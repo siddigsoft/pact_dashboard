@@ -210,7 +210,7 @@ const AppSidebar = () => {
           <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center">
             <span className="text-white font-bold text-sm">TPM</span>
           </div>
-          <span className="font-bold text-lg">TPM Workflow</span>
+          <span className="font-bold text-lg">PACT Consultancy</span>
         </div>
         <SidebarTrigger className="ml-auto"/>
       </SidebarHeader>
@@ -238,7 +238,7 @@ const AppSidebar = () => {
       </SidebarContent>
       <SidebarFooter className="p-4 space-y-4">
         <div className="text-xs text-gray-500 mb-2">
-          TPM Workflow v1.0
+          PACT Consultancy v1.0
         </div>
         {currentUser && (
           <div className="flex items-center justify-between">

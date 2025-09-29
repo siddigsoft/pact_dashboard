@@ -188,7 +188,7 @@ const Register = () => {
           </div>
           <CardTitle className="text-2xl font-bold">Create an Account</CardTitle>
           <CardDescription className="text-base">
-            Register to access TPM Workflow
+            Register to access PACT Consultancy
           </CardDescription>
         </CardHeader>
         
