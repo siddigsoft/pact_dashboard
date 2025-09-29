@@ -22,6 +22,10 @@ interface CompositeContextType {
   rejectUser: ReturnType<typeof useUser>['rejectUser'];
   updateUser: ReturnType<typeof useUser>['updateUser'];
   updateUserLocation: ReturnType<typeof useUser>['updateUserLocation'];
+  emailVerificationPending: ReturnType<typeof useUser>['emailVerificationPending'];
+  verificationEmail: ReturnType<typeof useUser>['verificationEmail'];
+  resendVerificationEmail: ReturnType<typeof useUser>['resendVerificationEmail'];
+  clearEmailVerificationNotice: ReturnType<typeof useUser>['clearEmailVerificationNotice'];
   
   mmpFiles: ReturnType<typeof useMMP>['mmpFiles'];
   uploadMMP: ReturnType<typeof useMMP>['uploadMMP'];
@@ -135,6 +139,10 @@ const CompositeContextProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     addRole: userContext.addRole,
     removeRole: userContext.removeRole,
     updateMMP: mmpContext.updateMMP,
+    emailVerificationPending: userContext.emailVerificationPending,
+    verificationEmail: userContext.verificationEmail,
+    resendVerificationEmail: userContext.resendVerificationEmail,
+    clearEmailVerificationNotice: userContext.clearEmailVerificationNotice,
   };
   
   return (

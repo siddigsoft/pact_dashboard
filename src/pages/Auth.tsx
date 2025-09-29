@@ -24,6 +24,8 @@ import {
 import AuthForm from '@/components/auth/AuthForm';
 import { useAppContext } from '@/context/AppContext';
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 
 const SystemFeaturesSection = () => {
   const features = [
@@ -183,12 +185,21 @@ const LoginSystemInfo = () => {
 const Auth = () => {
   let currentUser = null;
   let navigate = useNavigate();
+  let emailVerificationPending = false;
+  let verificationEmail: string | undefined = undefined;
+  let resendVerificationEmail: (email?: string) => Promise<boolean> = async () => false;
+  let clearEmailVerificationNotice: () => void = () => {};
   const [showSystemInfo, setShowSystemInfo] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
 
   // Safely access the AppContext - we're now sure Auth is wrapped inside AppProvider
   try {
     const appContext = useAppContext();
     currentUser = appContext.currentUser;
+    emailVerificationPending = appContext.emailVerificationPending;
+    verificationEmail = appContext.verificationEmail;
+    resendVerificationEmail = appContext.resendVerificationEmail;
+    clearEmailVerificationNotice = appContext.clearEmailVerificationNotice;
   } catch (error) {
     console.error("Error accessing AppContext:", error);
   }
@@ -241,6 +252,41 @@ const Auth = () => {
           </CardContent>
         </div>
       </Card>
+
+      {/* Email not verified modal */}
+      <Dialog open={emailVerificationPending} onOpenChange={(open) => { if (!open) clearEmailVerificationNotice(); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Email verification required</DialogTitle>
+            <DialogDescription>
+              {verificationEmail ? (
+                <>We found an account for <strong>{verificationEmail}</strong>, but the email is not verified yet. Check your inbox and spam folder for a verification email.</>
+              ) : (
+                <>Your email is not verified yet. Check your inbox and spam folder for a verification email.</>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="text-sm text-muted-foreground">
+            You can request another verification link if needed.
+          </div>
+          <DialogFooter>
+            <Button variant="secondary" onClick={() => clearEmailVerificationNotice()}>Close</Button>
+            <Button
+              onClick={async () => {
+                try {
+                  setResendLoading(true);
+                  await resendVerificationEmail(verificationEmail);
+                } finally {
+                  setResendLoading(false);
+                }
+              }}
+              disabled={resendLoading}
+            >
+              {resendLoading ? 'Sending...' : 'Resend verification link'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

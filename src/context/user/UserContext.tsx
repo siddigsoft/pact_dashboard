@@ -2,7 +2,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User } from '@/types';
 import { useToast } from '@/hooks/use-toast';
-// Removed mockUsers import to enforce DB-only user sources
 import { useRoles } from '@/hooks/use-roles';
 import { AppRole } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
@@ -24,6 +23,10 @@ interface UserContextType {
   hasRole: (role: AppRole) => boolean;
   addRole: (userId: string, role: AppRole) => Promise<boolean>;
   removeRole: (userId: string, role: AppRole) => Promise<boolean>;
+  emailVerificationPending: boolean;
+  verificationEmail?: string;
+  resendVerificationEmail: (email?: string) => Promise<boolean>;
+  clearEmailVerificationNotice: () => void;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -92,6 +95,38 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
   
   const { toast } = useToast();
   const { roles, hasRole, addRole, removeRole } = useRoles(currentUser?.id);
+
+  const [emailVerification, setEmailVerification] = useState<{ pending: boolean; email?: string }>({ pending: false });
+
+  const resendVerificationEmail = async (emailParam?: string): Promise<boolean> => {
+    try {
+      const target = emailParam || emailVerification.email;
+      if (!target) return false;
+      const { error } = await supabase.auth.resend({ type: 'signup', email: target });
+      if (error) {
+        toast({
+          title: 'Resend failed',
+          description: error.message || 'Failed to send verification link.',
+          variant: 'destructive',
+        });
+        return false;
+      }
+      toast({
+        title: 'Verification email sent',
+        description: `We sent a verification link to ${target}.`,
+      });
+      return true;
+    } catch (err: any) {
+      toast({
+        title: 'Resend failed',
+        description: err?.message || 'Unexpected error while resending.',
+        variant: 'destructive',
+      });
+      return false;
+    }
+  };
+
+  const clearEmailVerificationNotice = () => setEmailVerification({ pending: false, email: undefined });
 
   const refreshUsers = async () => {
     try {
@@ -242,14 +277,44 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       if (authError) {
         console.log("Supabase auth failed:", authError);
-        
+
+        const msg = (authError as any)?.message?.toString().toLowerCase() || "";
+        const isEmailNotConfirmed = /email\s*not\s*confirm|email\s*not\s*verified/.test(msg);
+
+        if (isEmailNotConfirmed) {
+          setEmailVerification({ pending: true, email });
+          try {
+            const { error: resendError } = await supabase.auth.resend({ type: 'signup', email });
+            if (resendError) {
+              console.warn('Resend verification failed:', resendError);
+              toast({
+                title: "Email not verified",
+                description: "Please check your inbox for the verification link. If you don't see it, try again later.",
+                variant: "destructive",
+              });
+            } else {
+              toast({
+                title: "Verify your email",
+                description: `We just sent a new verification link to ${email}. Check your inbox and spam folder.`,
+              });
+            }
+          } catch (e) {
+            console.warn('Resend verification threw:', e);
+            toast({
+              title: "Email not verified",
+              description: "Please check your inbox for the verification link. If you don't see it, try again later.",
+              variant: "destructive",
+            });
+          }
+          return false;
+        }
+
         toast({
           title: "Login failed",
           description: "Invalid email or password. Please try again.",
           variant: "destructive",
         });
         
-        // Return false immediately on auth error - DO NOT FALLBACK to mock users
         return false;
       } else if (authData?.user) {
         const { data: profileData } = await supabase
@@ -721,6 +786,10 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     hasRole,
     addRole,
     removeRole,
+    emailVerificationPending: emailVerification.pending,
+    verificationEmail: emailVerification.email,
+    resendVerificationEmail,
+    clearEmailVerificationNotice,
   };
 
   return (
@@ -742,6 +811,10 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         hasRole,
         addRole,
         removeRole,
+        emailVerificationPending: emailVerification.pending,
+        verificationEmail: emailVerification.email,
+        resendVerificationEmail,
+        clearEmailVerificationNotice,
       }}
     >
       {children}
