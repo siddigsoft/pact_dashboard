@@ -61,45 +61,38 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   
   // Try to get the current user ID from the UserContext when it becomes available
   React.useEffect(() => {
-    try {
-      // Import the UserContext dynamically to avoid circular dependencies
-      import('../user/UserContext').then(module => {
-        try {
-          const { useUser } = module;
-          // This is a workaround to get the current user ID
-          // We're not calling the hook directly here, but rather setting up
-          // a component to do it for us
-          const UserIdGetter = () => {
-            const { currentUser } = useUser();
-            React.useEffect(() => {
-              if (currentUser) {
-                setCurrentUserId(currentUser.id);
-              }
-            }, [currentUser]);
-            return null;
-          };
-          
-          // Render the component
-          const div = document.createElement('div');
-          document.body.appendChild(div);
-          const { createRoot } = require('react-dom/client');
-          const root = createRoot(div);
-          root.render(<UserIdGetter />);
-          
-          // Clean up
-          return () => {
-            root.unmount();
-            document.body.removeChild(div);
-          };
-        } catch (error) {
-          console.error('Error using UserContext:', error);
-        }
-      }).catch(error => {
-        console.error('Error importing UserContext:', error);
-      });
-    } catch (error) {
-      console.error('Failed to get current user ID:', error);
-    }
+    let cleanup: (() => void) | undefined;
+    (async () => {
+      try {
+        const module = await import('../user/UserContext');
+        const { createRoot } = await import('react-dom/client');
+
+        const { useUser } = module;
+        const UserIdGetter = () => {
+          const { currentUser } = useUser();
+          React.useEffect(() => {
+            if (currentUser) {
+              setCurrentUserId(currentUser.id);
+            }
+          }, [currentUser]);
+          return null;
+        };
+
+        const div = document.createElement('div');
+        document.body.appendChild(div);
+        const root = createRoot(div);
+        root.render(<UserIdGetter />);
+
+        cleanup = () => {
+          try { root.unmount(); } catch {}
+          try { document.body.removeChild(div); } catch {}
+        };
+      } catch (error) {
+        console.error('Failed to get current user ID:', error);
+      }
+    })();
+
+    return () => { if (cleanup) cleanup(); };
   }, []);
 
   // Enhanced duplicate detection that checks content and creation time

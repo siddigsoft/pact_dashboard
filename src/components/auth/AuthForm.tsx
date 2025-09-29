@@ -104,28 +104,6 @@ const AuthForm = ({ mode }: AuthFormProps) => {
     try {
       let uploadedAvatarUrl = "";
 
-      if (mode === 'signup' && avatarFile) {
-        const fileExt = avatarFile.name.split('.').pop();
-        const fileName = `${Date.now()}-${Math.round(Math.random() * 1e9)}.${fileExt}`;
-        const filePath = fileName;
-
-        const { data, error } = await supabase.storage
-          .from('avatars')
-          .upload(filePath, avatarFile);
-
-        if (error) {
-          throw new Error("Failed to upload avatar. Please try again.");
-        }
-
-        if (data) {
-          const { data: publicUrlData } = supabase.storage
-            .from('avatars')
-            .getPublicUrl(filePath);
-          uploadedAvatarUrl = publicUrlData.publicUrl;
-          setAvatarUrl(uploadedAvatarUrl);
-        }
-      }
-
       if (mode === 'signup') {
         const userData = {
           email,
@@ -136,13 +114,68 @@ const AuthForm = ({ mode }: AuthFormProps) => {
           role,
           hubId: showHubSelection ? selectedHub : undefined,
           stateId: showHubSelection ? selectedState : undefined,
-          localityId: showHubSelection && selectedLocality ? selectedLocality : undefined,
-          avatar: uploadedAvatarUrl
+          localityId: showHubSelection && selectedLocality ? selectedLocality : undefined
         };
 
         const success = await registerUser(userData);
 
         if (success) {
+          // After successful signup, attempt avatar upload only if we have a session
+          const { data: sessionData } = await supabase.auth.getSession();
+          const session = sessionData?.session;
+
+          if (session && avatarFile) {
+            try {
+              const fileExt = avatarFile.name.split('.').pop();
+              const fileName = `${session.user.id}-${Date.now()}.${fileExt}`;
+              const filePath = fileName;
+
+              const { data, error } = await supabase.storage
+                .from('avatars')
+                .upload(filePath, avatarFile);
+
+              if (!error && data) {
+                const { data: publicUrlData } = supabase.storage
+                  .from('avatars')
+                  .getPublicUrl(filePath);
+                uploadedAvatarUrl = publicUrlData.publicUrl;
+                setAvatarUrl(uploadedAvatarUrl);
+
+                // Save avatar URL to profile
+                const { error: updateError } = await supabase
+                  .from('profiles')
+                  .update({ avatar_url: uploadedAvatarUrl })
+                  .eq('id', session.user.id);
+
+                if (updateError) {
+                  // Non-blocking: show info toast, continue
+                  toast({
+                    title: 'Avatar saved, but profile update failed',
+                    description: 'You can set your avatar later in Settings.',
+                  });
+                }
+              } else if (error) {
+                toast({
+                  title: 'Avatar upload failed',
+                  description: error.message,
+                  variant: 'destructive',
+                });
+              }
+            } catch (err: any) {
+              toast({
+                title: 'Avatar upload failed',
+                description: err?.message || 'Unexpected error during avatar upload',
+                variant: 'destructive',
+              });
+            }
+          } else if (avatarFile) {
+            // No session (email confirm likely enabled) — inform user to set avatar later
+            toast({
+              title: 'Check your email',
+              description: 'Verify your email, then set your avatar from Settings after first login.',
+            });
+          }
+
           toast({
             title: "Registration successful",
             description: "Your account is pending approval by an administrator.",
@@ -245,6 +278,39 @@ const AuthForm = ({ mode }: AuthFormProps) => {
       />
 
       <div className="space-y-4">
+        {/* Email (required for signup) */}
+        <div className="relative">
+          <Mail className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+          <Input
+            type="email"
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            className="pl-10 bg-white/50 focus:bg-white transition-colors"
+          />
+        </div>
+
+        {/* Password (required for signup) */}
+        <div className="relative">
+          <Lock className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+          <Input
+            type={showPassword ? 'text' : 'password'}
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            className="pl-10 pr-10 bg-white/50 focus:bg-white transition-colors"
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword(!showPassword)}
+            className="absolute right-3 top-3 text-gray-400 hover:text-gray-600"
+          >
+            {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+          </button>
+        </div>
+
         <div>
           <Select value={role} onValueChange={setRole}>
             <SelectTrigger className="w-full">

@@ -2,7 +2,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User } from '@/types';
 import { useToast } from '@/hooks/use-toast';
-import { users } from '@/data/mockUsers';
+// Removed mockUsers import to enforce DB-only user sources
 import { useRoles } from '@/hooks/use-roles';
 import { AppRole } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
@@ -54,11 +54,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loadUsersFromStorage = () => {
     const storedUsersMap: Record<string, User> = {};
     
-    const initialUsers = users.map(user => ({
-      ...user,
-      availability: user.availability || (Math.random() > 0.3 ? 'online' : 'offline'),
-      lastActive: new Date().toISOString()
-    }));
+    const initialUsers: User[] = [];
     
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
@@ -170,18 +166,8 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
           } as User;
         });
         
-        // Get all mock users that don't exist in Supabase data
-        const mockUsersNotInSupabase = users.filter(user => 
-          !supabaseUsers.some(su => su.email === user.email)
-        );
-        
         const mergedUsers = [
-          ...supabaseUsers,
-          ...mockUsersNotInSupabase,
-          ...appUsers.filter(user => 
-            !supabaseUsers.some(su => su.id === user.id) && 
-            !mockUsersNotInSupabase.some(mu => mu.id === user.id)
-          )
+          ...supabaseUsers
         ];
         
         mergedUsers.forEach(user => {
@@ -390,83 +376,22 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       });
       
-      let newUser: User;
-      
       if (signUpError) {
         console.error("Supabase signup error:", signUpError);
-        newUser = {
-          id: `usr${Date.now()}`,
-          name: userData.name || '',
-          email: userData.email || '',
-          phone: userData.phone,
-          employeeId: userData.employeeId,
-          role: userData.role || 'dataCollector',
-          isApproved: false,
-          hubId: userData.hubId,
-          stateId: userData.stateId,
-          localityId: userData.localityId,
-          avatar: userData.avatar,
-          wallet: {
-            balance: 0,
-            currency: 'USD',
-          },
-          performance: {
-            rating: 0,
-            totalCompletedTasks: 0,
-            onTimeCompletion: 0,
-          },
-          settings: {
-            language: 'en',
-            notificationPreferences: {
-              email: true,
-              push: true,
-              sms: true,
-            },
-          },
-          availability: 'offline',
-          lastActive: new Date().toISOString(),
-          createdAt: new Date().toISOString()
-        };
-      } else {
-        newUser = {
-          id: `usr${Date.now()}`,
-          name: userData.name || '',
-          email: userData.email || '',
-          phone: userData.phone,
-          employeeId: userData.employeeId,
-          role: userData.role || 'dataCollector',
-          isApproved: false,
-          hubId: userData.hubId,
-          stateId: userData.stateId,
-          localityId: userData.localityId,
-          avatar: userData.avatar,
-          wallet: {
-            balance: 0,
-            currency: 'USD',
-          },
-          performance: {
-            rating: 0,
-            totalCompletedTasks: 0,
-            onTimeCompletion: 0,
-          },
-          availability: 'offline',
-          lastActive: new Date().toISOString(),
-          createdAt: new Date().toISOString()
-        };
+        toast({
+          title: "Registration failed",
+          description: "There was a problem creating your account. Please try again.",
+          variant: "destructive",
+        });
+        return false;
       }
-      
-      setAppUsers(prev => [...prev, newUser]);
-      
-      localStorage.setItem(`user-${newUser.id}`, JSON.stringify(newUser));
       
       toast({
         title: "Registration successful",
         description: "Your account is pending approval by an administrator.",
       });
       
-      // Refresh users to make sure the new user is in the list
       await refreshUsers();
-      
       return true;
     } catch (error) {
       console.error("Registration error:", error);

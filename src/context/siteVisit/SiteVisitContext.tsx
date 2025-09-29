@@ -87,18 +87,23 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 
                 const div = document.createElement('div');
                 document.body.appendChild(div);
-                const { createRoot } = require('react-dom/client');
-                const root = createRoot(div);
-                root.render(<module.NotificationProvider><NotificationHelper /></module.NotificationProvider>);
-                
-                setTimeout(() => {
+                (async () => {
                   try {
-                    root.unmount();
-                    document.body.removeChild(div);
+                    const { createRoot } = await import('react-dom/client');
+                    const root = createRoot(div);
+                    root.render(<module.NotificationProvider><NotificationHelper /></module.NotificationProvider>);
+                    setTimeout(() => {
+                      try {
+                        root.unmount();
+                        document.body.removeChild(div);
+                      } catch (error) {
+                        console.error("Cleanup error:", error);
+                      }
+                    }, 100);
                   } catch (error) {
-                    console.error("Cleanup error:", error);
+                    console.error("Failed to render notification helper:", error);
                   }
-                }, 100);
+                })();
               } catch (error) {
                 console.error("Failed to add notification:", error);
               }
