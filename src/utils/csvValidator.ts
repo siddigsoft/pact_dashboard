@@ -1,7 +1,8 @@
 
 // Fix the import to use validateSiteCode
 import { validateSiteCode } from './mmpIdGenerator';
-import { format, parse, isValid } from 'date-fns'; // Add missing date-fns imports
+import { format, parse, isValid } from 'date-fns'; 
+import * as XLSX from 'xlsx';
 
 export interface CSVValidationError {
   type: 'error' | 'warning';
@@ -39,7 +40,7 @@ const REQUIRED_HEADERS = [
   'Comments'
 ];
 
-// Using our new site code pattern from mmpIdGenerator
+// Define regex patterns for date validation
 const DATE_PATTERNS = [
   /^\d{4}-\d{2}-\d{2}$/, // YYYY-MM-DD
   /^\d{2}-\d{2}-\d{4}$/  // DD-MM-YYYY
@@ -52,28 +53,83 @@ export const validateCSV = async (file: File): Promise<CSVParseResult> => {
   const hubOffices: string[] = []; // Track hub offices found in the file
   
   try {
-    const content = await file.text();
-    const lines = content.split('\n');
+    // Detect file extension and parse accordingly (Excel or CSV)
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    let headers: string[] = [];
+    let rows: string[][] = [];
     
-    if (lines.length < 2) {
-      errors.push({
-        type: 'error',
-        message: 'File is empty or contains only headers',
-        category: 'file_structure'
-      });
-      return { 
-        isValid: false, 
-        errors, 
-        warnings, 
-        data, 
-        hubOffices, 
-        errorSummary: summarizeIssues(errors),
-        warningSummary: summarizeIssues(warnings)
-      };
+    if (ext === 'xlsx' || ext === 'xls') {
+      // Parse Excel workbook
+      const buffer = await file.arrayBuffer();
+      const wb = XLSX.read(buffer, { type: 'array', cellDates: true });
+      const sheetName = wb.SheetNames[0];
+      const ws = wb.Sheets[sheetName];
+      const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true }) as any[][];
+      
+      if (!aoa || aoa.length < 2) {
+        errors.push({
+          type: 'error',
+          message: 'File is empty or contains only headers',
+          category: 'file_structure'
+        });
+        return { 
+          isValid: false, 
+          errors, 
+          warnings, 
+          data, 
+          hubOffices, 
+          errorSummary: summarizeIssues(errors),
+          warningSummary: summarizeIssues(warnings)
+        };
+      }
+      
+      headers = (aoa[0] || []).map(h => String(h ?? '').trim());
+      rows = aoa.slice(1).map(r => headers.map((h, idx) => {
+        const v = (r || [])[idx];
+        if (v === undefined || v === null) return '';
+        // Normalize Excel date cells or serials specifically for Visit Date
+        if (h === 'Visit Date') {
+          if (v instanceof Date) return format(v, 'dd-MM-yyyy');
+          if (typeof v === 'number') {
+            // Convert Excel serial (1900 date system) to JS Date
+            const excelEpoch = Date.UTC(1899, 11, 30); // 1899-12-30
+            const days = Math.floor(v);
+            const d = new Date(excelEpoch + days * 24 * 60 * 60 * 1000);
+            return format(d, 'dd-MM-yyyy');
+          }
+        }
+        return String(v).trim();
+      }));
+    } else {
+      // Parse as CSV text
+      const content = await file.text();
+      const lines = content.split(/\r?\n/);
+      
+      if (lines.length < 2) {
+        errors.push({
+          type: 'error',
+          message: 'File is empty or contains only headers',
+          category: 'file_structure'
+        });
+        return { 
+          isValid: false, 
+          errors, 
+          warnings, 
+          data, 
+          hubOffices, 
+          errorSummary: summarizeIssues(errors),
+          warningSummary: summarizeIssues(warnings)
+        };
+      }
+      
+      // Validate headers
+      headers = lines[0].trim().split(',').map(h => h.trim());
+      rows = lines.slice(1)
+        .filter(line => line.trim() !== '')
+        .map(line => line.split(',').map(v => v.trim()));
     }
     
     // Validate headers
-    const headers = lines[0].trim().split(',').map(h => h.trim());
     const missingHeaders = REQUIRED_HEADERS.filter(required => 
       !headers.find(h => h === required)
     );
@@ -90,12 +146,9 @@ export const validateCSV = async (file: File): Promise<CSVParseResult> => {
     const siteCodes = new Set<string>();
     
     // Validate each row
-    for (let i = 1; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (!line) continue; // Skip empty lines
-      
-      const values = line.split(',').map(v => v.trim());
-      const row = i + 1;
+    for (let i = 0; i < rows.length; i++) {
+      const values = rows[i];
+      const row = i + 2; // Account for header row
       
       // Create record object - preserve ALL fields from the original CSV
       const record: any = {};

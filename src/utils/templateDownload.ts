@@ -1,5 +1,7 @@
+ import { saveAs } from 'file-saver';
+ import * as XLSX from 'xlsx';
 
-export const downloadMMPTemplate = () => {
+ export const downloadMMPTemplate = () => {
   // Create template headers data
   const headers = [
     'Hub Office',
@@ -42,27 +44,17 @@ export const downloadMMPTemplate = () => {
     ]
   ];
   
-  // Create CSV content with headers and sample rows
-  let csvContent = headers.join(',') + '\n';
-  sampleRows.forEach(row => {
-    csvContent += row.join(',') + '\n';
-  });
-  
-  // Create blob and trigger download
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-  const url = window.URL.createObjectURL(blob);
-  
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = 'mmp_template.csv';
-  document.body.appendChild(link);
-  link.click();
-  
-  // Clean up
-  setTimeout(() => {
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(url);
-  }, 100);
-  
+  // Build Excel workbook from headers + sample rows
+  const wsData = [headers, ...sampleRows];
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(wsData);
+  XLSX.utils.book_append_sheet(wb, ws, 'Template');
+
+  // Generate .xlsx file and trigger download
+  const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  const blobData = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  saveAs(blobData, 'mmp_template.xlsx');
+
   return true;
 };

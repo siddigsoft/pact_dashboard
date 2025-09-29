@@ -557,7 +557,7 @@ const MMPUpload = () => {
               <CardHeader>
                 <CardTitle>MMP File Upload</CardTitle>
                 <CardDescription>
-                  Enter MMP details and upload an Excel file containing site visit information
+                  Enter MMP details and upload an Excel or CSV file containing site visit information
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -673,13 +673,13 @@ const MMPUpload = () => {
                       name="file"
                       render={({ field: { onChange, value, ...fieldProps }, fieldState }) => (
                         <FormItem>
-                          <FormLabel>MMP File (Excel format)</FormLabel>
+                          <FormLabel>MMP File (Excel/CSV)</FormLabel>
                           <FormControl>
                             <div className="space-y-2">
                               <Input
                                 {...fieldProps}
                                 type="file"
-                                accept=".xlsx,.xls"
+                                accept=".xlsx,.xls,.csv"
                                 onChange={(e) => {
                                   const file = e.target.files?.[0];
                                   if (file) {
@@ -692,10 +692,10 @@ const MMPUpload = () => {
                               <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-8 text-center hover:bg-muted/50 transition-colors cursor-pointer">
                                 <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
                                 <p className="text-sm text-muted-foreground">
-                                  Drag and drop your Excel file here, or click above to browse
+                                  Drag and drop your Excel or CSV file here, or click above to browse
                                 </p>
                                 <p className="text-xs text-muted-foreground mt-2">
-                                  Supported formats: .xlsx, .xls
+                                  Supported formats: .xlsx, .xls, .csv
                                 </p>
                               </div>
                             </div>
@@ -804,7 +804,7 @@ const MMPUpload = () => {
                         MMP File Requirements
                       </p>
                       <ul className="list-disc list-inside mt-2 text-blue-600 space-y-1 pl-5">
-                        <li>Excel file (.xlsx or .xls format)</li>
+                        <li>Excel or CSV file (.xlsx, .xls, or .csv format)</li>
                         <li>Must include columns for Site Name, Location, Activities</li>
                         <li>Include dates for planned visits</li>
                         <li>For joint visits, specify participating organizations</li>
