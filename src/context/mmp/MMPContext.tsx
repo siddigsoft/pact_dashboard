@@ -9,6 +9,51 @@ import { useMMPStatusOperations } from './hooks/useMMPStatusOperations';
 import { useMMPVersioning } from './hooks/useMMPVersioning';
 import { useMMPUpload } from './hooks/useMMPUpload';
 
+// Transform database record (snake_case) to MMPFile interface (camelCase)
+const transformDBToMMPFile = (dbRecord: any): MMPFile => {
+  return {
+    id: dbRecord.id,
+    name: dbRecord.name,
+    uploadedBy: dbRecord.uploaded_by || 'Unknown',
+    uploadedAt: dbRecord.uploaded_at,
+    status: dbRecord.status,
+    entries: dbRecord.entries,
+    processedEntries: dbRecord.processed_entries,
+    mmpId: dbRecord.mmp_id,
+    rejectionReason: dbRecord.rejection_reason,
+    approvedBy: dbRecord.approved_by,
+    approvedAt: dbRecord.approved_at,
+    archivedAt: dbRecord.archived_at,
+    archivedBy: dbRecord.archived_by,
+    deletedAt: dbRecord.deleted_at,
+    deletedBy: dbRecord.deleted_by,
+    expiryDate: dbRecord.expiry_date,
+    region: dbRecord.region,
+    month: dbRecord.month,
+    year: dbRecord.year,
+    version: dbRecord.version,
+    modificationHistory: dbRecord.modification_history,
+    modifiedAt: dbRecord.modified_at,
+    description: dbRecord.description,
+    projectName: dbRecord.project_name,
+    type: dbRecord.type,
+    filePath: dbRecord.file_path,
+    originalFilename: dbRecord.original_filename,
+    fileUrl: dbRecord.file_url,
+    projectId: dbRecord.project_id,
+    siteEntries: dbRecord.site_entries || [],
+    workflow: dbRecord.workflow,
+    approvalWorkflow: dbRecord.approval_workflow,
+    location: dbRecord.location,
+    team: dbRecord.team,
+    permits: dbRecord.permits,
+    siteVisit: dbRecord.site_visit,
+    financial: dbRecord.financial,
+    performance: dbRecord.performance,
+    cpVerification: dbRecord.cp_verification,
+  } as MMPFile; // Type assertion to handle any remaining type issues
+};
+
 const MMPContext = createContext<MMPContextType>({
   mmpFiles: [],
   loading: true,
@@ -67,8 +112,9 @@ export const useMMPProvider = () => {
           }
           
           if (mmpData && mmpData.length > 0) {
-            data = mmpData;
-            console.log('MMP files loaded from Supabase:', mmpData);
+            // Transform snake_case database columns to camelCase interface
+            data = mmpData.map(transformDBToMMPFile);
+            console.log('MMP files loaded from Supabase:', data);
           } else {
             console.log('No MMP files found in Supabase, using mock data');
             const storedMockData = JSON.parse(localStorage.getItem('mock_mmp_files') || '[]');

@@ -51,4 +51,9 @@ export interface MMPBase {
   description?: string;
   projectName?: string;
   type?: string;
+  // File-related properties
+  filePath?: string;
+  originalFilename?: string;
+  fileUrl?: string;
+  projectId?: string;
 }
