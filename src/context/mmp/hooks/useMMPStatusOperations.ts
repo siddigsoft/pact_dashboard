@@ -63,13 +63,13 @@ export const useMMPStatusOperations = (setMMPFiles: React.Dispatch<React.SetStat
         )
       );
       
-      // Update database via Supabase (if connected)
+      // Update database via Supabase with approver metadata (columns now exist)
       try {
         supabase
           .from('mmp_files')
           .update({ 
-            status: 'approved', 
-            approved_by: approvedBy, 
+            status: 'approved',
+            approved_by: approvedBy,
             approved_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           })

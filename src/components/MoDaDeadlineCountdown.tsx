@@ -70,7 +70,7 @@ export const MoDaDeadlineCountdown: React.FC = () => {
       clearInterval(timer);
       clearInterval(reminderCheck);
     };
-  }, [isPastDeadline, sendNotification, currentUser]); // Removed timeLeft.days from deps
+  }, []); // Empty deps - intervals handle all updates
   
   // Calculate how close we are to the deadline as a percentage
   const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();

@@ -111,8 +111,8 @@ const AppRoutes = () => {
         <Route path="/settings" element={<Settings />} />
         <Route path="/site-visits" element={<SiteVisits />} />
         <Route path="/site-visits/create" element={<CreateSiteVisit />} />
-        <Route path="/site-visits/create/mmp/:id" element={<CreateSiteVisitMMP />} />
-        <Route path="/site-visits/create/mmp/:id/:siteId" element={<CreateSiteVisitMMPDetail />} />
+        <Route path="/site-visits/create/mmp" element={<CreateSiteVisitMMP />} />
+        <Route path="/site-visits/create/mmp/:id" element={<CreateSiteVisitMMPDetail />} />
         <Route path="/site-visits/create/urgent" element={<CreateSiteVisitUrgent />} />
         <Route path="/site-visits/:id" element={<SiteVisitDetail />} />
         <Route path="/users" element={<Users />} />

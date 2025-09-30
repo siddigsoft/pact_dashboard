@@ -12,13 +12,15 @@ import { SiteEntryCard } from '@/components/site-visit/SiteEntryCard';
 import { MMPInfoCard } from '@/components/site-visit/MMPInfoCard';
 import { Separator } from '@/components/ui/separator';
 import { useMMP } from '@/context/mmp/MMPContext';
+import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
 
 const CreateSiteVisitMMPDetail = () => {
-  const { mmpId } = useParams();
+  const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
   const { currentUser, calculateDistanceFee } = useAppContext();
   const { getMmpById } = useMMP();
+  const { createSiteVisit } = useSiteVisitContext();
   
   const [loading, setLoading] = useState(true);
   const [mmpData, setMmpData] = useState<any>(null);
@@ -30,22 +32,31 @@ const CreateSiteVisitMMPDetail = () => {
   const [creating, setCreating] = useState(false);
   
   useEffect(() => {
-    if (mmpId) {
-      const mmp = getMmpById(mmpId);
-      if (mmp) {
-        setMmpData(mmp);
-        console.log("MMP data loaded:", mmp);
-      } else {
-        toast({
-          title: "MMP not found",
-          description: "The requested MMP could not be found.",
-          variant: "destructive",
-        });
-        navigate("/site-visits/create");
-      }
+    if (!id) {
       setLoading(false);
+      toast({
+        title: "Invalid URL",
+        description: "Missing MMP id in the URL.",
+        variant: "destructive",
+      });
+      navigate("/site-visits/create/mmp");
+      return;
     }
-  }, [mmpId, getMmpById, navigate, toast]);
+
+    const mmp = getMmpById(id);
+    if (mmp) {
+      setMmpData(mmp);
+      console.log("MMP data loaded:", mmp);
+    } else {
+      toast({
+        title: "MMP not found",
+        description: "The requested MMP could not be found.",
+        variant: "destructive",
+      });
+      navigate("/site-visits/create/mmp");
+    }
+    setLoading(false);
+  }, [id]);
 
   if (!currentUser || !['admin', 'ict'].includes(currentUser.role)) {
     return (
@@ -106,16 +117,72 @@ const CreateSiteVisitMMPDetail = () => {
       return;
     }
 
-    setCreating(true);
+    try {
+      setCreating(true);
 
-    setTimeout(() => {
+      const selectedSiteObjects = (mmpData?.siteEntries || []).filter((s: any) =>
+        selectedSites.includes(s.id)
+      );
+
+      const results = await Promise.all(
+        selectedSiteObjects.map(async (site: any) => {
+          const location = mmpData?.location || { address: '', latitude: 0, longitude: 0, region: mmpData?.region || '' };
+          const distanceFee = calculateDistanceFee(Number(location.latitude) || 0, Number(location.longitude) || 0) || 0;
+
+          const payload: any = {
+            siteName: site.siteName || site.site_name || site.name || site.site || 'Unknown Site',
+            siteCode: site.siteCode || site.site_code || site.code || site.id,
+            status: 'pending',
+            locality: site.locality || location?.locality || '',
+            state: site.state || location?.region || '',
+            activity: site.activity || site.mainActivity || '',
+            priority,
+            dueDate,
+            notes: '',
+            mainActivity: site.mainActivity || '',
+            location,
+            fees: {
+              total: distanceFee,
+              currency: 'SDG',
+              distanceFee,
+              complexityFee: 0,
+              urgencyFee: 0,
+            },
+            permitDetails: { federal: false, state: false, locality: false },
+            complexity: 'medium',
+            visitType: 'regular',
+            projectActivities: [],
+            mmpDetails: {
+              mmpId: mmpData?.id,
+              projectName: mmpData?.projectName || '',
+              uploadedBy: mmpData?.uploadedBy || '',
+              uploadedAt: mmpData?.uploadedAt || '',
+              region: mmpData?.region || ''
+            },
+            mmpId: mmpData?.id,
+          };
+
+          return createSiteVisit(payload);
+        })
+      );
+
+      const createdCount = results.filter(Boolean).length;
+
       toast({
-        title: "Site visits created",
-        description: `Successfully created ${selectedSites.length} site visits.`,
+        title: 'Site visits created',
+        description: `Successfully created ${createdCount} site visit${createdCount !== 1 ? 's' : ''}.`,
       });
-      navigate("/site-visits");
+      navigate('/site-visits');
+    } catch (error) {
+      console.error('Error creating site visits:', error);
+      toast({
+        title: 'Creation failed',
+        description: 'There was a problem creating the site visits.',
+        variant: 'destructive',
+      });
+    } finally {
       setCreating(false);
-    }, 1500);
+    }
   };
 
   return (

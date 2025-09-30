@@ -231,6 +231,22 @@ export const useMMPProvider = () => {
             return mmp;
           })
         );
+
+        // Persist reset to DB (avoid columns that may not exist across envs)
+        try {
+          await supabase
+            .from('mmp_files')
+            .update({
+              status: 'pending',
+              approval_workflow: null,
+              rejection_reason: null,
+              approved_by: null,
+              approved_at: null,
+            })
+            .eq('id', id);
+        } catch (dbErr) {
+          console.error('Failed to persist resetMMP to DB:', dbErr);
+        }
       }
       return true;
     } catch (error) {

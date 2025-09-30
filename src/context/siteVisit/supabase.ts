@@ -78,11 +78,12 @@ export const createSiteVisitInDb = async (siteVisit: Partial<SiteVisit>) => {
     state: siteVisit.state,
     activity: siteVisit.activity,
     priority: siteVisit.priority,
-    due_date: siteVisit.dueDate,
+    due_date: siteVisit.dueDate ? new Date(siteVisit.dueDate).toISOString() : null,
     notes: siteVisit.notes,
     main_activity: siteVisit.mainActivity,
     location: siteVisit.location,
     fees: siteVisit.fees,
+    mmp_id: (siteVisit as any).mmpId || siteVisit.mmpDetails?.mmpId,
     visit_data: {
       permitDetails: siteVisit.permitDetails,
       complexity: siteVisit.complexity,
@@ -92,21 +93,11 @@ export const createSiteVisitInDb = async (siteVisit: Partial<SiteVisit>) => {
     }
   };
   
-  // First insert the data
-  const { error: insertError, data: insertData } = await supabase
-    .from('site_visits')
-    .insert(dbSiteVisit);
-    
-  if (insertError) {
-    console.error('Error creating site visit:', insertError);
-    throw insertError;
-  }
-  
-  // Then fetch the inserted data in a separate query
+  // Insert and return the created row in one round-trip
   const { data, error } = await supabase
     .from('site_visits')
+    .insert(dbSiteVisit)
     .select('*')
-    .eq('id', insertData[0].id)
     .single();
     
   if (error) {
