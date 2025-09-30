@@ -45,7 +45,7 @@ export function GlobalSearch() {
 
   return (
     <div className="relative w-full max-w-sm lg:max-w-md mx-4">
-      <Button
+      {/* <Button
         variant="outline"
         className="relative h-9 w-full justify-start text-sm text-neutral-500 dark:text-neutral-400 px-3 md:w-64 lg:w-80 
                    border-neutral-200 dark:border-neutral-800 bg-white/70 dark:bg-neutral-900/70 
@@ -59,7 +59,7 @@ export function GlobalSearch() {
                        px-1.5 font-mono text-[10px] font-medium text-neutral-600 dark:text-neutral-400 md:flex">
           <span className="text-xs">⌘</span>K
         </kbd>
-      </Button>
+      </Button> */}
       <CommandDialog open={open} onOpenChange={setOpen}>
         <Command className="rounded-lg border shadow-md">
           <CommandInput placeholder="Type a command or search..." />
