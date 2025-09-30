@@ -11,7 +11,7 @@ export const TeamCommunication = () => {
   const [activeTab, setActiveTab] = useState('chat');
   
   return (
-    <Card className="border-t-4 border-t-violet-500 hover:shadow-md transition-all duration-300 h-full">
+    <Card className="border-t-4 border-t-violet-500 hover:shadow-md transition-all duration-300">
       <CardHeader className="bg-gradient-to-r from-violet-50 to-transparent flex flex-row justify-between items-center">
         <CardTitle className="flex items-center gap-2">
           <MessageSquare className="h-5 w-5 text-violet-500" />

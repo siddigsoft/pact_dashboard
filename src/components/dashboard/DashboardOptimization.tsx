@@ -1,5 +1,6 @@
 
 import React from 'react';
+import type { Variants } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useProjectContext } from '@/context/project/ProjectContext';
 import { useMMP } from '@/context/mmp/MMPContext';
@@ -43,7 +44,7 @@ export const StatsCard = ({ title, value, description, icon, trendValue, trendDi
 };
 
 // Container animation variants
-export const containerVariants = {
+export const containerVariants: Variants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
@@ -54,7 +55,7 @@ export const containerVariants = {
 };
 
 // Item animation variants
-export const itemVariants = {
+export const itemVariants: Variants = {
   hidden: { y: 20, opacity: 0 },
   visible: {
     y: 0,

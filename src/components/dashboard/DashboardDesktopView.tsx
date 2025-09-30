@@ -81,7 +81,7 @@ export const DashboardDesktopView = () => {
       variants={containerVariants}
       initial="hidden"
       animate="visible"
-      className="space-y-6"
+      className="space-y-8"
     >
       {/* Operational Overview Zone */}
       <div className="flex flex-col-reverse md:flex-row items-start justify-between gap-4">
@@ -98,9 +98,9 @@ export const DashboardDesktopView = () => {
       </div>
       
       {/* Main Content Grid */}
-      <div className="grid grid-cols-12 gap-6">
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_380px] items-start">
         {/* Left Column */}
-        <div className="col-span-12 lg:col-span-8 space-y-6">
+        <div className="space-y-6">
           <SectionCollapsible 
             id="monitoring" 
             icon={<BarChart className="h-5 w-5 text-primary" />}
@@ -113,19 +113,37 @@ export const DashboardDesktopView = () => {
                   <EnhancedRiskManagement />
                 </LazyLoadingCard>
               </motion.div>
-              
-              <motion.div variants={itemVariants}>
-                <LazyLoadingCard>
-                  <div className="bg-gradient-to-r from-blue-50 to-transparent p-2 rounded-t-md flex items-center gap-2">
-                    <MapPin className="h-5 w-5 text-blue-500" />
-                    <h3 className="font-medium">Field Team Map</h3>
-                  </div>
-                  <LiveTeamMapWidget />
-                </LazyLoadingCard>
-              </motion.div>
             </div>
           </SectionCollapsible>
+        </div>
+        
+        {/* Right Column */}
+        <motion.div variants={itemVariants} className="space-y-6 lg:sticky lg:top-4">
+          <LazyLoadingCard>
+            <EnhancedMoDaCountdown />
+          </LazyLoadingCard>
           
+          <LazyLoadingCard>
+            <TeamCommunication />
+          </LazyLoadingCard>
+        </motion.div>
+
+        {/* Full-width Field Team Map */}
+        <motion.div variants={itemVariants} className="lg:col-span-2">
+          <SectionCollapsible
+            id="team-map"
+            icon={<MapPin className="h-5 w-5 text-primary" />}
+            title="Field Team Map"
+            description="Live view of team locations and active site visits"
+          >
+            <LazyLoadingCard>
+              <LiveTeamMapWidget />
+            </LazyLoadingCard>
+          </SectionCollapsible>
+        </motion.div>
+
+        {/* Full-width Planning & Activities */}
+        <motion.div variants={itemVariants} className="lg:col-span-2">
           <SectionCollapsible 
             id="planning" 
             icon={<Activity className="h-5 w-5 text-primary" />}
@@ -146,7 +164,10 @@ export const DashboardDesktopView = () => {
               </motion.div>
             </div>
           </SectionCollapsible>
-          
+        </motion.div>
+
+        {/* Full-width Progress & Achievements */}
+        <motion.div variants={itemVariants} className="lg:col-span-2">
           <SectionCollapsible 
             id="achievements" 
             icon={<Target className="h-5 w-5 text-primary" />}
@@ -159,17 +180,6 @@ export const DashboardDesktopView = () => {
               </LazyLoadingCard>
             </motion.div>
           </SectionCollapsible>
-        </div>
-        
-        {/* Right Column */}
-        <motion.div variants={itemVariants} className="col-span-12 lg:col-span-4 space-y-6">
-          <LazyLoadingCard>
-            <EnhancedMoDaCountdown />
-          </LazyLoadingCard>
-          
-          <LazyLoadingCard>
-            <TeamCommunication />
-          </LazyLoadingCard>
         </motion.div>
       </div>
     </motion.div>

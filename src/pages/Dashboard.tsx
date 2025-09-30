@@ -81,8 +81,6 @@ const Dashboard = () => {
             <DashboardStatsOverview />
           </div>
         </section>
-
-        Main Dashboard View
         <section className="mt-8">
           {viewMode === 'mobile' ? <DashboardMobileView /> : <DashboardDesktopView />}
         </section>
