@@ -42,34 +42,43 @@ const Index = () => {
         <div className="flex flex-wrap justify-center gap-3 mb-8">
           <button
             className="px-4 py-2 bg-blue-100 dark:bg-blue-800 text-blue-800 dark:text-blue-200 
-                      rounded-full text-sm font-medium shadow-sm transition-all duration-300
-                      hover:bg-blue-200 dark:hover:bg-blue-700 hover:scale-105 focus:ring-2 focus:ring-blue-400"
+                      rounded-full text-sm font-medium shadow-md transition-all duration-300
+                      hover:bg-blue-200 dark:hover:bg-blue-700 hover:scale-105 focus:ring-2 focus:ring-blue-400
+                      active:translate-y-1 active:shadow-sm"
           >
             Project Management
           </button>
 
           <button
             className="px-4 py-2 bg-orange-100 dark:bg-orange-800 text-orange-800 dark:text-orange-200 
-                      rounded-full text-sm font-medium shadow-sm transition-all duration-300
-                      hover:bg-orange-200 dark:hover:bg-orange-700 hover:scale-105 focus:ring-2 focus:ring-orange-400"
+                      rounded-full text-sm font-medium shadow-md transition-all duration-300
+                      hover:bg-orange-200 dark:hover:bg-orange-700 hover:scale-105 focus:ring-2 focus:ring-orange-400
+                      active:translate-y-1 active:shadow-sm"
           >
             Field Operations
           </button>
 
           <button
             className="px-4 py-2 bg-black/10 dark:bg-white/10 text-black dark:text-white 
-                      rounded-full text-sm font-medium shadow-sm transition-all duration-300
-                      hover:bg-black/20 dark:hover:bg-white/20 hover:scale-105 focus:ring-2 focus:ring-gray-400"
+                      rounded-full text-sm font-medium shadow-md transition-all duration-300
+                      hover:bg-black/20 dark:hover:bg-white/20 hover:scale-105 focus:ring-2 focus:ring-gray-400
+                      active:translate-y-1 active:shadow-sm"
           >
             Advanced Reporting
           </button>
         </div>
 
-
-
         {/* Continue Button */}
         <Button
-          className="mb-4 px-8 py-3 font-medium bg-blue-600 hover:bg-orange-500 text-white transition-all duration-300 rounded-lg shadow-lg"
+          className="
+            mb-4 px-8 py-3 font-semibold rounded-lg text-white
+            bg-blue-600 shadow-[0_4px_6px_rgba(0,0,0,0.3)] 
+            hover:scale-105 hover:shadow-[0_8px_12px_rgba(0,0,0,0.35)] 
+            hover:bg-blue-500
+            focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2
+            active:translate-y-0.5 active:shadow-[0_3px_5px_rgba(0,0,0,0.25)]
+            transition-all duration-200 ease-in-out
+          "
           onClick={() => navigate("/auth")}
         >
           Continue to Login

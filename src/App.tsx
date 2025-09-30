@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { ThemeProvider } from 'next-themes';
 
-// Import our new AppProviders
+// Import AppProviders
 import { AppProviders } from './context/AppContext';
 
 // Pages
@@ -53,28 +53,29 @@ import { Toaster as SonnerToaster } from './components/ui/sonner';
 import { useAppContext } from './context/AppContext';
 import ErrorBoundary from './components/ErrorBoundary';
 
-// Custom redirect component to handle dynamic path parameters
+// Redirect for old MMP view paths
 const MmpViewRedirect = () => {
   const location = useLocation();
   const mmpId = location.pathname.split('/').pop();
   return <Navigate to={`/mmp/${mmpId}/view`} replace />;
 };
 
-// Auth guard component to check if user is logged in
+// Auth guard for protected routes
 const AuthGuard = ({ children }) => {
   const location = useLocation();
   const { currentUser } = useAppContext();
-  
-  // Don't redirect if already on auth-related pages
-  if (!currentUser && 
-      !['/auth', '/login', '/register', '/registration-success', '/forgot-password'].includes(location.pathname)) {
+
+  if (
+    !currentUser &&
+    !['/auth', '/login', '/register', '/registration-success', '/forgot-password'].includes(location.pathname)
+  ) {
     return <Navigate to="/auth" replace />;
   }
-  
+
   return children;
 };
 
-// Main routes component - separated to ensure context is available
+// Main application routes
 const AppRoutes = () => {
   return (
     <Routes>
@@ -85,7 +86,7 @@ const AppRoutes = () => {
       <Route path="/register" element={<Register />} />
       <Route path="/registration-success" element={<RegistrationSuccess />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
-      
+
       {/* Protected routes */}
       <Route element={<AuthGuard><MainLayout /></AuthGuard>}>
         <Route path="/dashboard" element={<Dashboard />} />
@@ -124,11 +125,11 @@ const AppRoutes = () => {
         <Route path="/archive" element={<Archive />} />
         <Route path="/calendar" element={<Calendar />} />
       </Route>
-      
+
       {/* Redirects */}
       <Route path="/mmp/view/:id" element={<MmpViewRedirect />} />
-      
-      {/* Catch-all route */}
+
+      {/* Catch-all */}
       <Route path="*" element={<NotFound />} />
     </Routes>
   );
@@ -137,25 +138,36 @@ const AppRoutes = () => {
 function App() {
   const [isMounted, setIsMounted] = useState(false);
 
+  // Ensure component mounts before rendering to avoid hydration issues
   useEffect(() => {
     setIsMounted(true);
+  }, []);
+
+  // Ensure first-time users start in light mode
+  useEffect(() => {
+    const savedTheme = localStorage.getItem("theme");
+    if (!savedTheme) {
+      document.documentElement.classList.remove("dark");
+      document.documentElement.classList.add("light");
+      localStorage.setItem("theme", "light");
+    }
   }, []);
 
   return (
     <ThemeProvider
       attribute="class"
-      defaultTheme="system"
-      enableSystem
+      defaultTheme="light"
+      enableSystem={false}
       disableTransitionOnChange
     >
       {isMounted && (
-        <ErrorBoundary 
+        <ErrorBoundary
           fallback={
             <div className="min-h-screen flex items-center justify-center">
               <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg max-w-md">
                 <h2 className="text-2xl font-bold text-red-600 mb-4">Something went wrong</h2>
                 <p className="mb-4">The application encountered an unexpected error. Please refresh the page to try again.</p>
-                <button 
+                <button
                   onClick={() => window.location.reload()}
                   className="px-4 py-2 bg-primary text-white rounded hover:bg-primary/90"
                 >
