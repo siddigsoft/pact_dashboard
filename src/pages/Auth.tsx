@@ -135,6 +135,13 @@ const Auth = () => {
         {/* Right Auth Column */}
         <div className="md:w-1/2 w-full p-6 md:p-10 flex flex-col items-center justify-center text-center">
           <CardHeader className="space-y-2 text-center mb-4">
+            <div className="text-right mb-3">
+              <select className="border border-gray-300 rounded-md p-1 text-sm bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200">
+                <option>English</option>
+                <option>Français</option>
+                <option>Español</option>
+              </select>
+            </div>
             <CardTitle className="text-2xl font-bold">Welcome To Pact</CardTitle>
             <CardDescription className="flex items-center justify-center text-sm text-gray-600 dark:text-gray-300">
               Sign in to your account
