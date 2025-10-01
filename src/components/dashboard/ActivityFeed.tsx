@@ -1,5 +1,5 @@
 
-import React from "react";
+import React, { useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,12 +10,14 @@ import {
   MapPin, 
   Calendar, 
   Clock, 
-  CheckCircle,
   AlertCircle,
   MoreHorizontal
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { useAppContext } from "@/context/AppContext";
+import { useProjectContext } from "@/context/project/ProjectContext";
+import { formatDistanceToNow } from "date-fns";
 
 interface Activity {
   id: string;
@@ -32,50 +34,121 @@ interface ActivityFeedProps {
 }
 
 const ActivityFeed = ({ className }: ActivityFeedProps) => {
-  // Sample activities data
-  const activities: Activity[] = [
-    {
-      id: "act1",
-      title: "MMP-2023-045 Approval",
-      description: "MMP approval request is waiting for your review",
-      type: "approval",
-      timestamp: "10 mins ago",
-      status: "pending",
-      user: "Mohammed Ali"
-    },
-    {
-      id: "act2",
-      title: "Field Team Site Visit",
-      description: "Team completed the site visit at Al Fashir",
-      type: "visit",
-      timestamp: "1 hour ago",
-      status: "completed",
-      user: "Sara Ahmed"
-    },
-    {
-      id: "act3",
-      title: "MMP Upload Verification",
-      description: "MMP-2023-030 has been verified and approved",
-      type: "upload",
-      timestamp: "2 hours ago",
-      status: "completed"
-    },
-    {
-      id: "act4",
-      title: "Upcoming Site Visit",
-      description: "Scheduled for tomorrow at South Darfur",
-      type: "reminder",
-      timestamp: "3 hours ago"
-    },
-    {
-      id: "act5",
-      title: "Data Validation Alert",
-      description: "Critical: MMP-2023-050 requires immediate attention",
-      type: "alert",
-      timestamp: "5 hours ago",
-      status: "critical"
+  const { mmpFiles, siteVisits, users } = useAppContext();
+  const { projects } = useProjectContext();
+
+  const getUserName = (id?: string) => {
+    if (!id) return undefined;
+    const u = (users || []).find((x: any) => x.id === id);
+    return u?.name || u?.fullName || u?.username || id;
+  };
+
+  const mapStatus = (status?: string): Activity["status"] => {
+    if (!status) return undefined;
+    const s = String(status).toLowerCase();
+    if (["approved", "completed", "archived", "verified"].includes(s)) return "completed";
+    if (["rejected", "critical", "error", "failed"].includes(s)) return "critical";
+    return "pending";
+  };
+
+  const activities: Activity[] = useMemo(() => {
+    const items: Activity[] = [];
+
+    try {
+      // MMP files: uploads and approvals
+      (mmpFiles || []).forEach((file: any) => {
+        const uploadedAt: string | undefined = file?.uploadedAt || file?.createdAt || file?.modifiedAt;
+        if (uploadedAt) {
+          items.push({
+            id: `mmp-upload-${file.id}`,
+            title: `MMP Upload: ${file?.name || file?.originalFilename || file?.mmpId || file?.id}`,
+            description: `Status: ${file?.status || "pending"}`,
+            type: "upload",
+            timestamp: uploadedAt,
+            status: mapStatus(file?.status),
+            user: file?.uploadedBy || undefined,
+          });
+        }
+        if (file?.approvedAt) {
+          items.push({
+            id: `mmp-approval-${file.id}`,
+            title: `MMP Approved: ${file?.name || file?.mmpId || file?.id}`,
+            description: file?.approvedBy ? `Approved by ${getUserName(file.approvedBy)}` : "Approved",
+            type: "approval",
+            timestamp: file.approvedAt,
+            status: "completed",
+            user: getUserName(file?.approvedBy),
+          });
+        }
+      });
+
+      // Site visits: latest significant event
+      (siteVisits || []).forEach((visit: any) => {
+        const candidates = [visit?.completedAt, visit?.assignedAt, visit?.createdAt, visit?.dueDate].filter(Boolean) as string[];
+        if (candidates.length === 0) return;
+        const latestTs = candidates.sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0];
+
+        let title = `Site Visit: ${visit?.siteName || visit?.siteCode || "Unknown"}`;
+        let description = `${visit?.state || ""}${visit?.state && visit?.locality ? ", " : ""}${visit?.locality || ""}`.trim();
+        let status: Activity["status"] = mapStatus(visit?.status);
+        let type: Activity["type"] = "visit";
+        let user: string | undefined = undefined;
+
+        if (visit?.completedAt && latestTs === visit.completedAt) {
+          title = `Site Visit Completed: ${visit?.siteName || visit?.siteCode || "Unknown"}`;
+          status = "completed";
+          user = getUserName(visit?.assignedTo);
+        } else if (visit?.assignedAt && latestTs === visit.assignedAt) {
+          title = `Site Visit Assigned: ${visit?.siteName || visit?.siteCode || "Unknown"}`;
+          description = `Assigned to ${getUserName(visit?.assignedTo) || "team"}`;
+          status = "pending";
+          user = getUserName(visit?.assignedTo);
+        } else if (visit?.createdAt && latestTs === visit.createdAt) {
+          title = `Site Visit Created: ${visit?.siteName || visit?.siteCode || "Unknown"}`;
+          status = "pending";
+        } else if (visit?.dueDate && latestTs === visit.dueDate) {
+          title = `Scheduled Site Visit: ${visit?.siteName || visit?.siteCode || "Unknown"}`;
+          type = "reminder";
+          status = "pending";
+        }
+
+        items.push({
+          id: `site-visit-${visit?.id}`,
+          title,
+          description,
+          type,
+          timestamp: latestTs,
+          status,
+          user,
+        });
+      });
+
+      // Project activities (basic signal)
+      (projects || []).forEach((proj: any) => {
+        (proj?.activities || []).forEach((act: any) => {
+          const ts: string | undefined = act?.startDate || act?.endDate;
+          if (!ts) return;
+          const st = act?.status === "completed" ? "completed" : act?.status === "cancelled" ? "critical" : "pending";
+          items.push({
+            id: `project-activity-${act?.id}`,
+            title: `Project Activity: ${act?.name || "Activity"}`,
+            description: `${proj?.name || "Project"} • Status: ${act?.status || "pending"}`,
+            type: "reminder",
+            timestamp: ts,
+            status: st as Activity["status"],
+            user: undefined,
+          });
+        });
+      });
+    } catch (e) {
+      console.error("Failed to build activity feed:", e);
     }
-  ];
+
+    return items
+      .filter((it) => !!it.timestamp)
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, 30);
+  }, [mmpFiles, siteVisits, projects, users]);
 
   const getActivityIcon = (type: Activity["type"], status?: Activity["status"]) => {
     switch (type) {
@@ -146,7 +219,7 @@ const ActivityFeed = ({ className }: ActivityFeedProps) => {
                   <p className="text-sm text-muted-foreground">{activity.description}</p>
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     <Clock className="h-3 w-3" />
-                    <span>{activity.timestamp}</span>
+                    <span>{activity.timestamp ? formatDistanceToNow(new Date(activity.timestamp), { addSuffix: true }) : ""}</span>
                     {activity.user && (
                       <>
                         <span>•</span>
