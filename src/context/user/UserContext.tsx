@@ -10,7 +10,7 @@ interface UserContextType {
   currentUser: User | null;
   users: User[];
   login: (email: string, password: string) => Promise<boolean>;
-  logout: () => void;
+  logout: () => Promise<void>;
   registerUser: (user: Partial<User>) => Promise<boolean>;
   approveUser: (userId: string) => Promise<boolean>;
   rejectUser: (userId: string) => Promise<boolean>;
@@ -533,11 +533,14 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const logout = async () => {
+  const logout = async (): Promise<void> => {
     try {
-      await supabase.auth.signOut();
+      // Clear local state immediately so route guards react without delay
       setCurrentUser(null);
       localStorage.removeItem('PACTCurrentUser');
+
+      // Then sign out from Supabase (network async)
+      await supabase.auth.signOut();
       
       toast({
         title: "Logout successful",
@@ -550,7 +553,6 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         description: "An error occurred during logout.",
         variant: "destructive",
       });
-      return false;
     }
   };
 

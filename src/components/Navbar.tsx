@@ -26,9 +26,9 @@ const Navbar = () => {
   const { currentUser, logout } = useUser();
   const { getUnreadNotificationsCount } = useNotifications();
   
-  const handleLogout = useCallback(() => {
-    logout();
-    navigate('/login');
+  const handleLogout = useCallback(async () => {
+    await logout();
+    navigate('/auth');
   }, [logout, navigate]);
   
   return (

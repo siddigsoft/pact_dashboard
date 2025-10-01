@@ -175,6 +175,7 @@ const getMenuGroups = (roles: AppRole[] = [], defaultRole: string = 'dataCollect
 
 const AppSidebar = () => {
   const { pathname } = useLocation();
+  const navigate = useNavigate();
   const { currentUser, logout, roles } = useAppContext();
   const { showDueReminders } = useSiteVisitReminders();
   
@@ -212,10 +213,11 @@ const AppSidebar = () => {
     return currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1);
   };
   
-  const handleLogout = () => {
+  const handleLogout = async () => {
     showDueReminders();
-    setTimeout(() => {
-      logout();
+    setTimeout(async () => {
+      await logout();
+      navigate('/auth');
     }, 1500);
   };
 
