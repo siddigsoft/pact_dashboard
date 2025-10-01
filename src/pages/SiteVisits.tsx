@@ -23,9 +23,10 @@ import { getStatusColor, getStatusLabel, getStatusDescription } from "@/utils/si
 import { useToast } from "@/hooks/use-toast";
 import FloatingMessenger from "@/components/communication/FloatingMessenger";
 import { useMMP } from "@/context/mmp/MMPContext";
+import LeafletMapContainer from '@/components/map/LeafletMapContainer';
 
 const SiteVisits = () => {
-  const { currentUser } = useAppContext();
+  const { currentUser, hasPermission, hasRole } = useAppContext();
   const { siteVisits } = useSiteVisitContext();
   const { mmpFiles } = useMMP();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -55,7 +56,11 @@ const SiteVisits = () => {
   }, []);
 
   useEffect(() => {
-    let filtered = siteVisits.filter(visit => visit.assignedTo === currentUser?.id);
+    const canViewAll = (typeof hasPermission === 'function' && hasPermission('view_all_site_visits'))
+      || ['admin','ict','supervisor','fom'].includes(currentUser?.role || '');
+    let filtered = canViewAll
+      ? siteVisits
+      : siteVisits.filter(visit => visit.assignedTo === currentUser?.id);
 
     if (statusFilter !== "all") {
       filtered = filtered.filter(visit => visit.status === statusFilter);
@@ -92,7 +97,7 @@ const SiteVisits = () => {
     
     if (view === 'map' && filtered.length > 0) {
       const pendingVisit = filtered.find(v => v.status === 'pending');
-      setSelectedVisit(pendingVisit || filtered[0]);
+      setSelectedVisit(pendingVisit || null);
     }
   }, [currentUser, siteVisits, statusFilter, searchTerm, sortBy, view]);
 
@@ -145,8 +150,40 @@ const SiteVisits = () => {
 
   const renderContent = () => {
     if (view === 'map') {
+      // Build map locations for all filtered visits
+      const siteLocations = filteredVisits
+        .map(v => {
+          const lat = (v as any)?.coordinates?.latitude ?? (v as any)?.location?.latitude;
+          const lng = (v as any)?.coordinates?.longitude ?? (v as any)?.location?.longitude;
+          if (!lat || !lng || isNaN(lat) || isNaN(lng)) return null;
+          return {
+            id: v.id,
+            name: v.siteName,
+            latitude: lat as number,
+            longitude: lng as number,
+            type: 'site' as const,
+            status: v.status,
+          };
+        })
+        .filter(Boolean) as Array<{id:string;name:string;latitude:number;longitude:number;type:'site';status:string}>;
+
       return (
         <div className="space-y-6">
+          {siteLocations.length > 0 && (
+            <div className="h-[500px] w-full rounded-lg overflow-hidden">
+              <LeafletMapContainer
+                locations={siteLocations}
+                height="500px"
+                defaultCenter={[15.5007, 32.5599]}
+                defaultZoom={6}
+                onLocationClick={(id) => {
+                  const v = filteredVisits.find(x => x.id === id);
+                  if (v) setSelectedVisit(v);
+                }}
+              />
+            </div>
+          )}
+
           {selectedVisit ? (
             <>
               <div className="flex items-center justify-between bg-muted/30 p-4 rounded-lg">

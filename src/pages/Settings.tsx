@@ -6,11 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Settings as SettingsIcon, Bell, Palette, User, Shield, Database, Wallet } from "lucide-react";
+import { Settings as SettingsIcon, Bell, Palette, User, Shield, Database, Wallet, MapPin } from "lucide-react";
 import { useSettings } from "@/context/settings/SettingsContext";
 import { Input } from "@/components/ui/input";
 import { useUser } from "@/context/user/UserContext";
 import { Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogClose, DialogDescription } from "@/components/ui/dialog";
+import LocationCapture from "@/components/LocationCapture";
 
 const Settings = () => {
   const { toast } = useToast();
@@ -229,6 +230,10 @@ const Settings = () => {
             <SettingsIcon className="h-4 w-4 mr-2" />
             General
           </TabsTrigger>
+          <TabsTrigger value="location">
+            <MapPin className="h-4 w-4 mr-2" />
+            Location
+          </TabsTrigger>
           <TabsTrigger value="notifications">
             <Bell className="h-4 w-4 mr-2" />
             Notifications
@@ -284,6 +289,10 @@ const Settings = () => {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+        
+        <TabsContent value="location" className="space-y-4">
+          <LocationCapture />
         </TabsContent>
         
         <TabsContent value="notifications" className="space-y-4">

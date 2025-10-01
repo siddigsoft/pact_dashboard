@@ -30,13 +30,33 @@ security definer
 set search_path = public
 as $$
 begin
-  insert into public.profiles (id, email, full_name, username, role, status, created_at)
+  insert into public.profiles (
+    id, 
+    email, 
+    full_name, 
+    username, 
+    role, 
+    hub_id, 
+    state_id, 
+    locality_id, 
+    phone, 
+    employee_id,
+    avatar_url,
+    status, 
+    created_at
+  )
   values (
     new.id,
     new.email,
     coalesce(new.raw_user_meta_data->>'name', split_part(new.email, '@', 1)),
     coalesce(new.raw_user_meta_data->>'username', split_part(new.email, '@', 1)),
     coalesce(new.raw_user_meta_data->>'role', 'dataCollector'),
+    new.raw_user_meta_data->>'hubId',
+    new.raw_user_meta_data->>'stateId',
+    new.raw_user_meta_data->>'localityId',
+    new.raw_user_meta_data->>'phone',
+    new.raw_user_meta_data->>'employeeId',
+    new.raw_user_meta_data->>'avatar',
     'pending',
     now()
   ) on conflict (id) do nothing;

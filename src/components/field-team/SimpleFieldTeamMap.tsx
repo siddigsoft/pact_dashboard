@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { User, SiteVisit } from '@/types';
 import { MapPin, Users, Navigation, ChevronRight, Globe2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -10,6 +10,8 @@ import { useNavigate } from 'react-router-dom';
 import TeamMemberLocation from '../field-team/TeamMemberLocation';
 import CollectorCard from '@/components/site-visit/CollectorCard';
 import { CollectorMatch } from '@/utils/gpsMatchingUtils';
+import LeafletMapContainer from '@/components/map/LeafletMapContainer';
+import 'leaflet/dist/leaflet.css';
 
 interface SimpleFieldTeamMapProps {
   users: User[];
@@ -45,21 +47,35 @@ const SimpleFieldTeamMap: React.FC<SimpleFieldTeamMapProps> = ({
   onAssign 
 }) => {
   const navigate = useNavigate();
+  const [isClient, setIsClient] = useState(false);
   
-  // Group users by region/state
-  const usersByRegion = users.reduce((acc, user) => {
-    const region = user.location?.region || user.stateId || 'Unknown';
-    if (!acc[region]) {
-      acc[region] = [];
-    }
-    acc[region].push(user);
-    return acc;
-  }, {} as Record<string, User[]>);
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
   
-  // Get all unique regions
-  const allRegions = [...new Set(Object.keys(usersByRegion))];
+  // Filter users with valid location data
+  const usersWithLocation = users.filter(user => 
+    user.location?.latitude && 
+    user.location?.longitude &&
+    !isNaN(user.location.latitude) &&
+    !isNaN(user.location.longitude)
+  );
+  
+  // Convert users to map locations format
+  const mapLocations = usersWithLocation.map(user => ({
+    id: user.id,
+    name: user.name || user.fullName || 'Unknown',
+    latitude: user.location!.latitude!,
+    longitude: user.location!.longitude!,
+    type: 'user' as const,
+    status: user.availability || 'offline',
+    phone: user.phone,
+    lastActive: user.lastActive,
+    workload: user.performance?.currentWorkload,
+    avatar: user.avatar,
+  }));
 
-  if (allRegions.length === 0) {
+  if (usersWithLocation.length === 0) {
     return (
       <Card>
         <CardContent className="p-4 flex flex-col items-center justify-center min-h-[600px]">
@@ -75,30 +91,35 @@ const SimpleFieldTeamMap: React.FC<SimpleFieldTeamMapProps> = ({
   }
 
   return (
-    <ScrollArea className="h-[600px] w-full pr-4">
-      <div className="space-y-6 pb-4">
-        {allRegions.map(region => (
-          <Card key={region} className="relative overflow-hidden">
-            <CardHeader className="bg-muted/50">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <MapPin className="h-5 w-5 text-primary" />
-                  {region}
-                </CardTitle>
-                <Badge variant="outline" className="bg-background">
-                  {usersByRegion[region].length} Team Members
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {usersByRegion[region].map(user => (
-                <TeamMemberLocation key={user.id} user={user} />
-              ))}
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-    </ScrollArea>
+    <Card className="w-full">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <MapPin className="h-5 w-5 text-primary" />
+            Field Team Locations
+          </CardTitle>
+          <Badge variant="outline" className="bg-background">
+            {usersWithLocation.length} Team Members
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="p-0">
+        <div className="h-[600px] w-full">
+          {isClient && (
+            <LeafletMapContainer
+              locations={mapLocations}
+              height="600px"
+              defaultCenter={[15.5007, 32.5599]} // Sudan's center
+              defaultZoom={6}
+              onLocationClick={(userId) => {
+                console.log('User clicked:', userId);
+                // You can add navigation or modal logic here
+              }}
+            />
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 };
 

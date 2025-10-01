@@ -194,6 +194,21 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             console.error("Error parsing stored user:", error);
           }
           
+          // Parse location data from database if it's a string
+          let locationData = existingUser.location;
+          if (profile.location) {
+            try {
+              if (typeof profile.location === 'string') {
+                locationData = JSON.parse(profile.location);
+              } else {
+                locationData = profile.location;
+              }
+            } catch (error) {
+              console.error("Error parsing location data:", error);
+              locationData = existingUser.location;
+            }
+          }
+          
           return {
             id: profile.id,
             name: profile.full_name || profile.username || 'Unknown',
@@ -210,8 +225,9 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             employeeId: profile.employee_id || existingUser.employeeId,
             lastActive: existingUser.lastActive || new Date().toISOString(),
             isApproved: profile.status === 'approved' || false,
-            availability: existingUser.availability || 'offline',
+            availability: profile.availability || existingUser.availability || 'offline',
             createdAt: profile.created_at || existingUser.createdAt || new Date().toISOString(),
+            location: locationData,
             wallet: existingUser.wallet || {
               balance: 0,
               currency: 'USD'
@@ -332,6 +348,21 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return false;
       }
 
+      // Parse location data if it's a string
+      let locationData;
+      if (profileData?.location) {
+        try {
+          if (typeof profileData.location === 'string') {
+            locationData = JSON.parse(profileData.location);
+          } else {
+            locationData = profileData.location;
+          }
+        } catch (error) {
+          console.error("Error parsing location data:", error);
+          locationData = undefined;
+        }
+      }
+
       const supabaseUser: User = {
         id: authUser.id,
         name: (userProfile as any).full_name || (userProfile as any).username || authUser.email?.split('@')[0] || 'User',
@@ -348,7 +379,8 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         employeeId: (userProfile as any).employee_id,
         lastActive: new Date().toISOString(),
         isApproved: true,
-        availability: 'online',
+        availability: profileData?.availability || 'online',
+        location: locationData,
         wallet: {
           balance: 0,
           currency: 'USD',
@@ -493,6 +525,20 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
           return false;
         }
         
+        // Parse location data if it's a string
+        let locationData;
+        if (profileData?.location) {
+          try {
+            if (typeof profileData.location === 'string') {
+              locationData = JSON.parse(profileData.location);
+            } else {
+              locationData = profileData.location;
+            }
+          } catch (error) {
+            console.error("Error parsing location data:", error);
+          }
+        }
+        
         const supabaseUser: User = {
           id: authData.user.id,
           name: userProfile.full_name || userProfile.username || authData.user.email?.split('@')[0] || 'User',
@@ -509,7 +555,8 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
           employeeId: userProfile.employee_id,
           lastActive: new Date().toISOString(),
           isApproved,
-          availability: 'online',
+          availability: profileData?.availability || 'online',
+          location: locationData,
           wallet: {
             balance: 0,
             currency: 'USD',

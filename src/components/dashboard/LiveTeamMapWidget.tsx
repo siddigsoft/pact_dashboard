@@ -25,17 +25,17 @@ const LiveTeamMapWidget = () => {
   const { siteVisits } = useSiteVisitContext();
   const [mapEnabled, setMapEnabled] = useState(true);
   
-  // Filter active collectors with location data
-  const activeCollectors = users?.filter(
-    user => 
-      (user?.role === 'dataCollector' || user?.role === 'datacollector' || user?.role === 'coordinator') && 
-      user?.status === 'active' &&
-      user?.location?.latitude && 
-      user?.location?.longitude
+  // Users with location data (regardless of role or account status)
+  const collectorsWithLocation = users?.filter(
+    user => !!(user?.location?.latitude && user?.location?.longitude)
   ) || [];
 
-  const activeSiteVisits = siteVisits?.filter(
-    visit => visit.status === 'inProgress' || visit.status === 'assigned'
+  const siteVisitsWithLocation = siteVisits?.filter(
+    visit => (
+      (visit as any)?.coordinates?.latitude && (visit as any)?.coordinates?.longitude
+    ) || (
+      (visit as any)?.location?.latitude && (visit as any)?.location?.longitude
+    )
   ) || [];
 
   return (
@@ -68,7 +68,7 @@ const LiveTeamMapWidget = () => {
           <div className="flex items-center justify-between text-sm text-muted-foreground">
             <div className="flex items-center gap-2">
               <Users className="h-4 w-4" />
-              <span>{activeCollectors.length} Active Members</span>
+              <span>{collectorsWithLocation.length} Active Members</span>
             </div>
             <div className="flex items-center gap-2">
               <MapPin className="h-4 w-4" />
@@ -79,8 +79,8 @@ const LiveTeamMapWidget = () => {
           <div className="h-[300px] w-full rounded-md overflow-hidden">
             {!mapEnabled ? <MapDisabled /> : (
               <StaticTeamMap 
-                users={activeCollectors.slice(0, 5)} 
-                siteVisits={activeSiteVisits.slice(0, 5)} 
+                users={collectorsWithLocation.slice(0, 5)} 
+                siteVisits={siteVisitsWithLocation.slice(0, 5)} 
               />
             )}
           </div>
