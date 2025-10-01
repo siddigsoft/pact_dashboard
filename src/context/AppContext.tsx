@@ -155,14 +155,14 @@ const CompositeContextProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 export const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   return (
     <ViewModeProvider>
-      <UserProvider>
-        <SiteVisitProvider>
-          <MMPProvider>
-            <ProjectProvider>
-              <WalletProvider>
-                <SettingsProvider>
-                  <ArchiveProvider>
-                    <NotificationProvider>
+      <NotificationProvider>
+        <UserProvider>
+          <SiteVisitProvider>
+            <MMPProvider>
+              <ProjectProvider>
+                <WalletProvider>
+                  <SettingsProvider>
+                    <ArchiveProvider>
                       <CompositeContextProvider>
                         <ChatProvider>
                           <CommunicationProvider>
@@ -170,14 +170,14 @@ export const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children
                           </CommunicationProvider>
                         </ChatProvider>
                       </CompositeContextProvider>
-                    </NotificationProvider>
-                  </ArchiveProvider>
-                </SettingsProvider>
-              </WalletProvider>
-            </ProjectProvider>
-          </MMPProvider>
-        </SiteVisitProvider>
-      </UserProvider>
+                    </ArchiveProvider>
+                  </SettingsProvider>
+                </WalletProvider>
+              </ProjectProvider>
+            </MMPProvider>
+          </SiteVisitProvider>
+        </UserProvider>
+      </NotificationProvider>
     </ViewModeProvider>
   );
 };

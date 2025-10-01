@@ -6,6 +6,7 @@ import { SiteVisitContextType } from './types';
 import { calculateOnTimeRate, calculateUserRating } from './utils';
 import { isUserNearSite, calculateUserWorkload } from '@/utils/collectorUtils';
 import { fetchSiteVisits, createSiteVisitInDb, updateSiteVisitInDb } from './supabase';
+import { useNotifications } from '../notifications/NotificationContext';
 
 const SiteVisitContext = createContext<SiteVisitContextType | undefined>(undefined);
 
@@ -68,65 +69,7 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   };
 
-  const [notificationsAPI, setNotificationsAPI] = useState<any>(null);
-  
-  React.useEffect(() => {
-    try {
-      import('../notifications/NotificationContext').then(module => {
-        try {
-          setNotificationsAPI({
-            addNotification: (notification: any) => {
-              try {
-                const NotificationHelper = () => {
-                  const { addNotification } = module.useNotifications();
-                  React.useEffect(() => {
-                    addNotification(notification);
-                  }, []);
-                  return null;
-                };
-                
-                const div = document.createElement('div');
-                document.body.appendChild(div);
-                (async () => {
-                  try {
-                    const { createRoot } = await import('react-dom/client');
-                    const root = createRoot(div);
-                    root.render(<module.NotificationProvider><NotificationHelper /></module.NotificationProvider>);
-                    setTimeout(() => {
-                      try {
-                        root.unmount();
-                        document.body.removeChild(div);
-                      } catch (error) {
-                        console.error("Cleanup error:", error);
-                      }
-                    }, 100);
-                  } catch (error) {
-                    console.error("Failed to render notification helper:", error);
-                  }
-                })();
-              } catch (error) {
-                console.error("Failed to add notification:", error);
-              }
-            }
-          });
-        } catch (error) {
-          console.error('Error using NotificationContext:', error);
-        }
-      }).catch(error => {
-        console.error('Error importing NotificationContext:', error);
-      });
-    } catch (error) {
-      console.error('Failed to set up notifications:', error);
-    }
-  }, []);
-
-  const addNotification = (notification: any) => {
-    if (notificationsAPI && notificationsAPI.addNotification) {
-      notificationsAPI.addNotification(notification);
-    } else {
-      console.log('Notification would be sent (but API not ready):', notification);
-    }
-  };
+  const { addNotification } = useNotifications();
 
   const verifySitePermit = async (siteVisitId: string): Promise<boolean> => {
     try {
