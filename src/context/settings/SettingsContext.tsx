@@ -107,73 +107,65 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
   // Fetch settings from the database when the component mounts
   useEffect(() => {
     if (!currentUser?.id) return;
-    
+
     const fetchSettings = async () => {
       setLoading(true);
       setError(null);
-      
       try {
-        // Fetch user settings
+        // user_settings
         const { data: userData, error: userError } = await supabase
           .from('user_settings')
           .select('*')
           .eq('user_id', currentUser.id)
-          .single();
-        
-        if (userError && userError.code !== 'PGRST116') {
-          // PGRST116 is "no rows returned", which is fine for new users
+          .maybeSingle();
+
+        if (userError) {
           console.error('Error fetching user settings:', userError);
           setError('Failed to fetch user settings');
-        } else if (userData) {
+        }
+        if (userData) {
           setUserSettings(userData);
-          // Update frontend state from database values
           if (userData.settings?.theme) {
             setAppearanceSettings(prev => ({
               ...prev,
-              darkMode: userData.settings?.theme === 'dark',
-              theme: userData.settings?.theme === 'system' ? 'default' : userData.settings?.theme
+              darkMode: userData.settings.theme === 'dark',
+              theme: userData.settings.theme === 'system' ? 'default' : userData.settings.theme,
             }));
           }
         }
-        
-        // Fetch wallet settings
+
+        // wallet_settings
         const { data: walletData, error: walletError } = await supabase
           .from('wallet_settings')
           .select('*')
           .eq('user_id', currentUser.id)
-          .single();
-        
-        if (walletError && walletError.code !== 'PGRST116') {
+          .maybeSingle();
+        if (walletError) {
           console.error('Error fetching wallet settings:', walletError);
-        } else if (walletData) {
-          setWalletSettings(walletData);
         }
-        
-        // Fetch data visibility settings
+        if (walletData) setWalletSettings(walletData);
+
+        // data_visibility_settings
         const { data: visibilityData, error: visibilityError } = await supabase
           .from('data_visibility_settings')
           .select('*')
           .eq('user_id', currentUser.id)
-          .single();
-        
-        if (visibilityError && visibilityError.code !== 'PGRST116') {
+          .maybeSingle();
+        if (visibilityError) {
           console.error('Error fetching data visibility settings:', visibilityError);
-        } else if (visibilityData) {
-          setDataVisibilitySettings(visibilityData);
         }
-        
-        // Fetch dashboard settings
+        if (visibilityData) setDataVisibilitySettings(visibilityData);
+
+        // dashboard_settings
         const { data: dashboardData, error: dashboardError } = await supabase
           .from('dashboard_settings')
           .select('*')
           .eq('user_id', currentUser.id)
-          .single();
-        
-        if (dashboardError && dashboardError.code !== 'PGRST116') {
+          .maybeSingle();
+        if (dashboardError) {
           console.error('Error fetching dashboard settings:', dashboardError);
-        } else if (dashboardData) {
-          setDashboardSettings(dashboardData);
         }
+        if (dashboardData) setDashboardSettings(dashboardData);
       } catch (err) {
         console.error('Error in fetchSettings:', err);
         setError('An unexpected error occurred while fetching settings');
@@ -181,58 +173,48 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
         setLoading(false);
       }
     };
-    
+
     fetchSettings();
   }, [currentUser?.id]);
   
   const updateUserSettings = async (settings: Partial<UserSettings['settings']>) => {
     if (!currentUser?.id) return;
-    
     try {
       const updatedSettings = {
-        ...userSettings?.settings,
-        ...settings
+        ...(userSettings?.settings || {}),
+        ...settings,
       };
-      
-      // First check if the user already has settings
+
       if (userSettings?.id) {
-        // Update existing settings
         const { error } = await supabase
           .from('user_settings')
           .update({ settings: updatedSettings })
           .eq('id', userSettings.id);
-        
         if (error) throw error;
       } else {
-        // Create new settings
         const { error } = await supabase
           .from('user_settings')
-          .insert([{ 
-            user_id: currentUser.id, 
-            settings: updatedSettings 
-          }]);
-        
+          .insert([{ user_id: currentUser.id, settings: updatedSettings }]);
         if (error) throw error;
       }
-      
-      // Update local state
+
       setUserSettings(prev => ({
-        ...prev,
+        ...(prev || {} as any),
         settings: updatedSettings,
-        user_id: currentUser.id
+        user_id: currentUser.id,
       }));
-      
+
       toast({
-        title: "Settings updated",
-        description: "Your settings have been saved successfully",
-        variant: "success",
+        title: 'Settings updated',
+        description: 'Your settings have been saved successfully',
+        variant: 'success',
       });
     } catch (err: any) {
       console.error('Error updating user settings:', err);
       toast({
-        title: "Settings update failed",
-        description: err.message || "There was a problem saving your settings",
-        variant: "destructive",
+        title: 'Settings update failed',
+        description: err?.message || 'There was a problem saving your settings',
+        variant: 'destructive',
       });
     }
   };

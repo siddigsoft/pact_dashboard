@@ -130,6 +130,12 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const refreshUsers = async () => {
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        // Not authenticated: avoid RLS errors and empty responses
+        setAppUsers([]);
+        return;
+      }
       console.log("Refreshing users from Supabase...");
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
@@ -270,6 +276,121 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => clearInterval(activityInterval);
   }, [currentUser]);
 
+  // Hydrate current user from existing Supabase session (OAuth/email) and listen for auth state changes
+  const setUserFromAuthUser = async (authUser: any): Promise<boolean> => {
+    try {
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', authUser.id)
+        .single();
+
+      const { data: userRoles } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', authUser.id);
+
+      const userRolesList = userRoles ? userRoles.map(r => r.role as AppRole) : [];
+
+      const userProfile = profileData || {
+        id: authUser.id,
+        full_name: authUser.email?.split('@')[0] || '',
+        username: authUser.email,
+        role: 'dataCollector',
+        status: 'pending',
+      } as any;
+
+      const userData = authUser.user_metadata || {};
+      const userRole = typeof userData === 'object' && userData
+        ? (userData as { role?: string }).role || 'dataCollector'
+        : 'dataCollector';
+
+      const isApproved = (profileData?.status === 'approved');
+      if (!isApproved) {
+        toast({
+          title: 'Pending approval',
+          description: 'Your account is pending approval by an administrator.',
+        });
+        await supabase.auth.signOut();
+        return false;
+      }
+
+      const supabaseUser: User = {
+        id: authUser.id,
+        name: (userProfile as any).full_name || (userProfile as any).username || authUser.email?.split('@')[0] || 'User',
+        email: authUser.email || '',
+        role: (userProfile as any).role || userRole,
+        roles: userRolesList.length > 0 ? userRolesList : undefined,
+        stateId: (userProfile as any).state_id,
+        hubId: (userProfile as any).hub_id,
+        avatar: (userProfile as any).avatar_url,
+        username: (userProfile as any).username,
+        fullName: (userProfile as any).full_name,
+        lastActive: new Date().toISOString(),
+        isApproved: true,
+        availability: 'online',
+        wallet: {
+          balance: 5000,
+          currency: 'USD',
+        },
+        performance: {
+          rating: 0,
+          totalCompletedTasks: 0,
+          onTimeCompletion: 0,
+        }
+      };
+
+      setCurrentUser(supabaseUser);
+      localStorage.setItem('PACTCurrentUser', JSON.stringify(supabaseUser));
+      localStorage.setItem(`user-${supabaseUser.id}`, JSON.stringify(supabaseUser));
+
+      const userExists = appUsers.some(u => u.id === supabaseUser.id);
+      if (!userExists) {
+        setAppUsers(prev => [...prev, supabaseUser]);
+      }
+
+      return true;
+    } catch (e) {
+      console.error('Bootstrap sign-in error:', e);
+      return false;
+    }
+  };
+
+  useEffect(() => {
+    let unsub: { unsubscribe: () => void } | undefined;
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) await setUserFromAuthUser(user);
+        } else {
+          setCurrentUser(null);
+          localStorage.removeItem('PACTCurrentUser');
+        }
+      } catch {}
+
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event) => {
+        try {
+          if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) await setUserFromAuthUser(user);
+          } else if (event === 'SIGNED_OUT') {
+            setCurrentUser(null);
+            localStorage.removeItem('PACTCurrentUser');
+          }
+        } catch (err) {
+          console.error('Auth state handler error:', err);
+        }
+      });
+      unsub = subscription;
+    })();
+
+    return () => {
+      try { unsub?.unsubscribe(); } catch {}
+    };
+  }, []);
+
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
       const { data: authData, error: authError } = await supabase.auth
@@ -341,6 +462,16 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const userRole = typeof userData === 'object' && userData ? 
           (userData as {role?: string}).role || 'dataCollector' : 
           'dataCollector';
+
+        const isApproved = (profileData?.status === 'approved');
+        if (!isApproved) {
+          toast({
+            title: 'Pending approval',
+            description: 'Your account is pending approval by an administrator.',
+          });
+          await supabase.auth.signOut();
+          return false;
+        }
         
         const supabaseUser: User = {
           id: authData.user.id,
@@ -354,7 +485,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
           username: userProfile.username,
           fullName: userProfile.full_name,
           lastActive: new Date().toISOString(),
-          isApproved: true,
+          isApproved,
           availability: 'online',
           wallet: {
             balance: 5000,
@@ -471,16 +602,25 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const approveUser = async (userId: string): Promise<boolean> => {
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('profiles')
         .update({ status: 'approved' })
-        .eq('id', userId);
+        .eq('id', userId)
+        .select('id');
       
       if (error) {
         console.error("Supabase approval error:", error);
         toast({
           title: "Approval error",
           description: "There was an error approving the user in Supabase.",
+          variant: "destructive",
+        });
+        return false;
+      }
+      if (!data || data.length === 0) {
+        toast({
+          title: "Approval blocked",
+          description: "No user was updated. Check Row Level Security policies for profiles.",
           variant: "destructive",
         });
         return false;
@@ -523,13 +663,22 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const rejectUser = async (userId: string): Promise<boolean> => {
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('profiles')
         .delete()
-        .eq('id', userId);
+        .eq('id', userId)
+        .select('id');
       
       if (error) {
         console.error("Supabase rejection error:", error);
+      }
+      if (error || !data || data.length === 0) {
+        toast({
+          title: "Rejection blocked",
+          description: "No user was deleted. Check Row Level Security policies for profiles.",
+          variant: "destructive",
+        });
+        return false;
       }
       
       setAppUsers(prev => prev.filter(user => user.id !== userId));

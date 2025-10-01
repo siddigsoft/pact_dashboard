@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useUser } from '@/context/user/UserContext';
 import { User } from '@/types';
 import UserRoleDashboard from '@/components/UserRoleDashboard';
@@ -78,8 +78,8 @@ const Users = () => {
   const [roleAction, setRoleAction] = useState<'add' | 'remove'>('add');
   const [isRoleLoading, setIsRoleLoading] = useState(false);
 
-  const pendingUsers = users.filter(user => !user.isApproved);
-  const approvedUsers = users.filter(user => user.isApproved);
+  const pendingUsers = useMemo(() => users.filter(user => !user.isApproved), [users]);
+  const approvedUsers = useMemo(() => users.filter(user => user.isApproved), [users]);
 
   const handleRefreshUsers = async () => {
     setIsRefreshing(true);
@@ -117,9 +117,11 @@ const Users = () => {
   }, []);
 
   useEffect(() => {
-    let result = activeTab === 'pending-approvals' ? pendingUsers : 
-                 activeTab === 'approved-users' ? approvedUsers : users;
+    let base = users;
+    if (activeTab === 'pending-approvals') base = pendingUsers;
+    else if (activeTab === 'approved-users') base = approvedUsers;
 
+    let result = base;
     if (searchQuery) {
       const lowerQuery = searchQuery.toLowerCase();
       result = result.filter(user =>
@@ -145,7 +147,7 @@ const Users = () => {
     }
 
     setFilteredUsers(result);
-  }, [users, pendingUsers, approvedUsers, activeTab, searchQuery, selectedRole, selectedState, selectedHub]);
+  }, [users, activeTab, searchQuery, selectedRole, selectedState, selectedHub]);
 
   const handleRoleClick = (role: string) => {
     if (selectedRole === role) {
@@ -229,36 +231,7 @@ const Users = () => {
           title: "User approved",
           description: "The user has been successfully approved and can now log in.",
         });
-        
-        const updatedUser = users.find(u => u.id === userId);
-        if (updatedUser) {
-          const storedUser = localStorage.getItem(`user-${userId}`);
-          if (storedUser) {
-            try {
-              const parsedUser = JSON.parse(storedUser);
-              localStorage.setItem(`user-${userId}`, JSON.stringify({
-                ...parsedUser,
-                isApproved: true
-              }));
-            } catch (error) {
-              console.error("Error updating stored user:", error);
-            }
-          } else {
-            localStorage.setItem(`user-${userId}`, JSON.stringify({
-              ...updatedUser,
-              isApproved: true
-            }));
-          }
-        }
-        
-        try {
-          await supabase
-            .from('profiles')
-            .update({ status: 'approved' })
-            .eq('id', userId);
-        } catch (error) {
-          console.error("Supabase update error:", error);
-        }
+        await refreshUsers();
       }
     } catch (error) {
       console.error("Error approving user:", error);
@@ -283,17 +256,7 @@ const Users = () => {
           title: "User rejected",
           description: "The user has been removed from the system.",
         });
-        
-        localStorage.removeItem(`user-${userId}`);
-        
-        try {
-          await supabase
-            .from('profiles')
-            .delete()
-            .eq('id', userId);
-        } catch (error) {
-          console.error("Supabase delete error:", error);
-        }
+        await refreshUsers();
       }
     } catch (error) {
       console.error("Error rejecting user:", error);
