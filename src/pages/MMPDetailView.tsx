@@ -76,31 +76,8 @@ const MMPDetailView = () => {
   const canApprove = currentUser && ['admin', 'fom', 'financialAdmin'].includes(currentUser.role || '') && mmpFile?.status === 'pending';
 
   const validateSiteEntries = (mmpFile: any) => {
-    if (!mmpFile) return [];
-    
-    if (mmpFile.siteEntries && Array.isArray(mmpFile.siteEntries)) {
-      return mmpFile.siteEntries;
-    }
-
-    // Generate mock entries if real entries don't exist
-    return Array(mmpFile.entries || 0).fill(null).map((_, index) => ({
-      id: `site-${index + 1}`,
-      siteCode: `SC${String(10000 + index).padStart(5, '0')}`,
-      siteName: `Site ${index + 1}`,
-      inMoDa: Math.random() > 0.3,
-      visitedBy: Math.random() > 0.5 ? 'PACT' : 'Joint Visit',
-      mainActivity: ['DM', 'AIM', 'PDM', 'OTHER'][Math.floor(Math.random() * 4)],
-      activityAtSite: ['TSFP', 'SF', 'eBSFP', 'PSN', 'THR'][Math.floor(Math.random() * 5)],
-      toolsToBeUsed: ['Tool A', 'Tool B', 'Tool C'].slice(0, Math.floor(Math.random() * 3) + 1),
-      visitDate: new Date(Date.now() + (Math.random() * 30 * 24 * 60 * 60 * 1000)).toISOString().split('T')[0],
-      distributionByCP: Math.random() > 0.3,
-      siteVisited: Math.random() > 0.4,
-      submittedToMoDa: Math.random() > 0.5,
-      questionsSubmitted: Math.floor(Math.random() * 20) + 1,
-      findings: Math.random() > 0.7 ? "Some findings noted during the visit" : "",
-      flaggedIssues: Math.random() > 0.8 ? "Critical issue that needs immediate attention" : "",
-      additionalComments: Math.random() > 0.6 ? "Additional observations about site conditions" : ""
-    }));
+    if (!mmpFile) return [] as any[];
+    return Array.isArray(mmpFile.siteEntries) ? mmpFile.siteEntries : [];
   };
 
   const siteEntries = mmpFile ? validateSiteEntries(mmpFile) : [];
@@ -397,116 +374,143 @@ const MMPDetailView = () => {
           <Card>
             <CardContent>
               <div className="space-y-6">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <Card>
-                    <CardContent className="pt-6">
-                      <div className="text-center">
-                        <div className="text-2xl font-bold text-green-600">
-                          {Math.floor(siteEntries.length * 0.85)}
-                        </div>
-                        <p className="text-muted-foreground text-sm">Valid Entries</p>
+                {(() => {
+                  // Compute validation metrics and issues from real data
+                  const total = siteEntries.length;
+                  const siteByCode: Record<string, number> = {};
+                  siteEntries.forEach(s => { if (s.siteCode) siteByCode[s.siteCode] = (siteByCode[s.siteCode] || 0) + 1 });
+                  const duplicateCodes = Object.entries(siteByCode).filter(([_, c]) => c > 1).map(([code]) => code);
+
+                  const issues: { site: string; issueType: string; description: string; severity: 'Warning' | 'Error' }[] = [];
+                  const siteHasIssue = new Set<string>();
+
+                  siteEntries.forEach((s) => {
+                    const idOrCode = (s as any).id || s.siteCode || '';
+                    const missingRequired = !s.siteCode || !s.siteName || !s.visitDate;
+                    if (missingRequired) {
+                      issues.push({ site: s.siteCode || s.siteName || idOrCode, issueType: 'Missing Data', description: 'siteCode, siteName and visitDate are required', severity: 'Error' });
+                      siteHasIssue.add(idOrCode);
+                    }
+                    const invalidDate = !s.visitDate || isNaN(Date.parse(String(s.visitDate)));
+                    if (!missingRequired && invalidDate) {
+                      issues.push({ site: s.siteCode || s.siteName || idOrCode, issueType: 'Format Error', description: 'Invalid visitDate format', severity: 'Error' });
+                      siteHasIssue.add(idOrCode);
+                    }
+                    if (duplicateCodes.includes(s.siteCode)) {
+                      issues.push({ site: s.siteCode || idOrCode, issueType: 'Duplicate', description: 'Duplicate siteCode in this MMP', severity: 'Error' });
+                      siteHasIssue.add(idOrCode);
+                    }
+                    if (!s.visitedBy || !s.mainActivity) {
+                      issues.push({ site: s.siteCode || s.siteName || idOrCode, issueType: 'Missing Optional', description: 'visitedBy or mainActivity missing', severity: 'Warning' });
+                      siteHasIssue.add(idOrCode);
+                    }
+                  });
+
+                  const errorsCount = issues.filter(i => i.severity === 'Error').length;
+                  const warningsCount = issues.filter(i => i.severity === 'Warning').length;
+                  const validEntries = total - siteHasIssue.size;
+
+                  return (
+                    <>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <Card>
+                          <CardContent className="pt-6">
+                            <div className="text-center">
+                              <div className="text-2xl font-bold text-green-600">
+                                {validEntries}
+                              </div>
+                              <p className="text-muted-foreground text-sm">Valid Entries</p>
+                            </div>
+                          </CardContent>
+                        </Card>
+                        <Card>
+                          <CardContent className="pt-6">
+                            <div className="text-center">
+                              <div className="text-2xl font-bold text-amber-600">
+                                {warningsCount}
+                              </div>
+                              <p className="text-muted-foreground text-sm">Warnings</p>
+                            </div>
+                          </CardContent>
+                        </Card>
+                        <Card>
+                          <CardContent className="pt-6">
+                            <div className="text-center">
+                              <div className="text-2xl font-bold text-red-600">
+                                {errorsCount}
+                              </div>
+                              <p className="text-muted-foreground text-sm">Errors</p>
+                            </div>
+                          </CardContent>
+                        </Card>
+                        <Card>
+                          <CardContent className="pt-6">
+                            <div className="text-center">
+                              <div className="text-2xl font-bold">
+                                {total}
+                              </div>
+                              <p className="text-muted-foreground text-sm">Total Entries</p>
+                            </div>
+                          </CardContent>
+                        </Card>
                       </div>
-                    </CardContent>
-                  </Card>
-                  
-                  <Card>
-                    <CardContent className="pt-6">
-                      <div className="text-center">
-                        <div className="text-2xl font-bold text-amber-600">
-                          {Math.floor(siteEntries.length * 0.1)}
-                        </div>
-                        <p className="text-muted-foreground text-sm">Warnings</p>
+
+                      <div className="rounded-md border mt-6">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Site</TableHead>
+                              <TableHead>Issue Type</TableHead>
+                              <TableHead>Description</TableHead>
+                              <TableHead>Severity</TableHead>
+                              <TableHead>Action</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {issues.length === 0 && (
+                              <TableRow>
+                                <TableCell colSpan={5} className="text-center text-muted-foreground">No issues detected</TableCell>
+                              </TableRow>
+                            )}
+                            {issues.slice(0, 50).map((issue, idx) => (
+                              <TableRow key={`${issue.site}-${issue.issueType}-${idx}`}>
+                                <TableCell>{issue.site}</TableCell>
+                                <TableCell>{issue.issueType}</TableCell>
+                                <TableCell>{issue.description}</TableCell>
+                                <TableCell>
+                                  {issue.severity === 'Error' ? (
+                                    <Badge className="bg-red-100 text-red-800">Error</Badge>
+                                  ) : (
+                                    <Badge className="bg-amber-100 text-amber-800">Warning</Badge>
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  <Button size="sm" variant="outline" onClick={() => toast({ description: 'Open site for fixing (coming soon)' })}>Fix</Button>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
                       </div>
-                    </CardContent>
-                  </Card>
-                  
-                  <Card>
-                    <CardContent className="pt-6">
-                      <div className="text-center">
-                        <div className="text-2xl font-bold text-red-600">
-                          {Math.floor(siteEntries.length * 0.05)}
+
+                      <div className="flex justify-between items-center mt-4">
+                        <div>
+                          <Button variant="outline" onClick={() => toast({ description: "This would attempt to auto-fix validation issues" })}>
+                            Auto-Fix Issues
+                          </Button>
                         </div>
-                        <p className="text-muted-foreground text-sm">Errors</p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                  
-                  <Card>
-                    <CardContent className="pt-6">
-                      <div className="text-center">
-                        <div className="text-2xl font-bold">
-                          {siteEntries.length}
+                        <div className="space-x-2">
+                          <Button variant="outline" onClick={() => toast({ description: "Retrying upload process" })}>
+                            Re-Upload File
+                          </Button>
+                          <Button onClick={() => toast({ description: "This would re-run validation checks" })}>
+                            Re-Run Validation
+                          </Button>
                         </div>
-                        <p className="text-muted-foreground text-sm">Total Entries</p>
                       </div>
-                    </CardContent>
-                  </Card>
-                </div>
-                
-                <div className="rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Site</TableHead>
-                        <TableHead>Issue Type</TableHead>
-                        <TableHead>Description</TableHead>
-                        <TableHead>Severity</TableHead>
-                        <TableHead>Status</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      <TableRow>
-                        <TableCell>Site 3</TableCell>
-                        <TableCell>Missing Data</TableCell>
-                        <TableCell>Visit date not specified</TableCell>
-                        <TableCell>
-                          <Badge className="bg-amber-100 text-amber-800">Warning</Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Button size="sm" variant="outline">Fix</Button>
-                        </TableCell>
-                      </TableRow>
-                      <TableRow>
-                        <TableCell>Site 7</TableCell>
-                        <TableCell>Format Error</TableCell>
-                        <TableCell>Invalid site code format</TableCell>
-                        <TableCell>
-                          <Badge className="bg-red-100 text-red-800">Error</Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Button size="sm" variant="outline">Fix</Button>
-                        </TableCell>
-                      </TableRow>
-                      <TableRow>
-                        <TableCell>Site 12</TableCell>
-                        <TableCell>Duplicate</TableCell>
-                        <TableCell>Site appears twice in the MMP</TableCell>
-                        <TableCell>
-                          <Badge className="bg-red-100 text-red-800">Error</Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Button size="sm" variant="outline">Fix</Button>
-                        </TableCell>
-                      </TableRow>
-                    </TableBody>
-                  </Table>
-                </div>
-                
-                <div className="flex justify-between items-center">
-                  <div>
-                    <Button variant="outline" onClick={() => toast({ description: "This would attempt to auto-fix validation issues" })}>
-                      Auto-Fix Issues
-                    </Button>
-                  </div>
-                  <div className="space-x-2">
-                    <Button variant="outline" onClick={() => toast({ description: "Retrying upload process" })}>
-                      Re-Upload File
-                    </Button>
-                    <Button onClick={() => toast({ description: "This would re-run validation checks" })}>
-                      Re-Run Validation
-                    </Button>
-                  </div>
-                </div>
+                    </>
+                  );
+                })()}
               </div>
             </CardContent>
           </Card>

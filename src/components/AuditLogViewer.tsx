@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +28,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/components/ui/use-toast";
 import { exportAuditLogsToCSV, exportAuditLogsToJSON } from "@/utils/exportUtils";
+import { useMMP } from "@/context/mmp/MMPContext";
+import { MMPFile } from "@/types";
 
 interface AuditLogViewerProps {
   mmpId?: string;
@@ -48,6 +50,8 @@ const AuditLogViewer: React.FC<AuditLogViewerProps> = ({
   const [dateRange, setDateRange] = useState<string>(timeFilter);
   const [currentView, setCurrentView] = useState<'timeline' | 'table'>('timeline');
   const { toast } = useToast();
+  const { mmpFiles, getMmpById } = useMMP();
+  const currentMMP: MMPFile | undefined = mmpId ? getMmpById(mmpId) : undefined;
 
   const getActionIcon = (action: string) => {
     switch(action.toLowerCase()) {
@@ -70,196 +74,112 @@ const AuditLogViewer: React.FC<AuditLogViewerProps> = ({
     }
   };
 
-  const mockAuditLogs = [
-    {
-      id: '1',
-      timestamp: new Date(Date.now() - 15 * 60000).toISOString(),
-      action: 'Upload',
-      category: 'Document',
-      description: 'Initial MMP file upload',
-      user: 'Sarah Williams',
-      userRole: 'Supervisor',
-      details: 'File uploaded successfully with 45 site entries',
-      metadata: {
-        fileSize: '2.3MB',
-        fileType: 'Excel',
-        totalEntries: 45,
-        validEntries: 43,
-        warnings: 2
-      },
-      status: 'success',
-      ipAddress: '192.168.1.100',
-      deviceInfo: 'Chrome / Windows 10',
-      relatedRecords: ['DOC-2023-45', 'BATCH-789']
-    },
-    {
-      id: '2',
-      timestamp: new Date(Date.now() - 14 * 60000).toISOString(),
-      action: 'Validation',
-      category: 'System',
-      description: 'Automated validation check',
-      user: 'System',
-      userRole: 'Automated',
-      details: '3 warnings found in data validation',
-      metadata: {
-        checksPerformed: 12,
-        passedChecks: 9,
-        failedChecks: 3,
-        warningDetails: [
-          'Missing coordinates in 2 sites',
-          'Invalid date format in 1 entry'
-        ]
-      },
-      status: 'warning',
-      relatedRecords: ['VAL-2023-123']
-    },
-    {
-      id: '3',
-      timestamp: new Date(Date.now() - 13 * 60000).toISOString(),
-      action: 'Edit',
-      category: 'Data',
-      description: 'Modified site entries',
-      user: 'Mike Johnson',
-      userRole: 'Data Officer',
-      details: 'Updated coordinates for 2 sites',
-      metadata: {
-        changedFields: ['coordinates', 'lastModified'],
-        previousValues: {
-          coordinates: 'N/A',
-          lastModified: '2023-04-16'
-        },
-        newValues: {
-          coordinates: '12.34N, 56.78E',
-          lastModified: '2023-04-17'
-        }
-      },
-      status: 'success',
-      ipAddress: '192.168.1.101',
-      deviceInfo: 'Firefox / MacOS'
-    },
-    {
-      id: '4',
-      timestamp: new Date(Date.now() - 12 * 60000).toISOString(),
-      action: 'Approval Request',
-      category: 'Workflow',
-      description: 'Submitted for approval',
-      user: 'Mike Johnson',
-      userRole: 'ICT',
-      details: 'MMP submitted to approval workflow',
-      metadata: {
-        approver: 'Jane Smith',
-        submissionDate: '2023-04-17',
-        comments: 'Ready for review'
-      },
-      status: 'pending',
-      relatedRecords: ['APR-2023-001']
-    },
-    {
-      id: '5',
-      timestamp: new Date(Date.now() - 11 * 60000).toISOString(),
-      action: 'Compliance Check',
-      category: 'Compliance',
-      description: 'Automated compliance verification',
-      user: 'System',
-      userRole: 'Automated',
-      details: 'All compliance checks passed',
-      metadata: {
-        checksPerformed: 5,
-        passedChecks: 5,
-        failedChecks: 0
-      },
-      status: 'success',
-      relatedRecords: ['CMP-2023-005']
-    },
-    {
-      id: '6',
-      timestamp: new Date(Date.now() - 10 * 60000).toISOString(),
-      action: 'Approve',
-      category: 'Workflow',
-      description: 'First-level approval completed',
-      user: 'Jane Smith',
-      userRole: 'Financial Admin',
-      details: 'Approved with comment: "Budget allocation verified"',
-      metadata: {
-        approvalDate: '2023-04-18',
-        comments: 'Budget verified and approved',
-        approvedAmount: '$50,000'
-      },
-      status: 'success',
-      ipAddress: '192.168.1.102',
-      deviceInfo: 'Safari / iOS'
-    },
-    {
-      id: '7',
-      timestamp: new Date(Date.now() - 9 * 60000).toISOString(),
-      action: 'Approve',
-      category: 'Workflow',
-      description: 'MMP fully approved',
-      user: 'John Doe',
-      userRole: 'Admin',
-      details: 'MMP approved for implementation',
-      metadata: {
-        approvalDate: '2023-04-19',
-        comments: 'Approved for immediate implementation',
-        finalBudget: '$50,000'
-      },
-      status: 'success',
-      ipAddress: '192.168.1.103',
-      deviceInfo: 'Edge / Windows 10'
-    },
-    {
-      id: '8',
-      timestamp: new Date(Date.now() - 8 * 60000).toISOString(),
-      action: 'View',
-      category: 'Access',
-      description: 'MMP file viewed',
-      user: 'Alex Johnson',
-      userRole: 'Coordinator',
-      details: 'Read-only access recorded',
-      metadata: {
-        accessType: 'Read-only',
-        duration: '5 minutes'
-      },
-      status: 'info',
-      ipAddress: '192.168.1.104',
-      deviceInfo: 'Chrome / Android'
-    },
-    {
-      id: '9',
-      timestamp: new Date(Date.now() - 7 * 60000).toISOString(),
-      action: 'Edit',
-      category: 'Security',
-      description: 'Unauthorized modification attempt',
-      user: 'Alex Johnson',
-      userRole: 'Coordinator',
-      details: 'Attempted to modify budget allocation without permission',
-      metadata: {
-        attemptedField: 'Budget Allocation',
-        permissionType: 'Write',
-        accessStatus: 'Denied'
-      },
-      status: 'error',
-      ipAddress: '192.168.1.104',
-      deviceInfo: 'Chrome / Android'
-    },
-    {
-      id: '10',
-      timestamp: new Date(Date.now() - 6 * 60000).toISOString(),
-      action: 'Security Alert',
-      category: 'Security',
-      description: 'Unauthorized modification detected',
-      user: 'System',
-      userRole: 'Automated',
-      details: 'Security alert sent to Admin and ICT',
-      metadata: {
-        alertType: 'Unauthorized Access',
-        severity: 'High',
-        affectedUser: 'Alex Johnson'
-      },
-      status: 'error',
-      relatedRecords: ['ALR-2023-012']
+  const buildLogsFromMMP = (file: MMPFile) => {
+    const logs: any[] = [];
+    if (file.uploadedAt) {
+      logs.push({
+        id: `upload-${file.id}`,
+        timestamp: file.uploadedAt,
+        action: 'Upload',
+        category: 'Document',
+        description: `File ${file.originalFilename || file.name} uploaded`,
+        user: file.uploadedBy || 'Unknown',
+        userRole: 'User',
+        details: `Entries: ${file.entries ?? 0}`,
+        status: 'success',
+        ipAddress: 'N/A',
+        deviceInfo: 'N/A',
+      });
     }
-  ];
+    if (file.modificationHistory && Array.isArray(file.modificationHistory)) {
+      file.modificationHistory.forEach((m, idx) => {
+        logs.push({
+          id: `edit-${file.id}-${idx}`,
+          timestamp: m.timestamp,
+          action: 'Edit',
+          category: 'Data',
+          description: 'MMP data modified',
+          user: m.modifiedBy || 'Unknown',
+          userRole: 'User',
+          details: m.changes,
+          metadata: { previousVersion: m.previousVersion, newVersion: m.newVersion },
+          status: 'success',
+          ipAddress: 'N/A',
+          deviceInfo: 'N/A',
+        });
+      });
+    }
+    if (file.approvedAt) {
+      logs.push({
+        id: `approve-${file.id}`,
+        timestamp: file.approvedAt,
+        action: 'Approve',
+        category: 'Workflow',
+        description: 'MMP approved',
+        user: file.approvedBy || 'Unknown',
+        userRole: 'Approver',
+        details: 'Approval completed',
+        status: 'success',
+        ipAddress: 'N/A',
+        deviceInfo: 'N/A',
+      });
+    }
+    if (file.status === 'rejected' || file.rejectionReason) {
+      logs.push({
+        id: `reject-${file.id}`,
+        timestamp: file.modifiedAt || file.uploadedAt || new Date().toISOString(),
+        action: 'Reject',
+        category: 'Workflow',
+        description: 'MMP rejected',
+        user: 'Reviewer',
+        userRole: 'Reviewer',
+        details: file.rejectionReason || 'Rejected',
+        status: 'error',
+        ipAddress: 'N/A',
+        deviceInfo: 'N/A',
+      });
+    }
+    if (file.archivedAt) {
+      logs.push({
+        id: `archive-${file.id}`,
+        timestamp: file.archivedAt,
+        action: 'Archive',
+        category: 'Workflow',
+        description: 'MMP archived',
+        user: file.archivedBy || 'Unknown',
+        userRole: 'User',
+        details: 'Archived',
+        status: 'success',
+        ipAddress: 'N/A',
+        deviceInfo: 'N/A',
+      });
+    }
+    if (file.deletedAt) {
+      logs.push({
+        id: `delete-${file.id}`,
+        timestamp: file.deletedAt,
+        action: 'Delete',
+        category: 'Workflow',
+        description: 'MMP deleted',
+        user: file.deletedBy || 'Unknown',
+        userRole: 'User',
+        details: 'Deleted',
+        status: 'error',
+        ipAddress: 'N/A',
+        deviceInfo: 'N/A',
+      });
+    }
+    // Sort by timestamp desc
+    return logs
+      .filter(l => !!l.timestamp)
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  };
+
+  const logs = useMemo(() => {
+    if (currentMMP) return buildLogsFromMMP(currentMMP);
+    if (standalone) return (mmpFiles || []).flatMap(buildLogsFromMMP);
+    return [] as any[];
+  }, [currentMMP, mmpFiles, standalone]);
 
   const getStatusBadge = (status: string) => {
     switch(status) {
@@ -276,7 +196,7 @@ const AuditLogViewer: React.FC<AuditLogViewerProps> = ({
     }
   };
 
-  const filteredLogs = mockAuditLogs
+  const filteredLogs = logs
     .filter(log => {
       if (searchQuery === "") return true;
       return (
@@ -286,7 +206,13 @@ const AuditLogViewer: React.FC<AuditLogViewerProps> = ({
         log.action.toLowerCase().includes(searchQuery.toLowerCase())
       );
     })
-    .filter(log => localActionFilter === "all" || log.action.toLowerCase() === localActionFilter.toLowerCase())
+    .filter(log => {
+      if (localActionFilter === 'all') return true;
+      const a = log.action.toLowerCase();
+      if (localActionFilter === 'approval') return a.includes('approve') || a.includes('reject') || a.includes('approval');
+      if (localActionFilter === 'security') return a.includes('security');
+      return a === localActionFilter.toLowerCase();
+    })
     .filter(log => categoryFilter === "all" || log.category.toLowerCase() === categoryFilter.toLowerCase())
     .filter(log => {
       if (dateRange === "all") return true;
@@ -601,7 +527,7 @@ const AuditLogViewer: React.FC<AuditLogViewerProps> = ({
 
           <div className="flex justify-between items-center">
             <p className="text-sm text-muted-foreground">
-              Showing {filteredLogs.length} of {mockAuditLogs.length} logs
+              Showing {filteredLogs.length} of {logs.length} logs
             </p>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -12,73 +12,20 @@ import {
   Info, Clock, FileText, ChartBar, ListChecks, ArrowUpRight
 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
+import { useMMP } from "@/context/mmp/MMPContext";
+import { MMPFile, MMPSiteEntry } from "@/types";
 
-// Mock data for compliance checks
-const mockComplianceChecks = [
-  {
-    id: '1',
-    rule: 'Complete Site Information',
-    description: 'All site entries must have complete information',
-    status: 'passed',
-    details: '45/45 site entries have complete information',
-    critical: true,
-    lastChecked: new Date(Date.now() - 2 * 3600000).toISOString()
-  },
-  {
-    id: '2',
-    rule: 'Valid Date Formats',
-    description: 'All dates must be in the correct format',
-    status: 'failed',
-    details: '2 entries with invalid date format: Site ID SC10034, SC10042',
-    critical: true,
-    lastChecked: new Date(Date.now() - 2 * 3600000).toISOString()
-  },
-  {
-    id: '3',
-    rule: 'Budget Consistency',
-    description: 'All budget entries must be consistent with guidelines',
-    status: 'passed',
-    details: 'All budget entries follow the approved allocation model',
-    critical: true,
-    lastChecked: new Date(Date.now() - 2 * 3600000).toISOString()
-  },
-  {
-    id: '4',
-    rule: 'Geographic Coordinates',
-    description: 'All sites must have valid GPS coordinates',
-    status: 'warning',
-    details: '1 site with potentially incorrect coordinates (out of expected region)',
-    critical: false,
-    lastChecked: new Date(Date.now() - 2 * 3600000).toISOString()
-  },
-  {
-    id: '5',
-    rule: 'Required Approvals',
-    description: 'All required approvals must be completed',
-    status: 'pending',
-    details: 'Awaiting final approval from Admin',
-    critical: true,
-    lastChecked: new Date(Date.now() - 2 * 3600000).toISOString()
-  },
-  {
-    id: '6',
-    rule: 'MoDa Integration',
-    description: 'Sites should be verified in MoDa database',
-    status: 'warning',
-    details: '5 sites not found in MoDa system',
-    critical: false,
-    lastChecked: new Date(Date.now() - 2 * 3600000).toISOString()
-  }
-];
-
-// Mock data for compliance policies
-const mockPolicies = [
-  { id: '1', name: 'Data Integrity Policy', status: 'active', lastUpdated: new Date(Date.now() - 90 * 24 * 3600000).toISOString() },
-  { id: '2', name: 'Approval Workflow Policy', status: 'active', lastUpdated: new Date(Date.now() - 45 * 24 * 3600000).toISOString() },
-  { id: '3', name: 'Budget Validation Rules', status: 'active', lastUpdated: new Date(Date.now() - 30 * 24 * 3600000).toISOString() },
-  { id: '4', name: 'Geographic Validation Policy', status: 'active', lastUpdated: new Date(Date.now() - 60 * 24 * 3600000).toISOString() },
-  { id: '5', name: 'Required Fields Policy', status: 'active', lastUpdated: new Date(Date.now() - 120 * 24 * 3600000).toISOString() }
-];
+type ComplianceStatus = 'passed' | 'warning' | 'failed' | 'pending';
+interface ComplianceCheckRow {
+  id: string;
+  rule: string;
+  description: string;
+  status: ComplianceStatus;
+  details: string;
+  critical: boolean;
+  lastChecked: string;
+}
+interface PolicyRow { id: string; name: string; status: string; lastUpdated: string }
 
 interface ComplianceTrackerProps {
   mmpId?: string; // Optional: for a specific MMP
@@ -88,17 +35,100 @@ interface ComplianceTrackerProps {
 const ComplianceTracker: React.FC<ComplianceTrackerProps> = ({ mmpId, standalone = false }) => {
   const [activeTab, setActiveTab] = useState<string>("compliance-checks");
   const { toast } = useToast();
+  const { mmpFiles, getMmpById } = useMMP();
+  const currentMMP: MMPFile | undefined = mmpId ? getMmpById(mmpId) : undefined;
 
-  const totalChecks = mockComplianceChecks.length;
-  const passedChecks = mockComplianceChecks.filter(check => check.status === 'passed').length;
-  const warningChecks = mockComplianceChecks.filter(check => check.status === 'warning').length;
-  const failedChecks = mockComplianceChecks.filter(check => check.status === 'failed').length;
-  const pendingChecks = mockComplianceChecks.filter(check => check.status === 'pending').length;
+  const targetSites: MMPSiteEntry[] = useMemo(() => {
+    if (currentMMP?.siteEntries && Array.isArray(currentMMP.siteEntries)) return currentMMP.siteEntries;
+    if (standalone) {
+      return (mmpFiles || []).flatMap((f) => f.siteEntries || []);
+    }
+    return [];
+  }, [currentMMP, mmpFiles, standalone]);
+
+  const complianceChecks: ComplianceCheckRow[] = useMemo(() => {
+    const nowISO = new Date().toISOString();
+    const total = targetSites.length;
+
+    const requiredMissing = targetSites.filter(s => !s.siteCode || !s.siteName || !s.visitDate);
+    const invalidDates = targetSites.filter(s => !s.visitDate || isNaN(Date.parse(String(s.visitDate))));
+    const notInMoDa = targetSites.filter(s => s.inMoDa === false);
+    const visitedByMissing = targetSites.filter(s => !s.visitedBy);
+    const mainActivityMissing = targetSites.filter(s => !s.mainActivity);
+
+    const approvalsStatus: ComplianceStatus = currentMMP
+      ? (currentMMP.status === 'approved' ? 'passed' : (currentMMP.status === 'rejected' ? 'failed' : 'pending'))
+      : (standalone ? 'pending' : 'pending');
+
+    const checks: ComplianceCheckRow[] = [
+      {
+        id: 'c1',
+        rule: 'Complete Site Information',
+        description: 'Required fields present: siteCode, siteName, visitDate',
+        status: requiredMissing.length === 0 ? 'passed' : (requiredMissing.length / (total || 1) > 0.1 ? 'failed' : 'warning'),
+        details: `${total - requiredMissing.length}/${total} entries have required fields` + (requiredMissing.length ? `; Missing in ${Math.min(5, requiredMissing.length)}+ entries` : ''),
+        critical: true,
+        lastChecked: nowISO,
+      },
+      {
+        id: 'c2',
+        rule: 'Valid Date Formats',
+        description: 'visitDate must be a valid date',
+        status: invalidDates.length === 0 ? 'passed' : (invalidDates.length / (total || 1) > 0.05 ? 'failed' : 'warning'),
+        details: invalidDates.length ? `${invalidDates.length} entries with invalid dates` : 'All dates valid',
+        critical: true,
+        lastChecked: nowISO,
+      },
+      {
+        id: 'c3',
+        rule: 'MoDa Integration',
+        description: 'Sites verified in MoDa',
+        status: notInMoDa.length === 0 ? 'passed' : (notInMoDa.length / (total || 1) > 0.2 ? 'failed' : 'warning'),
+        details: notInMoDa.length ? `${notInMoDa.length} site(s) not found/marked in MoDa` : 'All sites verified in MoDa',
+        critical: false,
+        lastChecked: nowISO,
+      },
+      {
+        id: 'c4',
+        rule: 'Required Approvals',
+        description: 'MMP approval workflow completion',
+        status: approvalsStatus,
+        details: currentMMP ? `Current status: ${currentMMP.status}` : 'Multiple MMPs selected',
+        critical: true,
+        lastChecked: nowISO,
+      },
+      {
+        id: 'c5',
+        rule: 'Data Volume Consistency',
+        description: 'Entries count matches uploaded data',
+        status: currentMMP ? ((currentMMP.entries ?? 0) === (currentMMP.siteEntries?.length ?? 0) ? 'passed' : 'warning') : 'pending',
+        details: currentMMP ? `${currentMMP.siteEntries?.length ?? 0}/${currentMMP.entries ?? 0} entries present` : 'Not applicable in aggregate view',
+        critical: false,
+        lastChecked: nowISO,
+      }
+    ];
+
+    return checks;
+  }, [targetSites, currentMMP, standalone]);
+
+  const policies: PolicyRow[] = useMemo(() => {
+    const baseDate = currentMMP?.modifiedAt || currentMMP?.uploadedAt || new Date().toISOString();
+    return [
+      { id: 'p1', name: 'Required Fields Policy', status: 'active', lastUpdated: baseDate },
+      { id: 'p2', name: 'Approval Workflow Policy', status: 'active', lastUpdated: baseDate },
+    ];
+  }, [currentMMP]);
+
+  const totalChecks = complianceChecks.length;
+  const passedChecks = complianceChecks.filter(check => check.status === 'passed').length;
+  const warningChecks = complianceChecks.filter(check => check.status === 'warning').length;
+  const failedChecks = complianceChecks.filter(check => check.status === 'failed').length;
+  const pendingChecks = complianceChecks.filter(check => check.status === 'pending').length;
 
   const complianceScore = Math.round((passedChecks / totalChecks) * 100);
   
   const getComplianceStatus = () => {
-    const criticalFails = mockComplianceChecks
+    const criticalFails = complianceChecks
       .filter(check => check.critical && check.status === 'failed')
       .length;
       
@@ -146,7 +176,7 @@ const ComplianceTracker: React.FC<ComplianceTrackerProps> = ({ mmpId, standalone
     let csvContent = "Rule,Description,Status,Critical,Last Verified,Details\n";
     
     // Add each compliance check as a row
-    mockComplianceChecks.forEach(check => {
+    complianceChecks.forEach(check => {
       // Format the data and escape any commas in text fields
       const row = [
         `"${check.rule}"`,
@@ -189,7 +219,7 @@ const ComplianceTracker: React.FC<ComplianceTrackerProps> = ({ mmpId, standalone
     let csvContent = "Policy Name,Status,Last Updated\n";
     
     // Add each policy as a row
-    mockPolicies.forEach(policy => {
+    policies.forEach(policy => {
       const row = [
         `"${policy.name}"`,
         `"${policy.status}"`,
@@ -234,6 +264,10 @@ const ComplianceTracker: React.FC<ComplianceTrackerProps> = ({ mmpId, standalone
   };
 
   const complianceStatus = getComplianceStatus();
+  const lastCheckedAt = useMemo(() => {
+    const times = complianceChecks.map(c => new Date(c.lastChecked).getTime());
+    return times.length ? new Date(Math.max(...times)) : null;
+  }, [complianceChecks]);
 
   return (
     <Card className={standalone ? "" : "mt-6"}>
@@ -277,7 +311,7 @@ const ComplianceTracker: React.FC<ComplianceTrackerProps> = ({ mmpId, standalone
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {mockComplianceChecks.map((check) => (
+                  {complianceChecks.map((check) => (
                     <TableRow key={check.id}>
                       <TableCell className="font-medium">{check.rule}</TableCell>
                       <TableCell>{check.description}</TableCell>
@@ -323,7 +357,7 @@ const ComplianceTracker: React.FC<ComplianceTrackerProps> = ({ mmpId, standalone
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {mockPolicies.map((policy) => (
+                  {policies.map((policy) => (
                     <TableRow key={policy.id}>
                       <TableCell className="font-medium">{policy.name}</TableCell>
                       <TableCell>
@@ -407,10 +441,10 @@ const ComplianceTracker: React.FC<ComplianceTrackerProps> = ({ mmpId, standalone
                   <CardContent>
                     <div className="flex flex-col">
                       <span className="text-lg">
-                        {format(new Date(Date.now() - 2 * 3600000), 'MMM d, yyyy')}
+                        {lastCheckedAt ? format(lastCheckedAt, 'MMM d, yyyy') : 'N/A'}
                       </span>
                       <span className="text-sm text-muted-foreground">
-                        {format(new Date(Date.now() - 2 * 3600000), 'h:mm a')}
+                        {lastCheckedAt ? format(lastCheckedAt, 'h:mm a') : ''}
                       </span>
                       <span className="text-xs text-muted-foreground mt-1">
                         By: System Automation
@@ -431,7 +465,7 @@ const ComplianceTracker: React.FC<ComplianceTrackerProps> = ({ mmpId, standalone
                   </CardHeader>
                   <CardContent>
                     <ul className="space-y-2">
-                      {mockComplianceChecks
+                      {complianceChecks
                         .filter(check => check.status === 'failed' || check.status === 'warning')
                         .map(check => (
                           <li key={check.id} className="flex items-start gap-2">
