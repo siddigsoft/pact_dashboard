@@ -106,7 +106,7 @@ const SmartCollectorSelector: React.FC<SmartCollectorSelectorProps> = ({
   
   function renderContent() {
     return (
-      <div className="p-4">
+      <div className="p-4 max-h-80 overflow-y-auto">
         <h2 className="text-xl font-semibold mb-4">Smart Collector Assignment</h2>
         <p className="text-sm text-gray-500 mb-6">
           The system has automatically prioritized collectors based on proximity, workload, and availability.
