@@ -45,6 +45,7 @@ const transformDBToMMPFile = (dbRecord: any): MMPFile => {
     financial: dbRecord.financial,
     performance: dbRecord.performance,
     cpVerification: dbRecord.cp_verification,
+    activities: dbRecord.activities,
   };
 };
 
@@ -192,10 +193,12 @@ export async function uploadMMPFile(file: File, projectId?: string): Promise<{ s
 
     console.log('Inserting MMP record into database:', dbData);
 
-    // Insert the record into Supabase
-    const { data: insertedDataRaw, error: insertError } = await supabase
+  // Insert the record into Supabase
+    const { data: insertedData, error: insertError } = await supabase
       .from('mmp_files')
-      .insert(dbData);
+      .insert(dbData)
+      .select('*')
+      .single();
       
     if (insertError) {
       // If database insert fails, attempt to clean up the uploaded file
@@ -210,9 +213,8 @@ export async function uploadMMPFile(file: File, projectId?: string): Promise<{ s
       return { success: false, error: 'Failed to save MMP data: ' + insertError.message };
     }
     
-    // Try to normalize the inserted row (Supabase may return null unless select() is chained)
-    let insertedRow: any = Array.isArray(insertedDataRaw) ? insertedDataRaw[0] : insertedDataRaw;
-    // If we didn't get the row back, fetch it using a unique key (file_path)
+    // Use the returned row; if it's not present, fetch by unique key (file_path)
+    let insertedRow: any = insertedData;
     if (!insertedRow) {
       const { data: fetchedRow, error: fetchError } = await supabase
         .from('mmp_files')

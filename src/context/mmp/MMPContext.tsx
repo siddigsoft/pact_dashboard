@@ -52,6 +52,7 @@ const transformDBToMMPFile = (dbRecord: any): MMPFile => {
     financial: dbRecord.financial,
     performance: dbRecord.performance,
     cpVerification: dbRecord.cp_verification,
+    activities: dbRecord.activities,
   } as MMPFile; // Type assertion to handle any remaining type issues
 };
 

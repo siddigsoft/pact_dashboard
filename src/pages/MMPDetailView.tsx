@@ -38,7 +38,7 @@ const MMPDetailView = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { currentUser, archiveMMP, deleteMMP, approveMMP } = useAppContext();
+  const { currentUser, archiveMMP, deleteMMPFile, approveMMP } = useAppContext();
   const { resetMMP, getMmpById } = useMMP();
   const [showAuditTrail, setShowAuditTrail] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -105,7 +105,7 @@ const MMPDetailView = () => {
   const handleDelete = async () => {
     if (id) {
       try {
-        await deleteMMP(id);
+        await deleteMMPFile(id);
         toast({ 
           title: "MMP File Deleted",
           description: "The MMP file has been permanently deleted.",

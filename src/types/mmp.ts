@@ -28,4 +28,5 @@ export interface MMPFile extends MMPBase {
   financial?: MMPFinancial;
   performance?: MMPPerformance;
   cpVerification?: MMPCPVerification;
+  activities?: any[];
 }

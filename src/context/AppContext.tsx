@@ -34,6 +34,7 @@ interface CompositeContextType {
   updateMMPVersion: ReturnType<typeof useMMP>['updateMMPVersion'];
   archiveMMP: ReturnType<typeof useMMP>['archiveMMP'];
   deleteMMP: ReturnType<typeof useMMP>['deleteMMP'];
+  deleteMMPFile: ReturnType<typeof useMMP>['deleteMMPFile'];
   restoreMMP: ReturnType<typeof useMMP>['restoreMMP'];
   resetMMP: ReturnType<typeof useMMP>['resetMMP'];
   getMmpById: ReturnType<typeof useMMP>['getMmpById'];
@@ -139,6 +140,7 @@ const CompositeContextProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     addRole: userContext.addRole,
     removeRole: userContext.removeRole,
     updateMMP: mmpContext.updateMMP,
+    deleteMMPFile: mmpContext.deleteMMPFile,
     emailVerificationPending: userContext.emailVerificationPending,
     verificationEmail: userContext.verificationEmail,
     resendVerificationEmail: userContext.resendVerificationEmail,
