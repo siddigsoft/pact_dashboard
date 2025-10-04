@@ -14,6 +14,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useAppContext } from '@/context/AppContext';
+import { useRoleManagement } from '@/context/role-management/RoleManagementContext';
 
 interface AdminUsersTableProps {
   users?: User[];
@@ -25,6 +26,7 @@ const AdminUsersTable: React.FC<AdminUsersTableProps> = ({ users }) => {
   // If users are not provided, use the global users from context
   const { users: allUsers } = useAppContext();
   const displayUsers = users || allUsers;
+  const { getUserRolesByUserId, roles: allRoles } = useRoleManagement();
   
   // Enhanced filtering for admin users - check both role property and roles array
   const adminUsers = displayUsers.filter(user => {
@@ -102,17 +104,30 @@ const AdminUsersTable: React.FC<AdminUsersTableProps> = ({ users }) => {
               </TableCell>
               <TableCell>
                 <div className="flex flex-wrap gap-1">
-                  {user.roles && Array.isArray(user.roles) ? (
-                    user.roles.map((role, index) => (
-                      <Badge key={index} variant={role === 'admin' ? 'default' : 'outline'}>
-                        {role}
+                  {(() => {
+                    const urs = getUserRolesByUserId(user.id);
+                    const sysSet = new Set<string>();
+                    if (user.role) sysSet.add(user.role);
+                    if (Array.isArray(user.roles)) user.roles.forEach(r => sysSet.add(r));
+                    urs.forEach(ur => { if (ur.role) sysSet.add(ur.role as string); });
+                    const sysLabels = Array.from(sysSet);
+                    const customLabels = urs
+                      .filter(ur => ur.role_id)
+                      .map(ur => {
+                        const r = allRoles.find(rr => rr.id === ur.role_id);
+                        return r?.display_name || r?.name || 'custom';
+                      });
+                    const labels = [...sysLabels, ...customLabels];
+                    return labels.length > 0 ? labels.map((label, idx) => (
+                      <Badge key={idx} variant={label === 'admin' ? 'default' : 'outline'}>
+                        {label}
                       </Badge>
-                    ))
-                  ) : (
-                    <Badge variant={user.role === 'admin' ? 'default' : 'outline'}>
-                      {user.role}
-                    </Badge>
-                  )}
+                    )) : (
+                      <Badge variant={user.role === 'admin' ? 'default' : 'outline'}>
+                        {user.role}
+                      </Badge>
+                    );
+                  })()}
                 </div>
               </TableCell>
             </TableRow>

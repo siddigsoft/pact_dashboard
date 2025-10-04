@@ -62,7 +62,7 @@ const ALL_POSSIBLE_ROLES: AppRole[] = [
 
 const Users = () => {
   const { currentUser, users, approveUser, rejectUser, refreshUsers, hasRole, addRole, removeRole } = useUser();
-  const { roles: allRoles, getUserRolesByUserId } = useRoleManagement();
+  const { roles: allRoles, getUserRolesByUserId, assignRoleToUser, removeRoleFromUser } = useRoleManagement();
   const { toast } = useToast();
   const [filteredUsers, setFilteredUsers] = useState<User[]>(users);
   const [searchQuery, setSearchQuery] = useState('');
@@ -76,7 +76,8 @@ const Users = () => {
   const [showAdminSection, setShowAdminSection] = useState(true);
 
   const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [roleSelect, setRoleSelect] = useState<AppRole | ''>('');
+  // Encoded value: 'sys:<AppRole>' or 'custom:<roleId>'
+  const [roleSelect, setRoleSelect] = useState<string>('');
   const [roleAction, setRoleAction] = useState<'add' | 'remove'>('add');
   const [isRoleLoading, setIsRoleLoading] = useState(false);
 
@@ -148,10 +149,25 @@ const Users = () => {
     }
 
     if (selectedRole) {
-      result = result.filter(user =>
-        user.role === selectedRole ||
-        (user.roles && user.roles.includes(selectedRole as any))
-      );
+      if (selectedRole.startsWith('sys:')) {
+        const sysRole = selectedRole.slice(4);
+        result = result.filter(user =>
+          user.role === sysRole ||
+          (user.roles && user.roles.includes(sysRole as any)) ||
+          getUserRolesByUserId(user.id).some(ur => ur.role === sysRole as any)
+        );
+      } else if (selectedRole.startsWith('custom:')) {
+        const roleId = selectedRole.slice(7);
+        result = result.filter(user =>
+          getUserRolesByUserId(user.id).some(ur => ur.role_id === roleId)
+        );
+      } else {
+        // Backward compatibility: plain system role value
+        result = result.filter(user =>
+          user.role === selectedRole ||
+          (user.roles && user.roles.includes(selectedRole as any))
+        );
+      }
     }
 
     if (selectedState) {
@@ -191,36 +207,54 @@ const Users = () => {
   const handleConfirmRoleEdit = async () => {
     if (!editingUser || !roleSelect) return;
     setIsRoleLoading(true);
-    
+
     try {
       let success = false;
-      if (roleAction === 'add') {
-        success = await addRole(editingUser.id, roleSelect);
-      } else {
-        success = await removeRole(editingUser.id, roleSelect);
-      }
-      
-      if (success) {
-        const storedUser = localStorage.getItem(`user-${editingUser.id}`);
-        if (storedUser) {
-          try {
-            const parsedUser = JSON.parse(storedUser);
-            let updatedRoles = parsedUser.roles || [];
-            
-            if (roleAction === 'add' && !updatedRoles.includes(roleSelect)) {
-              updatedRoles.push(roleSelect);
-            } else if (roleAction === 'remove') {
-              updatedRoles = updatedRoles.filter((r: string) => r !== roleSelect);
+      if (roleSelect.startsWith('sys:')) {
+        const sysRole = roleSelect.slice(4) as AppRole;
+        if (roleAction === 'add') {
+          success = await addRole(editingUser.id, sysRole);
+        } else {
+          success = await removeRole(editingUser.id, sysRole);
+        }
+
+        if (success) {
+          const storedUser = localStorage.getItem(`user-${editingUser.id}`);
+          if (storedUser) {
+            try {
+              const parsedUser = JSON.parse(storedUser);
+              let updatedRoles = parsedUser.roles || [];
+
+              if (roleAction === 'add' && !updatedRoles.includes(sysRole)) {
+                updatedRoles.push(sysRole);
+              } else if (roleAction === 'remove') {
+                updatedRoles = updatedRoles.filter((r: string) => r !== sysRole);
+              }
+
+              localStorage.setItem(`user-${editingUser.id}`, JSON.stringify({
+                ...parsedUser,
+                roles: updatedRoles
+              }));
+            } catch (error) {
+              console.error("Error updating stored user roles:", error);
             }
-            
-            localStorage.setItem(`user-${editingUser.id}`, JSON.stringify({
-              ...parsedUser,
-              roles: updatedRoles
-            }));
-          } catch (error) {
-            console.error("Error updating stored user roles:", error);
           }
         }
+      } else if (roleSelect.startsWith('custom:')) {
+        const roleId = roleSelect.slice(7);
+        if (roleAction === 'add') {
+          success = await assignRoleToUser({ user_id: editingUser.id, role_id: roleId });
+        } else {
+          success = await removeRoleFromUser(editingUser.id, roleId);
+        }
+      }
+
+      if (!success) {
+        toast({
+          title: "Role update failed",
+          description: "The role could not be updated. Check permissions or try again.",
+          variant: "destructive",
+        });
       }
     } catch (error) {
       console.error("Error updating role:", error);
@@ -381,7 +415,15 @@ const Users = () => {
             <div className="flex items-center gap-3">
               {selectedRole && (
                 <Badge variant="outline" className="flex items-center gap-1">
-                  Role: {selectedRole}
+                  Role: {(() => {
+                    if (selectedRole.startsWith('sys:')) return selectedRole.slice(4);
+                    if (selectedRole.startsWith('custom:')) {
+                      const rid = selectedRole.slice(7);
+                      const r = allRoles.find(rr => rr.id === rid);
+                      return r?.display_name || r?.name || 'custom';
+                    }
+                    return selectedRole;
+                  })()}
                   <button
                     onClick={() => setSelectedRole(null)}
                     className="ml-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 p-0.5"
@@ -682,17 +724,30 @@ const Users = () => {
           <div className="mb-3">
             <Select
               value={roleSelect}
-              onValueChange={val => setRoleSelect(val as AppRole)}
+              onValueChange={val => setRoleSelect(val)}
             >
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select role" />
               </SelectTrigger>
               <SelectContent>
+                {/* System roles */}
+                <SelectItem disabled value="__sys_label">System Roles</SelectItem>
                 {ALL_POSSIBLE_ROLES.map(role => (
-                  <SelectItem key={role} value={role}>
+                  <SelectItem key={`sys:${role}`} value={`sys:${role}`}>
                     {role}
                   </SelectItem>
                 ))}
+                {/* Custom roles from roles table */}
+                {allRoles.filter(r => !r.is_system_role).length > 0 && (
+                  <SelectItem disabled value="__custom_label">Custom Roles</SelectItem>
+                )}
+                {allRoles
+                  .filter(r => !r.is_system_role)
+                  .map(r => (
+                    <SelectItem key={`custom:${r.id}`} value={`custom:${r.id}`}>
+                      {r.display_name || r.name}
+                    </SelectItem>
+                  ))}
               </SelectContent>
             </Select>
             <div className="flex gap-3 mt-3">

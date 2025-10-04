@@ -23,6 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { useRoleManagement } from "@/context/role-management/RoleManagementContext";
 
 interface UserRoleDashboardProps {
   users: User[];
@@ -44,11 +45,25 @@ const UserRoleDashboard: React.FC<UserRoleDashboardProps> = ({
   // State for available states based on hub selection
   const [availableStates, setAvailableStates] = useState(sudanStates);
 
-  // Count users by role
-  const userCounts = users.reduce((acc, user) => {
-    acc[user.role] = (acc[user.role] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
+  // Role management context for dynamic roles and assignments
+  const { roles: allRoles, getUserRolesByUserId } = useRoleManagement();
+
+  // Helpers to count users including assignments stored in user_roles
+  const countUsersWithSystemRole = (role: string) => {
+    return users.reduce((acc, u) => {
+      const has = u.role === role
+        || (Array.isArray(u.roles) && (u.roles as any[]).includes(role))
+        || getUserRolesByUserId(u.id).some(ur => ur.role === role);
+      return acc + (has ? 1 : 0);
+    }, 0);
+  };
+
+  const countUsersWithCustomRole = (roleId: string) => {
+    return users.reduce((acc, u) => {
+      const has = getUserRolesByUserId(u.id).some(ur => ur.role_id === roleId);
+      return acc + (has ? 1 : 0);
+    }, 0);
+  };
 
   // Count users by state
   const stateUserCounts = users.reduce((acc, user) => {
@@ -134,7 +149,7 @@ const UserRoleDashboard: React.FC<UserRoleDashboardProps> = ({
       bgColor: "bg-red-100",
     },
     {
-      role: "datacollector",
+      role: "dataCollector",
       displayName: "Data Collector",
       icon: ClipboardList,
       color: "text-cyan-600",
@@ -175,14 +190,14 @@ const UserRoleDashboard: React.FC<UserRoleDashboardProps> = ({
     <div className="space-y-6 mb-6">
       <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-6">
         {roleCards.map((card) => {
-          const count = userCounts[card.role] || 0;
+          const count = countUsersWithSystemRole(card.role);
           const Icon = card.icon;
           
           return (
             <Card 
               key={card.role} 
               className="hover:shadow-lg transition-all duration-300 ease-in-out transform hover:-translate-y-1 flex flex-col items-center justify-center p-4 cursor-pointer"
-              onClick={() => handleRoleClick(card.role)}
+              onClick={() => handleRoleClick(`sys:${card.role}`)}
             >
               <div 
                 className={`${card.bgColor} p-4 rounded-full shadow-md flex items-center justify-center mb-3`} 
@@ -197,6 +212,34 @@ const UserRoleDashboard: React.FC<UserRoleDashboardProps> = ({
               </div>
               <p className="font-bold text-center font-sans text-sm tracking-wide">
                 {card.displayName}
+                <span className="block text-xs text-gray-500 font-normal mt-1">
+                  {count} {count === 1 ? 'user' : 'users'}
+                </span>
+              </p>
+            </Card>
+          );
+        })}
+
+        {/* Custom role cards */}
+        {allRoles.filter(r => !r.is_system_role).map(r => {
+          const count = countUsersWithCustomRole(r.id);
+          const Icon = ShieldCheck;
+          const roleKey = `custom:${r.id}`;
+          return (
+            <Card
+              key={roleKey}
+              className="hover:shadow-lg transition-all duration-300 ease-in-out transform hover:-translate-y-1 flex flex-col items-center justify-center p-4 cursor-pointer"
+              onClick={() => handleRoleClick(roleKey)}
+            >
+              <div
+                className={`bg-slate-100 p-4 rounded-full shadow-md flex items-center justify-center mb-3`}
+                aria-label={`${r.display_name || r.name} (${count} users)`}
+                title={`${r.display_name || r.name} (${count} users)`}
+              >
+                <Icon className={`text-slate-600`} size={32} strokeWidth={1.5} />
+              </div>
+              <p className="font-bold text-center font-sans text-sm tracking-wide">
+                {r.display_name || r.name}
                 <span className="block text-xs text-gray-500 font-normal mt-1">
                   {count} {count === 1 ? 'user' : 'users'}
                 </span>
