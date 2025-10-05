@@ -89,7 +89,7 @@ const Dashboard = () => {
         {/* Floating components */}
         {SiteVisitRemindersDialog}
         <LocationPermissionPrompt />
-        <FloatingMessenger />
+        {/* <FloatingMessenger /> */}
       </div>
     </TooltipProvider>
   );
