@@ -13,7 +13,7 @@ const Index = () => {
   }, []);
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-blue-50/20 via-orange-50/20 to-gray-100 dark:from-black dark:via-gray-900 dark:to-gray-800 px-4 py-24 md:py-32 text-center relative overflow-hidden">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-blue-50/20 via-orange-50/20 to-gray-100 dark:from-black dark:via-gray-900 dark:to-gray-800 px-4 py-14 md:py-22 text-center relative overflow-hidden">
       {/* Logo */}
       <img
         src={PactLogo}
