@@ -129,17 +129,34 @@ const CreateSiteVisitMMPDetail = () => {
           const location = mmpData?.location || { address: '', latitude: 0, longitude: 0, region: mmpData?.region || '' };
           const distanceFee = calculateDistanceFee(Number(location.latitude) || 0, Number(location.longitude) || 0) || 0;
 
+          const hub = site.hubOffice || site.siteCode || site.site_code || '';
+          const cpName = site.cpName || '';
+          const siteActivity = site.siteActivity || site.activity || '';
+          const visitType = site.visitType || 'regular';
+          const comments = site.comments || '';
+
           const payload: any = {
-            siteName: site.siteName || site.site_name || site.name || site.site || 'Unknown Site',
-            siteCode: site.siteCode || site.site_code || site.code || site.id,
+            // DB columns
+            siteName: site.siteName || site.site_name || site.name || site.site || 'Unknown Site', // site_visits.site_name
+            siteCode: hub || site.siteCode || site.site_code || site.id, // site_visits.site_code (compat)
             status: 'pending',
             locality: site.locality || location?.locality || '',
             state: site.state || location?.region || '',
-            activity: site.activity || site.mainActivity || '',
+            activity: siteActivity, // Activity at Site -> site_visits.activity
             priority,
-            dueDate,
-            notes: '',
-            mainActivity: site.mainActivity || '',
+            dueDate: site.visitDate || dueDate, // Visit Date -> site_visits.due_date
+            notes: comments, // Comments -> site_visits.notes
+            mainActivity: site.mainActivity || '', // Main Activity -> site_visits.main_activity
+
+            // JSON fields in visit_data
+            hub, // Hub Office
+            cpName, // CP Name
+            visitType, // Visit Type
+            projectActivities: [],
+            permitDetails: { federal: false, state: false, locality: false },
+            complexity: 'medium',
+
+            // Context
             location,
             fees: {
               total: distanceFee,
@@ -148,10 +165,6 @@ const CreateSiteVisitMMPDetail = () => {
               complexityFee: 0,
               urgencyFee: 0,
             },
-            permitDetails: { federal: false, state: false, locality: false },
-            complexity: 'medium',
-            visitType: 'regular',
-            projectActivities: [],
             mmpDetails: {
               mmpId: mmpData?.id,
               projectName: mmpData?.projectName || '',

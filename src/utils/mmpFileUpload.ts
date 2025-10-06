@@ -63,8 +63,8 @@ async function parseAndCountEntries(file: File): Promise<{ entries: MMPSiteEntry
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
 
-    // Convert to JSON with header row
-    const jsonData: any[] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+    // Convert to JSON with header row (array-of-arrays)
+    const jsonData: any[] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
 
     if (jsonData.length < 2) {
       errors.push('File must contain at least a header row and one data row');
@@ -75,19 +75,49 @@ async function parseAndCountEntries(file: File): Promise<{ entries: MMPSiteEntry
     const headers = jsonData[0] as string[];
     const dataRows = jsonData.slice(1);
 
-    // Expected headers (adjust based on your Excel template)
-    const expectedHeaders = [
-      'siteCode', 'siteName', 'inMoDa', 'visitedBy', 'mainActivity',
-      'visitDate', 'status', 'locality', 'state'
+    // Build a header index map using normalized header keys
+    const norm = (s: string) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+    const headerIndex: Record<string, number> = {};
+    headers.forEach((h, idx) => { headerIndex[norm(h)] = idx; });
+
+    // Define synonyms for each target field
+    const synonyms: Record<string, string[]> = {
+      hubOffice: ['huboffice', 'hub', 'office', 'sitecode'],
+      state: ['state', 'statename'],
+      locality: ['locality', 'localityname'],
+      siteName: ['sitename', 'site', 'facilityname'],
+      cpName: ['cpname', 'partner', 'implementingpartner', 'cp'],
+      mainActivity: ['mainactivity'],
+      siteActivity: ['activityatsite', 'siteactivity', 'activitysite'],
+      visitType: ['visittype', 'type'],
+      visitDate: ['visitdate', 'date'],
+      comments: ['comments', 'comment', 'remarks', 'notes']
+    };
+
+    const getVal = (row: any[], keys: string[]) => {
+      for (const k of keys) {
+        const idx = headerIndex[k];
+        if (idx !== undefined) return row[idx];
+      }
+      return '';
+    };
+
+    // Soft validation: ensure we have at least these core columns
+    const requiredSets: Array<[string, string[]]> = [
+      ['Hub Office', synonyms.hubOffice],
+      ['State', synonyms.state],
+      ['Locality', synonyms.locality],
+      ['Site Name', synonyms.siteName],
+      ['CP Name', synonyms.cpName],
+      ['Main Activity', synonyms.mainActivity],
+      ['Visit Date', synonyms.visitDate],
     ];
-
-    // Validate headers
-    const missingHeaders = expectedHeaders.filter(h => !headers.some(header =>
-      header.toLowerCase().includes(h.toLowerCase())
-    ));
-
-    if (missingHeaders.length > 0) {
-      errors.push(`Missing required columns: ${missingHeaders.join(', ')}`);
+    const missing: string[] = [];
+    for (const [label, keys] of requiredSets) {
+      if (!keys.some(k => headerIndex[k] !== undefined)) missing.push(label);
+    }
+    if (missing.length > 0) {
+      errors.push(`Missing recommended columns: ${missing.join(', ')}`);
     }
 
     // Process each data row
@@ -95,20 +125,27 @@ async function parseAndCountEntries(file: File): Promise<{ entries: MMPSiteEntry
       try {
         const entry: Partial<MMPSiteEntry> = {};
 
-        // Map row data to entry fields (adjust column indices based on your template)
-        entry.siteCode = row[0] || '';
-        entry.siteName = row[1] || '';
-        entry.inMoDa = Boolean(row[2]);
-        entry.visitedBy = row[3] || '';
-        entry.mainActivity = row[4] || '';
-        entry.visitDate = row[5] || '';
-        entry.status = row[6] || 'Pending';
-        entry.locality = row[7] || '';
-        entry.state = row[8] || '';
+        // Map by header synonyms to our unified camelCase shape
+        const hubOffice = getVal(row, synonyms.hubOffice) || '';
+        entry.hubOffice = hubOffice;
+        entry.siteCode = hubOffice; // keep compatibility
+
+        entry.state = getVal(row, synonyms.state) || '';
+        entry.locality = getVal(row, synonyms.locality) || '';
+        entry.siteName = getVal(row, synonyms.siteName) || '';
+        entry.cpName = getVal(row, synonyms.cpName) || '';
+        entry.mainActivity = getVal(row, synonyms.mainActivity) || '';
+        entry.siteActivity = getVal(row, synonyms.siteActivity) || '';
+        entry.visitType = getVal(row, synonyms.visitType) || '';
+        entry.visitDate = getVal(row, synonyms.visitDate) || '';
+        entry.comments = getVal(row, synonyms.comments) || '';
+
+        // Defaults/compatibility
+        entry.status = entry.status || 'Pending';
 
         // Validate required fields
-        if (!entry.siteCode || !entry.siteName) {
-          errors.push(`Row ${index + 2}: Missing required fields (siteCode, siteName)`);
+        if (!entry.hubOffice || !entry.siteName) {
+          errors.push(`Row ${index + 2}: Missing required fields (Hub Office, Site Name)`);
           return;
         }
 
