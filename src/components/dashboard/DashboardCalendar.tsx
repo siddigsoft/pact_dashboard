@@ -7,10 +7,12 @@ import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
 import { CalendarClock, MapPin } from 'lucide-react';
 import { format, isSameDay } from 'date-fns';
 import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 
 export const DashboardCalendar = () => {
   const { siteVisits } = useSiteVisitContext();
   const [date, setDate] = React.useState<Date>(new Date());
+  const navigate = useNavigate();
 
   const scheduledVisits = React.useMemo(() => {
     return siteVisits.filter(visit => 
@@ -45,7 +47,17 @@ export const DashboardCalendar = () => {
           <Calendar
             mode="single"
             selected={date}
-            onSelect={(date) => setDate(date || new Date())}
+            onSelect={(newDate) => {
+              const selected = newDate || new Date();
+              const hasVisits = siteVisits.some(visit =>
+                isSameDay(new Date(visit.dueDate), selected)
+              );
+              if (!hasVisits) {
+                navigate('/calendar');
+              } else {
+                setDate(selected);
+              }
+            }}
             className="rounded-md border shadow-sm"
             modifiers={{
               withVisits: (date) => isDayWithVisits(date),
