@@ -7,11 +7,12 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { calculateDistance, calculateUserWorkload } from '@/utils/collectorUtils';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Loader2 } from 'lucide-react';
 
 interface SmartCollectorSelectorProps {
   siteVisit: SiteVisit;
   users: User[];
-  onAssign: (userId: string) => void;
+  onAssign: (userId: string) => void | Promise<void>;
   onClose: () => void;
   isOpen?: boolean;
   allSiteVisits?: SiteVisit[];
@@ -34,6 +35,7 @@ const SmartCollectorSelector: React.FC<SmartCollectorSelectorProps> = ({
   allSiteVisits = []
 }) => {
   const [sortedUsers, setSortedUsers] = useState<EnhancedUser[]>([]);
+  const [assigningUserId, setAssigningUserId] = useState<string | null>(null);
 
   const hasValidCoords = (coords?: { latitude?: number; longitude?: number }) => {
     if (!coords) return false;
@@ -197,9 +199,24 @@ const SmartCollectorSelector: React.FC<SmartCollectorSelectorProps> = ({
                       </div>
                       
                       <Button 
-                        onClick={() => onAssign(user.id)} 
+                        onClick={async () => {
+                          setAssigningUserId(user.id);
+                          try {
+                            await onAssign(user.id);
+                          } finally {
+                            setAssigningUserId(null);
+                          }
+                        }}
+                        disabled={assigningUserId !== null}
                       >
-                        Assign
+                        {assigningUserId === user.id ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Assigning...
+                          </>
+                        ) : (
+                          'Assign'
+                        )}
                       </Button>
                     </div>
                   </CardContent>
