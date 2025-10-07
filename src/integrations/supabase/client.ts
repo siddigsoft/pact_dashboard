@@ -9,4 +9,11 @@ if (!url || !anonKey) {
   throw new Error('Supabase is not configured. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
 }
 
-export const supabase = createClient(url, anonKey);
+export const supabase = createClient(url, anonKey, {
+  auth: {
+    // Ensure SPA persists auth across reloads and handles OAuth callback params
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+  },
+});

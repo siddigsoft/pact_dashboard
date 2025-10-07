@@ -15,6 +15,7 @@ import { RoleManagementProvider } from './role-management/RoleManagementContext'
 
 interface CompositeContextType {
   currentUser: ReturnType<typeof useUser>['currentUser'];
+  authReady: boolean;
   users: ReturnType<typeof useUser>['users'];
   refreshUsers: ReturnType<typeof useUser>['refreshUsers'];
   login: ReturnType<typeof useUser>['login'];

@@ -8,6 +8,7 @@ import { supabase } from '@/integrations/supabase/client';
 
 interface UserContextType {
   currentUser: User | null;
+  authReady: boolean;
   users: User[];
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => Promise<void>;
@@ -106,6 +107,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const [appUsers, setAppUsers] = useState<User[]>(loadUsersFromStorage);
+  const [authReady, setAuthReady] = useState(false);
   
   const { toast } = useToast();
   const { roles, hasRole, addRole, removeRole } = useRoles(currentUser?.id);
@@ -417,6 +419,13 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     let unsub: { unsubscribe: () => void } | undefined;
+    let readyTimeout: any | undefined;
+
+    const isOAuthCallback = typeof window !== 'undefined' && (
+      (window.location && typeof window.location.hash === 'string' && window.location.hash.includes('access_token')) ||
+      (window.location && typeof window.location.search === 'string' && new URLSearchParams(window.location.search).has('code'))
+    );
+
     (async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
@@ -440,13 +449,26 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         } catch (err) {
           console.error('Auth state handler error:', err);
+        } finally {
+          // Once we receive the first auth event post-mount, we can consider auth ready
+          if (!authReady) setAuthReady(true);
+          if (readyTimeout) clearTimeout(readyTimeout);
         }
       });
       unsub = subscription;
+
+      // If we're not in an OAuth callback context, auth is ready now.
+      // If we are, allow a short window for Supabase to process URL and emit SIGNED_IN.
+      if (!isOAuthCallback) {
+        setAuthReady(true);
+      } else {
+        readyTimeout = setTimeout(() => setAuthReady(true), 2000);
+      }
     })();
 
     return () => {
       try { unsub?.unsubscribe(); } catch {}
+      if (readyTimeout) clearTimeout(readyTimeout);
     };
   }, []);
 
@@ -1004,6 +1026,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const contextValue: UserContextType = {
     currentUser,
+    authReady,
     users: appUsers,
     login,
     logout,
@@ -1029,6 +1052,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     <UserContext.Provider
       value={{
         currentUser,
+        authReady,
         users: appUsers,
         login,
         logout,

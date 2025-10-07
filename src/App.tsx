@@ -74,7 +74,16 @@ const TeamAddRedirect = () => {
 // Auth guard for protected routes
 const AuthGuard = ({ children }) => {
   const location = useLocation();
-  const { currentUser } = useAppContext();
+  const { currentUser, authReady } = useAppContext();
+
+  // Wait for initial auth hydration to complete before deciding
+  if (!authReady) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-sm text-muted-foreground">Loading…</div>
+      </div>
+    );
+  }
 
   if (
     !currentUser &&
