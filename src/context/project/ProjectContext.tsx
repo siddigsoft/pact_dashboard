@@ -81,45 +81,59 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
       
       const { data: projectsData, error: projectsError } = await supabase
         .from('projects')
-        .select('*');
-        
+        .select(`
+          id,
+          name,
+          project_code,
+          description,
+          project_type,
+          status,
+          start_date,
+          end_date,
+          budget,
+          location,
+          team,
+          created_at,
+          updated_at,
+          project_activities (
+            id,
+            name,
+            description,
+            start_date,
+            end_date,
+            status,
+            is_active,
+            assigned_to,
+            sub_activities (
+              id,
+              name,
+              description,
+              status,
+              is_active,
+              due_date,
+              assigned_to
+            )
+          )
+        `);
+
       if (projectsError) {
         throw new Error(projectsError.message);
       }
-      
-      const formattedProjects: Project[] = await Promise.all((projectsData || []).map(async (dbProject) => {
+
+      const formattedProjects: Project[] = (projectsData || []).map((dbProject: any) => {
         const project = mapDbProjectToProject(dbProject);
-        
-        const { data: activitiesData, error: activitiesError } = await supabase
-          .from('project_activities')
-          .select('*')
-          .eq('project_id', project.id);
-          
-        if (activitiesError) {
-          console.error(`Error fetching activities for project ${project.id}:`, activitiesError);
-          return project;
-        }
-        
-        const activities: ProjectActivity[] = await Promise.all((activitiesData || []).map(async (dbActivity) => {
-          const { data: subActivitiesData, error: subActivitiesError } = await supabase
-            .from('sub_activities')
-            .select('*')
-            .eq('activity_id', dbActivity.id);
-            
-          if (subActivitiesError) {
-            console.error(`Error fetching sub-activities for activity ${dbActivity.id}:`, subActivitiesError);
-          }
-          
-          const subActivities: SubActivity[] = (subActivitiesData || []).map((dbSubActivity) => ({
-            id: dbSubActivity.id,
-            name: dbSubActivity.name,
-            description: dbSubActivity.description,
-            status: dbSubActivity.status,
-            isActive: dbSubActivity.is_active,
-            dueDate: dbSubActivity.due_date,
-            assignedTo: dbSubActivity.assigned_to,
+
+        const activities: ProjectActivity[] = (dbProject.project_activities || []).map((dbActivity: any) => {
+          const subActivities: SubActivity[] = (dbActivity.sub_activities || []).map((dbSub: any) => ({
+            id: dbSub.id,
+            name: dbSub.name,
+            description: dbSub.description,
+            status: dbSub.status,
+            isActive: dbSub.is_active,
+            dueDate: dbSub.due_date,
+            assignedTo: dbSub.assigned_to,
           }));
-          
+
           return {
             id: dbActivity.id,
             name: dbActivity.name,
@@ -129,14 +143,13 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
             status: dbActivity.status,
             isActive: dbActivity.is_active,
             assignedTo: dbActivity.assigned_to,
-            subActivities: subActivities,
+            subActivities,
           };
-        }));
-        
-        project.activities = activities;
-        return project;
-      }));
-      
+        });
+
+        return { ...project, activities } as Project;
+      });
+
       setProjects(formattedProjects);
     } catch (err) {
       console.error("Error fetching projects:", err);

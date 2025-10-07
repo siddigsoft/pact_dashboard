@@ -16,6 +16,7 @@ const ProjectDetailPage = () => {
   const { getProjectById, loading, error, fetchProjects, projects, deleteProject } = useProjectContext();
   const [project, setProject] = useState<Project | undefined>(undefined);
   const { toast } = useToast();
+  const [deleting, setDeleting] = useState(false);
 
   // Effect to fetch projects if not loaded
   useEffect(() => {
@@ -57,8 +58,13 @@ const ProjectDetailPage = () => {
       });
       return;
     }
-    await deleteProject(id);
-    navigate('/projects');
+    try {
+      setDeleting(true);
+      await deleteProject(id);
+      navigate('/projects');
+    } finally {
+      setDeleting(false);
+    }
   };
 
   if (loading && !project) {
@@ -127,6 +133,7 @@ const ProjectDetailPage = () => {
           project={project}
           onEdit={handleEdit}
           onDelete={handleDelete}
+          deleting={deleting}
         />
       ) : project ? (
         <div className="max-w-2xl mx-auto my-12">

@@ -14,7 +14,8 @@ import {
   AlertCircle,
   Clock3,
   FileText,
-  Plus
+  Plus,
+  Loader2
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -31,12 +32,14 @@ interface ProjectDetailProps {
   project: Project;
   onEdit?: () => void;
   onDelete?: () => void;
+  deleting?: boolean;
 }
 
 const ProjectDetail: React.FC<ProjectDetailProps> = ({
   project,
   onEdit,
   onDelete,
+  deleting,
 }) => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('overview');
@@ -122,8 +125,22 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
             </Button>
           )}
           {onDelete && (
-            <Button variant="outline" size="sm" className="text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={onDelete}>
-              <Trash2 className="h-4 w-4 mr-2" /> Delete
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+              onClick={onDelete}
+              disabled={!!deleting}
+            >
+              {deleting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4 mr-2" /> Delete
+                </>
+              )}
             </Button>
           )}
         </div>

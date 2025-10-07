@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FileSpreadsheet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -240,10 +240,10 @@ const MMPDetailView = () => {
         onShowAuditTrail={() => setShowAuditTrail(true)}
       />
 
-      <MMPStatusBadge status={mmpFile.status} />
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
+      {/* Main Overview Section */}
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+        {/* Left Column - Main Overview */}
+        <div className="xl:col-span-8 space-y-6">
           <MMPOverviewCard 
             mmpFile={mmpFile} 
             siteEntries={siteEntries}
@@ -252,7 +252,8 @@ const MMPDetailView = () => {
           />
         </div>
         
-        <div>
+        {/* Right Column - Details & Info */}
+        <div className="xl:col-span-4 space-y-6">
           <MMPInfoCard 
             mmpData={mmpFile} 
             showActions={true}
@@ -260,50 +261,73 @@ const MMPDetailView = () => {
             onEditClick={handleEditMMP}
           />
           
-          <div className="mt-6">
-            <MMPSiteInformation 
-              mmpFile={mmpFile} 
-              showVerificationButton={false} 
-            />
-          </div>
+          <MMPSiteInformation 
+            mmpFile={mmpFile} 
+            showVerificationButton={false} 
+          />
         </div>
       </div>
 
-      <Tabs defaultValue="list" className="w-full">
-        <TabsList className="grid grid-cols-2 md:grid-cols-6 mb-4 bg-muted/80">
-          <TabsTrigger value="list" className="data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 dark:data-[state=active]:bg-blue-900/20 dark:data-[state=active]:text-blue-300">
-            Site Entries ({siteEntries.length})
-          </TabsTrigger>
-          <TabsTrigger value="detail" className="data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 dark:data-[state=active]:bg-blue-900/20 dark:data-[state=active]:text-blue-300">
-            Detailed View
-          </TabsTrigger>
-          <TabsTrigger value="validation" className="data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 dark:data-[state=active]:bg-blue-900/20 dark:data-[state=active]:text-blue-300">
-            Validation Results
-          </TabsTrigger>
-          <TabsTrigger value="audit" className="data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 dark:data-[state=active]:bg-blue-900/20 dark:data-[state=active]:text-blue-300">
-            Audit Log
-          </TabsTrigger>
-          <TabsTrigger value="compliance" className="data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 dark:data-[state=active]:bg-blue-900/20 dark:data-[state=active]:text-blue-300">
-            Compliance
-          </TabsTrigger>
-          <TabsTrigger value="version-history" className="data-[state=active]:bg-blue-50 data-[state=active]:text-blue-700 dark:data-[state=active]:bg-blue-900/20 dark:data-[state=active]:text-blue-300">
-            Version History
-          </TabsTrigger>
-        </TabsList>
+      {/* Data & Analysis Section */}
+      <Card className="shadow-md">
+        <CardHeader className="pb-4">
+          <CardTitle className="text-xl font-semibold">Site Data & Analysis</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Tabs defaultValue="list" className="w-full">
+            <TabsList className="grid grid-cols-2 md:grid-cols-6 w-full bg-muted/50">
+              <TabsTrigger 
+                value="list" 
+                className="data-[state=active]:bg-blue-600 data-[state=active]:text-white dark:data-[state=active]:bg-blue-700 transition-all"
+              >
+                <span className="hidden sm:inline">Site Entries</span>
+                <span className="sm:hidden">List</span>
+                <Badge variant="secondary" className="ml-2 bg-white/20">{siteEntries.length}</Badge>
+              </TabsTrigger>
+              <TabsTrigger 
+                value="detail" 
+                className="data-[state=active]:bg-blue-600 data-[state=active]:text-white dark:data-[state=active]:bg-blue-700 transition-all"
+              >
+                Details
+              </TabsTrigger>
+              <TabsTrigger 
+                value="validation" 
+                className="data-[state=active]:bg-blue-600 data-[state=active]:text-white dark:data-[state=active]:bg-blue-700 transition-all"
+              >
+                Validation
+              </TabsTrigger>
+              <TabsTrigger 
+                value="audit" 
+                className="data-[state=active]:bg-blue-600 data-[state=active]:text-white dark:data-[state=active]:bg-blue-700 transition-all"
+              >
+                Audit
+              </TabsTrigger>
+              <TabsTrigger 
+                value="compliance" 
+                className="data-[state=active]:bg-blue-600 data-[state=active]:text-white dark:data-[state=active]:bg-blue-700 transition-all"
+              >
+                Compliance
+              </TabsTrigger>
+              <TabsTrigger 
+                value="version-history" 
+                className="data-[state=active]:bg-blue-600 data-[state=active]:text-white dark:data-[state=active]:bg-blue-700 transition-all"
+              >
+                <span className="hidden sm:inline">Version History</span>
+                <span className="sm:hidden">Versions</span>
+              </TabsTrigger>
+            </TabsList>
         
-        <TabsContent value="list" className="pt-2">
-          <MMPSiteEntriesTable 
-            siteEntries={siteEntries}
-            onViewSiteDetail={handleViewSiteDetail}
-          />
-        </TabsContent>
+            <TabsContent value="list" className="mt-6">
+              <MMPSiteEntriesTable 
+                siteEntries={siteEntries}
+                onViewSiteDetail={handleViewSiteDetail}
+              />
+            </TabsContent>
         
-        <TabsContent value="detail">
-          <Card>
-            <CardContent>
-              <div className="space-y-6">
+            <TabsContent value="detail" className="mt-6">
+              <div className="space-y-4">
                 {siteEntries.map((site) => (
-                  <Card key={site.id} className="overflow-hidden">
+                  <Card key={site.id} className="overflow-hidden hover:shadow-md transition-shadow">
                     <CardContent className="pt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                       <div>
                         <p className="text-sm font-medium text-muted-foreground">Site Code</p>
@@ -374,13 +398,9 @@ const MMPDetailView = () => {
                   </Card>
                 ))}
               </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+            </TabsContent>
         
-        <TabsContent value="validation">
-          <Card>
-            <CardContent>
+            <TabsContent value="validation" className="mt-6">
               <div className="space-y-6">
                 {(() => {
                   // Compute validation metrics and issues from real data
@@ -520,22 +540,22 @@ const MMPDetailView = () => {
                   );
                 })()}
               </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+            </TabsContent>
 
-        <TabsContent value="audit">
-          <AuditLogViewer mmpId={id} />
-        </TabsContent>
+            <TabsContent value="audit" className="mt-6">
+              <AuditLogViewer mmpId={id} />
+            </TabsContent>
 
-        <TabsContent value="compliance">
-          <ComplianceTracker mmpId={id} />
-        </TabsContent>
+            <TabsContent value="compliance" className="mt-6">
+              <ComplianceTracker mmpId={id} />
+            </TabsContent>
 
-        <TabsContent value="version-history">
-          <MMPVersionHistory mmpFile={mmpFile} mmpId={mmpFile.mmpId || `MMP-${mmpFile.id}`} />
-        </TabsContent>
-      </Tabs>
+            <TabsContent value="version-history" className="mt-6">
+              <MMPVersionHistory mmpFile={mmpFile} mmpId={mmpFile.mmpId || `MMP-${mmpFile.id}`} />
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+      </Card>
       
       {(canArchive || canDelete || canApprove) && (
         <MMPFileManagement
