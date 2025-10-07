@@ -28,6 +28,7 @@ import Reports from './pages/Reports';
 import Projects from './pages/Projects';
 import CreateProject from './pages/CreateProject';
 import CreateProjectActivity from './pages/CreateProjectActivity';
+import ProjectActivityDetail from './pages/ProjectActivityDetail';
 import ProjectDetail from './pages/ProjectDetail';
 import EditProject from './pages/EditProject';
 import ProjectTeamManagement from './pages/ProjectTeamManagement';
@@ -128,6 +129,7 @@ const AppRoutes = () => {
         <Route path="/projects/:id" element={<ProjectDetail />} />
         <Route path="/projects/:id/edit" element={<EditProject />} />
         <Route path="/projects/:id/activities/create" element={<CreateProjectActivity />} />
+        <Route path="/projects/:id/activities/:activityId" element={<ProjectActivityDetail />} />
         <Route path="/projects/:id/team" element={<ProjectTeamManagement />} />
         <Route path="/reports" element={<Reports />} />
         <Route path="/settings" element={<Settings />} />
