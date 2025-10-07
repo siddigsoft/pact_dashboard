@@ -4,29 +4,25 @@ import { Monitor, Smartphone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useViewMode } from '@/context/ViewModeContext';
 
-const ViewModeToggle = () => {
+const ViewModeToggle: React.FC = () => {
   const { viewMode, toggleViewMode } = useViewMode();
 
-  // return (
-  //   <Button
-  //     variant="outline"
-  //     size="sm"
-  //     className="fixed top-4 left-1/2 -translate-x-1/2 z-50 gap-2 bg-white/80 backdrop-blur-sm shadow-md border-gray-200 transition-all hover:bg-white/90"
-  //     onClick={toggleViewMode}
-  //   >
-  //     {viewMode === 'web' ? (
-  //       <>
-  //         <Smartphone className="h-4 w-4" />
-  //         <span>Mobile View</span>
-  //       </>
-  //     ) : (
-  //       <>
-  //         <Monitor className="h-4 w-4" />
-  //         <span>Desktop View</span>
-  //       </>
-  //     )}
-  //   </Button>
-  // );
+  return (
+    <Button
+      variant="outline"
+      size="icon"
+      className="rounded-full bg-white dark:bg-gray-800"
+      onClick={toggleViewMode}
+      aria-label={viewMode === 'mobile' ? 'Switch to desktop view' : 'Switch to mobile view'}
+      title={viewMode === 'mobile' ? 'Desktop view' : 'Mobile view'}
+    >
+      {viewMode === 'mobile' ? (
+        <Monitor className="h-5 w-5" />
+      ) : (
+        <Smartphone className="h-5 w-5" />
+      )}
+    </Button>
+  );
 };
 
 export default ViewModeToggle;

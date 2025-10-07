@@ -500,7 +500,7 @@ const DataVisibility: React.FC = () => {
   };
 
   return (
-    <div className="container mx-auto p-4 space-y-6">
+    <div className="container mx-auto p-4 space-y-6 max-w-full overflow-x-hidden">
       <div className="flex items-center mb-6">
         <Button
           variant="outline"
@@ -513,7 +513,7 @@ const DataVisibility: React.FC = () => {
         </Button>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full overflow-x-hidden">
         <TabsList className="grid grid-cols-1 md:grid-cols-3">
           <TabsTrigger value="integrated-view">Integrated Module View</TabsTrigger>
           <TabsTrigger value="reporting">Reporting & Trends</TabsTrigger>
@@ -521,14 +521,14 @@ const DataVisibility: React.FC = () => {
         </TabsList>
         
         <TabsContent value="integrated-view" className="space-y-4">
-          <Card>
+          <Card className="overflow-hidden">
             <CardHeader>
               <CardTitle>Site Visits & Data Collectors Map</CardTitle>
               <CardDescription>
                 Interactive map showing site visits and active data collectors
               </CardDescription>
             </CardHeader>
-            <CardContent className="p-0">
+            <CardContent className="p-0 overflow-hidden">
               <DynamicFieldTeamMap 
                 siteVisits={siteVisits}
                 eligibleCollectors={eligibleCollectors}

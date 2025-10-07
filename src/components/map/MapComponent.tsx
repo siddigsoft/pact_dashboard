@@ -231,10 +231,10 @@ const MapComponent: React.FC<MapComponentProps> = ({
   }, [assignments, collectors, siteVisits, showAssignmentLines, map.current]);
 
   return (
-    <Card className="w-full">
-      <CardContent className="p-0">
-        <div className="relative w-full" style={{ height }}>
-          <div ref={mapContainer} className="absolute inset-0 rounded-lg" />
+    <Card className="w-full overflow-hidden relative z-0">
+      <CardContent className="p-0 overflow-hidden">
+        <div className="relative z-0 w-full overflow-hidden" style={{ height }}>
+          <div ref={mapContainer} className="absolute inset-0 rounded-lg z-0" />
         </div>
       </CardContent>
     </Card>
