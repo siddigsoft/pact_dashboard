@@ -29,40 +29,53 @@ export const AssignmentMap: React.FC<AssignmentMapProps> = ({
   const [isAssigning, setIsAssigning] = useState(false);
   const { toast } = useToast();
 
-  // Get nearby data collectors sorted by distance
+  // Get all data collectors
   const eligibleCollectors = useMemo(() => {
-    // Get collectors that are near the site location
-    const collectors = getNearbyDataCollectors(siteVisit.id);
+    // Get all data collectors regardless of location
+    const collectors = users.filter(user => 
+      user.role === 'dataCollector' || user.role === 'datacollector'
+    );
     
-    // Sort by proximity (closest first)
+    // Sort by proximity (closest first) - collectors without location go to the end
     return collectors.sort((a, b) => {
-      if (!a.location?.latitude || !b.location?.latitude) return 0;
+      const hasLocationA = a.location?.latitude && a.location?.longitude;
+      const hasLocationB = b.location?.latitude && b.location?.longitude;
+      
+      // Collectors without location go to the end
+      if (!hasLocationA && !hasLocationB) return 0;
+      if (!hasLocationA) return 1;
+      if (!hasLocationB) return -1;
       
       const distanceA = calculateDistance(
         a.location.latitude, 
-        a.location.longitude || 0, 
+        a.location.longitude, 
         siteVisit.coordinates.latitude, 
         siteVisit.coordinates.longitude
       );
       
       const distanceB = calculateDistance(
         b.location.latitude, 
-        b.location.longitude || 0, 
+        b.location.longitude, 
         siteVisit.coordinates.latitude, 
         siteVisit.coordinates.longitude
       );
       
       return distanceA - distanceB;
-    }).slice(0, 10); // Limit to top 10
-  }, [siteVisit.id, getNearbyDataCollectors]);
+    });
+  }, [users, siteVisit.coordinates]);
 
   // Calculate collector statistics 
   const getCollectorStats = useCallback((user: User) => {
-    if (!user.location?.latitude) return { distance: 0, eta: 'Unknown', workload: 0 };
+    // Current workload
+    const workload = user.performance?.currentWorkload || 0;
+    
+    if (!user.location?.latitude || !user.location?.longitude) {
+      return { distance: 0, eta: 'Unknown', workload };
+    }
     
     const distance = calculateDistance(
       user.location.latitude,
-      user.location.longitude || 0,
+      user.location.longitude,
       siteVisit.coordinates.latitude,
       siteVisit.coordinates.longitude
     );
@@ -72,9 +85,6 @@ export const AssignmentMap: React.FC<AssignmentMapProps> = ({
     const eta = timeHours < 1 
       ? `${Math.round(timeHours * 60)} mins` 
       : `${Math.round(timeHours * 10) / 10} hours`;
-      
-    // Current workload
-    const workload = user.performance?.currentWorkload || 0;
     
     return { distance, eta, workload };
   }, [siteVisit]);
@@ -139,7 +149,7 @@ export const AssignmentMap: React.FC<AssignmentMapProps> = ({
       
       <CardFooter className="p-3 bg-muted/10">
         <div className="w-full">
-          <h4 className="text-sm font-medium mb-2">Top Collectors Near Site</h4>
+          <h4 className="text-sm font-medium mb-2">All Data Collectors</h4>
           
           <ScrollArea className="h-[200px] w-full pr-4">
             <div className="space-y-2">
@@ -177,8 +187,12 @@ export const AssignmentMap: React.FC<AssignmentMapProps> = ({
                               </div>
                               
                               <div className="text-xs text-muted-foreground flex items-center gap-2">
-                                <span>{distance.toFixed(1)}km</span>
-                                <span className="text-muted-foreground/60">•</span>
+                                {distance > 0 ? (
+                                  <>
+                                    <span>{distance.toFixed(1)}km</span>
+                                    <span className="text-muted-foreground/60">•</span>
+                                  </>
+                                ) : null}
                                 <span className="flex items-center">
                                   <Clock className="h-3 w-3 mr-1" />
                                   {eta}
@@ -254,7 +268,7 @@ export const AssignmentMap: React.FC<AssignmentMapProps> = ({
               ) : (
                 <div className="flex flex-col items-center justify-center py-8">
                   <AlertCircle className="h-8 w-8 text-muted-foreground mb-2" />
-                  <p className="text-muted-foreground">No eligible collectors found nearby</p>
+                  <p className="text-muted-foreground">No data collectors found</p>
                 </div>
               )}
             </div>
