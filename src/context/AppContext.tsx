@@ -4,14 +4,14 @@ import { MMPProvider, useMMP } from './mmp/MMPContext';
 import { NotificationProvider, useNotifications } from './notifications/NotificationContext';
 import { SiteVisitProvider, useSiteVisitContext } from './siteVisit/SiteVisitContext';
 import { WalletProvider, useWallet } from './wallet/WalletContext';
-import { AppRole } from '@/types/roles';
+import { AppRole, ResourceType, ActionType } from '@/types/roles';
 import { ProjectProvider } from './project/ProjectContext';
 import { ChatProvider } from './chat/ChatContext';
 import { CommunicationProvider } from './communications/CommunicationContext';
 import { ViewModeProvider } from './ViewModeContext';
 import { ArchiveProvider } from './archive/ArchiveContext';
 import { SettingsProvider } from './settings/SettingsContext';
-import { RoleManagementProvider } from './role-management/RoleManagementContext';
+import { RoleManagementProvider, useRoleManagement } from './role-management/RoleManagementContext';
 
 interface CompositeContextType {
   currentUser: ReturnType<typeof useUser>['currentUser'];
@@ -60,6 +60,7 @@ interface CompositeContextType {
   getUnreadNotificationsCount: ReturnType<typeof useNotifications>['getUnreadNotificationsCount'];
   
   hasPermission: (action: string) => boolean;
+  hasGranularPermission: (resource: ResourceType, action: ActionType) => boolean;
   calculateDistanceFee: (latitude: number, longitude: number) => number;
   roles: AppRole[];
   hasRole: (role: AppRole) => boolean;
@@ -75,6 +76,7 @@ const CompositeContextProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const siteVisitContext = useSiteVisitContext();
   const walletContext = useWallet();
   const notificationContext = useNotifications();
+  const roleManagement = useRoleManagement();
   
   const hasPermission = (action: string): boolean => {
     if (!userContext.currentUser) return false;
@@ -119,6 +121,11 @@ const CompositeContextProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const permissions = permissionsByRole[userRole] || [];
     return permissions.includes(action);
   };
+
+  const hasGranularPermission = (resource: ResourceType, action: ActionType): boolean => {
+    if (!userContext.currentUser) return false;
+    return roleManagement.hasPermission(userContext.currentUser.id, resource, action);
+  };
   
   const calculateDistanceFee = (latitude: number, longitude: number): number => {
     const baseLatitude = 15.5007;
@@ -138,6 +145,7 @@ const CompositeContextProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     ...walletContext,
     ...notificationContext,
     hasPermission,
+    hasGranularPermission,
     calculateDistanceFee,
     roles: userContext.roles,
     hasRole: userContext.hasRole,

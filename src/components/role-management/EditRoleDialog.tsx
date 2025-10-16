@@ -4,10 +4,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { RoleWithPermissions, UpdateRoleRequest, RESOURCES, ACTIONS, ResourceType, ActionType } from '@/types/roles';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { RoleWithPermissions, UpdateRoleRequest, ResourceType, ActionType } from '@/types/roles';
+import { PermissionManager } from './PermissionManager';
 
 interface EditRoleDialogProps {
   open: boolean;
@@ -30,7 +30,7 @@ export const EditRoleDialog: React.FC<EditRoleDialogProps> = ({
     is_active: true
   });
 
-  const [selectedPermissions, setSelectedPermissions] = useState<Record<string, boolean>>({});
+  const [selectedPermissions, setSelectedPermissions] = useState<{ resource: ResourceType; action: ActionType }[]>([]);
 
   useEffect(() => {
     if (role) {
@@ -41,11 +41,10 @@ export const EditRoleDialog: React.FC<EditRoleDialogProps> = ({
       });
 
       // Set existing permissions
-      const permissions: Record<string, boolean> = {};
-      role.permissions.forEach(permission => {
-        const key = `${permission.resource}:${permission.action}`;
-        permissions[key] = true;
-      });
+      const permissions = role.permissions.map(p => ({
+        resource: p.resource as ResourceType,
+        action: p.action as ActionType
+      }));
       setSelectedPermissions(permissions);
     }
   }, [role]);
@@ -55,34 +54,28 @@ export const EditRoleDialog: React.FC<EditRoleDialogProps> = ({
     
     if (!role) return;
 
-    const permissions = Object.entries(selectedPermissions)
-      .filter(([_, selected]) => selected)
-      .map(([key, _]) => {
-        const [resource, action] = key.split(':');
-        return { resource: resource as ResourceType, action: action as ActionType };
-      });
-
     await onUpdateRole(role.id, {
       ...formData,
-      permissions
+      permissions: selectedPermissions
     });
 
     onOpenChange(false);
   };
 
-  const handlePermissionChange = (resource: ResourceType, action: ActionType, checked: boolean) => {
-    const key = `${resource}:${action}`;
-    setSelectedPermissions(prev => ({
-      ...prev,
-      [key]: checked
-    }));
+  const handleUpdatePermissions = async (roleId: string, permissions: { resource: ResourceType; action: ActionType }[]) => {
+    setSelectedPermissions(permissions);
+    await onUpdateRole(roleId, {
+      ...formData,
+      permissions
+    });
+    return true;
   };
 
   if (!role) return null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+      <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Role: {role.display_name}</DialogTitle>
           <DialogDescription>
@@ -90,82 +83,63 @@ export const EditRoleDialog: React.FC<EditRoleDialogProps> = ({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="display_name">Display Name</Label>
-              <Input
-                id="display_name"
-                value={formData.display_name}
-                onChange={(e) => setFormData(prev => ({ ...prev, display_name: e.target.value }))}
-                required
-              />
-            </div>
-            <div className="flex items-center space-x-2">
-              <Switch
-                id="is_active"
-                checked={formData.is_active}
-                onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_active: checked }))}
-              />
-              <Label htmlFor="is_active">Active</Label>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="description">Description</Label>
-            <Textarea
-              id="description"
-              value={formData.description}
-              onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-              rows={3}
-            />
-          </div>
-
-          {!role.is_system_role && (
-            <div className="space-y-4">
-              <Label>Permissions</Label>
-              <div className="grid gap-4">
-                {RESOURCES.map(resource => (
-                  <Card key={resource}>
-                    <CardHeader className="py-3">
-                      <CardTitle className="text-base capitalize">{resource}</CardTitle>
-                    </CardHeader>
-                    <CardContent className="pt-0">
-                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                        {ACTIONS.map(action => (
-                          <div key={`${resource}:${action}`} className="flex items-center space-x-2">
-                            <Checkbox
-                              id={`edit-${resource}:${action}`}
-                              checked={selectedPermissions[`${resource}:${action}`] || false}
-                              onCheckedChange={(checked) => 
-                                handlePermissionChange(resource, action, checked as boolean)
-                              }
-                            />
-                            <Label
-                              htmlFor={`edit-${resource}:${action}`}
-                              className="text-sm capitalize cursor-pointer"
-                            >
-                              {action}
-                            </Label>
-                          </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+        <Tabs defaultValue="general" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="general">General Information</TabsTrigger>
+            <TabsTrigger value="permissions">Permissions</TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="general" className="space-y-6">
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="display_name">Display Name</Label>
+                  <Input
+                    id="display_name"
+                    value={formData.display_name}
+                    onChange={(e) => setFormData(prev => ({ ...prev, display_name: e.target.value }))}
+                    required
+                  />
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="is_active"
+                    checked={formData.is_active}
+                    onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_active: checked }))}
+                  />
+                  <Label htmlFor="is_active">Active</Label>
+                </div>
               </div>
-            </div>
-          )}
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={isLoading}>
-              {isLoading ? 'Updating...' : 'Update Role'}
-            </Button>
-          </DialogFooter>
-        </form>
+              <div className="space-y-2">
+                <Label htmlFor="description">Description</Label>
+                <Textarea
+                  id="description"
+                  value={formData.description}
+                  onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                  rows={3}
+                />
+              </div>
+
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={isLoading}>
+                  {isLoading ? 'Updating...' : 'Update Role'}
+                </Button>
+              </DialogFooter>
+            </form>
+          </TabsContent>
+          
+          <TabsContent value="permissions">
+            <PermissionManager
+              role={role}
+              onUpdatePermissions={handleUpdatePermissions}
+              isLoading={isLoading}
+            />
+          </TabsContent>
+        </Tabs>
       </DialogContent>
     </Dialog>
   );

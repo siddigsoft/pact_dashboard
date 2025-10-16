@@ -9,6 +9,7 @@ import { RoleCard } from '@/components/role-management/RoleCard';
 import { CreateRoleDialog } from '@/components/role-management/CreateRoleDialog';
 import { EditRoleDialog } from '@/components/role-management/EditRoleDialog';
 import { UserRoleAssignment } from '@/components/role-management/UserRoleAssignment';
+import { PermissionTester } from '@/components/role-management/PermissionTester';
 import { RoleWithPermissions, CreateRoleRequest, UpdateRoleRequest, AssignRoleRequest, AppRole } from '@/types/roles';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -29,6 +30,7 @@ const RoleManagement = () => {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showUserAssignment, setShowUserAssignment] = useState(false);
+  const [showPermissionTester, setShowPermissionTester] = useState(false);
   const [selectedRole, setSelectedRole] = useState<RoleWithPermissions | null>(null);
 
   // Check if user has permission to manage roles
@@ -148,10 +150,16 @@ const RoleManagement = () => {
             Manage roles and permissions for your organization
           </p>
         </div>
-        <Button onClick={() => setShowCreateDialog(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          Create Role
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={() => setShowPermissionTester(true)} variant="outline">
+            <Shield className="h-4 w-4 mr-2" />
+            Test Permissions
+          </Button>
+          <Button onClick={() => setShowCreateDialog(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Create Role
+          </Button>
+        </div>
       </div>
 
       {/* Statistics Cards */}
@@ -283,6 +291,26 @@ const RoleManagement = () => {
         onRemoveRole={handleRemoveRoleFromUser}
         isLoading={isLoading}
       />
+
+      {/* Permission Tester Dialog */}
+      {showPermissionTester && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg max-w-6xl max-h-[90vh] overflow-y-auto w-full">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-semibold">Permission Testing</h2>
+                <Button 
+                  variant="outline" 
+                  onClick={() => setShowPermissionTester(false)}
+                >
+                  Close
+                </Button>
+              </div>
+              <PermissionTester />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
