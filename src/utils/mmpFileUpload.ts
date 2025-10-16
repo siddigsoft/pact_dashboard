@@ -170,16 +170,34 @@ export async function uploadMMPFile(file: File, projectId?: string): Promise<{ s
   try {
     console.log('Starting MMP file upload:', file.name);
     
+    // Check file size (10MB limit)
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    if (file.size > maxSize) {
+      return { 
+        success: false, 
+        error: `File size (${(file.size / 1024 / 1024).toFixed(2)}MB) exceeds the 10MB limit` 
+      };
+    }
+    
     // Generate a unique file path for storage
     const timestamp = Date.now();
     const fileExt = file.name.split('.').pop();
     const filePath = `${timestamp}_${Math.random().toString(36).substring(2)}.${fileExt}`;
     
-    // Upload file to Supabase Storage
-    const { data: storageData, error: storageError } = await supabase
+    // Upload file to Supabase Storage with timeout
+    const uploadPromise = supabase
       .storage
       .from('mmp-files')
       .upload(filePath, file);
+    
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Storage upload timeout after 30 seconds')), 30000)
+    );
+    
+    const { data: storageData, error: storageError } = await Promise.race([
+      uploadPromise,
+      timeoutPromise
+    ]) as any;
 
     if (storageError) {
       console.error('Storage upload error:', storageError);
@@ -230,12 +248,21 @@ export async function uploadMMPFile(file: File, projectId?: string): Promise<{ s
 
     console.log('Inserting MMP record into database:', dbData);
 
-  // Insert the record into Supabase
-    const { data: insertedData, error: insertError } = await supabase
+  // Insert the record into Supabase with timeout
+    const insertPromise = supabase
       .from('mmp_files')
       .insert(dbData)
       .select('*')
       .single();
+    
+    const insertTimeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Database insert timeout after 15 seconds')), 15000)
+    );
+    
+    const { data: insertedData, error: insertError } = await Promise.race([
+      insertPromise,
+      insertTimeoutPromise
+    ]) as any;
       
     if (insertError) {
       // If database insert fails, attempt to clean up the uploaded file
@@ -286,4 +313,4 @@ export async function uploadMMPFile(file: File, projectId?: string): Promise<{ s
 }
 
 
-// Note: This function assumes the existence of a Supabase table named 'mmp_files' exists.
+
