@@ -19,7 +19,9 @@ export const useAuthorization = () => {
    */
   const hasAnyRole = (roles: string[]): boolean => {
     if (!currentUser) return false;
-    return roles.includes(currentUser.role);
+    const primary = currentUser.role;
+    const extras = Array.isArray(currentUser.roles) ? currentUser.roles : [];
+    return roles.some(r => r === primary || extras.includes(r as any));
   };
 
   /**
@@ -27,9 +29,9 @@ export const useAuthorization = () => {
    */
   const hasAllRoles = (roles: string[]): boolean => {
     if (!currentUser) return false;
-    // For single role system, user can only have one primary role
-    // This would be enhanced when implementing multiple roles per user
-    return roles.every(role => currentUser.role === role);
+    const primary = currentUser.role;
+    const extras = Array.isArray(currentUser.roles) ? currentUser.roles : [];
+    return roles.every(r => r === primary || extras.includes(r as any));
   };
 
   /**

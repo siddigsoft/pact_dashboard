@@ -62,6 +62,7 @@ export const PermissionManager: React.FC<PermissionManagerProps> = ({
 }) => {
   const [selectedPermissions, setSelectedPermissions] = useState<Set<string>>(new Set());
   const [hasChanges, setHasChanges] = useState(false);
+  const [saving, setSaving] = useState(false);
   const { toast } = useToast();
 
   // Initialize selected permissions from role
@@ -88,6 +89,7 @@ export const PermissionManager: React.FC<PermissionManagerProps> = ({
   };
 
   const handleSave = async () => {
+    setSaving(true);
     const permissions = Array.from(selectedPermissions).map(key => {
       const [resource, action] = key.split(':') as [ResourceType, ActionType];
       return { resource, action };
@@ -101,6 +103,7 @@ export const PermissionManager: React.FC<PermissionManagerProps> = ({
         description: `Permissions for ${role.display_name} have been updated successfully.`,
       });
     }
+    setSaving(false);
   };
 
   const handleSelectAll = (resource: ResourceType) => {
@@ -136,7 +139,7 @@ export const PermissionManager: React.FC<PermissionManagerProps> = ({
           </p>
         </div>
         {hasChanges && (
-          <Button onClick={handleSave} disabled={isLoading} size="sm">
+          <Button onClick={handleSave} disabled={saving} size="sm">
             <Save className="h-4 w-4 mr-2" />
             Save Changes
           </Button>
@@ -232,7 +235,7 @@ export const PermissionManager: React.FC<PermissionManagerProps> = ({
           >
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={isLoading}>
+          <Button onClick={handleSave} disabled={saving}>
             <Save className="h-4 w-4 mr-2" />
             Save Permissions
           </Button>

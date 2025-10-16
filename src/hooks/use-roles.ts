@@ -47,84 +47,19 @@ export const useRoles = (userId?: string) => {
   const hasRole = (role: AppRole) => roles.includes(role);
 
   const addRole = async (userId: string, role: AppRole) => {
-    try {
-      setIsLoading(true);
-      
-      const { data, error: checkError } = await supabase
-        .from('user_roles')
-        .select('id')
-        .eq('user_id', userId)
-        .eq('role', role);
-        
-      const existingRole = data && data.length > 0;
-      
-      if (existingRole) {
-        toast({
-          title: 'Role already exists',
-          description: `User already has the ${role} role.`,
-        });
-        return true;
-      }
-
-      if (checkError) throw checkError;
-
-      const { error } = await supabase
-        .from('user_roles')
-        .insert({ user_id: userId, role });
-
-      if (error) throw error;
-
-      setRoles(prev => [...prev, role]);
-      
-      toast({
-        title: 'Role added',
-        description: `Successfully added ${role} role to the user.`,
-      });
-      
-      return true;
-    } catch (error: any) {
-      console.error('Error adding role:', error);
-      toast({
-        title: 'Error adding role',
-        description: error.message,
-        variant: 'destructive',
-      });
-      return false;
-    } finally {
-      setIsLoading(false);
-    }
+    toast({
+      title: 'Use Role Management',
+      description: 'Assign roles from the Role Management screen only.',
+    });
+    return false;
   };
 
   const removeRole = async (userId: string, role: AppRole) => {
-    try {
-      setIsLoading(true);
-      
-      const { error } = await supabase
-        .from('user_roles')
-        .delete()
-        .match({ user_id: userId, role: role });
-
-      if (error) throw error;
-
-      setRoles(prev => prev.filter(r => r !== role));
-      
-      toast({
-        title: 'Role removed',
-        description: `Successfully removed ${role} role from the user.`,
-      });
-      
-      return true;
-    } catch (error: any) {
-      console.error('Error removing role:', error);
-      toast({
-        title: 'Error removing role',
-        description: error.message,
-        variant: 'destructive',
-      });
-      return false;
-    } finally {
-      setIsLoading(false);
-    }
+    toast({
+      title: 'Use Role Management',
+      description: 'Remove roles from the Role Management screen only.',
+    });
+    return false;
   };
 
   return {

@@ -20,7 +20,7 @@ export const PermissionTester: React.FC<PermissionTesterProps> = ({
   selectedRoleId
 }) => {
   const { currentUser, users } = useAppContext();
-  const { roles, getUserRolesByUserId, hasPermission, getUserPermissions } = useRoleManagement();
+  const { roles, getUserRolesByUserId, hasPermission, getUserPermissions, refreshUserPermissions } = useRoleManagement();
   const { checkPermission, getCurrentUserPermissions } = useAuthorization();
   
   const [testUserId, setTestUserId] = useState(selectedUserId || '');
@@ -31,21 +31,25 @@ export const PermissionTester: React.FC<PermissionTesterProps> = ({
   // Get user roles and permissions when test user changes
   useEffect(() => {
     if (testUserId) {
-      const userRoles = getUserRolesByUserId(testUserId);
-      const permissions = getUserPermissions(testUserId);
-      setUserPermissions(permissions);
-      
-      // Test all possible permissions
-      const results: Record<string, boolean> = {};
-      RESOURCES.forEach(resource => {
-        ACTIONS.forEach(action => {
-          const key = `${resource}:${action}`;
-          results[key] = hasPermission(testUserId, resource, action);
+      (async () => {
+        const perms = await refreshUserPermissions(testUserId);
+        const userRoles = getUserRolesByUserId(testUserId);
+        setUserPermissions(perms as any);
+
+        const results: Record<string, boolean> = {};
+        RESOURCES.forEach(resource => {
+          ACTIONS.forEach(action => {
+            const key = `${resource}:${action}`;
+            results[key] = (perms || []).some((p: any) => p.resource === resource && p.action === action);
+          });
         });
-      });
-      setTestResults(results);
+        setTestResults(results);
+      })();
+    } else {
+      setUserPermissions([]);
+      setTestResults({});
     }
-  }, [testUserId, roles, getUserRolesByUserId, getUserPermissions, hasPermission]);
+  }, [testUserId, roles, getUserRolesByUserId, getUserPermissions, hasPermission, refreshUserPermissions]);
 
   const getPermissionDisplayName = (resource: ResourceType, action: ActionType): string => {
     const resourceNames: Record<ResourceType, string> = {
@@ -130,7 +134,7 @@ export const PermissionTester: React.FC<PermissionTesterProps> = ({
                 <option value="">Select a user...</option>
                 {users.map(user => (
                   <option key={user.id} value={user.id}>
-                    {user.full_name} ({user.role})
+                    {user.name} ({user.role})
                   </option>
                 ))}
               </select>
@@ -163,7 +167,7 @@ export const PermissionTester: React.FC<PermissionTesterProps> = ({
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <p className="text-sm font-medium">Name</p>
-                <p className="text-sm text-gray-600">{selectedUser.full_name}</p>
+                <p className="text-sm text-gray-600">{selectedUser.name}</p>
               </div>
               <div>
                 <p className="text-sm font-medium">Email</p>

@@ -11,7 +11,9 @@ import { useToast } from '@/components/ui/use-toast';
   AppRole,
   UserRole,
   ResourceType,
-  ActionType
+  ActionType,
+  RESOURCES,
+  ACTIONS
 } from '@/types/roles';
 
 interface RoleManagementContextType {
@@ -34,6 +36,7 @@ interface RoleManagementContextType {
   // Permission checking
   hasPermission: (userId: string, resource: ResourceType, action: ActionType) => boolean;
   getUserPermissions: (userId: string) => Permission[];
+  refreshUserPermissions: (userId: string) => Promise<Permission[]>;
   
   // Utility functions
   getRoleById: (roleId: string) => RoleWithPermissions | undefined;
@@ -70,6 +73,26 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
           permissions: role.permissions || []
         }));
         setRoles(formattedRoles);
+
+        // Self-heal: guarantee admin role has all permissions
+        const admin = formattedRoles.find(r => r.name === 'admin');
+        if (admin) {
+          const desired = new Set(
+            RESOURCES.flatMap(rsrc => ACTIONS.map(act => `${rsrc}:${act}`))
+          );
+          const existing = new Set(
+            (admin.permissions || []).map(p => `${p.resource}:${p.action}`)
+          );
+          const missing = Array.from(desired)
+            .filter(key => !existing.has(key))
+            .map(key => {
+              const [resource, action] = key.split(':') as [ResourceType, ActionType];
+              return { role_id: admin.id, resource, action, conditions: null as any };
+            });
+          if (missing.length > 0) {
+            await supabase.from('permissions').upsert(missing, { onConflict: 'role_id,resource,action' });
+          }
+        }
       }
     } catch (error: any) {
       console.error('Error fetching roles:', error);
@@ -83,13 +106,15 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
     }
   }, [toast]);
 
-  const refreshUserPermissions = useCallback(async (userId: string) => {
+  const refreshUserPermissions = useCallback(async (userId: string): Promise<Permission[]> => {
     try {
       const { data, error } = await supabase.rpc('get_user_permissions', { user_uuid: userId });
       if (error) throw error;
       setPermissionsCache(prev => ({ ...prev, [userId]: (data || []) as any }));
+      return ((data || []) as any);
     } catch (error) {
       console.error('Error fetching user permissions:', error);
+      return [] as any;
     }
   }, []);
 
@@ -161,14 +186,19 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
         if (roleError) throw roleError;
       }
 
-      if (roleData.permissions) {
+      const isAdminRole = roles.find(r => r.id === roleId)?.name === 'admin';
+      const desiredPermissions = isAdminRole
+        ? RESOURCES.flatMap(rsrc => ACTIONS.map(act => ({ resource: rsrc, action: act })))
+        : roleData.permissions;
+
+      if (desiredPermissions) {
         const { data: existing, error: existingErr } = await supabase
           .from('permissions')
           .select('id, resource, action')
           .eq('role_id', roleId);
         if (existingErr) throw existingErr;
 
-        const desiredSet = new Set(roleData.permissions.map(p => `${p.resource}:${p.action}`));
+        const desiredSet = new Set(desiredPermissions.map(p => `${p.resource}:${p.action}`));
         const toDeleteIds = (existing || [])
           .filter((p: any) => !desiredSet.has(`${p.resource}:${p.action}`))
           .map((p: any) => p.id);
@@ -181,7 +211,7 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
           if (delErr) throw delErr;
         }
 
-        const toUpsert = roleData.permissions.map(p => ({
+        const toUpsert = desiredPermissions.map(p => ({
           role_id: roleId,
           resource: p.resource,
           action: p.action,
@@ -400,15 +430,19 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
         event: '*',
         schema: 'public',
         table: 'user_roles',
-      }, () => {
+      }, (payload: any) => {
         fetchUserRoles().catch(() => {});
+        const uid = payload?.new?.user_id || payload?.old?.user_id;
+        if (uid) {
+          refreshUserPermissions(uid).catch(() => {});
+        }
       })
       .subscribe();
 
     return () => {
       try { supabase.removeChannel(channel); } catch {}
     };
-  }, []);
+  }, [refreshUserPermissions]);
 
   const contextValue: RoleManagementContextType = {
     roles,
@@ -423,6 +457,7 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
     fetchUserRoles,
     hasPermission,
     getUserPermissions,
+    refreshUserPermissions,
     getRoleById,
     getRoleByName,
     getUserRolesByUserId

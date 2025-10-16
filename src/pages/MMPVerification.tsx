@@ -149,7 +149,7 @@ const MMPVerification: React.FC = () => {
   }
 
   return (
-    <FieldTeamMapPermissions requiredAction="verify_permits">
+    <FieldTeamMapPermissions resource="mmp" action="approve">
       <div className="container mx-auto p-4 space-y-6">
         <MMPVerificationHeader 
           mmpFile={mmpFile}

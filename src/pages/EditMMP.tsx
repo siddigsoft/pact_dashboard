@@ -86,7 +86,7 @@ const EditMMP: React.FC = () => {
   }
 
   return (
-    <FieldTeamMapPermissions requiredAction="edit_mmp">
+    <FieldTeamMapPermissions resource="mmp" action="update">
       <div className="container mx-auto p-4 space-y-6">
         <div className="flex items-center gap-4 mb-4">
           <Button 

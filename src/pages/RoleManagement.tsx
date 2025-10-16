@@ -13,9 +13,11 @@ import { PermissionTester } from '@/components/role-management/PermissionTester'
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { RoleWithPermissions, CreateRoleRequest, UpdateRoleRequest, AssignRoleRequest, AppRole } from '@/types/roles';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuthorization } from '@/hooks/use-authorization';
 
 const RoleManagement = () => {
-  const { currentUser, users, hasPermission, refreshUsers } = useAppContext();
+  const { currentUser, users, refreshUsers } = useAppContext();
+  const { canManageRoles: canManageRolesAuth } = useAuthorization();
   const {
     roles,
     isLoading,
@@ -34,9 +36,8 @@ const RoleManagement = () => {
   const [showPermissionTester, setShowPermissionTester] = useState(false);
   const [selectedRole, setSelectedRole] = useState<RoleWithPermissions | null>(null);
 
-  // Check if user has permission to manage roles
-  const canManageRoles = hasPermission('manage_roles') || 
-    (currentUser && ['admin', 'ict'].includes(currentUser.role));
+  // Gate by granular permissions (fallback to legacy for backward compatibility)
+  const canManageRoles = canManageRolesAuth();
 
   if (!canManageRoles) {
     return (
@@ -61,10 +62,13 @@ const RoleManagement = () => {
     setShowEditDialog(true);
   };
 
-  const handleUpdateRole = async (roleId: string, roleData: UpdateRoleRequest) => {
-    await updateRole(roleId, roleData);
-    setShowEditDialog(false);
-    setSelectedRole(null);
+  const handleUpdateRole = async (roleId: string, roleData: UpdateRoleRequest): Promise<boolean> => {
+    const ok = await updateRole(roleId, roleData);
+    if (ok) {
+      setShowEditDialog(false);
+      setSelectedRole(null);
+    }
+    return ok;
   };
 
   const handleDeleteRole = async (roleId: string) => {

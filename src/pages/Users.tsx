@@ -18,6 +18,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Link } from 'react-router-dom';
+import { useAuthorization } from '@/hooks/use-authorization';
 import {
   User as UserIcon,
   Search,
@@ -63,6 +64,7 @@ const ALL_POSSIBLE_ROLES: AppRole[] = [
 const Users = () => {
   const { currentUser, users, approveUser, rejectUser, refreshUsers, hasRole, addRole, removeRole } = useUser();
   const { roles: allRoles, getUserRolesByUserId, assignRoleToUser, removeRoleFromUser } = useRoleManagement();
+  const { canManageRoles } = useAuthorization();
   const { toast } = useToast();
   const [filteredUsers, setFilteredUsers] = useState<User[]>(users);
   const [searchQuery, setSearchQuery] = useState('');
@@ -551,11 +553,7 @@ const Users = () => {
 
                     const isAdmin = currentUser && (currentUser.role === 'admin' ||
                       (currentUser.roles && Array.isArray(currentUser.roles) && currentUser.roles.includes('admin')));
-                    const canManageRolesUI = currentUser && (
-                      ['admin', 'ict'].includes(currentUser.role) ||
-                      (currentUser.roles && Array.isArray(currentUser.roles) &&
-                        (currentUser.roles.includes('admin') || currentUser.roles.includes('ict')))
-                    );
+                    const canManageRolesUI = canManageRoles();
 
                     return (
                       <TableRow key={user.id}>
@@ -636,14 +634,11 @@ const Users = () => {
                             </Link>
                           </Button>
                           {canManageRolesUI && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="ml-2"
-                              onClick={() => handleOpenRoleEdit(user)}
-                            >
-                              <Shield className="h-4 w-4 mr-1" />
-                              Edit Roles
+                            <Button variant="outline" size="sm" className="ml-2" asChild>
+                              <Link to="/role-management" className="flex items-center">
+                                <Shield className="h-4 w-4 mr-1" />
+                                Manage Roles
+                              </Link>
                             </Button>
                           )}
                         </TableCell>

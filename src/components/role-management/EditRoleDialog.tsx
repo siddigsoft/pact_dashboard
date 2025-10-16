@@ -13,7 +13,7 @@ interface EditRoleDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   role: RoleWithPermissions | null;
-  onUpdateRole: (roleId: string, roleData: UpdateRoleRequest) => Promise<void>;
+  onUpdateRole: (roleId: string, roleData: UpdateRoleRequest) => Promise<boolean>;
   isLoading: boolean;
 }
 
@@ -54,21 +54,22 @@ export const EditRoleDialog: React.FC<EditRoleDialogProps> = ({
     
     if (!role) return;
 
-    await onUpdateRole(role.id, {
+    const ok = await onUpdateRole(role.id, {
       ...formData,
       permissions: selectedPermissions
     });
-
-    onOpenChange(false);
+    if (ok) {
+      onOpenChange(false);
+    }
   };
 
   const handleUpdatePermissions = async (roleId: string, permissions: { resource: ResourceType; action: ActionType }[]) => {
     setSelectedPermissions(permissions);
-    await onUpdateRole(roleId, {
+    const ok = await onUpdateRole(roleId, {
       ...formData,
       permissions
     });
-    return true;
+    return ok;
   };
 
   if (!role) return null;

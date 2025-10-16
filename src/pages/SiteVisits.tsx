@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { useAppContext } from "@/context/AppContext";
+import { useAuthorization } from "@/hooks/use-authorization";
 import { SiteVisit } from "@/types";
 import { Link } from "react-router-dom";
 import { Plus, ChevronLeft, Search, MapPin, Clock } from "lucide-react";
@@ -26,7 +27,8 @@ import { useMMP } from "@/context/mmp/MMPContext";
 import LeafletMapContainer from '@/components/map/LeafletMapContainer';
 
 const SiteVisits = () => {
-  const { currentUser, hasPermission, hasRole } = useAppContext();
+  const { currentUser, hasRole } = useAppContext();
+  const { canViewAllSiteVisits } = useAuthorization();
   const { siteVisits } = useSiteVisitContext();
   const { mmpFiles } = useMMP();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -56,8 +58,7 @@ const SiteVisits = () => {
   }, []);
 
   useEffect(() => {
-    const canViewAll = (typeof hasPermission === 'function' && hasPermission('view_all_site_visits'))
-      || ['admin','ict','supervisor','fom'].includes(currentUser?.role || '');
+    const canViewAll = canViewAllSiteVisits();
     let filtered = canViewAll
       ? siteVisits
       : siteVisits.filter(visit => visit.assignedTo === currentUser?.id);

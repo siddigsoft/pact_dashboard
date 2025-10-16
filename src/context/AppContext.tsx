@@ -59,7 +59,6 @@ interface CompositeContextType {
   markNotificationAsRead: ReturnType<typeof useNotifications>['markNotificationAsRead'];
   getUnreadNotificationsCount: ReturnType<typeof useNotifications>['getUnreadNotificationsCount'];
   
-  hasPermission: (action: string) => boolean;
   hasGranularPermission: (resource: ResourceType, action: ActionType) => boolean;
   calculateDistanceFee: (latitude: number, longitude: number) => number;
   roles: AppRole[];
@@ -78,49 +77,7 @@ const CompositeContextProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const notificationContext = useNotifications();
   const roleManagement = useRoleManagement();
   
-  const hasPermission = (action: string): boolean => {
-    if (!userContext.currentUser) return false;
-    
-    // Legacy permission system - keeping for backward compatibility
-    const permissionsByRole: Record<string, string[]> = {
-      admin: [
-        'manage_users', 'approve_users', 'upload_mmp', 'approve_mmp', 'verify_permits',
-        'assign_site_visits', 'view_all_site_visits', 'view_finances', 'manage_finances',
-        'view_analytics', 'manage_settings', 'manage_roles',
-      ],
-      ict: [
-        'manage_users', 'upload_mmp', 'approve_mmp', 'verify_permits', 'assign_site_visits',
-        'view_all_site_visits', 'view_finances', 'manage_finances', 'view_analytics', 'manage_settings', 'manage_roles',
-      ],
-      fom: [
-        'upload_mmp', 'approve_mmp', 'verify_permits', 'assign_site_visits',
-        'view_all_site_visits', 'view_finances', 'view_budget', 'view_analytics',
-      ],
-      financialAdmin: [
-        'view_all_site_visits', 'view_finances', 'manage_finances', 'view_budget',
-        'manage_budget', 'view_analytics', 'approve_payments', 'process_withdrawals',
-      ],
-      supervisor: [
-        'verify_permits', 'view_all_site_visits', 'rate_site_visits', 'view_analytics',
-      ],
-      coordinator: [
-        'view_assigned_site_visits', 'complete_site_visits', 'view_limited_analytics',
-      ],
-      dataCollector: [
-        'view_assigned_site_visits', 'complete_site_visits',
-      ],
-      datacollector: [
-        'view_assigned_site_visits', 'complete_site_visits',
-      ],
-      reviewer: [
-        'view_assigned_site_visits',
-      ]
-    };
-    
-    const userRole = userContext.currentUser.role;
-    const permissions = permissionsByRole[userRole] || [];
-    return permissions.includes(action);
-  };
+  // Legacy hasPermission(action: string) removed: use useAuthorization() or hasGranularPermission() instead.
 
   const hasGranularPermission = (resource: ResourceType, action: ActionType): boolean => {
     if (!userContext.currentUser) return false;
@@ -144,7 +101,6 @@ const CompositeContextProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     ...siteVisitContext,
     ...walletContext,
     ...notificationContext,
-    hasPermission,
     hasGranularPermission,
     calculateDistanceFee,
     roles: userContext.roles,

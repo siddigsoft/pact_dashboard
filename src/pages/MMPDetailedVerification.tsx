@@ -134,7 +134,7 @@ const MMPDetailedVerification: React.FC = () => {
   }
 
   return (
-    <FieldTeamMapPermissions requiredAction="verify_permits">
+    <FieldTeamMapPermissions resource="mmp" action="approve">
       <div className="container mx-auto p-4 space-y-6">
         <div className="flex items-center gap-4 mb-4">
           <Button variant="outline" size="sm" onClick={handleGoBack} className="flex items-center gap-2">
