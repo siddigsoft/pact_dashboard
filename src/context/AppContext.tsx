@@ -6,7 +6,7 @@ import { SiteVisitProvider, useSiteVisitContext } from './siteVisit/SiteVisitCon
 import { WalletProvider, useWallet } from './wallet/WalletContext';
 import { AppRole, ResourceType, ActionType } from '@/types/roles';
 import { ProjectProvider } from './project/ProjectContext';
-import { ChatProvider } from './chat/ChatContext';
+import { ChatProvider } from './chat/ChatContextSupabase';
 import { CommunicationProvider } from './communications/CommunicationContext';
 import { ViewModeProvider } from './ViewModeContext';
 import { ArchiveProvider } from './archive/ArchiveContext';

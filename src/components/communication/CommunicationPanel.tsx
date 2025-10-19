@@ -16,7 +16,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar } from '@/components/ui/avatar';
-import { useChat } from '@/context/chat/ChatContext';
+import { useChat } from '@/context/chat/ChatContextSupabase';
 import { useNotifications } from '@/context/notifications/NotificationContext';
 import { useNavigate } from 'react-router-dom';
 import ChatWindow from '@/components/chat/ChatWindow';

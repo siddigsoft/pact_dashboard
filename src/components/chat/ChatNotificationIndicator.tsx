@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useChat } from '@/context/chat/ChatContext';
+import { useChat } from '@/context/chat/ChatContextSupabase';
 import { Button } from '@/components/ui/button';
 import { 
   Tooltip, 

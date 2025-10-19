@@ -3,6 +3,7 @@ import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ChatSidebar from '@/components/chat/ChatSidebar';
 import ChatWindow from '@/components/chat/ChatWindow';
+import ChatTestComponent from '@/components/chat/ChatTestComponent';
 import { useAppContext } from '@/context/AppContext';
 import { useViewMode } from '@/context/ViewModeContext';
 import { useToast } from '@/hooks/use-toast';
@@ -47,6 +48,11 @@ const Chat: React.FC = () => {
         <div className="flex-1 h-full overflow-hidden">
           <ChatWindow />
         </div>
+      </div>
+      
+      {/* Test Component (for development only) */}
+      <div className="mt-4">
+        <ChatTestComponent />
       </div>
     </div>
   );

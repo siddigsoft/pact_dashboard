@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Bell, CheckCheck, AlertCircle, CheckCircle2, Clock, Phone, MessageSquare } from 'lucide-react';
 import { useNotifications } from '@/context/notifications/NotificationContext';
 import { useCommunication } from '@/context/communications/CommunicationContext';
-import { useChat } from '@/context/chat/ChatContext';
+import { useChat } from '@/context/chat/ChatContextSupabase';
 import { isToday } from 'date-fns';
 import { NotificationGroup } from './notification-center/NotificationGroup';
 import { NotificationFilter } from './notification-center/NotificationFilter';

@@ -1,12 +1,14 @@
 
 import React, { useState } from 'react';
-import { useChat } from '@/context/chat/ChatContext';
+import { useChat } from '@/context/chat/ChatContextSupabase';
 import { Chat } from '@/types/chat';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useUser } from '@/context/user/UserContext';
 import { formatDistanceToNow } from 'date-fns';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
+import { Avatar } from '@/components/ui/avatar';
 import { 
   Search, 
   Users, 
@@ -95,9 +97,24 @@ const ChatItem: React.FC<ChatItemProps> = ({ chat, isActive, onClick }) => {
 };
 
 const ChatSidebar: React.FC = () => {
-  const { chats, activeChat, setActiveChat } = useChat();
+  const { chats, activeChat, setActiveChat, createChat } = useChat();
   const [searchQuery, setSearchQuery] = useState('');
-  const { currentUser } = useUser();
+  const [isNewChatOpen, setIsNewChatOpen] = useState(false);
+  const [userSearch, setUserSearch] = useState('');
+  const { currentUser, users } = useUser();
+  const availableUsers = users.filter(u => u.id !== currentUser?.id);
+  const filteredUsersList = userSearch 
+    ? availableUsers.filter(u => (u.fullName || u.name || u.username || '').toLowerCase().includes(userSearch.toLowerCase()))
+    : availableUsers;
+
+  const handleStartChatWith = async (userId: string, displayName: string) => {
+    const chat = await createChat([userId], displayName, 'private');
+    if (chat) {
+      setActiveChat(chat);
+      setIsNewChatOpen(false);
+      setUserSearch('');
+    }
+  };
   
   const filteredChats = searchQuery 
     ? chats.filter(chat => 
@@ -119,9 +136,58 @@ const ChatSidebar: React.FC = () => {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-          <Button size="icon" variant="outline" className="h-10 w-10">
-            <Plus size={18} />
-          </Button>
+          <Dialog open={isNewChatOpen} onOpenChange={setIsNewChatOpen}>
+            <DialogTrigger asChild>
+              <Button size="icon" variant="outline" className="h-10 w-10">
+                <Plus size={18} />
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Start a new chat</DialogTitle>
+                <DialogDescription>Select a user to start a conversation</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-2">
+                <div className="relative">
+                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search users..."
+                    className="pl-8"
+                    value={userSearch}
+                    onChange={(e) => setUserSearch(e.target.value)}
+                  />
+                </div>
+                <ScrollArea className="h-64">
+                  <div className="space-y-1">
+                    {filteredUsersList.map(u => (
+                      <button
+                        key={u.id}
+                        className="w-full flex items-center gap-3 p-2 rounded-md hover:bg-muted text-left"
+                        onClick={() => handleStartChatWith(u.id, u.fullName || u.name || u.username || 'Chat')}
+                      >
+                        <Avatar className="h-8 w-8">
+                          <div className="bg-primary/20 w-full h-full rounded-full flex items-center justify-center text-primary">
+                            {(u.fullName || u.name || u.username || 'U').charAt(0).toUpperCase()}
+                          </div>
+                        </Avatar>
+                        <div className="flex-1">
+                          <div className="text-sm font-medium">
+                            {u.fullName || u.name || u.username || 'User'}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {u.role || ''}
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                    {filteredUsersList.length === 0 && (
+                      <div className="text-sm text-muted-foreground p-3">No users found</div>
+                    )}
+                  </div>
+                </ScrollArea>
+              </div>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
       

@@ -3,7 +3,7 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { useChat } from '@/context/chat/ChatContext';
+import { useChat } from '@/context/chat/ChatContextSupabase';
 import { MessageSquare, ArrowRight } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 

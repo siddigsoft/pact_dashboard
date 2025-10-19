@@ -3,53 +3,47 @@ import { User } from './user';
 
 export interface Chat {
   id: string;
-  participants: string[];
-  messages: ChatMessage[];
+  name: string;
+  type: 'private' | 'group' | 'state-group';
+  isGroup: boolean;
+  createdBy: string | null;
+  stateId: string | null;
+  relatedEntityId: string | null;
+  relatedEntityType: 'mmpFile' | 'siteVisit' | 'project' | null;
   createdAt: string;
   updatedAt: string;
-  isGroup: boolean;
-  groupName?: string;
-  groupAvatar?: string;
+  participants: string[];
   lastMessage?: ChatMessage;
   unreadCount?: number;
   status: 'active' | 'archived' | 'deleted';
-  
-  // Additional properties being used in the codebase
-  name: string;
-  type: 'private' | 'group' | 'state-group';
-  relatedEntityId?: string;
-  relatedEntityType?: 'mmpFile' | 'siteVisit' | 'project';
-  stateId?: string;
-  isStateGroup?: boolean;
   pinnedMessageId?: string | null;
+  isStateGroup?: boolean;
 }
 
 export interface ChatMessage {
   id: string;
   chatId: string;
   senderId: string;
-  content: string;
+  content: string | null;
   contentType: 'text' | 'image' | 'file' | 'location' | 'audio';
   timestamp: string;
-  readBy: string[];
   status: 'sent' | 'delivered' | 'read' | 'failed';
-  read?: boolean; // Added this property to match existing code
-  attachments?: {
-    url: string;
-    type: string;
-    name: string;
-    size?: number;
-  }[];
-  metadata?: {
-    replyTo?: string;
-    forwardedFrom?: string;
-    location?: {
-      latitude: number;
-      longitude: number;
-      address?: string;
-    };
-    reactions?: Record<string, string[]>;
-  };
+  attachments?: any;
+  metadata?: any;
+  readBy: string[];
+  read?: boolean;
+}
+
+export interface ChatParticipant {
+  chat_id: string;
+  user_id: string;
+  joined_at: string;
+}
+
+export interface ChatMessageRead {
+  message_id: string;
+  user_id: string;
+  read_at: string;
 }
 
 export interface ChatContextType {

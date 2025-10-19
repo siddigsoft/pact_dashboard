@@ -1,7 +1,7 @@
 
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Home, Map, FileText, Users, Wallet, MessageSquare } from 'lucide-react';
-import { useChat } from '@/context/chat/ChatContext';
+import { useChat } from '@/context/chat/ChatContextSupabase';
 
 const MobileNavigation = () => {
   const location = useLocation();
