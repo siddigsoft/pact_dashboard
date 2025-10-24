@@ -28,31 +28,31 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail }: MMPSiteEntriesTa
     const ad = site?.additionalData || {};
 
     // Monitoring Plan Structure Fields - check multiple sources including additionalData
-    const hubOffice = site.hubOffice || site.hub_office || vd?.hubOffice || ad['Hub Office'] || ad['Hub Office:'] || 'Farchana Hub';
-    const state = site.state || site.state_name || vd?.state || ad['State'] || ad['State:'] || 'West Darfur';
-    const locality = site.locality || site.locality_name || vd?.locality || ad['Locality'] || ad['Locality:'] || '';
-    const siteName = site.siteName || site.site_name || vd?.siteName || ad['Site Name'] || ad['Site Name:'] || '';
-    const cpName = site.cpName || site.cp_name || vd?.cpName || ad['CP Name'] || ad['CP name'] || ad['CP Name:'] || 'World Relief (WR)';
-    const siteActivity = site.siteActivity || site.activity_at_site || site.activity || vd?.siteActivity || ad['Activity at the site'] || ad['Activity at Site'] || ad['Activity at the site:'] || 'GFA';
-    const monitoringBy = site.monitoringBy || site.monitoring_by || vd?.monitoringBy || ad['monitoring by'] || ad['monitoring by:'] || ad['Monitoring By'] || 'PACT';
-    const surveyTool = site.surveyTool || site.survey_tool || vd?.surveyTool || ad['Survey under Master tool'] || ad['Survey under Master tool:'] || ad['Survey Tool'] || 'PDM';
+    const hubOffice = site.hubOffice || site.hub_office || vd?.hubOffice || ad['Hub Office'] || ad['Hub Office:'] || '—';
+    const state = site.state || site.state_name || vd?.state || ad['State'] || ad['State:'] || '—';
+    const locality = site.locality || site.locality_name || vd?.locality || ad['Locality'] || ad['Locality:'] || '—';
+    const siteName = site.siteName || site.site_name || vd?.siteName || ad['Site Name'] || ad['Site Name:'] || '—';
+    const cpName = site.cpName || site.cp_name || vd?.cpName || ad['CP Name'] || ad['CP name'] || ad['CP Name:'] || '—';
+    const siteActivity = site.siteActivity || site.activity_at_site || site.activity || vd?.siteActivity || ad['Activity at the site'] || ad['Activity at Site'] || ad['Activity at the site:'] || '—';
+    const monitoringBy = site.monitoringBy || site.monitoring_by || vd?.monitoringBy || ad['monitoring by'] || ad['monitoring by:'] || ad['Monitoring By'] || '—';
+    const surveyTool = site.surveyTool || site.survey_tool || vd?.surveyTool || ad['Survey under Master tool'] || ad['Survey under Master tool:'] || ad['Survey Tool'] || '—';
     const useMarketDiversion = site.useMarketDiversion || site.use_market_diversion || vd?.useMarketDiversion || 
       (ad['Use Market Diversion Monitoring'] === 'Yes' || ad['Use Market Diversion Monitoring'] === 'true' || ad['Use Market Diversion Monitoring'] === '1') || false;
     const useWarehouseMonitoring = site.useWarehouseMonitoring || site.use_warehouse_monitoring || vd?.useWarehouseMonitoring || 
       (ad['Use Warehouse Monitoring'] === 'Yes' || ad['Use Warehouse Monitoring'] === 'true' || ad['Use Warehouse Monitoring'] === '1') || false;
 
     // Additional fields
-    const mainActivity = site.main_activity || site.mainActivity || vd?.mainActivity || '';
-    const visitType = site.visitType || vd?.visitType || '';
+    const mainActivity = site.main_activity || site.mainActivity || vd?.mainActivity || '—';
+    const visitType = site.visitType || vd?.visitType || '—';
 
     const rawDate = site.due_date || site.visitDate || '';
-    let visitDate = '';
+    let visitDate = '—';
     if (rawDate) {
       const d = new Date(rawDate);
       visitDate = isNaN(d.getTime()) ? String(rawDate) : d.toISOString().split('T')[0];
     }
 
-    const comments = site.comments || site.notes || '';
+    const comments = site.comments || site.notes || '—';
 
     return { 
       hubOffice, state, locality, siteName, cpName, siteActivity, 
