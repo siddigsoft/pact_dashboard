@@ -94,7 +94,10 @@ export const createSiteVisitInDb = async (siteVisit: Partial<SiteVisit>) => {
     state: siteVisit.state,
     activity: siteVisit.activity,
     priority: siteVisit.priority,
-    due_date: siteVisit.dueDate ? new Date(siteVisit.dueDate).toISOString() : null,
+    due_date: siteVisit.dueDate ? (() => {
+      const date = new Date(siteVisit.dueDate);
+      return isNaN(date.getTime()) ? null : date.toISOString();
+    })() : null,
     notes: siteVisit.notes,
     main_activity: siteVisit.mainActivity,
     location: siteVisit.location,

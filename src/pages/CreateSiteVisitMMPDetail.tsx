@@ -144,7 +144,14 @@ const CreateSiteVisitMMPDetail = () => {
             state: site.state || location?.region || '',
             activity: siteActivity, // Activity at Site -> site_visits.activity
             priority,
-            dueDate: site.visitDate || dueDate, // Visit Date -> site_visits.due_date
+            dueDate: (() => {
+              const visitDate = site.visitDate;
+              if (visitDate) {
+                const date = new Date(visitDate);
+                return isNaN(date.getTime()) ? dueDate : visitDate;
+              }
+              return dueDate;
+            })(), // Visit Date -> site_visits.due_date
             notes: comments, // Comments -> site_visits.notes
             mainActivity: site.mainActivity || '', // Main Activity -> site_visits.main_activity
 
