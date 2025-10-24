@@ -83,4 +83,16 @@ export interface SiteVisit {
   createdAt?: string;
   projectName?: string; 
   startTime?: string;
+  // Monitoring Plan Structure Fields
+  hubOffice?: string; // e.g., "Farchana Hub"
+  siteActivity?: string; // e.g., "GFA"
+  monitoringBy?: string; // e.g., "PACT"
+  surveyTool?: string; // e.g., "PDM"
+  useMarketDiversion?: boolean;
+  useWarehouseMonitoring?: boolean;
+  arrivalLatitude?: number;
+  arrivalLongitude?: number;
+  arrivalTimestamp?: string;
+  journeyPath?: any[];
+  arrivalRecorded?: boolean;
 }

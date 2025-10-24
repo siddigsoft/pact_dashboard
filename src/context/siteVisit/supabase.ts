@@ -36,6 +36,18 @@ export const fetchSiteVisits = async () => {
     // Additional fields persisted in visit_data
     hub: visit.visit_data?.hub || visit.hub || "",
     cpName: visit.visit_data?.cpName,
+    // Monitoring Plan Structure Fields
+    hubOffice: visit.visit_data?.hubOffice || visit.hub_office || "Farchana Hub",
+    siteActivity: visit.visit_data?.siteActivity || visit.activity_at_site || visit.activity || "GFA",
+    monitoringBy: visit.visit_data?.monitoringBy || visit.monitoring_by || "PACT",
+    surveyTool: visit.visit_data?.surveyTool || visit.survey_tool || "PDM",
+    useMarketDiversion: visit.visit_data?.useMarketDiversion || visit.use_market_diversion || false,
+    useWarehouseMonitoring: visit.visit_data?.useWarehouseMonitoring || visit.use_warehouse_monitoring || false,
+    arrivalLatitude: visit.arrival_latitude,
+    arrivalLongitude: visit.arrival_longitude,
+    arrivalTimestamp: visit.arrival_timestamp,
+    journeyPath: visit.journey_path,
+    arrivalRecorded: visit.arrival_recorded || false,
     permitDetails: visit.visit_data?.permitDetails || {
       federal: false,
       state: false,
@@ -96,8 +108,27 @@ export const createSiteVisitInDb = async (siteVisit: Partial<SiteVisit>) => {
       projectActivities: siteVisit.projectActivities,
       mmpDetails: siteVisit.mmpDetails,
       hub: siteVisit.hub,
-      cpName: siteVisit.cpName
-    }
+      cpName: siteVisit.cpName,
+      // Monitoring Plan Structure Fields
+      hubOffice: siteVisit.hubOffice,
+      siteActivity: siteVisit.siteActivity,
+      monitoringBy: siteVisit.monitoringBy,
+      surveyTool: siteVisit.surveyTool,
+      useMarketDiversion: siteVisit.useMarketDiversion,
+      useWarehouseMonitoring: siteVisit.useWarehouseMonitoring
+    },
+    // Direct database fields for monitoring plan
+    hub_office: siteVisit.hubOffice,
+    activity_at_site: siteVisit.siteActivity,
+    monitoring_by: siteVisit.monitoringBy,
+    survey_tool: siteVisit.surveyTool,
+    use_market_diversion: siteVisit.useMarketDiversion,
+    use_warehouse_monitoring: siteVisit.useWarehouseMonitoring,
+    arrival_latitude: siteVisit.arrivalLatitude,
+    arrival_longitude: siteVisit.arrivalLongitude,
+    arrival_timestamp: siteVisit.arrivalTimestamp,
+    journey_path: siteVisit.journeyPath,
+    arrival_recorded: siteVisit.arrivalRecorded
   };
   
   // Insert and return the created row in one round-trip

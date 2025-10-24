@@ -65,6 +65,7 @@ const getMenuGroups = (roles: AppRole[] = [], defaultRole: string = 'dataCollect
   const projectItems = [
     { title: "Projects", url: "/projects", icon: FolderKanban },
     { title: "MMP Management", url: "/mmp", icon: Database },
+    { title: "Monitoring Plan", url: "/monitoring-plan", icon: Activity },
     { title: "Site Visits", url: "/site-visits", icon: ClipboardList },
   ];
 

@@ -24,22 +24,20 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail }: MMPSiteEntriesTa
       ? (typeof site.visit_data === 'string' ? (() => { try { return JSON.parse(site.visit_data); } catch { return undefined; } })() : site.visit_data)
       : undefined;
 
-    const hubOffice = site.hubOffice || site.site_code || site.siteCode || vd?.hub || '';
-    const state = site.state || site.site_name || site.stateName || site.siteName || '';
-    const locality = site.locality || site.locality_name || site.localityName || '';
+    // Monitoring Plan Structure Fields
+    const hubOffice = site.hubOffice || site.hub_office || vd?.hubOffice || 'Farchana Hub';
+    const state = site.state || site.state_name || vd?.state || 'West Darfur';
+    const locality = site.locality || site.locality_name || vd?.locality || '';
+    const siteName = site.siteName || site.site_name || vd?.siteName || '';
+    const cpName = site.cpName || site.cp_name || vd?.cpName || 'World Relief (WR)';
+    const siteActivity = site.siteActivity || site.activity_at_site || site.activity || vd?.siteActivity || 'GFA';
+    const monitoringBy = site.monitoringBy || site.monitoring_by || vd?.monitoringBy || 'PACT';
+    const surveyTool = site.surveyTool || site.survey_tool || vd?.surveyTool || 'PDM';
+    const useMarketDiversion = site.useMarketDiversion || site.use_market_diversion || vd?.useMarketDiversion || false;
+    const useWarehouseMonitoring = site.useWarehouseMonitoring || site.use_warehouse_monitoring || vd?.useWarehouseMonitoring || false;
 
-    // Site name may be in siteName (camel), or sometimes notes/name
-    const siteName = site.siteName || site.notes || site.name || '';
-
-    // CP name may have been stored in mainActivity previously
-    const cpName = site.cpName || vd?.cpName || site.activity || site.cp || site.mainActivity || '';
-
-    // Main activity may be in main_activity, mainActivity, or siteActivity
-    const mainActivity = site.main_activity || site.mainActivity || site.siteActivity || '';
-
-    // Activity at site sometimes came in DB 'activity', status or siteActivity
-    const siteActivity = site.siteActivity || site.activity_at_site || site.activity || site.status || '';
-
+    // Additional fields
+    const mainActivity = site.main_activity || site.mainActivity || vd?.mainActivity || '';
     const visitType = site.visitType || vd?.visitType || '';
 
     const rawDate = site.due_date || site.visitDate || '';
@@ -51,7 +49,11 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail }: MMPSiteEntriesTa
 
     const comments = site.comments || site.notes || '';
 
-    return { hubOffice, state, locality, siteName, cpName, mainActivity, siteActivity, visitType, visitDate, comments };
+    return { 
+      hubOffice, state, locality, siteName, cpName, siteActivity, 
+      monitoringBy, surveyTool, useMarketDiversion, useWarehouseMonitoring,
+      mainActivity, visitType, visitDate, comments 
+    };
   };
 
   const handleView = (site: any) => {
@@ -68,7 +70,7 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail }: MMPSiteEntriesTa
     : siteEntries.filter(site => {
         const s = normalizeSite(site);
         const q = searchQuery.toLowerCase();
-        return [s.hubOffice, s.state, s.locality, s.siteName, s.cpName, s.mainActivity, s.siteActivity, s.visitType, s.visitDate, s.comments]
+        return [s.hubOffice, s.state, s.locality, s.siteName, s.cpName, s.siteActivity, s.monitoringBy, s.surveyTool, s.visitDate, s.comments]
           .filter(Boolean)
           .some((v) => String(v).toLowerCase().includes(q));
       });
@@ -109,9 +111,11 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail }: MMPSiteEntriesTa
                 <TableHead>Locality</TableHead>
                 <TableHead>Site Name</TableHead>
                 <TableHead>CP Name</TableHead>
-                <TableHead>Main Activity</TableHead>
                 <TableHead>Activity at Site</TableHead>
-                <TableHead>Visit Type</TableHead>
+                <TableHead>Monitoring By</TableHead>
+                <TableHead>Survey Tool</TableHead>
+                <TableHead>Market Diversion</TableHead>
+                <TableHead>Warehouse Monitoring</TableHead>
                 <TableHead>Visit Date</TableHead>
                 <TableHead>Comments</TableHead>
                 <TableHead>Actions</TableHead>
@@ -128,9 +132,11 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail }: MMPSiteEntriesTa
                       <TableCell>{row.locality}</TableCell>
                       <TableCell>{row.siteName}</TableCell>
                       <TableCell>{row.cpName}</TableCell>
-                      <TableCell>{row.mainActivity}</TableCell>
                       <TableCell>{row.siteActivity}</TableCell>
-                      <TableCell>{row.visitType}</TableCell>
+                      <TableCell>{row.monitoringBy}</TableCell>
+                      <TableCell>{row.surveyTool}</TableCell>
+                      <TableCell>{row.useMarketDiversion ? 'Yes' : 'No'}</TableCell>
+                      <TableCell>{row.useWarehouseMonitoring ? 'Yes' : 'No'}</TableCell>
                       <TableCell>{row.visitDate}</TableCell>
                       <TableCell>{row.comments}</TableCell>
                       <TableCell>
@@ -148,7 +154,7 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail }: MMPSiteEntriesTa
                 })
               ) : (
                 <TableRow>
-                  <TableCell colSpan={11} className="h-24 text-center">
+                  <TableCell colSpan={13} className="h-24 text-center">
                     No results.
                   </TableCell>
                 </TableRow>
@@ -189,16 +195,24 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail }: MMPSiteEntriesTa
                   <p className="font-medium">{row.cpName || '—'}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Main Activity</p>
-                  <p className="font-medium">{row.mainActivity || '—'}</p>
-                </div>
-                <div>
                   <p className="text-sm text-muted-foreground">Activity at Site</p>
                   <p className="font-medium">{row.siteActivity || '—'}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Visit Type</p>
-                  <p className="font-medium">{row.visitType || '—'}</p>
+                  <p className="text-sm text-muted-foreground">Monitoring By</p>
+                  <p className="font-medium">{row.monitoringBy || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Survey Tool</p>
+                  <p className="font-medium">{row.surveyTool || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Market Diversion</p>
+                  <p className="font-medium">{row.useMarketDiversion ? 'Yes' : 'No'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Warehouse Monitoring</p>
+                  <p className="font-medium">{row.useWarehouseMonitoring ? 'Yes' : 'No'}</p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Visit Date</p>
@@ -218,3 +232,4 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail }: MMPSiteEntriesTa
 };
 
 export default MMPSiteEntriesTable;
+
