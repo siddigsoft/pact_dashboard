@@ -241,9 +241,9 @@ const MMPDetailView = () => {
       />
 
       {/* Main Overview Section */}
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 overflow-x-auto">
         {/* Left Column - Main Overview */}
-        <div className="xl:col-span-8 space-y-6">
+        <div className="xl:col-span-5 space-y-6">
           <MMPOverviewCard 
             mmpFile={mmpFile} 
             siteEntries={siteEntries}
@@ -253,7 +253,7 @@ const MMPDetailView = () => {
         </div>
         
         {/* Right Column - Details & Info */}
-        <div className="xl:col-span-4 space-y-6">
+        <div className="xl:col-span-7 space-y-6">
           <MMPInfoCard 
             mmpData={mmpFile} 
             showActions={true}
