@@ -66,7 +66,7 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
   return (
     <TooltipProvider>
       <SidebarProvider>
-        <div className="min-h-screen flex w-full overflow-x-hidden">
+        <div className="min-h-screen flex w-full">
           {!isMobile && <AppSidebar />}
           <div className={`flex-1 flex flex-col ${isMobile ? 'bg-gray-50 dark:bg-gray-900' : ''} relative z-0`}>
             {isMobile ? (
@@ -78,7 +78,7 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
             ) : (
               <Navbar />
             )}
-            <main className={`flex-1 ${isMobile ? 'px-3 pb-24 pt-2' : 'p-4 md:p-6 lg:p-8'} ${isMobile ? 'bg-gray-50 dark:bg-gray-900' : 'bg-slate-50/70 dark:bg-gray-900/70'} overflow-y-auto overflow-x-hidden relative z-0`}>
+            <main className={`flex-1 ${isMobile ? 'px-3 pb-24 pt-2' : 'p-4 md:p-6 lg:p-8'} ${isMobile ? 'bg-gray-50 dark:bg-gray-900' : 'bg-slate-50/70 dark:bg-gray-900/70'} overflow-y-auto relative z-0`}>
               {children || <Outlet />}
             </main>
             {isMobile && <MobileNavigation />}

@@ -107,7 +107,8 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail }: MMPSiteEntriesTa
         </div>
       </CardHeader>
       <CardContent>
-        <div className="rounded-md border overflow-x-auto">
+        <div className="rounded-md border">
+          <div className="min-w-[1600px]">
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50">
@@ -166,6 +167,7 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail }: MMPSiteEntriesTa
               )}
             </TableBody>
           </Table>
+          </div>
         </div>
       </CardContent>
 
