@@ -12,7 +12,7 @@ import { Link } from "react-router-dom";
 import { Plus, ChevronLeft, Search, MapPin, Clock } from "lucide-react";
 import { useSiteVisitContext } from "@/context/siteVisit/SiteVisitContext";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
-import { format } from "date-fns";
+import { format, isValid } from "date-fns";
 import { CalendarIcon } from "lucide-react";
 import ApprovedMMPList from '@/components/site-visit/ApprovedMMPList';
 import SiteVisitStats from '@/components/site-visit/SiteVisitStats';
@@ -294,7 +294,7 @@ const SiteVisits = () => {
                   </div>
                   <div className="flex items-center text-muted-foreground">
                     <CalendarIcon className="h-3 w-3 mr-1 text-primary/70" />
-                    Due: {format(new Date(visit.dueDate), 'MMM d, yyyy')}
+                    Due: {(() => { const d = new Date(visit.dueDate || ''); return isValid(d) ? format(d, 'MMM d, yyyy') : 'N/A'; })()}
                   </div>
                 </div>
                 <div className="mt-2 text-muted-foreground line-clamp-1">
@@ -321,7 +321,7 @@ const SiteVisits = () => {
                     ? 'bg-amber-100 text-amber-800 border border-amber-200'
                     : 'bg-green-100 text-green-800 border border-green-200'
                 }`}>
-                  {visit.priority.charAt(0).toUpperCase() + visit.priority.slice(1)} Priority
+                  {(visit.priority ? visit.priority.charAt(0).toUpperCase() + visit.priority.slice(1) : 'Unknown')} Priority
                 </div>
                 <div className="font-medium">
                   ${visit.fees?.total || 'N/A'}

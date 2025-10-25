@@ -1,6 +1,7 @@
 
-export const getStatusColor = (status: string): string => {
-  switch (status) {
+export const getStatusColor = (status?: string | null): string => {
+  const s = (status ?? "").trim();
+  switch (s) {
     case "pending":
       return "bg-amber-100 text-amber-800";
     case "inProgress":
@@ -19,8 +20,9 @@ export const getStatusColor = (status: string): string => {
   }
 };
 
-export const getStatusLabel = (status: string): string => {
-  switch (status) {
+export const getStatusLabel = (status?: string | null): string => {
+  const s = (status ?? "").trim();
+  switch (s) {
     case "pending":
       return "Pending";
     case "inProgress":
@@ -35,12 +37,16 @@ export const getStatusLabel = (status: string): string => {
     case "cancelled":
       return "Canceled";
     default:
-      return status.charAt(0).toUpperCase() + status.slice(1);
+      return s ? s.charAt(0).toUpperCase() + s.slice(1) : "Unknown";
   }
 };
 
-export const getStatusDescription = (status: string, permitDetails?: { federal: boolean; state: boolean; locality: boolean }): string => {
-  switch (status) {
+export const getStatusDescription = (
+  status?: string | null,
+  permitDetails?: { federal: boolean; state: boolean; locality: boolean }
+): string => {
+  const s = (status ?? "").trim();
+  switch (s) {
     case "pending":
       if (permitDetails) {
         const missingPermits = [];
