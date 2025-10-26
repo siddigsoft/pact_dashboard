@@ -42,6 +42,10 @@ interface UrgentSiteVisitForm {
   supervisorName: string;
   risks: string;
   resources: string;
+  feeCurrency: string;
+  distanceFee: string;
+  complexityFee: string;
+  urgencyFee: string;
 }
 
 const CreateSiteVisitUrgent = () => {
@@ -61,11 +65,19 @@ const CreateSiteVisitUrgent = () => {
       priority: 'high',
       state: '',
       complexity: 'medium',
+      feeCurrency: 'SDG',
+      distanceFee: '',
+      complexityFee: '0',
+      urgencyFee: '0',
     }
   });
 
   const watchState = form.watch('state');
   const watchHub = form.watch('hub');
+  const watchDistanceFee = form.watch('distanceFee');
+  const watchComplexityFee = form.watch('complexityFee');
+  const watchUrgencyFee = form.watch('urgencyFee');
+  const watchFeeCurrency = form.watch('feeCurrency');
   
   useEffect(() => {
     if (watchHub) {
@@ -161,6 +173,14 @@ const CreateSiteVisitUrgent = () => {
 
     try {
       let siteVisitId;
+      const toAmount = (v: any) => {
+        const n = typeof v === 'string' ? parseFloat(v) : Number(v || 0);
+        return isNaN(n) ? 0 : n;
+      };
+      const distanceFeeVal = toAmount(data.distanceFee);
+      const complexityFeeVal = toAmount(data.complexityFee);
+      const urgencyFeeVal = toAmount(data.urgencyFee);
+      const totalFee = distanceFeeVal + complexityFeeVal + urgencyFeeVal;
       
       if (data.siteSource === 'existing') {
         const selectedSite = approvedMmpSites.find(site => site.id === data.selectedMmpSite);
@@ -170,7 +190,14 @@ const CreateSiteVisitUrgent = () => {
             siteCode: selectedSite.code,
             priority: data.priority,
             visitType: 'urgent',
-            status: 'pending'
+            status: 'pending',
+            fees: {
+              total: totalFee,
+              currency: data.feeCurrency || 'SDG',
+              distanceFee: distanceFeeVal,
+              complexityFee: complexityFeeVal,
+              urgencyFee: urgencyFeeVal,
+            },
           });
         }
       } else {
@@ -191,6 +218,13 @@ const CreateSiteVisitUrgent = () => {
           description: data.description?.toString() || '',
           risks: data.risks?.toString() || '',
           resources: data.resources ? [data.resources] : [],
+          fees: {
+            total: totalFee,
+            currency: data.feeCurrency || 'SDG',
+            distanceFee: distanceFeeVal,
+            complexityFee: complexityFeeVal,
+            urgencyFee: urgencyFeeVal,
+          },
           team: {
             coordinator: data.coordinatorName,
             supervisor: data.supervisorName
@@ -625,6 +659,81 @@ const CreateSiteVisitUrgent = () => {
                     </FormItem>
                   )}
                 />
+
+                <div className="space-y-2">
+                  <FormLabel className="text-sm">Fees</FormLabel>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="feeCurrency"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Currency</FormLabel>
+                          <FormControl>
+                            <Input {...field} placeholder="e.g., SDG" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="distanceFee"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Distance Fee</FormLabel>
+                          <FormControl>
+                            <Input {...field} type="number" placeholder="0" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="complexityFee"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Complexity Fee</FormLabel>
+                          <FormControl>
+                            <Input {...field} type="number" placeholder="0" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="urgencyFee"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Urgency Fee</FormLabel>
+                          <FormControl>
+                            <Input {...field} type="number" placeholder="0" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <div className="text-sm text-muted-foreground">
+                    {(() => {
+                      const toAmount = (v: any) => {
+                        const n = typeof v === 'string' ? parseFloat(v) : Number(v || 0);
+                        return isNaN(n) ? 0 : n;
+                      };
+                      const d = toAmount(watchDistanceFee);
+                      const c = toAmount(watchComplexityFee);
+                      const u = toAmount(watchUrgencyFee);
+                      const total = d + c + u;
+                      return `Total: ${total.toLocaleString()} ${watchFeeCurrency || 'SDG'}`;
+                    })()}
+                  </div>
+                </div>
 
                 <Button type="submit" variant="destructive" className="w-full">
                   <Plus className="h-4 w-4 mr-2" />

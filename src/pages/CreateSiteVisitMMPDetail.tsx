@@ -30,6 +30,15 @@ const CreateSiteVisitMMPDetail = () => {
     new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
   );
   const [creating, setCreating] = useState(false);
+  const [feeCurrency, setFeeCurrency] = useState<string>('SDG');
+  const [distanceFeeAmount, setDistanceFeeAmount] = useState<string>('');
+  const [complexityFeeAmount, setComplexityFeeAmount] = useState<string>('0');
+  const [urgencyFeeAmount, setUrgencyFeeAmount] = useState<string>('0');
+
+  const toAmount = (val: any) => {
+    const n = typeof val === 'string' ? parseFloat(val) : Number(val || 0);
+    return isNaN(n) ? 0 : n;
+  };
   
   useEffect(() => {
     if (!id) {
@@ -47,6 +56,9 @@ const CreateSiteVisitMMPDetail = () => {
     if (mmp) {
       setMmpData(mmp);
       console.log("MMP data loaded:", mmp);
+      const locAny = (mmp as any)?.location || {};
+      const df = calculateDistanceFee(Number(locAny.latitude) || 0, Number(locAny.longitude) || 0) || 0;
+      setDistanceFeeAmount(String(df));
     } else {
       toast({
         title: "MMP not found",
@@ -127,13 +139,18 @@ const CreateSiteVisitMMPDetail = () => {
       const results = await Promise.all(
         selectedSiteObjects.map(async (site: any) => {
           const location = mmpData?.location || { address: '', latitude: 0, longitude: 0, region: mmpData?.region || '' };
-          const distanceFee = calculateDistanceFee(Number(location.latitude) || 0, Number(location.longitude) || 0) || 0;
+          const computedDistanceFee = calculateDistanceFee(Number(location.latitude) || 0, Number(location.longitude) || 0) || 0;
 
           const hub = site.hubOffice || site.siteCode || site.site_code || '';
           const cpName = site.cpName || '';
           const siteActivity = site.siteActivity || site.activity || '';
           const visitType = site.visitType || 'regular';
           const comments = site.comments || '';
+
+          const distanceFeeVal = toAmount(distanceFeeAmount) || computedDistanceFee;
+          const complexityFeeVal = toAmount(complexityFeeAmount);
+          const urgencyFeeVal = toAmount(urgencyFeeAmount);
+          const totalFee = distanceFeeVal + complexityFeeVal + urgencyFeeVal;
 
           const payload: any = {
             // DB columns
@@ -166,11 +183,11 @@ const CreateSiteVisitMMPDetail = () => {
             // Context
             location,
             fees: {
-              total: distanceFee,
-              currency: 'SDG',
-              distanceFee,
-              complexityFee: 0,
-              urgencyFee: 0,
+              total: totalFee,
+              currency: feeCurrency,
+              distanceFee: distanceFeeVal,
+              complexityFee: complexityFeeVal,
+              urgencyFee: urgencyFeeVal,
             },
             mmpDetails: {
               mmpId: mmpData?.id,
@@ -302,6 +319,50 @@ const CreateSiteVisitMMPDetail = () => {
                   value={dueDate}
                   onChange={(e) => setDueDate(e.target.value)}
                 />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Fees</Label>
+                
+                  <div>
+                    <Label htmlFor="feeCurrency" className="text-xs">Currency</Label>
+                    <Input
+                      id="feeCurrency"
+                      value={feeCurrency}
+                      onChange={(e) => setFeeCurrency(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="distanceFee" className="text-xs">Distance Fee</Label>
+                    <Input
+                      id="distanceFee"
+                      type="number"
+                      value={distanceFeeAmount}
+                      onChange={(e) => setDistanceFeeAmount(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="complexityFee" className="text-xs">Complexity Fee</Label>
+                    <Input
+                      id="complexityFee"
+                      type="number"
+                      value={complexityFeeAmount}
+                      onChange={(e) => setComplexityFeeAmount(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="urgencyFee" className="text-xs">Urgency Fee</Label>
+                    <Input
+                      id="urgencyFee"
+                      type="number"
+                      value={urgencyFeeAmount}
+                      onChange={(e) => setUrgencyFeeAmount(e.target.value)}
+                    />
+                  </div>
+                
+                <div className="text-sm text-muted-foreground mt-2">
+                  Total: {(toAmount(distanceFeeAmount) + toAmount(complexityFeeAmount) + toAmount(urgencyFeeAmount)).toLocaleString()} {feeCurrency}
+                </div>
               </div>
 
               <Separator />
