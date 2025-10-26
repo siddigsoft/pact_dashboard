@@ -122,10 +122,10 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
     },
   });
 
-  const handleFormSubmit = (values: z.infer<typeof formSchema>) => {
+  const handleFormSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
-      const projectCode = isEditing && initialData?.projectCode 
-        ? initialData.projectCode 
+      const projectCode = isEditing && initialData?.projectCode
+        ? initialData.projectCode
         : `PROJ-${new Date().getFullYear()}-${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`;
 
       const selectedStates = values.selectedState ? [values.selectedState] : [];
@@ -139,7 +139,7 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
         status: values.status,
         startDate: values.startDate.toISOString(),
         endDate: values.endDate.toISOString(),
-        budget: values.budgetTotal 
+        budget: values.budgetTotal
           ? {
               total: values.budgetTotal,
               currency: values.budgetCurrency,
@@ -163,13 +163,13 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
         updatedAt: new Date().toISOString(),
       };
 
-      onSubmit(project);
-      
+      await onSubmit(project);
+
       toast({
         title: isEditing ? "Project Updated" : "Project Created",
         description: `${values.name} has been ${isEditing ? 'updated' : 'created'} successfully.`,
       });
-      
+
     } catch (error) {
       console.error('Error submitting project form:', error);
       toast({
@@ -620,6 +620,7 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
             )}
             
             <div className="border-t pt-6">
+              {isEditing && initialData?.id &&(
               <ActivityManager
                 activities={initialData?.activities || []}
                 onActivitiesChange={(activities) => {
@@ -633,6 +634,8 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
                 }}
                 projectType={form.watch('projectType')}
               />
+              )
+}
             </div>
 
             <div className="flex justify-end space-x-4">
