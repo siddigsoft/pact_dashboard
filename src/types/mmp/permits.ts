@@ -20,8 +20,9 @@ export interface MMPStatePermitDocument {
   verificationNotes?: string;
   verifiedBy?: string;
   verifiedAt?: string;
-  permitType: 'federal' | 'state';
+  permitType: 'federal' | 'state' | 'local';
   state?: string; // Only required for state permits
+  locality?: string; // Only required for local permits
 }
 
 export interface MMPStatePermit {
@@ -33,8 +34,16 @@ export interface MMPStatePermit {
 export interface MMPPermitsData {
   federal: boolean;
   state: boolean;
+  local: boolean;
   lastVerified?: string;
   verifiedBy?: string;
   documents?: MMPDocument[];
   statePermits?: MMPStatePermit[];
+  localPermits?: MMPLocalPermit[];
+}
+
+export interface MMPLocalPermit {
+  localityName: string;
+  verified: boolean;
+  documents: MMPStatePermitDocument[];
 }

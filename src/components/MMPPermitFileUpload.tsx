@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { FileUpload } from '@/components/FileUpload';
 import { MMPStatePermitDocument } from '@/types/mmp/permits';
 import { useToast } from '@/hooks/use-toast';
-import { Upload, Building2, Landmark } from 'lucide-react';
+import { Upload, Building2, Landmark, MapPin } from 'lucide-react';
 import { DatePicker } from '@/components/ui/date-picker';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -34,6 +34,12 @@ const permitTypes = [
     description: 'State level authorization',
     icon: Building2,
   },
+  {
+    id: 'local',
+    name: 'Local Permit',
+    description: 'Local municipality authorization',
+    icon: MapPin,
+  },
 ];
 
 export const MMPPermitFileUpload: React.FC<MMPPermitFileUploadProps> = ({ onUploadSuccess, bucket = 'mmp-files', pathPrefix }) => {
@@ -41,16 +47,18 @@ export const MMPPermitFileUpload: React.FC<MMPPermitFileUploadProps> = ({ onUplo
   const [issueDate, setIssueDate] = useState<Date>();
   const [expiryDate, setExpiryDate] = useState<Date>();
   const [comments, setComments] = useState('');
-  const [permitType, setPermitType] = useState<'federal' | 'state'>('federal');
+  const [permitType, setPermitType] = useState<'federal' | 'state' | 'local'>('federal');
   const [state, setState] = useState('');
+  const [locality, setLocality] = useState('');
   const { toast } = useToast();
 
   const handleUploadSuccess = (fileUrl: string, fileName: string) => {
     const currentDate = new Date();
     const formattedDate = format(currentDate, 'yyyyMMdd-HHmmss');
-    const documentType = permitType === 'federal' ? 'FED' : 'STATE';
+    const documentType = permitType === 'federal' ? 'FED' : permitType === 'state' ? 'STATE' : 'LOCAL';
     const stateCode = permitType === 'state' && state ? `-${state}` : '';
-    const documentId = `${documentType}${stateCode}-${formattedDate}`;
+    const localityCode = permitType === 'local' && locality ? `-${locality}` : '';
+    const documentId = `${documentType}${stateCode}${localityCode}-${formattedDate}`;
 
     const newDocument: MMPStatePermitDocument = {
       id: documentId,
@@ -63,6 +71,7 @@ export const MMPPermitFileUpload: React.FC<MMPPermitFileUploadProps> = ({ onUplo
       comments: comments.trim() || undefined,
       permitType,
       ...(permitType === 'state' && { state: state.trim() }),
+      ...(permitType === 'local' && { locality: locality.trim() }),
     };
 
     onUploadSuccess(newDocument);
@@ -72,6 +81,7 @@ export const MMPPermitFileUpload: React.FC<MMPPermitFileUploadProps> = ({ onUplo
     setExpiryDate(undefined);
     setComments('');
     setState('');
+    setLocality('');
     
     toast({
       title: 'File Uploaded',
@@ -144,6 +154,19 @@ export const MMPPermitFileUpload: React.FC<MMPPermitFileUploadProps> = ({ onUplo
                 ))}
               </SelectContent>
             </Select>
+          </div>
+        )}
+
+        {permitType === 'local' && (
+          <div className="space-y-2">
+            <Label>Locality/Municipality</Label>
+            <input
+              type="text"
+              value={locality}
+              onChange={(e) => setLocality(e.target.value)}
+              placeholder="Enter locality or municipality name"
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            />
           </div>
         )}
 

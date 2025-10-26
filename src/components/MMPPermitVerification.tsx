@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { MMPPermitsData, MMPStatePermitDocument } from '@/types/mmp/permits';
+import { MMPPermitsData, MMPStatePermitDocument, MMPLocalPermit } from '@/types/mmp/permits';
 import { MMPPermitFileUpload } from './MMPPermitFileUpload';
 import { PermitVerificationCard } from './permits/PermitVerificationCard';
 import { Progress } from '@/components/ui/progress';
@@ -21,6 +21,7 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
   onVerificationComplete
 }) => {
   const [permits, setPermits] = useState<MMPStatePermitDocument[]>([]);
+  const [localPermits, setLocalPermits] = useState<MMPStatePermitDocument[]>([]);
   const { toast } = useToast();
   const { updateMMP } = useMMP();
   const { currentUser } = useAppContext();
@@ -30,31 +31,39 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
     if (mmpFile && mmpFile.permits) {
       // Support both legacy array and new object shape
       if (Array.isArray(mmpFile.permits)) {
-        setPermits(mmpFile.permits as MMPStatePermitDocument[]);
+        const allPermits = mmpFile.permits as MMPStatePermitDocument[];
+        setPermits(allPermits.filter(p => p.permitType === 'federal' || p.permitType === 'state'));
+        setLocalPermits(allPermits.filter(p => p.permitType === 'local'));
       } else if (
         typeof mmpFile.permits === 'object' &&
         'documents' in mmpFile.permits &&
         Array.isArray(mmpFile.permits.documents)
       ) {
-        setPermits(mmpFile.permits.documents as MMPStatePermitDocument[]);
+        const allPermits = mmpFile.permits.documents as MMPStatePermitDocument[];
+        setPermits(allPermits.filter(p => p.permitType === 'federal' || p.permitType === 'state'));
+        setLocalPermits(allPermits.filter(p => p.permitType === 'local'));
       } else {
         setPermits([]);
+        setLocalPermits([]);
       }
       console.log('MMPPermitVerification - Initial permits:', mmpFile.permits);
     } else {
       setPermits([]);
+      setLocalPermits([]);
     }
   }, [mmpFile]);
 
-  const persistPermits = (docs: MMPStatePermitDocument[]) => {
+  const persistPermits = (docs: MMPStatePermitDocument[], localDocs: MMPStatePermitDocument[] = []) => {
     const now = new Date().toISOString();
+    const allDocs = [...docs, ...localDocs];
     const permitsData: MMPPermitsData = {
       federal: docs.some(d => d.permitType === 'federal'),
       state: docs.some(d => d.permitType === 'state'),
-      lastVerified: docs.some(d => d.status) ? now : undefined,
+      local: localDocs.some(d => d.permitType === 'local'),
+      lastVerified: allDocs.some(d => d.status) ? now : undefined,
       verifiedBy: currentUser?.username || currentUser?.fullName || currentUser?.email || undefined,
       // Cast to MMPDocument[] for compatibility; downstream code handles extended fields safely
-      documents: docs as unknown as any,
+      documents: allDocs as unknown as any,
     };
 
     if (onVerificationComplete) {
@@ -66,9 +75,15 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
   };
 
   const handleUploadSuccess = (newPermit: MMPStatePermitDocument) => {
-    const updatedPermits = [...permits, newPermit];
-    setPermits(updatedPermits);
-    persistPermits(updatedPermits);
+    if (newPermit.permitType === 'local') {
+      const updatedLocalPermits = [...localPermits, newPermit];
+      setLocalPermits(updatedLocalPermits);
+      persistPermits(permits, updatedLocalPermits);
+    } else {
+      const updatedPermits = [...permits, newPermit];
+      setPermits(updatedPermits);
+      persistPermits(updatedPermits, localPermits);
+    }
     
     toast({
       title: "Permit Uploaded",
@@ -77,27 +92,46 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
   };
 
   const handleVerifyPermit = (permitId: string, status: 'verified' | 'rejected', notes?: string) => {
-    const updatedPermits = permits.map(permit => {
-      if (permit.id === permitId) {
-        return {
-          ...permit,
-          status,
-          verificationNotes: notes,
-          verifiedAt: new Date().toISOString(),
-          verifiedBy: currentUser?.username || currentUser?.fullName || currentUser?.email || 'System'
-        };
-      }
-      return permit;
-    });
-
-    setPermits(updatedPermits);
-    persistPermits(updatedPermits);
+    // Check if it's a local permit
+    const localPermitIndex = localPermits.findIndex(p => p.id === permitId);
+    if (localPermitIndex !== -1) {
+      const updatedLocalPermits = localPermits.map(permit => {
+        if (permit.id === permitId) {
+          return {
+            ...permit,
+            status,
+            verificationNotes: notes,
+            verifiedAt: new Date().toISOString(),
+            verifiedBy: currentUser?.username || currentUser?.fullName || currentUser?.email || 'System'
+          };
+        }
+        return permit;
+      });
+      setLocalPermits(updatedLocalPermits);
+      persistPermits(permits, updatedLocalPermits);
+    } else {
+      const updatedPermits = permits.map(permit => {
+        if (permit.id === permitId) {
+          return {
+            ...permit,
+            status,
+            verificationNotes: notes,
+            verifiedAt: new Date().toISOString(),
+            verifiedBy: currentUser?.username || currentUser?.fullName || currentUser?.email || 'System'
+          };
+        }
+        return permit;
+      });
+      setPermits(updatedPermits);
+      persistPermits(updatedPermits, localPermits);
+    }
   };
 
   const calculateProgress = () => {
-    if (permits.length === 0) return 0;
-    const verifiedCount = permits.filter(p => p.status === 'verified' || p.status === 'rejected').length;
-    return Math.round((verifiedCount / permits.length) * 100);
+    const allPermits = [...permits, ...localPermits];
+    if (allPermits.length === 0) return 0;
+    const verifiedCount = allPermits.filter(p => p.status === 'verified' || p.status === 'rejected').length;
+    return Math.round((verifiedCount / allPermits.length) * 100);
   };
 
   const progress = calculateProgress();
@@ -105,6 +139,7 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
 
   return (
     <div className="space-y-8">
+      {/* Upload Section */}
       <Card className="border-dashed">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -129,29 +164,18 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
         </CardContent>
       </Card>
 
+      {/* Federal/State Permits Section */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FileCheck className="h-5 w-5" />
-            Verification Progress
+            Federal & State Permits
           </CardTitle>
           <CardDescription>
-            Track and manage permit verifications
+            Track and manage federal and state permit verifications
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="mb-6">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-muted-foreground">
-                Overall Progress
-              </span>
-              <span className="text-sm font-medium">
-                {progress}%
-              </span>
-            </div>
-            <Progress value={progress} className="h-2" />
-          </div>
-
           <div className="space-y-4">
             {permits.length > 0 ? (
               permits.map((permit) => (
@@ -162,12 +186,85 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
                 />
               ))
             ) : (
-              <div className="text-center py-12 text-muted-foreground">
-                <Upload className="h-12 w-12 mx-auto mb-4 opacity-20" />
-                <p className="text-lg font-medium mb-1">No permits uploaded yet</p>
-                <p className="text-sm">Upload permits to begin the verification process</p>
+              <div className="text-center py-8 text-muted-foreground">
+                <Upload className="h-8 w-8 mx-auto mb-2 opacity-20" />
+                <p className="text-sm font-medium mb-1">No federal/state permits uploaded yet</p>
+                <p className="text-xs">Upload federal or state permits to begin verification</p>
               </div>
             )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Local Permits Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileCheck className="h-5 w-5" />
+            Local Permits
+          </CardTitle>
+          <CardDescription>
+            Track and manage local permit verifications
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {localPermits.length > 0 ? (
+              localPermits.map((permit) => (
+                <PermitVerificationCard
+                  key={permit.id}
+                  permit={permit}
+                  onVerify={handleVerifyPermit}
+                />
+              ))
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <Upload className="h-8 w-8 mx-auto mb-2 opacity-20" />
+                <p className="text-sm font-medium mb-1">No local permits uploaded yet</p>
+                <p className="text-xs">Upload local permits to begin verification</p>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Overall Progress Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileCheck className="h-5 w-5" />
+            Overall Verification Progress
+          </CardTitle>
+          <CardDescription>
+            Combined progress for all permit types
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="mb-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-muted-foreground">
+                Overall Progress
+              </span>
+              <span className="text-sm font-medium">
+                {progress}%
+              </span>
+            </div>
+            <Progress value={progress} className="h-2" />
+          </div>
+          
+          <div className="grid grid-cols-3 gap-4 text-sm">
+            <div className="text-center">
+              <div className="font-medium text-blue-600">{permits.filter(p => p.permitType === 'federal').length}</div>
+              <div className="text-muted-foreground">Federal</div>
+            </div>
+            <div className="text-center">
+              <div className="font-medium text-green-600">{permits.filter(p => p.permitType === 'state').length}</div>
+              <div className="text-muted-foreground">State</div>
+            </div>
+            <div className="text-center">
+              <div className="font-medium text-purple-600">{localPermits.length}</div>
+              <div className="text-muted-foreground">Local</div>
+            </div>
           </div>
         </CardContent>
       </Card>
