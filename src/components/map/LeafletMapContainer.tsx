@@ -237,7 +237,7 @@ const LeafletMapContainer: React.FC<LeafletMapContainerProps> = ({
                   </div>
                   
                   <div className="mt-3 space-y-2 text-sm text-muted-foreground">
-                    {location.phone && (
+                    {location.type === 'user' && location.phone && (
                       <div className="flex items-center gap-2">
                         <Phone className="h-4 w-4" />
                         <span>{location.phone}</span>
@@ -249,11 +249,13 @@ const LeafletMapContainer: React.FC<LeafletMapContainerProps> = ({
                         [{location.latitude.toFixed(4)}, {location.longitude.toFixed(4)}]
                       </span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Clock className="h-4 w-4" />
-                      <span>Last active: {formatLastActive(location.lastActive)}</span>
-                    </div>
-                    {location.workload !== undefined && (
+                    {location.type === 'user' && (
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-4 w-4" />
+                        <span>Last active: {formatLastActive(location.lastActive)}</span>
+                      </div>
+                    )}
+                    {location.type === 'user' && location.workload !== undefined && (
                       <div className="flex items-center gap-2">
                         <Briefcase className="h-4 w-4" />
                         <span>Workload: {location.workload} tasks</span>
