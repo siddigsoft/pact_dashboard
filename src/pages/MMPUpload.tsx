@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -96,6 +96,8 @@ const MMPUpload = () => {
   const [selectedHub, setSelectedHub] = useState<string>('');
   const [uploadTimeout, setUploadTimeout] = useState<NodeJS.Timeout | null>(null);
   const [activeTab, setActiveTab] = useState<string>('upload');
+  const [isDragOver, setIsDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   const form = useForm<UploadFormValues>({
     resolver: zodResolver(uploadSchema),
@@ -121,6 +123,40 @@ const MMPUpload = () => {
     setIsValidating(false);
     setShowPreview(false);
     setPreviewData([]);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      const file = files[0];
+      if (file.type === 'text/csv' || file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+        form.setValue('file', file);
+        resetValidation();
+      } else {
+        toast({
+          title: "Invalid File Type",
+          description: "Please select a CSV, XLSX, or XLS file.",
+          variant: "destructive"
+        });
+      }
+    }
+  };
+
+  const handleFileSelect = () => {
+    fileInputRef.current?.click();
   };
 
   const resetUploadState = () => {
@@ -727,6 +763,7 @@ const MMPUpload = () => {
                             <div className="space-y-2">
                               <Input
                                 {...fieldProps}
+                                ref={fileInputRef}
                                 type="file"
                                 accept=".xlsx,.xls,.csv"
                                 onChange={(e) => {
@@ -736,12 +773,23 @@ const MMPUpload = () => {
                                     resetValidation();
                                   }
                                 }}
+                                style={{ display: 'none' }}
                               />
-                              
-                              <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-8 text-center hover:bg-muted/50 transition-colors cursor-pointer">
+
+                              <div
+                                className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer ${
+                                  isDragOver
+                                    ? 'border-primary bg-primary/5'
+                                    : 'border-muted-foreground/25 hover:bg-muted/50'
+                                }`}
+                                onDragOver={handleDragOver}
+                                onDragLeave={handleDragLeave}
+                                onDrop={handleDrop}
+                                onClick={handleFileSelect}
+                              >
                                 <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
                                 <p className="text-sm text-muted-foreground">
-                                  Drag and drop your Excel or CSV file here, or click above to browse
+                                  Drag and drop your Excel or CSV file here, or click to browse
                                 </p>
                                 <p className="text-xs text-muted-foreground mt-2">
                                   Supported formats: .xlsx, .xls, .csv
