@@ -123,8 +123,8 @@ const FieldTeamMap: React.FC<FieldTeamMapProps> = ({
     return new leafletModule.Icon({
       iconUrl: `data:image/svg+xml;base64,${btoa(`
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${color}" width="${size}" height="${size}">
-          <circle cx="12" cy="12" r="8" fill="${color}" stroke="${borderColor}" stroke-width="${borderWidth}" />
-          <circle cx="12" cy="12" r="4" fill="white" />
+          <circle cx="12" cy="8" r="3" stroke="${borderColor}" stroke-width="${borderWidth}" fill="white" />
+          <path d="M7 20c0-2.5 2.2-4.5 5-4.5s5 2 5 4.5" stroke="${borderColor}" stroke-width="${borderWidth}" fill="none" stroke-linecap="round" />
         </svg>
       `)}`,
       iconSize: [size, size],
@@ -145,7 +145,13 @@ const FieldTeamMap: React.FC<FieldTeamMapProps> = ({
     return new leafletModule.Icon({
       iconUrl: `data:image/svg+xml;base64,${btoa(`
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${color}" width="36" height="36">
-          <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" />
+          <rect x="2" y="2" width="20" height="18" rx="2" stroke="white" stroke-width="1.5" fill="none" />
+          <rect x="6" y="6" width="3" height="3" fill="white" />
+          <rect x="11" y="6" width="3" height="3" fill="white" />
+          <rect x="16" y="6" width="3" height="3" fill="white" />
+          <rect x="6" y="11" width="3" height="3" fill="white" />
+          <rect x="11" y="11" width="3" height="3" fill="white" />
+          <rect x="16" y="11" width="3" height="3" fill="white" />
         </svg>
       `)}`,
       iconSize: [36, 36],

@@ -52,15 +52,21 @@ const MapComponent: React.FC<MapComponentProps> = ({
       html: `
         <div style="
           background-color: ${color};
-          width: 12px;
-          height: 12px;
+          width: 16px;
+          height: 16px;
           border-radius: 50%;
           border: 2px solid white;
           box-shadow: 0 0 0 2px ${color}40;
-        "></div>
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 8px;
+          color: white;
+          font-weight: bold;
+        ">👤</div>
       `,
-      iconSize: [12, 12],
-      iconAnchor: [6, 6],
+      iconSize: [16, 16],
+      iconAnchor: [8, 8],
     });
   };
 
@@ -78,10 +84,16 @@ const MapComponent: React.FC<MapComponentProps> = ({
           background-color: ${color};
           width: 16px;
           height: 16px;
-          clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+          border-radius: 2px;
           border: 2px solid white;
           box-shadow: 0 0 0 2px ${color}40;
-        "></div>
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 8px;
+          color: white;
+          font-weight: bold;
+        ">🏢</div>
       `,
       iconSize: [16, 16],
       iconAnchor: [8, 8],

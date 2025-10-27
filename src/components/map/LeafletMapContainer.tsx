@@ -80,12 +80,18 @@ const createMarkerIcon = (type: 'user' | 'site', status?: string) => {
   
   const svgIcon = type === 'user'
     ? `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${color}" width="32" height="32">
-        <circle cx="12" cy="10" r="4" stroke="white" stroke-width="1.5" />
-        <path d="M12,2 C16.418,2 20,5.582 20,10 C20,14.418 12,22 12,22 C12,22 4,14.418 4,10 C4,5.582 7.582,2 12,2 z" stroke="white" stroke-width="1.5" />
+        <circle cx="12" cy="8" r="3" stroke="white" stroke-width="2" fill="white" />
+        <path d="M7 20c0-2.5 2.2-4.5 5-4.5s5 2 5 4.5" stroke="white" stroke-width="2" fill="none" stroke-linecap="round" />
       </svg>`
     : `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${color}" width="28" height="28">
-        <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-        <circle cx="12" cy="10" r="3" fill="white" />
+        <path d="M3 21h18v-2H3v2zm0-4h18v-2H3v2zm0-4h18v-2H3v2zm0-4h18V7H3v2zm0-6v2h18V1H3z" fill="white" />
+        <rect x="2" y="2" width="20" height="18" rx="2" stroke="white" stroke-width="1.5" fill="none" />
+        <rect x="6" y="6" width="3" height="3" fill="white" />
+        <rect x="11" y="6" width="3" height="3" fill="white" />
+        <rect x="16" y="6" width="3" height="3" fill="white" />
+        <rect x="6" y="11" width="3" height="3" fill="white" />
+        <rect x="11" y="11" width="3" height="3" fill="white" />
+        <rect x="16" y="11" width="3" height="3" fill="white" />
       </svg>`;
 
   return new L.Icon({

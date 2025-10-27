@@ -11,6 +11,7 @@ import TeamMemberLocation from '../field-team/TeamMemberLocation';
 import { HoverCard, HoverCardTrigger, HoverCardContent } from '@/components/ui/hover-card';
 import { CollectorMatch } from '@/utils/gpsMatchingUtils';
 import LeafletMapContainer from './LeafletMapContainer';
+import { getSiteCoordinates, isValidLocation } from '@/utils/locationUtils';
 import 'leaflet/dist/leaflet.css';
 
 interface SimpleFieldTeamMapProps {
@@ -57,18 +58,12 @@ const SimpleFieldTeamMap: React.FC<SimpleFieldTeamMapProps> = ({
   
   // Filter users with valid location data
   const usersWithLocation = users.filter(user => 
-    user.location?.latitude && 
-    user.location?.longitude &&
-    !isNaN(user.location.latitude) &&
-    !isNaN(user.location.longitude)
+    isValidLocation(user.location)
   );
   
-  // Filter site visits with valid location data
+  // Filter site visits with valid location data (including fallback coordinates)
   const siteVisitsWithLocation = siteVisits.filter(visit => 
-    visit.location?.latitude && 
-    visit.location?.longitude &&
-    !isNaN(visit.location.latitude) &&
-    !isNaN(visit.location.longitude)
+    getSiteCoordinates(visit) !== null
   );
   
   // Convert users to map locations format
@@ -86,14 +81,22 @@ const SimpleFieldTeamMap: React.FC<SimpleFieldTeamMapProps> = ({
   }));
   
   // Convert site visits to map locations format
-  const siteLocations = siteVisitsWithLocation.map(visit => ({
-    id: visit.id,
-    name: visit.siteName,
-    latitude: visit.location!.latitude!,
-    longitude: visit.location!.longitude!,
-    type: 'site' as const,
-    status: visit.status,
-  }));
+  const siteLocations = siteVisitsWithLocation.map(visit => {
+    const coordinates = getSiteCoordinates(visit);
+    if (!coordinates) return null;
+    
+    return {
+      id: visit.id,
+      name: visit.siteName,
+      latitude: coordinates.latitude,
+      longitude: coordinates.longitude,
+      type: 'site' as const,
+      status: visit.status,
+      isFallbackLocation: !isValidLocation(visit.location),
+      locality: visit.locality,
+      state: visit.state
+    };
+  }).filter(Boolean);
   
   // Combine all locations
   const allLocations = [...userLocations, ...siteLocations];

@@ -7,6 +7,7 @@ import { User, SiteVisit } from '@/types';
 import { useAppContext } from '@/context/AppContext';
 import TeamMapFilters from '@/components/field-team/TeamMapFilters';
 import MapComponent from '@/components/map/MapComponent';
+import { getSiteCoordinates, isValidLocation } from '@/utils/locationUtils';
 
 interface DynamicFieldTeamMapProps {
   siteVisits?: SiteVisit[];
@@ -23,30 +24,27 @@ const DynamicFieldTeamMap: React.FC<DynamicFieldTeamMapProps> = (props) => {
   const { siteVisits = [], height = '500px', eligibleCollectors = [] } = props;
   const [selectedFilter, setSelectedFilter] = useState<'all' | 'online' | 'busy' | 'offline'>('all');
   const [loading, setLoading] = useState(true);
-  const hasValidCoords = (coords?: { latitude?: number; longitude?: number }) => {
-    const lat = coords?.latitude; const lon = coords?.longitude;
-    return (
-      typeof lat === 'number' && typeof lon === 'number' &&
-      Number.isFinite(lat) && Number.isFinite(lon) &&
-      !(lat === 0 && lon === 0)
-    );
-  };
 
   // Transform siteVisits and collectors into locations for the map
   const mapLocations = React.useMemo(() => {
     const locations = [];
     
-    // Add site visit locations
+    // Add site visit locations (with fallback to locality-based coordinates)
     if (siteVisits) {
       siteVisits.forEach(visit => {
-        if (visit.location?.latitude && visit.location?.longitude) {
+        const coordinates = getSiteCoordinates(visit);
+        if (coordinates) {
+          const isFallbackLocation = !isValidLocation(visit.location);
           locations.push({
             id: visit.id,
             name: visit.siteName,
-            latitude: visit.location.latitude,
-            longitude: visit.location.longitude,
+            latitude: coordinates.latitude,
+            longitude: coordinates.longitude,
             type: 'site' as const,
-            status: visit.status
+            status: visit.status,
+            isFallbackLocation, // Flag to indicate if this is a fallback location
+            locality: visit.locality,
+            state: visit.state
           });
         }
       });
@@ -55,12 +53,12 @@ const DynamicFieldTeamMap: React.FC<DynamicFieldTeamMapProps> = (props) => {
     // Add collector locations if user has appropriate role
     if (hasRole('admin') || hasRole('supervisor') || hasRole('coordinator') || hasRole('fom')) {
       eligibleCollectors.forEach(collector => {
-        if (collector.location?.latitude && collector.location?.longitude) {
+        if (isValidLocation(collector.location)) {
           locations.push({
             id: collector.id,
             name: collector.name,
-            latitude: collector.location.latitude,
-            longitude: collector.location.longitude,
+            latitude: collector.location!.latitude!,
+            longitude: collector.location!.longitude!,
             type: 'user' as const,
             status: collector.availability || 'active'
           });
@@ -93,7 +91,7 @@ const DynamicFieldTeamMap: React.FC<DynamicFieldTeamMapProps> = (props) => {
 
   // Transform data for MapComponent
   const mapCollectors = eligibleCollectors
-    .filter(c => hasValidCoords(c.location))
+    .filter(c => isValidLocation(c.location))
     .map(collector => ({
       id: collector.id,
       name: collector.name,
@@ -109,16 +107,24 @@ const DynamicFieldTeamMap: React.FC<DynamicFieldTeamMapProps> = (props) => {
     }));
 
   const mapSiteVisits = siteVisits
-    .filter(v => hasValidCoords(v.location))
-    .map(visit => ({
-      id: visit.id,
-      name: visit.siteName,
-      location: {
-        latitude: visit.location.latitude,
-        longitude: visit.location.longitude
-      },
-      status: visit.status as 'pending' | 'assigned' | 'inProgress' | 'completed'
-    }));
+    .map(visit => {
+      const coordinates = getSiteCoordinates(visit);
+      if (!coordinates) return null;
+      
+      return {
+        id: visit.id,
+        name: visit.siteName,
+        location: {
+          latitude: coordinates.latitude,
+          longitude: coordinates.longitude
+        },
+        status: visit.status as 'pending' | 'assigned' | 'inProgress' | 'completed',
+        isFallbackLocation: !isValidLocation(visit.location),
+        locality: visit.locality,
+        state: visit.state
+      };
+    })
+    .filter(Boolean);
 
   // Filter based on selected filter
   const filteredCollectors = selectedFilter === 'all' 
