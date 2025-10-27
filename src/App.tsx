@@ -58,6 +58,7 @@ import { Toaster as SonnerToaster } from './components/ui/sonner';
 import { useAppContext } from './context/AppContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import { debugDatabase } from './utils/debug-db';
+import SessionManager from '@/components/layout/SessionManager';
 
 // Redirect for old MMP view paths
 const MmpViewRedirect = () => {
@@ -216,9 +217,11 @@ function App() {
         >
           <Router>
             <AppProviders>
-              <AppRoutes />
-              <Toaster />
-              <SonnerToaster />
+              <SessionManager>
+                <AppRoutes />
+                <Toaster />
+                <SonnerToaster />
+              </SessionManager>
             </AppProviders>
           </Router>
         </ErrorBoundary>
