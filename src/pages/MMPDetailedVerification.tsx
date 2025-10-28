@@ -80,6 +80,13 @@ const MMPDetailedVerification: React.FC = () => {
         verifiedAt: new Date().toISOString(),
         verificationStatus: data?.verificationStatus || updatedMMP.cpVerification?.verificationStatus || 'in-progress'
       };
+      // Also reflect verifier and time at the top-level columns for easier reporting
+      const firstSite: any = (data as any)?.siteVerification ? (Object.values((data as any).siteVerification as any)[0] as any) : undefined;
+      const verifier = (data as any)?.verifiedBy || firstSite?.verifiedBy || undefined;
+      if (verifier) {
+        updatedMMP.verifiedBy = verifier as any;
+      }
+      updatedMMP.verifiedAt = new Date().toISOString();
       // Derive processedEntries from number of sites that have a verification decision
       const totalSites = (updatedMMP.siteEntries?.length || updatedMMP.entries || 0) as number;
       const processed = data?.siteVerification ? Object.keys(data.siteVerification).length : 0;

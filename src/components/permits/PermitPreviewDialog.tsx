@@ -30,6 +30,17 @@ const PermitPreviewDialog: React.FC<PermitPreviewDialogProps> = ({
     }
   }, [open]);
 
+  // Safety timeout: if the browser never fires onLoad/onError, reveal content and provide link
+  useEffect(() => {
+    if (!open || !fileUrl) return;
+    const t = setTimeout(() => {
+      if (isLoading) {
+        setIsLoading(false);
+      }
+    }, 5000);
+    return () => clearTimeout(t);
+  }, [open, fileUrl, isLoading]);
+
   const handleLoadSuccess = () => {
     setIsLoading(false);
   };
@@ -71,8 +82,13 @@ const PermitPreviewDialog: React.FC<PermitPreviewDialogProps> = ({
                     title={fileName}
                     onLoad={handleLoadSuccess}
                     onError={handleLoadError}
-                    style={{ display: isLoading ? 'none' : 'block' }}
+                    referrerPolicy="no-referrer"
                   />
+                  {isLoading && (
+                    <div className="absolute inset-0">
+                      <Skeleton className="h-full w-full" />
+                    </div>
+                  )}
                 </div>
               ) : isImage ? (
                 <AspectRatio ratio={16 / 9}>
@@ -82,7 +98,7 @@ const PermitPreviewDialog: React.FC<PermitPreviewDialogProps> = ({
                     className="w-full h-full object-contain"
                     onLoad={handleLoadSuccess}
                     onError={handleLoadError}
-                    style={{ display: isLoading ? 'none' : 'block' }}
+                    referrerPolicy="no-referrer"
                   />
                 </AspectRatio>
               ) : isVideo ? (
@@ -93,7 +109,6 @@ const PermitPreviewDialog: React.FC<PermitPreviewDialogProps> = ({
                     className="w-full h-full"
                     onLoadedData={handleLoadSuccess}
                     onError={handleLoadError}
-                    style={{ display: isLoading ? 'none' : 'block' }}
                   />
                 </AspectRatio>
               ) : (

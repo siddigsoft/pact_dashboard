@@ -30,9 +30,46 @@ const MMPVerificationPage: React.FC = () => {
   }
 
   const handleVerificationUpdate = (verification: any) => {
-    if (mmpFile.id) {
-      updateMMP(mmpFile.id, { comprehensiveVerification: verification });
+    if (!mmpFile.id) return;
+
+    const payload: any = { comprehensiveVerification: verification };
+
+    // Mirror CP verification to the legacy/top-level fields used elsewhere
+    if (verification?.cpVerification) {
+      payload.cpVerification = verification.cpVerification;
+      const cpv = verification.cpVerification as any;
+      if (cpv?.verifiedBy) payload.verifiedBy = cpv.verifiedBy;
+      if (cpv?.verifiedAt) payload.verifiedAt = cpv.verifiedAt;
+
+      // Derive processedEntries from number of site decisions
+      const totalSites = (mmpFile.siteEntries?.length || mmpFile.entries || 0) as number;
+      const processed = cpv?.siteVerification ? Object.keys(cpv.siteVerification).length : 0;
+      const newProcessed = Math.min(totalSites, processed);
+      if (newProcessed > (mmpFile.processedEntries || 0)) {
+        payload.processedEntries = newProcessed;
+      }
     }
+
+    // Sync permits into shared MMPPermitsData shape used by other pages
+    if (verification?.permitVerification?.permits) {
+      const permits = verification.permitVerification.permits as any[];
+      payload.permits = {
+        documents: permits,
+        verifiedBy: verification.permitVerification.verifiedBy,
+        lastVerified: verification.permitVerification.verifiedAt,
+        federal: permits.some((p) => p?.permitType === 'federal'),
+        state: permits.some((p) => p?.permitType === 'state'),
+        local: permits.some((p) => p?.permitType === 'local'),
+      };
+    }
+
+    // If overall is complete and we have a verifier, set top-level too
+    if (verification?.overallStatus === 'complete') {
+      payload.verifiedAt = payload.verifiedAt || new Date().toISOString();
+      payload.verifiedBy = payload.verifiedBy || 'System';
+    }
+
+    updateMMP(mmpFile.id, payload);
   };
 
   const handleVerificationComplete = () => {
