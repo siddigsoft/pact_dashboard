@@ -68,6 +68,7 @@ const MMPContext = createContext<MMPContextType>({
   deleteMMPFile: async () => false,
   getMMPById: () => undefined,
   getMmpById: () => undefined,
+  getPermitsByMmpId: async () => undefined,
   archiveMMP: () => {},
   approveMMP: () => {},
   rejectMMP: () => {},
@@ -266,6 +267,29 @@ export const useMMPProvider = () => {
     }
   };
 
+  // Always return permits attached to this MMP id (fresh from local state or DB)
+  const getPermitsByMmpId = async (id: string) => {
+    try {
+      const local = (mmpFiles || []).find((m) => m.id === id);
+      if (local && typeof local.permits !== 'undefined') {
+        return local.permits;
+      }
+      const { data, error } = await supabase
+        .from('mmp_files')
+        .select('permits')
+        .eq('id', id)
+        .single();
+      if (error) {
+        console.error('Error fetching permits by MMP id:', error);
+        return undefined;
+      }
+      return data?.permits;
+    } catch (e) {
+      console.error('getPermitsByMmpId failed:', e);
+      return undefined;
+    }
+  };
+
   return {
     mmpFiles,
     loading,
@@ -277,6 +301,7 @@ export const useMMPProvider = () => {
     deleteMMPFile,
     getMmpById,
     getMMPById: getMmpById,
+    getPermitsByMmpId,
     archiveMMP,
     approveMMP,
     rejectMMP,

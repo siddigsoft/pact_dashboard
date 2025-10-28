@@ -10,6 +10,7 @@ import { Progress } from '@/components/ui/progress';
 import { Upload, FileCheck } from 'lucide-react';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { useAppContext } from '@/context/AppContext';
+import { supabase } from '@/integrations/supabase/client';
 
 interface MMPPermitVerificationProps {
   mmpFile: any;
@@ -27,31 +28,137 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
   const { currentUser } = useAppContext();
 
   useEffect(() => {
-    // Initialize permits from mmpFile when component mounts or mmpFile changes
-    if (mmpFile && mmpFile.permits) {
-      // Support both legacy array and new object shape
-      if (Array.isArray(mmpFile.permits)) {
-        const allPermits = mmpFile.permits as MMPStatePermitDocument[];
-        setPermits(allPermits.filter(p => p.permitType === 'federal' || p.permitType === 'state'));
-        setLocalPermits(allPermits.filter(p => p.permitType === 'local'));
-      } else if (
-        typeof mmpFile.permits === 'object' &&
-        'documents' in mmpFile.permits &&
-        Array.isArray(mmpFile.permits.documents)
-      ) {
-        const allPermits = mmpFile.permits.documents as MMPStatePermitDocument[];
-        setPermits(allPermits.filter(p => p.permitType === 'federal' || p.permitType === 'state'));
-        setLocalPermits(allPermits.filter(p => p.permitType === 'local'));
-      } else {
-        setPermits([]);
-        setLocalPermits([]);
+    let cancelled = false;
+
+    const normalizeDocs = (raw: any): MMPStatePermitDocument[] => {
+      if (!raw) return [];
+      if (Array.isArray(raw)) return raw as MMPStatePermitDocument[];
+      if (typeof raw === 'object') {
+        if ('documents' in raw && Array.isArray((raw as any).documents)) {
+          return (raw as any).documents as MMPStatePermitDocument[];
+        }
+        const stateDocs = ((raw as any).statePermits || []).flatMap((sp: any) =>
+          (sp.documents || []).map((d: any) => ({ ...d, permitType: 'state' as const, state: d?.state || sp?.stateName }))
+        );
+        const localDocs = ((raw as any).localPermits || []).flatMap((lp: any) =>
+          (lp.documents || []).map((d: any) => ({ ...d, permitType: 'local' as const, locality: d?.locality || lp?.localityName }))
+        );
+        return [...stateDocs, ...localDocs];
       }
-      console.log('MMPPermitVerification - Initial permits:', mmpFile.permits);
-    } else {
-      setPermits([]);
-      setLocalPermits([]);
-    }
-  }, [mmpFile]);
+      return [];
+    };
+
+    const fetchFromStorage = async (): Promise<MMPStatePermitDocument[]> => {
+      const bucket = 'mmp-files';
+      const id = mmpFile?.id || mmpFile?.mmpId;
+      if (!id) return [];
+      const base = `permits/${id}`;
+      try {
+        const list = async (path: string) => {
+          const { data, error } = await supabase.storage
+            .from(bucket)
+            .list(path, { limit: 100, offset: 0, sortBy: { column: 'name', order: 'asc' } });
+          if (error) {
+            console.error('Storage list error', path, error);
+            return [] as any[];
+          }
+          return (data || []) as any[];
+        };
+
+        const toDocs = (
+          path: string,
+          files: any[],
+          type: 'federal' | 'state' | 'local',
+          extra?: { state?: string; locality?: string }
+        ) => {
+          return (files || [])
+            .filter((f: any) => f && f.name && f.metadata && typeof f.metadata.size === 'number')
+            .map((f: any) => {
+              const fullPath = `${path}/${f.name}`.replace(/\/+/g, '/');
+              const url = supabase.storage.from(bucket).getPublicUrl(fullPath).data.publicUrl;
+              return {
+                id: fullPath,
+                fileName: f.name,
+                fileUrl: url,
+                uploadedAt: f.created_at || new Date().toISOString(),
+                validated: false,
+                permitType: type,
+                ...(extra?.state ? { state: extra.state } : {}),
+                ...(extra?.locality ? { locality: extra.locality } : {}),
+              } as MMPStatePermitDocument;
+            });
+        };
+
+        const top = await list(base);
+        const hasTypeFolders = top?.some((e: any) => !e.metadata && ['federal', 'state', 'local'].includes(e.name));
+        let docs: MMPStatePermitDocument[] = [];
+
+        if (hasTypeFolders) {
+          const fedEntries = await list(`${base}/federal`);
+          const fedFiles = (fedEntries || []).filter((e: any) => !!e.metadata);
+          docs = docs.concat(toDocs(`${base}/federal`, fedFiles, 'federal'));
+
+          const stateEntries = await list(`${base}/state`);
+          const stateFolders = (stateEntries || []).filter((e: any) => !e.metadata);
+          for (const sf of stateFolders) {
+            const stateFilesEntries = await list(`${base}/state/${sf.name}`);
+            const stateFiles = (stateFilesEntries || []).filter((e: any) => !!e.metadata);
+            docs = docs.concat(toDocs(`${base}/state/${sf.name}`, stateFiles, 'state', { state: sf.name }));
+          }
+          // Also handle flat files directly under /state (no nested folders)
+          const flatStateFiles = (stateEntries || []).filter((e: any) => !!e.metadata);
+          if (flatStateFiles?.length) {
+            docs = docs.concat(toDocs(`${base}/state`, flatStateFiles, 'state'));
+          }
+
+          const localEntries = await list(`${base}/local`);
+          const localFolders = (localEntries || []).filter((e: any) => !e.metadata);
+          for (const lf of localFolders) {
+            const localFilesEntries = await list(`${base}/local/${lf.name}`);
+            const localFiles = (localFilesEntries || []).filter((e: any) => !!e.metadata);
+            docs = docs.concat(toDocs(`${base}/local/${lf.name}`, localFiles, 'local', { locality: lf.name }));
+          }
+          const flatLocalFiles = (localEntries || []).filter((e: any) => !!e.metadata);
+          if (flatLocalFiles?.length) {
+            docs = docs.concat(toDocs(`${base}/local`, flatLocalFiles, 'local'));
+          }
+        } else {
+          // Backward compatibility: files directly under base. We default to 'federal' to at least render them.
+          const entries = await list(base);
+          const files = (entries || []).filter((e: any) => !!e.metadata);
+          docs = docs.concat(toDocs(base, files, 'federal'));
+        }
+
+        return docs;
+      } catch (e) {
+        console.error('fetchFromStorage failed', e);
+        return [];
+      }
+    };
+
+    const load = async () => {
+      const storageDocs = await fetchFromStorage();
+      if (!cancelled && storageDocs.length > 0) {
+        setPermits(storageDocs.filter(d => d.permitType === 'federal' || d.permitType === 'state'));
+        setLocalPermits(storageDocs.filter(d => d.permitType === 'local'));
+        return;
+      }
+
+      // Fallback to value on the MMP record
+      const raw = mmpFile?.permits;
+      const docs = normalizeDocs(raw);
+      if (!cancelled) {
+        setPermits(docs.filter(d => d.permitType === 'federal' || d.permitType === 'state'));
+        setLocalPermits(docs.filter(d => d.permitType === 'local'));
+      }
+    };
+
+    load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [mmpFile?.id, mmpFile?.mmpId, mmpFile?.permits]);
 
   const persistPermits = (docs: MMPStatePermitDocument[], localDocs: MMPStatePermitDocument[] = []) => {
     const now = new Date().toISOString();

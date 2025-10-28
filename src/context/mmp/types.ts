@@ -22,6 +22,7 @@ export interface MMPContextType {
   deleteMMPFile: (id: string) => Promise<boolean>;
   getMMPById: (id: string) => MMPFile | undefined;
   getMmpById: (id: string) => MMPFile | undefined;
+  getPermitsByMmpId: (id: string) => Promise<any | undefined>;
   archiveMMP: (id: string, archivedBy: string) => void;
   approveMMP: (id: string, approvedBy: string) => void;
   rejectMMP: (id: string, rejectionReason: string) => void;

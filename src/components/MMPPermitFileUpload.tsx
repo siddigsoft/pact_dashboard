@@ -96,7 +96,7 @@ export const MMPPermitFileUpload: React.FC<MMPPermitFileUploadProps> = ({ onUplo
           <Label>Permit Type</Label>
           <RadioGroup
             value={permitType}
-            onValueChange={(value: 'federal' | 'state') => setPermitType(value)}
+            onValueChange={(value: 'federal' | 'state' | 'local') => setPermitType(value)}
             className="grid grid-cols-1 md:grid-cols-2 gap-4"
           >
             {permitTypes.map((type) => {
@@ -192,7 +192,14 @@ export const MMPPermitFileUpload: React.FC<MMPPermitFileUploadProps> = ({ onUplo
 
         <FileUpload
           bucket={bucket}
-          pathPrefix={pathPrefix}
+          pathPrefix={[
+            pathPrefix,
+            permitType,
+            permitType === 'state' && state ? state : undefined,
+            permitType === 'local' && locality ? locality : undefined,
+          ]
+            .filter(Boolean)
+            .join('/')}
           onUploadSuccess={(fileUrl: string, fileName: string) => handleUploadSuccess(fileUrl, fileName)}
         />
       </div>
