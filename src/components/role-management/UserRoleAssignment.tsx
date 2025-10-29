@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { X, Plus } from 'lucide-react';
+import { X, Plus, Loader2 } from 'lucide-react';
 import { RoleWithPermissions, AppRole, AssignRoleRequest } from '@/types/roles';
 
 interface User {
@@ -41,6 +41,7 @@ export const UserRoleAssignment: React.FC<UserRoleAssignmentProps> = ({
 }) => {
   const [selectedUserId, setSelectedUserId] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [isAssigning, setIsAssigning] = useState(false);
 
   const unassignedUsers = users.filter(user => 
     !assignedUsers.some(assigned => assigned.id === user.id)
@@ -52,15 +53,20 @@ export const UserRoleAssignment: React.FC<UserRoleAssignmentProps> = ({
   );
 
   const handleAssignRole = async () => {
-    if (!selectedUserId || !role) return;
+    if (!selectedUserId || !role || isAssigning) return;
 
-    const assignData: AssignRoleRequest = role.is_system_role 
-      ? { user_id: selectedUserId, role: role.name as AppRole }
-      : { user_id: selectedUserId, role_id: role.id };
+    setIsAssigning(true);
+    try {
+      const assignData: AssignRoleRequest = role.is_system_role 
+        ? { user_id: selectedUserId, role: role.name as AppRole }
+        : { user_id: selectedUserId, role_id: role.id };
 
-    await onAssignRole(assignData);
-    setSelectedUserId('');
-    setSearchTerm('');
+      await onAssignRole(assignData);
+      setSelectedUserId('');
+      setSearchTerm('');
+    } finally {
+      setIsAssigning(false);
+    }
   };
 
   const handleRemoveRole = async (userId: string) => {
@@ -112,10 +118,19 @@ export const UserRoleAssignment: React.FC<UserRoleAssignmentProps> = ({
               </Select>
               <Button 
                 onClick={handleAssignRole} 
-                disabled={!selectedUserId}
+                disabled={!selectedUserId || isAssigning || isLoading}
               >
-                <Plus className="h-4 w-4 mr-2" />
-                Assign
+                {isAssigning ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Assigning...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Assign
+                  </>
+                )}
               </Button>
             </div>
           </div>
