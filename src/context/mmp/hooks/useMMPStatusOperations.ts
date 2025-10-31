@@ -6,137 +6,126 @@ import { supabase } from '@/integrations/supabase/client';
 
 export const useMMPStatusOperations = (setMMPFiles: React.Dispatch<React.SetStateAction<MMPFile[]>>) => {
   const archiveMMP = useCallback(
-    (id: string, archivedBy: string) => {
-    try {
-      // Update local state
-      setMMPFiles((prev: MMPFile[]) =>
-        (prev || []).map((mmp) =>
-          mmp.id === id
-            ? {
-                ...mmp,
-                status: 'archived',
-                archivedBy,
-                archivedAt: new Date().toISOString(),
-              }
-            : mmp
-        )
-      );
+    async (id: string, archivedBy: string) => {
+      try {
+        const timestamp = new Date().toISOString();
 
-      // Update database via Supabase
-      supabase
-        .from('mmp_files')
-        .update({
-          status: 'archived',
-          archived_by: archivedBy,
-          archived_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', id)
-        .then(({ error }) => {
-          if (error) {
-            console.error('Supabase archive error:', error);
-            toast.error('Database update failed');
-          } else {
-            toast.success('MMP file archived successfully');
-          }
-        });
-    } catch (error) {
-      console.error('Error archiving MMP file:', error);
-      toast.error('Failed to archive MMP file');
-    }
-  }, [setMMPFiles]);
+        // Persist to database first
+        const { error } = await supabase
+          .from('mmp_files')
+          .update({
+            status: 'archived',
+            archivedby: archivedBy,
+            archivedat: timestamp,
+            updated_at: timestamp,
+          })
+          .eq('id', id);
+
+        if (error) {
+          console.error('Supabase archive error:', error);
+          toast.error('Database update failed');
+          throw error;
+        }
+
+        // Update local state after successful DB write
+        setMMPFiles((prev: MMPFile[]) =>
+          (prev || []).map((mmp) =>
+            mmp.id === id
+              ? { ...mmp, status: 'archived', archivedBy, archivedAt: timestamp }
+              : mmp
+          )
+        );
+
+        toast.success('MMP file archived successfully');
+      } catch (error) {
+        console.error('Error archiving MMP file:', error);
+        toast.error('Failed to archive MMP file');
+        throw error;
+      }
+    },
+    [setMMPFiles]
+  );
 
   const approveMMP = useCallback(
-    (id: string, approvedBy: string) => {
-    try {
-      // Update local state
-      setMMPFiles((prev: MMPFile[]) =>
-        (prev || []).map((mmp) =>
-          mmp.id === id
-            ? {
-                ...mmp,
-                status: 'approved',
-                approvedBy,
-                approvedAt: new Date().toISOString(),
-              }
-            : mmp
-        )
-      );
-      
-      // Update database via Supabase with approver metadata (columns now exist)
+    async (id: string, approvedBy: string) => {
       try {
-        supabase
+        const timestamp = new Date().toISOString();
+
+        // Persist to DB first
+        const { error } = await supabase
           .from('mmp_files')
-          .update({ 
+          .update({
             status: 'approved',
-            approved_by: approvedBy,
-            approved_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
+            approvedby: approvedBy,
+            approvedat: timestamp,
+            updated_at: timestamp,
           })
-          .eq('id', id)
-          .then(({ error }) => {
-            if (error) {
-              console.error('Supabase approve error:', error);
-              toast.error('Database update failed');
-            } else {
-              toast.success('MMP file approved successfully');
-            }
-          });
-      } catch (dbError) {
-        console.error('Database operation failed:', dbError);
-        toast.error('Database operation failed');
+          .eq('id', id);
+
+        if (error) {
+          console.error('Supabase approve error:', error);
+          toast.error('Database update failed');
+          throw error;
+        }
+
+        // Update local state after successful DB write
+        setMMPFiles((prev: MMPFile[]) =>
+          (prev || []).map((mmp) =>
+            mmp.id === id
+              ? { ...mmp, status: 'approved', approvedBy, approvedAt: timestamp }
+              : mmp
+          )
+        );
+
+        toast.success('MMP file approved successfully');
+      } catch (error) {
+        console.error('Error approving MMP file:', error);
+        toast.error('Failed to approve MMP file');
+        throw error;
       }
-    } catch (error) {
-      console.error('Error approving MMP file:', error);
-      toast.error('Failed to approve MMP file');
-    }
-  }, [setMMPFiles]);
+    },
+    [setMMPFiles]
+  );
 
   const rejectMMP = useCallback(
-    (id: string, rejectionReason: string) => {
-    try {
-      // Update local state
-      setMMPFiles((prev: MMPFile[]) =>
-        (prev || []).map((mmp) => {
-          if (mmp.id === id) {
-            return {
-              ...mmp,
-              status: 'rejected',
-              rejectionReason,
-              rejectedAt: new Date().toISOString(),
-            };
-          }
-          return mmp;
-        })
-      );
-      
-      // Update database via Supabase (if connected)
+    async (id: string, rejectionReason: string) => {
       try {
-        supabase
+        const timestamp = new Date().toISOString();
+
+        // Persist to DB first
+        const { error } = await supabase
           .from('mmp_files')
-          .update({ 
-            status: 'rejected', 
-            rejection_reason: rejectionReason,
-            updated_at: new Date().toISOString() 
+          .update({
+            status: 'rejected',
+            rejectionreason: rejectionReason,
+            updated_at: timestamp,
           })
-          .eq('id', id)
-          .then(({ error }) => {
-            if (error) {
-              console.error('Supabase reject error:', error);
-              toast.error('Database update failed');
-            } else {
-              toast.success('MMP file rejected');
-            }
-          });
-      } catch (dbError) {
-        console.error('Database operation failed:', dbError);
-        toast.error('Database operation failed');
+          .eq('id', id);
+
+        if (error) {
+          console.error('Supabase reject error:', error);
+          toast.error('Database update failed');
+          throw error;
+        }
+
+        // Update local state after successful DB write
+        setMMPFiles((prev: MMPFile[]) =>
+          (prev || []).map((mmp) =>
+            mmp.id === id
+              ? { ...mmp, status: 'rejected', rejectionReason, rejectedAt: timestamp }
+              : mmp
+          )
+        );
+
+        toast.success('MMP file rejected');
+      } catch (error) {
+        console.error('Error rejecting MMP file:', error);
+        toast.error('Failed to reject MMP file');
+        throw error;
       }
-    } catch (error) {
-      console.error('Error rejecting MMP file:', error);
-      toast.error('Failed to reject MMP file');
-    }
-  }, [setMMPFiles]);
+    },
+    [setMMPFiles]
+  );
 
   return {
     archiveMMP,
@@ -144,3 +133,4 @@ export const useMMPStatusOperations = (setMMPFiles: React.Dispatch<React.SetStat
     rejectMMP,
   };
 };
+
