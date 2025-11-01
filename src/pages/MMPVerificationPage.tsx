@@ -5,14 +5,35 @@ import { ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { MMPComprehensiveVerificationComponent } from '@/components/MMPComprehensiveVerification';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { useToast } from '@/hooks/use-toast';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { useAuthorization } from '@/hooks/use-authorization';
 
 const MMPVerificationPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { getMmpById, updateMMP } = useMMP();
   const { toast } = useToast();
+  const { checkPermission, hasAnyRole } = useAuthorization();
 
   const mmpFile = id ? getMmpById(id) : null;
+
+  const isAdmin = hasAnyRole(['admin']);
+  const canApprove = checkPermission('mmp', 'approve') || isAdmin;
+  if (!canApprove) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <Card className="max-w-md mx-auto">
+          <CardHeader>
+            <CardTitle className="text-destructive">Access Denied</CardTitle>
+            <CardDescription>You don't have permission to verify or approve MMPs.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button variant="outline" onClick={() => navigate('/mmp')} className="w-full">Back to MMP</Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   if (!mmpFile) {
     return (

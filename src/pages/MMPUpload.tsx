@@ -50,6 +50,7 @@ import { downloadMMP } from '@/utils/mmpExport';
 import { toast } from "@/components/ui/use-toast";
 import { validateCSV, validateHubMatch, type CSVValidationError, createValidationSummary } from '@/utils/csvValidator';
 import { generateSiteCode, validateSiteCode } from '@/utils/mmpIdGenerator';
+import { useAuthorization } from '@/hooks/use-authorization';
 
 const uploadSchema = z.object({
   name: z.string({
@@ -81,6 +82,7 @@ const MMPUpload = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
   const { uploadMMP, currentUser } = useAppContext();
+  const { checkPermission, hasAnyRole } = useAuthorization();
   const [isUploading, setIsUploading] = useState(false);
   const [validationProgress, setValidationProgress] = useState(0);
   const [isValidating, setIsValidating] = useState(false);
@@ -98,6 +100,28 @@ const MMPUpload = () => {
   const [activeTab, setActiveTab] = useState<string>('upload');
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isAdmin = hasAnyRole(['admin']);
+  const canCreate = checkPermission('mmp', 'create') || isAdmin;
+
+  if (!canCreate) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle className="text-destructive">Access Denied</CardTitle>
+            <CardDescription>
+              You don't have permission to upload MMP files.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button variant="outline" onClick={() => navigate('/mmp')} className="w-full">
+              Back to MMP
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
   
   const form = useForm<UploadFormValues>({
     resolver: zodResolver(uploadSchema),

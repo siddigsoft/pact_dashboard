@@ -83,7 +83,8 @@ export type ActionType =
   | 'update'
   | 'delete'
   | 'approve'
-  | 'assign';
+  | 'assign'
+  | 'archive';
 
 export const RESOURCES: ResourceType[] = [
   'users',
@@ -103,7 +104,8 @@ export const ACTIONS: ActionType[] = [
   'update',
   'delete',
   'approve',
-  'assign'
+  'assign',
+  'archive'
 ];
 
 // Default role permissions mapping
@@ -130,6 +132,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     { resource: 'mmp', action: 'update' },
     { resource: 'mmp', action: 'delete' },
     { resource: 'mmp', action: 'approve' },
+    { resource: 'mmp', action: 'archive' },
     { resource: 'site_visits', action: 'create' },
     { resource: 'site_visits', action: 'read' },
     { resource: 'site_visits', action: 'update' },
@@ -158,6 +161,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     { resource: 'mmp', action: 'read' },
     { resource: 'mmp', action: 'update' },
     { resource: 'mmp', action: 'approve' },
+    { resource: 'mmp', action: 'archive' },
     { resource: 'site_visits', action: 'create' },
     { resource: 'site_visits', action: 'read' },
     { resource: 'site_visits', action: 'update' },
@@ -185,6 +189,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     { resource: 'finances', action: 'read' },
     { resource: 'finances', action: 'update' },
     { resource: 'finances', action: 'approve' },
+    { resource: 'mmp', action: 'archive' },
     { resource: 'reports', action: 'read' }
   ],
   supervisor: [

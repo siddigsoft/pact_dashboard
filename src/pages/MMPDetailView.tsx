@@ -33,6 +33,7 @@ import MMPDetailHeader from "@/components/mmp/MMPDetailHeader";
 import MMPOverviewCard from "@/components/mmp/MMPOverviewCard";
 import MMPSiteEntriesTable from "@/components/mmp/MMPSiteEntriesTable";
 import MMPFileManagement from "@/components/mmp/MMPFileManagement";
+import { useAuthorization } from "@/hooks/use-authorization";
 
 const MMPDetailView = () => {
   const { id } = useParams<{ id: string }>();
@@ -40,6 +41,7 @@ const MMPDetailView = () => {
   const { toast } = useToast();
   const { currentUser, archiveMMP, deleteMMPFile, approveMMP } = useAppContext();
   const { resetMMP, getMmpById } = useMMP();
+  const { checkPermission, hasAnyRole } = useAuthorization();
   const [showAuditTrail, setShowAuditTrail] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -70,10 +72,11 @@ const MMPDetailView = () => {
     return () => clearTimeout(timer);
   }, [id, mmpFile, toast]);
 
-  const canEdit = currentUser && ['admin', 'fom', 'ict', 'financialAdmin'].includes(currentUser.role || '');
-  const canDelete = currentUser && ['admin', 'financialAdmin'].includes(currentUser.role || '');
-  const canArchive = currentUser && ['admin', 'financialAdmin', 'ict'].includes(currentUser.role || '');
-  const canApprove = currentUser && ['admin', 'fom', 'financialAdmin'].includes(currentUser.role || '') && mmpFile?.status === 'pending';
+  const isAdmin = hasAnyRole(['admin']);
+  const canEdit = (checkPermission('mmp', 'update') || isAdmin) ? true : false;
+  const canDelete = (checkPermission('mmp', 'delete') || isAdmin) ? true : false;
+  const canArchive = (checkPermission('mmp', 'archive') || isAdmin) ? true : false;
+  const canApprove = (checkPermission('mmp', 'approve') || isAdmin) && mmpFile?.status === 'pending';
 
   const validateSiteEntries = (mmpFile: any) => {
     if (!mmpFile) return [] as any[];

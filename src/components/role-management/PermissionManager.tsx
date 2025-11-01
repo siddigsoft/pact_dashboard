@@ -36,7 +36,8 @@ const getPermissionDisplayName = (resource: ResourceType, action: ActionType): s
     update: 'Edit',
     delete: 'Delete',
     approve: 'Approve',
-    assign: 'Assign'
+    assign: 'Assign',
+    archive: 'Archive'
   };
 
   return `${actionNames[action]} ${resourceNames[resource]}`;
@@ -50,7 +51,8 @@ const getPermissionColor = (action: ActionType): string => {
     update: 'bg-yellow-100 text-yellow-800 border-yellow-200',
     delete: 'bg-red-100 text-red-800 border-red-200',
     approve: 'bg-purple-100 text-purple-800 border-purple-200',
-    assign: 'bg-indigo-100 text-indigo-800 border-indigo-200'
+    assign: 'bg-indigo-100 text-indigo-800 border-indigo-200',
+    archive: 'bg-slate-100 text-slate-800 border-slate-200'
   };
   return colors[action];
 };
