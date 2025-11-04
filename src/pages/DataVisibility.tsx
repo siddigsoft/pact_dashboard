@@ -405,7 +405,7 @@ const DataVisibility: React.FC = () => {
   const prepareVisitData = () => {
     return filteredSiteVisits.map(visit => ({
       siteName: visit.siteName,
-      linkedMMP: (mmpFiles || []).find(m => m.id === visit.mmpDetails.mmpId)?.projectName || 'N/A',
+      linkedMMP: (mmpFiles || []).find(m => m.id === visit.mmpDetails.mmpId)?.projectName || '-',
       location: visit.location.address,
       status: visit.status,
       assignedTo: resolveUserName(visit.assignedTo),
@@ -669,16 +669,16 @@ const DataVisibility: React.FC = () => {
                     {filteredSiteVisits.map((visit) => (
                       <TableRow key={visit.id}>
                         <TableCell className="font-medium">{visit.siteName}</TableCell>
-                        <TableCell>{visit.hub || 'N/A'}</TableCell>
-                        <TableCell>{visit.state || 'N/A'}</TableCell>
-                        <TableCell>{visit.locality || 'N/A'}</TableCell>
-                        <TableCell>{visit.cpName || 'N/A'}</TableCell>
-                        <TableCell>{visit.mainActivity || 'N/A'}</TableCell>
-                        <TableCell>{visit.activity || 'N/A'}</TableCell>
-                        <TableCell>{visit.visitTypeRaw || visit.visitType || 'N/A'}</TableCell>
-                        <TableCell>{visit.dueDate ? format(new Date(visit.dueDate), 'yyyy-MM-dd') : 'N/A'}</TableCell>
+                        <TableCell>{visit.hub || '-'}</TableCell>
+                        <TableCell>{visit.state || '-'}</TableCell>
+                        <TableCell>{visit.locality || '-'}</TableCell>
+                        <TableCell>{visit.cpName || '-'}</TableCell>
+                        <TableCell>{visit.mainActivity || '-'}</TableCell>
+                        <TableCell>{visit.activity || '-'}</TableCell>
+                        <TableCell>{visit.visitTypeRaw || visit.visitType || '-'}</TableCell>
+                        <TableCell>{visit.dueDate ? format(new Date(visit.dueDate), 'yyyy-MM-dd') : '-'}</TableCell>
                         <TableCell>
-                          {(mmpFiles || []).find(m => m.id === visit.mmpDetails.mmpId)?.projectName || 'N/A'}
+                          {(mmpFiles || []).find(m => m.id === visit.mmpDetails.mmpId)?.projectName || '-'}
                         </TableCell>
                         <TableCell>
                           <Badge variant={
