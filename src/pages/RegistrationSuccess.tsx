@@ -3,7 +3,7 @@ import React from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, ShieldCheck, Clock, CheckCircle, UserCog, Sparkles } from "lucide-react";
+import { CheckCircle2, ShieldCheck, Clock, CheckCircle, UserCog } from "lucide-react";
 
 const RegistrationSuccess = () => {
   const [searchParams] = useSearchParams();
@@ -36,17 +36,9 @@ const RegistrationSuccess = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-      <div className="animate-bounce-slow absolute top-10 left-1/2 transform -translate-x-1/2">
-        <Sparkles className="h-16 w-16 text-primary animate-pulse" />
-      </div>
-      
+     
       <Card className="w-full max-w-lg animate-scale-in">
         <CardHeader className="space-y-2 text-center">
-          <div className="flex justify-center mb-2">
-            <div className="h-20 w-20 rounded-full bg-primary/10 flex items-center justify-center animate-bounce-slow">
-              <CheckCircle2 className="h-12 w-12 text-primary animate-pulse" />
-            </div>
-          </div>
           <CardTitle className="text-3xl font-bold bg-gradient-to-r from-primary to-blue-600 bg-clip-text text-transparent animate-fade-in">
             Registration Successful!
           </CardTitle>
