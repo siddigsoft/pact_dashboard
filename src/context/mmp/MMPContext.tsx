@@ -36,7 +36,7 @@ const transformDBToMMPFile = (dbRecord: any): MMPFile => {
     modificationHistory: dbRecord.modification_history || dbRecord.modificationhistory,
     modifiedAt: dbRecord.modified_at,
     description: dbRecord.description,
-    projectName: dbRecord.project_name || dbRecord.projectname,
+    projectName: dbRecord.project_name || dbRecord.projectname || dbRecord.name,
     type: dbRecord.type,
     filePath: dbRecord.file_path,
     originalFilename: dbRecord.original_filename,
