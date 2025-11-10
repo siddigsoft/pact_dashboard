@@ -15,6 +15,17 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 
+const availableRoles = [
+  "admin",
+  "ict",
+  "manager",
+  "field_agent",
+  "finance",
+  "hr",
+  "guest"
+  // Add/remove roles as needed
+];
+
 const UserDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const { users, currentUser, updateUser, approveUser, rejectUser } = useUser();
@@ -33,12 +44,17 @@ const UserDetail: React.FC = () => {
   const [isApproving, setIsApproving] = useState(false);
   const [isRejecting, setIsRejecting] = useState(false);
 
+  // Add loading state for save
+  const [isLoadingUser, setIsLoadingUser] = useState(false);
+
   useEffect(() => {
     if (id) {
+      setIsLoadingUser(true);
       const foundUser = users.find(u => u.id === id);
       if (foundUser) {
         setUser(foundUser);
         setEditForm(foundUser);
+        setIsLoadingUser(false);
       } else {
         toast({
           title: "User not found",
@@ -119,16 +135,38 @@ const UserDetail: React.FC = () => {
   const handleEditSave = async () => {
     if (!updateUser || !user) return;
     setIsSaving(true);
-    
+
     try {
       const updatedUser: User = { ...user, ...editForm };
       const success = await updateUser(updatedUser);
-      
+
       if (success) {
-        setUser(updatedUser);
+        // Fetch the latest user data from the database
+        const { data, error } = await supabase
+          .from("users")
+          .select("*")
+          .eq("id", user.id)
+          .single();
+
+        if (error || !data) {
+          setUser(updatedUser);
+          setEditForm(updatedUser);
+        } else {
+          setUser(data);
+          setEditForm(data);
+        }
+
         toast({
           title: "User updated",
           description: "User information was successfully updated and will persist between sessions.",
+          variant: "success"
+        });
+        setEditMode(false); // <-- move this here so it only closes on success
+      } else {
+        toast({
+          title: "Update failed",
+          description: "There was a problem updating the user information.",
+          variant: "destructive"
         });
       }
     } catch (error) {
@@ -140,7 +178,6 @@ const UserDetail: React.FC = () => {
       });
     } finally {
       setIsSaving(false);
-      setEditMode(false);
     }
   };
 
@@ -161,6 +198,17 @@ const UserDetail: React.FC = () => {
     navigate("/users");
   };
 
+  if (isLoadingUser) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <h2 className="text-2xl font-bold mb-2">Loading user details...</h2>
+        </div>
+      </div>
+    );
+  }
+
   if (!user) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -180,8 +228,8 @@ const UserDetail: React.FC = () => {
   }
 
   return (
-    <div className="container p-4 space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="container max-w-5xl mx-auto p-4 space-y-8">
+      <div className="flex items-center justify-between mb-2">
         <Button 
           variant="outline" 
           onClick={() => navigate("/users")}
@@ -196,161 +244,159 @@ const UserDetail: React.FC = () => {
         )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="md:col-span-1">
-          <CardContent className="pt-6">
-            <div className="flex flex-col items-center justify-center space-y-4">
-              <Avatar className="h-32 w-32">
-                {user.avatar ? (
-                  <AvatarImage src={user.avatar} alt={user.name} />
-                ) : (
-                  <AvatarFallback className="bg-primary text-primary-foreground text-3xl">
-                    {getInitials(user.name)}
-                  </AvatarFallback>
-                )}
-              </Avatar>
-              
-              <div className="text-center">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        {/* Profile Card */}
+        <Card className="md:col-span-1 shadow-lg border-0 bg-gradient-to-b from-primary/5 to-background">
+          <CardContent className="pt-8 pb-6 flex flex-col items-center">
+            <Avatar className="h-32 w-32 shadow-lg border-4 border-background -mt-20 mb-4">
+              {user.avatar ? (
+                <AvatarImage src={user.avatar} alt={user.name} />
+              ) : (
+                <AvatarFallback className="bg-primary text-primary-foreground text-3xl">
+                  {getInitials(user.name)}
+                </AvatarFallback>
+              )}
+            </Avatar>
+            <div className="text-center w-full">
+              {editMode ? (
+                <Input
+                  className="font-bold text-2xl text-center mb-1"
+                  value={editForm.name || ""}
+                  onChange={e => handleEditChange("name", e.target.value)}
+                />
+              ) : (
+                <h2 className="text-2xl font-bold">{user.name}</h2>
+              )}
+              <div className="flex justify-center items-center gap-2 mt-1">
                 {editMode ? (
-                  <input
-                    className="font-bold text-2xl text-center border rounded px-2"
-                    value={editForm.name || ""}
-                    onChange={e => handleEditChange("name", e.target.value)}
-                  />
+                  <select
+                    className="border rounded px-2 py-1 text-center"
+                    value={editForm.role || ""}
+                    onChange={e => handleEditChange("role", e.target.value)}
+                  >
+                    <option value="" disabled>Select role</option>
+                    {availableRoles.map(role => (
+                      <option key={role} value={role}>{role}</option>
+                    ))}
+                  </select>
                 ) : (
-                  <h2 className="text-2xl font-bold">{user.name}</h2>
+                  <Badge className="capitalize">{user.role}</Badge>
                 )}
-                <p className="text-muted-foreground">
-                  {editMode ? (
-                    <input
-                      className="border rounded px-1 text-center"
-                      value={editForm.role || ""}
-                      onChange={e => handleEditChange("role", e.target.value)}
-                    />
-                  ) : (
-                    user.role
-                  )}
-                </p>
-                <Badge className="mt-2" variant={user.isApproved ? "default" : "destructive"}>
+                <Badge className="ml-2" variant={user.isApproved ? "default" : "destructive"}>
                   {user.isApproved ? "Active" : "Pending Approval"}
                 </Badge>
               </div>
-              
-              <div className="w-full space-y-2 pt-4">
-                <div className="flex items-center gap-2">
-                  <Mail className="h-4 w-4 text-muted-foreground" />
-                  {editMode ? (
-                    <Input
-                      type="email"
-                      value={editForm.email || ""}
-                      onChange={e => handleEditChange("email", e.target.value)}
-                    />
-                  ) : (
-                    <span>{user.email}</span>
-                  )}
-                </div>
-                
-                <div className="flex items-center gap-2">
-                  <Phone className="h-4 w-4 text-muted-foreground" />
-                  {editMode ? (
-                    <Input
-                      value={editForm.phone || ""}
-                      onChange={e => handleEditChange("phone", e.target.value)}
-                    />
-                  ) : (
-                    <span>{user.phone || "N/A"}</span>
-                  )}
-                </div>
-                
-                <div className="flex items-center gap-2">
-                  <MapPin className="h-4 w-4 text-muted-foreground" />
-                  {editMode ? (
-                    <Input
-                      value={editForm.stateId || ""}
-                      placeholder="State ID"
-                      onChange={e => handleEditChange("stateId", e.target.value)}
-                      className="mb-1"
-                    />
-                  ) : (
-                    <span>{getUserLocation(user)}</span>
-                  )}
-                </div>
-                
-                <div className="flex items-center gap-2">
-                  <Award className="h-4 w-4 text-muted-foreground" />
-                  <span>Rating: {user.performance?.rating ?? "-"}/5</span>
-                </div>
-                
-                <div className="flex items-center gap-2">
-                  <Wallet className="h-4 w-4 text-muted-foreground" />
-                  <span>{user.wallet?.balance} {user.wallet?.currency}</span>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-muted-foreground" />
-                  <span>
-                    Last Active: {user.lastActive ? new Date(user.lastActive).toLocaleString() : "N/A"}
-                  </span>
-                </div>
-              </div>
-              {!user.isApproved && isAdmin && !editMode && (
-                <div className="w-full flex justify-center gap-2 mt-4">
-                  <Button onClick={handleApprove} disabled={isApproving} variant="default">
-                    <UserCheck className="h-4 w-4 mr-1" />
-                    Approve
-                  </Button>
-                  <Button onClick={handleReject} disabled={isRejecting} variant="destructive">
-                    <UserX className="h-4 w-4 mr-1" />
-                    Reject
-                  </Button>
-                </div>
-              )}
-              {editMode && (
-                <div className="w-full flex justify-center gap-2 mt-4">
-                  <Button 
-                    onClick={handleEditSave} 
-                    disabled={isSaving} 
-                    variant="default"
-                  >
-                    {isSaving ? "Saving..." : "Save"}
-                  </Button>
-                  <Button onClick={handleEditCancel} variant="outline">
-                    Cancel
-                  </Button>
-                </div>
-              )}
             </div>
+            <div className="w-full mt-6 space-y-3">
+              <div className="flex items-center gap-2">
+                <Mail className="h-4 w-4 text-muted-foreground" />
+                {editMode ? (
+                  <Input
+                    type="email"
+                    value={editForm.email || ""}
+                    onChange={e => handleEditChange("email", e.target.value)}
+                  />
+                ) : (
+                  <span>{user.email}</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <Phone className="h-4 w-4 text-muted-foreground" />
+                {editMode ? (
+                  <Input
+                    value={editForm.phone || ""}
+                    onChange={e => handleEditChange("phone", e.target.value)}
+                  />
+                ) : (
+                  <span>{user.phone || "N/A"}</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <MapPin className="h-4 w-4 text-muted-foreground" />
+                {editMode ? (
+                  <Input
+                    value={editForm.stateId || ""}
+                    placeholder="State ID"
+                    onChange={e => handleEditChange("stateId", e.target.value)}
+                  />
+                ) : (
+                  <span>{getUserLocation(user)}</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <Award className="h-4 w-4 text-muted-foreground" />
+                <span>Rating: {user.performance?.rating ?? "-"}/5</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Wallet className="h-4 w-4 text-muted-foreground" />
+                <span>{user.wallet?.balance} {user.wallet?.currency}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Calendar className="h-4 w-4 text-muted-foreground" />
+                <span>
+                  Last Active: {user.lastActive ? new Date(user.lastActive).toLocaleString() : "N/A"}
+                </span>
+              </div>
+            </div>
+            {/* Action Buttons */}
+            {!user.isApproved && isAdmin && !editMode && (
+              <div className="w-full flex justify-center gap-2 mt-6">
+                <Button onClick={handleApprove} disabled={isApproving} variant="default">
+                  <UserCheck className="h-4 w-4 mr-1" />
+                  Approve
+                </Button>
+                <Button onClick={handleReject} disabled={isRejecting} variant="destructive">
+                  <UserX className="h-4 w-4 mr-1" />
+                  Reject
+                </Button>
+              </div>
+            )}
+            {editMode && (
+              <div className="w-full flex justify-center gap-2 mt-6">
+                <Button 
+                  onClick={handleEditSave} 
+                  disabled={isSaving} 
+                  variant="default"
+                >
+                  {isSaving ? "Saving..." : "Save"}
+                </Button>
+                <Button onClick={handleEditCancel} variant="outline">
+                  Cancel
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
 
-        <Card className="md:col-span-2">
+        {/* Details Tabs */}
+        <Card className="md:col-span-2 shadow-lg border-0">
           <CardHeader>
-            <CardTitle>User Details</CardTitle>
+            <CardTitle className="text-xl">User Details</CardTitle>
           </CardHeader>
           <CardContent>
-            <Tabs defaultValue="details">
-              <TabsList className="mb-4">
-                <TabsTrigger value="details">Details</TabsTrigger>
-                <TabsTrigger value="performance">Performance</TabsTrigger>
-                <TabsTrigger value="bankak">Bankak Account</TabsTrigger>
-                <TabsTrigger value="location">Location</TabsTrigger>
+            <Tabs defaultValue="details" className="w-full">
+              <TabsList className="mb-4 w-full flex">
+                <TabsTrigger value="details" className="flex-1">Details</TabsTrigger>
+                <TabsTrigger value="performance" className="flex-1">Performance</TabsTrigger>
+                <TabsTrigger value="bankak" className="flex-1">Bank Account</TabsTrigger>
+                <TabsTrigger value="location" className="flex-1">Location</TabsTrigger>
               </TabsList>
               
               <TabsContent value="details" className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <h3 className="font-medium text-sm">Full Name</h3>
+                    <h3 className="font-medium text-sm text-muted-foreground">Full Name</h3>
                     {editMode ? (
                       <Input
                         value={editForm.name || ""}
                         onChange={e => handleEditChange("name", e.target.value)}
                       />
                     ) : (
-                      <p>{user.name}</p>
+                      <p className="font-semibold">{user.name}</p>
                     )}
                   </div>
                   <div>
-                    <h3 className="font-medium text-sm">Email</h3>
+                    <h3 className="font-medium text-sm text-muted-foreground">Email</h3>
                     {editMode ? (
                       <Input
                         type="email"
@@ -358,45 +404,53 @@ const UserDetail: React.FC = () => {
                         onChange={e => handleEditChange("email", e.target.value)}
                       />
                     ) : (
-                      <p>{user.email}</p>
+                      <p className="font-semibold">{user.email}</p>
                     )}
                   </div>
                   <div>
-                    <h3 className="font-medium text-sm">Role</h3>
+                    <h3 className="font-medium text-sm text-muted-foreground">Role</h3>
                     {editMode ? (
-                      <Input
+                      <select
+                        className="border rounded px-2 py-1 w-full"
                         value={editForm.role || ""}
                         onChange={e => handleEditChange("role", e.target.value)}
-                      />
+                      >
+                        <option value="" disabled>Select role</option>
+                        {availableRoles.map(role => (
+                          <option key={role} value={role}>{role}</option>
+                        ))}
+                      </select>
                     ) : (
-                      <p>{user.role}</p>
+                      <Badge className="capitalize">{user.role}</Badge>
                     )}
                   </div>
                   <div>
-                    <h3 className="font-medium text-sm">Employee ID</h3>
+                    <h3 className="font-medium text-sm text-muted-foreground">Employee ID</h3>
                     {editMode ? (
                       <Input
                         value={editForm.employeeId || ""}
                         onChange={e => handleEditChange("employeeId", e.target.value)}
                       />
                     ) : (
-                      <p>{user.employeeId || 'N/A'}</p>
+                      <p className="font-semibold">{user.employeeId || 'N/A'}</p>
                     )}
                   </div>
                   <div>
-                    <h3 className="font-medium text-sm">Phone</h3>
+                    <h3 className="font-medium text-sm text-muted-foreground">Phone</h3>
                     {editMode ? (
                       <Input
                         value={editForm.phone || ""}
                         onChange={e => handleEditChange("phone", e.target.value)}
                       />
                     ) : (
-                      <p>{user.phone || 'N/A'}</p>
+                      <p className="font-semibold">{user.phone || 'N/A'}</p>
                     )}
                   </div>
                   <div>
-                    <h3 className="font-medium text-sm">Status</h3>
-                    <p>{user.isApproved ? 'Active' : 'Pending Approval'}</p>
+                    <h3 className="font-medium text-sm text-muted-foreground">Status</h3>
+                    <Badge variant={user.isApproved ? "default" : "destructive"}>
+                      {user.isApproved ? 'Active' : 'Pending Approval'}
+                    </Badge>
                   </div>
                 </div>
               </TabsContent>
@@ -409,17 +463,14 @@ const UserDetail: React.FC = () => {
                         <h3 className="font-medium text-sm mb-1">Rating</h3>
                         <p className="text-2xl font-bold">{user.performance.rating}/5</p>
                       </div>
-                      
                       <div className="bg-muted rounded-lg p-4">
                         <h3 className="font-medium text-sm mb-1">Completed Tasks</h3>
                         <p className="text-2xl font-bold">{user.performance.totalCompletedTasks}</p>
                       </div>
-                      
                       <div className="bg-muted rounded-lg p-4">
                         <h3 className="font-medium text-sm mb-1">On-Time Completion</h3>
                         <p className="text-2xl font-bold">{user.performance.onTimeCompletion}%</p>
                       </div>
-                      
                       <div className="bg-muted rounded-lg p-4">
                         <h3 className="font-medium text-sm mb-1">Current Workload</h3>
                         <p className="text-2xl font-bold">{user.performance.currentWorkload || 0}</p>
@@ -451,7 +502,6 @@ const UserDetail: React.FC = () => {
                         </div>
                       </div>
                     </div>
-                    
                     {canEditBankAccount && (
                       <Button onClick={() => setBankAccountFormOpen(true)}>
                         Edit Bank Account
@@ -495,7 +545,6 @@ const UserDetail: React.FC = () => {
                         </p>
                       </div>
                     </div>
-                    
                     <div className="h-[300px] bg-slate-100 rounded-lg flex items-center justify-center">
                       <div className="text-center p-4">
                         <MapPin className="h-12 w-12 mx-auto mb-2 text-muted-foreground" />
@@ -520,7 +569,6 @@ const UserDetail: React.FC = () => {
               {user.bankAccount ? "Edit Bankak Account" : "Add Bankak Account"}
             </DialogTitle>
           </DialogHeader>
-          
           <BankakAccountForm 
             onSubmit={handleBankAccountSubmit}
             isSubmitting={false}
