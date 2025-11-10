@@ -10,6 +10,19 @@ import { useNavigate } from 'react-router-dom';
 import { format, startOfMonth, subMonths, isAfter } from 'date-fns';
 import { MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import { CheckCircleIcon, ClipboardDocumentCheckIcon, CalendarDaysIcon, ExclamationCircleIcon } from '@heroicons/react/24/outline';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
+import { 
+  BarChart3, 
+  FileCheck, 
+  MapPin, 
+  CalendarRange, 
+  Globe, 
+  TrendingUp, 
+  Users, 
+  CheckCircle 
+} from 'lucide-react';
 
 export const DashboardStatsOverview = () => {
   const [hoveredCard, setHoveredCard] = useState<number | null>(null);
@@ -311,6 +324,56 @@ export const DashboardStatsOverview = () => {
           </div>
         </div>
 
+      </div>
+
+      {/* ===== ADDITIONAL PROFESSIONAL ELEMENTS ===== */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
+        {/* Quick Insights Card */}
+        <Card className="border-l-4 border-l-blue-500 bg-gradient-to-r from-blue-50 to-transparent dark:from-blue-950/20 dark:to-transparent">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <CheckCircle className="h-5 w-5 text-blue-600" />
+              Quick Insights
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-600 dark:text-gray-400">Team Efficiency</span>
+              <span className="font-medium">94%</span>
+            </div>
+            <Progress value={94} className="h-2" />
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-600 dark:text-gray-400">Global Coverage</span>
+              <span className="font-medium">87%</span>
+            </div>
+            <Progress value={87} className="h-2" />
+          </CardContent>
+        </Card>
+
+        {/* International Reach Card */}
+        <Card className="border-l-4 border-l-green-500 bg-gradient-to-r from-green-50 to-transparent dark:from-green-950/20 dark:to-transparent">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Users className="h-5 w-5 text-green-600" />
+              International Reach
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid grid-cols-2 gap-4 text-center">
+              <div>
+                <div className="text-2xl font-bold text-green-600">12</div>
+                <div className="text-xs text-gray-600 dark:text-gray-400">Countries</div>
+              </div>
+              <div>
+                <div className="text-2xl font-bold text-green-600">45</div>
+                <div className="text-xs text-gray-600 dark:text-gray-400">Regions</div>
+              </div>
+            </div>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
+              Expanding operations across Africa and beyond
+            </p>
+          </CardContent>
+        </Card>
       </div>
     </motion.div>
   );

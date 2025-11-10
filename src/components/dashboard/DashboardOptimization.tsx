@@ -1,4 +1,3 @@
-
 import React from 'react';
 import type { Variants } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,24 +17,24 @@ interface StatsCardProps {
 
 export const StatsCard = ({ title, value, description, icon, trendValue, trendDirection }: StatsCardProps) => {
   return (
-    <Card className="h-full">
+    <Card className="h-full transition-all duration-300 hover:shadow-lg hover:scale-105 border border-gray-200 dark:border-gray-700 bg-gradient-to-br from-white to-gray-50 dark:from-gray-900 dark:to-gray-800">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium">{title}</CardTitle>
-        <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+        <CardTitle className="text-sm font-medium text-gray-900 dark:text-white">{title}</CardTitle>
+        <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-100 to-indigo-200 dark:from-blue-900 dark:to-indigo-800 flex items-center justify-center shadow-sm">
           {icon}
         </div>
       </CardHeader>
       <CardContent>
-        <div className="text-2xl font-bold">{value}</div>
+        <div className="text-3xl font-bold text-gray-900 dark:text-white mb-1">{value}</div>
         {description && (
-          <p className="text-xs text-muted-foreground">{description}</p>
+          <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">{description}</p>
         )}
         {trendValue !== undefined && (
-          <div className={`flex items-center text-xs ${
-            trendDirection === 'up' ? 'text-green-500' : 
-            trendDirection === 'down' ? 'text-red-500' : 'text-gray-500'
+          <div className={`flex items-center text-xs font-medium ${
+            trendDirection === 'up' ? 'text-green-600' : 
+            trendDirection === 'down' ? 'text-red-600' : 'text-gray-600'
           }`}>
-            {trendDirection === 'up' ? '↑' : trendDirection === 'down' ? '↓' : '→'} {trendValue}%
+            {trendDirection === 'up' ? '↗' : trendDirection === 'down' ? '↘' : '→'} {trendValue}%
           </div>
         )}
       </CardContent>
