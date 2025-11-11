@@ -75,10 +75,7 @@ const FieldOperationManagerPage = () => {
                 </tr>
               </thead>
               <tbody>
-                {(mmpFiles || []).filter(mmp => 
-                  // Only show MMPs at the Field Op Manager stage
-                  ['pendingreview', 'reviewed'].includes(normalizeStatus(mmp.status))
-                ).map(mmp => {
+                {(mmpFiles || []).map(mmp => {
                   const uploadedBy = (mmp as any).uploadedBy;
                   const uploadedByName = typeof uploadedBy === 'object' && uploadedBy !== null
                     ? uploadedBy.name || '-'

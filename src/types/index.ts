@@ -19,10 +19,10 @@ export type { AppRole, UserRole as AppUserRole } from './roles';
 // Always import MMPStatus from './mmp/base'
 import { MMPStatus } from './mmp/base';
 
-// Ensure this is the only MMPFile definition, or that it extends the one from './mmp'
-export interface MMPFile {
-  // ...existing fields...
-  status: MMPStatus;
-  logs?: { action: string; by: string; date: string }[];
-  // ...existing fields...
-}
+// Remove this block:
+// export interface MMPFile {
+//   // ...existing fields...
+//   status: MMPStatus;
+//   logs?: { action: string; by: string; date: string }[];
+//   // ...existing fields...
+// }
