@@ -223,7 +223,10 @@ export const DashboardStatsOverview = () => {
         <div className="flex flex-col h-full">
           <div className="bg-white dark:bg-gray-900 border border-blue-100 dark:border-blue-900 rounded-xl shadow-sm p-5 flex flex-col flex-1">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold">MMP Overview — Last 3 Months</h3>
+              <div>
+                <h3 className="text-lg font-semibold">MMP Overview</h3>
+                <div className="text-xs text-muted-foreground mt-1">(Last 3 Months)</div>
+              </div>
               <button className="text-sm text-primary font-medium hover:underline" onClick={() => navigate('/mmp')}>Manage</button>
             </div>
             <div className="space-y-2">
@@ -262,31 +265,40 @@ export const DashboardStatsOverview = () => {
             {/* Filters */}
             <div className="flex flex-col sm:flex-row gap-2 mb-2">
               <div className="relative w-full sm:w-1/3">
+                <MagnifyingGlassIcon className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
                 <input
-                  placeholder="Search by Hub"
+                  placeholder="Hub"
                   value={hubFilter}
                   onChange={e => setHubFilter(e.target.value)}
                   className="input input-sm w-full pl-8 rounded-lg border border-neutral-200 focus:ring-primary/30"
+                  aria-label="Search for Hub"
                 />
-                <MagnifyingGlassIcon className="absolute left-2 top-2.5 w-4 h-4 text-muted-foreground" />
               </div>
               <div className="relative w-full sm:w-1/3">
+                <MagnifyingGlassIcon className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
                 <input
-                  placeholder="Search by Region"
+                  placeholder="Region"
                   value={regionFilter}
                   onChange={e => setRegionFilter(e.target.value)}
                   className="input input-sm w-full pl-8 rounded-lg border border-neutral-200 focus:ring-primary/30"
+                  aria-label="Search for Region"
                 />
-                <MagnifyingGlassIcon className="absolute left-2 top-2.5 w-4 h-4 text-muted-foreground" />
               </div>
-              <select value={monthFilter} onChange={e => setMonthFilter(e.target.value)} className="input input-sm w-full sm:w-1/3 rounded-lg border border-neutral-200 focus:ring-primary/30">
-                <option value="">All months</option>
-                {[0, 1, 2].map(i => {
-                  const d = subMonths(new Date(), i);
-                  const v = format(d, 'yyyy-MM');
-                  return <option key={v} value={v}>{format(d, 'MMMM yyyy')}</option>;
-                })}
-              </select>
+              <div className="relative w-full sm:w-1/3">
+                <select
+                  value={monthFilter}
+                  onChange={e => setMonthFilter(e.target.value)}
+                  className="input input-sm w-full rounded-lg border border-neutral-200 focus:ring-primary/30"
+                  aria-label="Filter by Month"
+                >
+                  <option value="">All months</option>
+                  {[0, 1, 2].map(i => {
+                    const d = subMonths(new Date(), i);
+                    const v = format(d, 'yyyy-MM');
+                    return <option key={v} value={v}>{format(d, 'MMMM yyyy')}</option>;
+                  })}
+                </select>
+              </div>
             </div>
 
             {/* Stats Grid */}
