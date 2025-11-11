@@ -59,28 +59,28 @@ const getMenuGroups = (
   perms: Record<string, boolean> = {}
 ): MenuGroup[] => {
   const isAdmin = roles.includes('admin' as AppRole) || defaultRole === 'admin';
+  const isICT = roles.includes('ict' as AppRole) || defaultRole === 'ict';
   // Build items per permission, allowing admin bypass
   const mainItems = [] as MenuGroup['items'];
-  if (isAdmin || perms.dashboard) mainItems.push({ title: "Dashboard", url: "/dashboard", icon: LayoutDashboard });
+  if (isAdmin || isICT || perms.dashboard) mainItems.push({ title: "Dashboard", url: "/dashboard", icon: LayoutDashboard });
 
   const projectItems = [] as MenuGroup['items'];
-  if (isAdmin || perms.projects) projectItems.push({ title: "Projects", url: "/projects", icon: FolderKanban });
-  if (isAdmin || perms.mmp) projectItems.push({ title: "MMP Management", url: "/mmp", icon: Database });
-  // if (isAdmin || perms.monitoringPlan) projectItems.push({ title: "Monitoring Plan", url: "/monitoring-plan", icon: Activity });
-  if (isAdmin || perms.siteVisits) projectItems.push({ title: "Site Visits", url: "/site-visits", icon: ClipboardList });
+  if (isAdmin || isICT || perms.projects) projectItems.push({ title: "Projects", url: "/projects", icon: FolderKanban });
+  if (isAdmin || isICT || perms.mmp) projectItems.push({ title: "MMP Management", url: "/mmp", icon: Database });
+  if (isAdmin || isICT || perms.siteVisits) projectItems.push({ title: "Site Visits", url: "/site-visits", icon: ClipboardList });
   if (isAdmin || perms.fieldOpManager) projectItems.push({ title: "Field Operation Manager", url: "/field-operation-manager", icon: ClipboardList });
   if (isAdmin || perms.archive) projectItems.push({ title: "Archive", url: "/archive", icon: Archive });
-  
 
+  // ICT should NOT have access to Team or Data & Reports
   const teamItems = [] as MenuGroup['items'];
-  if (isAdmin || perms.fieldTeam) teamItems.push({ title: "Field Team", url: "/field-team", icon: Activity });
+  if ((isAdmin || perms.fieldTeam) && !isICT) teamItems.push({ title: "Field Team", url: "/field-team", icon: Activity });
 
   const dataItems = [] as MenuGroup['items'];
-  if (isAdmin || perms.dataVisibility) dataItems.push({ title: "Data Visibility", url: "/data-visibility", icon: Link2 });
-  if (isAdmin || perms.reports) dataItems.push({ title: "Reports", url: "/reports", icon: Calendar });
+  if ((isAdmin || perms.dataVisibility) && !isICT) dataItems.push({ title: "Data Visibility", url: "/data-visibility", icon: Link2 });
+  if ((isAdmin || perms.reports) && !isICT) dataItems.push({ title: "Reports", url: "/reports", icon: Calendar });
 
   const adminItems = [] as MenuGroup['items'];
-  if (isAdmin || perms.users) adminItems.push({ title: "User Management", url: "/users", icon: Users });
+  if (isAdmin || isICT || perms.users) adminItems.push({ title: "User Management", url: "/users", icon: Users });
   if (isAdmin || perms.roleManagement) adminItems.push({ title: "Role Management", url: "/role-management", icon: Shield });
   if (isAdmin || perms.settings) adminItems.push({ title: "Settings", url: "/settings", icon: Settings });
 
@@ -105,15 +105,15 @@ const AppSidebar = () => {
   const isAdmin = hasAnyRole(['admin']);
   const perms = {
     dashboard: true,
-    projects: checkPermission('projects', 'read') || isAdmin,
-    mmp: checkPermission('mmp', 'read') || isAdmin,
-    monitoringPlan: checkPermission('mmp', 'read') || isAdmin,
-    siteVisits: checkPermission('site_visits', 'read') || isAdmin,
+    projects: checkPermission('projects', 'read') || isAdmin || hasAnyRole(['ict']),
+    mmp: checkPermission('mmp', 'read') || isAdmin || hasAnyRole(['ict']),
+    monitoringPlan: checkPermission('mmp', 'read') || isAdmin || hasAnyRole(['ict']),
+    siteVisits: checkPermission('site_visits', 'read') || isAdmin || hasAnyRole(['ict']),
     archive: checkPermission('reports', 'read') || isAdmin,
     fieldTeam: checkPermission('users', 'read') || isAdmin,
     dataVisibility: checkPermission('reports', 'read') || isAdmin,
     reports: checkPermission('reports', 'read') || isAdmin,
-    users: checkPermission('users', 'read') || isAdmin,
+    users: checkPermission('users', 'read') || isAdmin || hasAnyRole(['ict']),
     roleManagement: canManageRoles() || isAdmin,
     settings: checkPermission('settings', 'read') || isAdmin,
   };

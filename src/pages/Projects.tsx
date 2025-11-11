@@ -86,10 +86,13 @@ const ProjectsPage = () => {
       </nav>
       
       <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-lg p-6">
+        {/* Add status filter UI if needed */}
+        {/* <StatusFilter ... /> */}
         <ProjectList 
           projects={projects} 
           onViewProject={handleViewProject}
           loading={loading}
+          // Pass workflow status if ProjectList supports it
         />
       </div>
     </div>

@@ -1,4 +1,3 @@
-
 // Basic MMP types
 export type MMPStatus = 'pending' | 'approved' | 'rejected' | 'archived' | 'deleted';
 export type MMPStage = 'notStarted' | 'draft' | 'verified' | 'implementation' | 'completed';
@@ -25,6 +24,7 @@ export interface MMPLocation {
 }
 
 // Core MMP interface with basic properties
+
 export interface MMPBase {
   id: string;
   name: string;

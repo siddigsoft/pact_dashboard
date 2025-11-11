@@ -24,18 +24,23 @@ import {
   CheckCircle,
   ClipboardList // Add icon for the new section
 } from 'lucide-react';
+import type { MMPStatus } from '@/types';
 
 export const DashboardStatsOverview = () => {
   const [hoveredCard, setHoveredCard] = useState<number | null>(null);
   const isLoaded = useProgressiveLoading(300);
 
   const { activeProjects, approvedMmps, completedVisits, pendingSiteVisits } = useDashboardStats();
-  const { roles } = useAppContext();
+  const { currentUser, roles } = useAppContext();
   const isFinanceOrAdmin = roles?.includes('admin') || roles?.includes('financialAdmin');
 
   const { mmpFiles } = useMMP();
   const { siteVisits } = useSiteVisitContext();
   const navigate = useNavigate();
+
+  // Helper to normalize status for comparison
+  const normalizeStatus = (status: MMPStatus) =>
+    status?.replace(/_/g, '').toLowerCase();
 
   // ====================== KPI CARDS ======================
   // Use meaningful icons for each KPI
@@ -136,6 +141,27 @@ export const DashboardStatsOverview = () => {
       .slice(0, 10);
   }, [siteVisits]);
 
+  // Add workflow status counts
+  const mmpStatusCounts = useMemo(() => {
+    const counts = { pending: 0, reviewed: 0, approved: 0, sent: 0 };
+    (mmpFiles || []).forEach(mmp => {
+      const norm = normalizeStatus(mmp.status);
+      if (norm === 'pendingreview') counts.pending++;
+      if (norm === 'reviewed') counts.reviewed++;
+      if (norm === 'approved') counts.approved++;
+      if (norm === 'sent') counts.sent++;
+    });
+    return counts;
+  }, [mmpFiles]);
+
+  // Add workflow status cards for relevant roles
+  const workflowCards = [
+    { title: 'Pending Review', value: mmpStatusCounts.pending, color: 'amber-500' },
+    { title: 'Reviewed', value: mmpStatusCounts.reviewed, color: 'blue-500' },
+    { title: 'Approved', value: mmpStatusCounts.approved, color: 'green-600' },
+    { title: 'Sent', value: mmpStatusCounts.sent, color: 'gray-500' },
+  ];
+
   // ====================== LOADING STATE ======================
   if (!isLoaded) {
     return (
@@ -177,6 +203,16 @@ export const DashboardStatsOverview = () => {
               </div>
             </div>
           </motion.div>
+        ))}
+      </div>
+
+      {/* ===== WORKFLOW STATUS CARDS ===== */}
+      <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
+        {workflowCards.map(card => (
+          <div key={card.title} className={`rounded-xl p-4 bg-white dark:bg-gray-900 border border-blue-100 dark:border-blue-900 flex flex-col items-center`}>
+            <div className={`text-lg font-semibold text-${card.color}`}>{card.title}</div>
+            <div className={`text-2xl font-bold text-${card.color}`}>{card.value}</div>
+          </div>
         ))}
       </div>
 

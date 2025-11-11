@@ -4,6 +4,7 @@ import { useAppContext } from '@/context/AppContext';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import type { MMPStatus } from '@/types';
 
 const FIELD_OP_ROLE = 'fieldOpManager'; // Adjust if your AppRole uses a different value
 
@@ -37,6 +38,10 @@ const FieldOperationManagerPage = () => {
     return map;
   }, [mmpFiles]);
 
+  // Helper to normalize status for comparison
+  const normalizeStatus = (status: MMPStatus) =>
+    status?.replace(/_/g, '').toLowerCase();
+
   return (
     <div className="min-h-screen py-10 px-2 md:px-8 bg-gradient-to-br from-slate-50 via-blue-50 to-blue-100 dark:from-gray-900 dark:via-gray-950 dark:to-gray-900 space-y-10">
       <div className="max-w-5xl mx-auto">
@@ -64,11 +69,16 @@ const FieldOperationManagerPage = () => {
                   <th className="px-4 py-3 text-left font-semibold">Role</th>
                   <th className="px-4 py-3 text-left font-semibold">Hub</th>
                   <th className="px-4 py-3 text-left font-semibold">Total Sites</th>
+                  <th className="px-4 py-3 text-left font-semibold">Status</th>
+                  <th className="px-4 py-3 text-left font-semibold">Logs</th>
                   <th className="px-4 py-3"></th>
                 </tr>
               </thead>
               <tbody>
-                {(mmpFiles || []).map(mmp => {
+                {(mmpFiles || []).filter(mmp => 
+                  // Only show MMPs at the Field Op Manager stage
+                  ['pendingreview', 'reviewed'].includes(normalizeStatus(mmp.status))
+                ).map(mmp => {
                   const uploadedBy = (mmp as any).uploadedBy;
                   const uploadedByName = typeof uploadedBy === 'object' && uploadedBy !== null
                     ? uploadedBy.name || '-'
@@ -98,6 +108,22 @@ const FieldOperationManagerPage = () => {
                       <td className="px-4 py-3">{hub}</td>
                       <td className="px-4 py-3">{siteCount}</td>
                       <td className="px-4 py-3">
+                        <Badge variant={
+                          normalizeStatus(mmp.status) === 'pendingreview' ? 'outline' :
+                          normalizeStatus(mmp.status) === 'reviewed' ? 'default' :
+                          normalizeStatus(mmp.status) === 'approved' ? 'success' : 'secondary'
+                        }>
+                          {mmp.status?.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ').toUpperCase()}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-3">
+                        <ul className="text-xs space-y-1">
+                          {(mmp.logs?.slice(-2) || []).map((log, idx) => (
+                            <li key={idx}>{log.action} by {log.by} on {new Date(log.date).toLocaleDateString()}</li>
+                          ))}
+                        </ul>
+                      </td>
+                      <td className="px-4 py-3">
                         <button
                           className="text-blue-700 dark:text-blue-300 hover:underline text-xs font-semibold"
                           onClick={() => navigate(`/mmp/${mmp.id}`)}
@@ -110,7 +136,7 @@ const FieldOperationManagerPage = () => {
                 })}
                 {(!mmpFiles || mmpFiles.length === 0) && (
                   <tr>
-                    <td colSpan={7} className="text-center py-8 text-muted-foreground">
+                    <td colSpan={9} className="text-center py-8 text-muted-foreground">
                       No MMPs uploaded yet.
                     </td>
                   </tr>

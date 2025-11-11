@@ -30,7 +30,8 @@ import {
   Edit,
   RefreshCw,
   AlertCircle,
-  Bell
+  Bell,
+  Loader2
 } from 'lucide-react';
 import { AppRole } from '@/types/roles';
 import {
@@ -48,6 +49,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card } from '@/components/ui/card';
 import PendingApprovalsList from '@/components/PendingApprovalsList';
 import { useRoleManagement } from '@/context/role-management/RoleManagementContext';
+import { useAppContext } from '@/context/AppContext';
 
 const ALL_POSSIBLE_ROLES: AppRole[] = [
   'admin',
@@ -65,6 +67,7 @@ const Users = () => {
   const { roles: allRoles, getUserRolesByUserId, assignRoleToUser, removeRoleFromUser } = useRoleManagement();
   const { canManageRoles } = useAuthorization();
   const { toast } = useToast();
+  const { roles } = useAppContext();
   const [filteredUsers, setFilteredUsers] = useState<User[]>(users);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRole, setSelectedRole] = useState<string | null>(null);
@@ -80,8 +83,13 @@ const Users = () => {
   const [roleSelect, setRoleSelect] = useState<string>('');
   const [isRoleLoading, setIsRoleLoading] = useState(false);
 
+  const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; userId?: string; action?: 'delete' | 'deactivate' }>({ open: false });
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
+
   const pendingUsers = useMemo(() => users.filter(user => !user.isApproved), [users]);
   const approvedUsers = useMemo(() => users.filter(user => user.isApproved), [users]);
+
+  const isAdminOrICT = (roles || []).includes('admin') || (roles || []).includes('ict');
 
   const getUserRoleLabels = (uid: string): string[] => {
     // Combine system roles (text) and custom roles (via role_id -> roles table)
@@ -364,6 +372,47 @@ const Users = () => {
     }
   };
 
+  const handleDelete = (userId: string) => {
+    setConfirmDialog({ open: true, userId, action: 'delete' });
+  };
+
+  const handleDeactivate = (userId: string) => {
+    setConfirmDialog({ open: true, userId, action: 'deactivate' });
+  };
+
+  // --- Add actual delete and deactivate logic ---
+  const deleteUser = async (userId: string) => {
+    // Remove from profiles table (or your users table)
+    await supabase.from('profiles').delete().eq('id', userId);
+    // Optionally, remove from auth.users if you have elevated permissions
+    // await supabase.auth.admin.deleteUser(userId);
+  };
+
+  const deactivateUser = async (userId: string) => {
+    // Set a flag in the profiles table (or your users table)
+    await supabase.from('profiles').update({ is_active: false }).eq('id', userId);
+    // Optionally, you can also remove from auth or set a custom claim
+  };
+
+  const confirmAction = async () => {
+    if (confirmDialog.action === 'delete' && confirmDialog.userId) {
+      setDeletingUserId(confirmDialog.userId);
+      const userToDelete = users.find(u => u.id === confirmDialog.userId);
+      await deleteUser(confirmDialog.userId);
+      await refreshUsers();
+      setDeletingUserId(null);
+      toast({
+        title: "User deleted",
+        description: `${userToDelete?.name || 'User'} has been successfully deleted from the system.`,
+        variant: "success"
+      });
+    } else if (confirmDialog.action === 'deactivate' && confirmDialog.userId) {
+      await deactivateUser(confirmDialog.userId);
+      await refreshUsers();
+    }
+    setConfirmDialog({ open: false });
+  };
+
   return (
     <div className="container mx-auto p-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-6">
@@ -627,6 +676,30 @@ const Users = () => {
                               </Link>
                             </Button>
                           )}
+                          {isAdminOrICT && (
+                            <div className="flex justify-end gap-2">
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => handleDelete(user.id)}
+                                disabled={deletingUserId === user.id}
+                              >
+                                {deletingUserId === user.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                ) : null}
+                                Delete
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="ml-2"
+                                onClick={() => handleDeactivate(user.id)}
+                                disabled={deletingUserId === user.id}
+                              >
+                                Deactivate
+                              </Button>
+                            </div>
+                          )}
                         </TableCell>
                       </TableRow>
                     );
@@ -793,6 +866,25 @@ const Users = () => {
             <DialogClose asChild>
               <Button type="button" variant="outline">Cancel</Button>
             </DialogClose>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={confirmDialog.open} onOpenChange={open => setConfirmDialog(s => ({ ...s, open }))}>
+        <DialogContent>
+          <DialogHeader>
+            Confirm {confirmDialog.action === 'delete' ? 'Delete' : 'Deactivate'} Account
+          </DialogHeader>
+          <div>
+            Are you sure you want to {confirmDialog.action} this user account? This action cannot be undone.
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmDialog({ open: false })}>
+              Cancel
+            </Button>
+            <Button variant={confirmDialog.action === 'delete' ? 'destructive' : 'default'} onClick={confirmAction}>
+              {confirmDialog.action === 'delete' ? 'Delete' : 'Deactivate'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

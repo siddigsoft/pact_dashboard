@@ -1,5 +1,4 @@
-
-import { MMPBase, MMPLocation } from './mmp/base';
+import { MMPBase, MMPLocation, MMPStatus } from './mmp/base';
 import { MMPApprovalWorkflow, MMPWorkflow } from './mmp/workflow';
 import { MMPTeam } from './mmp/team';
 import { MMPSiteEntry, MMPSiteVisit } from './mmp/site';
@@ -30,4 +29,6 @@ export interface MMPFile extends MMPBase {
   cpVerification?: MMPCPVerification;
   comprehensiveVerification?: MMPComprehensiveVerification;
   activities?: any[];
+  status: MMPStatus;
+  logs?: { action: string; by: string; date: string }[];
 }
