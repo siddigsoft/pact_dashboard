@@ -51,6 +51,7 @@ import Calendar from './pages/Calendar';
 import RoleManagement from './pages/RoleManagement';
 import MonitoringPlanPage from './pages/MonitoringPlanPage';
 import FieldOperationManagerPage from './pages/FieldOperationManager';
+import GlobalSearchPage from './pages/GlobalSearchPage';
 
 // Components
 import MainLayout from './components/MainLayout';
@@ -155,6 +156,7 @@ const AppRoutes = () => {
         <Route path="/role-management" element={<RoleManagement />} />
         <Route path="/monitoring-plan" element={<MonitoringPlanPage />} />
         <Route path="/field-operation-manager" element={<FieldOperationManagerPage />} />
+        <Route path="/search" element={<GlobalSearchPage />} />
       </Route>
 
       {/* Redirects */}
