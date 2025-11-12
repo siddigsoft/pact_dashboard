@@ -7,6 +7,7 @@ import { calculateOnTimeRate, calculateUserRating } from './utils';
 import { isUserNearSite, calculateUserWorkload } from '@/utils/collectorUtils';
 import { fetchSiteVisits, createSiteVisitInDb, updateSiteVisitInDb } from './supabase';
 import { useNotifications } from '../notifications/NotificationContext';
+import { useWallet } from '../wallet/WalletContext';
 
 const SiteVisitContext = createContext<SiteVisitContextType | undefined>(undefined);
 
@@ -14,6 +15,7 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [appSiteVisits, setAppSiteVisits] = useState<SiteVisit[]>([]);
   const { toast } = useToast();
   const { currentUser, users, updateUser } = useUser();
+  const { addTransaction } = useWallet();
   
   useEffect(() => {
     const loadSiteVisits = async () => {
@@ -293,7 +295,24 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         createdAt: now,
         method: 'Wallet',
         reference: `PAY-${siteVisitId}-${Math.floor(Math.random() * 1000000)}`,
-      };
+      } as const;
+
+      // Persist wallet credit transaction (DB-backed via WalletContext)
+      try {
+        await addTransaction({
+          userId: newTransaction.userId,
+          amount: newTransaction.amount,
+          currency: newTransaction.currency,
+          type: newTransaction.type,
+          status: newTransaction.status,
+          description: newTransaction.description,
+          siteVisitId: newTransaction.siteVisitId,
+          method: newTransaction.method,
+          reference: newTransaction.reference,
+        });
+      } catch (txErr) {
+        console.warn('Failed to persist credit transaction, continuing:', txErr);
+      }
 
       const assignedUserId = siteVisit.assignedTo;
       const user = users.find(u => u.id === assignedUserId);

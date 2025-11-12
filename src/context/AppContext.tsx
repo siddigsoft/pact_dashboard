@@ -13,6 +13,8 @@ import { ArchiveProvider } from './archive/ArchiveContext';
 import { SettingsProvider } from './settings/SettingsContext';
 import { RoleManagementProvider, useRoleManagement } from './role-management/RoleManagementContext';
 
+
+
 interface CompositeContextType {
   currentUser: ReturnType<typeof useUser>['currentUser'];
   authReady: boolean;
@@ -127,10 +129,10 @@ export const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children
     <ViewModeProvider>
       <NotificationProvider>
         <UserProvider>
-          <SiteVisitProvider>
-            <MMPProvider>
-              <ProjectProvider>
-                <WalletProvider>
+          <WalletProvider>
+            <SiteVisitProvider>
+              <MMPProvider>
+                <ProjectProvider>
                   <SettingsProvider>
                     <ArchiveProvider>
                       <RoleManagementProvider>
@@ -144,10 +146,10 @@ export const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children
                       </RoleManagementProvider>
                     </ArchiveProvider>
                   </SettingsProvider>
-                </WalletProvider>
-              </ProjectProvider>
-            </MMPProvider>
-          </SiteVisitProvider>
+                </ProjectProvider>
+              </MMPProvider>
+            </SiteVisitProvider>
+          </WalletProvider>
         </UserProvider>
       </NotificationProvider>
     </ViewModeProvider>

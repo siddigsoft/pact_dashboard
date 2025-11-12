@@ -18,10 +18,12 @@ import { useToast } from "@/hooks/use-toast";
 import { addDays, format } from "date-fns";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PaymentMethodForm } from "@/components/PaymentMethodForm";
+import { useSettings } from "@/context/settings/SettingsContext";
 
 const Wallet: React.FC = () => {
   const { transactions, withdrawFunds } = useWallet();
   const { currentUser, updateUser } = useUser();
+  const { walletSettings, updateWalletSettings } = useSettings();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("overview");
@@ -37,6 +39,11 @@ const Wallet: React.FC = () => {
   const userTransactions = transactions.filter(
     transaction => transaction.userId === currentUser?.id
   );
+
+  // Compute wallet balance from completed transactions (credits - debits)
+  const computedBalance = userTransactions
+    .filter(t => t.status === 'completed')
+    .reduce((sum, t) => sum + (t.type === 'credit' ? t.amount : -t.amount), 0);
 
   // Calculate estimated next payment date (3 days from now)
   const estimatedNextPayment = format(addDays(new Date(), 3), "MMM d, yyyy");
@@ -65,6 +72,18 @@ const Wallet: React.FC = () => {
       };
       
       updateUser(updatedUser);
+
+      // Persist bank account into wallet_settings.notification_prefs
+      try {
+        updateWalletSettings({
+          notification_prefs: {
+            ...(walletSettings?.notification_prefs || {}),
+            bank_account: values,
+          },
+        });
+      } catch (e) {
+        console.warn('Failed to persist bank account to wallet_settings:', e);
+      }
       
       toast({
         title: "Payment method added",
@@ -145,7 +164,7 @@ const Wallet: React.FC = () => {
 
         <TabsContent value="overview" className="space-y-6">
           <WalletBalance 
-            balance={currentUser?.wallet.balance || 0} 
+            balance={computedBalance || 0} 
             currency={currentUser?.wallet.currency || "SDG"} 
           />
           
