@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppContext } from '@/context/AppContext';
-import { useMMP } from '@/context/mmp/MMPContext';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import type { MMPStatus } from '@/types';
@@ -17,10 +16,21 @@ const CATEGORY_LABELS = [
   { key: 'archived', label: 'Archived' },
 ];
 
+// --- Fixes and checklist for fetching MMP data from Supabase ---
+
+// 1. Make sure SUPABASE_URL and SUPABASE_ANON_KEY are set to your real project values (not placeholders).
+// 2. Confirm your table name is "mmp_files" and you have data in it.
+// 3. Ensure Row Level Security (RLS) is disabled or you have a SELECT policy for anon/public users.
+// 4. Use the correct Supabase client (do not create a new client if you already have one in your project).
+// 5. Log errors and data for debugging.
+
+import { supabase } from '@/integrations/supabase/client'; // Use your shared client, not createClient()
+
 const FieldOperationManagerPage = () => {
   const { roles } = useAppContext();
-  const { mmpFiles } = useMMP();
   const navigate = useNavigate();
+  const [mmpFiles, setMmpFiles] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<'all' | 'approved' | 'pending' | 'archived'>('all');
   const [search, setSearch] = useState('');
   const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
@@ -300,19 +310,32 @@ const FieldOperationManagerPage = () => {
 
   // Helper to get user info for report
   const getUserInfo = () => {
-    // Try to get user name and role from context if available
-    // You may need to adjust this if you have a user object in context
-    // For now, fallback to roles array
+    // Try to get the latest uploader from the MMPs list (if available)
     let userName = 'Unknown User';
     let userRole = 'Unknown Role';
-    // If you have user info in context, use it here
-    // Example: const { user } = useAppContext();
-    // if (user) { userName = user.name; userRole = user.role; }
-    // Otherwise, fallback:
-    if (roles && roles.length > 0) {
+
+    // Find the most recent MMP with an uploader
+    const latestMMP = (mmpFiles || []).find(
+      (mmp: any) => mmp.uploadedBy && (typeof mmp.uploadedBy === 'object' || typeof mmp.uploadedBy === 'string')
+    );
+
+    if (latestMMP) {
+      if (typeof latestMMP.uploadedBy === 'object' && latestMMP.uploadedBy !== null) {
+        userName =
+          latestMMP.uploadedBy.name ||
+          latestMMP.uploadedBy.fullName ||
+          latestMMP.uploadedBy.email ||
+          userName;
+        userRole = latestMMP.uploadedBy.role || userRole;
+      } else if (typeof latestMMP.uploadedBy === 'string') {
+        userName = latestMMP.uploadedBy;
+        // Role may not be available if uploadedBy is a string
+      }
+    } else if (roles && roles.length > 0) {
       userRole = roles.join(', ');
       userName = roles.includes('admin') ? 'admin' : roles[0];
     }
+
     return { userName, userRole };
   };
 
@@ -799,6 +822,41 @@ const FieldOperationManagerPage = () => {
     );
   };
 
+  React.useEffect(() => {
+    setLoading(true);
+    supabase
+      .from('mmp_files')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .then(({ data, error }) => {
+        if (error) {
+          console.error('Supabase error:', error);
+          setLoading(false);
+          return;
+        }
+        if (!data || data.length === 0) {
+          console.warn('No MMP data returned from Supabase');
+        } else {
+          console.log('Fetched MMP data:', data);
+        }
+        // Map DB fields to frontend fields
+        const mapped = (data || []).map((mmp: any) => ({
+          ...mmp,
+          sites: Array.isArray(mmp.site_entries) ? mmp.site_entries : [],
+          uploadedAt: mmp.uploaded_at,
+          projectName: mmp.name,
+          mmpId: mmp.mmp_id || mmp.id,
+          status: mmp.status,
+          siteCount: typeof mmp.entries === 'number' ? mmp.entries : (Array.isArray(mmp.site_entries) ? mmp.site_entries.length : 0),
+          logs: mmp.workflow?.logs || [],
+        }));
+        setMmpFiles(mapped);
+        setLoading(false);
+      });
+  }, [
+    // add dependencies if you want to refetch on filter changes
+  ]);
+
   return (
     <div className="min-h-screen py-10 px-2 md:px-8 bg-gradient-to-br from-slate-50 via-blue-50 to-blue-100 dark:from-gray-900 dark:via-gray-950 dark:to-gray-900 space-y-10">
       <div className="max-w-5xl mx-auto">
@@ -844,8 +902,8 @@ const FieldOperationManagerPage = () => {
                     uploadedByName = uploadedBy;
                   }
 
+                  // Fix: define hub and siteCount before using them
                   const hub = (mmp as any).hub || (mmp as any).projectHub || (mmp as any).location?.hub || '-';
-                  // Try to get total sites from .sites, .siteEntries, .entries, or .processedEntries
                   let siteCount = 0;
                   if (Array.isArray((mmp as any).sites)) siteCount = (mmp as any).sites.length;
                   else if (Array.isArray((mmp as any).siteEntries)) siteCount = (mmp as any).siteEntries.length;
@@ -1151,11 +1209,4 @@ const FieldOperationManagerPage = () => {
 
 export default FieldOperationManagerPage;
 
-// No code change needed in this file to fix the error.
-// To resolve the error:
-// 1. Install the required packages and their types in your project root:
-//    npm install docx file-saver
-//    npm install --save-dev @types/file-saver
-// 2. If using TypeScript < 5, you may need to add a type declaration for 'docx':
-//    Create a file named src/types/docx.d.ts with:
-//      declare module 'docx';
+
