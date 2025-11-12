@@ -228,6 +228,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             fullName: profile.full_name || existingUser.fullName,
             phone: profile.phone || existingUser.phone,
             employeeId: profile.employee_id || existingUser.employeeId,
+            bankAccount: (profile as any).bank_account || (existingUser as any).bankAccount,
             lastActive: existingUser.lastActive || new Date().toISOString(),
             isApproved: profile.status === 'approved' || false,
             availability: profile.availability || existingUser.availability || 'offline',
@@ -386,6 +387,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         fullName: (userProfile as any).full_name,
         phone: (userProfile as any).phone,
         employeeId: (userProfile as any).employee_id,
+        bankAccount: (userProfile as any).bank_account,
         lastActive: new Date().toISOString(),
         isApproved: true,
         availability: profileData?.availability || 'online',
@@ -586,6 +588,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
           fullName: userProfile.full_name,
           phone: userProfile.phone,
           employeeId: userProfile.employee_id,
+          bankAccount: userProfile.bank_account,
           lastActive: new Date().toISOString(),
           isApproved,
           availability: profileData?.availability || 'online',
@@ -988,6 +991,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             locality_id: updatedUser.localityId,
             employee_id: updatedUser.employeeId,
             phone: updatedUser.phone,
+            bank_account: (updatedUser as any).bankAccount,
           })
           .eq('id', updatedUser.id);
         
