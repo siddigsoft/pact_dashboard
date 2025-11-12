@@ -83,6 +83,7 @@ const getMenuGroups = (
 
   const adminItems = [] as MenuGroup['items'];
   if (isAdmin || isICT || perms.users) adminItems.push({ title: "User Management", url: "/users", icon: Users });
+  if (isAdmin || isICT || perms.adminTransactions) adminItems.push({ title: "Transactions", url: "/admin/transactions", icon: ClipboardList });
   if (isAdmin || perms.roleManagement) adminItems.push({ title: "Role Management", url: "/role-management", icon: Shield });
   if (isAdmin || perms.settings) adminItems.push({ title: "Settings", url: "/settings", icon: Settings });
 
@@ -119,6 +120,7 @@ const AppSidebar = () => {
     users: checkPermission('users', 'read') || isAdmin || hasAnyRole(['ict']),
     roleManagement: canManageRoles() || isAdmin,
     settings: checkPermission('settings', 'read') || isAdmin,
+    adminTransactions: isAdmin || hasAnyRole(['financialAdmin','ict']),
   };
   const menuGroups = currentUser ? getMenuGroups(roles || [], currentUser.role, perms) : [];
 

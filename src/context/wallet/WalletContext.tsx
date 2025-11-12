@@ -11,6 +11,7 @@ interface WalletContextType {
   addTransaction: (transaction: Omit<Transaction, 'id' | 'createdAt'>) => Promise<boolean>;
   getTransactionsByUserId: (userId: string) => Transaction[];
   getPendingWithdrawals: (userId: string) => Transaction[];
+  updateTransactionStatus: (idOrReference: string, newStatus: Transaction['status']) => Promise<boolean>;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
@@ -37,6 +38,79 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                   }, []);
                   return null;
                 };
+  
+  const updateTransactionStatus = async (idOrReference: string, newStatus: Transaction['status']): Promise<boolean> => {
+    try {
+      if (!currentUser) return false;
+      const role = currentUser.role;
+      const isFinance = role === 'admin' || role === 'financialAdmin' || role === 'ict';
+      if (!isFinance) return false;
+
+      let updated: Transaction | null = null;
+      try {
+        const { data, error } = await supabase
+          .from(TABLE_NAME)
+          .update({ status: newStatus })
+          .eq('id', idOrReference)
+          .select('*');
+        if (error || !data || data.length === 0) {
+          const { data: byRefData, error: byRefErr } = await supabase
+            .from(TABLE_NAME)
+            .update({ status: newStatus })
+            .eq('reference', idOrReference)
+            .select('*');
+          if (byRefErr || !byRefData || byRefData.length === 0) throw byRefErr || new Error('No rows updated');
+          const r = byRefData[0] as any;
+          updated = {
+            id: r.id || idOrReference,
+            userId: r.user_id,
+            amount: Number(r.amount || 0),
+            currency: r.currency || currentUser.wallet?.currency || 'SDG',
+            type: r.type,
+            status: r.status,
+            description: r.description || '',
+            createdAt: r.created_at || new Date().toISOString(),
+            method: r.method || undefined,
+            reference: r.reference || undefined,
+            siteVisitId: r.site_visit_id || undefined,
+            operationalCosts: r.operational_costs || undefined,
+            taskDetails: r.task_details || undefined,
+            bankDetails: r.bank_details || undefined,
+          };
+        } else {
+          const r = (data as any[])[0];
+          updated = {
+            id: r.id || idOrReference,
+            userId: r.user_id,
+            amount: Number(r.amount || 0),
+            currency: r.currency || currentUser.wallet?.currency || 'SDG',
+            type: r.type,
+            status: r.status,
+            description: r.description || '',
+            createdAt: r.created_at || new Date().toISOString(),
+            method: r.method || undefined,
+            reference: r.reference || undefined,
+            siteVisitId: r.site_visit_id || undefined,
+            operationalCosts: r.operational_costs || undefined,
+            taskDetails: r.task_details || undefined,
+            bankDetails: r.bank_details || undefined,
+          };
+        }
+      } catch (dbErr) {
+        const exists = appTransactions.find(t => t.id === idOrReference || t.reference === idOrReference);
+        if (!exists) return false;
+        updated = { ...exists, status: newStatus } as Transaction;
+      }
+
+      setAppTransactions(prev => prev.map(t => (t.id === idOrReference || t.reference === idOrReference) ? { ...t, status: newStatus } : t));
+      toast({ title: 'Transaction updated', description: `Status set to ${newStatus}.` });
+      return true;
+    } catch (e) {
+      console.error('updateTransactionStatus error:', e);
+      toast({ title: 'Update failed', description: 'Could not update transaction status.', variant: 'destructive' });
+      return false;
+    }
+  };
                 
                 const div = document.createElement('div');
                 document.body.appendChild(div);
@@ -341,6 +415,79 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       t.status === 'pending'
     );
   };
+  
+  const updateTransactionStatus = async (idOrReference: string, newStatus: Transaction['status']): Promise<boolean> => {
+    try {
+      if (!currentUser) return false;
+      const role = currentUser.role;
+      const isFinance = role === 'admin' || role === 'financialAdmin' || role === 'ict';
+      if (!isFinance) return false;
+
+      let updated: Transaction | null = null;
+      try {
+        const { data, error } = await supabase
+          .from(TABLE_NAME)
+          .update({ status: newStatus })
+          .eq('id', idOrReference)
+          .select('*');
+        if (error || !data || data.length === 0) {
+          const { data: byRefData, error: byRefErr } = await supabase
+            .from(TABLE_NAME)
+            .update({ status: newStatus })
+            .eq('reference', idOrReference)
+            .select('*');
+          if (byRefErr || !byRefData || byRefData.length === 0) throw byRefErr || new Error('No rows updated');
+          const r = byRefData[0] as any;
+          updated = {
+            id: r.id || idOrReference,
+            userId: r.user_id,
+            amount: Number(r.amount || 0),
+            currency: r.currency || currentUser.wallet?.currency || 'SDG',
+            type: r.type,
+            status: r.status,
+            description: r.description || '',
+            createdAt: r.created_at || new Date().toISOString(),
+            method: r.method || undefined,
+            reference: r.reference || undefined,
+            siteVisitId: r.site_visit_id || undefined,
+            operationalCosts: r.operational_costs || undefined,
+            taskDetails: r.task_details || undefined,
+            bankDetails: r.bank_details || undefined,
+          };
+        } else {
+          const r = (data as any[])[0];
+          updated = {
+            id: r.id || idOrReference,
+            userId: r.user_id,
+            amount: Number(r.amount || 0),
+            currency: r.currency || currentUser.wallet?.currency || 'SDG',
+            type: r.type,
+            status: r.status,
+            description: r.description || '',
+            createdAt: r.created_at || new Date().toISOString(),
+            method: r.method || undefined,
+            reference: r.reference || undefined,
+            siteVisitId: r.site_visit_id || undefined,
+            operationalCosts: r.operational_costs || undefined,
+            taskDetails: r.task_details || undefined,
+            bankDetails: r.bank_details || undefined,
+          };
+        }
+      } catch (dbErr) {
+        const exists = appTransactions.find(t => t.id === idOrReference || t.reference === idOrReference);
+        if (!exists) return false;
+        updated = { ...exists, status: newStatus } as Transaction;
+      }
+
+      setAppTransactions(prev => prev.map(t => (t.id === idOrReference || t.reference === idOrReference) ? { ...t, status: newStatus } : t));
+      toast({ title: 'Transaction updated', description: `Status set to ${newStatus}.` });
+      return true;
+    } catch (e) {
+      console.error('updateTransactionStatus error:', e);
+      toast({ title: 'Update failed', description: 'Could not update transaction status.', variant: 'destructive' });
+      return false;
+    }
+  };
 
   return (
     <WalletContext.Provider
@@ -350,6 +497,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         addTransaction,
         getTransactionsByUserId,
         getPendingWithdrawals,
+        updateTransactionStatus,
       }}
     >
       {children}
