@@ -13,7 +13,8 @@ import {
   ChevronUp,
   Shield,
   Calendar,
-  Archive
+  Archive,
+  Wallet
 } from "lucide-react";
 import { useSiteVisitReminders } from "@/hooks/use-site-visit-reminders";
 import Logo from "../assets/logo.png";
@@ -62,6 +63,7 @@ const getMenuGroups = (
   // Build items per permission, allowing admin bypass
   const mainItems = [] as MenuGroup['items'];
   if (isAdmin || perms.dashboard) mainItems.push({ title: "Dashboard", url: "/dashboard", icon: LayoutDashboard });
+  if (isAdmin || perms.wallet) mainItems.push({ title: "Wallet", url: "/wallet", icon: Wallet });
 
   const projectItems = [] as MenuGroup['items'];
   if (isAdmin || perms.projects) projectItems.push({ title: "Projects", url: "/projects", icon: FolderKanban });
@@ -103,6 +105,7 @@ const AppSidebar = () => {
   const isAdmin = hasAnyRole(['admin']);
   const perms = {
     dashboard: true,
+    wallet: true,
     projects: checkPermission('projects', 'read') || isAdmin,
     mmp: checkPermission('mmp', 'read') || isAdmin,
     monitoringPlan: checkPermission('mmp', 'read') || isAdmin,
