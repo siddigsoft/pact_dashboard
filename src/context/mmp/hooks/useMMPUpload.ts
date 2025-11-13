@@ -5,12 +5,14 @@ import { uploadMMPFile } from '@/utils/mmpFileUpload';
 export const useMMPUpload = (addMMPFile: (mmp: MMPFile) => void) => {
   const uploadMMP = async (
     file: File,
-    metadata?: { name?: string; hub?: string; month?: string; projectId?: string }
+    metadata?: string | { name?: string; hub?: string; month?: string; projectId?: string }
   ): Promise<{ success: boolean; id?: string; mmp?: MMPFile; error?: string }> => {
     try {
       console.log('Starting MMP upload process for file:', file.name, 'with metadata:', metadata);
 
-      const { success, mmpData, error } = await uploadMMPFile(file, metadata);
+      const normalized = typeof metadata === 'string' ? { projectId: metadata } : metadata;
+
+      const { success, mmpData, error } = await uploadMMPFile(file, normalized);
 
       if (!success || error) {
         console.error('Error uploading MMP:', error);
