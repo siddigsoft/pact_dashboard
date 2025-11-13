@@ -12,6 +12,8 @@ const transformDBToMMPFile = (dbRecord: any): MMPFile => {
   return {
     id: dbRecord.id,
     name: dbRecord.name,
+    hub: dbRecord.hub,
+    month: dbRecord.month,
     uploadedBy: dbRecord.uploaded_by || 'Unknown',
     uploadedAt: dbRecord.uploaded_at,
     status: dbRecord.status,
@@ -29,18 +31,17 @@ const transformDBToMMPFile = (dbRecord: any): MMPFile => {
     deletedBy: dbRecord.deleted_by || dbRecord.deletedby,
     expiryDate: dbRecord.expiry_date || dbRecord.expirydate,
     region: dbRecord.region,
-    month: dbRecord.month,
     year: dbRecord.year,
     version: dbRecord.version,
     modificationHistory: dbRecord.modification_history || dbRecord.modificationhistory,
     modifiedAt: dbRecord.modified_at,
     description: dbRecord.description,
-    projectName: dbRecord.project_name || dbRecord.projectname || dbRecord.name,
     type: dbRecord.type,
     filePath: dbRecord.file_path,
     originalFilename: dbRecord.original_filename,
     fileUrl: dbRecord.file_url,
     projectId: dbRecord.project_id,
+    projectName: dbRecord.project?.name || dbRecord.project_name || dbRecord.projectname || dbRecord.name,
     siteEntries: dbRecord.site_entries || [],
     workflow: dbRecord.workflow,
     approvalWorkflow: dbRecord.approval_workflow,
@@ -104,15 +105,29 @@ export const useMMPProvider = () => {
         
         const { data: mmpData, error } = await supabase
           .from('mmp_files')
-          .select('*')
+          .select(`
+            *,
+            project:projects(
+              id,
+              name,
+              project_code
+            )
+          `)
           .order('created_at', { ascending: false });
 
+        let rows = mmpData;
         if (error) {
-          console.error('Error fetching MMP files from Supabase:', error);
-          throw error;
+          const { data: fallbackData, error: fallbackError } = await supabase
+            .from('mmp_files')
+            .select('*')
+            .order('created_at', { ascending: false });
+          if (fallbackError) {
+            throw fallbackError;
+          }
+          rows = fallbackData;
         }
 
-        const mapped = (mmpData || []).map(transformDBToMMPFile);
+        const mapped = (rows || []).map(transformDBToMMPFile);
         setMMPFiles(mapped);
       } catch (err) {
         console.error('Error loading MMP files:', err);
@@ -141,14 +156,17 @@ export const useMMPProvider = () => {
       const map: Record<string, string> = {
         uploadedAt: 'uploaded_at',
         uploadedBy: 'uploaded_by',
+        hub: 'hub',
+        month: 'month',
         processedEntries: 'processed_entries',
         mmpId: 'mmp_id',
         filePath: 'file_path',
         originalFilename: 'original_filename',
         fileUrl: 'file_url',
+        projectId: 'project_id',
+        projectName: 'project_name',
         approvalWorkflow: 'approval_workflow',
         siteEntries: 'site_entries',
-        projectName: 'projectname',
         cpVerification: 'cpverification',
         comprehensiveVerification: 'comprehensive_verification',
         rejectionReason: 'rejectionreason',

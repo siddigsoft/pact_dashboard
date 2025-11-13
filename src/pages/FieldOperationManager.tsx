@@ -826,12 +826,45 @@ const FieldOperationManagerPage = () => {
     setLoading(true);
     supabase
       .from('mmp_files')
-      .select('*')
+      .select(`
+        *,
+        project:projects(
+          id,
+          name,
+          project_code
+        )
+      `)
       .order('created_at', { ascending: false })
       .then(({ data, error }) => {
         if (error) {
-          console.error('Supabase error:', error);
-          setLoading(false);
+          console.error('Supabase error (with join), retrying without join:', error);
+          supabase
+            .from('mmp_files')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .then(({ data: fbData, error: fbError }) => {
+              if (fbError) {
+                console.error('Supabase fallback error:', fbError);
+                setLoading(false);
+                return;
+              }
+              const mappedFb = (fbData || []).map((mmp: any) => ({
+                ...mmp,
+                sites: Array.isArray(mmp.site_entries) ? mmp.site_entries : [],
+                uploadedAt: mmp.uploaded_at,
+                uploadedBy: mmp.uploaded_by || 'Unknown',
+                hub: mmp.hub,
+                month: mmp.month,
+                projectId: mmp.project_id,
+                projectName: mmp.project_name || undefined,
+                mmpId: mmp.mmp_id || mmp.id,
+                status: mmp.status,
+                siteCount: typeof mmp.entries === 'number' ? mmp.entries : (Array.isArray(mmp.site_entries) ? mmp.site_entries.length : 0),
+                logs: mmp.workflow?.logs || [],
+              }));
+              setMmpFiles(mappedFb);
+              setLoading(false);
+            });
           return;
         }
         if (!data || data.length === 0) {
@@ -845,7 +878,10 @@ const FieldOperationManagerPage = () => {
           sites: Array.isArray(mmp.site_entries) ? mmp.site_entries : [],
           uploadedAt: mmp.uploaded_at,
           uploadedBy: mmp.uploaded_by || 'Unknown',
-          projectName: mmp.name,
+          hub: mmp.hub,
+          month: mmp.month,
+          projectId: mmp.project_id,
+          projectName: mmp.project?.name || mmp.project_name,
           mmpId: mmp.mmp_id || mmp.id,
           status: mmp.status,
           siteCount: typeof mmp.entries === 'number' ? mmp.entries : (Array.isArray(mmp.site_entries) ? mmp.site_entries.length : 0),
@@ -880,6 +916,8 @@ const FieldOperationManagerPage = () => {
               <thead>
                 <tr className="bg-blue-50 dark:bg-blue-950 text-blue-900 dark:text-blue-100">
                   <th className="px-4 py-3 text-left font-semibold">MMP Name</th>
+                  <th className="px-4 py-3 text-left font-semibold">Project</th>
+                  <th className="px-4 py-3 text-left font-semibold">Month</th>
                   <th className="px-4 py-3 text-left font-semibold">Upload Date</th>
                   <th className="px-4 py-3 text-left font-semibold">Uploaded By</th>
                   <th className="px-4 py-3 text-left font-semibold">Role</th>
@@ -903,8 +941,12 @@ const FieldOperationManagerPage = () => {
                     uploadedByName = uploadedBy;
                   }
 
-                  // Fix: define hub and siteCount before using them
+                  // Fix: define hub, month, project and siteCount before using them
                   const hub = (mmp as any).hub || (mmp as any).projectHub || (mmp as any).location?.hub || '-';
+                  const month = (mmp as any).month ? 
+                    new Date(2024, parseInt((mmp as any).month) - 1).toLocaleDateString('en-US', { month: 'long' }) : 
+                    '-';
+                  const project = (mmp as any).projectName || (mmp as any).project?.name || '-';
                   let siteCount = 0;
                   if (Array.isArray((mmp as any).sites)) siteCount = (mmp as any).sites.length;
                   else if (Array.isArray((mmp as any).siteEntries)) siteCount = (mmp as any).siteEntries.length;
@@ -928,7 +970,9 @@ const FieldOperationManagerPage = () => {
 
                   return (
                     <tr key={mmp.id} className="border-b last:border-0 hover:bg-blue-50/40 dark:hover:bg-blue-900/40 transition">
-                      <td className="px-4 py-3 font-medium">{(mmp as any).projectName || mmp.name || mmp.mmpId || mmp.id}</td>
+                      <td className="px-4 py-3 font-medium">{mmp.name || mmp.mmpId || mmp.id}</td>
+                      <td className="px-4 py-3">{project}</td>
+                      <td className="px-4 py-3">{month}</td>
                       <td className="px-4 py-3">{uploadDate}</td>
                       <td className="px-4 py-3">{uploadedByName}</td>
                       <td className="px-4 py-3">

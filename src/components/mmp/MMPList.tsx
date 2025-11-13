@@ -41,6 +41,9 @@ export const MMPList = ({ mmpFiles }: MMPListProps) => {
                   <h3 className="font-medium">{mmp.name}</h3>
                   <p className="text-sm text-muted-foreground">
                     MMP ID: {mmp.mmpId}
+                    {mmp.projectName && <span> • Project: {mmp.projectName}</span>}
+                    {mmp.hub && <span> • Hub: {mmp.hub}</span>}
+                    {mmp.month && <span> • Month: {new Date(2024, parseInt(mmp.month) - 1).toLocaleDateString('en-US', { month: 'long' })}</span>}
                   </p>
                   <div className="mt-2 flex items-center gap-4 text-sm text-muted-foreground">
                     <span>

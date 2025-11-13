@@ -8,6 +8,8 @@ const transformDBToMMPFile = (dbRecord: any): MMPFile => {
   return {
     id: dbRecord.id,
     name: dbRecord.name,
+    hub: dbRecord.hub,
+    month: dbRecord.month,
     uploadedBy: dbRecord.uploaded_by || 'Unknown',
     uploadedAt: dbRecord.uploaded_at,
     status: dbRecord.status,
@@ -23,18 +25,17 @@ const transformDBToMMPFile = (dbRecord: any): MMPFile => {
     deletedBy: dbRecord.deleted_by,
     expiryDate: dbRecord.expiry_date,
     region: dbRecord.region,
-    month: dbRecord.month,
     year: dbRecord.year,
     version: dbRecord.version,
     modificationHistory: dbRecord.modification_history,
     modifiedAt: dbRecord.modified_at,
     description: dbRecord.description,
-    projectName: dbRecord.project_name,
     type: dbRecord.type,
     filePath: dbRecord.file_path,
     originalFilename: dbRecord.original_filename,
     fileUrl: dbRecord.file_url,
     projectId: dbRecord.project_id,
+    projectName: dbRecord.project?.name || dbRecord.project_name,
     siteEntries: dbRecord.site_entries || [],
     workflow: dbRecord.workflow,
     approvalWorkflow: dbRecord.approval_workflow,
@@ -174,7 +175,10 @@ async function parseAndCountEntries(file: File): Promise<{ entries: MMPSiteEntry
   }
 }
 
-export async function uploadMMPFile(file: File, projectId?: string): Promise<{ success: boolean; mmpData?: MMPFile; error?: string }> {
+export async function uploadMMPFile(
+  file: File, 
+  metadata?: { name?: string; hub?: string; month?: string; projectId?: string }
+): Promise<{ success: boolean; mmpData?: MMPFile; error?: string }> {
   try {
     console.log('Starting MMP file upload:', file.name);
     
@@ -249,7 +253,9 @@ export async function uploadMMPFile(file: File, projectId?: string): Promise<{ s
 
     // Create database entry with parsed data
     const dbData = {
-      name: file.name.replace(/\.[^/.]+$/, ""),
+      name: metadata?.name || file.name.replace(/\.[^/.]+$/, ""),
+      hub: metadata?.hub,
+      month: metadata?.month,
       uploaded_at: new Date().toISOString(),
       uploaded_by: uploaderDisplay,
       status: 'pending',
@@ -269,7 +275,7 @@ export async function uploadMMPFile(file: File, projectId?: string): Promise<{ s
       file_path: filePath,
       original_filename: file.name,
       file_url: publicUrl,
-      ...(projectId && { project_id: projectId })
+      ...(metadata?.projectId && { project_id: metadata.projectId })
     };
 
     console.log('Inserting MMP record into database:', dbData);

@@ -51,12 +51,16 @@ import { toast } from "@/components/ui/use-toast";
 import { validateCSV, validateHubMatch, type CSVValidationError, createValidationSummary } from '@/utils/csvValidator';
 import { generateSiteCode, validateSiteCode } from '@/utils/mmpIdGenerator';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { useProjectContext } from '@/context/project/ProjectContext';
 
 const uploadSchema = z.object({
   name: z.string({
     required_error: "MMP name is required",
   }).min(3, {
     message: "MMP name must be at least 3 characters.",
+  }),
+  project: z.string({
+    required_error: "Project selection is required",
   }),
   month: z.string({
     required_error: "Month selection is required",
@@ -83,6 +87,7 @@ const MMPUpload = () => {
   const navigate = useNavigate();
   const { uploadMMP, currentUser } = useAppContext();
   const { checkPermission, hasAnyRole } = useAuthorization();
+  const { projects, loading: projectsLoading } = useProjectContext();
   const [isUploading, setIsUploading] = useState(false);
   const [validationProgress, setValidationProgress] = useState(0);
   const [isValidating, setIsValidating] = useState(false);
@@ -127,6 +132,7 @@ const MMPUpload = () => {
     resolver: zodResolver(uploadSchema),
     defaultValues: {
       name: "",
+      project: "",
       month: "",
       hub: "",
       includeDistributionByCP: true,
@@ -387,7 +393,12 @@ const MMPUpload = () => {
     
     try {
       console.log('Starting MMP upload process...');
-      const result = await uploadMMP(data.file);
+      const result = await uploadMMP(data.file, {
+        name: data.name,
+        hub: data.hub,
+        month: data.month,
+        projectId: data.project
+      });
       
       // Clear timeout since upload completed
       if (uploadTimeout) {
@@ -684,6 +695,40 @@ const MMPUpload = () => {
                         </FormControl>
                         <FormDescription>
                           Provide a descriptive name for this MMP
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="project"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Project</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select a project" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {projectsLoading ? (
+                              <SelectItem value="" disabled>Loading projects...</SelectItem>
+                            ) : projects.length === 0 ? (
+                              <SelectItem value="" disabled>No projects available</SelectItem>
+                            ) : (
+                              projects.map((project) => (
+                                <SelectItem key={project.id} value={project.id}>
+                                  {project.name}
+                                </SelectItem>
+                              ))
+                            )}
+                          </SelectContent>
+                        </Select>
+                        <FormDescription>
+                          Select the project this MMP belongs to
                         </FormDescription>
                         <FormMessage />
                       </FormItem>

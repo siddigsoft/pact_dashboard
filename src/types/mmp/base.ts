@@ -45,17 +45,18 @@ export interface MMPBase {
   deletedBy?: string;
   expiryDate?: string;
   region?: string;
-  month?: number;
+  hub?: string;
+  month?: string;
   year?: number;
   version?: MMPVersion;
   modificationHistory?: MMPModificationEntry[];
   modifiedAt?: string;
   description?: string;
-  projectName?: string;
   type?: string;
   // File-related properties
   filePath?: string;
   originalFilename?: string;
   fileUrl?: string;
   projectId?: string;
+  projectName?: string;
 }
