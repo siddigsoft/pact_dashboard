@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
+import { Button } from '@/components/ui/button';
 import { AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { MMPCooperatingPartnerVerification as MMPCooperatingPartnerVerificationType } from '@/types/mmp/verification';
@@ -106,6 +107,44 @@ const MMPCooperatingPartnerVerification: React.FC<MMPCooperatingPartnerVerificat
     });
   };
 
+  const handleVerifyAll = () => {
+    const siteEntries = mmpFile?.siteEntries || [];
+    const totalSites: number = (siteEntries.length || mmpFile?.entries || 0) as number;
+    if (totalSites === 0) return;
+
+    const now = new Date().toISOString();
+    const verifier = currentUser?.username || currentUser?.fullName || currentUser?.email || 'System';
+
+    // Build full verified map
+    const next: Record<string, { status: 'verified' | 'rejected' | null; notes?: string }> = { ...verificationStatus };
+    siteEntries.forEach((site: any, idx: number) => {
+      const sid = site?.id || String(idx);
+      next[sid] = { status: 'verified' };
+    });
+    setVerificationStatus(next);
+
+    // Build CP verification payload
+    const cpData: MMPCooperatingPartnerVerificationType = {
+      verificationStatus: 'complete',
+      verifiedAt: now,
+      verifiedBy: verifier,
+      completionPercentage: 100,
+      siteVerification: siteEntries.reduce((acc: any, site: any, idx: number) => {
+        const sid = site?.id || String(idx);
+        acc[sid] = {
+          verified: true,
+          verifiedAt: now,
+          verifiedBy: verifier,
+          notes: next[sid]?.notes,
+        };
+        return acc;
+      }, {}),
+    };
+
+    onVerificationComplete?.(cpData);
+    toast({ title: 'All sites verified', description: `Marked ${totalSites} sites as verified.` });
+  };
+
   if (!mmpFile) {
     return <div>No MMP file data available</div>;
   }
@@ -129,12 +168,20 @@ const MMPCooperatingPartnerVerification: React.FC<MMPCooperatingPartnerVerificat
     );
   }
 
+  // Count processed for UI state
+  const processedCount = Object.values(verificationStatus).filter(s => s.status === 'verified' || s.status === 'rejected').length;
+
   return (
     <div className="space-y-6">
       <div>
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-sm font-medium">Verification Progress</h3>
-          <span className="text-sm">{verificationProgress}%</span>
+          <div className="flex items-center gap-2">
+            <span className="text-sm">{verificationProgress}%</span>
+            <Button size="sm" onClick={handleVerifyAll} disabled={processedCount >= (mmpFile?.siteEntries?.length || mmpFile?.entries || 0)}>
+              Verify All
+            </Button>
+          </div>
         </div>
         <Progress value={verificationProgress} className="h-2" />
       </div>

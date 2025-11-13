@@ -167,7 +167,7 @@ export const useMMPProvider = () => {
         projectName: 'project_name',
         approvalWorkflow: 'approval_workflow',
         siteEntries: 'site_entries',
-        cpVerification: 'cpverification',
+        cpVerification: 'cp_verification',
         comprehensiveVerification: 'comprehensive_verification',
         rejectionReason: 'rejectionreason',
         approvedBy: 'approvedby',
@@ -183,7 +183,10 @@ export const useMMPProvider = () => {
         modifiedAt: 'modified_at',
       };
       const out: any = { updated_at: new Date().toISOString() };
-      Object.entries(p).forEach(([k, v]) => {
+      const safeInput: any = { ...p };
+      // Avoid updating non-existent wide JSON columns unless explicitly supported by schema
+      delete safeInput.comprehensiveVerification;
+      Object.entries(safeInput).forEach(([k, v]) => {
         const dbk = (map as any)[k] || k;
         out[dbk] = v;
       });
