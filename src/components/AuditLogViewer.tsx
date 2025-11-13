@@ -53,6 +53,18 @@ const AuditLogViewer: React.FC<AuditLogViewerProps> = ({
   const { mmpFiles, getMmpById } = useMMP();
   const currentMMP: MMPFile | undefined = mmpId ? getMmpById(mmpId) : undefined;
 
+  const parseUserAndRole = (display?: string): { name: string; role: string } => {
+    const raw = (display || '').trim();
+    if (!raw) return { name: 'Unknown', role: 'User' };
+    const match = raw.match(/^(.*)\s*\(([^)]+)\)\s*$/);
+    if (match) {
+      const name = match[1].trim() || 'Unknown';
+      const role = match[2].trim() || 'User';
+      return { name, role };
+    }
+    return { name: raw, role: 'User' };
+  };
+
   const getActionIcon = (action: string) => {
     switch(action.toLowerCase()) {
       case 'upload': return <FileUp className="h-4 w-4 text-blue-500" />;
@@ -77,14 +89,15 @@ const AuditLogViewer: React.FC<AuditLogViewerProps> = ({
   const buildLogsFromMMP = (file: MMPFile) => {
     const logs: any[] = [];
     if (file.uploadedAt) {
+      const parsed = parseUserAndRole(file.uploadedBy);
       logs.push({
         id: `upload-${file.id}`,
         timestamp: file.uploadedAt,
         action: 'Upload',
         category: 'Document',
         description: `File ${file.originalFilename || file.name} uploaded`,
-        user: file.uploadedBy || 'Unknown',
-        userRole: 'User',
+        user: parsed.name || 'Unknown',
+        userRole: parsed.role || 'User',
         details: `Entries: ${file.entries ?? 0}`,
         status: 'success',
         ipAddress: 'N/A',

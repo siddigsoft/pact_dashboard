@@ -231,10 +231,27 @@ export async function uploadMMPFile(file: File, projectId?: string): Promise<{ s
       toast.warning(`File uploaded with ${errors.length} validation issues. Check console for details.`);
     }
 
+    // Prepare uploader info (name and role) for persistence
+    let uploaderDisplay = 'Unknown';
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user?.id) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('full_name, username, role, email')
+          .eq('id', user.id)
+          .single();
+        const displayName = (profile as any)?.full_name || (profile as any)?.username || user.email?.split('@')[0] || 'User';
+        const primaryRole = (profile as any)?.role || 'User';
+        uploaderDisplay = `${displayName} (${primaryRole})`;
+      }
+    } catch {}
+
     // Create database entry with parsed data
     const dbData = {
       name: file.name.replace(/\.[^/.]+$/, ""),
       uploaded_at: new Date().toISOString(),
+      uploaded_by: uploaderDisplay,
       status: 'pending',
       entries: count,
       processed_entries: 0,

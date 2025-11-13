@@ -844,6 +844,7 @@ const FieldOperationManagerPage = () => {
           ...mmp,
           sites: Array.isArray(mmp.site_entries) ? mmp.site_entries : [],
           uploadedAt: mmp.uploaded_at,
+          uploadedBy: mmp.uploaded_by || 'Unknown',
           projectName: mmp.name,
           mmpId: mmp.mmp_id || mmp.id,
           status: mmp.status,

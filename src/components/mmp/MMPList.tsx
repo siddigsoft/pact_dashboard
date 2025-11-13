@@ -47,6 +47,8 @@ export const MMPList = ({ mmpFiles }: MMPListProps) => {
                       Uploaded {format(new Date(mmp.uploadedAt), 'MMM d, yyyy')}
                     </span>
                     <span>•</span>
+                    <span>by {mmp.uploadedBy || 'Unknown (User)'}</span>
+                    <span>•</span>
                     <span>{mmp.entries} entries</span>
                   </div>
                 </div>

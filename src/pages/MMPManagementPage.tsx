@@ -5,8 +5,8 @@ import { useMMP } from '@/context/mmp/MMPContext';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 
-// Use the correct AppRole value for field operation manager
-const FIELD_OP_ROLE = 'fieldOpManager'; // Adjust this string if your AppRole uses a different value
+// Use the correct AppRole value for field operation manager (per schema)
+const FIELD_OP_ROLE = 'fom';
 
 const FieldOperationManagerPage = () => {
   const { currentUser, roles } = useAppContext();
@@ -68,16 +68,22 @@ const FieldOperationManagerPage = () => {
             </thead>
             <tbody>
               {(mmpFiles || []).map(mmp => {
-                // uploadedBy may be a string or object
+                // uploadedBy may be a string in format "Name (Role)" or an object
                 const uploadedBy = (mmp as any).uploadedBy;
-                const uploadedByName = typeof uploadedBy === 'object' && uploadedBy !== null
-                  ? uploadedBy.name || '-'
-                  : typeof uploadedBy === 'string'
-                    ? uploadedBy
-                    : '-';
-                const uploadedByRole = typeof uploadedBy === 'object' && uploadedBy !== null
-                  ? uploadedBy.role || '-'
-                  : '-';
+                let uploadedByName = '-';
+                let uploadedByRole = '-';
+                if (typeof uploadedBy === 'object' && uploadedBy !== null) {
+                  uploadedByName = uploadedBy.name || uploadedBy.fullName || uploadedBy.email || '-';
+                  uploadedByRole = uploadedBy.role || '-';
+                } else if (typeof uploadedBy === 'string') {
+                  const match = uploadedBy.match(/^(.*)\s*\(([^)]+)\)\s*$/);
+                  if (match) {
+                    uploadedByName = match[1].trim() || '-';
+                    uploadedByRole = match[2].trim() || '-';
+                  } else {
+                    uploadedByName = uploadedBy;
+                  }
+                }
                 const hub = (mmp as any).hub || (mmp as any).projectHub || '-';
                 const siteCount =
                   Array.isArray((mmp as any).sites)
