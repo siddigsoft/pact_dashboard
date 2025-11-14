@@ -8,6 +8,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { calculateDistance, calculateUserWorkload } from '@/utils/collectorUtils';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Loader2 } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 
 interface SmartCollectorSelectorProps {
   siteVisit: SiteVisit;
@@ -37,6 +38,26 @@ const SmartCollectorSelector: React.FC<SmartCollectorSelectorProps> = ({
   const [sortedUsers, setSortedUsers] = useState<EnhancedUser[]>([]);
   const [assigningUserId, setAssigningUserId] = useState<string | null>(null);
   const [autoAssigning, setAutoAssigning] = useState<boolean>(false);
+  const [workloadCounts, setWorkloadCounts] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data: activeVisits } = await supabase
+          .from('site_visits')
+          .select('assigned_to, status');
+        const counts: Record<string, number> = {};
+        (activeVisits || []).forEach((r: any) => {
+          if (r.assigned_to && (r.status === 'assigned' || r.status === 'inProgress')) {
+            counts[r.assigned_to] = (counts[r.assigned_to] || 0) + 1;
+          }
+        });
+        if (!cancelled) setWorkloadCounts(counts);
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, [allSiteVisits]);
 
   const hasValidCoords = (coords?: { latitude?: number; longitude?: number }) => {
     if (!coords) return false;
@@ -86,7 +107,9 @@ const SmartCollectorSelector: React.FC<SmartCollectorSelectorProps> = ({
       const isStateMatch = !!(user.stateId && siteVisit.state && normalize(user.stateId) === normalize(siteVisit.state));
       const isLocalityMatch = !!(user.localityId && siteVisit.locality && normalize(user.localityId) === normalize(siteVisit.locality));
 
-      const workload = calculateUserWorkload(user.id, allSiteVisits);
+      const workload = typeof workloadCounts[user.id] === 'number'
+        ? workloadCounts[user.id]
+        : calculateUserWorkload(user.id, allSiteVisits);
       const overloaded = workload >= 20;
 
       return {
@@ -145,7 +168,9 @@ const SmartCollectorSelector: React.FC<SmartCollectorSelectorProps> = ({
               if (autoAssigning) return;
               const withWorkload = displayUsers.map(u => ({
                 u,
-                workload: calculateUserWorkload(u.id, allSiteVisits)
+                workload: typeof workloadCounts[u.id] === 'number'
+                  ? workloadCounts[u.id]
+                  : calculateUserWorkload(u.id, allSiteVisits)
               }));
               const perfect = withWorkload.filter(x => x.u.isStateMatch && x.u.isLocalityMatch);
               const stateOnly = withWorkload.filter(x => x.u.isStateMatch && !x.u.isLocalityMatch);

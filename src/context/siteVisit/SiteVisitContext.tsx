@@ -124,6 +124,20 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             ? (newVisit.location as any)
             : null;
 
+        let workloadCounts: Record<string, number> = {};
+        try {
+          const { data: activeVisits } = await supabase
+            .from('site_visits')
+            .select('assigned_to, status');
+          const counts: Record<string, number> = {};
+          (activeVisits || []).forEach((r: any) => {
+            if (r.assigned_to && (r.status === 'assigned' || r.status === 'inProgress')) {
+              counts[r.assigned_to] = (counts[r.assigned_to] || 0) + 1;
+            }
+          });
+          workloadCounts = counts;
+        } catch {}
+
         const enhanced = consideredUsers.map(user => {
           const hasUserCoords = typeof user.location?.latitude === 'number' && typeof user.location?.longitude === 'number';
           const distance = siteCoords && hasUserCoords
@@ -137,7 +151,9 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           const isStateMatch = !!(user.stateId && newVisit.state && normalize(user.stateId) === normalize(newVisit.state));
           const isLocalityMatch = !!(user.localityId && newVisit.locality && normalize(user.localityId) === normalize(newVisit.locality));
           const isHubMatch = !!(user.hubId && newVisit.hub && normalize(user.hubId) === normalize(newVisit.hub));
-          const workload = calculateUserWorkload(user.id, appSiteVisits);
+          const workload = typeof workloadCounts[user.id] === 'number'
+            ? workloadCounts[user.id]
+            : calculateUserWorkload(user.id, appSiteVisits);
           return { user, distance, isStateMatch, isLocalityMatch, isHubMatch, workload };
         });
 
