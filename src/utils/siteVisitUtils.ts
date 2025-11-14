@@ -1,6 +1,12 @@
 
-export const getStatusColor = (status?: string | null): string => {
+export const getStatusColor = (status?: string | null, dueDate?: string | null): string => {
   const s = (status ?? "").trim();
+  
+  // Check if the site visit is overdue
+  if (isOverdue(dueDate, status)) {
+    return "bg-red-100 text-red-800 border-red-300 border";
+  }
+  
   switch (s) {
     case "pending":
       return "bg-amber-100 text-amber-800";
@@ -20,8 +26,15 @@ export const getStatusColor = (status?: string | null): string => {
   }
 };
 
-export const getStatusLabel = (status?: string | null): string => {
+export const getStatusLabel = (status?: string | null, dueDate?: string | null): string => {
   const s = (status ?? "").trim();
+  
+  // Check if the site visit is overdue
+  if (isOverdue(dueDate, status)) {
+    const daysOverdue = getDaysOverdue(dueDate, status);
+    return `Overdue (${daysOverdue} day${daysOverdue !== 1 ? 's' : ''})`;
+  }
+  
   switch (s) {
     case "pending":
       return "Pending";
@@ -38,6 +51,46 @@ export const getStatusLabel = (status?: string | null): string => {
       return "Canceled";
     default:
       return s ? s.charAt(0).toUpperCase() + s.slice(1) : "Unknown";
+  }
+};
+
+// Check if a site visit is overdue based on its due date
+export const isOverdue = (dueDate?: string | null, status?: string | null): boolean => {
+  if (!dueDate || status === 'completed' || status === 'cancelled' || status === 'canceled') {
+    return false;
+  }
+  
+  try {
+    const due = new Date(dueDate);
+    const now = new Date();
+    
+    // Set time to start of day for accurate comparison
+    due.setHours(23, 59, 59, 999);
+    now.setHours(0, 0, 0, 0);
+    
+    return due < now;
+  } catch {
+    return false;
+  }
+};
+
+// Get the number of days overdue (returns 0 if not overdue)
+export const getDaysOverdue = (dueDate?: string | null, status?: string | null): number => {
+  if (!isOverdue(dueDate, status)) {
+    return 0;
+  }
+  
+  try {
+    const due = new Date(dueDate!);
+    const now = new Date();
+    
+    // Calculate difference in days
+    const diffTime = now.getTime() - due.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    return Math.max(0, diffDays);
+  } catch {
+    return 0;
   }
 };
 

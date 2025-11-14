@@ -19,7 +19,7 @@ import VisitFilters from '@/components/site-visit/VisitFilters';
 import ViewToggle from '@/components/site-visit/ViewToggle';
 import AssignmentMap from '@/components/site-visit/AssignmentMap';
 import { Skeleton } from "@/components/ui/skeleton";
-import { getStatusColor, getStatusLabel, getStatusDescription } from "@/utils/siteVisitUtils";
+import { getStatusColor, getStatusLabel, getStatusDescription, isOverdue } from "@/utils/siteVisitUtils";
 import { useToast } from "@/hooks/use-toast";
 import FloatingMessenger from "@/components/communication/FloatingMessenger";
 import { useMMP } from "@/context/mmp/MMPContext";
@@ -105,7 +105,11 @@ const SiteVisits = () => {
       : siteVisits.filter(visit => visit.assignedTo === currentUser?.id);
 
     if (statusFilter !== "all") {
-      filtered = filtered.filter(visit => visit.status === statusFilter);
+      if (statusFilter === "overdue") {
+        filtered = filtered.filter(visit => isOverdue(visit.dueDate, visit.status));
+      } else {
+        filtered = filtered.filter(visit => visit.status === statusFilter);
+      }
     }
 
     if (searchTerm) {
@@ -338,8 +342,8 @@ const SiteVisits = () => {
                 <CardTitle className="text-md font-semibold group-hover:text-primary transition-colors">
                   {visit.siteName}
                 </CardTitle>
-                <div className={`px-2 py-1 text-xs rounded-full transition-colors ${getStatusColor(visit.status)}`}>
-                  {getStatusLabel(visit.status)}
+                <div className={`px-2 py-1 text-xs rounded-full transition-colors ${getStatusColor(visit.status, visit.dueDate)}`}>
+                  {getStatusLabel(visit.status, visit.dueDate)}
                 </div>
               </div>
               <CardDescription className="flex items-center mt-1">
@@ -518,7 +522,7 @@ const SiteVisits = () => {
         {statusFilter !== 'all' && (
           <div className="flex items-center gap-2 p-3 bg-primary/5 border border-primary/20 rounded-lg">
             <div className="text-sm font-medium text-primary">
-              Showing {statusFilter === 'assigned' ? 'scheduled' : statusFilter} visits
+              Showing {statusFilter === 'assigned' ? 'scheduled' : statusFilter === 'overdue' ? 'overdue' : statusFilter} visits
             </div>
             <Button
               variant="ghost"

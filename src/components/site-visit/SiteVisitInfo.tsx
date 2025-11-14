@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { getStateName, getLocalityName } from "@/data/sudanStates";
 import { useUser } from "@/context/user/UserContext";
+import { isOverdue, getStatusLabel, getStatusColor } from "@/utils/siteVisitUtils";
 
 interface SiteVisitInfoProps {
   siteVisit: SiteVisit;
@@ -22,8 +23,13 @@ export const SiteVisitInfo = ({ siteVisit }: SiteVisitInfoProps) => {
     return u?.name || (u as any)?.fullName || (u as any)?.username;
   };
 
-  // Helper function to determine badge variant based on status
-  const getStatusVariant = (status: string) => {
+  // Helper function to determine badge variant based on status and overdue state
+  const getStatusVariant = (status: string, dueDate?: string) => {
+    // Check if overdue first
+    if (isOverdue(dueDate, status)) {
+      return { variant: "outline", className: "bg-red-50 text-red-700 border-red-300" };
+    }
+    
     switch(status?.toLowerCase()) {
       case 'pending': return { variant: "outline", className: "bg-yellow-50 text-yellow-700 border-yellow-300" };
       case 'completed': return { variant: "outline", className: "bg-green-50 text-green-700 border-green-300" };
@@ -35,7 +41,7 @@ export const SiteVisitInfo = ({ siteVisit }: SiteVisitInfoProps) => {
     }
   };
 
-  const statusBadge = getStatusVariant(siteVisit.status);
+  const statusBadge = getStatusVariant(siteVisit.status, siteVisit.dueDate);
 
   return (
     <div className="space-y-6">
@@ -89,7 +95,7 @@ export const SiteVisitInfo = ({ siteVisit }: SiteVisitInfoProps) => {
               </h3>
               <div className="space-y-3">
                 <Badge className={statusBadge.className} variant={statusBadge.variant as any}>
-                  {siteVisit.status || 'Unknown'}
+                  {getStatusLabel(siteVisit.status, siteVisit.dueDate)}
                 </Badge>
                 
                 <div className="text-sm space-y-2">

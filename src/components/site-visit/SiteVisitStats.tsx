@@ -1,7 +1,8 @@
 import React from 'react';
 import { Card, CardContent } from "@/components/ui/card";
 import { SiteVisit } from '@/types';
-import { Clock, CheckCircle, AlertCircle, CalendarClock } from 'lucide-react';
+import { Clock, CheckCircle, AlertCircle, CalendarClock, AlertTriangle } from 'lucide-react';
+import { isOverdue } from '@/utils/siteVisitUtils';
 
 interface SiteVisitStatsProps {
   visits: SiteVisit[];
@@ -14,6 +15,7 @@ const SiteVisitStats: React.FC<SiteVisitStatsProps> = ({ visits, onStatusClick }
     inProgress: visits.filter(v => v.status === 'inProgress').length,
     completed: visits.filter(v => v.status === 'completed').length,
     scheduled: visits.filter(v => ['assigned', 'permitVerified'].includes(v.status)).length,
+    overdue: visits.filter(v => isOverdue(v.dueDate, v.status)).length,
   };
 
   const handleCardClick = (status: string) => {
@@ -23,7 +25,7 @@ const SiteVisitStats: React.FC<SiteVisitStatsProps> = ({ visits, onStatusClick }
   };
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
       <Card 
         className="group hover:shadow-lg transition-all duration-300 hover:-translate-y-1 hover:bg-amber-50/50 cursor-pointer"
         onClick={() => handleCardClick('pending')}
@@ -116,6 +118,30 @@ const SiteVisitStats: React.FC<SiteVisitStatsProps> = ({ visits, onStatusClick }
           </div>
           <div className="mt-3 text-xs text-purple-600 opacity-0 group-hover:opacity-100 transition-opacity">
             Click to view scheduled visits →
+          </div>
+        </CardContent>
+      </Card>
+      
+      <Card 
+        className="group hover:shadow-lg transition-all duration-300 hover:-translate-y-1 hover:bg-red-50/50 cursor-pointer"
+        onClick={() => handleCardClick('overdue')}
+      >
+        <CardContent className="pt-6">
+          <div className="flex items-center justify-between">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-medium text-muted-foreground group-hover:text-red-700">Overdue</p>
+                <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-xs font-medium">{stats.overdue}</span>
+              </div>
+              <p className="text-2xl font-bold text-red-600">{stats.overdue}</p>
+              <p className="text-xs text-muted-foreground group-hover:text-red-600">Past due date visits</p>
+            </div>
+            <div className="h-12 w-12 rounded-full bg-red-100 flex items-center justify-center group-hover:bg-red-200 transition-colors">
+              <AlertTriangle className="h-6 w-6 text-red-600" />
+            </div>
+          </div>
+          <div className="mt-3 text-xs text-red-600 opacity-0 group-hover:opacity-100 transition-opacity">
+            Click to view overdue visits →
           </div>
         </CardContent>
       </Card>
