@@ -4,7 +4,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useUser } from '../user/UserContext';
 import { SiteVisitContextType } from './types';
 import { calculateOnTimeRate, calculateUserRating } from './utils';
-import { isUserNearSite, calculateUserWorkload } from '@/utils/collectorUtils';
+import { isUserNearSite, calculateUserWorkload, calculateDistance } from '@/utils/collectorUtils';
 import { fetchSiteVisits, createSiteVisitInDb, updateSiteVisitInDb } from './supabase';
 import { useNotifications } from '../notifications/NotificationContext';
 import { useWallet } from '../wallet/WalletContext';
@@ -54,6 +54,110 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
       setAppSiteVisits(prev => [...prev, newVisit]);
       
+      try {
+        const normalize = (v?: string) => (v ?? '').toString().trim().toLowerCase();
+        const consideredUsers = users.filter(user => {
+          const roleVal = (user.role || '').toString();
+          const direct = roleVal === 'dataCollector' || roleVal.toLowerCase() === 'datacollector';
+          const inArray = Array.isArray(user.roles) && user.roles.some((r: any) => r === 'dataCollector' || (typeof r === 'string' && r.toLowerCase() === 'datacollector'));
+          return direct || inArray;
+        });
+
+        const hasValidCoords = (coords?: { latitude?: number; longitude?: number }) => {
+          if (!coords) return false;
+          const { latitude, longitude } = coords as any;
+          return (
+            typeof latitude === 'number' && typeof longitude === 'number' &&
+            Number.isFinite(latitude) && Number.isFinite(longitude) &&
+            !(latitude === 0 && longitude === 0)
+          );
+        };
+
+        const siteCoords = hasValidCoords(newVisit.coordinates)
+          ? (newVisit.coordinates as any)
+          : hasValidCoords(newVisit.location)
+            ? (newVisit.location as any)
+            : null;
+
+        const enhanced = consideredUsers.map(user => {
+          const hasUserCoords = typeof user.location?.latitude === 'number' && typeof user.location?.longitude === 'number';
+          const distance = siteCoords && hasUserCoords
+            ? calculateDistance(
+                user.location!.latitude!,
+                user.location!.longitude!,
+                (siteCoords as any).latitude,
+                (siteCoords as any).longitude
+              )
+            : 999999;
+          const isStateMatch = !!(user.stateId && newVisit.state && normalize(user.stateId) === normalize(newVisit.state));
+          const isLocalityMatch = !!(user.localityId && newVisit.locality && normalize(user.localityId) === normalize(newVisit.locality));
+          const isHubMatch = !!(user.hubId && newVisit.hub && normalize(user.hubId) === normalize(newVisit.hub));
+          const workload = calculateUserWorkload(user.id, appSiteVisits);
+          return { user, distance, isStateMatch, isLocalityMatch, isHubMatch, workload };
+        });
+
+        const perfectMatches = enhanced.filter(e => e.isStateMatch && e.isLocalityMatch);
+
+        if (perfectMatches.length > 0) {
+          perfectMatches.sort((a, b) => {
+            if (a.workload !== b.workload) return a.workload - b.workload;
+            if (a.distance !== b.distance) return a.distance - b.distance;
+            return 0;
+          });
+
+          const best = perfectMatches[0];
+          const updatedVisit = await updateSiteVisitInDb(newVisit.id, {
+            status: 'assigned',
+            assignedTo: best.user.id,
+            assignedBy: currentUser.id,
+            assignedAt: new Date().toISOString(),
+          });
+
+          setAppSiteVisits(prev => prev.map(v => v.id === newVisit.id ? updatedVisit : v));
+
+          addNotification({
+            userId: best.user.id,
+            title: "Assigned to Site Visit",
+            message: `You have been assigned to the site visit at ${newVisit.siteName}.`,
+            type: "info",
+            link: `/site-visits/${newVisit.id}`,
+            relatedEntityId: newVisit.id,
+            relatedEntityType: "siteVisit",
+          });
+        } else {
+          const stateMatches = enhanced.filter(e => e.isStateMatch);
+          if (stateMatches.length > 0) {
+            stateMatches.sort((a, b) => {
+              if (a.workload !== b.workload) return a.workload - b.workload;
+              if (a.distance !== b.distance) return a.distance - b.distance;
+              return 0;
+            });
+
+            const bestState = stateMatches[0];
+            const updatedVisit = await updateSiteVisitInDb(newVisit.id, {
+              status: 'assigned',
+              assignedTo: bestState.user.id,
+              assignedBy: currentUser.id,
+              assignedAt: new Date().toISOString(),
+            });
+
+            setAppSiteVisits(prev => prev.map(v => v.id === newVisit.id ? updatedVisit : v));
+
+            addNotification({
+              userId: bestState.user.id,
+              title: "Assigned to Site Visit",
+              message: `You have been assigned to the site visit at ${newVisit.siteName}.`,
+              type: "info",
+              link: `/site-visits/${newVisit.id}`,
+              relatedEntityId: newVisit.id,
+              relatedEntityType: "siteVisit",
+            });
+          }
+        }
+      } catch (autoAssignErr) {
+        console.warn('Auto-assignment failed; manual assignment remains available:', autoAssignErr);
+      }
+
       toast({
         title: "Site visit created",
         description: "The site visit has been created successfully.",

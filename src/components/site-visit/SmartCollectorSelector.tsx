@@ -36,6 +36,7 @@ const SmartCollectorSelector: React.FC<SmartCollectorSelectorProps> = ({
 }) => {
   const [sortedUsers, setSortedUsers] = useState<EnhancedUser[]>([]);
   const [assigningUserId, setAssigningUserId] = useState<string | null>(null);
+  const [autoAssigning, setAutoAssigning] = useState<boolean>(false);
 
   const hasValidCoords = (coords?: { latitude?: number; longitude?: number }) => {
     if (!coords) return false;
@@ -138,7 +139,52 @@ const SmartCollectorSelector: React.FC<SmartCollectorSelectorProps> = ({
         <p className="text-sm text-gray-500 mb-6">
           The system prioritizes by hub, then state, then locality, then distance.
         </p>
-        
+        <div className="mb-3 flex justify-end">
+          <Button
+            onClick={async () => {
+              if (autoAssigning) return;
+              const withWorkload = displayUsers.map(u => ({
+                u,
+                workload: calculateUserWorkload(u.id, allSiteVisits)
+              }));
+              const perfect = withWorkload.filter(x => x.u.isStateMatch && x.u.isLocalityMatch);
+              const stateOnly = withWorkload.filter(x => x.u.isStateMatch && !x.u.isLocalityMatch);
+              const sortFn = (a: any, b: any) => {
+                if (a.workload !== b.workload) return a.workload - b.workload;
+                const ad = typeof a.u.distance === 'number' ? a.u.distance : 999999;
+                const bd = typeof b.u.distance === 'number' ? b.u.distance : 999999;
+                return ad - bd;
+              };
+              let candidate = null as any;
+              if (perfect.length > 0) {
+                perfect.sort(sortFn);
+                candidate = perfect[0].u;
+              } else if (stateOnly.length > 0) {
+                stateOnly.sort(sortFn);
+                candidate = stateOnly[0].u;
+              }
+              if (candidate) {
+                setAutoAssigning(true);
+                try {
+                  await onAssign(candidate.id);
+                } finally {
+                  setAutoAssigning(false);
+                }
+              }
+            }}
+            disabled={autoAssigning || displayUsers.length === 0}
+          >
+            {autoAssigning ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Assigning best...
+              </>
+            ) : (
+              'Assign Best'
+            )}
+          </Button>
+        </div>
+
         <ScrollArea className="h-[400px] pr-4">
           <div className="space-y-3">
             {displayUsers.map(user => {
@@ -207,7 +253,7 @@ const SmartCollectorSelector: React.FC<SmartCollectorSelectorProps> = ({
                             setAssigningUserId(null);
                           }
                         }}
-                        disabled={assigningUserId !== null}
+                        disabled={assigningUserId !== null || autoAssigning}
                       >
                         {assigningUserId === user.id ? (
                           <>
