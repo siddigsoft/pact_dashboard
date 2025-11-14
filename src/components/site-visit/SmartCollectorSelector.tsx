@@ -7,7 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { calculateDistance, calculateUserWorkload } from '@/utils/collectorUtils';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
-import { Loader2 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Loader2, Search } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 
 interface SmartCollectorSelectorProps {
@@ -39,6 +40,7 @@ const SmartCollectorSelector: React.FC<SmartCollectorSelectorProps> = ({
   const [assigningUserId, setAssigningUserId] = useState<string | null>(null);
   const [autoAssigning, setAutoAssigning] = useState<boolean>(false);
   const [workloadCounts, setWorkloadCounts] = useState<Record<string, number>>({});
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
   useEffect(() => {
     let cancelled = false;
@@ -136,7 +138,7 @@ const SmartCollectorSelector: React.FC<SmartCollectorSelectorProps> = ({
   if (isOpen !== undefined) {
     return (
       <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-        <DialogContent className="sm:max-w-[600px]">
+        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
           <div className="p-4">
             {renderContent()}
           </div>
@@ -154,14 +156,32 @@ const SmartCollectorSelector: React.FC<SmartCollectorSelectorProps> = ({
       const inArray = Array.isArray(user.roles) && user.roles.some((r: any) => r === 'dataCollector' || (typeof r === 'string' && r.toLowerCase() === 'datacollector'));
       return direct || inArray;
     }) as EnhancedUser[];
-    const displayUsers: EnhancedUser[] =
-      sortedUsers.length > 0 ? sortedUsers : fallbackCollectors;
+    const allUsers: EnhancedUser[] = sortedUsers.length > 0 ? sortedUsers : fallbackCollectors;
+    
+    // Filter users based on search query
+    const displayUsers: EnhancedUser[] = searchQuery.trim() === '' 
+      ? allUsers
+      : allUsers.filter(user => 
+          user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          user.email?.toLowerCase().includes(searchQuery.toLowerCase())
+        );
     return (
       <div className="p-4">
         <h2 className="text-xl font-semibold mb-4">Smart Collector Assignment</h2>
-        <p className="text-sm text-gray-500 mb-6">
+        <p className="text-sm text-gray-500 mb-4">
           The system prioritizes by hub, then state, then locality, then distance.
         </p>
+        
+        <div className="relative mb-4">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+          <Input
+            type="text"
+            placeholder="Search collectors by name or email..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-10"
+          />
+        </div>
         <div className="mb-3 flex justify-end">
           <Button
             onClick={async () => {
@@ -210,7 +230,7 @@ const SmartCollectorSelector: React.FC<SmartCollectorSelectorProps> = ({
           </Button>
         </div>
 
-        <ScrollArea className="h-[400px] pr-4">
+        <ScrollArea className="h-[300px] pr-4">
           <div className="space-y-3">
             {displayUsers.map(user => {
               const availabilityColor = 
