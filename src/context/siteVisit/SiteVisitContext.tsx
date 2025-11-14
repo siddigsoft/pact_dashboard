@@ -8,6 +8,7 @@ import { isUserNearSite, calculateUserWorkload, calculateDistance } from '@/util
 import { fetchSiteVisits, createSiteVisitInDb, updateSiteVisitInDb } from './supabase';
 import { useNotifications } from '../notifications/NotificationContext';
 import { useWallet } from '../wallet/WalletContext';
+import { supabase } from '@/integrations/supabase/client';
 
 const SiteVisitContext = createContext<SiteVisitContextType | undefined>(undefined);
 
@@ -56,12 +57,56 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       
       try {
         const normalize = (v?: string) => (v ?? '').toString().trim().toLowerCase();
-        const consideredUsers = users.filter(user => {
+        let consideredUsers = users.filter(user => {
           const roleVal = (user.role || '').toString();
           const direct = roleVal === 'dataCollector' || roleVal.toLowerCase() === 'datacollector';
           const inArray = Array.isArray(user.roles) && user.roles.some((r: any) => r === 'dataCollector' || (typeof r === 'string' && r.toLowerCase() === 'datacollector'));
           return direct || inArray;
         });
+
+        if (consideredUsers.length === 0) {
+          try {
+            const { data: profilesData } = await supabase
+              .from('profiles')
+              .select('id, full_name, role, state_id, locality_id, hub_id, location, availability');
+            const { data: rolesData } = await supabase
+              .from('user_roles')
+              .select('*');
+
+            const rolesMap: Record<string, any[]> = {};
+            (rolesData || []).forEach((r: any) => {
+              if (!rolesMap[r.user_id]) rolesMap[r.user_id] = [];
+              if (r.role) rolesMap[r.user_id].push(r.role);
+            });
+
+            const remoteUsers = (profilesData || []).map((p: any) => {
+              let locationData = p.location;
+              try {
+                if (typeof locationData === 'string') locationData = JSON.parse(locationData);
+              } catch {}
+              return {
+                id: p.id,
+                name: p.full_name || 'Unknown',
+                role: p.role || 'dataCollector',
+                roles: rolesMap[p.id] || [],
+                stateId: p.state_id,
+                localityId: p.locality_id,
+                hubId: p.hub_id,
+                availability: p.availability || 'offline',
+                location: locationData,
+              } as any;
+            });
+
+            consideredUsers = remoteUsers.filter((user: any) => {
+              const roleVal = (user.role || '').toString();
+              const direct = roleVal === 'dataCollector' || roleVal.toLowerCase() === 'datacollector';
+              const inArray = Array.isArray(user.roles) && user.roles.some((r: any) => r === 'dataCollector' || (typeof r === 'string' && r.toLowerCase() === 'datacollector'));
+              return direct || inArray;
+            });
+          } catch (e) {
+            console.warn('Failed to fetch collectors for auto-assignment:', e);
+          }
+        }
 
         const hasValidCoords = (coords?: { latitude?: number; longitude?: number }) => {
           if (!coords) return false;
@@ -152,6 +197,60 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
               relatedEntityId: newVisit.id,
               relatedEntityType: "siteVisit",
             });
+          } else {
+            const hubMatches = enhanced.filter(e => e.isHubMatch);
+            if (hubMatches.length > 0) {
+              hubMatches.sort((a, b) => {
+                if (a.workload !== b.workload) return a.workload - b.workload;
+                if (a.distance !== b.distance) return a.distance - b.distance;
+                return 0;
+              });
+
+              const bestHub = hubMatches[0];
+              const updatedVisit = await updateSiteVisitInDb(newVisit.id, {
+                status: 'assigned',
+                assignedTo: bestHub.user.id,
+                assignedBy: currentUser.id,
+                assignedAt: new Date().toISOString(),
+              });
+
+              setAppSiteVisits(prev => prev.map(v => v.id === newVisit.id ? updatedVisit : v));
+
+              addNotification({
+                userId: bestHub.user.id,
+                title: "Assigned to Site Visit",
+                message: `You have been assigned to the site visit at ${newVisit.siteName}.`,
+                type: "info",
+                link: `/site-visits/${newVisit.id}`,
+                relatedEntityId: newVisit.id,
+                relatedEntityType: "siteVisit",
+              });
+            } else if (enhanced.length > 0) {
+              const anySorted = [...enhanced].sort((a, b) => {
+                if (a.workload !== b.workload) return a.workload - b.workload;
+                if (a.distance !== b.distance) return a.distance - b.distance;
+                return 0;
+              });
+              const bestAny = anySorted[0];
+              const updatedVisit = await updateSiteVisitInDb(newVisit.id, {
+                status: 'assigned',
+                assignedTo: bestAny.user.id,
+                assignedBy: currentUser.id,
+                assignedAt: new Date().toISOString(),
+              });
+
+              setAppSiteVisits(prev => prev.map(v => v.id === newVisit.id ? updatedVisit : v));
+
+              addNotification({
+                userId: bestAny.user.id,
+                title: "Assigned to Site Visit",
+                message: `You have been assigned to the site visit at ${newVisit.siteName}.`,
+                type: "info",
+                link: `/site-visits/${newVisit.id}`,
+                relatedEntityId: newVisit.id,
+                relatedEntityType: "siteVisit",
+              });
+            }
           }
         }
       } catch (autoAssignErr) {
