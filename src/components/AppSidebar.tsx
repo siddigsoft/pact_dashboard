@@ -62,11 +62,12 @@ const getMenuGroups = (
   const isAdmin = roles.includes('admin' as AppRole) || defaultRole === 'admin';
   const isICT = roles.includes('ict' as AppRole) || defaultRole === 'ict';
   const isFinancialAdmin = roles.includes('financialAdmin' as AppRole) || defaultRole === 'financialAdmin';
+  const isDataCollector = roles.includes('dataCollector' as AppRole) || defaultRole === 'dataCollector';
   // Build items per permission, allowing admin bypass
   const mainItems = [] as MenuGroup['items'];
   if (isAdmin || isICT || perms.dashboard) mainItems.push({ title: "Dashboard", url: "/dashboard", icon: LayoutDashboard });
-  // Everyone sees My Wallet
-  mainItems.push({ title: "My Wallet", url: "/wallet", icon: CreditCard });
+  // Only data collectors see My Wallet
+  if (isDataCollector) mainItems.push({ title: "My Wallet", url: "/wallet", icon: CreditCard });
 
   const projectItems = [] as MenuGroup['items'];
   if (isAdmin || isICT || perms.projects) projectItems.push({ title: "Projects", url: "/projects", icon: FolderKanban });
