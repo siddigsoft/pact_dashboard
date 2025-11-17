@@ -52,6 +52,8 @@ import { validateCSV, validateHubMatch, type CSVValidationError, createValidatio
 import { generateSiteCode, validateSiteCode } from '@/utils/mmpIdGenerator';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useProjectContext } from '@/context/project/ProjectContext';
+import MMPFileManagement from '@/components/mmp/MMPFileManagement';
+import { useMMP } from '@/context/mmp/MMPContext';
 
 const uploadSchema = z.object({
   name: z.string({
@@ -107,6 +109,7 @@ const MMPUpload = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isAdmin = hasAnyRole(['admin']);
   const canCreate = checkPermission('mmp', 'create') || isAdmin;
+  const { getMMPById, archiveMMP, approveMMP, deleteMMP, resetMMP } = useMMP();
 
   if (!canCreate) {
     return (
@@ -453,6 +456,36 @@ const MMPUpload = () => {
     navigate("/mmp");
   };
 
+  const uploadedMmp = uploadedMmpId ? getMMPById(uploadedMmpId) : undefined;
+  const canApproveAction = checkPermission('mmp', 'approve') || isAdmin;
+  const canArchiveAction = checkPermission('mmp', 'archive') || isAdmin;
+  const canDeleteAction = checkPermission('mmp', 'delete') || isAdmin;
+
+  const handleApproveAction = async () => {
+    if (uploadedMmpId && currentUser?.id) {
+      await approveMMP(uploadedMmpId, currentUser.id);
+    }
+  };
+
+  const handleArchiveAction = async () => {
+    if (uploadedMmpId && currentUser?.id) {
+      await archiveMMP(uploadedMmpId, currentUser.id);
+    }
+  };
+
+  const handleDeleteAction = async () => {
+    if (uploadedMmpId) {
+      await deleteMMP(uploadedMmpId);
+      navigate('/mmp');
+    }
+  };
+
+  const handleResetApprovalAction = async () => {
+    if (uploadedMmpId) {
+      await resetMMP(uploadedMmpId);
+    }
+  };
+
   const handleDownload = () => {
     const success = downloadMMP(previewData, {
       includeDistributionByCP: form.getValues('includeDistributionByCP'),
@@ -657,6 +690,21 @@ const MMPUpload = () => {
                 <li>Reports and analytics will reflect the newly added sites</li>
               </ol>
             </div>
+
+            {uploadedMmp && (
+              <div className="mt-2">
+                <MMPFileManagement
+                  mmpFile={uploadedMmp}
+                  canArchive={canArchiveAction}
+                  canDelete={canDeleteAction}
+                  canApprove={canApproveAction}
+                  onArchive={handleArchiveAction}
+                  onDelete={handleDeleteAction}
+                  onResetApproval={handleResetApprovalAction}
+                  onApprove={handleApproveAction}
+                />
+              </div>
+            )}
           </CardContent>
           <CardFooter className="flex gap-3 justify-end">
             <Button variant="outline" onClick={handleReturnToMmpList}>
