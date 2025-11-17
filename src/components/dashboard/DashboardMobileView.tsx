@@ -6,10 +6,9 @@ import { motion } from 'framer-motion';
 import { useGestures } from '@/hooks/use-gestures';
 import { QuickActionButtons } from './QuickActionButtons';
 import { EnhancedMoDaCountdown } from './EnhancedMoDaCountdown';
-import { EnhancedRiskManagement } from './EnhancedRiskManagement';
 import { AchievementTracker } from './AchievementTracker';
 import { MMPStage } from '@/types';
-import { Activity, Calendar, Users, Layout, Target, HelpCircle } from 'lucide-react';
+import { Activity, Calendar, Users, Layout, Target } from 'lucide-react';
 import { MMPStageIndicator } from '@/components/MMPStageIndicator';
 
 const DashboardCalendar = React.lazy(() => 
@@ -19,11 +18,7 @@ const DashboardCalendar = React.lazy(() =>
 
 const SiteVisitsOverview = React.lazy(() => import('@/components/dashboard/SiteVisitsOverview'));
 const ActivityFeed = React.lazy(() => import('@/components/dashboard/ActivityFeed'));
-const MMPStageIndicatorComponent = React.lazy(() => 
-  import('@/components/MMPStageIndicator').then(module => ({ default: module.MMPStageIndicator }))
-);
 const DashboardLocationSharingCard = React.lazy(() => import('@/components/DashboardLocationSharingCard'));
-const ChatIndicatorWidget = React.lazy(() => import('@/components/dashboard/ChatIndicatorWidget'));
 const LiveTeamMapWidget = React.lazy(() => import('@/components/dashboard/LiveTeamMapWidget'));
 
 const LoadingCard = () => (
