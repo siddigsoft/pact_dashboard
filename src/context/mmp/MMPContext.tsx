@@ -9,6 +9,33 @@ import { useMMPUpload } from './hooks/useMMPUpload';
 
 // Transform database record (snake_case) to MMPFile interface (camelCase)
 const transformDBToMMPFile = (dbRecord: any): MMPFile => {
+  // Prefer site entries from the relational table if present; fallback to JSONB
+  let siteEntries: any[] = [];
+  if (dbRecord.mmp_site_entries) {
+    siteEntries = (dbRecord.mmp_site_entries as any[]).map((entry: any) => ({
+      id: entry.id,
+      siteCode: entry.site_code,
+      hubOffice: entry.hub_office,
+      state: entry.state,
+      locality: entry.locality,
+      siteName: entry.site_name,
+      cpName: entry.cp_name,
+      visitType: entry.visit_type,
+      visitDate: entry.visit_date,
+      mainActivity: entry.main_activity,
+      siteActivity: entry.activity_at_site,
+      monitoringBy: entry.monitoring_by,
+      surveyTool: entry.survey_tool,
+      useMarketDiversion: entry.use_market_diversion,
+      useWarehouseMonitoring: entry.use_warehouse_monitoring,
+      comments: entry.comments,
+      additionalData: entry.additional_data || {},
+      status: entry.status,
+    }));
+  } else if (dbRecord.site_entries) {
+    siteEntries = dbRecord.site_entries;
+  }
+
   return {
     id: dbRecord.id,
     name: dbRecord.name,
@@ -42,7 +69,7 @@ const transformDBToMMPFile = (dbRecord: any): MMPFile => {
     fileUrl: dbRecord.file_url,
     projectId: dbRecord.project_id,
     projectName: dbRecord.project?.name || dbRecord.project_name || dbRecord.projectname || dbRecord.name,
-    siteEntries: dbRecord.site_entries || [],
+    siteEntries,
     workflow: dbRecord.workflow,
     approvalWorkflow: dbRecord.approval_workflow,
     location: dbRecord.location,
@@ -111,7 +138,8 @@ export const useMMPProvider = () => {
               id,
               name,
               project_code
-            )
+            ),
+            mmp_site_entries (*)
           `)
           .order('created_at', { ascending: false });
 

@@ -92,9 +92,20 @@ export const validateCSV = async (
 
       const ws = wb.Sheets[bestSheetName];
 
-      // Use streaming approach for large files
       const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
-      const totalRows = range.e.r - range.s.r;
+      let bestHeaderRow = range.s.r;
+      let bestHeaderScore = -1;
+      const scanEnd = Math.min(range.e.r, range.s.r + 20);
+      for (let r = range.s.r; r <= scanEnd; r++) {
+        const hdr = (XLSX.utils.sheet_to_json(ws, { header: 1, range: `A${r + 1}:ZZ${r + 1}` })[0] as any[] | undefined) || [];
+        const normalized = hdr.map(h => norm(String(h)));
+        const s = normalized.reduce((acc, h) => acc + (requiredSet.has(h) ? 1 : 0), 0);
+        if (s > bestHeaderScore) {
+          bestHeaderScore = s;
+          bestHeaderRow = r;
+        }
+      }
+      const totalRows = range.e.r - bestHeaderRow;
 
       if (totalRows < 2) {
         errors.push({
@@ -113,15 +124,13 @@ export const validateCSV = async (
         };
       }
 
-      // Process headers
-      const headerRow = XLSX.utils.sheet_to_json(ws, { header: 1, range: 'A1:ZZ1' })[0] as any[];
+      const headerRow = XLSX.utils.sheet_to_json(ws, { header: 1, range: `A${bestHeaderRow + 1}:ZZ${bestHeaderRow + 1}` })[0] as any[];
       headers = (headerRow || []).map(h => String(h ?? '').trim());
 
-      // Process rows in chunks to avoid memory issues
       const CHUNK_SIZE = 100;
       const chunks = [];
-      for (let startRow = 1; startRow <= totalRows; startRow += CHUNK_SIZE) {
-        const endRow = Math.min(startRow + CHUNK_SIZE - 1, totalRows);
+      for (let startRow = bestHeaderRow + 1; startRow <= range.e.r; startRow += CHUNK_SIZE) {
+        const endRow = Math.min(startRow + CHUNK_SIZE - 1, range.e.r);
         const chunkRange = { s: { r: startRow, c: 0 }, e: { r: endRow, c: range.e.c } };
         const chunk = XLSX.utils.sheet_to_json(ws, {
           header: 1,
@@ -131,8 +140,8 @@ export const validateCSV = async (
         chunks.push(chunk);
 
         onProgress?.({
-          current: Math.min(startRow + CHUNK_SIZE, totalRows),
-          total: totalRows,
+          current: Math.min(startRow + CHUNK_SIZE, range.e.r),
+          total: range.e.r,
           stage: `Reading rows ${startRow}-${endRow}`
         });
       }
@@ -141,12 +150,11 @@ export const validateCSV = async (
       rows = chunks.flat().map(r => headers.map((h, idx) => {
         const v = (r || [])[idx];
         if (v === undefined || v === null) return '';
-        // Normalize Excel date cells or serials specifically for Visit Date
-        if (h === 'Visit Date') {
+        const hNorm = norm(String(h));
+        if (hNorm === 'visitdate' || hNorm === 'date') {
           if (v instanceof Date) return format(v, 'dd-MM-yyyy');
           if (typeof v === 'number') {
-            // Convert Excel serial (1900 date system) to JS Date
-            const excelEpoch = Date.UTC(1899, 11, 30); // 1899-12-30
+            const excelEpoch = Date.UTC(1899, 11, 30);
             const days = Math.floor(v);
             const d = new Date(excelEpoch + days * 24 * 60 * 60 * 1000);
             return format(d, 'dd-MM-yyyy');

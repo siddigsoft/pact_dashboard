@@ -93,51 +93,72 @@ async function parseAndCountEntries(file: File): Promise<{ entries: MMPSiteEntry
 
     const norm = (s: string) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
 
-    // Normalized header -> MMPSiteEntry key mapping (includes synonyms)
-    const headerMap: Record<string, keyof MMPSiteEntry> = {
+    // Define synonyms (keys can be unnormalized; we'll normalize them below)
+    const rawHeaderMap: Record<string, keyof MMPSiteEntry> = {
       // Basic fields
-      huboffice: 'hubOffice',
-      hub: 'hubOffice',
-      office: 'hubOffice',
-      sitecode: 'siteCode',
-      state: 'state',
-      statename: 'state',
-      locality: 'locality',
-      localityname: 'locality',
-      sitename: 'siteName',
-      site: 'siteName',
-      facilityname: 'siteName',
-      cpname: 'cpName',
-      partner: 'cpName',
-      implementingpartner: 'cpName',
-      cp: 'cpName',
-      mainactivity: 'mainActivity',
-      visittype: 'visitType',
-      type: 'visitType',
-      visitdate: 'visitDate',
-      date: 'visitDate',
-      comments: 'comments',
-      comment: 'comments',
-      remarks: 'comments',
-      notes: 'comments',
+      'huboffice': 'hubOffice',
+      'hub': 'hubOffice',
+      'hubofficename': 'hubOffice',
+      'officename': 'hubOffice',
+      'office': 'hubOffice',
+      'sitecode': 'siteCode',
+      'siteid': 'siteCode',
+      'code': 'siteCode',
+      'state': 'state',
+      'statename': 'state',
+      'stateprovince': 'state',
+      'region': 'state',
+      'locality': 'locality',
+      'localityname': 'locality',
+      'district': 'locality',
+      'county': 'locality',
+      'lga': 'locality',
+      'sitename': 'siteName',
+      'site': 'siteName',
+      'facilityname': 'siteName',
+      'distributionpoint': 'siteName',
+      'cpname': 'cpName',
+      'cp': 'cpName',
+      'partner': 'cpName',
+      'partnername': 'cpName',
+      'implementingpartner': 'cpName',
+      'ipname': 'cpName',
+      'mainactivity': 'mainActivity',
+      'activity': 'mainActivity',
+      'visittype': 'visitType',
+      'typeofvisit': 'visitType',
+      'type': 'visitType',
+      'visitdate': 'visitDate',
+      'date': 'visitDate',
+      'dateofvisit': 'visitDate',
+      'comments': 'comments',
+      'comment': 'comments',
+      'remarks': 'comments',
+      'notes': 'comments',
       // Monitoring Plan specific fields
-      activityatsite: 'siteActivity',
-      siteactivity: 'siteActivity',
-      activitysite: 'siteActivity',
-      'activity at the site': 'siteActivity',
-      monitoringby: 'monitoringBy',
+      'activityatsite': 'siteActivity',
+      'siteactivity': 'siteActivity',
+      'activitysite': 'siteActivity',
+      'activityatthesite': 'siteActivity',
+      'monitoringby': 'monitoringBy',
+      'monitoringby:': 'monitoringBy',
       'monitoring by': 'monitoringBy',
-      'monitoring by:': 'monitoringBy',
-      surveytool: 'surveyTool',
+      'monitoredby': 'monitoringBy',
+      'surveytool': 'surveyTool',
+      'surveyundermastertool': 'surveyTool',
       'survey under master tool': 'surveyTool',
       'survey under master tool:': 'surveyTool',
-      usemarketdiversion: 'useMarketDiversion',
+      'usemarketdiversion': 'useMarketDiversion',
       'use market diversion monitoring': 'useMarketDiversion',
       'use market diversion monitorir': 'useMarketDiversion',
-      usewarehousemonitoring: 'useWarehouseMonitoring',
+      'usewarehousemonitoring': 'useWarehouseMonitoring',
       'use warehouse monitoring': 'useWarehouseMonitoring',
       'use warehouse monitorin': 'useWarehouseMonitoring',
     };
+
+    // Normalize the header map keys once
+    const headerMap: Record<string, keyof MMPSiteEntry> = Object.entries(rawHeaderMap)
+      .reduce((acc, [k, v]) => { acc[norm(k)] = v; return acc; }, {} as Record<string, keyof MMPSiteEntry>);
 
     const timestamp = Date.now();
 
@@ -169,7 +190,12 @@ async function parseAndCountEntries(file: File): Promise<{ entries: MMPSiteEntry
           // Handle boolean fields
           if (target === 'useMarketDiversion' || target === 'useWarehouseMonitoring') {
             const boolValue = String(value).toLowerCase().trim();
-            (entry as any)[target] = boolValue === 'yes' || boolValue === 'true' || boolValue === '1';
+            (entry as any)[target] = ['yes','true','1','y','t'].includes(boolValue)
+              ? true
+              : ['no','false','0','n','f',''].includes(boolValue) ? false : false;
+          } else if (target === 'visitDate' && record['OriginalDate']) {
+            // If we already set ISO date, do not override with display value
+            continue;
           } else {
             (entry as any)[target] = String(value);
           }
@@ -187,6 +213,50 @@ async function parseAndCountEntries(file: File): Promise<{ entries: MMPSiteEntry
       }
       if (Object.keys(additional).length > 0) {
         entry.additionalData = additional;
+      }
+
+      // Heuristic backfill from additionalData when primary headers are irregular
+      if (entry.additionalData) {
+        const addNormMap: Record<string, string> = {};
+        Object.entries(entry.additionalData).forEach(([k, v]) => { addNormMap[norm(k)] = String(v); });
+
+        const setIfEmpty = (key: keyof MMPSiteEntry, value?: string) => {
+          if (!value) return;
+          if (!(entry as any)[key] || String((entry as any)[key]).trim() === '') {
+            (entry as any)[key] = value;
+          }
+        };
+
+        // 1) Direct synonym match from additionalData
+        for (const [k, v] of Object.entries(addNormMap)) {
+          const t = headerMap[k];
+          if (t) setIfEmpty(t, v);
+        }
+
+        // 2) "Month" column sometimes actually contains State names
+        const monthVal = addNormMap['month'] || addNormMap['month:'];
+        if (!entry.state && monthVal) {
+          const v = monthVal.trim();
+          const months = ['jan','january','feb','february','mar','march','apr','april','may','jun','june','jul','july','aug','august','sep','september','oct','october','nov','november','dec','december'];
+          if (!months.includes(v.toLowerCase())) {
+            setIfEmpty('state', v);
+          }
+        }
+
+        // 3) Headers that look like date/time often hold locality text
+        if (!entry.locality) {
+          const dateLikeKey = Object.keys(addNormMap).find(k => /(mon|tue|wed|thu|fri|sat|sun)/.test(k) || /\b\d{4}\b/.test(k));
+          if (dateLikeKey) {
+            const val = addNormMap[dateLikeKey];
+            if (val && val.length > 0) setIfEmpty('locality', val);
+          }
+        }
+
+        // 4) Visit Date fallback from any date-like additional key
+        if (!entry.visitDate) {
+          const dateKey = Object.keys(addNormMap).find(k => k.includes('date') || k.includes('visitdate'));
+          if (dateKey) setIfEmpty('visitDate', addNormMap[dateKey]);
+        }
       }
 
       entries.push(entry);

@@ -18,6 +18,7 @@ import { useAppContext } from "@/context/AppContext";
 import { useMMP } from "@/context/mmp/MMPContext";
 import { MMPFile } from "@/types";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Textarea } from "@/components/ui/textarea";
 import AuditLogViewer from "@/components/AuditLogViewer";
@@ -48,6 +49,7 @@ const MMPDetailView = () => {
   const [notFound, setNotFound] = useState(false);
   const [selectedSite, setSelectedSite] = useState<any>(null);
   const [siteDetailOpen, setSiteDetailOpen] = useState(false);
+  const [siteEntriesDB, setSiteEntriesDB] = useState<any[]>([]);
   
   const mmpFile = id ? getMmpById(id) : undefined;
   
@@ -78,12 +80,31 @@ const MMPDetailView = () => {
   const canArchive = (checkPermission('mmp', 'archive') || isAdmin) ? true : false;
   const canApprove = (checkPermission('mmp', 'approve') || isAdmin) && mmpFile?.status === 'pending';
 
-  const validateSiteEntries = (mmpFile: any) => {
-    if (!mmpFile) return [] as any[];
-    return Array.isArray(mmpFile.siteEntries) ? mmpFile.siteEntries : [];
-  };
+  // Prefer entries from context; if missing, fetch from mmp_site_entries
+  const siteEntries = (mmpFile?.siteEntries && Array.isArray(mmpFile.siteEntries) && mmpFile.siteEntries.length > 0)
+    ? mmpFile.siteEntries
+    : siteEntriesDB;
 
-  const siteEntries = mmpFile ? validateSiteEntries(mmpFile) : [];
+  useEffect(() => {
+    const loadSiteEntries = async () => {
+      if (!id) return;
+      // Only fetch if not already present in mmpFile
+      if (mmpFile?.siteEntries && mmpFile.siteEntries.length > 0) {
+        setSiteEntriesDB([]);
+        return;
+      }
+      const { data, error } = await supabase
+        .from('mmp_site_entries')
+        .select('*')
+        .eq('mmp_file_id', id);
+      if (error) {
+        console.error('Failed to load mmp_site_entries:', error);
+        return;
+      }
+      setSiteEntriesDB(data || []);
+    };
+    loadSiteEntries();
+  }, [id, mmpFile?.siteEntries?.length]);
 
   const handleArchive = async () => {
     if (id) {
