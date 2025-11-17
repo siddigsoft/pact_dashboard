@@ -38,7 +38,7 @@ export const projectValidationSchema = z.object({
   endDate: z.string().refine(date => !isNaN(Date.parse(date)), {
     message: "Invalid end date format"
   }),
-  budget: budgetSchema.optional(),
+  budget: budgetSchema.nullable().optional(),
   location: locationSchema,
   team: z.object({
     projectManager: z.string().optional(),
