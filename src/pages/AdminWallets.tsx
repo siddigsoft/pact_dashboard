@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { supabase } from '@/integrations/supabase/client';
 
 const fmt = (c: number, cur: string) => new Intl.NumberFormat(undefined, { style: 'currency', currency: cur || 'NGN', currencyDisplay: 'narrowSymbol' }).format((c||0)/100);
 
@@ -23,6 +24,19 @@ const AdminWallets: React.FC = () => {
   };
 
   useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    const id = setInterval(() => { load(); }, 60000);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    const ch = supabase
+      .channel('admin_wallets')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'wallets' }, () => load());
+    ch.subscribe();
+    return () => { try { supabase.removeChannel(ch); } catch {} };
+  }, []);
 
   const filtered = useMemo(() => {
     if (!search) return rows;

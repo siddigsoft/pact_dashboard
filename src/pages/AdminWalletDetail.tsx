@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { supabase } from '@/integrations/supabase/client';
 
 const currencyFmt = (c: number, cur: string) => new Intl.NumberFormat(undefined, { style: 'currency', currency: cur || 'NGN', currencyDisplay: 'narrowSymbol' }).format((c||0)/100);
 
@@ -28,6 +29,22 @@ const AdminWalletDetail: React.FC = () => {
   };
 
   useEffect(() => { if (userId) load(); }, [userId]);
+
+  useEffect(() => {
+    if (!userId) return;
+    const id = setInterval(() => { load(); }, 60000);
+    return () => clearInterval(id);
+  }, [userId]);
+
+  useEffect(() => {
+    if (!userId) return;
+    const ch = supabase
+      .channel(`admin_wallet_detail_${userId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'wallets', filter: `user_id=eq.${userId}` }, () => load())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'wallet_transactions', filter: `user_id=eq.${userId}` }, () => load());
+    ch.subscribe();
+    return () => { try { supabase.removeChannel(ch); } catch {} };
+  }, [userId]);
 
   const totals = useMemo(() => ({
     earned: txns.filter(t=>t.type==='earning'&&t.status==='posted').reduce((a,b)=>a+(Number(b.amountCents)||0),0),

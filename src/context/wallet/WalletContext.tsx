@@ -62,6 +62,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const res = await createPayoutRequest(currentUser.id, amountCents, method, destination);
     if (res) {
       setPayoutRequests(prev => [res, ...prev]);
+      await refresh();
       return true;
     }
     return false;
@@ -85,6 +86,12 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       try { supabase.removeChannel(ch3); } catch {}
     };
   }, [currentUser]);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    const id = setInterval(() => { refresh(); }, 60000);
+    return () => clearInterval(id);
+  }, [currentUser, fromIso, toIso]);
 
   const value: WalletContextType = {
     summary,
