@@ -55,6 +55,21 @@ export const validateCSV = async (
   const warnings: CSVValidationError[] = [];
   const data: any[] = [];
   const hubOffices: string[] = []; // Track hub offices found in the file
+  const norm = (s: string) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+
+  // Canonical required field keys and their header synonyms (normalized)
+  const requiredFieldSynonyms: Record<string, string[]> = {
+    hubOffice: ['huboffice','hub','office','hubofficename'],
+    state: ['state','statename','region','stateprovince'],
+    locality: ['locality','localityname','district','county','lga'],
+    siteName: ['sitename','site','facilityname','distributionpoint'],
+    siteCode: ['sitecode','siteid','code'],
+    cpName: ['cpname','cp','partner','partnername','implementingpartner','ipname'],
+    siteActivity: ['activityatsite','siteactivity','activitysite','activityatthesite'],
+    mainActivity: ['mainactivity','activity','activitydetails'],
+    monitoringBy: ['monitoringby','monitoringby:','monitoring by','monitoredby','visitby'],
+    surveyTool: ['surveytool','surveyundermastertool','survey under master tool','tooltobeused','tool']
+  };
 
   try {
     // Detect file extension and parse accordingly (Excel or CSV)
@@ -217,6 +232,9 @@ export const validateCSV = async (
 
     onProgress?.({ current: 0, total: totalRows, stage: 'Validating data' });
 
+    // Track duplicates by Site Code or composite key
+    const seenKeys = new Map<string, number>();
+
     for (let chunkStart = 0; chunkStart < totalRows; chunkStart += VALIDATION_CHUNK_SIZE) {
       const chunkEnd = Math.min(chunkStart + VALIDATION_CHUNK_SIZE, totalRows);
 
@@ -230,6 +248,28 @@ export const validateCSV = async (
         headers.forEach((header, index) => {
           record[header] = values[index] || '';
         });
+
+        // Build a normalized header->value map for fast lookup
+        const nrec: Record<string, string> = {};
+        Object.entries(record).forEach(([k, v]) => { nrec[norm(k)] = String(v ?? ''); });
+
+        // Early skip: if ALL compulsory fields are missing/blank, treat as empty row.
+        const getSynValEarly = (syns: string[]) => syns.map(s => nrec[norm(s)]).find(v => v && v.trim() !== '') || '';
+        const hasAnyRequiredEarly = (
+          getSynValEarly(requiredFieldSynonyms.hubOffice) ||
+          getSynValEarly(requiredFieldSynonyms.state) ||
+          getSynValEarly(requiredFieldSynonyms.locality) ||
+          getSynValEarly(requiredFieldSynonyms.siteName) ||
+          getSynValEarly(requiredFieldSynonyms.siteCode) ||
+          getSynValEarly(requiredFieldSynonyms.cpName) ||
+          getSynValEarly(requiredFieldSynonyms.siteActivity) ||
+          getSynValEarly(requiredFieldSynonyms.mainActivity) ||
+          getSynValEarly(requiredFieldSynonyms.monitoringBy) ||
+          getSynValEarly(requiredFieldSynonyms.surveyTool)
+        );
+        if (!hasAnyRequiredEarly) {
+          continue; // skip silently: do not include in data, errors, or warnings
+        }
 
         // Track Hub Offices for hub validation
         if (record['Hub Office'] && !hubOffices.includes(record['Hub Office'])) {
@@ -306,66 +346,57 @@ export const validateCSV = async (
           }
         }
 
-        // Check for missing required fields
-        if (!record['Hub Office']) {
-          warnings.push({
-            type: 'warning',
-            message: 'Missing Hub Office',
-            row,
-            column: 'Hub Office',
-            category: 'missing_field'
-          });
-        }
+        // Blocking validation for required fields using synonyms
+        const getVal = (key: keyof typeof requiredFieldSynonyms): string => {
+          for (const syn of requiredFieldSynonyms[key]) {
+            const v = nrec[syn];
+            if (v && v.trim() !== '') return v;
+          }
+          return '';
+        };
 
-        if (!record['State']) {
-          warnings.push({
-            type: 'warning',
-            message: 'Missing State',
-            row,
-            column: 'State',
-            category: 'missing_field'
-          });
-        }
+        const requiredChecks: Array<{label: string; key: keyof typeof requiredFieldSynonyms}> = [
+          { label: 'Hub Office', key: 'hubOffice' },
+          { label: 'State', key: 'state' },
+          { label: 'Locality', key: 'locality' },
+          { label: 'Site Name', key: 'siteName' },
+          { label: 'Site ID', key: 'siteCode' },
+          { label: 'CP Name', key: 'cpName' },
+          { label: 'Activity at Site', key: 'siteActivity' },
+          { label: 'Activity Details', key: 'mainActivity' },
+          { label: 'Visit by', key: 'monitoringBy' },
+          { label: 'Tool to be used', key: 'surveyTool' },
+        ];
 
-        if (!record['Site Name']) {
-          warnings.push({
-            type: 'warning',
-            message: 'Missing Site Name',
-            row,
-            column: 'Site Name',
-            category: 'missing_field'
-          });
-        }
+        requiredChecks.forEach(chk => {
+          const v = getVal(chk.key);
+          if (!v) {
+            errors.push({
+              type: 'error',
+              message: `Missing ${chk.label}`,
+              row,
+              column: chk.label,
+              category: 'missing_field'
+            });
+          }
+        });
 
-        // Check for monitoring plan specific fields
-        if (!record['Activity at Site']) {
-          warnings.push({
-            type: 'warning',
-            message: 'Missing Activity at Site',
-            row,
-            column: 'Activity at Site',
-            category: 'missing_field'
-          });
-        }
-
-        if (!record['Monitoring By']) {
-          warnings.push({
-            type: 'warning',
-            message: 'Missing Monitoring By',
-            row,
-            column: 'Monitoring By',
-            category: 'missing_field'
-          });
-        }
-
-        if (!record['Survey under Master tool']) {
-          warnings.push({
-            type: 'warning',
-            message: 'Missing Survey under Master tool',
-            row,
-            column: 'Survey under Master tool',
-            category: 'missing_field'
-          });
+        // Duplicate detection within file
+        const sc = getVal('siteCode');
+        const siteKey = sc || [getVal('hubOffice'), getVal('state'), getVal('locality'), getVal('siteName'), getVal('cpName')].map(v => v.trim().toLowerCase()).join('|');
+        if (siteKey.trim() !== '') {
+          if (seenKeys.has(siteKey)) {
+            const firstRow = seenKeys.get(siteKey)!;
+            errors.push({
+              type: 'error',
+              message: `Duplicate site found (matches row ${firstRow})`,
+              row,
+              column: sc ? 'Site ID' : 'Composite Site Fields',
+              category: 'duplicate_site'
+            });
+          } else {
+            seenKeys.set(siteKey, row);
+          }
         }
 
         // Validate boolean fields for monitoring plan

@@ -1,7 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { MMPFile, MMPSiteEntry } from '@/types';
 import { toast } from 'sonner';
-import { validateCSV } from '@/utils/csvValidator';
+import { validateCSV, CSVValidationError } from '@/utils/csvValidator';
 
 // Transform database record (snake_case) to MMPFile interface (camelCase)
 const transformDBToMMPFile = (dbRecord: any): MMPFile => {
@@ -79,8 +79,9 @@ const transformDBToMMPFile = (dbRecord: any): MMPFile => {
 };
 
 // Parse file through validateCSV and map rows to MMPSiteEntry while preserving unmapped columns
-async function parseAndCountEntries(file: File): Promise<{ entries: MMPSiteEntry[]; count: number; errors: string[] }> {
+async function parseAndCountEntries(file: File): Promise<{ entries: MMPSiteEntry[]; count: number; errors: string[]; warnings: string[]; rawErrors: CSVValidationError[]; rawWarnings: CSVValidationError[] }> {
   const issues: string[] = [];
+  const warns: string[] = [];
   const entries: MMPSiteEntry[] = [];
 
   try {
@@ -89,7 +90,7 @@ async function parseAndCountEntries(file: File): Promise<{ entries: MMPSiteEntry
     // Collect both errors and warnings as non-blocking issues for this stage
     const toText = (e: any) => e.row ? `${e.message} (Row ${e.row})` : e.message;
     issues.push(...result.errors.map(toText));
-    issues.push(...result.warnings.map(toText));
+    warns.push(...result.warnings.map(toText));
 
     const norm = (s: string) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
 
@@ -262,10 +263,10 @@ async function parseAndCountEntries(file: File): Promise<{ entries: MMPSiteEntry
       entries.push(entry);
     });
 
-    return { entries, count: entries.length, errors: issues.map(msg => `⚠️ ${msg}`) };
+    return { entries, count: entries.length, errors: issues, warnings: warns, rawErrors: result.errors, rawWarnings: result.warnings };
   } catch (error) {
     const message = `File parsing error: ${error instanceof Error ? error.message : 'Unknown error'}`;
-    return { entries: [], count: 0, errors: [message] };
+    return { entries: [], count: 0, errors: [message], warnings: [], rawErrors: [{ type: 'error', message, category: 'parse_error' } as CSVValidationError], rawWarnings: [] };
   }
 }
 
@@ -273,7 +274,7 @@ export async function uploadMMPFile(
   file: File,
   metadata?: { name?: string; hub?: string; month?: string; projectId?: string },
   onProgress?: (progress: { current: number; total: number; stage: string }) => void
-): Promise<{ success: boolean; mmpData?: MMPFile; error?: string }> {
+): Promise<{ success: boolean; mmpData?: MMPFile; error?: string; validationReport?: string; validationErrors?: CSVValidationError[]; validationWarnings?: CSVValidationError[] }> {
   try {
     console.log('Starting MMP file upload:', file.name);
     onProgress?.({ current: 0, total: 100, stage: 'Starting upload process' });
@@ -331,12 +332,27 @@ export async function uploadMMPFile(
     onProgress?.({ current: 35, total: 100, stage: 'Parsing file and extracting entries' });
 
     // Parse the file once to extract entries (combines validation and parsing)
-    const { entries, count, errors } = await parseAndCountEntries(file);
+    const { entries, count, errors: hardErrors, warnings, rawErrors, rawWarnings } = await parseAndCountEntries(file);
 
-    // Show validation errors if any (but don't block upload)
-    if (errors.length > 0) {
-      console.warn('File validation warnings:', errors);
-      toast.warning(`File has ${errors.length} validation issues but will proceed with upload.`);
+    // If there are hard validation errors, cancel upload and provide report
+    if (hardErrors.length > 0) {
+      console.error('Blocking validation errors found:', rawErrors);
+      // Remove uploaded file to avoid orphaned storage object
+      try { await supabase.storage.from('mmp-files').remove([filePath]); } catch {}
+
+      // Build CSV report
+      const header = 'type,row,column,category,message\n';
+      const esc = (s: any) => '"' + String(s ?? '').replace(/"/g, '""') + '"';
+      const rows = rawErrors.map(e => [e.type, e.row ?? '', e.column ?? '', e.category ?? '', e.message].map(esc).join(','));
+      const report = header + rows.join('\n');
+
+      return {
+        success: false,
+        error: `Validation failed with ${rawErrors.length} error(s). Please fix and re-upload.`,
+        validationReport: report,
+        validationErrors: rawErrors,
+        validationWarnings: rawWarnings,
+      };
     }
 
     // Prepare uploader info (name and role) for persistence
@@ -381,6 +397,26 @@ export async function uploadMMPFile(
       file_url: publicUrl,
       ...(metadata?.projectId && { project_id: metadata.projectId })
     };
+
+    // Preflight: prevent duplicate MMP for same project/hub/month
+    if (metadata?.projectId && metadata?.hub && metadata?.month) {
+      const { data: existingMmp, error: existingErr } = await supabase
+        .from('mmp_files')
+        .select('id,name,status,deleted_at,archived_at')
+        .eq('project_id', metadata.projectId)
+        .eq('hub', metadata.hub)
+        .eq('month', metadata.month)
+        .is('deleted_at', null)
+        .limit(1);
+      if (!existingErr && existingMmp && existingMmp.length > 0) {
+        // Clean up storage file
+        try { await supabase.storage.from('mmp-files').remove([filePath]); } catch {}
+        return {
+          success: false,
+          error: `Duplicate MMP exists for selected Project/Hub/Month ("${existingMmp[0].name}"). Upload aborted.`,
+        };
+      }
+    }
 
     console.log('Inserting MMP record into database:', dbData);
 

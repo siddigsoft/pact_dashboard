@@ -1,4 +1,5 @@
 import { MMPFile } from '@/types';
+import { CSVValidationError } from '@/utils/csvValidator';
 import { toast } from 'sonner';
 import { uploadMMPFile } from '@/utils/mmpFileUpload';
 
@@ -7,18 +8,18 @@ export const useMMPUpload = (addMMPFile: (mmp: MMPFile) => void) => {
     file: File,
     metadata?: string | { name?: string; hub?: string; month?: string; projectId?: string },
     onProgress?: (progress: { current: number; total: number; stage: string }) => void
-  ): Promise<{ success: boolean; id?: string; mmp?: MMPFile; error?: string }> => {
+  ): Promise<{ success: boolean; id?: string; mmp?: MMPFile; error?: string; validationReport?: string; validationErrors?: CSVValidationError[]; validationWarnings?: CSVValidationError[] }> => {
     try {
       console.log('Starting MMP upload process for file:', file.name, 'with metadata:', metadata);
 
       const normalized = typeof metadata === 'string' ? { projectId: metadata } : metadata;
 
-      const { success, mmpData, error } = await uploadMMPFile(file, normalized, onProgress);
+      const { success, mmpData, error, validationReport, validationErrors, validationWarnings } = await uploadMMPFile(file, normalized, onProgress);
 
       if (!success || error) {
         console.error('Error uploading MMP:', error);
         toast.error(`Error uploading MMP: ${error}`);
-        return { success: false, error };
+        return { success: false, error, validationReport, validationErrors, validationWarnings };
       }
 
       if (mmpData) {

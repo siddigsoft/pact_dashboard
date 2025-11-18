@@ -27,7 +27,7 @@ import {
 import { useToast } from "@/components/ui/use-toast";
 import { useAppContext } from "@/context/AppContext";
 import { ArrowUpCircle, CheckCircle, Info, Upload, HelpCircle, AlertTriangle, 
-         Eye, Save, X, RefreshCw, FileCheck, MessageSquare, ArrowRight, ListChecks } from "lucide-react";
+         Eye, Save, X, RefreshCw, FileCheck, MessageSquare, ArrowRight, ListChecks, Download } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
@@ -91,6 +91,9 @@ const MMPUpload = () => {
   const [isDragOver, setIsDragOver] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStage, setUploadStage] = useState<string>('');
+  const [validationReportUrl, setValidationReportUrl] = useState<string | null>(null);
+  const [validationErrors, setValidationErrors] = useState<any[] | null>(null);
+  const [validationWarnings, setValidationWarnings] = useState<any[] | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isAdmin = hasAnyRole(['admin']);
   const canCreate = checkPermission('mmp', 'create') || isAdmin;
@@ -255,6 +258,17 @@ const MMPUpload = () => {
           description: errorMessage,
           variant: "destructive",
         });
+
+        // If we have a validation report, expose it for download with a panel
+        if (result?.validationReport) {
+          try {
+            const blob = new Blob([result.validationReport], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            setValidationReportUrl(url);
+            setValidationErrors(result.validationErrors || []);
+            setValidationWarnings(result.validationWarnings || []);
+          } catch {}
+        }
       }
     } catch (error) {
       console.error('Upload error:', error);
@@ -340,6 +354,40 @@ const MMPUpload = () => {
           Upload a new Monthly Monitoring Plan with detailed site information
         </p>
       </div>
+
+      {validationReportUrl && (
+        <div className="bg-red-50 border border-red-200 rounded p-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5" />
+            <div className="space-y-2">
+              <p className="font-medium text-red-700">Validation failed. Fix the errors and re-upload.</p>
+              <div className="text-sm text-red-700">
+                <p>{(validationErrors?.length || 0)} errors{(validationWarnings?.length || 0) ? `, ${validationWarnings?.length} warnings` : ''} detected.</p>
+              </div>
+              <div className="flex gap-2">
+                <a href={validationReportUrl} download="mmp_validation_report.csv">
+                  <Button size="sm" className="bg-red-600 hover:bg-red-700">
+                    <Download className="mr-2 h-4 w-4" />
+                    Download error report (CSV)
+                  </Button>
+                </a>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    if (validationReportUrl) URL.revokeObjectURL(validationReportUrl);
+                    setValidationReportUrl(null);
+                    setValidationErrors(null);
+                    setValidationWarnings(null);
+                  }}
+                >
+                  Dismiss
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {uploadSuccess ? (
         <Card>
