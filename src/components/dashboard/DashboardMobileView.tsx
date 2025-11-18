@@ -10,6 +10,8 @@ import { AchievementTracker } from './AchievementTracker';
 import { MMPStage } from '@/types';
 import { Activity, Calendar, Users, Layout, Target } from 'lucide-react';
 import { MMPStageIndicator } from '@/components/MMPStageIndicator';
+import ForwardedMMPsCard from './ForwardedMMPsCard';
+import { useAppContext } from '@/context/AppContext';
 
 const DashboardCalendar = React.lazy(() => 
   import(/* webpackChunkName: "dashboard-calendar" */ '@/components/dashboard/DashboardCalendar')
@@ -34,6 +36,7 @@ const LoadingCard = () => (
 
 export const DashboardMobileView = () => {
   const [activeTab, setActiveTab] = useState('overview');
+  const { roles } = useAppContext();
   
   useGestures({
     onSwipeLeft: () => {
@@ -99,6 +102,11 @@ export const DashboardMobileView = () => {
               animate="visible"
               className="space-y-4"
             >
+              {(roles?.includes('fom' as any) || roles?.includes('fieldOpManager' as any)) && (
+                <Suspense fallback={<LoadingCard />}>
+                  <ForwardedMMPsCard />
+                </Suspense>
+              )}
               <Suspense fallback={<LoadingCard />}>
                 <EnhancedMoDaCountdown />
               </Suspense>

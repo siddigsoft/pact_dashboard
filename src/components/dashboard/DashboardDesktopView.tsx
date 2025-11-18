@@ -10,10 +10,11 @@ import { CalendarAndVisits } from './CalendarAndVisits';
 import { EnhancedActivityFeed } from './EnhancedActivityFeed';
 import { AchievementTracker } from './AchievementTracker';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ChevronDown, ChevronUp, Activity, MapPin, Target } from 'lucide-react';
+import { ChevronDown, ChevronUp, Activity, MapPin, Target, Inbox } from 'lucide-react';
 import { containerVariants, itemVariants } from './DashboardOptimization';
 import LiveTeamMapWidget from './LiveTeamMapWidget';
 import { useAppContext } from '@/context/AppContext';
+import ForwardedMMPsCard from './ForwardedMMPsCard';
 
 const LazyLoadingCard = ({ children }: { children: React.ReactNode }) => (
   <Suspense fallback={<Skeleton className="h-[300px] w-full" />}>
@@ -23,7 +24,7 @@ const LazyLoadingCard = ({ children }: { children: React.ReactNode }) => (
 
 export const DashboardDesktopView = () => {
   const [collapsedSections, setCollapsedSections] = React.useState<Record<string, boolean>>({});
-  const { currentUser } = useAppContext();
+  const { currentUser, roles } = useAppContext();
   
   const toggleSection = (section: string) => {
     setCollapsedSections(prev => ({
@@ -99,6 +100,20 @@ export const DashboardDesktopView = () => {
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_380px] items-start">
         {/* Left Column */}
         <div className="space-y-6">
+          {(roles?.includes('fom' as any) || roles?.includes('fieldOpManager' as any)) && (
+            <motion.div variants={itemVariants}>
+              <SectionCollapsible 
+                id="forwarded-mmp"
+                icon={<Inbox className="h-5 w-5 text-primary" />}
+                title="Forwarded to You"
+                description="MMPs awaiting your permit attachments"
+              >
+                <LazyLoadingCard>
+                  <ForwardedMMPsCard />
+                </LazyLoadingCard>
+              </SectionCollapsible>
+            </motion.div>
+          )}
         </div>
         
         {/* Right Column */}
