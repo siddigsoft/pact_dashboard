@@ -4,7 +4,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { MMPStatePermitDocument } from '@/types/mmp/permits';
-import { FileCheck, XCircle, CheckCircle, Eye, Calendar, FileText } from 'lucide-react';
+import { FileCheck, XCircle, CheckCircle, Eye, Calendar, FileText, Trash } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { Textarea } from '@/components/ui/textarea';
@@ -16,16 +16,19 @@ import { format } from 'date-fns';
 interface PermitVerificationCardProps {
   permit: MMPStatePermitDocument;
   onVerify: (permitId: string, status: 'verified' | 'rejected', notes?: string) => void;
+  onDelete: (permitId: string) => void;
 }
 
 export const PermitVerificationCard: React.FC<PermitVerificationCardProps> = ({
   permit,
   onVerify,
+  onDelete,
 }) => {
   const [verifyDialogOpen, setVerifyDialogOpen] = React.useState(false);
   const [previewDialogOpen, setPreviewDialogOpen] = React.useState(false);
   const [verifyAction, setVerifyAction] = React.useState<'verified' | 'rejected'>();
   const [notes, setNotes] = React.useState('');
+  const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
   const { toast } = useToast();
 
   const handleVerifyClick = (action: 'verified' | 'rejected') => {
@@ -168,28 +171,39 @@ export const PermitVerificationCard: React.FC<PermitVerificationCardProps> = ({
               Preview Document
             </Button>
 
-            {!permit.status && (
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleVerifyClick('verified')}
-                  className="flex items-center gap-2"
-                >
-                  <CheckCircle className="h-4 w-4" />
-                  Verify
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleVerifyClick('rejected')}
-                  className="flex items-center gap-2 border-destructive/50 hover:bg-destructive/10"
-                >
-                  <XCircle className="h-4 w-4 text-destructive" />
-                  Reject
-                </Button>
-              </div>
-            )}
+            <div className="flex gap-2">
+              {!permit.status && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleVerifyClick('verified')}
+                    className="flex items-center gap-2"
+                  >
+                    <CheckCircle className="h-4 w-4" />
+                    Verify
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleVerifyClick('rejected')}
+                    className="flex items-center gap-2 border-destructive/50 hover:bg-destructive/10"
+                  >
+                    <XCircle className="h-4 w-4 text-destructive" />
+                    Reject
+                  </Button>
+                </>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setDeleteDialogOpen(true)}
+                className="flex items-center gap-2 border-destructive/50 hover:bg-destructive/10"
+              >
+                <Trash className="h-4 w-4 text-destructive" />
+                Delete
+              </Button>
+            </div>
           </div>
 
           {/* Progress Indicator */}
@@ -251,6 +265,31 @@ export const PermitVerificationCard: React.FC<PermitVerificationCardProps> = ({
           open={previewDialogOpen}
           onOpenChange={setPreviewDialogOpen}
         />
+
+        {/* Delete confirmation */}
+        <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete Permit</DialogTitle>
+            </DialogHeader>
+            <div className="py-2 text-sm text-muted-foreground">
+              Are you sure you want to delete "{permit.fileName}"? This will remove the file from storage and from this MMP. This action cannot be undone.
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                className="flex items-center gap-2"
+                onClick={() => { onDelete(permit.id); setDeleteDialogOpen(false); }}
+              >
+                <Trash className="h-4 w-4" />
+                Delete Permit
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </CardContent>
     </Card>
   );

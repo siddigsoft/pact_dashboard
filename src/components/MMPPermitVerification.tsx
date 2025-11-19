@@ -3,11 +3,11 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { MMPPermitsData, MMPStatePermitDocument, MMPLocalPermit } from '@/types/mmp/permits';
+import { MMPPermitsData, MMPStatePermitDocument } from '@/types/mmp/permits';
 import { MMPPermitFileUpload } from './MMPPermitFileUpload';
 import { PermitVerificationCard } from './permits/PermitVerificationCard';
 import { Progress } from '@/components/ui/progress';
-import { Upload, FileCheck } from 'lucide-react';
+import { Upload, FileCheck, Send } from 'lucide-react';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { useAppContext } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -27,6 +27,8 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
   const { toast } = useToast();
   const { updateMMP } = useMMP();
   const { currentUser } = useAppContext();
+  const [forwardLoading, setForwardLoading] = useState(false);
+  const [hasForwarded, setHasForwarded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -49,28 +51,6 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
       return [];
     };
 
-  const notifyAdminsAndICT = async (doc: MMPStatePermitDocument, decision: 'verified' | 'rejected') => {
-    try {
-      const mmpId = mmpFile?.id || mmpFile?.mmpId;
-      if (!mmpId) return;
-      const { data: recipients } = await supabase
-        .from('profiles')
-        .select('id, role')
-        .in('role', ['admin', 'ict']);
-      const rows = (recipients || []).map(r => ({
-        user_id: r.id,
-        title: decision === 'verified' ? 'Permit accepted' : 'Permit rejected',
-        message: `${mmpFile?.name || 'MMP'} • ${doc.fileName} ${decision}. ${doc.state ? `State: ${doc.state}. ` : ''}${doc.locality ? `Locality: ${doc.locality}. ` : ''}${doc.verificationNotes ? `Reason: ${doc.verificationNotes}` : ''}`.trim(),
-        type: decision === 'verified' ? 'success' : 'warning',
-        link: `/mmp/${mmpId}/verification`,
-        related_entity_id: mmpId,
-        related_entity_type: 'mmpFile'
-      }));
-      if (rows.length) await supabase.from('notifications').insert(rows);
-    } catch (e) {
-      console.warn('Failed to notify admins/ICT about permit decision:', e);
-    }
-  };
 
     
 
@@ -218,6 +198,67 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
       cancelled = true;
     };
   }, [mmpFile?.id, mmpFile?.mmpId, mmpFile?.permits]);
+
+  const handleDeletePermit = async (permitId: string) => {
+    try {
+      const doc = localPermits.find(p => p.id === permitId) || permits.find(p => p.id === permitId);
+      if (!doc) {
+        toast({ title: 'Permit not found', description: 'Could not locate the selected permit.', variant: 'destructive' });
+        return;
+      }
+
+      try {
+        const bucket = 'mmp-files';
+        const path = typeof doc.id === 'string' && doc.id.includes('/') ? doc.id : '';
+        if (path) {
+          const { error: rmError } = await supabase.storage.from(bucket).remove([path]);
+          if (rmError) {
+            console.warn('Storage remove failed (non-fatal):', rmError);
+          }
+        }
+      } catch (e) {
+        console.warn('Storage remove threw (non-fatal):', e);
+      }
+
+      if (doc.permitType === 'local') {
+        const updatedLocalPermits = localPermits.filter(p => p.id !== permitId);
+        setLocalPermits(updatedLocalPermits);
+        persistPermits(permits, updatedLocalPermits);
+      } else {
+        const updatedPermits = permits.filter(p => p.id !== permitId);
+        setPermits(updatedPermits);
+        persistPermits(updatedPermits, localPermits);
+      }
+
+      toast({ title: 'Permit deleted', description: `${doc.fileName} was removed.` });
+    } catch (e) {
+      console.warn('Delete permit failed:', e);
+      toast({ title: 'Delete failed', description: 'Could not delete the permit. Please try again.', variant: 'destructive' });
+    }
+  };
+
+  const notifyAdminsAndICT = async (doc: MMPStatePermitDocument, decision: 'verified' | 'rejected') => {
+    try {
+      const mmpId = mmpFile?.id || mmpFile?.mmpId;
+      if (!mmpId) return;
+      const { data: recipients } = await supabase
+        .from('profiles')
+        .select('id, role')
+        .in('role', ['admin', 'ict']);
+      const rows = (recipients || []).map(r => ({
+        user_id: r.id,
+        title: decision === 'verified' ? 'Permit accepted' : 'Permit rejected',
+        message: `${mmpFile?.name || 'MMP'} • ${doc.fileName} ${decision}. ${doc.state ? `State: ${doc.state}. ` : ''}${doc.locality ? `Locality: ${doc.locality}. ` : ''}${doc.verificationNotes ? `Reason: ${doc.verificationNotes}` : ''}`.trim(),
+        type: decision === 'verified' ? 'success' : 'warning',
+        link: `/mmp/${mmpId}/verification`,
+        related_entity_id: mmpId,
+        related_entity_type: 'mmpFile'
+      }));
+      if (rows.length) await supabase.from('notifications').insert(rows);
+    } catch (e) {
+      console.warn('Failed to notify admins/ICT about permit decision:', e);
+    }
+  };
 
   const persistPermits = (docs: MMPStatePermitDocument[], localDocs: MMPStatePermitDocument[] = []) => {
     const now = new Date().toISOString();
@@ -423,6 +464,97 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
     }
   };
 
+  const forwardEntriesToCoordinators = async () => {
+    try {
+      if (forwardLoading || hasForwarded) return;
+      setForwardLoading(true);
+      const mmpId = mmpFile?.id || mmpFile?.mmpId;
+      if (!mmpId) {
+        toast({ title: 'Missing MMP', description: 'Cannot forward without a valid MMP file.', variant: 'destructive' });
+        setForwardLoading(false);
+        return;
+      }
+
+      let entries: any[] = Array.isArray(mmpFile?.siteEntries) && mmpFile.siteEntries.length > 0 ? mmpFile.siteEntries : [];
+      if (!entries.length && mmpFile?.id) {
+        const { data: dbEntries, error } = await supabase
+          .from('mmp_site_entries')
+          .select('state, locality')
+          .eq('mmp_file_id', mmpFile.id);
+        if (error) {
+          console.warn('Failed to fetch site entries:', error);
+        }
+        entries = dbEntries || [];
+      }
+
+      if (!entries.length) {
+        toast({ title: 'No entries', description: 'There are no MMP site entries to forward.', variant: 'destructive' });
+        setForwardLoading(false);
+        return;
+      }
+
+      const stateNameToId = new Map<string, string>();
+      for (const s of sudanStates) stateNameToId.set(s.name.toLowerCase(), s.id);
+
+      const localitiesByState = new Map<string, Map<string, string>>();
+      for (const s of sudanStates) {
+        const map = new Map<string, string>();
+        s.localities.forEach(l => map.set(l.name.toLowerCase(), l.id));
+        localitiesByState.set(s.id, map);
+      }
+
+      const targetPairs = new Set<string>();
+      entries.forEach((e: any) => {
+        const sName = String(e.state || '').trim().toLowerCase();
+        const stateId = stateNameToId.get(sName);
+        if (!stateId) return;
+        const locName = String(e.locality || '').trim().toLowerCase();
+        const locMap = localitiesByState.get(stateId);
+        const localityId = locName && locMap ? (locMap.get(locName) || '') : '';
+        targetPairs.add(`${stateId}|${localityId}`);
+      });
+
+      if (targetPairs.size === 0) {
+        toast({ title: 'No matching coordinators', description: 'Could not map entries to states/localities.', variant: 'destructive' });
+        setForwardLoading(false);
+        return;
+      }
+
+      const allStates = Array.from(new Set(Array.from(targetPairs).map(k => k.split('|')[0])));
+      const { data: coords } = await supabase
+        .from('profiles')
+        .select('id, state_id, locality_id, role')
+        .eq('role', 'coordinator')
+        .in('state_id', allStates);
+
+      const coordRows = (coords || []).filter((c: any) => {
+        const key1 = `${c.state_id}|${c.locality_id || ''}`;
+        const key2 = `${c.state_id}|`;
+        return targetPairs.has(key1) || targetPairs.has(key2);
+      }).map((c: any) => ({
+        user_id: c.id,
+        title: 'Sites forwarded for CP verification',
+        message: `${mmpFile?.name || 'MMP'} sites have been forwarded for your CP verification`,
+        type: 'info',
+        link: `/mmp/${mmpId}/verification`,
+        related_entity_id: mmpId,
+        related_entity_type: 'mmpFile'
+      }));
+
+      if (coordRows.length) {
+        await supabase.from('notifications').insert(coordRows);
+      }
+
+      setHasForwarded(true);
+      toast({ title: 'Forwarded', description: 'Entries were forwarded to the respective coordinators.', variant: 'default' });
+    } catch (e) {
+      console.warn('Forward to coordinators failed:', e);
+      toast({ title: 'Forwarding failed', description: 'Could not forward to coordinators. Please try again.', variant: 'destructive' });
+    } finally {
+      setForwardLoading(false);
+    }
+  };
+
   const calculateProgress = () => {
     const allPermits = [...permits, ...localPermits];
     if (allPermits.length === 0) return 0;
@@ -432,6 +564,8 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
 
   const progress = calculateProgress();
   const siteCount = mmpFile?.siteEntries?.length || mmpFile?.entries || 0;
+  const allPermitsList = [...permits, ...localPermits];
+  const allVerified = allPermitsList.length > 0 && allPermitsList.every(p => p.status === 'verified');
 
   return (
     <div className="space-y-8">
@@ -479,6 +613,7 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
                   key={permit.id}
                   permit={permit}
                   onVerify={handleVerifyPermit}
+                  onDelete={handleDeletePermit}
                 />
               ))
             ) : (
@@ -511,6 +646,7 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
                   key={permit.id}
                   permit={permit}
                   onVerify={handleVerifyPermit}
+                  onDelete={handleDeletePermit}
                 />
               ))
             ) : (
@@ -561,6 +697,14 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
               <div className="font-medium text-purple-600">{localPermits.length}</div>
               <div className="text-muted-foreground">Local</div>
             </div>
+          </div>
+          <div className="mt-6 flex justify-end">
+            {allVerified && !hasForwarded ? (
+              <Button onClick={forwardEntriesToCoordinators} disabled={forwardLoading}>
+                <Send className="h-4 w-4 mr-2" />
+                {forwardLoading ? 'Forwarding...' : 'Forward to Coordinators'}
+              </Button>
+            ) : null}
           </div>
         </CardContent>
       </Card>
