@@ -7,7 +7,7 @@ import { MMPPermitsData, MMPStatePermitDocument } from '@/types/mmp/permits';
 import { MMPPermitFileUpload } from './MMPPermitFileUpload';
 import { PermitVerificationCard } from './permits/PermitVerificationCard';
 import { Progress } from '@/components/ui/progress';
-import { Upload, FileCheck, Send } from 'lucide-react';
+import { Upload, FileCheck, Send, Eye } from 'lucide-react';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { useAppContext } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -17,6 +17,7 @@ import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { useState as useReactState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 interface MMPPermitVerificationProps {
   mmpFile: any;
@@ -42,6 +43,7 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
   const [batchForwarded, setBatchForwarded] = useReactState({} as Record<string, boolean>); // key: groupKey, value: forwarded state
   const [expandedGroups, setExpandedGroups] = useReactState({} as Record<string, boolean>); // key: groupKey, value: expanded/collapsed
   const { users } = useAppContext();
+  const navigate = useNavigate();
 
   useEffect(() => {
     let cancelled = false;
@@ -583,7 +585,7 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
           title: 'Sites forwarded for CP verification',
           message: `${mmpFile?.name || 'MMP'}: ${siteIds.length} site(s) have been forwarded for your CP review`,
           type: 'info',
-          link: `/coordinator/sites-for-verification`,
+          link: `/coordinator/sites`,
           related_entity_id: mmpId,
           related_entity_type: 'mmpFile',
         }
@@ -774,9 +776,9 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
           </div>
           <div className="mt-6 flex justify-end">
             {allVerified && !hasForwarded ? (
-              <Button onClick={forwardEntriesToCoordinators} disabled={forwardLoading}>
-                <Send className="h-4 w-4 mr-2" />
-                {forwardLoading ? 'Forwarding...' : 'Forward to Coordinators'}
+              <Button onClick={() => navigate(`/mmp/${mmpFile.id}`)} disabled={forwardLoading}>
+                <Eye className="h-4 w-4 mr-2" />
+                Review MMP
               </Button>
             ) : null}
           </div>

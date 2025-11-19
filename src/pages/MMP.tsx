@@ -89,8 +89,11 @@ const MMP = () => {
     });
     
     const verifiedMMPs = filteredMMPs.filter(mmp => {
-      if (isFOM || isCoordinator) {
-        // For FOM/Coordinator: Verified means MMPs with sites available for verification
+      if (isCoordinator) {
+        // For Coordinator: Show MMPs that have been forwarded to coordinators
+        return (mmp.workflow as any)?.forwardedToCoordinators === true;
+      } else if (isFOM) {
+        // For FOM: Verified means MMPs with sites available for verification
         return mmp.type === 'verified-template' || 
                mmp.status === 'approved' ||
                ((mmp.workflow as any)?.currentStage && ['permitsVerified', 'cpVerification', 'completed'].includes((mmp.workflow as any)?.currentStage));
@@ -188,7 +191,7 @@ const MMP = () => {
                 </TabsTrigger>
               )}
               <TabsTrigger value={isCoordinator ? "verified" : "verified"} className="flex items-center gap-2">
-                {isCoordinator ? "Sites to Verify" : "Verified Sites"}
+                {isCoordinator ? "MMPs to Review" : "Verified Sites"}
                 <Badge variant="secondary">{categorizedMMPs.verified.length}</Badge>
               </TabsTrigger>
             </TabsList>

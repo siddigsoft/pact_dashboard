@@ -17,4 +17,9 @@ export interface MMPWorkflow {
   lastUpdated?: string;
   assignedTo?: string;
   comments?: string;
+  forwardedToCoordinators?: boolean;
+  forwardedToCoordinatorIds?: string[];
+  coordinatorVerified?: boolean;
+  coordinatorVerifiedAt?: string;
+  coordinatorVerifiedBy?: string;
 }

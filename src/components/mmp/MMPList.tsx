@@ -62,7 +62,15 @@ export const MMPList = ({ mmpFiles }: MMPListProps) => {
             <div className="flex items-start justify-between">
               <div 
                 className="flex items-start gap-3 flex-1 cursor-pointer"
-                onClick={() => navigate(`/mmp/${mmp.id}/view`)}
+                onClick={() => {
+                  // If FOM and federal permit not attached, go to permit message page
+                  const isFOM = hasAnyRole(['fom']);
+                  if (isFOM && !(mmp.permits && mmp.permits.federal)) {
+                    navigate(`/mmp/${mmp.id}/permit-message`);
+                  } else {
+                    navigate(`/mmp/${mmp.id}/view`);
+                  }
+                }}
               >
                 <div className="mt-1">
                   <FileText className="h-5 w-5 text-muted-foreground" />
@@ -106,31 +114,7 @@ export const MMPList = ({ mmpFiles }: MMPListProps) => {
                         Edit
                       </DropdownMenuItem>
 
-                      {/* If current user is a FOM and this MMP was forwarded to them, show Verify action */}
-                      {hasAnyRole(['fom']) && currentUser && (() => {
-                        const workflow = (mmp as any).workflow || {};
-                        const forwardedToFomIds: string[] = workflow?.forwardedToFomIds || [];
-                        const isForwardedToThisFOM = forwardedToFomIds.includes(currentUser.id);
-
-                        if (isForwardedToThisFOM && mmp.status !== 'approved' && mmp.type !== 'verified-template') {
-                          return (
-                            <>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                              onClick={e => {
-                                e.stopPropagation();
-                                // Go to verification / attach-permit page for this MMP
-                                navigate(`/mmp/${mmp.id}/verification`);
-                              }}
-                              >
-                                Verify
-                              </DropdownMenuItem>
-                            </>
-                          );
-                        }
-
-                        return null;
-                      })()}
+                      {/* FOM: No verify/reject options, only permit upload and preview flow */}
 
                       {canDeleteMMP && (
                         <>
