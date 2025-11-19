@@ -289,12 +289,12 @@ const MMPDetailView = () => {
         
         {/* Right Column - Details & Info */}
         <div className="xl:col-span-7 space-y-6">
-          <MMPInfoCard 
+          {/* <MMPInfoCard 
             mmpData={mmpFile} 
             showActions={true}
             onVerificationClick={handleProceedToVerification}
             onEditClick={handleEditMMP}
-          />
+          /> */}
           {canForward && (
             <div>
               <Button 

@@ -96,8 +96,8 @@ const MMPFileManagement = ({
               </AlertDialog>
             )}
 
-            {/* Verification Button */}
-            {canApprove && !isVerificationComplete && (
+            {/* Verification Button - removed for admin overview */}
+            {/* {canApprove && !isVerificationComplete && (
               <Button 
                 variant="outline" 
                 className="border-amber-200 hover:bg-amber-50 hover:text-amber-700"
@@ -106,7 +106,7 @@ const MMPFileManagement = ({
                 <ShieldCheck className="h-4 w-4 mr-2" />
                 Start Verification
               </Button>
-            )}
+            )} */}
 
             {canApprove && isVerificationComplete && (
               <div className="text-sm text-green-600 bg-green-50 p-2 rounded border border-green-200">

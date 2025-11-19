@@ -178,9 +178,10 @@ const MMPCooperatingPartnerVerification: React.FC<MMPCooperatingPartnerVerificat
           <h3 className="text-sm font-medium">Verification Progress</h3>
           <div className="flex items-center gap-2">
             <span className="text-sm">{verificationProgress}%</span>
-            <Button size="sm" onClick={handleVerifyAll} disabled={processedCount >= (mmpFile?.siteEntries?.length || mmpFile?.entries || 0)}>
+            {/* Verification button removed for admin overview */}
+            {/* <Button size="sm" onClick={handleVerifyAll} disabled={processedCount >= (mmpFile?.siteEntries?.length || mmpFile?.entries || 0)}>
               Verify All
-            </Button>
+            </Button> */}
           </div>
         </div>
         <Progress value={verificationProgress} className="h-2" />

@@ -392,7 +392,7 @@ const CreateSiteVisitMMPDetail = () => {
             </CardContent>
           </Card>
 
-          <MMPInfoCard mmpData={mmpData} />
+          {/* <MMPInfoCard mmpData={mmpData} /> */}
         </div>
       </div>
     </div>

@@ -77,12 +77,13 @@ const MMPOverviewCard = ({ mmpFile, siteEntries = [], onProceedToVerification, o
               <Edit className="h-4 w-4 mr-2" />
               Edit MMP Data
             </Button>
-            {onProceedToVerification && (
+            {/* Verification buttons removed for admin overview */}
+            {/* {onProceedToVerification && (
               <Button size="sm" onClick={onProceedToVerification}>
                 <FileCheck className="h-4 w-4 mr-2" />
                 Proceed to Verification
               </Button>
-            )}
+            )} */}
           </div>
         </div>
       </CardContent>

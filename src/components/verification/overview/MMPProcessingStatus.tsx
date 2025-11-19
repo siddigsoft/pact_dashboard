@@ -124,10 +124,11 @@ const MMPProcessingStatus: React.FC<MMPProcessingStatusProps> = ({ mmpFile }) =>
           <Edit className="h-4 w-4 mr-2" />
           Edit MMP
         </Button>
-        <Button onClick={handleVerify}>
+        {/* Verification button removed for admin overview */}
+        {/* <Button onClick={handleVerify}>
           <FileCheck className="h-4 w-4 mr-2" />
           Start Verification
-        </Button>
+        </Button> */}
       </div>
 
       {!hasSiteData && (

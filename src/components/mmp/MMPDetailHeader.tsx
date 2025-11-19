@@ -40,12 +40,13 @@ const MMPDetailHeader = ({
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          {mmpFile.status === 'pending' && (
+          {/* Verification buttons removed for admin overview */}
+          {/* {mmpFile.status === 'pending' && (
             <Button onClick={onProceedToVerification} className="bg-blue-600 hover:bg-blue-700">
               <FileCheck className="h-4 w-4 mr-2" />
               Verify MMP
             </Button>
-          )}
+          )} */}
           
           {canEdit && (
             <Button variant="outline" onClick={onEditMMP}>
