@@ -12,6 +12,11 @@ import { useMMP } from '@/context/mmp/MMPContext';
 import { useAppContext } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
 import { sudanStates } from '@/data/sudanStates';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
+import { useState as useReactState } from 'react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 
 interface MMPPermitVerificationProps {
   mmpFile: any;
@@ -29,6 +34,14 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
   const { currentUser } = useAppContext();
   const [forwardLoading, setForwardLoading] = useState(false);
   const [hasForwarded, setHasForwarded] = useState(false);
+  // Modal state for review/assignment
+  const [showAssignModal, setShowAssignModal] = useReactState(false);
+  const [assignmentMap, setAssignmentMap] = useReactState({} as Record<string, string>); // key: groupKey, value: coordinatorId
+  const [selectedSites, setSelectedSites] = useReactState({} as Record<string, Set<string>>); // key: groupKey, value: Set of site ids
+  const [batchLoading, setBatchLoading] = useReactState({} as Record<string, boolean>); // key: groupKey, value: loading state
+  const [batchForwarded, setBatchForwarded] = useReactState({} as Record<string, boolean>); // key: groupKey, value: forwarded state
+  const [expandedGroups, setExpandedGroups] = useReactState({} as Record<string, boolean>); // key: groupKey, value: expanded/collapsed
+  const { users } = useAppContext();
 
   useEffect(() => {
     let cancelled = false;
@@ -464,94 +477,43 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
     }
   };
 
+  // Show modal instead of forwarding directly
   const forwardEntriesToCoordinators = async () => {
+    setShowAssignModal(true);
+  };
+
+  // Forward a single batch (group) to the selected coordinator
+  const handleForwardBatch = async (groupKey: string) => {
+    setBatchLoading(b => ({ ...b, [groupKey]: true }));
     try {
-      if (forwardLoading || hasForwarded) return;
-      setForwardLoading(true);
       const mmpId = mmpFile?.id || mmpFile?.mmpId;
-      if (!mmpId) {
-        toast({ title: 'Missing MMP', description: 'Cannot forward without a valid MMP file.', variant: 'destructive' });
-        setForwardLoading(false);
+      const coordinatorId = assignmentMap[groupKey];
+      const siteIds = Array.from(selectedSites[groupKey] || []);
+      if (!coordinatorId || siteIds.length === 0) {
+        toast({ title: 'Select sites and coordinator', description: 'Please select at least one site and a coordinator.', variant: 'destructive' });
+        setBatchLoading(b => ({ ...b, [groupKey]: false }));
         return;
       }
-
-      let entries: any[] = Array.isArray(mmpFile?.siteEntries) && mmpFile.siteEntries.length > 0 ? mmpFile.siteEntries : [];
-      if (!entries.length && mmpFile?.id) {
-        const { data: dbEntries, error } = await supabase
-          .from('mmp_site_entries')
-          .select('state, locality')
-          .eq('mmp_file_id', mmpFile.id);
-        if (error) {
-          console.warn('Failed to fetch site entries:', error);
+      // Send notification to coordinator
+      await supabase.from('notifications').insert([
+        {
+          user_id: coordinatorId,
+          title: 'Sites forwarded for CP verification',
+          message: `${mmpFile?.name || 'MMP'}: ${siteIds.length} site(s) have been forwarded for your CP review`,
+          type: 'info',
+          link: `/mmp/${mmpId}/verification`,
+          related_entity_id: mmpId,
+          related_entity_type: 'mmpFile',
         }
-        entries = dbEntries || [];
-      }
-
-      if (!entries.length) {
-        toast({ title: 'No entries', description: 'There are no MMP site entries to forward.', variant: 'destructive' });
-        setForwardLoading(false);
-        return;
-      }
-
-      const stateNameToId = new Map<string, string>();
-      for (const s of sudanStates) stateNameToId.set(s.name.toLowerCase(), s.id);
-
-      const localitiesByState = new Map<string, Map<string, string>>();
-      for (const s of sudanStates) {
-        const map = new Map<string, string>();
-        s.localities.forEach(l => map.set(l.name.toLowerCase(), l.id));
-        localitiesByState.set(s.id, map);
-      }
-
-      const targetPairs = new Set<string>();
-      entries.forEach((e: any) => {
-        const sName = String(e.state || '').trim().toLowerCase();
-        const stateId = stateNameToId.get(sName);
-        if (!stateId) return;
-        const locName = String(e.locality || '').trim().toLowerCase();
-        const locMap = localitiesByState.get(stateId);
-        const localityId = locName && locMap ? (locMap.get(locName) || '') : '';
-        targetPairs.add(`${stateId}|${localityId}`);
-      });
-
-      if (targetPairs.size === 0) {
-        toast({ title: 'No matching coordinators', description: 'Could not map entries to states/localities.', variant: 'destructive' });
-        setForwardLoading(false);
-        return;
-      }
-
-      const allStates = Array.from(new Set(Array.from(targetPairs).map(k => k.split('|')[0])));
-      const { data: coords } = await supabase
-        .from('profiles')
-        .select('id, state_id, locality_id, role')
-        .eq('role', 'coordinator')
-        .in('state_id', allStates);
-
-      const coordRows = (coords || []).filter((c: any) => {
-        const key1 = `${c.state_id}|${c.locality_id || ''}`;
-        const key2 = `${c.state_id}|`;
-        return targetPairs.has(key1) || targetPairs.has(key2);
-      }).map((c: any) => ({
-        user_id: c.id,
-        title: 'Sites forwarded for CP verification',
-        message: `${mmpFile?.name || 'MMP'} sites have been forwarded for your CP verification`,
-        type: 'info',
-        link: `/mmp/${mmpId}/verification`,
-        related_entity_id: mmpId,
-        related_entity_type: 'mmpFile'
-      }));
-
-      if (coordRows.length) {
-        await supabase.from('notifications').insert(coordRows);
-      }
-
-      setHasForwarded(true);
-      toast({ title: 'Forwarded', description: 'Entries were forwarded to the respective coordinators.', variant: 'default' });
+      ]);
+      toast({ title: 'Batch Forwarded', description: `Sites were forwarded to ${allCoordinators.find(c => c.id === coordinatorId)?.fullName || 'Coordinator'}.`, variant: 'default' });
+      setBatchLoading(b => ({ ...b, [groupKey]: false }));
+      setBatchForwarded(f => ({ ...f, [groupKey]: true }));
+      setSelectedSites(s => ({ ...s, [groupKey]: new Set() }));
     } catch (e) {
-      console.warn('Forward to coordinators failed:', e);
-      toast({ title: 'Forwarding failed', description: 'Could not forward to coordinators. Please try again.', variant: 'destructive' });
-    } finally {
-      setForwardLoading(false);
+      console.warn('Batch forward failed:', e);
+      toast({ title: 'Forwarding failed', description: 'Could not forward to coordinator. Please try again.', variant: 'destructive' });
+      setBatchLoading(b => ({ ...b, [groupKey]: false }));
     }
   };
 
@@ -566,6 +528,36 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
   const siteCount = mmpFile?.siteEntries?.length || mmpFile?.entries || 0;
   const allPermitsList = [...permits, ...localPermits];
   const allVerified = allPermitsList.length > 0 && allPermitsList.every(p => p.status === 'verified');
+
+  // --- Modal assignment logic ---
+  // Prepare site groups and coordinators for modal
+  let entries: any[] = Array.isArray(mmpFile?.siteEntries) && mmpFile.siteEntries.length > 0 ? mmpFile.siteEntries : [];
+  const stateNameToId = new Map<string, string>();
+  for (const s of sudanStates) stateNameToId.set(s.name.toLowerCase(), s.id);
+  const localitiesByState = new Map<string, Map<string, string>>();
+  for (const s of sudanStates) {
+    const map = new Map<string, string>();
+    s.localities.forEach(l => map.set(l.name.toLowerCase(), l.id));
+    localitiesByState.set(s.id, map);
+  }
+  const groupMap: Record<string, any[]> = {};
+  entries.forEach((e: any) => {
+    const sName = String(e.state || '').trim().toLowerCase();
+    const stateId = stateNameToId.get(sName);
+    if (!stateId) return;
+    const locName = String(e.locality || '').trim().toLowerCase();
+    const locMap = localitiesByState.get(stateId);
+    const localityId = locName && locMap ? (locMap.get(locName) || '') : '';
+    const key = `${stateId}|${localityId}`;
+    if (!groupMap[key]) groupMap[key] = [];
+    groupMap[key].push(e);
+  });
+  // All coordinators in the system
+  const allCoordinators = users.filter(u => u.role === 'coordinator');
+  // Helper to get recommended coordinator for a group
+  function getRecommendedCoordinator(stateId: string, localityId: string) {
+    return allCoordinators.find(c => c.stateId === stateId && (c.localityId === localityId || !localityId));
+  }
 
   return (
     <div className="space-y-8">
@@ -683,7 +675,6 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
             </div>
             <Progress value={progress} className="h-2" />
           </div>
-          
           <div className="grid grid-cols-3 gap-4 text-sm">
             <div className="text-center">
               <div className="font-medium text-blue-600">{permits.filter(p => p.permitType === 'federal').length}</div>
@@ -708,6 +699,97 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
           </div>
         </CardContent>
       </Card>
+
+      {/* Assignment Modal - Usable, simple batch forwarding */}
+      <Dialog open={showAssignModal} onOpenChange={setShowAssignModal}>
+        <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Review & Assign Coordinators</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-6 overflow-y-auto flex-1 pr-2" style={{ maxHeight: '60vh' }}>
+            {Object.entries(groupMap).length === 0 ? (
+              <div className="text-center text-muted-foreground">No site groups found.</div>
+            ) : (
+              Object.entries(groupMap).map(([groupKey, groupSites]) => {
+                const [stateId, localityId] = groupKey.split('|');
+                const recommended = getRecommendedCoordinator(stateId, localityId);
+                const selectedId = assignmentMap[groupKey] || recommended?.id || '';
+                // Initialize selectedSites for this group if not set
+                if (!selectedSites[groupKey]) {
+                  setSelectedSites(s => ({ ...s, [groupKey]: new Set(groupSites.map((site: any) => site.id)) }));
+                }
+                return (
+                  <div key={groupKey} className="border rounded p-3 bg-white">
+                    <div className="flex items-center mb-2 font-medium cursor-pointer select-none" onClick={() => setExpandedGroups(g => ({ ...g, [groupKey]: !g[groupKey] }))}>
+                      {expandedGroups[groupKey] ? <ChevronDown className="w-4 h-4 mr-1" /> : <ChevronRight className="w-4 h-4 mr-1" />}
+                      {groupSites.length} site(s) in <span className="text-blue-700 ml-1">{sudanStates.find(s => s.id === stateId)?.name || stateId}</span>
+                      {localityId && (
+                        <span> / <span className="text-green-700">{sudanStates.find(s => s.id === stateId)?.localities.find(l => l.id === localityId)?.name || localityId}</span></span>
+                      )}
+                    </div>
+                    <div className="mb-2 text-sm text-muted-foreground">
+                      Recommended: {recommended ? `${recommended.fullName || recommended.name || recommended.email}` : 'None'}
+                    </div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <Select value={selectedId} onValueChange={val => setAssignmentMap(a => ({ ...a, [groupKey]: val }))}>
+                        <SelectTrigger className="max-w-md">
+                          <SelectValue placeholder="Select coordinator..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {allCoordinators.map(c => (
+                            <SelectItem key={c.id} value={c.id}>
+                              {c.fullName || c.name || c.email}
+                              {recommended?.id === c.id ? ' (Recommended)' : ''}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        size="sm"
+                        onClick={() => handleForwardBatch(groupKey)}
+                        disabled={batchLoading[groupKey] || batchForwarded[groupKey] || !assignmentMap[groupKey] || !(selectedSites[groupKey]?.size > 0)}
+                        variant={batchForwarded[groupKey] ? 'secondary' : 'default'}
+                        className="ml-2"
+                      >
+                        {batchForwarded[groupKey]
+                          ? 'Forwarded'
+                          : batchLoading[groupKey]
+                            ? 'Forwarding...'
+                            : 'Forward Selected'}
+                      </Button>
+                    </div>
+                    {expandedGroups[groupKey] && (
+                      <div className="mt-3 mb-2">
+                        <div className="font-medium text-xs mb-1">Select sites to forward:</div>
+                        <div className="flex flex-wrap gap-2">
+                          {groupSites.map((site: any) => (
+                            <label key={site.id} className="flex items-center gap-1 border rounded px-2 py-1 cursor-pointer">
+                              <Checkbox
+                                checked={selectedSites[groupKey]?.has(site.id) || false}
+                                onCheckedChange={checked => {
+                                  setSelectedSites(s => {
+                                    const set = new Set(s[groupKey] || []);
+                                    if (checked) set.add(site.id); else set.delete(site.id);
+                                    return { ...s, [groupKey]: set };
+                                  });
+                                }}
+                              />
+                              <span className="text-xs">{site.siteName || site.name || site.id}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAssignModal(false)} disabled={forwardLoading}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

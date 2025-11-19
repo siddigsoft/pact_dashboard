@@ -21,6 +21,7 @@ import MMPDetailedVerification from './pages/MMPDetailedVerification';
 import MMPVerificationPage from './pages/MMPVerificationPage';
 import EditMMP from './pages/EditMMP';
 import NotFound from './pages/NotFound';
+import SitesForVerification from './pages/coordinator/SitesForVerification';
 import Calls from './pages/Calls';
 import Chat from './pages/Chat';
 import FieldTeam from './pages/FieldTeam';
@@ -116,7 +117,7 @@ const AppRoutes = () => {
       <Route path="/forgot-password" element={<ForgotPassword />} />
 
       {/* Protected routes */}
-      <Route element={<AuthGuard><MainLayout /></AuthGuard>}>
+  <Route element={<AuthGuard><MainLayout /></AuthGuard>}>
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/mmp" element={<MMP />} />
         <Route path="/mmp/upload" element={<MMPUpload />} />
@@ -158,9 +159,11 @@ const AppRoutes = () => {
         <Route path="/archive" element={<Archive />} />
         <Route path="/calendar" element={<Calendar />} />
         <Route path="/role-management" element={<RoleManagement />} />
-        <Route path="/monitoring-plan" element={<MonitoringPlanPage />} />
-        <Route path="/field-operation-manager" element={<FieldOperationManagerPage />} />
-        <Route path="/search" element={<GlobalSearchPage />} />
+  <Route path="/monitoring-plan" element={<MonitoringPlanPage />} />
+  <Route path="/field-operation-manager" element={<FieldOperationManagerPage />} />
+  <Route path="/search" element={<GlobalSearchPage />} />
+  {/* Coordinator: Sites for Verification */}
+  <Route path="/coordinator/sites-for-verification" element={<SitesForVerification />} />
       </Route>
 
       {/* Redirects */}
