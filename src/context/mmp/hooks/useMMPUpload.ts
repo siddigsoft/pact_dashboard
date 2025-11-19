@@ -26,10 +26,10 @@ export const useMMPUpload = (addMMPFile: (mmp: MMPFile) => void) => {
         console.log('MMP uploaded successfully, adding to context:', mmpData);
         addMMPFile(mmpData);
         toast.success(`${file.name} uploaded successfully`);
-        return { success: true, id: mmpData.id, mmp: mmpData };
+        return { success: true, id: mmpData.id, mmp: mmpData, validationReport, validationErrors, validationWarnings };
       }
 
-      return { success: false, error: 'Upload finished without returning data' }; // Fallback
+      return { success: false, error: 'Upload finished without returning data', validationReport, validationErrors, validationWarnings }; // Fallback
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       console.error('Error in MMP upload:', err);

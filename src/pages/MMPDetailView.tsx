@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { FileSpreadsheet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -79,11 +79,34 @@ const MMPDetailView = () => {
   }, [id, mmpFile, toast]);
 
   const isAdmin = hasAnyRole(['admin']);
-  const canEdit = (checkPermission('mmp', 'update') || isAdmin) ? true : false;
+  const isFOM = hasAnyRole(['fom']);
+  const isCoordinator = hasAnyRole(['coordinator']);
+  const canRead = checkPermission('mmp', 'read') || isAdmin || isFOM || isCoordinator;
+  const canEdit = (checkPermission('mmp', 'update') || isAdmin || isCoordinator) ? true : false;
   const canDelete = (checkPermission('mmp', 'delete') || isAdmin) ? true : false;
   const canArchive = (checkPermission('mmp', 'archive') || isAdmin) ? true : false;
   const canApprove = (checkPermission('mmp', 'approve') || isAdmin) && mmpFile?.status === 'pending';
   const canForward = hasAnyRole(['admin','ict']);
+
+  if (!canRead) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle className="text-destructive">Access Denied</CardTitle>
+            <CardDescription>
+              You don't have permission to view this MMP.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button variant="outline" onClick={() => navigate('/mmp')} className="w-full">
+              Back to MMP List
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const isForwarded = useMemo(() => {
     if (forwardedLocal) return true;
@@ -614,18 +637,23 @@ const MMPDetailView = () => {
         </CardContent>
       </Card>
       
+
+      {/* Move file management to the top of the page */}
       {(canArchive || canDelete || canApprove) && (
-        <MMPFileManagement
-          mmpFile={mmpFile}
-          canArchive={canArchive}
-          canDelete={canDelete}
-          canApprove={canApprove}
-          onArchive={handleArchive}
-          onDelete={handleDelete}
-          onResetApproval={handleReset}
-          onApprove={handleApprove}
-        />
+        <div className="mb-6">
+          <MMPFileManagement
+            mmpFile={mmpFile}
+            canArchive={canArchive}
+            canDelete={canDelete}
+            canApprove={canApprove}
+            onArchive={handleArchive}
+            onDelete={handleDelete}
+            onResetApproval={handleReset}
+            onApprove={handleApprove}
+          />
+        </div>
       )}
+
       
       <Dialog open={showAuditTrail} onOpenChange={setShowAuditTrail}>
         <DialogContent className="max-w-3xl">

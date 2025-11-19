@@ -38,7 +38,7 @@ const SitesForVerification: React.FC = () => {
                     <div className="text-xs text-gray-400">Due: {site.dueDate ? new Date(site.dueDate).toLocaleDateString() : 'N/A'}</div>
                   </div>
                   <div className="mt-2 md:mt-0 flex gap-2">
-                    <Button size="sm" onClick={() => navigate(`/mmp-verification?siteId=${site.id}`)}>
+                    <Button size="sm" onClick={() => navigate(`/mmp/${site.mmpDetails?.mmpId}/verification`)}>
                       Review & Verify
                     </Button>
                   </div>

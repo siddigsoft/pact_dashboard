@@ -8,6 +8,8 @@ import { MMPCooperatingPartnerVerification as MMPCooperatingPartnerVerificationT
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import SiteCooperatingPartnerVerificationCard from './verification/SiteCooperatingPartnerVerificationCard';
 import { useAppContext } from '@/context/AppContext';
+import { useMMP } from '@/context/mmp/MMPContext';
+import { MMPFile } from '@/types';
 
 interface MMPCooperatingPartnerVerificationProps {
   mmpFile: any;
@@ -22,6 +24,7 @@ const MMPCooperatingPartnerVerification: React.FC<MMPCooperatingPartnerVerificat
   const [verificationProgress, setVerificationProgress] = useState<number>(0);
   const { toast } = useToast();
   const { currentUser } = useAppContext();
+  const { mmpFiles, addMMPFile, updateMMPFile } = useMMP();
 
   // Seed local status from persisted cpVerification
   useEffect(() => {
@@ -66,7 +69,62 @@ const MMPCooperatingPartnerVerification: React.FC<MMPCooperatingPartnerVerificat
     }
   }, [verificationStatus, mmpFile, onVerificationComplete]);
 
-  const handleVerifySite = (siteId: string, status: 'verified' | 'rejected', notes?: string) => {
+  const handleVerifySite = async (siteId: string, status: 'verified' | 'rejected', notes?: string) => {
+    // Check if this is the first verification for this MMP
+    const isFirstVerification = Object.values(verificationStatus).every(s => !s.status) && !verificationStatus[siteId]?.status;
+    
+    let verifiedMMP: MMPFile | null = null;
+    
+    if (isFirstVerification && status === 'verified') {
+      // Find if there's already a verified MMP for this original MMP
+      const existingVerifiedMMP = mmpFiles.find(mmp => 
+        mmp.status === 'approved' && 
+        mmp.mmpId === mmpFile.id && 
+        mmp.type === 'verified-template'
+      );
+      
+      if (!existingVerifiedMMP) {
+        // Create a new verified MMP template
+        const newVerifiedMMP: MMPFile = {
+          ...mmpFile,
+          id: `verified-${mmpFile.id}-${Date.now()}`,
+          name: `${mmpFile.name} - Verified`,
+          status: 'approved',
+          mmpId: mmpFile.id,
+          type: 'verified-template',
+          uploadedBy: currentUser?.username || currentUser?.fullName || currentUser?.email || 'System',
+          uploadedAt: new Date().toISOString(),
+          approvedBy: currentUser?.username || currentUser?.fullName || currentUser?.email || 'System',
+          approvedAt: new Date().toISOString(),
+          siteEntries: [], // Will be populated with verified sites
+          cpVerification: undefined, // Reset verification data
+          workflow: {
+            currentStage: 'verified',
+            lastUpdated: new Date().toISOString(),
+            assignedTo: currentUser?.username || currentUser?.fullName || currentUser?.email || 'System'
+          }
+        };
+        
+        // Add to context and database
+        addMMPFile(newVerifiedMMP);
+        verifiedMMP = newVerifiedMMP;
+        
+        toast({
+          title: 'Verified MMP Template Created',
+          description: `A new verified MMP template has been created for ${mmpFile.name}`,
+        });
+      } else {
+        verifiedMMP = existingVerifiedMMP;
+      }
+    } else {
+      // Find existing verified MMP for this original MMP
+      verifiedMMP = mmpFiles.find(mmp => 
+        mmp.status === 'approved' && 
+        mmp.mmpId === mmpFile.id && 
+        mmp.type === 'verified-template'
+      ) || null;
+    }
+
     setVerificationStatus(prev => {
       const next = {
         ...prev,
@@ -94,6 +152,28 @@ const MMPCooperatingPartnerVerification: React.FC<MMPCooperatingPartnerVerificat
           }
         }), {})
       };
+
+      // If we have a verified MMP and this site was verified, add it to the verified MMP
+      if (verifiedMMP && status === 'verified') {
+        const siteEntry = mmpFile.siteEntries?.find(site => site.id === siteId);
+        if (siteEntry) {
+          const updatedVerifiedMMP = {
+            ...verifiedMMP,
+            siteEntries: [
+              ...(verifiedMMP.siteEntries || []),
+              {
+                ...siteEntry,
+                status: 'verified',
+                verifiedBy: currentUser?.username || currentUser?.fullName || currentUser?.email || 'System',
+                verifiedAt: new Date().toISOString()
+              }
+            ],
+            entries: (verifiedMMP.entries || 0) + 1,
+            processedEntries: (verifiedMMP.processedEntries || 0) + 1
+          };
+          updateMMPFile(updatedVerifiedMMP);
+        }
+      }
 
       // Notify parent immediately so it can persist to DB and update processedEntries
       onVerificationComplete?.(cpData);
