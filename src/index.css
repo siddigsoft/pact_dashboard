@@ -1,0 +1,362 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 210 40% 98%;
+    --foreground: 222.2 84% 4.9%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+
+    --primary: 221.2 83% 53.9%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+
+    --accent: 217 91% 60%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221.2 83.2% 53.9%;
+
+    --radius: 0.5rem;
+
+    --sidebar-background: 222.2 47.4% 11.2%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 221.2 83.2% 53.9%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 217.2 32.6% 17.5%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 217.2 32.6% 17.5%;
+    --sidebar-ring: 212.7 26.8% 83.9%;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+
+    --accent: 217.2 91.2% 59.8%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 212.7 26.8% 83.9%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Prevent horizontal overflow globally */
+@layer base {
+  html, body, #root {
+    max-width: 100%;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes float {
+  0% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+  100% {
+    transform: translateY(0px);
+  }
+}
+
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.5;
+  }
+  100% {
+    transform: scale(1.3);
+    opacity: 0;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -468px 0;
+  }
+  100% {
+    background-position: 468px 0;
+  }
+}
+
+@keyframes border-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(99, 102, 241, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0);
+  }
+}
+
+@keyframes bg-pulse {
+  0% {
+    background-color: rgba(79, 70, 229, 0.1);
+  }
+  50% {
+    background-color: rgba(79, 70, 229, 0.2);
+  }
+  100% {
+    background-color: rgba(79, 70, 229, 0.1);
+  }
+}
+
+@keyframes gradient-shift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@layer utilities {
+  .animate-fade-in {
+    will-change: opacity, transform;
+    animation: fade-in 0.3s ease-out forwards;
+  }
+
+  .animate-fade-out {
+    will-change: opacity, transform;
+    animation: fade-out 0.2s ease-in forwards;
+  }
+
+  .animate-float {
+    will-change: transform;
+    animation: float 3s ease-in-out infinite;
+  }
+
+  .hover-scale {
+    @apply transition-transform duration-300 hover:scale-105;
+  }
+
+  .card-gradient {
+    @apply bg-gradient-to-br from-card to-secondary/80;
+    backdrop-filter: blur(5px);
+  }
+
+  .glass-effect {
+    background: rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(8px);
+    @apply border border-white/20;
+  }
+
+  .animate-shimmer {
+    will-change: background-position;
+    animation: shimmer 1.8s infinite linear;
+    background: linear-gradient(
+      to right, 
+      rgba(255,255,255,0) 8%, 
+      rgba(255,255,255,0.2) 18%, 
+      rgba(255,255,255,0) 33%
+    );
+    background-size: 1000px 100%;
+  }
+
+  .animate-border-pulse {
+    animation: border-pulse 2.5s infinite;
+  }
+
+  .animate-bg-pulse {
+    animation: bg-pulse 2.5s infinite;
+  }
+
+  .gradient-text {
+    @apply bg-gradient-to-r from-blue-500 to-indigo-600 bg-clip-text text-transparent;
+  }
+
+  .gradient-text-primary {
+    @apply bg-gradient-to-r from-[#4361ee] via-[#7209b7] to-[#4895ef] bg-clip-text text-transparent;
+    background-size: 200% auto;
+    animation: gradient-shift 4s ease infinite;
+  }
+
+  .gradient-bg {
+    background: linear-gradient(90deg, rgba(59,130,246,0.07), rgba(79,70,229,0.07), rgba(147,51,234,0.07));
+    background-size: 200% 200%;
+    animation: gradient-shift 8s ease infinite;
+  }
+
+  .dashboard-card {
+    @apply relative overflow-hidden rounded-lg border transition-all duration-300;
+    background: linear-gradient(
+      to bottom right,
+      rgba(255, 255, 255, 0.8),
+      rgba(255, 255, 255, 0.4)
+    );
+    backdrop-filter: blur(6px);
+  }
+
+  .card-hover-effect {
+    @apply transition-all duration-300 ease-out hover:shadow-md hover:-translate-y-1;
+  }
+
+  .stat-card-gradient {
+    background: linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.1),
+      rgba(255, 255, 255, 0.05)
+    );
+    backdrop-filter: blur(3px);
+  }
+}
+
+@layer components {
+  /* Fix for calendar popover transparency issue */
+  [data-radix-popper-content-wrapper] {
+    z-index: 9999 !important;
+  }
+  
+  [data-radix-popper-content-wrapper] [data-radix-popper-content] {
+    background-color: hsl(var(--popover)) !important;
+    backdrop-filter: none !important;
+  }
+
+  /* Ensure calendar has solid background */
+  .rdp {
+    background-color: hsl(var(--popover)) !important;
+  }
+  
+  .rdp-table {
+    background-color: hsl(var(--popover)) !important;
+  }
+  
+  .rdp-month {
+    background-color: hsl(var(--popover)) !important;
+  }
+
+  .workflow-step {
+    @apply relative flex flex-col items-center justify-center;
+  }
+
+  .workflow-step::after {
+    @apply content-[''] absolute top-6 w-full h-0.5 bg-gray-200 right-1/2 z-0;
+  }
+
+  .workflow-step:last-child::after {
+    @apply hidden;
+  }
+
+  .workflow-number {
+    @apply h-12 w-12 rounded-full bg-primary text-white flex items-center justify-center font-semibold text-lg z-10;
+  }
+
+  .workflow-active .workflow-number {
+    @apply bg-accent shadow-lg;
+  }
+
+  .workflow-completed .workflow-number {
+    @apply bg-green-500;
+  }
+
+  .workflow-description {
+    @apply mt-2 text-sm text-gray-600;
+  }
+
+  .stat-card {
+    @apply relative overflow-hidden rounded-lg border p-4 transition-all duration-300 hover:shadow-lg;
+  }
+
+  .stat-card-highlight {
+    @apply after:absolute after:bottom-0 after:left-0 after:h-1 after:w-full after:bg-gradient-to-r after:from-blue-500 after:to-indigo-600;
+  }
+
+  .feature-icon {
+    @apply flex h-12 w-12 items-center justify-center rounded-full bg-blue-100 text-blue-600 mb-4;
+  }
+
+  .dashboard-card {
+    @apply border rounded-lg overflow-hidden transition-transform duration-300 hover:shadow-lg hover:-translate-y-1;
+  }
+
+  .notification-badge {
+    @apply absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] text-white;
+  }
+
+  .data-item {
+    @apply flex items-center justify-between p-3 hover:bg-slate-50 rounded-md transition-colors border-b last:border-0;
+  }
+
+  .btn {
+  @apply px-4 py-2 rounded-lg font-medium transition-colors shadow-md;
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.15); /* custom bottom shadow */
+}
+
+.btn:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.15); /* pressed effect */
+}
+
+}

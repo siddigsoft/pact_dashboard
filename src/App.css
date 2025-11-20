@@ -1,0 +1,32 @@
+
+/* App.css - Enhanced styling for dashboard components */
+
+/* Performance optimization for animations */
+.dashboard-component {
+  will-change: transform, opacity;
+}
+
+/* Reduce motion option for users who prefer reduced animations */
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in,
+  .animate-fade-out,
+  .animate-float {
+    animation: none !important;
+    transition: none !important;
+  }
+  
+  .hover-scale:hover {
+    transform: none !important;
+  }
+}
+
+/* Performance optimization for card gradients */
+.performance-card {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+/* Add GPU acceleration for smoother transitions */
+.gpu-accelerated {
+  transform: translateZ(0);
+}

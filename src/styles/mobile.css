@@ -1,0 +1,299 @@
+/* Mobile-specific styles */
+
+/* iOS-specific styles */
+.ios-app {
+  /* Add safe area insets for iOS notch */
+  padding-top: constant(safe-area-inset-top);
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: constant(safe-area-inset-bottom);
+  padding-bottom: env(safe-area-inset-bottom);
+  -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+}
+
+/* Prevent overscroll/bounce effect on iOS */
+.native-app {
+  overflow: hidden;
+  position: fixed;
+  width: 100%;
+  height: 100%;
+  overscroll-behavior: none;
+}
+
+/* Improved touch targets for mobile */
+.native-app button,
+.native-app a,
+.native-app input,
+.native-app select,
+.native-app .clickable {
+  min-height: 44px;
+  touch-action: manipulation; /* Disable double-tap zoom */
+}
+
+/* Performance optimizations */
+.gpu-accelerated {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  perspective: 1000;
+  will-change: transform;
+}
+
+/* Prevent text size adjustment on orientation change */
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Improved scrolling performance */
+.scroll-container {
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  overscroll-behavior: contain;
+}
+
+/* Hide scrollbars but allow scrolling */
+.native-app .overflow-y-auto,
+.native-app .overflow-x-auto {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}
+
+.native-app .overflow-y-auto::-webkit-scrollbar,
+.native-app .overflow-x-auto::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+}
+
+/* Improved form elements for touch */
+.native-app input[type="text"],
+.native-app input[type="email"],
+.native-app input[type="password"],
+.native-app input[type="number"],
+.native-app textarea,
+.native-app select {
+  font-size: 16px; /* Prevent zoom on iOS */
+  padding: 12px;
+  border-radius: 8px;
+}
+
+/* Native app transitions */
+.native-app .page-transition {
+  transition: all 0.3s ease-in-out;
+}
+
+/* Bottom safe area for iOS */
+.ios-app .safe-area-bottom {
+  padding-bottom: constant(safe-area-inset-bottom);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Top safe area for iOS */
+.ios-app .safe-area-top {
+  padding-top: constant(safe-area-inset-top);
+  padding-top: env(safe-area-inset-top);
+}
+
+/* Uber-like styling */
+.mobile-app-card {
+  @apply rounded-xl shadow-md bg-white p-4 border border-gray-100;
+}
+
+.mobile-section-title {
+  @apply text-lg font-semibold text-gray-800 mb-3;
+}
+
+.mobile-button-primary {
+  @apply bg-[#9b87f5] text-white rounded-full py-3 px-6 shadow-md;
+}
+
+.mobile-button-secondary {
+  @apply bg-white border border-[#9b87f5] text-[#9b87f5] rounded-full py-3 px-6;
+}
+
+.mobile-gradient-header {
+  @apply bg-gradient-to-r from-[#1A1F2C] to-[#2D3748] text-white;
+}
+
+.mobile-status-badge {
+  @apply px-2 py-1 rounded-full text-xs font-medium;
+}
+
+/* Uber-like animations */
+.slide-up-enter {
+  transform: translateY(100%);
+}
+
+.slide-up-enter-active {
+  transform: translateY(0);
+  transition: transform 300ms ease-out;
+}
+
+.slide-up-exit {
+  transform: translateY(0);
+}
+
+.slide-up-exit-active {
+  transform: translateY(100%);
+  transition: transform 300ms ease-in;
+}
+
+/* Uber-like cards */
+.uber-card {
+  @apply rounded-xl shadow-md bg-white p-4 border border-gray-100 mb-3;
+}
+
+.uber-card-header {
+  @apply flex justify-between items-center mb-2;
+}
+
+.uber-card-title {
+  @apply font-bold text-gray-800;
+}
+
+.uber-card-content {
+  @apply text-sm text-gray-600;
+}
+
+/* Mobile-specific list items */
+.mobile-list-item {
+  @apply flex items-center p-3 border-b border-gray-100;
+}
+
+.mobile-list-item-icon {
+  @apply mr-3 text-gray-400;
+}
+
+.mobile-list-item-content {
+  @apply flex-1;
+}
+
+.mobile-list-item-title {
+  @apply font-medium text-gray-800;
+}
+
+.mobile-list-item-subtitle {
+  @apply text-xs text-gray-500;
+}
+
+/* Floating action button like Uber */
+.floating-action-button {
+  @apply fixed bottom-20 right-4 h-14 w-14 rounded-full bg-[#9b87f5] text-white flex items-center justify-center shadow-lg z-50;
+}
+
+/* Enhanced login page animations */
+.login-card-enter {
+  opacity: 0;
+  transform: translateY(20px);
+}
+
+.login-card-enter-active {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 300ms, transform 300ms;
+}
+
+/* Glass effect for login card */
+.glass-card {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+}
+
+/* Input field focus effects */
+.focus-ring {
+  transition: all 0.2s ease;
+}
+
+.focus-ring:focus {
+  box-shadow: 0 0 0 2px rgba(155, 135, 245, 0.2);
+}
+
+/* Enhanced touch feedback */
+.touch-feedback:active {
+  transform: scale(0.98);
+}
+
+/* Enhanced Performance Optimizations */
+.gpu-accelerated {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  perspective: 1000;
+  will-change: transform;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Responsive Grid System */
+.responsive-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+  width: 100%;
+}
+
+/* Bottom Safe Area Padding */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-bottom: constant(safe-area-inset-bottom);
+}
+
+/* Improved touch targets */
+.touch-target {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* Optimized scrolling */
+.scroll-container {
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  overscroll-behavior-y: contain;
+  height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+}
+
+/* Enhanced Loading States */
+.loading-skeleton {
+  @apply animate-pulse bg-gray-200 rounded;
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0,
+    rgba(255, 255, 255, 0.5) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+/* Responsive Container Classes */
+.container-responsive {
+  width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+@media (min-width: 640px) {
+  .container-responsive {
+    max-width: 640px;
+  }
+}
+
+@media (min-width: 768px) {
+  .container-responsive {
+    max-width: 768px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .container-responsive {
+    max-width: 1024px;
+  }
+}
