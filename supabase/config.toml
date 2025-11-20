@@ -1,13 +1,9 @@
-project_id = "ucbqrqyvepoxpuilfgjv"
+project_id = "abznugnirnlrqnnfkein"  # Use your actual project ref here
 
 [auth]
 enabled = true
-# Session timeout in seconds (2 minutes = 120 seconds)
 jwt_expiry = 120
-# Refresh token expiry (keep longer for development)
-refresh_token_rotation_enabled = true
-# Enable automatic token refresh
-enable_refresh_token_rotation = true
+# remove deprecated refresh‑rotation lines
 
-[storage.avatars]
-public = true
+[storage]
+# Remove bucket definitions here — define buckets via Supabase dashboard or CLI
