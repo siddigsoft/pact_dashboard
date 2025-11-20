@@ -1,3 +1,23 @@
+// Map backend/system role values to professional display names
+const ROLE_DISPLAY_MAP: Record<string, string> = {
+  admin: 'Admin',
+  ict: 'ICT',
+  fom: 'Field Operation Manager (FOM)',
+  financialAdmin: 'FinancialAdmin',
+  supervisor: 'Supervisor',
+  coordinator: 'Coordinator',
+  dataCollector: 'DataCollector',
+  reviewer: 'Reviewer',
+  // Also include new values for safety
+  Admin: 'Admin',
+  ICT: 'ICT',
+  'Field Operation Manager (FOM)': 'Field Operation Manager (FOM)',
+  FinancialAdmin: 'FinancialAdmin',
+  Supervisor: 'Supervisor',
+  Coordinator: 'Coordinator',
+  DataCollector: 'DataCollector',
+  Reviewer: 'Reviewer',
+};
 import React, { useEffect } from 'react';
 import { useSiteVisitRemindersUI } from '@/hooks/use-site-visit-reminders-ui';
 import { DashboardDesktopView } from '@/components/dashboard/DashboardDesktopView';
@@ -27,10 +47,10 @@ const Dashboard = () => {
     return userRoles.map((role, idx) => (
       <Badge
         key={idx}
-        variant={role === 'admin' ? 'default' : 'outline'}
+        variant={role === 'Admin' ? 'default' : 'outline'}
         className={`px-4 py-1 rounded-full text-sm font-medium transition-all duration-200
           ${
-            role === 'admin'
+            role === 'Admin'
               ? 'bg-orange-500 text-white hover:bg-orange-600'
               : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600'
           }`}
@@ -51,7 +71,7 @@ const Dashboard = () => {
           <p className="text-gray-600 dark:text-gray-300 text-base md:text-lg">
             Welcome to your{' '}
             <span className="font-semibold text-blue-600 dark:text-blue-400">
-              PACT Operations Center
+              PACT Field Operations Platform
             </span>
           </p>
 
@@ -72,7 +92,7 @@ const Dashboard = () => {
                       key={idx}
                       className="px-4 py-1 rounded-full bg-orange-500 text-white font-semibold border border-orange-600"
                     >
-                      {role}
+                      {ROLE_DISPLAY_MAP[role] || role}
                     </span>
                   ))}
                 </div>

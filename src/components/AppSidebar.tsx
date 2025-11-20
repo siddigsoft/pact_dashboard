@@ -77,7 +77,7 @@ const getMenuGroups = (
   if (isAdmin || isICT || perms.siteVisits) projectItems.push({ title: "Site Visits", url: "/site-visits", icon: ClipboardList });
   if (isAdmin || perms.fieldOpManager) projectItems.push({ title: "Field Operation Manager", url: "/field-operation-manager", icon: ClipboardList });
   if (isAdmin || perms.archive) projectItems.push({ title: "Archive", url: "/archive", icon: Archive });
-  if (showSitesForVerification) projectItems.push({ title: "Sites for Verification", url: "/coordinator/sites-for-verification", icon: ClipboardList });
+  if (showSitesForVerification) projectItems.push({ title: "Site Verification", url: "/coordinator/sites", icon: ClipboardList });
 
   // ICT should NOT have access to Team or Data & Reports
   const teamItems = [] as MenuGroup['items'];

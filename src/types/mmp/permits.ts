@@ -40,6 +40,7 @@ export interface MMPPermitsData {
   documents?: MMPDocument[];
   statePermits?: MMPStatePermit[];
   localPermits?: MMPLocalPermit[];
+  approved?: boolean;
 }
 
 export interface MMPLocalPermit {

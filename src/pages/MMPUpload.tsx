@@ -1,3 +1,4 @@
+import { MMPFile } from '@/types/mmp';
 import React, { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
@@ -96,7 +97,7 @@ const MMPUpload = () => {
   const [validationWarnings, setValidationWarnings] = useState<any[] | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isAdmin = hasAnyRole(['admin']);
-  const canCreate = checkPermission('mmp', 'create') || isAdmin;
+  const canCreate = (checkPermission('mmp', 'create') || isAdmin) && hasAnyRole(['admin', 'ict']);
   const { getMMPById, archiveMMP, approveMMP, deleteMMP, resetMMP } = useMMP();
 
   if (!canCreate) {
@@ -222,7 +223,15 @@ const MMPUpload = () => {
     
     try {
       console.log('Starting MMP upload process...');
-      const result = await uploadMMP(data.file, {
+      const result: {
+        success: boolean;
+        id?: string;
+        mmp?: MMPFile;
+        error?: string;
+        validationReport?: string;
+        validationErrors?: import("@/utils/csvValidator").CSVValidationError[];
+        validationWarnings?: import("@/utils/csvValidator").CSVValidationError[];
+      } = await uploadMMP(data.file, {
         name: data.name,
         hub: data.hub,
         month: data.month,
@@ -293,7 +302,11 @@ const MMPUpload = () => {
   };
 
   const handleReturnToMmpList = () => {
-    navigate("/mmp");
+    if (uploadedMmpId) {
+      navigate(`/mmp-verification?mmpId=${uploadedMmpId}`);
+    } else {
+      navigate("/mmp");
+    }
   };
 
   const uploadedMmp = uploadedMmpId ? getMMPById(uploadedMmpId) : undefined;

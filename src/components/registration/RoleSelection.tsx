@@ -14,7 +14,7 @@ interface RoleSelectionProps {
 const RoleSelection = ({ role, onRoleChange, isManagementTab }: RoleSelectionProps) => {
   const roles = isManagementTab ? [
     {
-      value: 'admin',
+  value: 'Admin',
       title: 'System Administrator',
       description: [
         'Full system access and configuration control',
@@ -25,7 +25,7 @@ const RoleSelection = ({ role, onRoleChange, isManagementTab }: RoleSelectionPro
       ]
     },
     {
-      value: 'ict',
+  value: 'ICT',
       title: 'ICT Team Member',
       description: [
         'Maintain and optimize technical infrastructure',
@@ -36,7 +36,7 @@ const RoleSelection = ({ role, onRoleChange, isManagementTab }: RoleSelectionPro
       ]
     },
     {
-      value: 'supervisor',
+  value: 'Supervisor',
       title: 'Regional Supervisor',
       description: [
         'Oversee all operations within assigned hub region',
@@ -47,7 +47,7 @@ const RoleSelection = ({ role, onRoleChange, isManagementTab }: RoleSelectionPro
       ]
     },
     {
-      value: 'fom',
+  value: 'Field Operation Manager (FOM)',
       title: 'Field Operations Manager',
       description: [
         'Strategic planning of field operations',
@@ -58,7 +58,7 @@ const RoleSelection = ({ role, onRoleChange, isManagementTab }: RoleSelectionPro
       ]
     },
     {
-      value: 'financialAdmin',
+  value: 'FinancialAdmin',
       title: 'Financial Administrator',
       description: [
         'Manage budgets and financial operations',
@@ -70,7 +70,7 @@ const RoleSelection = ({ role, onRoleChange, isManagementTab }: RoleSelectionPro
     }
   ] : [
     {
-      value: 'dataCollector',
+  value: 'DataCollector',
       title: 'Data Collector',
       description: [
         'Conduct on-site data collection and verification',
@@ -81,7 +81,7 @@ const RoleSelection = ({ role, onRoleChange, isManagementTab }: RoleSelectionPro
       ]
     },
     {
-      value: 'coordinator',
+  value: 'Coordinator',
       title: 'Coordinator',
       description: [
         'Manage and oversee data collection teams',

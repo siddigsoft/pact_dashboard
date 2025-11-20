@@ -128,10 +128,10 @@ const MMPVerificationPage: React.FC = () => {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              MMP Verification Process
+              MMP Verification & Approval Process
             </h1>
             <p className="text-gray-600">
-              Complete all verification steps for <strong>{mmpFile.name}</strong>
+              Complete verification and approval steps for <strong>{mmpFile.name}</strong>
             </p>
             <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
               <span>MMP ID: {mmpFile.mmpId}</span>

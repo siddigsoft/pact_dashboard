@@ -105,6 +105,7 @@ const MMPContext = createContext<MMPContextType>({
   deleteMMP: () => {},
   restoreMMP: () => {},
   resetMMP: async () => false,
+  attachPermitsToMMP: async () => {},
 });
 
 export const useMMPProvider = () => {
@@ -124,6 +125,47 @@ export const useMMPProvider = () => {
   const { archiveMMP, approveMMP, rejectMMP } = useMMPStatusOperations(setMMPFiles);
   const { updateMMPVersion } = useMMPVersioning(setMMPFiles);
   const { uploadMMP } = useMMPUpload(addMMPFile);
+
+  // Attach permits to MMP (federal required, state/local optional)
+  const attachPermitsToMMP = async (id: string, permits: { federal: File | null; state?: File | null; local?: File | null }) => {
+    if (!id || !permits.federal) throw new Error('Federal permit is required');
+    // Simulate upload: In real app, upload files to storage and get URLs
+    const uploadedDocs: any[] = [];
+    const uploadFile = async (file: File, type: string) => {
+      // Simulate upload and return a fake URL
+      return {
+        type,
+        fileName: file.name,
+        uploadedAt: new Date().toISOString(),
+        fileUrl: URL.createObjectURL(file),
+      };
+    };
+    if (permits.federal) uploadedDocs.push(await uploadFile(permits.federal, 'federal'));
+    if (permits.state) uploadedDocs.push(await uploadFile(permits.state, 'state'));
+    if (permits.local) uploadedDocs.push(await uploadFile(permits.local, 'local'));
+
+    // Update local state
+    setMMPFiles((prev: MMPFile[]) => prev.map(mmp => mmp.id === id ? {
+      ...mmp,
+      permits: {
+        ...mmp.permits,
+        federal: !!permits.federal,
+        state: !!permits.state,
+        local: !!permits.local,
+        documents: uploadedDocs,
+      }
+    } : mmp));
+
+    // Persist to Supabase (store metadata, not files)
+    await supabase.from('mmp_files').update({
+      permits: {
+        federal: !!permits.federal,
+        state: !!permits.state,
+        local: !!permits.local,
+        documents: uploadedDocs,
+      }
+    }).eq('id', id);
+  };
 
   useEffect(() => {
     const fetchMMPFiles = async () => {
@@ -292,6 +334,7 @@ export const useMMPProvider = () => {
 
         // Persist reset to DB (avoid columns that may not exist across envs)
         try {
+  // attachPermitsToMMP, (removed stray comma operator usage)
           await supabase
             .from('mmp_files')
             .update({
@@ -359,6 +402,7 @@ export const useMMPProvider = () => {
     deleteMMP,
     restoreMMP,
     resetMMP
+    ,attachPermitsToMMP
   };
 };
 

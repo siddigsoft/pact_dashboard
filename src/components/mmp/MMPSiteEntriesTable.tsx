@@ -10,6 +10,8 @@ import { Search, Eye } from 'lucide-react';
 interface MMPSiteEntriesTableProps {
   siteEntries: any[];
   onViewSiteDetail?: (site: any) => void;
+  editable?: boolean;
+  onUpdateSites?: (sites: any[]) => void;
 }
 
 const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail }: MMPSiteEntriesTableProps) => {

@@ -1,13 +1,13 @@
 
 export type AppRole = 
-  | 'admin'
-  | 'ict'
-  | 'fom'
-  | 'financialAdmin'
-  | 'supervisor'
-  | 'coordinator'
-  | 'dataCollector'
-  | 'reviewer';
+  | 'Admin'
+  | 'ICT'
+  | 'Field Operation Manager (FOM)'
+  | 'FinancialAdmin'
+  | 'Supervisor'
+  | 'Coordinator'
+  | 'DataCollector'
+  | 'Reviewer';
 
 export interface UserRole {
   id: string;
@@ -110,7 +110,7 @@ export const ACTIONS: ActionType[] = [
 
 // Default role permissions mapping
 export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType; action: ActionType }[]> = {
-  admin: [
+  Admin: [
     { resource: 'users', action: 'create' },
     { resource: 'users', action: 'read' },
     { resource: 'users', action: 'update' },
@@ -145,7 +145,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     { resource: 'settings', action: 'read' },
     { resource: 'settings', action: 'update' }
   ],
-  ict: [
+  ICT: [
     { resource: 'users', action: 'create' },
     { resource: 'users', action: 'read' },
     { resource: 'users', action: 'update' },
@@ -171,7 +171,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     { resource: 'settings', action: 'read' },
     { resource: 'settings', action: 'update' }
   ],
-  fom: [
+  'Field Operation Manager (FOM)': [
     { resource: 'projects', action: 'read' },
     { resource: 'projects', action: 'update' },
     { resource: 'mmp', action: 'create' },
@@ -184,7 +184,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     { resource: 'finances', action: 'read' },
     { resource: 'reports', action: 'read' }
   ],
-  financialAdmin: [
+  FinancialAdmin: [
     { resource: 'site_visits', action: 'read' },
     { resource: 'finances', action: 'read' },
     { resource: 'finances', action: 'update' },
@@ -192,24 +192,24 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     { resource: 'mmp', action: 'archive' },
     { resource: 'reports', action: 'read' }
   ],
-  supervisor: [
+  Supervisor: [
     { resource: 'mmp', action: 'read' },
     { resource: 'mmp', action: 'update' },
     { resource: 'site_visits', action: 'read' },
     { resource: 'site_visits', action: 'update' },
     { resource: 'reports', action: 'read' }
   ],
-  coordinator: [
+  Coordinator: [
     { resource: 'site_visits', action: 'read' },
     { resource: 'site_visits', action: 'update' },
     { resource: 'reports', action: 'read' }
   ],
-  dataCollector: [
+  DataCollector: [
     { resource: 'site_visits', action: 'read' },
     { resource: 'site_visits', action: 'update' },
     { resource: 'mmp', action: 'read' }
   ],
-  reviewer: [
+  Reviewer: [
     { resource: 'site_visits', action: 'read' },
     { resource: 'mmp', action: 'read' }
   ]

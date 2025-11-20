@@ -1,7 +1,11 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppContext } from '@/context/AppContext';
 import { useMMP } from '@/context/mmp/MMPContext';
+import { useAuthorization } from '@/hooks/use-authorization';
+import { Button } from '@/components/ui/button';
+import { Trash2 } from 'lucide-react';
+import { AlertDialog, AlertDialogTrigger, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 
@@ -10,8 +14,14 @@ const FIELD_OP_ROLE = 'fom';
 
 const FieldOperationManagerPage = () => {
   const { currentUser, roles } = useAppContext();
-  const { mmpFiles } = useMMP();
+  const { mmpFiles, deleteMMPFile } = useMMP();
+  const { checkPermission, hasAnyRole } = useAuthorization();
+  const [deleteId, setDeleteId] = useState<string|null>(null);
+  const [deleting, setDeleting] = useState(false);
   const navigate = useNavigate();
+
+  // Check if user can delete MMPs (only admin and ICT can delete)
+  const canDeleteMMP = checkPermission('mmp', 'delete') || hasAnyRole(['admin', 'ict']);
 
   // Use the correct role value
   const allowed = roles?.includes('admin') || roles?.includes(FIELD_OP_ROLE as any);
@@ -103,13 +113,44 @@ const FieldOperationManagerPage = () => {
                     </td>
                     <td className="px-4 py-2">{hub}</td>
                     <td className="px-4 py-2">{siteCount}</td>
-                    <td className="px-4 py-2">
+                    <td className="px-4 py-2 flex gap-2 items-center">
                       <button
                         className="text-primary hover:underline text-xs"
                         onClick={() => navigate(`/mmp/${mmp.id}`)}
                       >
                         View
                       </button>
+                      {canDeleteMMP && (
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button size="icon" variant="destructive" className="ml-2" onClick={() => setDeleteId(mmp.id)}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Delete MMP File "{mmp.projectName || mmp.mmpId}"?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This action cannot be undone. The MMP file and all its data will be permanently deleted from the system.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction
+                                disabled={deleting}
+                                onClick={async () => {
+                                  setDeleting(true);
+                                  await deleteMMPFile(mmp.id);
+                                  setDeleting(false);
+                                  setDeleteId(null);
+                                }}
+                              >
+                                Delete
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      )}
                     </td>
                   </tr>
                 );

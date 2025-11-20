@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
 import { useMMP } from '@/context/mmp/MMPContext';
+import { useAuthorization } from '@/hooks/use-authorization';
 import MMPOverallInformation from '@/components/MMPOverallInformation';
 import MMPVersionHistory from '@/components/MMPVersionHistory';
 import MMPSiteInformation from '@/components/MMPSiteInformation';
@@ -17,9 +18,35 @@ const EditMMP: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { getMmpById, updateMMP } = useMMP();
+  const { checkPermission, hasAnyRole } = useAuthorization();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [mmpFile, setMmpFile] = useState<any>(null);
+
+  const isAdmin = hasAnyRole(['admin']);
+  const isFOM = hasAnyRole(['fom']);
+  const isCoordinator = hasAnyRole(['coordinator']);
+  const canEdit = checkPermission('mmp', 'update') || isAdmin || isCoordinator;
+
+  if (!canEdit) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle className="text-destructive">Access Denied</CardTitle>
+            <CardDescription>
+              You don't have permission to edit MMP files.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button variant="outline" onClick={() => navigate('/mmp')} className="w-full">
+              Back to MMP List
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const handleGoBack = () => {
     navigate('/mmp');

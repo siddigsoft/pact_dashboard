@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { FileSpreadsheet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -36,13 +36,14 @@ import MMPSiteEntriesTable from "@/components/mmp/MMPSiteEntriesTable";
 import MMPFileManagement from "@/components/mmp/MMPFileManagement";
 import { useAuthorization } from "@/hooks/use-authorization";
 import ForwardToFOMDialog from "@/components/mmp/ForwardToFOMDialog";
+import ForwardToCoordinatorsDialog from "@/components/mmp/ForwardToCoordinatorsDialog";
 
 const MMPDetailView = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
   const { currentUser, archiveMMP, deleteMMPFile, approveMMP } = useAppContext();
-  const { resetMMP, getMmpById } = useMMP();
+  const { resetMMP, getMmpById, updateMMP } = useMMP();
   const { checkPermission, hasAnyRole } = useAuthorization();
   const [showAuditTrail, setShowAuditTrail] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -54,6 +55,7 @@ const MMPDetailView = () => {
   const [forwardOpen, setForwardOpen] = useState(false);
   const [forwardedLocal, setForwardedLocal] = useState(false);
   const [forwardedCount, setForwardedCount] = useState<number | null>(null);
+  const [forwardToCoordinatorsOpen, setForwardToCoordinatorsOpen] = useState(false);
   
   const mmpFile = id ? getMmpById(id) : undefined;
   
@@ -79,11 +81,34 @@ const MMPDetailView = () => {
   }, [id, mmpFile, toast]);
 
   const isAdmin = hasAnyRole(['admin']);
-  const canEdit = (checkPermission('mmp', 'update') || isAdmin) ? true : false;
+  const isFOM = hasAnyRole(['fom']);
+  const isCoordinator = hasAnyRole(['coordinator']);
+  const canRead = checkPermission('mmp', 'read') || isAdmin || isFOM || isCoordinator;
+  const canEdit = (checkPermission('mmp', 'update') || isAdmin || isCoordinator) ? true : false;
   const canDelete = (checkPermission('mmp', 'delete') || isAdmin) ? true : false;
   const canArchive = (checkPermission('mmp', 'archive') || isAdmin) ? true : false;
   const canApprove = (checkPermission('mmp', 'approve') || isAdmin) && mmpFile?.status === 'pending';
   const canForward = hasAnyRole(['admin','ict']);
+
+  if (!canRead) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle className="text-destructive">Access Denied</CardTitle>
+            <CardDescription>
+              You don't have permission to view this MMP.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button variant="outline" onClick={() => navigate('/mmp')} className="w-full">
+              Back to MMP List
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const isForwarded = useMemo(() => {
     if (forwardedLocal) return true;
@@ -239,6 +264,41 @@ const MMPDetailView = () => {
     setSiteDetailOpen(true);
   };
 
+  const handleForwardToCoordinators = () => {
+    setForwardToCoordinatorsOpen(true);
+  };
+
+  const handleMarkAsVerified = async () => {
+    if (!mmpFile || !currentUser) return;
+    
+    try {
+      // Update MMP workflow to indicate coordinator verification is complete
+      await updateMMP(mmpFile.id, { 
+        workflow: { 
+          ...mmpFile.workflow, 
+          coordinatorVerified: true,
+          coordinatorVerifiedAt: new Date().toISOString(),
+          coordinatorVerifiedBy: currentUser.username || currentUser.fullName || currentUser.email || 'Unknown'
+        } 
+      });
+      
+      toast({
+        title: "MMP Verified",
+        description: "MMP has been marked as verified by coordinator.",
+      });
+      
+      // Navigate back to MMP list
+      navigate('/mmp');
+    } catch (error) {
+      console.error("Failed to mark as verified:", error);
+      toast({
+        title: "Verification Failed",
+        description: "There was a problem marking the MMP as verified.",
+        variant: "destructive"
+      });
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center h-96">
@@ -310,9 +370,57 @@ const MMPDetailView = () => {
               )}
             </div>
           )}
+          
+          {/* Forward to Coordinators button for FOM users */}
+          {isFOM && mmpFile?.permits?.federal && (
+            <div>
+              <Button 
+                onClick={handleForwardToCoordinators}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                <Send className="mr-2 h-4 w-4" />
+                Forward Sites to Coordinators
+              </Button>
+            </div>
+          )}
+
+          {/* Review & Assign Coordinators button for FOM users */}
+          {isFOM && mmpFile?.permits?.federal && (
+            <div>
+              <Button 
+                onClick={() => navigate(`/mmp/${mmpFile.id}/review-assign-coordinators`)}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                <Send className="mr-2 h-4 w-4" />
+                Review & Assign Coordinators
+              </Button>
+            </div>
+          )}
+
+          {/* Mark as Verified button for Coordinator users */}
+          {isCoordinator && (mmpFile as any)?.workflow?.forwardedToCoordinators && (
+            <div>
+              <Button 
+                onClick={handleMarkAsVerified}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                <CheckCircle className="mr-2 h-4 w-4" />
+                Mark as Verified
+              </Button>
+            </div>
+          )}
+          
           <ForwardToFOMDialog 
             open={forwardOpen} 
             onOpenChange={setForwardOpen} 
+            mmpId={mmpFile.id} 
+            mmpName={mmpFile.name}
+            onForwarded={(ids) => { setForwardedLocal(true); setForwardedCount(ids.length); }}
+          />
+          
+          <ForwardToCoordinatorsDialog 
+            open={forwardToCoordinatorsOpen} 
+            onOpenChange={setForwardToCoordinatorsOpen} 
             mmpId={mmpFile.id} 
             mmpName={mmpFile.name}
             onForwarded={(ids) => { setForwardedLocal(true); setForwardedCount(ids.length); }}
@@ -614,18 +722,23 @@ const MMPDetailView = () => {
         </CardContent>
       </Card>
       
+
+      {/* Move file management to the top of the page */}
       {(canArchive || canDelete || canApprove) && (
-        <MMPFileManagement
-          mmpFile={mmpFile}
-          canArchive={canArchive}
-          canDelete={canDelete}
-          canApprove={canApprove}
-          onArchive={handleArchive}
-          onDelete={handleDelete}
-          onResetApproval={handleReset}
-          onApprove={handleApprove}
-        />
+        <div className="mb-6">
+          <MMPFileManagement
+            mmpFile={mmpFile}
+            canArchive={canArchive}
+            canDelete={canDelete}
+            canApprove={canApprove}
+            onArchive={handleArchive}
+            onDelete={handleDelete}
+            onResetApproval={handleReset}
+            onApprove={handleApprove}
+          />
+        </div>
       )}
+
       
       <Dialog open={showAuditTrail} onOpenChange={setShowAuditTrail}>
         <DialogContent className="max-w-3xl">

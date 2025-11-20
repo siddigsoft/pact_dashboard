@@ -19,9 +19,12 @@ import MMPDetailView from './pages/MMPDetailView';
 import MMPVerification from './pages/MMPVerification';
 import MMPDetailedVerification from './pages/MMPDetailedVerification';
 import MMPVerificationPage from './pages/MMPVerificationPage';
+import MMPPermitMessagePage from './pages/mmp/MMPPermitMessagePage';
 import EditMMP from './pages/EditMMP';
 import NotFound from './pages/NotFound';
+import ReviewAssignCoordinators from './pages/ReviewAssignCoordinators';
 import SitesForVerification from './pages/coordinator/SitesForVerification';
+import CoordinatorSites from './pages/coordinator/CoordinatorSites';
 import Calls from './pages/Calls';
 import Chat from './pages/Chat';
 import FieldTeam from './pages/FieldTeam';
@@ -128,6 +131,8 @@ const AppRoutes = () => {
         <Route path="/mmp/verify/:id" element={<MMPVerification />} />
         <Route path="/mmp/:id/detailed-verification" element={<MMPDetailedVerification />} />
         <Route path="/mmp/:id/verification" element={<MMPVerificationPage />} />
+        <Route path="/mmp/:id/permit-message" element={<MMPPermitMessagePage />} />
+        <Route path="/mmp/:id/review-assign-coordinators" element={<ReviewAssignCoordinators />} />
         <Route path="/calls" element={<Calls />} />
         <Route path="/field-team" element={<FieldTeam />} />
         <Route path="/finance" element={<Finance />} />
@@ -164,6 +169,7 @@ const AppRoutes = () => {
   <Route path="/search" element={<GlobalSearchPage />} />
   {/* Coordinator: Sites for Verification */}
   <Route path="/coordinator/sites-for-verification" element={<SitesForVerification />} />
+  <Route path="/coordinator/sites" element={<CoordinatorSites />} />
       </Route>
 
       {/* Redirects */}
