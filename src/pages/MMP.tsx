@@ -22,11 +22,11 @@ const MMP = () => {
   const { checkPermission, hasAnyRole, currentUser } = useAuthorization();
   const [activeTab, setActiveTab] = useState('new');
   // Subcategory state for Forwarded MMPs (Admin/ICT only)
-  const [forwardedSubTab, setForwardedSubTab] = useState<'pending' | 'verified' | 'rejected'>('pending');
+  const [forwardedSubTab, setForwardedSubTab] = useState<'pending' | 'verified'>('pending');
   // Subcategory state for Verified Sites (Admin/ICT only)
-  const [verifiedSubTab, setVerifiedSubTab] = useState<'newSites' | 'approvedCosted' | 'dispatched' | 'completed' | 'rejected'>('newSites');
+  const [verifiedSubTab, setVerifiedSubTab] = useState<'newSites' | 'approvedCosted' | 'dispatched' | 'completed'>('newSites');
   // Subcategory state for New MMPs (FOM only)
-  const [newFomSubTab, setNewFomSubTab] = useState<'pending' | 'verified' | 'rejected'>('pending');
+  const [newFomSubTab, setNewFomSubTab] = useState<'pending' | 'verified'>('pending');
   const [siteVisitStats, setSiteVisitStats] = useState<Record<string, {
     exists: boolean;
     hasCosted: boolean;
@@ -167,7 +167,7 @@ const MMP = () => {
     };
   }, [mmpFiles, isFOM, currentUser]);
 
-  // Forwarded subcategories for Admin/ICT view
+  // Forwarded subcategories for Admin/ICT view (Removed Rejected)
   const forwardedSubcategories = useMemo(() => {
     const base = categorizedMMPs.forwarded || [];
     const pending = base.filter(mmp => {
@@ -175,18 +175,16 @@ const MMP = () => {
       return !hasFederalPermit && mmp.status !== 'approved' && mmp.status !== 'rejected';
     });
     const verified = base.filter(mmp => mmp.status === 'approved');
-    const rejected = base.filter(mmp => mmp.status === 'rejected');
-    return { pending, verified, rejected };
+    return { pending, verified };
   }, [categorizedMMPs.forwarded]);
 
-  // New MMP subcategories for FOM (Pending, Verified, Rejected)
+  // New MMP subcategories for FOM (Removed Rejected)
   const newFomSubcategories = useMemo(() => {
-    if (!isFOM) return { pending: [], verified: [], rejected: [] } as Record<string, typeof categorizedMMPs.new>;
+    if (!isFOM) return { pending: [], verified: [] } as Record<string, typeof categorizedMMPs.new>;
     const base = categorizedMMPs.new || [];
     const pending = base.filter(mmp => mmp.status !== 'approved' && mmp.status !== 'rejected');
     const verified = base.filter(mmp => mmp.status === 'approved');
-    const rejected = base.filter(mmp => mmp.status === 'rejected');
-    return { pending, verified, rejected };
+    return { pending, verified };
   }, [isFOM, categorizedMMPs.new]);
 
   // Verified subcategories for Admin/ICT
@@ -218,10 +216,6 @@ const MMP = () => {
       completed: base.filter(mmp => {
         const stats = siteVisitStats[mmp.id];
         return Boolean(stats?.hasCompleted) || (mmp.workflow as any)?.currentStage === 'completed';
-      }),
-      rejected: base.filter(mmp => {
-        const stats = siteVisitStats[mmp.id];
-        return mmp.status === 'rejected' || Boolean(stats?.hasRejected);
       })
     };
   }, [categorizedMMPs.verified, siteVisitStats]);
@@ -372,267 +366,168 @@ const MMP = () => {
 
   return (
     <div className="space-y-10 min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-blue-100 dark:from-gray-900 dark:via-gray-950 dark:to-gray-900 py-8 px-2 md:px-8">
-      {/* Header Section */}
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-gradient-to-r from-blue-600/90 to-blue-400/80 dark:from-blue-900 dark:to-blue-700 p-7 rounded-2xl shadow-xl border border-blue-100 dark:border-blue-900">
         <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => navigate("/dashboard")}
-            className="hover:bg-blue-100 dark:hover:bg-blue-900/40"
-          >
+          <Button variant="ghost" size="icon" onClick={() => navigate('/dashboard')} className="hover:bg-blue-100 dark:hover:bg-blue-900/40">
             <ChevronLeft className="h-5 w-5 text-white dark:text-blue-200" />
           </Button>
           <div>
-            <h1 className="text-3xl font-extrabold bg-gradient-to-r from-white to-blue-200 dark:from-blue-200 dark:to-blue-400 bg-clip-text text-transparent tracking-tight">
-              MMP Management
-            </h1>
+            <h1 className="text-3xl font-extrabold bg-gradient-to-r from-white to-blue-200 dark:from-blue-200 dark:to-blue-400 bg-clip-text text-transparent tracking-tight">MMP Management</h1>
             <p className="text-blue-100 dark:text-blue-200/80 font-medium">
               {isAdmin || isICT
                 ? 'Upload, validate, and forward MMPs to Field Operations Managers'
                 : isFOM
                   ? 'Process MMPs, attach permits, and assign sites to coordinators'
                   : isCoordinator
-                  ? 'Review and verify site assignments'
-                  : 'Manage your MMP files and site visits'}
+                    ? 'Review and verify site assignments'
+                    : 'Manage your MMP files and site visits'}
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          {canCreate && (
-            <Button
-              className="bg-gradient-to-r from-blue-700 to-blue-500 hover:from-blue-800 hover:to-blue-600 text-white shadow-lg hover:shadow-xl transition-all duration-300 px-6 py-2 rounded-full font-semibold"
-              onClick={() => navigate('/mmp/upload')}
-            >
-              <Upload className="h-5 w-5 mr-2" />
-              Upload MMP
-            </Button>
-          )}
-          {/* {(isAdmin || isICT) && (
-            <Button
-              variant="outline"
-              onClick={() => setClearDialogOpen(true)}
-              className="border-red-300 text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30 hover:text-red-800"
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Clear Forwarded Sites
-            </Button>
-          )} */}
-        </div>
+        {canCreate && (
+          <Button className="bg-gradient-to-r from-blue-700 to-blue-500 hover:from-blue-800 hover:to-blue-600 text-white shadow-lg hover:shadow-xl transition-all duration-300 px-6 py-2 rounded-full font-semibold" onClick={() => navigate('/mmp/upload')}>
+            <Upload className="h-5 w-5 mr-2" />
+            Upload MMP
+          </Button>
+        )}
       </div>
 
-      {/* Content Section */}
+      {/* Body */}
       <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-lg p-6">
         {loading ? (
-          <div className="text-center text-muted-foreground py-8">
-            Loading MMP files...
-          </div>
+          <div className="text-center text-muted-foreground py-8">Loading MMP files...</div>
         ) : (
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className={`grid w-full mb-6 ${isCoordinator ? 'grid-cols-1' : 'grid-cols-3'}`}>
-                {!isCoordinator && (
-                  <TabsTrigger value="new" className="flex items-center gap-2 data-[state=active]:bg-blue-100 data-[state=active]:text-blue-900">
-                    New MMPs
-                    <Badge variant="secondary">{categorizedMMPs.new.length}</Badge>
-                  </TabsTrigger>
-                )}
-                {!isCoordinator && (
-                  <TabsTrigger value="forwarded" className="flex items-center gap-2 data-[state=active]:bg-blue-100 data-[state=active]:text-blue-900">
-                    {isFOM ? 'Forwarded Sites' : 'Forwarded MMPs'}
-                    <Badge variant="secondary">{categorizedMMPs.forwarded.length}</Badge>
-                  </TabsTrigger>
-                )}
-                <TabsTrigger value={isCoordinator ? "verified" : "verified"} className="flex items-center gap-2 data-[state=active]:bg-blue-100 data-[state=active]:text-blue-900">
-                  {isCoordinator ? "MMPs to Review" : "Verified Sites"}
-                  <Badge variant="secondary">{categorizedMMPs.verified.length}</Badge>
+            <TabsList className={`grid w-full mb-6 ${isCoordinator ? 'grid-cols-1' : 'grid-cols-3'}`}>
+              {!isCoordinator && (
+                <TabsTrigger value="new" className="flex items-center gap-2 data-[state=active]:bg-blue-100 data-[state=active]:text-blue-900">
+                  New MMPs
+                  <Badge variant="secondary">{categorizedMMPs.new.length}</Badge>
                 </TabsTrigger>
-              </TabsList>
-
-              {!isCoordinator && (
-                <TabsContent value="new">
-                  {isFOM && (
-                    <div className="mb-4 flex flex-wrap gap-2 items-center">
-                      <div className="text-sm font-medium text-muted-foreground mr-2">Subcategory:</div>
-                      <Button
-                        variant={newFomSubTab === 'pending' ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => setNewFomSubTab('pending')}
-                        className={newFomSubTab === 'pending' ? 'bg-blue-600 hover:bg-blue-700 text-white' : ''}
-                      >
-                        Pending
-                        <Badge variant="secondary" className="ml-2">{newFomSubcategories.pending.length}</Badge>
-                      </Button>
-                      <Button
-                        variant={newFomSubTab === 'verified' ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => setNewFomSubTab('verified')}
-                        className={newFomSubTab === 'verified' ? 'bg-blue-600 hover:bg-blue-700 text-white' : ''}
-                      >
-                        Verified
-                        <Badge variant="secondary" className="ml-2">{newFomSubcategories.verified.length}</Badge>
-                      </Button>
-                      <Button
-                        variant={newFomSubTab === 'rejected' ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => setNewFomSubTab('rejected')}
-                        className={newFomSubTab === 'rejected' ? 'bg-blue-600 hover:bg-blue-700 text-white' : ''}
-                      >
-                        Rejected
-                        <Badge variant="secondary" className="ml-2">{newFomSubcategories.rejected.length}</Badge>
-                      </Button>
-                    </div>
-                  )}
-                  <MMPList mmpFiles={isFOM ? newFomSubcategories[newFomSubTab] : categorizedMMPs.new} />
-                </TabsContent>
               )}
-
               {!isCoordinator && (
-                <TabsContent value="forwarded">
-                  {(isAdmin || isICT || isFOM) && (
-                    <div className="mb-4 flex flex-wrap gap-2 items-center">
-                      <div className="text-sm font-medium text-muted-foreground mr-2">Subcategory:</div>
-                      <Button
-                        variant={forwardedSubTab === 'pending' ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => setForwardedSubTab('pending')}
-                        className={forwardedSubTab === 'pending' ? 'bg-blue-600 hover:bg-blue-700 text-white' : ''}
-                      >
-                        Pending
-                        <Badge variant="secondary" className="ml-2">
-                          {forwardedSubcategories.pending.length}
-                        </Badge>
-                      </Button>
-                      <Button
-                        variant={forwardedSubTab === 'verified' ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => setForwardedSubTab('verified')}
-                        className={forwardedSubTab === 'verified' ? 'bg-blue-600 hover:bg-blue-700 text-white' : ''}
-                      >
-                        Verified
-                        <Badge variant="secondary" className="ml-2">
-                          {forwardedSubcategories.verified.length}
-                        </Badge>
-                      </Button>
-                      <Button
-                        variant={forwardedSubTab === 'rejected' ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => setForwardedSubTab('rejected')}
-                        className={forwardedSubTab === 'rejected' ? 'bg-blue-600 hover:bg-blue-700 text-white' : ''}
-                      >
-                        Rejected
-                        <Badge variant="secondary" className="ml-2">
-                          {forwardedSubcategories.rejected.length}
-                        </Badge>
-                      </Button>
-                    </div>
-                  )}
-                  <MMPList
-                    mmpFiles={(isAdmin || isICT || isFOM) ? forwardedSubcategories[forwardedSubTab] : categorizedMMPs.forwarded}
-                  />
-                  {isFOM && (
-                    <div className="mt-6">
-                      <div className="flex items-center justify-between mb-2">
-                        <h3 className="text-lg font-semibold">Site Entries ({forwardedCategorySiteRows.length})</h3>
-                        <span className="text-xs text-muted-foreground">Forwarded subcategory: {forwardedSubTab}</span>
-                      </div>
-                      <MMPCategorySitesTable
-                        title="Forwarded Sites"
-                        description="Sites contained in forwarded MMPs (from original entries or generated visit records)."
-                        rows={forwardedCategorySiteRows}
-                        maxHeightPx={520}
-                        emptyMessage="No site entries in this forwarded subcategory." />
-                    </div>
-                  )}
-                </TabsContent>
+                <TabsTrigger value="forwarded" className="flex items-center gap-2 data-[state=active]:bg-blue-100 data-[state=active]:text-blue-900">
+                  {isFOM ? 'Forwarded Sites' : 'Forwarded MMPs'}
+                  <Badge variant="secondary">{categorizedMMPs.forwarded.length}</Badge>
+                </TabsTrigger>
               )}
+              <TabsTrigger value="verified" className="flex items-center gap-2 data-[state=active]:bg-blue-100 data-[state=active]:text-blue-900">
+                {isCoordinator ? 'MMPs to Review' : 'Verified Sites'}
+                <Badge variant="secondary">{categorizedMMPs.verified.length}</Badge>
+              </TabsTrigger>
+            </TabsList>
 
-              <TabsContent value="verified">
-                {(isAdmin || isICT || isFOM || isCoordinator) && (
+            {!isCoordinator && (
+              <TabsContent value="new">
+                {isFOM && (
                   <div className="mb-4 flex flex-wrap gap-2 items-center">
                     <div className="text-sm font-medium text-muted-foreground mr-2">Subcategory:</div>
-                    <Button
-                      variant={verifiedSubTab === 'newSites' ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setVerifiedSubTab('newSites')}
-                      className={verifiedSubTab === 'newSites' ? 'bg-blue-600 hover:bg-blue-700 text-white' : ''}
-                    >
-                      New Sites
-                      <Badge variant="secondary" className="ml-2">{verifiedSubcategories.newSites.length}</Badge>
+                    <Button variant={newFomSubTab === 'pending' ? 'default' : 'outline'} size="sm" onClick={() => setNewFomSubTab('pending')} className={newFomSubTab === 'pending' ? 'bg-blue-600 hover:bg-blue-700 text-white' : ''}>
+                      MMPs Pending Verification
+                      <Badge variant="secondary" className="ml-2">{newFomSubcategories.pending.length}</Badge>
                     </Button>
-                    <Button
-                      variant={verifiedSubTab === 'approvedCosted' ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setVerifiedSubTab('approvedCosted')}
-                      className={verifiedSubTab === 'approvedCosted' ? 'bg-blue-600 hover:bg-blue-700 text-white' : ''}
-                    >
-                      Approved & Costed
-                      <Badge variant="secondary" className="ml-2">{verifiedSubcategories.approvedCosted.length}</Badge>
-                    </Button>
-                    <Button
-                      variant={verifiedSubTab === 'dispatched' ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setVerifiedSubTab('dispatched')}
-                      className={verifiedSubTab === 'dispatched' ? 'bg-blue-600 hover:bg-blue-700 text-white' : ''}
-                    >
-                      Dispatched
-                      <Badge variant="secondary" className="ml-2">{verifiedSubcategories.dispatched.length}</Badge>
-                    </Button>
-                    <Button
-                      variant={verifiedSubTab === 'completed' ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setVerifiedSubTab('completed')}
-                      className={verifiedSubTab === 'completed' ? 'bg-blue-600 hover:bg-blue-700 text-white' : ''}
-                    >
-                      Completed
-                      <Badge variant="secondary" className="ml-2">{verifiedSubcategories.completed.length}</Badge>
-                    </Button>
-                    <Button
-                      variant={verifiedSubTab === 'rejected' ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setVerifiedSubTab('rejected')}
-                      className={verifiedSubTab === 'rejected' ? 'bg-blue-600 hover:bg-blue-700 text-white' : ''}
-                    >
-                      Rejected
-                      <Badge variant="secondary" className="ml-2">{verifiedSubcategories.rejected.length}</Badge>
+                    <Button variant={newFomSubTab === 'verified' ? 'default' : 'outline'} size="sm" onClick={() => setNewFomSubTab('verified')} className={newFomSubTab === 'verified' ? 'bg-blue-600 hover:bg-blue-700 text-white' : ''}>
+                      Verified MMPs
+                      <Badge variant="secondary" className="ml-2">{newFomSubcategories.verified.length}</Badge>
                     </Button>
                   </div>
                 )}
-                <MMPList mmpFiles={verifiedVisibleMMPs} />
-                {(isAdmin || isICT || isFOM || isCoordinator) && (
+                <MMPList mmpFiles={isFOM ? newFomSubcategories[newFomSubTab] : categorizedMMPs.new} />
+              </TabsContent>
+            )}
+
+            {!isCoordinator && (
+              <TabsContent value="forwarded">
+                {(isAdmin || isICT || isFOM) && (
+                  <div className="mb-4 flex flex-wrap gap-2 items-center">
+                    <div className="text-sm font-medium text-muted-foreground mr-2">Subcategory:</div>
+                    <Button variant={forwardedSubTab === 'pending' ? 'default' : 'outline'} size="sm" onClick={() => setForwardedSubTab('pending')} className={forwardedSubTab === 'pending' ? 'bg-blue-600 hover:bg-blue-700 text-white' : ''}>
+                      {isFOM ? 'Sites Pending Verification' : 'MMPs Pending Verification'}
+                      <Badge variant="secondary" className="ml-2">{forwardedSubcategories.pending.length}</Badge>
+                    </Button>
+                    <Button variant={forwardedSubTab === 'verified' ? 'default' : 'outline'} size="sm" onClick={() => setForwardedSubTab('verified')} className={forwardedSubTab === 'verified' ? 'bg-blue-600 hover:bg-blue-700 text-white' : ''}>
+                      {isFOM ? 'Verified Sites' : 'Verified MMPs'}
+                      <Badge variant="secondary" className="ml-2">{forwardedSubcategories.verified.length}</Badge>
+                    </Button>
+                  </div>
+                )}
+                <MMPList mmpFiles={(isAdmin || isICT || isFOM) ? forwardedSubcategories[forwardedSubTab] : categorizedMMPs.forwarded} />
+                {isFOM && (
                   <div className="mt-6">
                     <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-lg font-semibold">Sites by MMP</h3>
-                      <span className="text-xs text-muted-foreground">Verified subcategory: {verifiedSubTab}</span>
+                      <h3 className="text-lg font-semibold">Site Entries ({forwardedCategorySiteRows.length})</h3>
+                      <span className="text-xs text-muted-foreground">Forwarded subcategory: {forwardedSubTab}</span>
                     </div>
-                    <Accordion type="multiple" className="w-full">
-                      {verifiedGroupedRows.map(({ mmp, rows }) => (
-                        <AccordionItem key={mmp.id} value={mmp.id}>
-                          <AccordionTrigger>
-                            <div className="flex items-center gap-3 text-left">
-                              <span className="font-medium">{mmp.name}</span>
-                              <Badge variant="secondary">{rows.length} sites</Badge>
-                            </div>
-                          </AccordionTrigger>
-                          <AccordionContent>
-                            <MMPCategorySitesTable
-                              title={`Sites for ${mmp.name}`}
-                              description={`MMP ID: ${mmp.mmpId || mmp.id}`}
-                              rows={rows}
-                              maxHeightPx={520}
-                              emptyMessage="No sites for this MMP in the current subcategory."/>
-                          </AccordionContent>
-                        </AccordionItem>
-                      ))}
-                    </Accordion>
+                    <MMPCategorySitesTable
+                      title="Forwarded Sites"
+                      description="Sites contained in forwarded MMPs (from original entries or generated visit records)."
+                      rows={forwardedCategorySiteRows}
+                      maxHeightPx={520}
+                      emptyMessage="No site entries in this forwarded subcategory." />
                   </div>
                 )}
               </TabsContent>
-            </Tabs>
+            )}
+
+            <TabsContent value="verified">
+              {(isAdmin || isICT || isFOM || isCoordinator) && (
+                <div className="mb-4 flex flex-wrap gap-2 items-center">
+                  <div className="text-sm font-medium text-muted-foreground mr-2">Subcategory:</div>
+                  <Button variant={verifiedSubTab === 'newSites' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('newSites')} className={verifiedSubTab === 'newSites' ? 'bg-blue-600 hover:bg-blue-700 text-white' : ''}>
+                    New Sites
+                    <Badge variant="secondary" className="ml-2">{verifiedSubcategories.newSites.length}</Badge>
+                  </Button>
+                  <Button variant={verifiedSubTab === 'approvedCosted' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('approvedCosted')} className={verifiedSubTab === 'approvedCosted' ? 'bg-blue-600 hover:bg-blue-700 text-white' : ''}>
+                    Approved & Costed
+                    <Badge variant="secondary" className="ml-2">{verifiedSubcategories.approvedCosted.length}</Badge>
+                  </Button>
+                  <Button variant={verifiedSubTab === 'dispatched' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('dispatched')} className={verifiedSubTab === 'dispatched' ? 'bg-blue-600 hover:bg-blue-700 text-white' : ''}>
+                    Dispatched
+                    <Badge variant="secondary" className="ml-2">{verifiedSubcategories.dispatched.length}</Badge>
+                  </Button>
+                  <Button variant={verifiedSubTab === 'completed' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('completed')} className={verifiedSubTab === 'completed' ? 'bg-blue-600 hover:bg-blue-700 text-white' : ''}>
+                    Completed
+                    <Badge variant="secondary" className="ml-2">{verifiedSubcategories.completed.length}</Badge>
+                  </Button>
+                </div>
+              )}
+              <MMPList mmpFiles={verifiedVisibleMMPs} />
+              {(isAdmin || isICT || isFOM || isCoordinator) && (
+                <div className="mt-6">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-lg font-semibold">Sites by MMP</h3>
+                    <span className="text-xs text-muted-foreground">Verified subcategory: {verifiedSubTab}</span>
+                  </div>
+                  <Accordion type="multiple" className="w-full">
+                    {verifiedGroupedRows.map(({ mmp, rows }) => (
+                      <AccordionItem key={mmp.id} value={mmp.id}>
+                        <AccordionTrigger>
+                          <div className="flex items-center gap-3 text-left">
+                            <span className="font-medium">{mmp.name}</span>
+                            <Badge variant="secondary">{rows.length} sites</Badge>
+                          </div>
+                        </AccordionTrigger>
+                        <AccordionContent>
+                          <MMPCategorySitesTable
+                            title={`Sites for ${mmp.name}`}
+                            description={`MMP ID: ${mmp.mmpId || mmp.id}`}
+                            rows={rows}
+                            maxHeightPx={520}
+                            emptyMessage="No sites for this MMP in the current subcategory." />
+                        </AccordionContent>
+                      </AccordionItem>
+                    ))}
+                  </Accordion>
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
         )}
       </div>
-        {(isAdmin || isICT) && (
-          <BulkClearForwardedDialog open={clearDialogOpen} onOpenChange={setClearDialogOpen} />
-        )}
+      {(isAdmin || isICT) && (
+        <BulkClearForwardedDialog open={clearDialogOpen} onOpenChange={setClearDialogOpen} />
+      )}
     </div>
   );
 };
