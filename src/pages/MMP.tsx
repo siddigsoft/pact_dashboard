@@ -9,7 +9,8 @@ import { MMPList } from '@/components/mmp/MMPList';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import MMPCategorySitesTable, { SiteVisitRow } from '@/components/mmp/MMPCategorySitesTable';
+import type { SiteVisitRow } from '@/components/mmp/MMPCategorySitesTable';
+import MMPSiteEntriesTable from '@/components/mmp/MMPSiteEntriesTable';
 import { supabase } from '@/integrations/supabase/client';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 
@@ -18,7 +19,7 @@ import BulkClearForwardedDialog from '../components/mmp/BulkClearForwardedDialog
 
 const MMP = () => {
   const navigate = useNavigate();
-  const { mmpFiles, loading } = useMMP();
+  const { mmpFiles, loading, updateMMP } = useMMP();
   const { checkPermission, hasAnyRole, currentUser } = useAuthorization();
   const [activeTab, setActiveTab] = useState('new');
   // Subcategory state for Forwarded MMPs (Admin/ICT only)
@@ -285,6 +286,26 @@ const MMP = () => {
     return buildSiteRowsFromMMPs(mmps);
   }, [isFOM, forwardedSubTab, forwardedSubcategories, siteVisitRows]);
 
+  // Aggregated site entries (raw MMP.siteEntries) for Forwarded section
+  const forwardedEntries = useMemo(() => {
+    const mmps = (isAdmin || isICT || isFOM) ? (forwardedSubcategories[forwardedSubTab] || []) : (categorizedMMPs.forwarded || []);
+    const entries: any[] = [];
+    for (const m of mmps) {
+      const list = (m as any).siteEntries || [];
+      if (Array.isArray(list)) {
+        list.forEach((se: any, idx: number) => {
+          entries.push({
+            ...se,
+            __mmpId: m.id,
+            __siteIndex: idx,
+            _key: se?.id || se?.siteCode || `${m.id}-site-${idx}`,
+          });
+        });
+      }
+    }
+    return entries;
+  }, [isAdmin, isICT, isFOM, forwardedSubTab, forwardedSubcategories, categorizedMMPs.forwarded]);
+
   // - Coordinator: Verified only
   useEffect(() => {
     const loadStats = async () => {
@@ -532,15 +553,49 @@ const MMP = () => {
                   {isFOM && (
                     <div className="mt-6">
                       <div className="flex items-center justify-between mb-2">
-                        <h3 className="text-lg font-semibold">Site Entries ({forwardedCategorySiteRows.length})</h3>
+                        <h3 className="text-lg font-semibold">Site Entries ({forwardedEntries.length})</h3>
                         <span className="text-xs text-muted-foreground">Forwarded subcategory: {forwardedSubTab}</span>
                       </div>
-                      <MMPCategorySitesTable
-                        title="Forwarded Sites"
-                        description="Sites contained in forwarded MMPs (from original entries or generated visit records)."
-                        rows={forwardedCategorySiteRows}
-                        maxHeightPx={520}
-                        emptyMessage="No site entries in this forwarded subcategory." />
+                      <MMPSiteEntriesTable
+                        siteEntries={forwardedEntries}
+                        editable={isFOM || isAdmin || isICT}
+                        onUpdateSites={async (sites) => {
+                          try {
+                            // Determine which rows changed
+                            const changed = sites.filter((s: any, i: number) => JSON.stringify(s) !== JSON.stringify(forwardedEntries[i]));
+                            if (changed.length === 0) return true;
+
+                            // Group changes by parent MMP id
+                            const byMmp: Record<string, any[]> = {};
+                            for (const row of changed) {
+                              const mId = row.__mmpId;
+                              if (!mId) continue;
+                              if (!byMmp[mId]) byMmp[mId] = [];
+                              byMmp[mId].push(row);
+                            }
+
+                            // For each MMP, update its siteEntries at the recorded indices
+                            const mmpsUsed = (isAdmin || isICT || isFOM) ? (forwardedSubcategories[forwardedSubTab] || []) : (categorizedMMPs.forwarded || []);
+                            for (const mId of Object.keys(byMmp)) {
+                              const m = mmpsUsed.find((x: any) => x.id === mId) || (categorizedMMPs.forwarded || []).find((x: any) => x.id === mId);
+                              if (!m) return false;
+                              const currentSites = Array.isArray((m as any).siteEntries) ? [ ...(m as any).siteEntries ] : [];
+                              for (const upd of byMmp[mId]) {
+                                const idx = typeof upd.__siteIndex === 'number' ? upd.__siteIndex : -1;
+                                if (idx >= 0 && idx < currentSites.length) {
+                                  const { __mmpId, __siteIndex, _key, ...clean } = upd;
+                                  currentSites[idx] = clean;
+                                }
+                              }
+                              const ok = await updateMMP(mId, { siteEntries: currentSites });
+                              if (!ok) return false;
+                            }
+                            return true;
+                          } catch {
+                            return false;
+                          }
+                        }}
+                      />
                     </div>
                   )}
                 </TabsContent>
@@ -610,16 +665,17 @@ const MMP = () => {
                           <AccordionTrigger>
                             <div className="flex items-center gap-3 text-left">
                               <span className="font-medium">{mmp.name}</span>
-                              <Badge variant="secondary">{rows.length} sites</Badge>
+                              <Badge variant="secondary">{((mmp as any).siteEntries?.length || 0)} sites</Badge>
                             </div>
                           </AccordionTrigger>
                           <AccordionContent>
-                            <MMPCategorySitesTable
-                              title={`Sites for ${mmp.name}`}
-                              description={`MMP ID: ${mmp.mmpId || mmp.id}`}
-                              rows={rows}
-                              maxHeightPx={520}
-                              emptyMessage="No sites for this MMP in the current subcategory."/>
+                            <MMPSiteEntriesTable
+                              siteEntries={(mmp as any).siteEntries || []}
+                              editable={isFOM || isAdmin || isICT}
+                              onUpdateSites={async (sites) => {
+                                return await updateMMP(mmp.id, { siteEntries: sites });
+                              }}
+                            />
                           </AccordionContent>
                         </AccordionItem>
                       ))}
