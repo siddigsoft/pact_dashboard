@@ -10,7 +10,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 
 // Use the correct AppRole value for field operation manager (per schema)
-const FIELD_OP_ROLE = 'fom';
+const FIELD_OP_ROLE = 'Field Operation Manager (FOM)';
 
 const FieldOperationManagerPage = () => {
   const { currentUser, roles } = useAppContext();
@@ -21,10 +21,10 @@ const FieldOperationManagerPage = () => {
   const navigate = useNavigate();
 
   // Check if user can delete MMPs (only admin and ICT can delete)
-  const canDeleteMMP = checkPermission('mmp', 'delete') || hasAnyRole(['admin', 'ict']);
+  const canDeleteMMP = checkPermission('mmp', 'delete') || hasAnyRole(['Admin', 'ICT']);
 
   // Use the correct role value
-  const allowed = roles?.includes('admin') || roles?.includes(FIELD_OP_ROLE as any);
+  const allowed = roles?.includes('Admin') || roles?.includes(FIELD_OP_ROLE);
   if (!allowed) {
     return (
       <div className="max-w-xl mx-auto mt-20 p-8 bg-white rounded-xl shadow text-center">
@@ -107,7 +107,7 @@ const FieldOperationManagerPage = () => {
                     <td className="px-4 py-2">{mmp.uploadedAt ? new Date(mmp.uploadedAt).toLocaleDateString() : '-'}</td>
                     <td className="px-4 py-2">{uploadedByName}</td>
                     <td className="px-4 py-2">
-                      <Badge variant={uploadedByRole === 'admin' ? 'default' : 'outline'}>
+                      <Badge variant={uploadedByRole === 'Admin' ? 'default' : 'outline'}>
                         {uploadedByRole}
                       </Badge>
                     </td>
@@ -120,37 +120,35 @@ const FieldOperationManagerPage = () => {
                       >
                         View
                       </button>
-                      {canDeleteMMP && (
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button size="icon" variant="destructive" className="ml-2" onClick={() => setDeleteId(mmp.id)}>
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Delete MMP File "{mmp.projectName || mmp.mmpId}"?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                This action cannot be undone. The MMP file and all its data will be permanently deleted from the system.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction
-                                disabled={deleting}
-                                onClick={async () => {
-                                  setDeleting(true);
-                                  await deleteMMPFile(mmp.id);
-                                  setDeleting(false);
-                                  setDeleteId(null);
-                                }}
-                              >
-                                Delete
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      )}
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button size="icon" variant="destructive" className="ml-2" onClick={() => setDeleteId(mmp.id)}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Delete MMP File "{mmp.projectName || mmp.mmpId}"?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This action cannot be undone. The MMP file and all its data will be permanently deleted from the system.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                              disabled={deleting}
+                              onClick={async () => {
+                                setDeleting(true);
+                                await deleteMMPFile(mmp.id);
+                                setDeleting(false);
+                                setDeleteId(null);
+                              }}
+                            >
+                              Delete
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </td>
                   </tr>
                 );
