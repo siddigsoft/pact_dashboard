@@ -3,13 +3,18 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { Upload, ChevronLeft } from 'lucide-react';
+import { Upload, ChevronLeft, Trash2 } from 'lucide-react';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { MMPList } from '@/components/mmp/MMPList';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
+import MMPCategorySitesTable, { SiteVisitRow } from '@/components/mmp/MMPCategorySitesTable';
 import { supabase } from '@/integrations/supabase/client';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+
+// Using relative import fallback in case path alias resolution misses new file
+import BulkClearForwardedDialog from '../components/mmp/BulkClearForwardedDialog';
 
 const MMP = () => {
   const navigate = useNavigate();
@@ -20,6 +25,8 @@ const MMP = () => {
   const [forwardedSubTab, setForwardedSubTab] = useState<'pending' | 'verified' | 'rejected'>('pending');
   // Subcategory state for Verified Sites (Admin/ICT only)
   const [verifiedSubTab, setVerifiedSubTab] = useState<'newSites' | 'approvedCosted' | 'dispatched' | 'completed' | 'rejected'>('newSites');
+  // Subcategory state for New MMPs (FOM only)
+  const [newFomSubTab, setNewFomSubTab] = useState<'pending' | 'verified' | 'rejected'>('pending');
   const [siteVisitStats, setSiteVisitStats] = useState<Record<string, {
     exists: boolean;
     hasCosted: boolean;
@@ -28,6 +35,8 @@ const MMP = () => {
     hasCompleted: boolean;
     hasRejected: boolean;
   }>>({});
+  const [siteVisitRows, setSiteVisitRows] = useState<SiteVisitRow[]>([]);
+  const [clearDialogOpen, setClearDialogOpen] = useState(false);
 
   // Helper function to normalize role checking (handles both lowercase and proper case)
   const hasRole = (rolesToCheck: string[]) => {
@@ -170,6 +179,16 @@ const MMP = () => {
     return { pending, verified, rejected };
   }, [categorizedMMPs.forwarded]);
 
+  // New MMP subcategories for FOM (Pending, Verified, Rejected)
+  const newFomSubcategories = useMemo(() => {
+    if (!isFOM) return { pending: [], verified: [], rejected: [] } as Record<string, typeof categorizedMMPs.new>;
+    const base = categorizedMMPs.new || [];
+    const pending = base.filter(mmp => mmp.status !== 'approved' && mmp.status !== 'rejected');
+    const verified = base.filter(mmp => mmp.status === 'approved');
+    const rejected = base.filter(mmp => mmp.status === 'rejected');
+    return { pending, verified, rejected };
+  }, [isFOM, categorizedMMPs.new]);
+
   // Verified subcategories for Admin/ICT
   const verifiedSubcategories = useMemo(() => {
     const base = categorizedMMPs.verified || [];
@@ -178,8 +197,12 @@ const MMP = () => {
         const stage = (mmp.workflow as any)?.currentStage;
         const stats = siteVisitStats[mmp.id];
         const coordinatorVerified = Boolean((mmp.workflow as any)?.coordinatorVerified);
-        // New Sites: verified by coordinators and saved, not yet approved/costed/advanced
-        return coordinatorVerified && (stage === 'verified' || stage === 'draft') && mmp.status === 'pending' && !(stats?.hasCosted || stats?.hasInProgress || stats?.hasCompleted);
+        // New Sites includes:
+        // 1) Coordinator-verified MMPs still in early stage and pending, with no cost/dispatch/completion
+        const isCoordinatorNew = coordinatorVerified && (stage === 'verified' || stage === 'draft') && mmp.status === 'pending' && !(stats?.hasCosted || stats?.hasInProgress || stats?.hasCompleted || stats?.hasRejected);
+        // 2) Verified-template MMPs that have no cost/dispatch/completion/rejection yet (status may already be approved)
+        const isVerifiedTemplateNew = (mmp.type === 'verified-template') && !(stats?.hasCosted || stats?.hasInProgress || stats?.hasCompleted || stats?.hasRejected);
+        return isCoordinatorNew || isVerifiedTemplateNew;
       }),
       approvedCosted: base.filter(mmp => {
         const stats = siteVisitStats[mmp.id];
@@ -203,11 +226,75 @@ const MMP = () => {
     };
   }, [categorizedMMPs.verified, siteVisitStats]);
 
-  // Load site visit stats for verified MMPs (Admin/ICT)
+  // Build unified site rows (site_visits + fallback to mmp.siteEntries) for given MMP list
+  const buildSiteRowsFromMMPs = (mmps: any[]): SiteVisitRow[] => {
+    const rows: SiteVisitRow[] = [];
+    const existingIds = new Set(siteVisitRows.map(r => r.mmpId));
+    for (const mmp of mmps) {
+      // Use siteEntries when we don't yet have site_visits for this MMP
+      if (!existingIds.has(mmp.id) && Array.isArray(mmp.siteEntries)) {
+        for (const se of mmp.siteEntries) {
+          rows.push({
+            id: se.id || `${mmp.id}-site-${rows.length}`,
+            mmpId: mmp.id,
+            siteName: se.siteName || se.siteCode || se.state || 'Site',
+            siteCode: se.siteCode,
+            state: se.state,
+            locality: se.locality,
+            status: (se.status || 'pending'),
+            feesTotal: 0,
+            assignedAt: undefined,
+            completedAt: undefined,
+            rejectionReason: undefined,
+          });
+        }
+      }
+    }
+    // Merge with siteVisitRows restricted to those MMPs
+    const visitRows = siteVisitRows.filter(r => mmps.find(m => m.id === r.mmpId));
+    return [...visitRows, ...rows];
+  };
+
+  // Verified site rows per subcategory (all roles seeing Verified tab)
+  const verifiedCategorySiteRows = useMemo(() => {
+    const subKey = verifiedSubTab;
+    const mmps = verifiedSubcategories[subKey] || [];
+    if (mmps.length === 0) return [];
+    return buildSiteRowsFromMMPs(mmps);
+  }, [verifiedSubTab, verifiedSubcategories, siteVisitRows]);
+
+  // Group verified site rows by MMP for display
+  const verifiedVisibleMMPs = useMemo(() => {
+    return (isAdmin || isICT || isFOM || isCoordinator)
+      ? (verifiedSubcategories[verifiedSubTab] || [])
+      : (categorizedMMPs.verified || []);
+  }, [isAdmin, isICT, isFOM, isCoordinator, verifiedSubTab, verifiedSubcategories, categorizedMMPs.verified]);
+
+  const verifiedGroupedRows = useMemo(() => {
+    return verifiedVisibleMMPs.map(m => ({
+      mmp: m,
+      rows: buildSiteRowsFromMMPs([m]),
+    }));
+  }, [verifiedVisibleMMPs, siteVisitRows]);
+
+  // Forwarded site rows per subcategory (FOM only for site data)
+  const forwardedCategorySiteRows = useMemo(() => {
+    if (!isFOM) return [] as SiteVisitRow[];
+    const mmps = forwardedSubcategories[forwardedSubTab] || [];
+    if (mmps.length === 0) return [];
+    return buildSiteRowsFromMMPs(mmps);
+  }, [isFOM, forwardedSubTab, forwardedSubcategories, siteVisitRows]);
+
+  // - Coordinator: Verified only
   useEffect(() => {
     const loadStats = async () => {
-      if (!(isAdmin || isICT)) return;
-      const list = categorizedMMPs.verified || [];
+      if (!(isAdmin || isICT || isFOM || isCoordinator)) return;
+      let list: any[] = [];
+      if (isFOM) {
+        list = [ ...(categorizedMMPs.verified || []), ...(categorizedMMPs.forwarded || []) ];
+      } else if (isAdmin || isICT || isCoordinator) {
+        list = [ ...(categorizedMMPs.verified || []) ];
+      }
       if (list.length === 0) {
         setSiteVisitStats({});
         return;
@@ -216,12 +303,13 @@ const MMP = () => {
       try {
         const { data, error } = await supabase
           .from('site_visits')
-          .select('mmp_id,status,fees')
+          .select('id,mmp_id,status,fees,site_name,site_code,state,locality,assigned_at,completed_at,rejection_reason')
           .in('mmp_id', ids);
         if (error) throw error;
         const map: Record<string, {
           exists: boolean; hasCosted: boolean; hasAssigned: boolean; hasInProgress: boolean; hasCompleted: boolean; hasRejected: boolean;
         }> = {};
+        const rows: SiteVisitRow[] = [];
         for (const row of (data || []) as any[]) {
           const id = row.mmp_id;
           if (!map[id]) {
@@ -236,11 +324,26 @@ const MMP = () => {
           const fees = row.fees || {};
           const total = Number(fees.total || 0);
           if (total > 0) map[id].hasCosted = true;
+          rows.push({
+            id: row.id,
+            mmpId: row.mmp_id,
+            siteName: row.site_name || row.site_code || row.id,
+            siteCode: row.site_code || undefined,
+            state: row.state || undefined,
+            locality: row.locality || undefined,
+            status: row.status || 'unknown',
+            feesTotal: total,
+            assignedAt: row.assigned_at || undefined,
+            completedAt: row.completed_at || undefined,
+            rejectionReason: row.rejection_reason || undefined,
+          });
         }
         setSiteVisitStats(map);
+        setSiteVisitRows(rows);
       } catch (e) {
         console.warn('Failed to load site visit stats', e);
         setSiteVisitStats({});
+        setSiteVisitRows([]);
       }
     };
     loadStats();
@@ -295,15 +398,27 @@ const MMP = () => {
             </p>
           </div>
         </div>
-        {canCreate && (
-          <Button
-            className="bg-gradient-to-r from-blue-700 to-blue-500 hover:from-blue-800 hover:to-blue-600 text-white shadow-lg hover:shadow-xl transition-all duration-300 px-6 py-2 rounded-full font-semibold"
-            onClick={() => navigate('/mmp/upload')}
-          >
-            <Upload className="h-5 w-5 mr-2" />
-            Upload MMP
-          </Button>
-        )}
+        <div className="flex items-center gap-3">
+          {canCreate && (
+            <Button
+              className="bg-gradient-to-r from-blue-700 to-blue-500 hover:from-blue-800 hover:to-blue-600 text-white shadow-lg hover:shadow-xl transition-all duration-300 px-6 py-2 rounded-full font-semibold"
+              onClick={() => navigate('/mmp/upload')}
+            >
+              <Upload className="h-5 w-5 mr-2" />
+              Upload MMP
+            </Button>
+          )}
+          {/* {(isAdmin || isICT) && (
+            <Button
+              variant="outline"
+              onClick={() => setClearDialogOpen(true)}
+              className="border-red-300 text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30 hover:text-red-800"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Clear Forwarded Sites
+            </Button>
+          )} */}
+        </div>
       </div>
 
       {/* Content Section */}
@@ -335,13 +450,45 @@ const MMP = () => {
 
               {!isCoordinator && (
                 <TabsContent value="new">
-                  <MMPList mmpFiles={categorizedMMPs.new} />
+                  {isFOM && (
+                    <div className="mb-4 flex flex-wrap gap-2 items-center">
+                      <div className="text-sm font-medium text-muted-foreground mr-2">Subcategory:</div>
+                      <Button
+                        variant={newFomSubTab === 'pending' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setNewFomSubTab('pending')}
+                        className={newFomSubTab === 'pending' ? 'bg-blue-600 hover:bg-blue-700 text-white' : ''}
+                      >
+                        Pending
+                        <Badge variant="secondary" className="ml-2">{newFomSubcategories.pending.length}</Badge>
+                      </Button>
+                      <Button
+                        variant={newFomSubTab === 'verified' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setNewFomSubTab('verified')}
+                        className={newFomSubTab === 'verified' ? 'bg-blue-600 hover:bg-blue-700 text-white' : ''}
+                      >
+                        Verified
+                        <Badge variant="secondary" className="ml-2">{newFomSubcategories.verified.length}</Badge>
+                      </Button>
+                      <Button
+                        variant={newFomSubTab === 'rejected' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setNewFomSubTab('rejected')}
+                        className={newFomSubTab === 'rejected' ? 'bg-blue-600 hover:bg-blue-700 text-white' : ''}
+                      >
+                        Rejected
+                        <Badge variant="secondary" className="ml-2">{newFomSubcategories.rejected.length}</Badge>
+                      </Button>
+                    </div>
+                  )}
+                  <MMPList mmpFiles={isFOM ? newFomSubcategories[newFomSubTab] : categorizedMMPs.new} />
                 </TabsContent>
               )}
 
               {!isCoordinator && (
                 <TabsContent value="forwarded">
-                  {(isAdmin || isICT) && (
+                  {(isAdmin || isICT || isFOM) && (
                     <div className="mb-4 flex flex-wrap gap-2 items-center">
                       <div className="text-sm font-medium text-muted-foreground mr-2">Subcategory:</div>
                       <Button
@@ -380,13 +527,27 @@ const MMP = () => {
                     </div>
                   )}
                   <MMPList
-                    mmpFiles={(isAdmin || isICT) ? forwardedSubcategories[forwardedSubTab] : categorizedMMPs.forwarded}
+                    mmpFiles={(isAdmin || isICT || isFOM) ? forwardedSubcategories[forwardedSubTab] : categorizedMMPs.forwarded}
                   />
+                  {isFOM && (
+                    <div className="mt-6">
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-lg font-semibold">Site Entries ({forwardedCategorySiteRows.length})</h3>
+                        <span className="text-xs text-muted-foreground">Forwarded subcategory: {forwardedSubTab}</span>
+                      </div>
+                      <MMPCategorySitesTable
+                        title="Forwarded Sites"
+                        description="Sites contained in forwarded MMPs (from original entries or generated visit records)."
+                        rows={forwardedCategorySiteRows}
+                        maxHeightPx={520}
+                        emptyMessage="No site entries in this forwarded subcategory." />
+                    </div>
+                  )}
                 </TabsContent>
               )}
 
               <TabsContent value="verified">
-                {(isAdmin || isICT) && (
+                {(isAdmin || isICT || isFOM || isCoordinator) && (
                   <div className="mb-4 flex flex-wrap gap-2 items-center">
                     <div className="text-sm font-medium text-muted-foreground mr-2">Subcategory:</div>
                     <Button
@@ -436,11 +597,42 @@ const MMP = () => {
                     </Button>
                   </div>
                 )}
-                <MMPList mmpFiles={(isAdmin || isICT) ? verifiedSubcategories[verifiedSubTab] : categorizedMMPs.verified} />
+                <MMPList mmpFiles={verifiedVisibleMMPs} />
+                {(isAdmin || isICT || isFOM || isCoordinator) && (
+                  <div className="mt-6">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="text-lg font-semibold">Sites by MMP</h3>
+                      <span className="text-xs text-muted-foreground">Verified subcategory: {verifiedSubTab}</span>
+                    </div>
+                    <Accordion type="multiple" className="w-full">
+                      {verifiedGroupedRows.map(({ mmp, rows }) => (
+                        <AccordionItem key={mmp.id} value={mmp.id}>
+                          <AccordionTrigger>
+                            <div className="flex items-center gap-3 text-left">
+                              <span className="font-medium">{mmp.name}</span>
+                              <Badge variant="secondary">{rows.length} sites</Badge>
+                            </div>
+                          </AccordionTrigger>
+                          <AccordionContent>
+                            <MMPCategorySitesTable
+                              title={`Sites for ${mmp.name}`}
+                              description={`MMP ID: ${mmp.mmpId || mmp.id}`}
+                              rows={rows}
+                              maxHeightPx={520}
+                              emptyMessage="No sites for this MMP in the current subcategory."/>
+                          </AccordionContent>
+                        </AccordionItem>
+                      ))}
+                    </Accordion>
+                  </div>
+                )}
               </TabsContent>
             </Tabs>
         )}
       </div>
+        {(isAdmin || isICT) && (
+          <BulkClearForwardedDialog open={clearDialogOpen} onOpenChange={setClearDialogOpen} />
+        )}
     </div>
   );
 };

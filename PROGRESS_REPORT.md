@@ -49,6 +49,7 @@ Supporting components: `src/components/mmp/*`, `src/components/verification/*`, 
 - **Optimized detail view**: `MMPDetailView.tsx` consolidates overview, site entries (list/detail), validation summary, audit, compliance, version history, and file management (archive/delete/approve/reset) based on role.
 - **Verification workflow**: `MMPVerification.tsx` calculates progress, site counts, and finalizes status to "verified"; integrates `MMPSiteInformation` for updates.
 - **Editing**: `EditMMP.tsx` supports core details, sites, activities (`ActivityManager`), and version history.
+- **Bulk maintenance**: Admin/ICT can use `BulkClearForwardedDialog` (triggered from MMP page header) to reset all forwarded flags (FOM & Coordinator) and optionally delete associated `site_visits` records in one controlled operation (double confirmation required).
 
 ---
 
