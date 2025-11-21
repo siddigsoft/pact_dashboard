@@ -624,6 +624,23 @@ const MMP = () => {
     return [...visitRows, ...rows];
   };
 
+  // Always calculate verified sites count for "newSites" subcategory (for badge display)
+  const newSitesVerifiedCount = useMemo(() => {
+    const allVerifiedMMPs = categorizedMMPs.verified || [];
+    
+    if (allVerifiedMMPs.length === 0) return 0;
+    
+    // Filter to only count verified sites from any MMP
+    const verifiedSites = buildSiteRowsFromMMPs(allVerifiedMMPs, (row) => {
+      // Show sites that are verified (from site_visits or mmp_site_entries)
+      // Check both lowercase and capitalized versions
+      const status = row.status?.toLowerCase() || '';
+      return status === 'verified';
+    });
+    
+    return verifiedSites.length;
+  }, [categorizedMMPs.verified, siteVisitRows]);
+
   // Verified site rows per subcategory (all roles seeing Verified tab)
   const verifiedCategorySiteRows = useMemo(() => {
     const subKey = verifiedSubTab;
@@ -956,9 +973,7 @@ const MMP = () => {
                   <Button variant={verifiedSubTab === 'newSites' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('newSites')} className={verifiedSubTab === 'newSites' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''}>
                     New Sites Verified by Coordinators
                     <Badge variant="secondary" className="ml-2">
-                      {verifiedSubTab === 'newSites' 
-                        ? verifiedCategorySiteRows.length 
-                        : verifiedSubcategories.newSites.length}
+                      {newSitesVerifiedCount}
                     </Badge>
                   </Button>
                   <Button variant={verifiedSubTab === 'approvedCosted' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('approvedCosted')} className={verifiedSubTab === 'approvedCosted' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''}>
