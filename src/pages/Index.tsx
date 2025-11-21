@@ -1,7 +1,18 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import PactLogo from "@/assets/logo.png";
+import {
+  FolderKanban,
+  MapPin,
+  BarChart3,
+  Users,
+  CheckCircle2,
+  TrendingUp,
+  ArrowRight
+} from "lucide-react";
 
 const Index = () => {
   const navigate = useNavigate();
@@ -12,62 +23,224 @@ const Index = () => {
     }
   }, []);
 
+  const features = [
+    {
+      icon: FolderKanban,
+      title: "Project Management",
+      description: "Organize and track multiple projects with ease",
+      color: "text-blue-600 dark:text-blue-400"
+    },
+    {
+      icon: MapPin,
+      title: "Field Operations",
+      description: "Real-time site visit tracking and coordination",
+      color: "text-orange-600 dark:text-orange-400"
+    },
+    {
+      icon: BarChart3,
+      title: "Advanced Reporting",
+      description: "Comprehensive analytics and insights",
+      color: "text-purple-600 dark:text-purple-400"
+    }
+  ];
+
+  const stats = [
+    { label: "Active Projects", value: "50+", icon: FolderKanban },
+    { label: "Field Teams", value: "100+", icon: Users },
+    { label: "Success Rate", value: "99%", icon: TrendingUp }
+  ];
+
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-blue-50/20 via-orange-50/20 to-gray-100 dark:from-black dark:via-gray-900 dark:to-gray-800 px-4 py-14 md:py-22 text-center relative overflow-hidden">
-      {/* Logo */}
-      <img
-        src={PactLogo}
-        alt="PACT Logo"
-        className="h-28 w-28 md:h-32 md:w-32 mb-8"
-      />
+    <div className="min-h-screen bg-gradient-to-br from-blue-50/30 via-orange-50/20 to-background dark:from-gray-950 dark:via-gray-900 dark:to-gray-950 relative overflow-hidden">
+      {/* Animated background elements */}
+      <div className="absolute -top-32 -left-24 w-96 h-96 bg-blue-400/10 dark:bg-blue-600/10 rounded-full blur-3xl animate-blob" />
+      <div className="absolute top-1/2 -right-32 w-96 h-96 bg-orange-400/10 dark:bg-orange-600/10 rounded-full blur-3xl animate-blob animation-delay-2000" />
+      <div className="absolute -bottom-32 left-1/3 w-96 h-96 bg-purple-400/10 dark:bg-purple-600/10 rounded-full blur-3xl animate-blob animation-delay-4000" />
 
-      {/* Main Heading */}
-      <h1 className="text-4xl md:text-5xl font-extrabold mb-4 text-blue-600">
-        PACT Workflow Platform
-      </h1>
+      <div className="relative z-10">
+        {/* Hero Section */}
+        <div className="container mx-auto px-4 py-16 md:py-24">
+          <div className="grid lg:grid-cols-2 gap-12 items-center">
+            {/* Left Column - Content */}
+            <div className="text-center lg:text-left space-y-8">
+              <div className="flex justify-center lg:justify-start">
+                <img
+                  src={PactLogo}
+                  alt="PACT Logo"
+                  data-testid="img-logo"
+                  className="h-24 w-24 md:h-28 md:w-28"
+                />
+              </div>
 
-      {/* Subheading */}
-      <p className="text-gray-700 dark:text-gray-300 text-base md:text-lg mb-10 max-w-xl">
-        Streamlined MMP Management System for seamless field operations
-      </p>
+              <div className="space-y-4">
+                <Badge 
+                  variant="secondary" 
+                  className="mb-2"
+                  data-testid="badge-platform-status"
+                >
+                  <CheckCircle2 className="w-3 h-3 mr-1" />
+                  Trusted by Organizations Worldwide
+                </Badge>
+                
+                <h1 
+                  className="text-4xl md:text-5xl lg:text-6xl font-extrabold bg-gradient-to-r from-blue-600 to-orange-600 dark:from-blue-400 dark:to-orange-400 bg-clip-text text-transparent"
+                  data-testid="heading-main"
+                >
+                  PACT Workflow Platform
+                </h1>
+                
+                <p 
+                  className="text-lg md:text-xl text-muted-foreground max-w-2xl"
+                  data-testid="text-subtitle"
+                >
+                  Streamlined MMP Management System for seamless field operations. 
+                  Empower your teams with real-time collaboration and data-driven insights.
+                </p>
+              </div>
 
-      {/* Feature Badges */}
-      <div className="flex flex-wrap justify-center gap-3 mb-10">
-        <span className="px-4 py-2 bg-blue-100 dark:bg-blue-800 text-blue-800 dark:text-blue-200 rounded-full text-sm font-medium shadow-md hover:scale-105 transition-all duration-300">
-          Project Management
-        </span>
-        <span className="px-4 py-2 bg-orange-100 dark:bg-orange-800 text-orange-800 dark:text-orange-200 rounded-full text-sm font-medium shadow-md hover:scale-105 transition-all duration-300">
-          Field Operations
-        </span>
-        <span className="px-4 py-2 bg-black/10 dark:bg-white/10 text-black dark:text-white rounded-full text-sm font-medium shadow-md hover:scale-105 transition-all duration-300">
-          Advanced Reporting
-        </span>
+              <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
+                <Button
+                  size="lg"
+                  onClick={() => navigate("/auth")}
+                  data-testid="button-login"
+                  className="gap-2"
+                >
+                  Continue to Login
+                  <ArrowRight className="w-4 h-4" />
+                </Button>
+                
+                <Button
+                  size="lg"
+                  variant="outline"
+                  onClick={() => navigate("/auth")}
+                  data-testid="button-learn-more"
+                >
+                  Learn More
+                </Button>
+              </div>
+
+              {/* Stats */}
+              <div className="grid grid-cols-3 gap-4 pt-8">
+                {stats.map((stat, index) => (
+                  <div 
+                    key={index} 
+                    className="text-center lg:text-left"
+                    data-testid={`stat-${stat.label.toLowerCase().replace(/\s+/g, '-')}`}
+                  >
+                    <div className="flex items-center justify-center lg:justify-start gap-2 mb-1">
+                      <stat.icon className="w-4 h-4 text-muted-foreground" />
+                      <p className="text-2xl md:text-3xl font-bold">{stat.value}</p>
+                    </div>
+                    <p className="text-xs text-muted-foreground">{stat.label}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Right Column - Feature Cards */}
+            <div className="space-y-4">
+              {features.map((feature, index) => {
+                const Icon = feature.icon;
+                return (
+                  <Card 
+                    key={index} 
+                    className="hover-elevate border-muted"
+                    data-testid={`card-feature-${feature.title.toLowerCase().replace(/\s+/g, '-')}`}
+                  >
+                    <CardContent className="p-6">
+                      <div className="flex items-start gap-4">
+                        <div className={`p-3 rounded-md bg-muted ${feature.color}`}>
+                          <Icon className="w-6 h-6" />
+                        </div>
+                        <div className="flex-1">
+                          <h3 className="text-lg font-semibold mb-2">
+                            {feature.title}
+                          </h3>
+                          <p className="text-sm text-muted-foreground">
+                            {feature.description}
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Trust Section */}
+        <div className="border-t bg-muted/20 backdrop-blur-sm">
+          <div className="container mx-auto px-4 py-8">
+            <div className="flex flex-wrap items-center justify-center gap-8 text-center">
+              <div data-testid="trust-secure">
+                <p className="text-sm text-muted-foreground mb-1">
+                  Enterprise-Grade Security
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  SOC 2 Compliant
+                </p>
+              </div>
+              <div className="h-8 w-px bg-border hidden sm:block" />
+              <div data-testid="trust-uptime">
+                <p className="text-sm text-muted-foreground mb-1">
+                  99.9% Uptime
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Guaranteed Availability
+                </p>
+              </div>
+              <div className="h-8 w-px bg-border hidden sm:block" />
+              <div data-testid="trust-support">
+                <p className="text-sm text-muted-foreground mb-1">
+                  24/7 Support
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Always Here to Help
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <footer className="border-t">
+          <div className="container mx-auto px-4 py-8">
+            <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+              <p 
+                className="text-sm text-muted-foreground"
+                data-testid="text-copyright"
+              >
+                &copy; {new Date().getFullYear()} PACT Consultancy. All rights reserved.
+              </p>
+              
+              <div className="flex gap-6">
+                <a
+                  href="#"
+                  className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  data-testid="link-privacy"
+                >
+                  Privacy Policy
+                </a>
+                <a
+                  href="#"
+                  className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  data-testid="link-terms"
+                >
+                  Terms of Service
+                </a>
+                <a
+                  href="#"
+                  className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  data-testid="link-support"
+                >
+                  Support
+                </a>
+              </div>
+            </div>
+          </div>
+        </footer>
       </div>
-
-      {/* Continue Button */}
-      <Button
-        className="
-          mb-8 px-8 py-3 font-semibold rounded-lg text-white
-          bg-blue-600 shadow-[0_4px_6px_rgba(0,0,0,0.3)] 
-          hover:scale-105 hover:shadow-[0_8px_12px_rgba(0,0,0,0.35)] 
-          hover:bg-blue-500
-          focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2
-          active:translate-y-0.5 active:shadow-[0_3px_5px_rgba(0,0,0,0.25)]
-          transition-all duration-200 ease-in-out
-        "
-        onClick={() => navigate("/auth")}
-      >
-        Continue to Login
-      </Button>
-
-      {/* Soft floating background accents */}
-      <div className="absolute -top-32 -left-24 w-64 h-64 bg-blue-300/20 rounded-full blur-3xl animate-blob"></div>
-      <div className="absolute -bottom-40 -right-32 w-72 h-72 bg-orange-300/20 rounded-full blur-3xl animate-blob animation-delay-2000"></div>
-
-      {/* Footer */}
-      <footer className="mt-10 text-gray-500 text-xs md:text-sm">
-        &copy; {new Date().getFullYear()} PACT Consultancy. All rights reserved.
-      </footer>
     </div>
   );
 };
