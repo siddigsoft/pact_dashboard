@@ -185,8 +185,12 @@ const SitesDisplayTable: React.FC<{
                 visit_date: site.visitDate || site.visit_date,
                 comments: site.comments,
                 cost: finalCost, // Save calculated cost to the cost column
+                enumerator_fee: enumFee,
+                transport_fee: transFee,
                 status: site.status,
                 verification_notes: site.verification_notes || site.verificationNotes,
+                verified_by: site.verified_by || site.verifiedBy,
+                verified_at: site.verified_at || site.verifiedAt,
                 additional_data: updatedAdditionalData // Store fees in additional_data
               };
 
@@ -388,6 +392,8 @@ const VerifiedSitesDisplay: React.FC<{ verifiedSites: SiteVisitRow[] }> = ({ ver
                 cost: finalCost, // Save calculated cost to the cost column
                 status: site.status,
                 verification_notes: site.verification_notes || site.verificationNotes,
+                verified_by: site.verified_by || site.verifiedBy,
+                verified_at: site.verified_at || site.verifiedAt,
                 additional_data: updatedAdditionalData // Store fees in additional_data
               };
 
@@ -710,6 +716,8 @@ const MMP = () => {
               .from('mmp_site_entries')
               .update({
                 cost: entryUpdate.cost || (entryUpdate.additional_data.enumerator_fee + entryUpdate.additional_data.transport_fee),
+                enumerator_fee: entryUpdate.additional_data.enumerator_fee,
+                transport_fee: entryUpdate.additional_data.transport_fee,
                 additional_data: entryUpdate.additional_data
               })
               .eq('id', entryUpdate.id);
@@ -737,6 +745,8 @@ const MMP = () => {
         // Format entries for MMPSiteEntriesTable
         const formattedEntries = verifiedEntries.map(entry => {
           const additionalData = entry.additional_data || {};
+          const enumFee = entry.enumerator_fee ?? additionalData.enumerator_fee;
+          const transFee = entry.transport_fee ?? additionalData.transport_fee;
           return {
             ...entry,
             siteName: entry.site_name,
@@ -750,10 +760,10 @@ const MMP = () => {
             useWarehouseMonitoring: entry.use_warehouse_monitoring,
             visitDate: entry.visit_date,
             comments: entry.comments,
-            enumerator_fee: additionalData.enumerator_fee,
-            enumeratorFee: additionalData.enumerator_fee,
-            transport_fee: additionalData.transport_fee,
-            transportFee: additionalData.transport_fee,
+            enumerator_fee: enumFee,
+            enumeratorFee: enumFee,
+            transport_fee: transFee,
+            transportFee: transFee,
             cost: entry.cost,
             status: entry.status,
             additionalData: additionalData
@@ -1359,6 +1369,8 @@ const MMP = () => {
                                 cost: finalCost, // Save calculated cost to the cost column
                                 status: site.status,
                                 verification_notes: site.verification_notes || site.verificationNotes,
+                                verified_by: site.verified_by || site.verifiedBy,
+                                verified_at: site.verified_at || site.verifiedAt,
                                 additional_data: updatedAdditionalData // Store fees in additional_data
                               };
 
@@ -1409,6 +1421,11 @@ const MMP = () => {
                                   transportFee: additionalData.transport_fee,
                                   cost: entry.cost,
                                   status: entry.status,
+                                  verified_by: entry.verified_by,
+                                  verified_at: entry.verified_at,
+                                  dispatched_by: entry.dispatched_by,
+                                  dispatched_at: entry.dispatched_at,
+                                  updated_at: entry.updated_at,
                                   additionalData: additionalData
                                 };
                               });
@@ -1507,6 +1524,11 @@ const MMP = () => {
                       transportFee: additionalData.transport_fee,
                       cost: entry.cost,
                       status: entry.status,
+                      verified_by: entry.verified_by,
+                      verified_at: entry.verified_at,
+                      dispatched_by: entry.dispatched_by,
+                      dispatched_at: entry.dispatched_at,
+                      updated_at: entry.updated_at,
                       additionalData: additionalData
                     };
                   });

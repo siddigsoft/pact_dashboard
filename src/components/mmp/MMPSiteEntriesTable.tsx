@@ -92,14 +92,15 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
       ? Number(finalEnumeratorFee) + Number(finalTransportFee)
       : (cost ? Number(cost) : undefined);
     
+    // Read from new columns first, then fallback to additional_data for backward compatibility
     const verifiedBy = site.verified_by || ad['Verified By'] || ad['Verified By:'] || undefined;
-    const verifiedAt = site.verified_at || ad['Verified At'] || ad['Verified At:'] || undefined;
+    const verifiedAt = site.verified_at || (ad['Verified At'] ? new Date(ad['Verified At']).toISOString() : undefined) || (ad['verified_at'] ? new Date(ad['verified_at']).toISOString() : undefined) || undefined;
     const verificationNotes = site.verification_notes || ad['Verification Notes'] || ad['Verification Notes:'] || undefined;
     const status = site.status || ad['Status'] || ad['Status:'] || 'Pending';
     
-    // Dispatch information
-    const dispatchedAt = ad['dispatched_at'] || ad['Dispatched At'] || undefined;
-    const dispatchedBy = ad['dispatched_by'] || ad['Dispatched By'] || undefined;
+    // Dispatch information - read from new columns first
+    const dispatchedAt = site.dispatched_at || (ad['dispatched_at'] ? new Date(ad['dispatched_at']).toISOString() : undefined) || (ad['Dispatched At'] ? new Date(ad['Dispatched At']).toISOString() : undefined) || undefined;
+    const dispatchedBy = site.dispatched_by || ad['dispatched_by'] || ad['Dispatched By'] || undefined;
     
     // Timestamps
     const createdAt = site.created_at || undefined;

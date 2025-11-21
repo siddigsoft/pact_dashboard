@@ -199,8 +199,8 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
       }
 
       // Get current user for assigned_by
-      const { data: { user } } = await supabase.auth.getUser();
-      const assignedBy = user?.id;
+      const { data: { user: authUserForAssign } } = await supabase.auth.getUser();
+      const assignedBy = authUserForAssign?.id;
 
       // Create site_visits for each site and collector combination
       const siteVisitPromises: Promise<any>[] = [];
@@ -370,9 +370,22 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
       const siteEntryIds = Array.from(selectedSites);
       const dispatchedAt = new Date().toISOString();
       
-      // Update each entry individually to set status and update additional_data
+      // Get current user for dispatched_by
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      const currentUserProfile = authUser ? await supabase
+        .from('profiles')
+        .select('full_name, username, email')
+        .eq('id', authUser.id)
+        .single() : null;
+      
+      const dispatchedBy = currentUserProfile?.data?.full_name || 
+                          currentUserProfile?.data?.username || 
+                          currentUserProfile?.data?.email || 
+                          'System';
+      
+      // Update each entry individually to set status and new columns
       for (const entryId of siteEntryIds) {
-        // Get current additional_data
+        // Get current additional_data to preserve it
         const { data: currentEntry } = await supabase
           .from('mmp_site_entries')
           .select('additional_data')
@@ -380,13 +393,17 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
           .single();
         
         const additionalData = currentEntry?.additional_data || {};
+        // Also store in additional_data for backward compatibility
         additionalData.dispatched_at = dispatchedAt;
+        additionalData.dispatched_by = dispatchedBy;
         
         const { error: entryUpdateError } = await supabase
           .from('mmp_site_entries')
           .update({ 
             status: 'Dispatched',
-            additional_data: additionalData
+            dispatched_at: dispatchedAt,
+            dispatched_by: dispatchedBy,
+            additional_data: additionalData // Keep for backward compatibility
           })
           .eq('id', entryId);
         

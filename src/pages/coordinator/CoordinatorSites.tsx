@@ -104,7 +104,14 @@ const CoordinatorSites: React.FC = () => {
             .eq('site_code', site.site_code)
             .single();
 
-          const mmpUpdateData: any = { status: 'Verified' };
+          const verifiedAt = new Date().toISOString();
+          const verifiedBy = currentUser?.username || currentUser?.fullName || currentUser?.email || 'System';
+          
+          const mmpUpdateData: any = { 
+            status: 'Verified',
+            verified_at: verifiedAt,
+            verified_by: verifiedBy
+          };
           if (notes) {
             mmpUpdateData.verification_notes = notes;
           }
@@ -135,6 +142,11 @@ const CoordinatorSites: React.FC = () => {
             }
             mmpUpdateData.additional_data = additionalData;
           }
+          
+          // Also store verification info in additional_data for backward compatibility
+          additionalData.verified_at = verifiedAt;
+          additionalData.verified_by = verifiedBy;
+          mmpUpdateData.additional_data = additionalData;
           
           await supabase
             .from('mmp_site_entries')
