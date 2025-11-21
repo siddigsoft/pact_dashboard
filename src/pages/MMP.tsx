@@ -223,14 +223,14 @@ const MMP = () => {
   }, [categorizedMMPs.verified, siteVisitStats]);
 
   // Build unified site rows (site_visits + fallback to mmp.siteEntries) for given MMP list
-  const buildSiteRowsFromMMPs = (mmps: any[]): SiteVisitRow[] => {
+  const buildSiteRowsFromMMPs = (mmps: any[], filterFn?: (row: SiteVisitRow) => boolean): SiteVisitRow[] => {
     const rows: SiteVisitRow[] = [];
     const existingIds = new Set(siteVisitRows.map(r => r.mmpId));
     for (const mmp of mmps) {
       // Use siteEntries when we don't yet have site_visits for this MMP
       if (!existingIds.has(mmp.id) && Array.isArray(mmp.siteEntries)) {
         for (const se of mmp.siteEntries) {
-          rows.push({
+          const row: SiteVisitRow = {
             id: se.id || `${mmp.id}-site-${rows.length}`,
             mmpId: mmp.id,
             siteName: se.siteName || se.siteCode || se.state || 'Site',
@@ -242,36 +242,84 @@ const MMP = () => {
             assignedAt: undefined,
             completedAt: undefined,
             rejectionReason: undefined,
-          });
+          };
+          if (!filterFn || filterFn(row)) {
+            rows.push(row);
+          }
         }
       }
     }
     // Merge with siteVisitRows restricted to those MMPs
-    const visitRows = siteVisitRows.filter(r => mmps.find(m => m.id === r.mmpId));
+    const visitRows = siteVisitRows.filter(r => {
+      const matchesMMP = mmps.find(m => m.id === r.mmpId);
+      if (!matchesMMP) return false;
+      return !filterFn || filterFn(r);
+    });
     return [...visitRows, ...rows];
   };
 
   // Verified site rows per subcategory (all roles seeing Verified tab)
   const verifiedCategorySiteRows = useMemo(() => {
     const subKey = verifiedSubTab;
+    
+    // For "newSites" subcategory, get all MMPs with verified sites
+    if (subKey === 'newSites') {
+      // Get all MMPs from verified category (they may or may not be marked coordinatorVerified yet)
+      const allVerifiedMMPs = categorizedMMPs.verified || [];
+      
+      if (allVerifiedMMPs.length === 0) return [];
+      
+      // Filter to only show verified sites from any MMP
+      const verifiedSites = buildSiteRowsFromMMPs(allVerifiedMMPs, (row) => {
+        // Show sites that are verified (from site_visits or mmp_site_entries)
+        // Check both lowercase and capitalized versions
+        const status = row.status?.toLowerCase() || '';
+        return status === 'verified';
+      });
+      
+      // Only return sites that are actually verified
+      return verifiedSites;
+    }
+    
     const mmps = verifiedSubcategories[subKey] || [];
     if (mmps.length === 0) return [];
     return buildSiteRowsFromMMPs(mmps);
-  }, [verifiedSubTab, verifiedSubcategories, siteVisitRows]);
+  }, [verifiedSubTab, verifiedSubcategories, categorizedMMPs.verified, siteVisitRows]);
 
   // Group verified site rows by MMP for display
   const verifiedVisibleMMPs = useMemo(() => {
+    // For "newSites" subcategory, show all MMPs that have verified sites
+    if (verifiedSubTab === 'newSites') {
+      // Use the verifiedCategorySiteRows which already has the filtered verified sites
+      const verifiedSites = verifiedCategorySiteRows;
+      
+      // Get unique MMP IDs from verified sites
+      const mmpIdsWithVerifiedSites = new Set(verifiedSites.map(s => s.mmpId));
+      
+      // Return only MMPs that have verified sites
+      const allVerifiedMMPs = categorizedMMPs.verified || [];
+      return allVerifiedMMPs.filter(mmp => mmpIdsWithVerifiedSites.has(mmp.id));
+    }
+    
     return (isAdmin || isICT || isFOM || isCoordinator)
       ? (verifiedSubcategories[verifiedSubTab] || [])
       : (categorizedMMPs.verified || []);
-  }, [isAdmin, isICT, isFOM, isCoordinator, verifiedSubTab, verifiedSubcategories, categorizedMMPs.verified]);
+  }, [isAdmin, isICT, isFOM, isCoordinator, verifiedSubTab, verifiedSubcategories, categorizedMMPs.verified, verifiedCategorySiteRows]);
 
   const verifiedGroupedRows = useMemo(() => {
+    // For "newSites" subcategory, filter to only show verified sites
+    const filterFn = verifiedSubTab === 'newSites' 
+      ? (row: SiteVisitRow) => {
+          const status = row.status?.toLowerCase() || '';
+          return status === 'verified';
+        }
+      : undefined;
+    
     return verifiedVisibleMMPs.map(m => ({
       mmp: m,
-      rows: buildSiteRowsFromMMPs([m]),
+      rows: buildSiteRowsFromMMPs([m], filterFn),
     }));
-  }, [verifiedVisibleMMPs, siteVisitRows]);
+  }, [verifiedVisibleMMPs, verifiedSubTab, siteVisitRows]);
 
   // Forwarded site rows per subcategory (FOM only for site data)
   const forwardedCategorySiteRows = useMemo(() => {
@@ -317,16 +365,29 @@ const MMP = () => {
       }
       const ids = list.map(m => m.id);
       try {
-        const { data, error } = await supabase
+        // Load from site_visits
+        const { data: siteVisitsData, error: siteVisitsError } = await supabase
           .from('site_visits')
-          .select('id,mmp_id,status,fees,site_name,site_code,state,locality,assigned_at,completed_at,rejection_reason')
+          .select('id,mmp_id,status,fees,site_name,site_code,state,locality,assigned_at,completed_at,rejection_reason,verified_by,verified_at')
           .in('mmp_id', ids);
-        if (error) throw error;
+        if (siteVisitsError) throw siteVisitsError;
+        
+        // Also load from mmp_site_entries for verified sites
+        const { data: mmpEntriesData, error: mmpEntriesError } = await supabase
+          .from('mmp_site_entries')
+          .select('id,mmp_file_id,status,site_code,state,locality,site_name,verification_notes')
+          .in('mmp_file_id', ids)
+          .eq('status', 'Verified');
+        if (mmpEntriesError) console.warn('Failed to load mmp_site_entries:', mmpEntriesError);
+        
         const map: Record<string, {
           exists: boolean; hasCosted: boolean; hasAssigned: boolean; hasInProgress: boolean; hasCompleted: boolean; hasRejected: boolean;
         }> = {};
         const rows: SiteVisitRow[] = [];
-        for (const row of (data || []) as any[]) {
+        const siteVisitMap = new Map<string, SiteVisitRow>();
+        
+        // Process site_visits
+        for (const row of (siteVisitsData || []) as any[]) {
           const id = row.mmp_id;
           if (!map[id]) {
             map[id] = { exists: false, hasCosted: false, hasAssigned: false, hasInProgress: false, hasCompleted: false, hasRejected: false };
@@ -340,7 +401,8 @@ const MMP = () => {
           const fees = row.fees || {};
           const total = Number(fees.total || 0);
           if (total > 0) map[id].hasCosted = true;
-          rows.push({
+          
+          const siteRow: SiteVisitRow = {
             id: row.id,
             mmpId: row.mmp_id,
             siteName: row.site_name || row.site_code || row.id,
@@ -352,8 +414,44 @@ const MMP = () => {
             assignedAt: row.assigned_at || undefined,
             completedAt: row.completed_at || undefined,
             rejectionReason: row.rejection_reason || undefined,
-          });
+            verifiedBy: row.verified_by || undefined,
+            verifiedAt: row.verified_at || undefined,
+          };
+          rows.push(siteRow);
+          // Map by mmp_id and site_code for merging
+          if (row.site_code) {
+            siteVisitMap.set(`${row.mmp_id}-${row.site_code}`, siteRow);
+          }
         }
+        
+        // Process mmp_site_entries - add verified sites that might not be in site_visits
+        for (const entry of (mmpEntriesData || []) as any[]) {
+          const key = `${entry.mmp_file_id}-${entry.site_code}`;
+          // If we don't have this site in site_visits, add it from mmp_site_entries
+          if (!siteVisitMap.has(key)) {
+            const siteRow: SiteVisitRow = {
+              id: entry.id || `${entry.mmp_file_id}-${entry.site_code}`,
+              mmpId: entry.mmp_file_id,
+              siteName: entry.site_name || entry.site_code || 'Site',
+              siteCode: entry.site_code || undefined,
+              state: entry.state || undefined,
+              locality: entry.locality || undefined,
+              status: 'Verified', // Status from mmp_site_entries
+              feesTotal: 0,
+              verifiedBy: undefined, // mmp_site_entries doesn't have verified_by, will need to get from site_visits if exists
+              verifiedAt: undefined,
+            };
+            rows.push(siteRow);
+            siteVisitMap.set(key, siteRow);
+          } else {
+            // Update existing row with verified status if it's verified in mmp_site_entries
+            const existingRow = siteVisitMap.get(key);
+            if (existingRow && entry.status === 'Verified' && existingRow.status?.toLowerCase() !== 'verified') {
+              existingRow.status = 'Verified';
+            }
+          }
+        }
+        
         setSiteVisitStats(map);
         setSiteVisitRows(rows);
       } catch (e) {
@@ -498,7 +596,11 @@ const MMP = () => {
                   <div className="text-sm font-medium text-muted-foreground mr-2">Subcategory:</div>
                   <Button variant={verifiedSubTab === 'newSites' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('newSites')} className={verifiedSubTab === 'newSites' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''}>
                     New Sites Verified by Coordinators
-                    <Badge variant="secondary" className="ml-2">{verifiedSubcategories.newSites.length}</Badge>
+                    <Badge variant="secondary" className="ml-2">
+                      {verifiedSubTab === 'newSites' 
+                        ? verifiedCategorySiteRows.length 
+                        : verifiedSubcategories.newSites.length}
+                    </Badge>
                   </Button>
                   <Button variant={verifiedSubTab === 'approvedCosted' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('approvedCosted')} className={verifiedSubTab === 'approvedCosted' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''}>
                     Approved & Costed

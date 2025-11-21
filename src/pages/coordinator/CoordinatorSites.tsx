@@ -9,6 +9,7 @@ import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
+import { useMMP } from '@/context/mmp/MMPContext';
 import { CheckCircle, Clock, FileCheck, XCircle, ArrowLeft, Eye, Edit } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -35,6 +36,7 @@ const CoordinatorSites: React.FC = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { currentUser } = useAppContext();
+  const { updateMMP } = useMMP();
   const [loading, setLoading] = useState(true);
   const [sites, setSites] = useState<SiteVisit[]>([]);
   const [activeTab, setActiveTab] = useState('new');
@@ -103,6 +105,37 @@ const CoordinatorSites: React.FC = () => {
             .update(mmpUpdateData)
             .eq('mmp_file_id', site.mmp_id)
             .eq('site_code', site.site_code);
+
+          // Mark MMP as coordinator-verified when first site is verified
+          // Get current MMP workflow
+          const { data: mmpData, error: mmpError } = await supabase
+            .from('mmp_files')
+            .select('workflow, status')
+            .eq('id', site.mmp_id)
+            .single();
+
+          if (!mmpError && mmpData) {
+            const workflow = (mmpData.workflow as any) || {};
+            const isAlreadyVerified = workflow.coordinatorVerified === true;
+            
+            // Only update if not already marked as coordinator-verified
+            if (!isAlreadyVerified) {
+              const updatedWorkflow = {
+                ...workflow,
+                coordinatorVerified: true,
+                coordinatorVerifiedAt: new Date().toISOString(),
+                coordinatorVerifiedBy: currentUser?.username || currentUser?.fullName || currentUser?.email || 'System',
+                currentStage: workflow.currentStage === 'awaitingCoordinatorVerification' ? 'verified' : (workflow.currentStage || 'verified'),
+                lastUpdated: new Date().toISOString()
+              };
+
+              // Update MMP workflow - keep status as 'pending' so it shows in "New Sites Verified by Coordinators"
+              await updateMMP(site.mmp_id, {
+                workflow: updatedWorkflow,
+                status: mmpData.status === 'pending' ? 'pending' : 'pending' // Ensure it's pending
+              });
+            }
+          }
         }
       } catch (syncErr) {
         console.warn('Failed to sync mmp_site_entries on verify:', syncErr);
