@@ -97,17 +97,18 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
       setLoading(true);
       setError(null);
       try {
-        // user_settings
-        const { data: userData, error: userError } = await supabase
+        // user_settings - use limit(1) to handle duplicates gracefully
+        const { data: userDataArray, error: userError } = await supabase
           .from('user_settings')
           .select('*')
           .eq('user_id', currentUser.id)
-          .maybeSingle();
+          .limit(1);
 
         if (userError) {
           console.error('Error fetching user settings:', userError);
           setError('Failed to fetch user settings');
         }
+        const userData = userDataArray?.[0];
         if (userData) {
           setUserSettings(userData);
           if (userData.settings?.theme) {
@@ -120,26 +121,28 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
         }
 
 
-        // data_visibility_settings
-        const { data: visibilityData, error: visibilityError } = await supabase
+        // data_visibility_settings - use limit(1) to handle duplicates gracefully
+        const { data: visibilityDataArray, error: visibilityError } = await supabase
           .from('data_visibility_settings')
           .select('*')
           .eq('user_id', currentUser.id)
-          .maybeSingle();
+          .limit(1);
         if (visibilityError) {
           console.error('Error fetching data visibility settings:', visibilityError);
         }
+        const visibilityData = visibilityDataArray?.[0];
         if (visibilityData) setDataVisibilitySettings(visibilityData);
 
-        // dashboard_settings
-        const { data: dashboardData, error: dashboardError } = await supabase
+        // dashboard_settings - use limit(1) to handle duplicates gracefully
+        const { data: dashboardDataArray, error: dashboardError } = await supabase
           .from('dashboard_settings')
           .select('*')
           .eq('user_id', currentUser.id)
-          .maybeSingle();
+          .limit(1);
         if (dashboardError) {
           console.error('Error fetching dashboard settings:', dashboardError);
         }
+        const dashboardData = dashboardDataArray?.[0];
         if (dashboardData) setDashboardSettings(dashboardData);
       } catch (err) {
         console.error('Error in fetchSettings:', err);
