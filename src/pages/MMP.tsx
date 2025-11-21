@@ -10,13 +10,375 @@ import { useAuthorization } from '@/hooks/use-authorization';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import type { SiteVisitRow } from '@/components/mmp/MMPCategorySitesTable';
-import MMPCategorySitesTable from '@/components/mmp/MMPCategorySitesTable';
 import MMPSiteEntriesTable from '@/components/mmp/MMPSiteEntriesTable';
 import { supabase } from '@/integrations/supabase/client';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 
 // Using relative import fallback in case path alias resolution misses new file
 import BulkClearForwardedDialog from '../components/mmp/BulkClearForwardedDialog';
+
+// Helper component to convert SiteVisitRow[] to site entries and display using MMPSiteEntriesTable
+const SitesDisplayTable: React.FC<{ 
+  siteRows: SiteVisitRow[]; 
+  mmpId?: string;
+  editable?: boolean;
+  title?: string;
+}> = ({ siteRows, mmpId, editable = true, title }) => {
+  const [siteEntries, setSiteEntries] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadSiteEntries = async () => {
+      if (siteRows.length === 0) {
+        setSiteEntries([]);
+        setLoading(false);
+        return;
+      }
+
+      try {
+        // Get unique mmp_ids from site rows
+        const mmpIds = mmpId ? [mmpId] : [...new Set(siteRows.map(s => s.mmpId).filter(Boolean))];
+
+        if (mmpIds.length === 0) {
+          setSiteEntries([]);
+          setLoading(false);
+          return;
+        }
+
+        // Load from mmp_site_entries
+        const { data: mmpEntries, error: mmpError } = await supabase
+          .from('mmp_site_entries')
+          .select('*')
+          .in('mmp_file_id', mmpIds);
+
+        if (mmpError) throw mmpError;
+
+        // Load from site_visits to get verified_by and other info
+        const { data: siteVisits, error: siteVisitsError } = await supabase
+          .from('site_visits')
+          .select('id,mmp_id,site_code,verified_by,verified_at,verification_notes,status')
+          .in('mmp_id', mmpIds);
+
+        if (siteVisitsError) console.warn('Failed to load site_visits:', siteVisitsError);
+
+        // Create a map of site_visits by mmp_id and site_code
+        const siteVisitMap = new Map<string, any>();
+        (siteVisits || []).forEach(sv => {
+          if (sv.mmp_id && sv.site_code) {
+            siteVisitMap.set(`${sv.mmp_id}-${sv.site_code}`, sv);
+          }
+        });
+
+        // Merge mmp_site_entries with site_visits data and format for MMPSiteEntriesTable
+        const mergedEntries = (mmpEntries || []).map(entry => {
+          const key = `${entry.mmp_file_id}-${entry.site_code}`;
+          const siteVisit = siteVisitMap.get(key);
+          
+          return {
+            ...entry,
+            verified_by: siteVisit?.verified_by || undefined,
+            verified_at: siteVisit?.verified_at || undefined,
+            verification_notes: entry.verification_notes || siteVisit?.verification_notes || undefined,
+            status: entry.status || siteVisit?.status || 'Pending',
+            // Map to camelCase for MMPSiteEntriesTable
+            siteName: entry.site_name,
+            siteCode: entry.site_code,
+            hubOffice: entry.hub_office,
+            cpName: entry.cp_name,
+            siteActivity: entry.activity_at_site,
+            monitoringBy: entry.monitoring_by,
+            surveyTool: entry.survey_tool,
+            useMarketDiversion: entry.use_market_diversion,
+            useWarehouseMonitoring: entry.use_warehouse_monitoring,
+            visitDate: entry.visit_date,
+            comments: entry.comments,
+            cost: entry.cost,
+            additionalData: entry.additional_data || {}
+          };
+        });
+
+        setSiteEntries(mergedEntries);
+      } catch (error) {
+        console.error('Failed to load site entries:', error);
+        setSiteEntries([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadSiteEntries();
+  }, [siteRows, mmpId]);
+
+  if (loading) {
+    return (
+      <div className="mt-6">
+        <Card>
+          <CardContent className="py-8">
+            <div className="text-center text-muted-foreground">Loading sites...</div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (siteEntries.length === 0) {
+    return (
+      <div className="mt-6">
+        <Card>
+          <CardContent className="py-8">
+            <div className="text-center text-muted-foreground">No sites found.</div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-6">
+      {title && (
+        <div className="mb-4">
+          <h3 className="text-lg font-semibold">{title}</h3>
+        </div>
+      )}
+      <MMPSiteEntriesTable 
+        siteEntries={siteEntries} 
+        editable={editable}
+        onUpdateSites={async (sites) => {
+          // Update mmp_site_entries in database
+          try {
+            for (const site of sites) {
+              const updateData: any = {
+                site_name: site.siteName || site.site_name,
+                site_code: site.siteCode || site.site_code,
+                hub_office: site.hubOffice || site.hub_office,
+                state: site.state,
+                locality: site.locality,
+                cp_name: site.cpName || site.cp_name,
+                activity_at_site: site.siteActivity || site.activity_at_site,
+                monitoring_by: site.monitoringBy || site.monitoring_by,
+                survey_tool: site.surveyTool || site.survey_tool,
+                use_market_diversion: site.useMarketDiversion || site.use_market_diversion,
+                use_warehouse_monitoring: site.useWarehouseMonitoring || site.use_warehouse_monitoring,
+                visit_date: site.visitDate || site.visit_date,
+                comments: site.comments,
+                cost: site.cost,
+                status: site.status,
+                verification_notes: site.verification_notes || site.verificationNotes,
+                additional_data: site.additionalData || site.additional_data
+              };
+
+              // Remove undefined values
+              Object.keys(updateData).forEach(key => {
+                if (updateData[key] === undefined) delete updateData[key];
+              });
+
+              if (site.id) {
+                await supabase
+                  .from('mmp_site_entries')
+                  .update(updateData)
+                  .eq('id', site.id);
+              }
+
+              // Also update site_visits if verified_by is set
+              if (site.verified_by && site.mmp_file_id && site.site_code) {
+                await supabase
+                  .from('site_visits')
+                  .update({
+                    verified_by: site.verified_by,
+                    verified_at: site.verified_at || new Date().toISOString(),
+                    verification_notes: site.verification_notes || site.verificationNotes,
+                    status: site.status || 'verified'
+                  })
+                  .eq('mmp_id', site.mmp_file_id)
+                  .eq('site_code', site.site_code);
+              }
+            }
+            return true;
+          } catch (error) {
+            console.error('Failed to update sites:', error);
+            return false;
+          }
+        }}
+      />
+    </div>
+  );
+};
+
+// Component to display verified sites using MMPSiteEntriesTable
+const VerifiedSitesDisplay: React.FC<{ verifiedSites: SiteVisitRow[] }> = ({ verifiedSites }) => {
+  const [verifiedSiteEntries, setVerifiedSiteEntries] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadVerifiedSites = async () => {
+      if (verifiedSites.length === 0) {
+        setVerifiedSiteEntries([]);
+        setLoading(false);
+        return;
+      }
+
+      try {
+        // Get unique mmp_ids from verified sites
+        const mmpIds = [...new Set(verifiedSites.map(s => s.mmpId).filter(Boolean))];
+
+        if (mmpIds.length === 0) {
+          setVerifiedSiteEntries([]);
+          setLoading(false);
+          return;
+        }
+
+        // Load from mmp_site_entries
+        const { data: mmpEntries, error: mmpError } = await supabase
+          .from('mmp_site_entries')
+          .select('*')
+          .in('mmp_file_id', mmpIds)
+          .eq('status', 'Verified');
+
+        if (mmpError) throw mmpError;
+
+        // Load from site_visits to get verified_by
+        const { data: siteVisits, error: siteVisitsError } = await supabase
+          .from('site_visits')
+          .select('id,mmp_id,site_code,verified_by,verified_at,verification_notes')
+          .in('mmp_id', mmpIds)
+          .eq('status', 'verified');
+
+        if (siteVisitsError) console.warn('Failed to load site_visits:', siteVisitsError);
+
+        // Create a map of site_visits by mmp_id and site_code
+        const siteVisitMap = new Map<string, any>();
+        (siteVisits || []).forEach(sv => {
+          if (sv.mmp_id && sv.site_code) {
+            siteVisitMap.set(`${sv.mmp_id}-${sv.site_code}`, sv);
+          }
+        });
+
+        // Merge mmp_site_entries with site_visits data and format for MMPSiteEntriesTable
+        const mergedEntries = (mmpEntries || []).map(entry => {
+          const key = `${entry.mmp_file_id}-${entry.site_code}`;
+          const siteVisit = siteVisitMap.get(key);
+          
+          return {
+            ...entry,
+            verified_by: siteVisit?.verified_by || undefined,
+            verified_at: siteVisit?.verified_at || undefined,
+            verification_notes: entry.verification_notes || siteVisit?.verification_notes || undefined,
+            // Map to camelCase for MMPSiteEntriesTable
+            siteName: entry.site_name,
+            siteCode: entry.site_code,
+            hubOffice: entry.hub_office,
+            cpName: entry.cp_name,
+            siteActivity: entry.activity_at_site,
+            monitoringBy: entry.monitoring_by,
+            surveyTool: entry.survey_tool,
+            useMarketDiversion: entry.use_market_diversion,
+            useWarehouseMonitoring: entry.use_warehouse_monitoring,
+            visitDate: entry.visit_date,
+            comments: entry.comments,
+            cost: entry.cost,
+            additionalData: entry.additional_data || {}
+          };
+        });
+
+        setVerifiedSiteEntries(mergedEntries);
+      } catch (error) {
+        console.error('Failed to load verified sites:', error);
+        setVerifiedSiteEntries([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadVerifiedSites();
+  }, [verifiedSites]);
+
+  if (loading) {
+    return (
+      <div className="mt-6">
+        <Card>
+          <CardContent className="py-8">
+            <div className="text-center text-muted-foreground">Loading verified sites...</div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (verifiedSiteEntries.length === 0) {
+    return (
+      <div className="mt-6">
+        <Card>
+          <CardContent className="py-8">
+            <div className="text-center text-muted-foreground">No verified sites found.</div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-6">
+      <MMPSiteEntriesTable 
+        siteEntries={verifiedSiteEntries} 
+        editable={true}
+        onUpdateSites={async (sites) => {
+          // Update mmp_site_entries in database
+          try {
+            for (const site of sites) {
+              const updateData: any = {
+                site_name: site.siteName || site.site_name,
+                site_code: site.siteCode || site.site_code,
+                hub_office: site.hubOffice || site.hub_office,
+                state: site.state,
+                locality: site.locality,
+                cp_name: site.cpName || site.cp_name,
+                activity_at_site: site.siteActivity || site.activity_at_site,
+                monitoring_by: site.monitoringBy || site.monitoring_by,
+                survey_tool: site.surveyTool || site.survey_tool,
+                use_market_diversion: site.useMarketDiversion || site.use_market_diversion,
+                use_warehouse_monitoring: site.useWarehouseMonitoring || site.use_warehouse_monitoring,
+                visit_date: site.visitDate || site.visit_date,
+                comments: site.comments,
+                cost: site.cost,
+                verification_notes: site.verification_notes || site.verificationNotes,
+                additional_data: site.additionalData || site.additional_data
+              };
+
+              // Remove undefined values
+              Object.keys(updateData).forEach(key => {
+                if (updateData[key] === undefined) delete updateData[key];
+              });
+
+              if (site.id) {
+                await supabase
+                  .from('mmp_site_entries')
+                  .update(updateData)
+                  .eq('id', site.id);
+              }
+
+              // Also update site_visits if verified_by is set
+              if (site.verified_by && site.mmp_file_id && site.site_code) {
+                await supabase
+                  .from('site_visits')
+                  .update({
+                    verified_by: site.verified_by,
+                    verified_at: site.verified_at || new Date().toISOString(),
+                    verification_notes: site.verification_notes || site.verificationNotes
+                  })
+                  .eq('mmp_id', site.mmp_file_id)
+                  .eq('site_code', site.site_code);
+              }
+            }
+            return true;
+          } catch (error) {
+            console.error('Failed to update verified sites:', error);
+            return false;
+          }
+        }}
+      />
+    </div>
+  );
+};
 
 const MMP = () => {
   const navigate = useNavigate();
@@ -574,18 +936,11 @@ const MMP = () => {
                 )}
                 <MMPList mmpFiles={(isAdmin || isICT || isFOM) ? forwardedSubcategories[forwardedSubTab] : categorizedMMPs.forwarded} />
                 {isFOM && (
-                  <div className="mt-6">
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-lg font-semibold">Site Entries ({forwardedCategorySiteRows.length})</h3>
-                      <span className="text-xs text-muted-foreground">Forwarded subcategory: {forwardedSubTab}</span>
-                    </div>
-                    <MMPCategorySitesTable
-                      title="Forwarded Sites"
-                      description="Sites contained in forwarded MMPs (from original entries or generated visit records)."
-                      rows={forwardedCategorySiteRows}
-                      maxHeightPx={520}
-                      emptyMessage="No site entries in this forwarded subcategory." />
-                  </div>
+                  <SitesDisplayTable 
+                    siteRows={forwardedCategorySiteRows}
+                    editable={true}
+                    title={`Site Entries (${forwardedCategorySiteRows.length}) - Forwarded subcategory: ${forwardedSubTab}`}
+                  />
                 )}
               </TabsContent>
             )}
@@ -617,7 +972,8 @@ const MMP = () => {
                 </div>
               )}
               <MMPList mmpFiles={verifiedVisibleMMPs} />
-              {(isAdmin || isICT || isFOM || isCoordinator) && (
+              {(isAdmin || isICT || isFOM || isCoordinator) && verifiedSubTab === 'newSites' && <VerifiedSitesDisplay verifiedSites={verifiedCategorySiteRows} />}
+              {(isAdmin || isICT || isFOM || isCoordinator) && verifiedSubTab !== 'newSites' && (
                 <div className="mt-6">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-lg font-semibold">Sites by MMP</h3>
@@ -633,12 +989,12 @@ const MMP = () => {
                           </div>
                         </AccordionTrigger>
                         <AccordionContent>
-                          <MMPCategorySitesTable
+                          <SitesDisplayTable 
+                            siteRows={rows}
+                            mmpId={mmp.id}
+                            editable={true}
                             title={`Sites for ${mmp.name}`}
-                            description={`MMP ID: ${mmp.mmpId || mmp.id}`}
-                            rows={rows}
-                            maxHeightPx={520}
-                            emptyMessage="No sites for this MMP in the current subcategory." />
+                          />
                         </AccordionContent>
                       </AccordionItem>
                     ))}

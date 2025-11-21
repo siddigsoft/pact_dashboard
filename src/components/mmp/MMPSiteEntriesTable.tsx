@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Badge } from '@/components/ui/badge';
 import { Search, Eye, Pencil, Check, X } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 
@@ -61,11 +62,15 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
     const comments = site.comments || site.notes || '—';
     const fees = (site.fees || vd?.fees) || {};
     const cost = site.cost ?? site.price ?? vd?.cost ?? vd?.price ?? fees.total ?? fees.amount ?? ad['Cost'] ?? ad['Price'] ?? ad['Amount'] ?? '—';
+    const verifiedBy = site.verified_by || ad['Verified By'] || ad['Verified By:'] || undefined;
+    const verifiedAt = site.verified_at || ad['Verified At'] || ad['Verified At:'] || undefined;
+    const verificationNotes = site.verification_notes || ad['Verification Notes'] || ad['Verification Notes:'] || undefined;
+    const status = site.status || ad['Status'] || ad['Status:'] || 'Pending';
 
     return { 
       hubOffice, state, locality, siteName, cpName, siteActivity, 
       monitoringBy, surveyTool, useMarketDiversion, useWarehouseMonitoring,
-      mainActivity, visitType, visitDate, comments, cost 
+      mainActivity, visitType, visitDate, comments, cost, verifiedBy, verifiedAt, verificationNotes, status
     };
   };
 
@@ -124,6 +129,20 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
       const n = d.cost === '—' || d.cost === '' ? undefined : Number(d.cost);
       updated.cost = isNaN(n as number) ? d.cost : n;
     }
+    if (typeof d.status !== 'undefined') {
+      updated.status = d.status;
+    }
+    
+    // Update verification fields
+    if (typeof d.verifiedBy !== 'undefined') {
+      updated.verified_by = d.verifiedBy;
+    }
+    if (typeof d.verifiedAt !== 'undefined') {
+      updated.verified_at = d.verifiedAt;
+    }
+    if (typeof d.verificationNotes !== 'undefined') {
+      updated.verification_notes = d.verificationNotes;
+    }
 
     // Mirror into additionalData for compatibility
     const ad = { ...(site.additionalData || {}) };
@@ -141,6 +160,15 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
     ad['Comments'] = d.comments;
     if (typeof d.cost !== 'undefined') {
       ad['Cost'] = d.cost;
+    }
+    if (typeof d.verifiedBy !== 'undefined') {
+      ad['Verified By'] = d.verifiedBy;
+    }
+    if (typeof d.verifiedAt !== 'undefined') {
+      ad['Verified At'] = d.verifiedAt;
+    }
+    if (typeof d.verificationNotes !== 'undefined') {
+      ad['Verification Notes'] = d.verificationNotes;
     }
     updated.additionalData = ad;
     return updated;
@@ -201,6 +229,7 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
                 <TableHead>Locality</TableHead>
                 <TableHead>Site Name</TableHead>
                 <TableHead>CP Name</TableHead>
+                <TableHead>Status</TableHead>
                 <TableHead>Activity at Site</TableHead>
                 <TableHead>Monitoring By</TableHead>
                 <TableHead>Survey Tool</TableHead>
@@ -209,6 +238,7 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
                 <TableHead>Visit Date</TableHead>
                 <TableHead>Cost</TableHead>
                 <TableHead>Comments</TableHead>
+                <TableHead>Verified By</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -243,6 +273,23 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
                         {isEditing ? (
                           <Input value={draft?.cpName ?? row.cpName ?? ''} onChange={(e) => setDraft((d:any)=> ({...(d||{}), cpName: e.target.value}))} className="h-8" />
                         ) : row.cpName}
+                      </TableCell>
+                      <TableCell>
+                        {isEditing ? (
+                          <Input value={draft?.status ?? row.status ?? 'Pending'} onChange={(e) => setDraft((d:any)=> ({...(d||{}), status: e.target.value}))} className="h-8" />
+                        ) : (
+                          <Badge 
+                            className={
+                              row.status?.toLowerCase() === 'verified' ? 'bg-green-100 text-green-700' :
+                              row.status?.toLowerCase() === 'rejected' ? 'bg-red-100 text-red-700' :
+                              row.status?.toLowerCase() === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                              row.status?.toLowerCase() === 'approved' ? 'bg-blue-100 text-blue-700' :
+                              'bg-gray-100 text-gray-700'
+                            }
+                          >
+                            {row.status || 'Pending'}
+                          </Badge>
+                        )}
                       </TableCell>
                       <TableCell>
                         {isEditing ? (
@@ -306,6 +353,53 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
                         ) : row.comments}
                       </TableCell>
                       <TableCell>
+                        {isEditing ? (
+                          <div className="space-y-2">
+                            <Input 
+                              value={draft?.verifiedBy ?? row.verifiedBy ?? ''} 
+                              onChange={(e) => setDraft((d:any)=> ({...(d||{}), verifiedBy: e.target.value}))} 
+                              placeholder="Coordinator name"
+                              className="h-8" 
+                            />
+                            <Input 
+                              type="date"
+                              value={draft?.verifiedAt ? new Date(draft.verifiedAt).toISOString().split('T')[0] : (row.verifiedAt ? new Date(row.verifiedAt).toISOString().split('T')[0] : '')} 
+                              onChange={(e) => {
+                                const date = e.target.value ? new Date(e.target.value).toISOString() : '';
+                                setDraft((d:any)=> ({...(d||{}), verifiedAt: date}));
+                              }} 
+                              className="h-8" 
+                            />
+                            <Input 
+                              value={draft?.verificationNotes ?? row.verificationNotes ?? ''} 
+                              onChange={(e) => setDraft((d:any)=> ({...(d||{}), verificationNotes: e.target.value}))} 
+                              placeholder="Verification notes"
+                              className="h-8" 
+                            />
+                          </div>
+                        ) : (
+                          row.verifiedBy ? (
+                            <div>
+                              <div className="font-medium">{row.verifiedBy}</div>
+                              {row.verifiedAt && (
+                                <div className="text-xs text-muted-foreground">
+                                  {new Date(row.verifiedAt).toLocaleDateString()}
+                                </div>
+                              )}
+                              {row.verificationNotes && (
+                                <div className="text-xs text-muted-foreground mt-1" title={row.verificationNotes}>
+                                  {row.verificationNotes.length > 30 
+                                    ? `${row.verificationNotes.substring(0, 30)}...` 
+                                    : row.verificationNotes}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )
+                        )}
+                      </TableCell>
+                      <TableCell>
                         {editable ? (
                           isEditing ? (
                             <div className="flex items-center gap-2">
@@ -352,7 +446,7 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
                 })
               ) : (
                 <TableRow>
-                  <TableCell colSpan={14} className="h-24 text-center">
+                  <TableCell colSpan={15} className="h-24 text-center">
                     No results.
                   </TableCell>
                 </TableRow>
