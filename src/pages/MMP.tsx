@@ -147,6 +147,28 @@ const SitesDisplayTable: React.FC<{
           // Update mmp_site_entries in database
           try {
             for (const site of sites) {
+              // Get fees values
+              const enumFee = site.enumerator_fee ?? site.enumeratorFee;
+              const transFee = site.transport_fee ?? site.transportFee;
+              
+              // Always calculate cost from fees if both are present
+              let calculatedCost: number | undefined;
+              if (enumFee !== undefined && transFee !== undefined) {
+                calculatedCost = Number(enumFee) + Number(transFee);
+              }
+              
+              // Use calculated cost if available, otherwise use provided cost
+              const finalCost = calculatedCost ?? site.cost;
+              
+              // Build additional_data with fees
+              const existingAdditionalData = site.additionalData || site.additional_data || {};
+              const updatedAdditionalData = {
+                ...existingAdditionalData,
+                enumerator_fee: enumFee,
+                transport_fee: transFee,
+                cost: finalCost
+              };
+              
               const updateData: any = {
                 site_name: site.siteName || site.site_name,
                 site_code: site.siteCode || site.site_code,
@@ -161,10 +183,10 @@ const SitesDisplayTable: React.FC<{
                 use_warehouse_monitoring: site.useWarehouseMonitoring || site.use_warehouse_monitoring,
                 visit_date: site.visitDate || site.visit_date,
                 comments: site.comments,
-                cost: site.cost,
+                cost: finalCost, // Save calculated cost to the cost column
                 status: site.status,
                 verification_notes: site.verification_notes || site.verificationNotes,
-                additional_data: site.additionalData || site.additional_data
+                additional_data: updatedAdditionalData // Store fees in additional_data
               };
 
               // Remove undefined values
@@ -326,6 +348,28 @@ const VerifiedSitesDisplay: React.FC<{ verifiedSites: SiteVisitRow[] }> = ({ ver
           // Update mmp_site_entries in database
           try {
             for (const site of sites) {
+              // Get fees values
+              const enumFee = site.enumerator_fee ?? site.enumeratorFee;
+              const transFee = site.transport_fee ?? site.transportFee;
+              
+              // Always calculate cost from fees if both are present
+              let calculatedCost: number | undefined;
+              if (enumFee !== undefined && transFee !== undefined) {
+                calculatedCost = Number(enumFee) + Number(transFee);
+              }
+              
+              // Use calculated cost if available, otherwise use provided cost
+              const finalCost = calculatedCost ?? site.cost;
+              
+              // Build additional_data with fees
+              const existingAdditionalData = site.additionalData || site.additional_data || {};
+              const updatedAdditionalData = {
+                ...existingAdditionalData,
+                enumerator_fee: enumFee,
+                transport_fee: transFee,
+                cost: finalCost
+              };
+              
               const updateData: any = {
                 site_name: site.siteName || site.site_name,
                 site_code: site.siteCode || site.site_code,
@@ -340,10 +384,10 @@ const VerifiedSitesDisplay: React.FC<{ verifiedSites: SiteVisitRow[] }> = ({ ver
                 use_warehouse_monitoring: site.useWarehouseMonitoring || site.use_warehouse_monitoring,
                 visit_date: site.visitDate || site.visit_date,
                 comments: site.comments,
-                cost: site.cost,
+                cost: finalCost, // Save calculated cost to the cost column
                 status: site.status,
                 verification_notes: site.verification_notes || site.verificationNotes,
-                additional_data: site.additionalData || site.additional_data
+                additional_data: updatedAdditionalData // Store fees in additional_data
               };
 
               // Remove undefined values
@@ -563,20 +607,22 @@ const MMP = () => {
   useEffect(() => {
     const loadApprovedCostedCount = async () => {
       try {
-        // Load all site entries where status = 'verified' (case-insensitive) and cost > 0
-        const { data: entries, error } = await supabase
+        // Load all site entries, then filter for verified ones
+        const { data: allEntries, error } = await supabase
           .from('mmp_site_entries')
-          .select('id,status,cost')
-          .gt('cost', 0);
+          .select('id,status,cost');
 
         if (error) throw error;
 
         // Filter to only include entries with status = 'verified' (case-insensitive)
-        const verifiedEntries = (entries || []).filter(entry => {
+        // Count includes entries with default cost (will be set when tab is opened)
+        const verifiedEntries = (allEntries || []).filter(entry => {
           const status = String(entry.status || '').toLowerCase();
           return status === 'verified';
         });
 
+        // Count verified entries (including those that will get default cost of 30)
+        // We count all verified entries since they'll either have cost > 0 or get default cost
         setApprovedCostedCount(verifiedEntries.length);
       } catch (error) {
         console.error('Failed to load approved and costed count:', error);
@@ -597,40 +643,118 @@ const MMP = () => {
 
       setLoadingApprovedCosted(true);
       try {
-        // Load all site entries where status = 'verified' (case-insensitive) and cost > 0
-        // First, get entries with cost > 0, then filter by status in JavaScript for case-insensitive matching
-        const { data: entries, error } = await supabase
+        // Load all site entries with status = 'verified' (case-insensitive), regardless of cost
+        // We'll set default costs for verified entries that don't have costs
+        const { data: allEntries, error: allError } = await supabase
           .from('mmp_site_entries')
           .select('*')
-          .gt('cost', 0)
           .order('created_at', { ascending: false });
 
-        if (error) throw error;
+        if (allError) throw allError;
 
         // Filter to only include entries with status = 'verified' (case-insensitive)
-        const verifiedEntries = (entries || []).filter(entry => {
+        let verifiedEntries = (allEntries || []).filter(entry => {
           const status = String(entry.status || '').toLowerCase();
           return status === 'verified';
         });
 
+        // Set default fees for verified entries that don't have a cost
+        // Default: Enumerator fees ($20) + Transport fees ($10 minimum) = $30
+        const entriesToUpdate: any[] = [];
+        for (const entry of verifiedEntries) {
+          const currentCost = entry.cost;
+          const additionalData = entry.additional_data || {};
+          const currentEnumFee = additionalData?.enumerator_fee;
+          const currentTransFee = additionalData?.transport_fee;
+          
+          if (!currentCost || currentCost === 0 || currentCost === null) {
+            entriesToUpdate.push({
+              id: entry.id,
+              cost: 30, // Total: $30
+              additional_data: {
+                ...additionalData,
+                enumerator_fee: 20, // $20 enumerator fee
+                transport_fee: 10 // $10 transport fee (minimum)
+              }
+            });
+          } else if ((!currentEnumFee || currentEnumFee === 0) && (!currentTransFee || currentTransFee === 0)) {
+            // If cost exists but fees don't, set fees based on cost
+            let enumFee = 20;
+            let transFee = 10;
+            if (currentCost === 30) {
+              enumFee = 20;
+              transFee = 10;
+            } else if (currentCost) {
+              enumFee = currentCost - 10;
+              transFee = 10;
+            }
+            entriesToUpdate.push({
+              id: entry.id,
+              additional_data: {
+                ...additionalData,
+                enumerator_fee: enumFee,
+                transport_fee: transFee
+              }
+            });
+          }
+        }
+
+        // Update entries that need default fees
+        if (entriesToUpdate.length > 0) {
+          for (const entryUpdate of entriesToUpdate) {
+            await supabase
+              .from('mmp_site_entries')
+              .update({
+                cost: entryUpdate.cost || (entryUpdate.additional_data.enumerator_fee + entryUpdate.additional_data.transport_fee),
+                additional_data: entryUpdate.additional_data
+              })
+              .eq('id', entryUpdate.id);
+          }
+          // Update the local entries array with the new fees
+          verifiedEntries = verifiedEntries.map(entry => {
+            const update = entriesToUpdate.find(u => u.id === entry.id);
+            if (update) {
+              return {
+                ...entry,
+                cost: update.cost || (update.additional_data.enumerator_fee + update.additional_data.transport_fee),
+                additional_data: update.additional_data
+              };
+            }
+            return entry;
+          });
+        }
+
+        // Filter to only include entries with cost > 0 (after setting defaults)
+        verifiedEntries = verifiedEntries.filter(entry => {
+          const cost = Number(entry.cost || 0);
+          return cost > 0;
+        });
+
         // Format entries for MMPSiteEntriesTable
-        const formattedEntries = verifiedEntries.map(entry => ({
-          ...entry,
-          siteName: entry.site_name,
-          siteCode: entry.site_code,
-          hubOffice: entry.hub_office,
-          cpName: entry.cp_name,
-          siteActivity: entry.activity_at_site,
-          monitoringBy: entry.monitoring_by,
-          surveyTool: entry.survey_tool,
-          useMarketDiversion: entry.use_market_diversion,
-          useWarehouseMonitoring: entry.use_warehouse_monitoring,
-          visitDate: entry.visit_date,
-          comments: entry.comments,
-          cost: entry.cost,
-          status: entry.status,
-          additionalData: entry.additional_data || {}
-        }));
+        const formattedEntries = verifiedEntries.map(entry => {
+          const additionalData = entry.additional_data || {};
+          return {
+            ...entry,
+            siteName: entry.site_name,
+            siteCode: entry.site_code,
+            hubOffice: entry.hub_office,
+            cpName: entry.cp_name,
+            siteActivity: entry.activity_at_site,
+            monitoringBy: entry.monitoring_by,
+            surveyTool: entry.survey_tool,
+            useMarketDiversion: entry.use_market_diversion,
+            useWarehouseMonitoring: entry.use_warehouse_monitoring,
+            visitDate: entry.visit_date,
+            comments: entry.comments,
+            enumerator_fee: additionalData.enumerator_fee,
+            enumeratorFee: additionalData.enumerator_fee,
+            transport_fee: additionalData.transport_fee,
+            transportFee: additionalData.transport_fee,
+            cost: entry.cost,
+            status: entry.status,
+            additionalData: additionalData
+          };
+        });
 
         setApprovedCostedSiteEntries(formattedEntries);
         // Update count when entries are loaded
@@ -1145,6 +1269,28 @@ const MMP = () => {
                           // Update mmp_site_entries in database
                           try {
                             for (const site of sites) {
+                              // Get fees values
+                              const enumFee = site.enumerator_fee ?? site.enumeratorFee;
+                              const transFee = site.transport_fee ?? site.transportFee;
+                              
+                              // Always calculate cost from fees if both are present
+                              let calculatedCost: number | undefined;
+                              if (enumFee !== undefined && transFee !== undefined) {
+                                calculatedCost = Number(enumFee) + Number(transFee);
+                              }
+                              
+                              // Use calculated cost if available, otherwise use provided cost
+                              const finalCost = calculatedCost ?? site.cost;
+                              
+                              // Build additional_data with fees
+                              const existingAdditionalData = site.additionalData || site.additional_data || {};
+                              const updatedAdditionalData = {
+                                ...existingAdditionalData,
+                                enumerator_fee: enumFee,
+                                transport_fee: transFee,
+                                cost: finalCost
+                              };
+                              
                               const updateData: any = {
                                 site_name: site.siteName || site.site_name,
                                 site_code: site.siteCode || site.site_code,
@@ -1159,10 +1305,10 @@ const MMP = () => {
                                 use_warehouse_monitoring: site.useWarehouseMonitoring || site.use_warehouse_monitoring,
                                 visit_date: site.visitDate || site.visit_date,
                                 comments: site.comments,
-                                cost: site.cost,
+                                cost: finalCost, // Save calculated cost to the cost column
                                 status: site.status,
                                 verification_notes: site.verification_notes || site.verificationNotes,
-                                additional_data: site.additionalData || site.additional_data
+                                additional_data: updatedAdditionalData // Store fees in additional_data
                               };
 
                               // Remove undefined values
@@ -1191,23 +1337,30 @@ const MMP = () => {
                                 return status === 'verified';
                               });
                               
-                              const formattedEntries = verifiedEntries.map(entry => ({
-                                ...entry,
-                                siteName: entry.site_name,
-                                siteCode: entry.site_code,
-                                hubOffice: entry.hub_office,
-                                cpName: entry.cp_name,
-                                siteActivity: entry.activity_at_site,
-                                monitoringBy: entry.monitoring_by,
-                                surveyTool: entry.survey_tool,
-                                useMarketDiversion: entry.use_market_diversion,
-                                useWarehouseMonitoring: entry.use_warehouse_monitoring,
-                                visitDate: entry.visit_date,
-                                comments: entry.comments,
-                                cost: entry.cost,
-                                status: entry.status,
-                                additionalData: entry.additional_data || {}
-                              }));
+                              const formattedEntries = verifiedEntries.map(entry => {
+                                const additionalData = entry.additional_data || {};
+                                return {
+                                  ...entry,
+                                  siteName: entry.site_name,
+                                  siteCode: entry.site_code,
+                                  hubOffice: entry.hub_office,
+                                  cpName: entry.cp_name,
+                                  siteActivity: entry.activity_at_site,
+                                  monitoringBy: entry.monitoring_by,
+                                  surveyTool: entry.survey_tool,
+                                  useMarketDiversion: entry.use_market_diversion,
+                                  useWarehouseMonitoring: entry.use_warehouse_monitoring,
+                                  visitDate: entry.visit_date,
+                                  comments: entry.comments,
+                                  enumerator_fee: additionalData.enumerator_fee,
+                                  enumeratorFee: additionalData.enumerator_fee,
+                                  transport_fee: additionalData.transport_fee,
+                                  transportFee: additionalData.transport_fee,
+                                  cost: entry.cost,
+                                  status: entry.status,
+                                  additionalData: additionalData
+                                };
+                              });
                               setApprovedCostedSiteEntries(formattedEntries);
                               // Update count when entries are reloaded
                               setApprovedCostedCount(formattedEntries.length);

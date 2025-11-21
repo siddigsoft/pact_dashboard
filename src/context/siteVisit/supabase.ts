@@ -317,6 +317,14 @@ export const updateSiteVisitInDb = async (id: string, updates: Partial<SiteVisit
         approved: 'Approved',
         completed: 'Completed',
       };
+      // Get current entry to check existing cost
+      const { data: currentEntry } = await supabase
+        .from('mmp_site_entries')
+        .select('cost, status, additional_data')
+        .eq('mmp_file_id', mmpId)
+        .eq('site_code', siteCode)
+        .single();
+
       const updatePayload: any = {
         site_name: data.site_name ?? undefined,
         state: data.state ?? undefined,
@@ -331,9 +339,40 @@ export const updateSiteVisitInDb = async (id: string, updates: Partial<SiteVisit
         comments: data.notes ?? undefined,
         cost: (() => { try { const t = Number(data?.fees?.total); return isNaN(t) ? undefined : t; } catch { return undefined; } })(),
       };
+      
       if (typeof updates.status !== 'undefined') {
         const mapped = statusMap[String(updates.status).toLowerCase()];
-        if (mapped) updatePayload.status = mapped;
+        if (mapped) {
+          updatePayload.status = mapped;
+          
+          // If status is being set to 'Verified' and cost is 0 or null, set default fees
+          // Default: Enumerator fees ($20) + Transport fees ($10 minimum) = $30
+          if (mapped === 'Verified') {
+            const existingCost = currentEntry?.cost;
+            const feesCost = updatePayload.cost;
+            const additionalData = currentEntry?.additional_data || {};
+            const existingEnumFee = additionalData?.enumerator_fee;
+            const existingTransFee = additionalData?.transport_fee;
+            
+            // Only set default if no cost exists (0, null, undefined) and no cost from fees
+            if ((!existingCost || existingCost === 0 || existingCost === null) && (!feesCost || feesCost === 0)) {
+              additionalData.enumerator_fee = 20; // $20 enumerator fee
+              additionalData.transport_fee = 10; // $10 transport fee (minimum)
+              updatePayload.cost = 30; // Total: $30
+              updatePayload.additional_data = additionalData;
+            } else if ((!existingEnumFee || existingEnumFee === 0) && (!existingTransFee || existingTransFee === 0)) {
+              // If cost exists but fees don't, set fees based on cost
+              if (existingCost === 30) {
+                additionalData.enumerator_fee = 20;
+                additionalData.transport_fee = 10;
+              } else if (existingCost) {
+                additionalData.enumerator_fee = existingCost - 10;
+                additionalData.transport_fee = 10;
+              }
+              updatePayload.additional_data = additionalData;
+            }
+          }
+        }
       }
       Object.keys(updatePayload).forEach(k => updatePayload[k] === undefined && delete updatePayload[k]);
       if (Object.keys(updatePayload).length > 0) {

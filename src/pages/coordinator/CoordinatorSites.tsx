@@ -96,10 +96,46 @@ const CoordinatorSites: React.FC = () => {
       try {
         const site = sites.find(s => s.id === siteId);
         if (site?.mmp_id && site?.site_code) {
+          // Get current site entry to check if cost exists
+          const { data: currentEntry } = await supabase
+            .from('mmp_site_entries')
+            .select('cost, additional_data')
+            .eq('mmp_file_id', site.mmp_id)
+            .eq('site_code', site.site_code)
+            .single();
+
           const mmpUpdateData: any = { status: 'Verified' };
           if (notes) {
             mmpUpdateData.verification_notes = notes;
           }
+          
+          // Set default fees if cost is 0, null, or undefined
+          // Default: Enumerator fees ($20) + Transport fees ($10 minimum) = $30
+          const currentCost = currentEntry?.cost;
+          const additionalData = currentEntry?.additional_data || {};
+          const currentEnumFee = additionalData?.enumerator_fee;
+          const currentTransFee = additionalData?.transport_fee;
+          
+          if (!currentCost || currentCost === 0 || currentCost === null) {
+            // Set default fees in additional_data
+            additionalData.enumerator_fee = 20; // $20 enumerator fee
+            additionalData.transport_fee = 10; // $10 transport fee (minimum)
+            mmpUpdateData.cost = 30; // Total: $30
+            mmpUpdateData.additional_data = additionalData;
+          } else if ((!currentEnumFee || currentEnumFee === 0) && (!currentTransFee || currentTransFee === 0)) {
+            // If cost exists but fees don't, set fees based on cost
+            // If cost is 30 (default), split it
+            if (currentCost === 30) {
+              additionalData.enumerator_fee = 20;
+              additionalData.transport_fee = 10;
+            } else {
+              // Otherwise, try to infer or use defaults
+              additionalData.enumerator_fee = currentCost - 10;
+              additionalData.transport_fee = 10;
+            }
+            mmpUpdateData.additional_data = additionalData;
+          }
+          
           await supabase
             .from('mmp_site_entries')
             .update(mmpUpdateData)

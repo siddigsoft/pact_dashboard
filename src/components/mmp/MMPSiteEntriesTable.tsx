@@ -61,7 +61,37 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
 
     const comments = site.comments || site.notes || '—';
     const fees = (site.fees || vd?.fees) || {};
-    const cost = site.cost ?? site.price ?? vd?.cost ?? vd?.price ?? fees.total ?? fees.amount ?? ad['Cost'] ?? ad['Price'] ?? ad['Amount'] ?? '—';
+    
+    // Extract enumerator_fee and transport_fee from additional_data or calculate from cost
+    const enumeratorFee = site.enumerator_fee ?? ad['Enumerator Fee'] ?? ad['enumerator_fee'] ?? 
+      (site.additional_data?.enumerator_fee ? Number(site.additional_data.enumerator_fee) : undefined);
+    const transportFee = site.transport_fee ?? ad['Transport Fee'] ?? ad['transport_fee'] ?? 
+      (site.additional_data?.transport_fee ? Number(site.additional_data.transport_fee) : undefined);
+    
+    // If we have separate fees, use them; otherwise try to extract from cost or use cost directly
+    let finalEnumeratorFee = enumeratorFee;
+    let finalTransportFee = transportFee;
+    
+    // If we have cost but not separate fees, and cost is 30 (default), split it
+    const cost = site.cost ?? site.price ?? vd?.cost ?? vd?.price ?? fees.total ?? fees.amount ?? ad['Cost'] ?? ad['Price'] ?? ad['Amount'];
+    if (cost && (!finalEnumeratorFee || !finalTransportFee)) {
+      // If cost is 30 (default), split into 20 + 10
+      if (Number(cost) === 30) {
+        finalEnumeratorFee = finalEnumeratorFee ?? 20;
+        finalTransportFee = finalTransportFee ?? 10;
+      } else if (cost && !finalEnumeratorFee && !finalTransportFee) {
+        // If we have cost but no separate fees, try to infer or use defaults
+        // For now, if cost exists and is not 30, we'll let user set fees manually
+        finalEnumeratorFee = finalEnumeratorFee ?? (cost ? Number(cost) - 10 : undefined);
+        finalTransportFee = finalTransportFee ?? 10;
+      }
+    }
+    
+    // Calculate total cost from fees if both exist, otherwise use cost
+    const totalCost = (finalEnumeratorFee && finalTransportFee) 
+      ? Number(finalEnumeratorFee) + Number(finalTransportFee)
+      : (cost ? Number(cost) : undefined);
+    
     const verifiedBy = site.verified_by || ad['Verified By'] || ad['Verified By:'] || undefined;
     const verifiedAt = site.verified_at || ad['Verified At'] || ad['Verified At:'] || undefined;
     const verificationNotes = site.verification_notes || ad['Verification Notes'] || ad['Verification Notes:'] || undefined;
@@ -70,7 +100,9 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
     return { 
       hubOffice, state, locality, siteName, cpName, siteActivity, 
       monitoringBy, surveyTool, useMarketDiversion, useWarehouseMonitoring,
-      mainActivity, visitType, visitDate, comments, cost, verifiedBy, verifiedAt, verificationNotes, status
+      mainActivity, visitType, visitDate, comments, 
+      enumeratorFee: finalEnumeratorFee, transportFee: finalTransportFee, cost: totalCost,
+      verifiedBy, verifiedAt, verificationNotes, status
     };
   };
 
@@ -125,10 +157,53 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
     updated.useWarehouseMonitoring = toBool(d.useWarehouseMonitoring);
     updated.visitDate = d.visitDate;
     updated.comments = d.comments;
-    if (typeof d.cost !== 'undefined') {
+    
+    // Handle enumerator_fee and transport_fee separately
+    let enumFeeNum: number | undefined;
+    let transFeeNum: number | undefined;
+    
+    if (typeof d.enumeratorFee !== 'undefined') {
+      const enumFee = d.enumeratorFee === '—' || d.enumeratorFee === '' ? undefined : Number(d.enumeratorFee);
+      enumFeeNum = !isNaN(enumFee as number) ? enumFee : undefined;
+      updated.enumerator_fee = enumFeeNum;
+      // Store in additional_data as well
+      if (!updated.additional_data) updated.additional_data = {};
+      updated.additional_data.enumerator_fee = updated.enumerator_fee;
+    } else {
+      // Preserve existing enumerator_fee if not being edited
+      enumFeeNum = updated.enumerator_fee ?? site.enumerator_fee ?? (site.additional_data?.enumerator_fee ? Number(site.additional_data.enumerator_fee) : undefined);
+      if (enumFeeNum !== undefined) {
+        updated.enumerator_fee = enumFeeNum;
+      }
+    }
+    
+    if (typeof d.transportFee !== 'undefined') {
+      const transFee = d.transportFee === '—' || d.transportFee === '' ? undefined : Number(d.transportFee);
+      transFeeNum = !isNaN(transFee as number) ? transFee : undefined;
+      updated.transport_fee = transFeeNum;
+      // Store in additional_data as well
+      if (!updated.additional_data) updated.additional_data = {};
+      updated.additional_data.transport_fee = updated.transport_fee;
+    } else {
+      // Preserve existing transport_fee if not being edited
+      transFeeNum = updated.transport_fee ?? site.transport_fee ?? (site.additional_data?.transport_fee ? Number(site.additional_data.transport_fee) : undefined);
+      if (transFeeNum !== undefined) {
+        updated.transport_fee = transFeeNum;
+      }
+    }
+    
+    // Always calculate total cost from fees if both are available
+    if (enumFeeNum !== undefined && transFeeNum !== undefined) {
+      updated.cost = Number(enumFeeNum) + Number(transFeeNum);
+    } else if (typeof d.cost !== 'undefined') {
+      // Fallback to explicit cost if provided
       const n = d.cost === '—' || d.cost === '' ? undefined : Number(d.cost);
       updated.cost = isNaN(n as number) ? d.cost : n;
+    } else if (updated.cost === undefined && site.cost) {
+      // Preserve existing cost if no fees and no new cost provided
+      updated.cost = Number(site.cost);
     }
+    
     if (typeof d.status !== 'undefined') {
       updated.status = d.status;
     }
@@ -158,8 +233,23 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
     ad['Use Warehouse Monitoring'] = toBool(d.useWarehouseMonitoring) ? 'Yes' : 'No';
     ad['Visit Date'] = d.visitDate;
     ad['Comments'] = d.comments;
-    if (typeof d.cost !== 'undefined') {
-      ad['Cost'] = d.cost;
+    if (typeof d.enumeratorFee !== 'undefined') {
+      ad['Enumerator Fee'] = d.enumeratorFee;
+      ad['enumerator_fee'] = d.enumeratorFee;
+    } else if (updated.enumerator_fee !== undefined) {
+      ad['Enumerator Fee'] = updated.enumerator_fee;
+      ad['enumerator_fee'] = updated.enumerator_fee;
+    }
+    if (typeof d.transportFee !== 'undefined') {
+      ad['Transport Fee'] = d.transportFee;
+      ad['transport_fee'] = d.transportFee;
+    } else if (updated.transport_fee !== undefined) {
+      ad['Transport Fee'] = updated.transport_fee;
+      ad['transport_fee'] = updated.transport_fee;
+    }
+    // Always include calculated cost in additional_data
+    if (updated.cost !== undefined) {
+      ad['Cost'] = updated.cost;
     }
     if (typeof d.verifiedBy !== 'undefined') {
       ad['Verified By'] = d.verifiedBy;
@@ -236,7 +326,9 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
                 <TableHead>Market Diversion</TableHead>
                 <TableHead>Warehouse Monitoring</TableHead>
                 <TableHead>Visit Date</TableHead>
-                <TableHead>Cost</TableHead>
+                <TableHead>Enumerator Fee</TableHead>
+                <TableHead>Transport Fee</TableHead>
+                <TableHead>Total Cost</TableHead>
                 <TableHead>Comments</TableHead>
                 <TableHead>Verified By</TableHead>
                 <TableHead>Actions</TableHead>
@@ -337,13 +429,64 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
                         {isEditing ? (
                           <Input
                             type="number"
-                            value={draft?.cost ?? (Number.isFinite(Number(row.cost)) ? Number(row.cost) : '')}
-                            onChange={(e) => setDraft((d:any)=> ({...(d||{}), cost: e.target.value}))}
+                            step="0.01"
+                            value={draft?.enumeratorFee ?? (Number.isFinite(Number(row.enumeratorFee)) ? Number(row.enumeratorFee) : '')}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setDraft((d:any)=> {
+                                const newDraft = {...(d||{}), enumeratorFee: val};
+                                // Auto-calculate total cost
+                                const enumFee = Number(val) || 0;
+                                const transFee = Number(d?.transportFee ?? row.transportFee ?? 0);
+                                newDraft.cost = enumFee + transFee;
+                                return newDraft;
+                              });
+                            }}
                             className="h-8"
+                            placeholder="20"
                           />
                         ) : (
-                          (row.cost !== '—' && row.cost !== undefined && row.cost !== null && String(row.cost) !== '')
-                            ? `${Number(row.cost).toLocaleString()}`
+                          (row.enumeratorFee !== undefined && row.enumeratorFee !== null && String(row.enumeratorFee) !== '')
+                            ? `$${Number(row.enumeratorFee).toLocaleString()}`
+                            : '—'
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {isEditing ? (
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min="10"
+                            max="25"
+                            value={draft?.transportFee ?? (Number.isFinite(Number(row.transportFee)) ? Number(row.transportFee) : '')}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setDraft((d:any)=> {
+                                const newDraft = {...(d||{}), transportFee: val};
+                                // Auto-calculate total cost
+                                const enumFee = Number(d?.enumeratorFee ?? row.enumeratorFee ?? 0);
+                                const transFee = Number(val) || 0;
+                                newDraft.cost = enumFee + transFee;
+                                return newDraft;
+                              });
+                            }}
+                            className="h-8"
+                            placeholder="10"
+                          />
+                        ) : (
+                          (row.transportFee !== undefined && row.transportFee !== null && String(row.transportFee) !== '')
+                            ? `$${Number(row.transportFee).toLocaleString()}`
+                            : '—'
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {isEditing ? (
+                          <div className="font-semibold text-blue-600">
+                            ${((Number(draft?.enumeratorFee ?? row.enumeratorFee ?? 0)) + (Number(draft?.transportFee ?? row.transportFee ?? 0))).toLocaleString()}
+                          </div>
+                        ) : (
+                          (row.cost !== undefined && row.cost !== null && String(row.cost) !== '' && String(row.cost) !== '—')
+                            ? `$${Number(row.cost).toLocaleString()}`
                             : '—'
                         )}
                       </TableCell>
