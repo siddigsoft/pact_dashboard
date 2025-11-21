@@ -162,25 +162,23 @@ const Auth = () => {
                     {securityFeatures.map((feature, index) => {
                       const Icon = feature.icon;
                       return (
-                        <Card 
+                        <div 
                           key={index}
-                          className="p-4"
+                          className="p-4 rounded-md border bg-card hover-elevate"
                           data-testid={`feature-${feature.label.toLowerCase().replace(/\s+/g, '-')}`}
                         >
-                          <CardContent className="p-0">
-                            <div className="flex flex-col items-center text-center gap-2">
-                              <div className={`p-2 rounded-md bg-muted ${feature.color}`}>
-                                <Icon className="w-5 h-5" />
-                              </div>
-                              <div>
-                                <p className="text-sm font-semibold">{feature.label}</p>
-                                <p className="text-xs text-muted-foreground">
-                                  {feature.description}
-                                </p>
-                              </div>
+                          <div className="flex flex-col items-center text-center gap-2">
+                            <div className={`p-2 rounded-md bg-muted ${feature.color}`}>
+                              <Icon className="w-5 h-5" />
                             </div>
-                          </CardContent>
-                        </Card>
+                            <div>
+                              <p className="text-sm font-semibold">{feature.label}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {feature.description}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
                       );
                     })}
                   </div>
@@ -262,7 +260,11 @@ const Auth = () => {
                 <p>
                   Protected by enterprise-grade security.
                   <br />
-                  <a href="#" className="text-primary hover:underline">
+                  <a 
+                    href="#" 
+                    className="text-primary hover:underline"
+                    data-testid="link-auth-help"
+                  >
                     Need help?
                   </a>
                 </p>
