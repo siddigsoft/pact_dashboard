@@ -30,13 +30,18 @@ import { BarChart } from 'lucide-react';
 import FloatingMessenger from '@/components/communication/FloatingMessenger';
 import { useAppContext } from '@/context/AppContext';
 import { Badge } from '@/components/ui/badge';
-import PactLogo from '@/assets/logo.png'; // PNG logo
+import PactLogo from '@/assets/logo.png';
 import LocationPermissionPrompt from '@/components/location/LocationPermissionPrompt';
+import { useLiveDashboard } from '@/hooks/useLiveDashboard';
+import { ConnectionStatus } from '@/components/dashboard/ConnectionStatus';
+import { RefreshButton } from '@/components/dashboard/RefreshButton';
 
 const Dashboard = () => {
   const { SiteVisitRemindersDialog, showDueReminders } = useSiteVisitRemindersUI();
   const { viewMode } = useViewMode();
   const { currentUser, roles } = useAppContext();
+  
+  const { isConnected, channels } = useLiveDashboard();
 
   useEffect(() => {
     showDueReminders();
@@ -65,9 +70,15 @@ const Dashboard = () => {
       <div className="container mx-auto p-6 md:p-8 space-y-12 bg-gradient-to-br from-slate-50 via-blue-50 to-blue-100 dark:from-gray-900 dark:via-gray-950 dark:to-gray-900 min-h-screen">
         {/* Header */}
         <header className="space-y-3">
-          <h1 className="text-3xl md:text-5xl font-extrabold text-gray-900 dark:text-white tracking-tight">
-            Dashboard
-          </h1>
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <h1 className="text-3xl md:text-5xl font-extrabold text-gray-900 dark:text-white tracking-tight">
+              Dashboard
+            </h1>
+            <div className="flex items-center gap-3">
+              <ConnectionStatus isConnected={isConnected} channelCount={channels} />
+              <RefreshButton />
+            </div>
+          </div>
           <p className="text-gray-600 dark:text-gray-300 text-base md:text-lg">
             Welcome to your{' '}
             <span className="font-semibold text-blue-600 dark:text-blue-400">
