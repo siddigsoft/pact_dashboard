@@ -96,13 +96,22 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
     const verifiedAt = site.verified_at || ad['Verified At'] || ad['Verified At:'] || undefined;
     const verificationNotes = site.verification_notes || ad['Verification Notes'] || ad['Verification Notes:'] || undefined;
     const status = site.status || ad['Status'] || ad['Status:'] || 'Pending';
+    
+    // Dispatch information
+    const dispatchedAt = ad['dispatched_at'] || ad['Dispatched At'] || undefined;
+    const dispatchedBy = ad['dispatched_by'] || ad['Dispatched By'] || undefined;
+    
+    // Timestamps
+    const createdAt = site.created_at || undefined;
+    const updatedAt = site.updated_at || site.last_modified || undefined;
 
     return { 
       hubOffice, state, locality, siteName, cpName, siteActivity, 
       monitoringBy, surveyTool, useMarketDiversion, useWarehouseMonitoring,
       mainActivity, visitType, visitDate, comments, 
       enumeratorFee: finalEnumeratorFee, transportFee: finalTransportFee, cost: totalCost,
-      verifiedBy, verifiedAt, verificationNotes, status
+      verifiedBy, verifiedAt, verificationNotes, status,
+      dispatchedAt, dispatchedBy, createdAt, updatedAt
     };
   };
 
@@ -310,7 +319,7 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
       </CardHeader>
       <CardContent>
         <div className="rounded-md border w-full overflow-x-auto">
-          <div className="min-w-[1700px]">
+          <div className="min-w-[2400px]">
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50">
@@ -330,7 +339,13 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
                 <TableHead>Transport Fee</TableHead>
                 <TableHead>Total Cost</TableHead>
                 <TableHead>Comments</TableHead>
+                <TableHead>Status</TableHead>
                 <TableHead>Verified By</TableHead>
+                <TableHead>Verified At</TableHead>
+                <TableHead>Verification Notes</TableHead>
+                <TableHead>Dispatched At</TableHead>
+                <TableHead>Dispatched By</TableHead>
+                <TableHead>Created At</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -497,49 +512,106 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
                       </TableCell>
                       <TableCell>
                         {isEditing ? (
-                          <div className="space-y-2">
-                            <Input 
-                              value={draft?.verifiedBy ?? row.verifiedBy ?? ''} 
-                              onChange={(e) => setDraft((d:any)=> ({...(d||{}), verifiedBy: e.target.value}))} 
-                              placeholder="Coordinator name"
-                              className="h-8" 
-                            />
-                            <Input 
-                              type="date"
-                              value={draft?.verifiedAt ? new Date(draft.verifiedAt).toISOString().split('T')[0] : (row.verifiedAt ? new Date(row.verifiedAt).toISOString().split('T')[0] : '')} 
-                              onChange={(e) => {
-                                const date = e.target.value ? new Date(e.target.value).toISOString() : '';
-                                setDraft((d:any)=> ({...(d||{}), verifiedAt: date}));
-                              }} 
-                              className="h-8" 
-                            />
-                            <Input 
-                              value={draft?.verificationNotes ?? row.verificationNotes ?? ''} 
-                              onChange={(e) => setDraft((d:any)=> ({...(d||{}), verificationNotes: e.target.value}))} 
-                              placeholder="Verification notes"
-                              className="h-8" 
-                            />
-                          </div>
+                          <Input 
+                            value={draft?.status ?? row.status ?? ''} 
+                            onChange={(e) => setDraft((d:any)=> ({...(d||{}), status: e.target.value}))} 
+                            className="h-8" 
+                          />
+                        ) : (
+                          <Badge variant={row.status === 'Verified' ? 'default' : row.status === 'Dispatched' ? 'secondary' : 'outline'}>
+                            {row.status || 'Pending'}
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {isEditing ? (
+                          <Input 
+                            value={draft?.verifiedBy ?? row.verifiedBy ?? ''} 
+                            onChange={(e) => setDraft((d:any)=> ({...(d||{}), verifiedBy: e.target.value}))} 
+                            placeholder="Coordinator name"
+                            className="h-8" 
+                          />
                         ) : (
                           row.verifiedBy ? (
-                            <div>
-                              <div className="font-medium">{row.verifiedBy}</div>
-                              {row.verifiedAt && (
-                                <div className="text-xs text-muted-foreground">
-                                  {new Date(row.verifiedAt).toLocaleDateString()}
-                                </div>
-                              )}
-                              {row.verificationNotes && (
-                                <div className="text-xs text-muted-foreground mt-1" title={row.verificationNotes}>
-                                  {row.verificationNotes.length > 30 
-                                    ? `${row.verificationNotes.substring(0, 30)}...` 
-                                    : row.verificationNotes}
-                                </div>
-                              )}
+                            <div className="font-medium">{row.verifiedBy}</div>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {isEditing ? (
+                          <Input 
+                            type="date"
+                            value={draft?.verifiedAt ? new Date(draft.verifiedAt).toISOString().split('T')[0] : (row.verifiedAt ? new Date(row.verifiedAt).toISOString().split('T')[0] : '')} 
+                            onChange={(e) => {
+                              const date = e.target.value ? new Date(e.target.value).toISOString() : '';
+                              setDraft((d:any)=> ({...(d||{}), verifiedAt: date}));
+                            }} 
+                            className="h-8" 
+                          />
+                        ) : (
+                          row.verifiedAt ? (
+                            <div className="text-sm">
+                              {new Date(row.verifiedAt).toLocaleDateString()}
+                              <div className="text-xs text-muted-foreground">
+                                {new Date(row.verifiedAt).toLocaleTimeString()}
+                              </div>
                             </div>
                           ) : (
                             <span className="text-muted-foreground">—</span>
                           )
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {isEditing ? (
+                          <Input 
+                            value={draft?.verificationNotes ?? row.verificationNotes ?? ''} 
+                            onChange={(e) => setDraft((d:any)=> ({...(d||{}), verificationNotes: e.target.value}))} 
+                            placeholder="Verification notes"
+                            className="h-8" 
+                          />
+                        ) : (
+                          row.verificationNotes ? (
+                            <div className="text-sm max-w-xs" title={row.verificationNotes}>
+                              {row.verificationNotes.length > 50 
+                                ? `${row.verificationNotes.substring(0, 50)}...` 
+                                : row.verificationNotes}
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {row.dispatchedAt ? (
+                          <div className="text-sm">
+                            {new Date(row.dispatchedAt).toLocaleDateString()}
+                            <div className="text-xs text-muted-foreground">
+                              {new Date(row.dispatchedAt).toLocaleTimeString()}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {row.dispatchedBy ? (
+                          <div className="font-medium text-sm">{row.dispatchedBy}</div>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {row.createdAt ? (
+                          <div className="text-sm">
+                            {new Date(row.createdAt).toLocaleDateString()}
+                            <div className="text-xs text-muted-foreground">
+                              {new Date(row.createdAt).toLocaleTimeString()}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
                         )}
                       </TableCell>
                       <TableCell>
@@ -589,7 +661,7 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
                 })
               ) : (
                 <TableRow>
-                  <TableCell colSpan={15} className="h-24 text-center">
+                  <TableCell colSpan={20} className="h-24 text-center">
                     No results.
                   </TableCell>
                 </TableRow>

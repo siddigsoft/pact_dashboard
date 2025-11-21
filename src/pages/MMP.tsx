@@ -16,6 +16,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 
 // Using relative import fallback in case path alias resolution misses new file
 import BulkClearForwardedDialog from '../components/mmp/BulkClearForwardedDialog';
+import { DispatchSitesDialog } from '@/components/mmp/DispatchSitesDialog';
 
 // Helper component to convert SiteVisitRow[] to site entries and display using MMPSiteEntriesTable
 const SitesDisplayTable: React.FC<{ 
@@ -446,6 +447,7 @@ const MMP = () => {
     hasInProgress: boolean;
     hasCompleted: boolean;
     hasRejected: boolean;
+    hasDispatched: boolean;
     allApprovedAndCosted: boolean;
   }>>({});
   const [siteVisitRows, setSiteVisitRows] = useState<SiteVisitRow[]>([]);
@@ -453,6 +455,8 @@ const MMP = () => {
   const [approvedCostedSiteEntries, setApprovedCostedSiteEntries] = useState<any[]>([]);
   const [loadingApprovedCosted, setLoadingApprovedCosted] = useState(false);
   const [approvedCostedCount, setApprovedCostedCount] = useState(0);
+  const [dispatchDialogOpen, setDispatchDialogOpen] = useState(false);
+  const [dispatchType, setDispatchType] = useState<'state' | 'locality' | 'individual'>('state');
 
   // Helper function to normalize role checking (handles both lowercase and proper case)
   const hasRole = (rolesToCheck: string[]) => {
@@ -652,7 +656,7 @@ const MMP = () => {
 
         if (allError) throw allError;
 
-        // Filter to only include entries with status = 'verified' (case-insensitive)
+        // Filter to only include entries with status = 'verified' (case-insensitive) and not dispatched
         let verifiedEntries = (allEntries || []).filter(entry => {
           const status = String(entry.status || '').toLowerCase();
           return status === 'verified';
@@ -792,8 +796,9 @@ const MMP = () => {
       }),
       dispatched: base.filter(mmp => {
         const stats = siteVisitStats[mmp.id];
-        // Dispatched: approved and accepted by enumerators (inProgress is proxy for accepted)
-        return Boolean(stats?.hasInProgress || stats?.hasAssigned);
+        // Dispatched: sites that have been dispatched (have site_visits created) or marked as dispatched
+        // Check if any site entries are marked as 'Dispatched' or have site_visits
+        return Boolean(stats?.hasInProgress || stats?.hasAssigned || stats?.hasDispatched);
       }),
       // Completed: rely on site visits completed or workflow stage
       completed: base.filter(mmp => {
@@ -978,7 +983,7 @@ const MMP = () => {
         if (mmpEntriesError) console.warn('Failed to load mmp_site_entries:', mmpEntriesError);
         
         const map: Record<string, {
-          exists: boolean; hasCosted: boolean; hasAssigned: boolean; hasInProgress: boolean; hasCompleted: boolean; hasRejected: boolean; allApprovedAndCosted: boolean;
+          exists: boolean; hasCosted: boolean; hasAssigned: boolean; hasInProgress: boolean; hasCompleted: boolean; hasRejected: boolean; hasDispatched: boolean; allApprovedAndCosted: boolean;
         }> = {};
         const rows: SiteVisitRow[] = [];
         const siteVisitMap = new Map<string, SiteVisitRow>();
@@ -986,7 +991,7 @@ const MMP = () => {
         // Initialize map for all MMPs
         for (const id of ids) {
           if (!map[id]) {
-            map[id] = { exists: false, hasCosted: false, hasAssigned: false, hasInProgress: false, hasCompleted: false, hasRejected: false, allApprovedAndCosted: false };
+            map[id] = { exists: false, hasCosted: false, hasAssigned: false, hasInProgress: false, hasCompleted: false, hasRejected: false, hasDispatched: false, allApprovedAndCosted: false };
           }
         }
         
@@ -994,7 +999,7 @@ const MMP = () => {
         for (const row of (siteVisitsData || []) as any[]) {
           const id = row.mmp_id;
           if (!map[id]) {
-            map[id] = { exists: false, hasCosted: false, hasAssigned: false, hasInProgress: false, hasCompleted: false, hasRejected: false, allApprovedAndCosted: false };
+            map[id] = { exists: false, hasCosted: false, hasAssigned: false, hasInProgress: false, hasCompleted: false, hasRejected: false, hasDispatched: false, allApprovedAndCosted: false };
           }
           map[id].exists = true;
           const status = String(row.status || '').toLowerCase();
@@ -1029,7 +1034,7 @@ const MMP = () => {
         }
         
         // Process mmp_site_entries - add verified sites that might not be in site_visits
-        // Also check if all entries are approved and costed
+        // Also check if all entries are approved and costed, and check for dispatched status
         const entriesByMmp = new Map<string, any[]>();
         for (const entry of (mmpEntriesData || []) as any[]) {
           const mmpId = entry.mmp_file_id;
@@ -1068,10 +1073,10 @@ const MMP = () => {
           }
         }
         
-        // Check if all entries for each MMP are approved and costed
+        // Check if all entries for each MMP are approved and costed, and check for dispatched status
         for (const [mmpId, entries] of entriesByMmp.entries()) {
           if (!map[mmpId]) {
-            map[mmpId] = { exists: false, hasCosted: false, hasAssigned: false, hasInProgress: false, hasCompleted: false, hasRejected: false, allApprovedAndCosted: false };
+            map[mmpId] = { exists: false, hasCosted: false, hasAssigned: false, hasInProgress: false, hasCompleted: false, hasRejected: false, hasDispatched: false, allApprovedAndCosted: false };
           }
           
           // For "Approved & Costed", ALL entries must have cost > 0 AND status = 'verified'
@@ -1082,6 +1087,15 @@ const MMP = () => {
               return cost > 0 && status === 'verified';
             });
             map[mmpId].allApprovedAndCosted = allApprovedAndCosted;
+            
+            // Check if any entry is dispatched
+            const hasDispatched = entries.some(entry => {
+              const status = String(entry.status || '').toLowerCase();
+              return status === 'dispatched';
+            });
+            if (hasDispatched) {
+              map[mmpId].hasDispatched = true;
+            }
           }
         }
         
@@ -1262,6 +1276,43 @@ const MMP = () => {
                         <h3 className="text-lg font-semibold">Approved & Costed Site Entries</h3>
                         <Badge variant="secondary">{approvedCostedSiteEntries.length} entries</Badge>
                       </div>
+                      {(isAdmin || isICT) && approvedCostedSiteEntries.length > 0 && (
+                        <div className="mb-4 flex flex-wrap gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setDispatchType('state');
+                              setDispatchDialogOpen(true);
+                            }}
+                            className="bg-blue-50 hover:bg-blue-100"
+                          >
+                            Bulk Dispatch by State
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setDispatchType('locality');
+                              setDispatchDialogOpen(true);
+                            }}
+                            className="bg-blue-50 hover:bg-blue-100"
+                          >
+                            Bulk Dispatch by Locality
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setDispatchType('individual');
+                              setDispatchDialogOpen(true);
+                            }}
+                            className="bg-blue-50 hover:bg-blue-100"
+                          >
+                            Individual Dispatch
+                          </Button>
+                        </div>
+                      )}
                       <MMPSiteEntriesTable 
                         siteEntries={approvedCostedSiteEntries} 
                         editable={true}
@@ -1409,7 +1460,63 @@ const MMP = () => {
         )}
       </div>
       {(isAdmin || isICT) && (
+        <>
         <BulkClearForwardedDialog open={clearDialogOpen} onOpenChange={setClearDialogOpen} />
+          <DispatchSitesDialog
+            open={dispatchDialogOpen}
+            onOpenChange={setDispatchDialogOpen}
+            siteEntries={approvedCostedSiteEntries}
+            dispatchType={dispatchType}
+            onDispatched={async () => {
+              // Reload approved and costed entries after dispatch
+              if (verifiedSubTab === 'approvedCosted') {
+                const { data: entries, error } = await supabase
+                  .from('mmp_site_entries')
+                  .select('*')
+                  .order('created_at', { ascending: false });
+
+                if (!error && entries) {
+                  const verifiedEntries = entries.filter(entry => {
+                    const status = String(entry.status || '').toLowerCase();
+                    return status === 'verified';
+                  });
+
+                  const entriesWithCost = verifiedEntries.filter(entry => {
+                    const cost = Number(entry.cost || 0);
+                    return cost > 0;
+                  });
+
+                  const formattedEntries = entriesWithCost.map(entry => {
+                    const additionalData = entry.additional_data || {};
+                    return {
+                      ...entry,
+                      siteName: entry.site_name,
+                      siteCode: entry.site_code,
+                      hubOffice: entry.hub_office,
+                      cpName: entry.cp_name,
+                      siteActivity: entry.activity_at_site,
+                      monitoringBy: entry.monitoring_by,
+                      surveyTool: entry.survey_tool,
+                      useMarketDiversion: entry.use_market_diversion,
+                      useWarehouseMonitoring: entry.use_warehouse_monitoring,
+                      visitDate: entry.visit_date,
+                      comments: entry.comments,
+                      enumerator_fee: additionalData.enumerator_fee,
+                      enumeratorFee: additionalData.enumerator_fee,
+                      transport_fee: additionalData.transport_fee,
+                      transportFee: additionalData.transport_fee,
+                      cost: entry.cost,
+                      status: entry.status,
+                      additionalData: additionalData
+                    };
+                  });
+                  setApprovedCostedSiteEntries(formattedEntries);
+                  setApprovedCostedCount(formattedEntries.length);
+                }
+              }
+            }}
+          />
+        </>
       )}
     </div>
   );
