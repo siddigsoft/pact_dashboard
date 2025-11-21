@@ -263,6 +263,10 @@ export const updateSiteVisitInDb = async (id: string, updates: Partial<SiteVisit
     visitDataUpdates.projectActivities = updates.projectActivities;
     hasVisitDataUpdates = true;
   }
+  if ((updates as any).visitDate !== undefined) {
+    (visitDataUpdates as any).visitDate = (updates as any).visitDate;
+    hasVisitDataUpdates = true;
+  }
   if (updates.mmpDetails !== undefined) {
     visitDataUpdates.mmpDetails = updates.mmpDetails;
     hasVisitDataUpdates = true;
@@ -301,6 +305,47 @@ export const updateSiteVisitInDb = async (id: string, updates: Partial<SiteVisit
   if (error) {
     console.error('Error fetching updated site visit:', error);
     throw error;
+  }
+  
+  try {
+    const mmpId = data?.mmp_id;
+    const siteCode = data?.site_code;
+    if (mmpId && siteCode) {
+      const statusMap: Record<string, string> = {
+        verified: 'Verified',
+        rejected: 'Rejected',
+        approved: 'Approved',
+        completed: 'Completed',
+      };
+      const updatePayload: any = {
+        site_name: data.site_name ?? undefined,
+        state: data.state ?? undefined,
+        locality: data.locality ?? undefined,
+        main_activity: data.main_activity ?? undefined,
+        visit_date: (data.visit_data && data.visit_data.visitDate) ? data.visit_data.visitDate : (data.due_date ?? undefined),
+        activity_at_site: data.activity_at_site ?? data.activity ?? undefined,
+        monitoring_by: data.monitoring_by ?? (data.visit_data?.monitoringBy ?? undefined),
+        survey_tool: data.survey_tool ?? (data.visit_data?.surveyTool ?? undefined),
+        use_market_diversion: (typeof data.use_market_diversion !== 'undefined') ? data.use_market_diversion : (data.visit_data?.useMarketDiversion ?? undefined),
+        use_warehouse_monitoring: (typeof data.use_warehouse_monitoring !== 'undefined') ? data.use_warehouse_monitoring : (data.visit_data?.useWarehouseMonitoring ?? undefined),
+        comments: data.notes ?? undefined,
+        cost: (() => { try { const t = Number(data?.fees?.total); return isNaN(t) ? undefined : t; } catch { return undefined; } })(),
+      };
+      if (typeof updates.status !== 'undefined') {
+        const mapped = statusMap[String(updates.status).toLowerCase()];
+        if (mapped) updatePayload.status = mapped;
+      }
+      Object.keys(updatePayload).forEach(k => updatePayload[k] === undefined && delete updatePayload[k]);
+      if (Object.keys(updatePayload).length > 0) {
+        await supabase
+          .from('mmp_site_entries')
+          .update(updatePayload)
+          .eq('mmp_file_id', mmpId)
+          .eq('site_code', siteCode);
+      }
+    }
+  } catch (e) {
+    console.warn('Non-fatal: failed to sync mmp_site_entries from site_visits update', e);
   }
   
   // Transform back to camelCase for frontend use

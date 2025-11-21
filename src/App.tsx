@@ -40,6 +40,7 @@ import ProjectTeamManagement from './pages/ProjectTeamManagement';
 import Settings from './pages/Settings';
 import SiteVisits from './pages/SiteVisits';
 import SiteVisitDetail from './pages/SiteVisitDetail';
+import EditSiteVisit from './pages/EditSiteVisit';
 import CreateSiteVisit from './pages/CreateSiteVisit';
 import CreateSiteVisitMMP from './pages/CreateSiteVisitMMP';
 import CreateSiteVisitMMPDetail from './pages/CreateSiteVisitMMPDetail';
@@ -156,6 +157,7 @@ const AppRoutes = () => {
         <Route path="/site-visits/create/mmp/:id" element={<CreateSiteVisitMMPDetail />} />
         <Route path="/site-visits/create/urgent" element={<CreateSiteVisitUrgent />} />
         <Route path="/site-visits/:id" element={<SiteVisitDetail />} />
+        <Route path="/site-visits/:id/edit" element={<EditSiteVisit />} />
         <Route path="/users" element={<Users />} />
         <Route path="/users/:id" element={<UserDetail />} />
         <Route path="/map" element={<AdvancedMap />} />

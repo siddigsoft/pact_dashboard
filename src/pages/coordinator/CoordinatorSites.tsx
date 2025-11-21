@@ -3,6 +3,8 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -36,6 +38,10 @@ const CoordinatorSites: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [sites, setSites] = useState<SiteVisit[]>([]);
   const [activeTab, setActiveTab] = useState('new');
+  const [verifyDialogOpen, setVerifyDialogOpen] = useState(false);
+  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
+  const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
+  const [verificationNotes, setVerificationNotes] = useState('');
 
   useEffect(() => {
     loadSites();
@@ -66,18 +72,41 @@ const CoordinatorSites: React.FC = () => {
     }
   };
 
-  const handleVerifySite = async (siteId: string) => {
+  const handleVerifySite = async (siteId: string, notes?: string) => {
     try {
+      const updateData: any = {
+        status: 'verified',
+        verified_at: new Date().toISOString(),
+        verified_by: currentUser?.username || currentUser?.fullName || currentUser?.email || 'System',
+      };
+      
+      // Add verification notes if provided
+      if (notes) {
+        updateData.verification_notes = notes;
+      }
+
       const { error } = await supabase
         .from('site_visits')
-        .update({
-          status: 'verified',
-          verified_at: new Date().toISOString(),
-          verified_by: currentUser?.id || null,
-        })
+        .update(updateData)
         .eq('id', siteId);
 
       if (error) throw error;
+      try {
+        const site = sites.find(s => s.id === siteId);
+        if (site?.mmp_id && site?.site_code) {
+          const mmpUpdateData: any = { status: 'Verified' };
+          if (notes) {
+            mmpUpdateData.verification_notes = notes;
+          }
+          await supabase
+            .from('mmp_site_entries')
+            .update(mmpUpdateData)
+            .eq('mmp_file_id', site.mmp_id)
+            .eq('site_code', site.site_code);
+        }
+      } catch (syncErr) {
+        console.warn('Failed to sync mmp_site_entries on verify:', syncErr);
+      }
 
       toast({
         title: 'Site Verified',
@@ -86,6 +115,10 @@ const CoordinatorSites: React.FC = () => {
 
       // Reload sites
       loadSites();
+      setActiveTab('verified');
+      setVerifyDialogOpen(false);
+      setVerificationNotes('');
+      setSelectedSiteId(null);
     } catch (error) {
       console.error('Error verifying site:', error);
       toast({
@@ -96,18 +129,41 @@ const CoordinatorSites: React.FC = () => {
     }
   };
 
-  const handleRejectSite = async (siteId: string) => {
+  const handleRejectSite = async (siteId: string, notes?: string) => {
     try {
+      const updateData: any = {
+        status: 'rejected',
+        verified_at: new Date().toISOString(),
+        verified_by: currentUser?.username || currentUser?.fullName || currentUser?.email || 'System',
+      };
+      
+      // Add verification notes if provided
+      if (notes) {
+        updateData.verification_notes = notes;
+      }
+
       const { error } = await supabase
         .from('site_visits')
-        .update({
-          status: 'rejected',
-          verified_at: new Date().toISOString(),
-          verified_by: currentUser?.id || null,
-        })
+        .update(updateData)
         .eq('id', siteId);
 
       if (error) throw error;
+      try {
+        const site = sites.find(s => s.id === siteId);
+        if (site?.mmp_id && site?.site_code) {
+          const mmpUpdateData: any = { status: 'Rejected' };
+          if (notes) {
+            mmpUpdateData.verification_notes = notes;
+          }
+          await supabase
+            .from('mmp_site_entries')
+            .update(mmpUpdateData)
+            .eq('mmp_file_id', site.mmp_id)
+            .eq('site_code', site.site_code);
+        }
+      } catch (syncErr) {
+        console.warn('Failed to sync mmp_site_entries on reject:', syncErr);
+      }
 
       toast({
         title: 'Site Rejected',
@@ -116,6 +172,9 @@ const CoordinatorSites: React.FC = () => {
 
       // Reload sites
       loadSites();
+      setRejectDialogOpen(false);
+      setVerificationNotes('');
+      setSelectedSiteId(null);
     } catch (error) {
       console.error('Error rejecting site:', error);
       toast({
@@ -193,6 +252,13 @@ const CoordinatorSites: React.FC = () => {
           </div>
         )}
 
+        {site.verification_notes && (
+          <div className="mb-3 p-2 bg-blue-50 rounded text-sm border border-blue-200">
+            <p className="font-medium text-blue-900 mb-1">Verification Notes:</p>
+            <p className="text-blue-800">{site.verification_notes}</p>
+          </div>
+        )}
+
         {showActions && (
           <div className="flex gap-2 mt-4">
             <Button
@@ -218,7 +284,11 @@ const CoordinatorSites: React.FC = () => {
                 </Button>
                 <Button
                   size="sm"
-                  onClick={() => handleVerifySite(site.id)}
+                  onClick={() => {
+                    setSelectedSiteId(site.id);
+                    setVerificationNotes('');
+                    setVerifyDialogOpen(true);
+                  }}
                   className="flex items-center gap-1 bg-green-600 hover:bg-green-700"
                 >
                   <CheckCircle className="h-4 w-4" />
@@ -227,7 +297,11 @@ const CoordinatorSites: React.FC = () => {
                 <Button
                   size="sm"
                   variant="destructive"
-                  onClick={() => handleRejectSite(site.id)}
+                  onClick={() => {
+                    setSelectedSiteId(site.id);
+                    setVerificationNotes('');
+                    setRejectDialogOpen(true);
+                  }}
                   className="flex items-center gap-1"
                 >
                   <XCircle className="h-4 w-4" />
@@ -388,6 +462,96 @@ const CoordinatorSites: React.FC = () => {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Verify Dialog */}
+      <Dialog open={verifyDialogOpen} onOpenChange={setVerifyDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Verify Site</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="mb-4">Are you sure you want to verify this site?</p>
+            <div className="mt-4">
+              <label htmlFor="verification-notes" className="text-sm font-medium mb-2 block">
+                Verification Notes (Optional)
+              </label>
+              <Textarea
+                id="verification-notes"
+                placeholder="Add any notes about the verification..."
+                value={verificationNotes}
+                onChange={(e) => setVerificationNotes(e.target.value)}
+                className="mt-1"
+                rows={4}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setVerifyDialogOpen(false);
+              setVerificationNotes('');
+              setSelectedSiteId(null);
+            }}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (selectedSiteId) {
+                  handleVerifySite(selectedSiteId, verificationNotes);
+                }
+              }}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              <CheckCircle className="h-4 w-4 mr-2" />
+              Confirm Verification
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reject Dialog */}
+      <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reject Site</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="mb-4">Are you sure you want to reject this site?</p>
+            <div className="mt-4">
+              <label htmlFor="rejection-notes" className="text-sm font-medium mb-2 block">
+                Rejection Notes (Optional)
+              </label>
+              <Textarea
+                id="rejection-notes"
+                placeholder="Add any notes about the rejection..."
+                value={verificationNotes}
+                onChange={(e) => setVerificationNotes(e.target.value)}
+                className="mt-1"
+                rows={4}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setRejectDialogOpen(false);
+              setVerificationNotes('');
+              setSelectedSiteId(null);
+            }}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (selectedSiteId) {
+                  handleRejectSite(selectedSiteId, verificationNotes);
+                }
+              }}
+              variant="destructive"
+            >
+              <XCircle className="h-4 w-4 mr-2" />
+              Confirm Rejection
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
