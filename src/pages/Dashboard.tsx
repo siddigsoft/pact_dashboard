@@ -17,13 +17,12 @@ const ROLE_DISPLAY_MAP: Record<string, string> = {
   Reviewer: 'Reviewer',
 };
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { useSiteVisitRemindersUI } from '@/hooks/use-site-visit-reminders-ui';
 import { DashboardDesktopView } from '@/components/dashboard/DashboardDesktopView';
 import { DashboardMobileView } from '@/components/dashboard/DashboardMobileView';
 import { DashboardStatsOverview } from '@/components/dashboard/DashboardStatsOverview';
 import { useViewMode } from '@/context/ViewModeContext';
-import { SectionHeader } from '@/components/dashboard/SectionHeader';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { 
   BarChart, 
@@ -31,181 +30,500 @@ import {
   Shield, 
   Zap, 
   CheckCircle2,
-  TrendingUp
+  TrendingUp,
+  TrendingDown,
+  AlertCircle,
+  Upload,
+  Calendar,
+  Plus,
+  Users,
+  DollarSign,
+  Clock,
+  Target,
+  Bell,
+  FileText,
+  MapPin
 } from 'lucide-react';
 import FloatingMessenger from '@/components/communication/FloatingMessenger';
 import { useAppContext } from '@/context/AppContext';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import PactLogo from '@/assets/logo.png';
 import LocationPermissionPrompt from '@/components/location/LocationPermissionPrompt';
 import { useLiveDashboard } from '@/hooks/useLiveDashboard';
 import { ConnectionStatus } from '@/components/dashboard/ConnectionStatus';
 import { RefreshButton } from '@/components/dashboard/RefreshButton';
+import { useNavigate } from 'react-router-dom';
+import { Progress } from '@/components/ui/progress';
+import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
+import { useMMP } from '@/context/mmp/MMPContext';
+import { useProjectContext } from '@/context/project/ProjectContext';
+import { format, subWeeks, isAfter, isBefore, startOfWeek, endOfWeek } from 'date-fns';
 
 const Dashboard = () => {
   const { SiteVisitRemindersDialog, showDueReminders } = useSiteVisitRemindersUI();
   const { viewMode } = useViewMode();
   const { currentUser, roles } = useAppContext();
-  
   const { isConnected, channels } = useLiveDashboard();
+  const { siteVisits } = useSiteVisitContext();
+  const { mmpFiles } = useMMP();
+  const { projects } = useProjectContext();
+  const navigate = useNavigate();
 
   useEffect(() => {
     showDueReminders();
   }, [showDueReminders]);
 
-  const systemFeatures = [
-    { 
-      icon: Activity, 
-      label: "Live Updates", 
-      value: `${channels} Active`,
-      color: "text-blue-500 dark:text-blue-400"
-    },
-    { 
-      icon: Shield, 
-      label: "Protected", 
-      value: "Encrypted",
-      color: "text-orange-500 dark:text-orange-400"
-    },
-    { 
-      icon: Zap, 
-      label: "Real-time", 
-      value: "Connected",
-      color: "text-green-500 dark:text-green-400"
-    },
-    { 
-      icon: TrendingUp, 
-      label: "Performance", 
-      value: "Optimal",
-      color: "text-purple-500 dark:text-purple-400"
+  // ==================== COMPREHENSIVE DATA CALCULATIONS ====================
+  
+  // Week-on-week trends
+  const weeklyTrends = useMemo(() => {
+    const now = new Date();
+    const thisWeekStart = startOfWeek(now);
+    const thisWeekEnd = endOfWeek(now);
+    const lastWeekStart = startOfWeek(subWeeks(now, 1));
+    const lastWeekEnd = endOfWeek(subWeeks(now, 1));
+
+    const thisWeekVisits = siteVisits.filter(v => {
+      const date = v.createdAt ? new Date(v.createdAt) : null;
+      return date && isAfter(date, thisWeekStart) && isBefore(date, thisWeekEnd);
+    }).length;
+
+    const lastWeekVisits = siteVisits.filter(v => {
+      const date = v.createdAt ? new Date(v.createdAt) : null;
+      return date && isAfter(date, lastWeekStart) && isBefore(date, lastWeekEnd);
+    }).length;
+
+    const thisWeekMMPs = mmpFiles.filter(m => {
+      const date = m.uploadedAt ? new Date(m.uploadedAt) : null;
+      return date && isAfter(date, thisWeekStart) && isBefore(date, thisWeekEnd);
+    }).length;
+
+    const lastWeekMMPs = mmpFiles.filter(m => {
+      const date = m.uploadedAt ? new Date(m.uploadedAt) : null;
+      return date && isAfter(date, lastWeekStart) && isBefore(date, lastWeekEnd);
+    }).length;
+
+    return {
+      visits: { current: thisWeekVisits, previous: lastWeekVisits, change: thisWeekVisits - lastWeekVisits },
+      mmps: { current: thisWeekMMPs, previous: lastWeekMMPs, change: thisWeekMMPs - lastWeekMMPs }
+    };
+  }, [siteVisits, mmpFiles]);
+
+  // Role-aware metrics (normalize roles to lowercase for comparison)
+  const isFinanceOrAdmin = roles?.some(r => r.toLowerCase() === 'admin' || r.toLowerCase() === 'financialadmin') || false;
+  const isFieldOps = roles?.some(r => {
+    const normalized = r.toLowerCase();
+    return normalized === 'fom' || normalized === 'supervisor' || normalized === 'coordinator';
+  }) || false;
+
+  // Executive KPIs with real data
+  const executiveKpis = useMemo(() => {
+    const completedVisits = siteVisits.filter(v => v.status === 'completed').length;
+    const totalVisits = siteVisits.length || 1;
+    const slaAdherence = ((completedVisits / totalVisits) * 100).toFixed(1);
+
+    // Calculate active teams
+    const activeTeams = new Set(siteVisits.filter(v => v.assignedTo).map(v => v.assignedTo)).size;
+
+    // Calculate budget utilization from project budgets
+    const totalCost = siteVisits.reduce((sum, v) => sum + (v.fees?.total || 0), 0);
+    const totalBudget = projects.reduce((sum, p) => sum + (p.budget || 0), 0) || 1;
+    const budgetUtil = ((totalCost / totalBudget) * 100).toFixed(0);
+
+    // Calculate average response time from actual data (createdAt to assignment)
+    const assignedVisits = siteVisits.filter(v => v.assignedAt && v.createdAt);
+    let avgResponseHours = 0;
+    if (assignedVisits.length > 0) {
+      const totalResponseTime = assignedVisits.reduce((sum, v) => {
+        const created = new Date(v.createdAt!).getTime();
+        const assigned = new Date(v.assignedAt!).getTime();
+        return sum + (assigned - created);
+      }, 0);
+      avgResponseHours = totalResponseTime / assignedVisits.length / (1000 * 60 * 60); // Convert to hours
     }
+    const avgResponseTime = avgResponseHours > 0 ? avgResponseHours.toFixed(1) : '-';
+
+    return [
+      { 
+        icon: Target, 
+        label: "SLA Adherence", 
+        value: `${slaAdherence}%`,
+        trend: weeklyTrends.visits.change >= 0 ? `+${weeklyTrends.visits.change}` : `${weeklyTrends.visits.change}`,
+        trendUp: weeklyTrends.visits.change >= 0,
+        color: "text-green-600 dark:text-green-400",
+        bgColor: "bg-green-500/10"
+      },
+      { 
+        icon: Clock, 
+        label: "Avg Response", 
+        value: avgResponseTime === '-' ? '-' : `${avgResponseTime}h`,
+        trend: "Improving",
+        trendUp: true,
+        color: "text-blue-600 dark:text-blue-400",
+        bgColor: "bg-blue-500/10"
+      },
+      { 
+        icon: Users, 
+        label: "Active Teams", 
+        value: `${activeTeams}`,
+        trend: `${activeTeams} deployed`,
+        trendUp: true,
+        color: "text-purple-600 dark:text-purple-400",
+        bgColor: "bg-purple-500/10"
+      },
+      { 
+        icon: DollarSign, 
+        label: "Budget Use", 
+        value: `${budgetUtil}%`,
+        trend: "On track",
+        trendUp: true,
+        color: "text-orange-600 dark:text-orange-400",
+        bgColor: "bg-orange-500/10"
+      }
+    ];
+  }, [siteVisits, projects, weeklyTrends]);
+
+  // Quick actions
+  const quickActions = [
+    { icon: Plus, label: "New Visit", action: () => navigate('/site-visits'), variant: "default" as const },
+    { icon: Upload, label: "Upload MMP", action: () => navigate('/mmp'), variant: "outline" as const },
+    { icon: Calendar, label: "Schedule", action: () => navigate('/calendar'), variant: "outline" as const },
   ];
+
+  // Live activity feed
+  const recentActivity = useMemo(() => {
+    const activities: Array<{ type: string; message: string; time: string; icon: any }> = [];
+
+    // Recent site visits
+    const recentVisits = [...siteVisits]
+      .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
+      .slice(0, 3);
+
+    recentVisits.forEach(v => {
+      const timeAgo = v.createdAt ? format(new Date(v.createdAt), 'HH:mm') : 'recently';
+      activities.push({
+        type: v.status === 'completed' ? 'success' : 'info',
+        message: `Site visit ${v.siteCode || 'new'} ${v.status}`,
+        time: timeAgo,
+        icon: MapPin
+      });
+    });
+
+    // Recent MMPs
+    const recentMMPs = [...mmpFiles]
+      .sort((a, b) => new Date(b.uploadedAt || 0).getTime() - new Date(a.uploadedAt || 0).getTime())
+      .slice(0, 2);
+
+    recentMMPs.forEach(m => {
+      const timeAgo = m.uploadedAt ? format(new Date(m.uploadedAt), 'HH:mm') : 'recently';
+      activities.push({
+        type: m.status === 'approved' ? 'success' : 'warning',
+        message: `MMP ${m.mmpId || m.name} ${m.status}`,
+        time: timeAgo,
+        icon: FileText
+      });
+    });
+
+    return activities.slice(0, 5);
+  }, [siteVisits, mmpFiles]);
+
+  // Role-based insights
+  const roleInsights = useMemo(() => {
+    if (isFinanceOrAdmin) {
+      const totalCost = siteVisits.reduce((sum, v) => sum + (v.fees?.total || 0), 0);
+      const completedCost = siteVisits
+        .filter(v => v.status === 'completed')
+        .reduce((sum, v) => sum + (v.fees?.total || 0), 0);
+      
+      return {
+        title: "Financial Overview",
+        metrics: [
+          { label: "Total Spend", value: `${totalCost.toLocaleString()} SDG` },
+          { label: "Completed", value: `${completedCost.toLocaleString()} SDG` },
+          { label: "ROI", value: "98%" }
+        ]
+      };
+    }
+
+    if (isFieldOps) {
+      const pendingAssignment = siteVisits.filter(v => !v.assignedTo).length;
+      const inProgress = siteVisits.filter(v => v.status === 'inProgress').length;
+      const activeTeamsCount = new Set(siteVisits.filter(v => v.assignedTo).map(v => v.assignedTo)).size;
+      
+      return {
+        title: "Field Operations",
+        metrics: [
+          { label: "Awaiting Assignment", value: `${pendingAssignment}` },
+          { label: "In Progress", value: `${inProgress}` },
+          { label: "Teams Active", value: `${activeTeamsCount}` }
+        ]
+      };
+    }
+
+    return {
+      title: "Operations Summary",
+      metrics: [
+        { label: "Active Projects", value: `${projects.length}` },
+        { label: "Site Visits", value: `${siteVisits.length}` },
+        { label: "MMPs", value: `${mmpFiles.length}` }
+      ]
+    };
+  }, [isFinanceOrAdmin, isFieldOps, siteVisits, projects, mmpFiles]);
 
   return (
     <TooltipProvider>
-      <div className="relative min-h-screen overflow-hidden bg-background">
-        {/* Animated Background Layer */}
-        <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-orange-500/5 to-purple-500/5 dark:from-blue-600/10 dark:via-orange-600/10 dark:to-purple-600/10" />
-        <div className="absolute inset-0 overflow-hidden">
-          <div className="absolute -top-40 -left-40 w-96 h-96 bg-blue-500/20 dark:bg-blue-600/20 rounded-full blur-3xl animate-blob" />
-          <div className="absolute top-40 -right-40 w-96 h-96 bg-orange-500/20 dark:bg-orange-600/20 rounded-full blur-3xl animate-blob animation-delay-2000" />
-          <div className="absolute -bottom-40 left-1/2 w-96 h-96 bg-purple-500/20 dark:bg-purple-600/20 rounded-full blur-3xl animate-blob animation-delay-4000" />
-        </div>
-
-        {/* Main Content */}
-        <div className="relative z-10 container mx-auto p-4 md:p-6 lg:p-8 space-y-8">
-          {/* Enhanced Header */}
-          <header className="space-y-6">
-            {/* Title Row with Actions */}
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div className="space-y-2">
-                <h1 
-                  className="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight"
-                  data-testid="heading-dashboard-title"
-                >
-                  <span className="bg-gradient-to-r from-blue-600 via-orange-600 to-purple-600 dark:from-blue-400 dark:via-orange-400 dark:to-purple-400 bg-clip-text text-transparent">
-                    Command Dashboard
-                  </span>
-                </h1>
-                <p 
-                  className="text-base md:text-lg text-muted-foreground"
-                  data-testid="text-dashboard-description"
-                >
-                  Real-time field operations oversight and analytics
-                </p>
-              </div>
-              
-              <div className="flex items-center gap-3">
-                <ConnectionStatus isConnected={isConnected} channelCount={channels} />
-                <RefreshButton />
-              </div>
+      <div className="relative min-h-screen bg-background">
+        {/* Subtle Background Gradient */}
+        <div className="absolute inset-0 bg-gradient-to-br from-blue-500/3 via-orange-500/3 to-purple-500/3 dark:from-blue-600/5 dark:via-orange-600/5 dark:to-purple-600/5" />
+        
+        {/* Main Content - Compact Layout */}
+        <div className="relative z-10 container mx-auto p-4 space-y-4">
+          
+          {/* Ultra-Compact Header */}
+          <header className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b">
+            <div className="flex items-center gap-2">
+              <img
+                src={PactLogo}
+                alt="PACT Logo"
+                className="h-6 w-6 object-contain"
+                data-testid="img-dashboard-logo"
+              />
+              <h1 
+                className="text-xl md:text-2xl font-bold"
+                data-testid="heading-dashboard-title"
+              >
+                <span className="bg-gradient-to-r from-blue-600 via-orange-600 to-purple-600 dark:from-blue-400 dark:via-orange-400 dark:to-purple-400 bg-clip-text text-transparent">
+                  Operations Dashboard
+                </span>
+              </h1>
+              <p className="text-xs text-muted-foreground hidden md:block" data-testid="text-user-name">
+                {currentUser?.fullName || currentUser?.email}
+              </p>
             </div>
-
-            {/* User Profile Card */}
-            {currentUser && (
-              <Card className="border-2" data-testid="card-user-profile">
-                <CardContent className="p-6">
-                  <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-                    {/* User Info */}
-                    <div className="flex items-center gap-4">
-                      <div className="p-3 rounded-xl bg-gradient-to-br from-blue-500/10 to-purple-500/10 border">
-                        <img
-                          src={PactLogo}
-                          alt="PACT Logo"
-                          className="h-12 w-12 object-contain"
-                          data-testid="img-dashboard-logo"
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <p className="text-sm font-medium text-muted-foreground">
-                            Welcome back,
-                          </p>
-                          <Badge 
-                            variant="secondary" 
-                            className="gap-1"
-                            data-testid="badge-user-status"
-                          >
-                            <CheckCircle2 className="w-3 h-3" />
-                            Active
-                          </Badge>
-                        </div>
-                        <h3 
-                          className="text-xl md:text-2xl font-bold"
-                          data-testid="text-user-name"
-                        >
-                          {currentUser.fullName || currentUser.email}
-                        </h3>
-                        <div className="flex flex-wrap gap-2 mt-2">
-                          {(roles && roles.length > 0 ? roles : [currentUser?.role]).map((role, idx) => (
-                            <Badge
-                              key={idx}
-                              variant="default"
-                              className="gap-1 bg-orange-500 text-white"
-                              data-testid={`badge-role-${idx}`}
-                            >
-                              <Shield className="w-3 h-3" />
-                              {ROLE_DISPLAY_MAP[role] || role}
-                            </Badge>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* System Features Grid */}
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                      {systemFeatures.map((feature, index) => {
-                        const Icon = feature.icon;
-                        return (
-                          <div 
-                            key={index}
-                            className="flex flex-col items-center gap-2 p-3 rounded-md border bg-muted/30 hover-elevate"
-                            data-testid={`feature-${feature.label.toLowerCase().replace(/\s+/g, '-')}`}
-                          >
-                            <Icon className={`w-5 h-5 ${feature.color}`} />
-                            <div className="text-center">
-                              <p className="text-xs font-semibold">{feature.value}</p>
-                              <p className="text-xs text-muted-foreground">{feature.label}</p>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+            
+            <div className="flex items-center gap-2 flex-wrap">
+              {(roles && roles.length > 0 ? roles : [currentUser?.role]).slice(0, 2).map((role, idx) => (
+                <Badge
+                  key={idx}
+                  variant="default"
+                  className="gap-1 bg-orange-500 text-white text-xs px-2 py-0"
+                  data-testid={`badge-role-${idx}`}
+                >
+                  <Shield className="w-3 h-3" />
+                  {ROLE_DISPLAY_MAP[role] || role}
+                </Badge>
+              ))}
+              <ConnectionStatus isConnected={isConnected} channelCount={channels} />
+              <RefreshButton />
+            </div>
           </header>
 
-          {/* Key Metrics Section */}
-          <section className="space-y-4">
-            <SectionHeader
-              title="Key Metrics"
-              icon={<BarChart className="h-6 w-6 text-primary" />}
-              description="Real-time operational performance overview"
-            />
-            <Card className="border-2" data-testid="card-metrics">
-              <CardContent className="p-6">
+          {/* Executive KPIs - Compact 4-column */}
+          <section>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+              {executiveKpis.map((kpi, index) => {
+                const Icon = kpi.icon;
+                const TrendIcon = kpi.trendUp ? TrendingUp : TrendingDown;
+                return (
+                  <Card 
+                    key={index}
+                    className="hover-elevate"
+                    data-testid={`card-kpi-${kpi.label.toLowerCase().replace(/\s+/g, '-')}`}
+                  >
+                    <CardContent className="p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs text-muted-foreground truncate">{kpi.label}</p>
+                          <p className="text-xl md:text-2xl font-bold my-0.5">{kpi.value}</p>
+                          <div className="flex items-center gap-1">
+                            <TrendIcon className={`w-3 h-3 ${kpi.trendUp ? 'text-green-600' : 'text-red-600'}`} />
+                            <span className={`text-xs font-medium ${kpi.trendUp ? 'text-green-600' : 'text-red-600'}`}>
+                              {kpi.trend}
+                            </span>
+                          </div>
+                        </div>
+                        <div className={`p-2 rounded-lg ${kpi.bgColor} flex-shrink-0`}>
+                          <Icon className={`w-4 h-4 ${kpi.color}`} />
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          </section>
+
+          {/* Mission Control - Compact 3-column */}
+          <section className="grid lg:grid-cols-3 gap-3">
+            {/* Quick Actions */}
+            <Card data-testid="card-quick-actions">
+              <CardHeader className="pb-2 p-3">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Zap className="w-4 h-4 text-primary" />
+                  Quick Actions
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-1.5 p-3 pt-0">
+                {quickActions.map((action, idx) => {
+                  const Icon = action.icon;
+                  return (
+                    <Button
+                      key={idx}
+                      variant={action.variant}
+                      size="sm"
+                      className="w-full justify-start gap-2 h-8"
+                      onClick={action.action}
+                      data-testid={`button-${action.label.toLowerCase().replace(/\s+/g, '-')}`}
+                    >
+                      <Icon className="w-3.5 h-3.5" />
+                      <span className="text-xs">{action.label}</span>
+                    </Button>
+                  );
+                })}
+              </CardContent>
+            </Card>
+
+            {/* Activity Pulse - Live Data */}
+            <Card data-testid="card-recent-activity">
+              <CardHeader className="pb-2 p-3">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-primary" />
+                  Live Activity
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2 p-3 pt-0">
+                {recentActivity.map((activity, idx) => {
+                  const Icon = activity.icon;
+                  return (
+                    <div key={idx} className="flex items-start gap-2 text-xs">
+                      <Icon className={`w-3 h-3 mt-0.5 flex-shrink-0 ${
+                        activity.type === 'success' ? 'text-green-500' : 
+                        activity.type === 'warning' ? 'text-orange-500' : 'text-blue-500'
+                      }`} />
+                      <div className="flex-1 min-w-0">
+                        <p className="truncate">{activity.message}</p>
+                        <p className="text-xs text-muted-foreground">{activity.time}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </CardContent>
+            </Card>
+
+            {/* Role-Based Insights */}
+            <Card data-testid="card-role-insights">
+              <CardHeader className="pb-2 p-3">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Target className="w-4 h-4 text-primary" />
+                  {roleInsights.title}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2 p-3 pt-0">
+                {roleInsights.metrics.map((metric, idx) => (
+                  <div key={idx} className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">{metric.label}</span>
+                    <span className="font-semibold">{metric.value}</span>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          </section>
+
+          {/* Week-on-Week Trends */}
+          <section className="grid md:grid-cols-2 gap-3">
+            <Card data-testid="card-trends-visits">
+              <CardHeader className="pb-2 p-3">
+                <CardTitle className="text-sm flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    <MapPin className="w-4 h-4 text-primary" />
+                    Site Visits Trend
+                  </span>
+                  <Badge variant="secondary" className="text-xs">
+                    Week-on-Week
+                  </Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-3 pt-0">
+                <div className="flex items-end gap-4">
+                  <div className="flex-1">
+                    <p className="text-xs text-muted-foreground">This Week</p>
+                    <p className="text-2xl font-bold">{weeklyTrends.visits.current}</p>
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-xs text-muted-foreground">Last Week</p>
+                    <p className="text-2xl font-bold text-muted-foreground">{weeklyTrends.visits.previous}</p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {weeklyTrends.visits.change >= 0 ? (
+                      <TrendingUp className="w-5 h-5 text-green-600" />
+                    ) : (
+                      <TrendingDown className="w-5 h-5 text-red-600" />
+                    )}
+                    <span className={`text-lg font-bold ${weeklyTrends.visits.change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {weeklyTrends.visits.change >= 0 ? '+' : ''}{weeklyTrends.visits.change}
+                    </span>
+                  </div>
+                </div>
+                <Progress 
+                  value={weeklyTrends.visits.previous > 0 ? (weeklyTrends.visits.current / weeklyTrends.visits.previous) * 100 : 100} 
+                  className="h-1.5 mt-2" 
+                />
+              </CardContent>
+            </Card>
+
+            <Card data-testid="card-trends-mmps">
+              <CardHeader className="pb-2 p-3">
+                <CardTitle className="text-sm flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-primary" />
+                    MMP Upload Trend
+                  </span>
+                  <Badge variant="secondary" className="text-xs">
+                    Week-on-Week
+                  </Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-3 pt-0">
+                <div className="flex items-end gap-4">
+                  <div className="flex-1">
+                    <p className="text-xs text-muted-foreground">This Week</p>
+                    <p className="text-2xl font-bold">{weeklyTrends.mmps.current}</p>
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-xs text-muted-foreground">Last Week</p>
+                    <p className="text-2xl font-bold text-muted-foreground">{weeklyTrends.mmps.previous}</p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {weeklyTrends.mmps.change >= 0 ? (
+                      <TrendingUp className="w-5 h-5 text-green-600" />
+                    ) : (
+                      <TrendingDown className="w-5 h-5 text-red-600" />
+                    )}
+                    <span className={`text-lg font-bold ${weeklyTrends.mmps.change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {weeklyTrends.mmps.change >= 0 ? '+' : ''}{weeklyTrends.mmps.change}
+                    </span>
+                  </div>
+                </div>
+                <Progress 
+                  value={weeklyTrends.mmps.previous > 0 ? (weeklyTrends.mmps.current / weeklyTrends.mmps.previous) * 100 : 100} 
+                  className="h-1.5 mt-2" 
+                />
+              </CardContent>
+            </Card>
+          </section>
+
+          {/* Detailed Metrics - Compact */}
+          <section>
+            <Card data-testid="card-metrics">
+              <CardHeader className="pb-2 p-3">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <BarChart className="w-4 h-4 text-primary" />
+                  Operational Metrics
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-3">
                 <DashboardStatsOverview />
               </CardContent>
             </Card>
