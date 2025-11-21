@@ -134,16 +134,6 @@ const Index = () => {
                 Get Started
                 <ArrowRight className="w-5 h-5" />
               </Button>
-              
-              <Button
-                size="lg"
-                variant="outline"
-                onClick={() => navigate("/auth")}
-                data-testid="button-view-demo"
-                className="text-lg px-8"
-              >
-                View Live Demo
-              </Button>
             </div>
           </div>
         </section>
