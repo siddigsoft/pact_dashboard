@@ -955,32 +955,38 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         availability: user.availability || 'offline'
       };
       
-      try {
-        const { error } = await supabase
-          .from('profiles')
-          .update({
-            full_name: updatedUser.fullName || updatedUser.name,
-            username: updatedUser.username,
-            role: updatedUser.role,
-            avatar_url: updatedUser.avatar,
-            hub_id: updatedUser.hubId,
-            state_id: updatedUser.stateId,
-            locality_id: updatedUser.localityId,
-            employee_id: updatedUser.employeeId,
-            phone: updatedUser.phone,
-            bank_account: (updatedUser as any).bankAccount,
-          })
-          .eq('id', updatedUser.id);
-        
-        if (error) {
-          console.error("Supabase update error:", error);
-        }
-      } catch (supabaseError) {
-        console.error("Supabase operation failed:", supabaseError);
+      // Persist to Supabase and verify a row was actually updated (RLS-safe)
+      const { data, error } = await supabase
+        .from('profiles')
+        .update({
+          full_name: updatedUser.fullName || updatedUser.name,
+          username: updatedUser.username,
+          email: updatedUser.email, // allow editing profile email field
+          role: updatedUser.role,
+          avatar_url: updatedUser.avatar,
+          hub_id: updatedUser.hubId,
+          state_id: updatedUser.stateId,
+          locality_id: updatedUser.localityId,
+          employee_id: updatedUser.employeeId,
+          phone: updatedUser.phone,
+          bank_account: (updatedUser as any).bankAccount,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', updatedUser.id)
+        .select('id');
+
+      if (error || !data || data.length === 0) {
+        console.error("Supabase update error or no row updated:", error || 'No data returned');
+        toast({
+          title: "Update blocked",
+          description: "No profile was updated. You may not have permission to edit this user.",
+          variant: "destructive",
+        });
+        return false;
       }
-      
+
+      // Update local caches only after confirmed DB success
       setAppUsers(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
-      
       localStorage.setItem(`user-${updatedUser.id}`, JSON.stringify(updatedUser));
       
       if (currentUser && updatedUser.id === currentUser.id) {
