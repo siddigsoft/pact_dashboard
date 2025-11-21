@@ -402,9 +402,13 @@ const MMP = () => {
     hasInProgress: boolean;
     hasCompleted: boolean;
     hasRejected: boolean;
+    allApprovedAndCosted: boolean;
   }>>({});
   const [siteVisitRows, setSiteVisitRows] = useState<SiteVisitRow[]>([]);
   const [clearDialogOpen, setClearDialogOpen] = useState(false);
+  const [approvedCostedSiteEntries, setApprovedCostedSiteEntries] = useState<any[]>([]);
+  const [loadingApprovedCosted, setLoadingApprovedCosted] = useState(false);
+  const [approvedCostedCount, setApprovedCostedCount] = useState(0);
 
   // Helper function to normalize role checking (handles both lowercase and proper case)
   const hasRole = (rolesToCheck: string[]) => {
@@ -555,6 +559,93 @@ const MMP = () => {
     return { pending, verified };
   }, [isFOM, categorizedMMPs.new]);
 
+  // Always load the count for the badge, regardless of active tab
+  useEffect(() => {
+    const loadApprovedCostedCount = async () => {
+      try {
+        // Load all site entries where status = 'verified' (case-insensitive) and cost > 0
+        const { data: entries, error } = await supabase
+          .from('mmp_site_entries')
+          .select('id,status,cost')
+          .gt('cost', 0);
+
+        if (error) throw error;
+
+        // Filter to only include entries with status = 'verified' (case-insensitive)
+        const verifiedEntries = (entries || []).filter(entry => {
+          const status = String(entry.status || '').toLowerCase();
+          return status === 'verified';
+        });
+
+        setApprovedCostedCount(verifiedEntries.length);
+      } catch (error) {
+        console.error('Failed to load approved and costed count:', error);
+        setApprovedCostedCount(0);
+      }
+    };
+
+    loadApprovedCostedCount();
+  }, [mmpFiles]); // Reload when MMP files change
+
+  // Load approved and costed site entries only when the tab is active
+  useEffect(() => {
+    const loadApprovedCostedEntries = async () => {
+      if (verifiedSubTab !== 'approvedCosted') {
+        setApprovedCostedSiteEntries([]);
+        return;
+      }
+
+      setLoadingApprovedCosted(true);
+      try {
+        // Load all site entries where status = 'verified' (case-insensitive) and cost > 0
+        // First, get entries with cost > 0, then filter by status in JavaScript for case-insensitive matching
+        const { data: entries, error } = await supabase
+          .from('mmp_site_entries')
+          .select('*')
+          .gt('cost', 0)
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        // Filter to only include entries with status = 'verified' (case-insensitive)
+        const verifiedEntries = (entries || []).filter(entry => {
+          const status = String(entry.status || '').toLowerCase();
+          return status === 'verified';
+        });
+
+        // Format entries for MMPSiteEntriesTable
+        const formattedEntries = verifiedEntries.map(entry => ({
+          ...entry,
+          siteName: entry.site_name,
+          siteCode: entry.site_code,
+          hubOffice: entry.hub_office,
+          cpName: entry.cp_name,
+          siteActivity: entry.activity_at_site,
+          monitoringBy: entry.monitoring_by,
+          surveyTool: entry.survey_tool,
+          useMarketDiversion: entry.use_market_diversion,
+          useWarehouseMonitoring: entry.use_warehouse_monitoring,
+          visitDate: entry.visit_date,
+          comments: entry.comments,
+          cost: entry.cost,
+          status: entry.status,
+          additionalData: entry.additional_data || {}
+        }));
+
+        setApprovedCostedSiteEntries(formattedEntries);
+        // Update count when entries are loaded
+        setApprovedCostedCount(formattedEntries.length);
+      } catch (error) {
+        console.error('Failed to load approved and costed site entries:', error);
+        setApprovedCostedSiteEntries([]);
+      } finally {
+        setLoadingApprovedCosted(false);
+      }
+    };
+
+    loadApprovedCostedEntries();
+  }, [verifiedSubTab]);
+
   // Verified subcategories for Admin/ICT
   const verifiedSubcategories = useMemo(() => {
     const base = categorizedMMPs.verified || [];
@@ -572,8 +663,8 @@ const MMP = () => {
       }),
       approvedCosted: base.filter(mmp => {
         const stats = siteVisitStats[mmp.id];
-        // Approved & Costed: reviewed by admin/ICT/finance and costs added
-        return mmp.status === 'approved' || Boolean(stats?.hasCosted);
+        // Approved & Costed: ALL site entries must have cost > 0 AND status = 'verified'
+        return Boolean(stats?.allApprovedAndCosted);
       }),
       dispatched: base.filter(mmp => {
         const stats = siteVisitStats[mmp.id];
@@ -755,25 +846,31 @@ const MMP = () => {
           .in('mmp_id', ids);
         if (siteVisitsError) throw siteVisitsError;
         
-        // Also load from mmp_site_entries for verified sites
+        // Load ALL mmp_site_entries (not just verified) to check cost and status for "Approved & Costed"
         const { data: mmpEntriesData, error: mmpEntriesError } = await supabase
           .from('mmp_site_entries')
-          .select('id,mmp_file_id,status,site_code,state,locality,site_name,verification_notes')
-          .in('mmp_file_id', ids)
-          .eq('status', 'Verified');
+          .select('id,mmp_file_id,status,site_code,state,locality,site_name,verification_notes,cost')
+          .in('mmp_file_id', ids);
         if (mmpEntriesError) console.warn('Failed to load mmp_site_entries:', mmpEntriesError);
         
         const map: Record<string, {
-          exists: boolean; hasCosted: boolean; hasAssigned: boolean; hasInProgress: boolean; hasCompleted: boolean; hasRejected: boolean;
+          exists: boolean; hasCosted: boolean; hasAssigned: boolean; hasInProgress: boolean; hasCompleted: boolean; hasRejected: boolean; allApprovedAndCosted: boolean;
         }> = {};
         const rows: SiteVisitRow[] = [];
         const siteVisitMap = new Map<string, SiteVisitRow>();
+        
+        // Initialize map for all MMPs
+        for (const id of ids) {
+          if (!map[id]) {
+            map[id] = { exists: false, hasCosted: false, hasAssigned: false, hasInProgress: false, hasCompleted: false, hasRejected: false, allApprovedAndCosted: false };
+          }
+        }
         
         // Process site_visits
         for (const row of (siteVisitsData || []) as any[]) {
           const id = row.mmp_id;
           if (!map[id]) {
-            map[id] = { exists: false, hasCosted: false, hasAssigned: false, hasInProgress: false, hasCompleted: false, hasRejected: false };
+            map[id] = { exists: false, hasCosted: false, hasAssigned: false, hasInProgress: false, hasCompleted: false, hasRejected: false, allApprovedAndCosted: false };
           }
           map[id].exists = true;
           const status = String(row.status || '').toLowerCase();
@@ -808,7 +905,15 @@ const MMP = () => {
         }
         
         // Process mmp_site_entries - add verified sites that might not be in site_visits
+        // Also check if all entries are approved and costed
+        const entriesByMmp = new Map<string, any[]>();
         for (const entry of (mmpEntriesData || []) as any[]) {
+          const mmpId = entry.mmp_file_id;
+          if (!entriesByMmp.has(mmpId)) {
+            entriesByMmp.set(mmpId, []);
+          }
+          entriesByMmp.get(mmpId)!.push(entry);
+          
           const key = `${entry.mmp_file_id}-${entry.site_code}`;
           // If we don't have this site in site_visits, add it from mmp_site_entries
           if (!siteVisitMap.has(key)) {
@@ -819,8 +924,8 @@ const MMP = () => {
               siteCode: entry.site_code || undefined,
               state: entry.state || undefined,
               locality: entry.locality || undefined,
-              status: 'Verified', // Status from mmp_site_entries
-              feesTotal: 0,
+              status: entry.status || 'Pending', // Use actual status from mmp_site_entries
+              feesTotal: Number(entry.cost || 0),
               verifiedBy: undefined, // mmp_site_entries doesn't have verified_by, will need to get from site_visits if exists
               verifiedAt: undefined,
             };
@@ -832,6 +937,27 @@ const MMP = () => {
             if (existingRow && entry.status === 'Verified' && existingRow.status?.toLowerCase() !== 'verified') {
               existingRow.status = 'Verified';
             }
+            // Update cost if available
+            if (entry.cost && Number(entry.cost) > 0) {
+              existingRow.feesTotal = Number(entry.cost);
+            }
+          }
+        }
+        
+        // Check if all entries for each MMP are approved and costed
+        for (const [mmpId, entries] of entriesByMmp.entries()) {
+          if (!map[mmpId]) {
+            map[mmpId] = { exists: false, hasCosted: false, hasAssigned: false, hasInProgress: false, hasCompleted: false, hasRejected: false, allApprovedAndCosted: false };
+          }
+          
+          // For "Approved & Costed", ALL entries must have cost > 0 AND status = 'verified'
+          if (entries.length > 0) {
+            const allApprovedAndCosted = entries.every(entry => {
+              const cost = Number(entry.cost || 0);
+              const status = String(entry.status || '').toLowerCase();
+              return cost > 0 && status === 'verified';
+            });
+            map[mmpId].allApprovedAndCosted = allApprovedAndCosted;
           }
         }
         
@@ -978,7 +1104,7 @@ const MMP = () => {
                   </Button>
                   <Button variant={verifiedSubTab === 'approvedCosted' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('approvedCosted')} className={verifiedSubTab === 'approvedCosted' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''}>
                     Approved & Costed
-                    <Badge variant="secondary" className="ml-2">{verifiedSubcategories.approvedCosted.length}</Badge>
+                    <Badge variant="secondary" className="ml-2">{approvedCostedCount}</Badge>
                   </Button>
                   <Button variant={verifiedSubTab === 'dispatched' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('dispatched')} className={verifiedSubTab === 'dispatched' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''}>
                     Dispatched
@@ -990,9 +1116,114 @@ const MMP = () => {
                   </Button>
                 </div>
               )}
-              <MMPList mmpFiles={verifiedVisibleMMPs} />
+              {verifiedSubTab !== 'approvedCosted' && <MMPList mmpFiles={verifiedVisibleMMPs} />}
               {(isAdmin || isICT || isFOM || isCoordinator) && verifiedSubTab === 'newSites' && <VerifiedSitesDisplay verifiedSites={verifiedCategorySiteRows} />}
-              {(isAdmin || isICT || isFOM || isCoordinator) && verifiedSubTab !== 'newSites' && (
+              {(isAdmin || isICT || isFOM || isCoordinator) && verifiedSubTab === 'approvedCosted' && (
+                <div className="mt-6">
+                  {loadingApprovedCosted ? (
+                    <Card>
+                      <CardContent className="py-8">
+                        <div className="text-center text-muted-foreground">Loading approved and costed site entries...</div>
+                      </CardContent>
+                    </Card>
+                  ) : approvedCostedSiteEntries.length === 0 ? (
+                    <Card>
+                      <CardContent className="py-8">
+                        <div className="text-center text-muted-foreground">No approved and costed site entries found.</div>
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    <div>
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-semibold">Approved & Costed Site Entries</h3>
+                        <Badge variant="secondary">{approvedCostedSiteEntries.length} entries</Badge>
+                      </div>
+                      <MMPSiteEntriesTable 
+                        siteEntries={approvedCostedSiteEntries} 
+                        editable={true}
+                        onUpdateSites={async (sites) => {
+                          // Update mmp_site_entries in database
+                          try {
+                            for (const site of sites) {
+                              const updateData: any = {
+                                site_name: site.siteName || site.site_name,
+                                site_code: site.siteCode || site.site_code,
+                                hub_office: site.hubOffice || site.hub_office,
+                                state: site.state,
+                                locality: site.locality,
+                                cp_name: site.cpName || site.cp_name,
+                                activity_at_site: site.siteActivity || site.activity_at_site,
+                                monitoring_by: site.monitoringBy || site.monitoring_by,
+                                survey_tool: site.surveyTool || site.survey_tool,
+                                use_market_diversion: site.useMarketDiversion || site.use_market_diversion,
+                                use_warehouse_monitoring: site.useWarehouseMonitoring || site.use_warehouse_monitoring,
+                                visit_date: site.visitDate || site.visit_date,
+                                comments: site.comments,
+                                cost: site.cost,
+                                status: site.status,
+                                verification_notes: site.verification_notes || site.verificationNotes,
+                                additional_data: site.additionalData || site.additional_data
+                              };
+
+                              // Remove undefined values
+                              Object.keys(updateData).forEach(key => {
+                                if (updateData[key] === undefined) delete updateData[key];
+                              });
+
+                              if (site.id) {
+                                await supabase
+                                  .from('mmp_site_entries')
+                                  .update(updateData)
+                                  .eq('id', site.id);
+                              }
+                            }
+                            // Reload the entries after update
+                            const { data: entries, error } = await supabase
+                              .from('mmp_site_entries')
+                              .select('*')
+                              .gt('cost', 0)
+                              .order('created_at', { ascending: false });
+
+                            if (!error && entries) {
+                              // Filter to only include entries with status = 'verified' (case-insensitive)
+                              const verifiedEntries = entries.filter(entry => {
+                                const status = String(entry.status || '').toLowerCase();
+                                return status === 'verified';
+                              });
+                              
+                              const formattedEntries = verifiedEntries.map(entry => ({
+                                ...entry,
+                                siteName: entry.site_name,
+                                siteCode: entry.site_code,
+                                hubOffice: entry.hub_office,
+                                cpName: entry.cp_name,
+                                siteActivity: entry.activity_at_site,
+                                monitoringBy: entry.monitoring_by,
+                                surveyTool: entry.survey_tool,
+                                useMarketDiversion: entry.use_market_diversion,
+                                useWarehouseMonitoring: entry.use_warehouse_monitoring,
+                                visitDate: entry.visit_date,
+                                comments: entry.comments,
+                                cost: entry.cost,
+                                status: entry.status,
+                                additionalData: entry.additional_data || {}
+                              }));
+                              setApprovedCostedSiteEntries(formattedEntries);
+                              // Update count when entries are reloaded
+                              setApprovedCostedCount(formattedEntries.length);
+                            }
+                            return true;
+                          } catch (error) {
+                            console.error('Failed to update sites:', error);
+                            return false;
+                          }
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+              {(isAdmin || isICT || isFOM || isCoordinator) && verifiedSubTab !== 'newSites' && verifiedSubTab !== 'approvedCosted' && (
                 <div className="mt-6">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-lg font-semibold">Sites by MMP</h3>
