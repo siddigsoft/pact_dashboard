@@ -193,6 +193,7 @@ const SitesDisplayTable: React.FC<{
                   .eq('site_code', site.site_code);
               }
             }
+            setSiteEntries(sites as any[]);
             return true;
           } catch (error) {
             console.error('Failed to update sites:', error);
@@ -340,6 +341,7 @@ const VerifiedSitesDisplay: React.FC<{ verifiedSites: SiteVisitRow[] }> = ({ ver
                 visit_date: site.visitDate || site.visit_date,
                 comments: site.comments,
                 cost: site.cost,
+                status: site.status,
                 verification_notes: site.verification_notes || site.verificationNotes,
                 additional_data: site.additionalData || site.additional_data
               };
@@ -363,12 +365,14 @@ const VerifiedSitesDisplay: React.FC<{ verifiedSites: SiteVisitRow[] }> = ({ ver
                   .update({
                     verified_by: site.verified_by,
                     verified_at: site.verified_at || new Date().toISOString(),
-                    verification_notes: site.verification_notes || site.verificationNotes
+                    verification_notes: site.verification_notes || site.verificationNotes,
+                    status: site.status || 'verified'
                   })
                   .eq('mmp_id', site.mmp_file_id)
                   .eq('site_code', site.site_code);
               }
             }
+            setVerifiedSiteEntries(sites as any[]);
             return true;
           } catch (error) {
             console.error('Failed to update verified sites:', error);

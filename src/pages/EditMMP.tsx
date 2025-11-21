@@ -14,6 +14,7 @@ import MMPSiteEntriesTable from '@/components/mmp/MMPSiteEntriesTable';
 import { ActivityManager } from '@/components/project/activity/ActivityManager';
 import { useToast } from '@/hooks/use-toast';
 import FieldTeamMapPermissions from '@/components/map/FieldTeamMapPermissions';
+import { supabase } from '@/integrations/supabase/client';
 
 const EditMMP: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -107,26 +108,61 @@ const EditMMP: React.FC = () => {
   };
 
   const handleUpdateSites = async (sites: any[]): Promise<boolean> => {
-    if (mmpFile && updateMMP) {
-      const updatedMMP = { ...mmpFile, siteEntries: sites };
-      const ok = await updateMMP(id!, { siteEntries: sites });
-      if (ok) {
-        setMmpFile(updatedMMP);
-        toast({
-          title: 'Site Entries Updated',
-          description: 'Your changes have been saved.',
+    if (!mmpFile || !id) return false;
+    try {
+      // Persist each edited site directly to mmp_site_entries
+      for (const site of sites) {
+        const updateData: any = {
+          site_name: site.siteName || site.site_name,
+          site_code: site.siteCode || site.site_code,
+          hub_office: site.hubOffice || site.hub_office,
+          state: site.state,
+          locality: site.locality,
+          cp_name: site.cpName || site.cp_name,
+          activity_at_site: site.siteActivity || site.activity_at_site,
+          monitoring_by: site.monitoringBy || site.monitoring_by,
+          survey_tool: site.surveyTool || site.survey_tool,
+          use_market_diversion: site.useMarketDiversion || site.use_market_diversion,
+          use_warehouse_monitoring: site.useWarehouseMonitoring || site.use_warehouse_monitoring,
+          visit_date: site.visitDate || site.visit_date,
+          comments: site.comments,
+          cost: site.cost,
+          status: site.status,
+          verification_notes: site.verification_notes || site.verificationNotes,
+          additional_data: site.additionalData || site.additional_data,
+        };
+
+        // Remove undefined to avoid overwriting with nulls
+        Object.keys(updateData).forEach((k) => {
+          if (typeof updateData[k] === 'undefined') delete updateData[k];
         });
-        return true;
-      } else {
-        toast({
-          title: 'Save Failed',
-          description: 'We could not persist your changes. Please check your permissions or try again.',
-          variant: 'destructive',
-        });
-        return false;
+
+        if (site.id) {
+          await supabase.from('mmp_site_entries').update(updateData).eq('id', site.id);
+        } else {
+          await supabase
+            .from('mmp_site_entries')
+            .insert([{ ...updateData, mmp_file_id: id }]);
+        }
       }
+
+      // Update local state with edited sites (optimistic) and notify
+      const updatedMMP = { ...mmpFile, siteEntries: sites };
+      setMmpFile(updatedMMP);
+      toast({
+        title: 'Site Entries Updated',
+        description: 'Your changes have been saved.',
+      });
+      return true;
+    } catch (e) {
+      console.error('Failed to save site entries directly to mmp_site_entries:', e);
+      toast({
+        title: 'Save Failed',
+        description: 'We could not persist your changes. Please check your permissions or try again.',
+        variant: 'destructive',
+      });
+      return false;
     }
-    return false;
   };
 
   if (loading) {
