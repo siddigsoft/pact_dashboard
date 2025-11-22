@@ -19,21 +19,27 @@ export const ComplianceZone: React.FC = () => {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold flex items-center gap-2">
-            <Shield className="h-6 w-6 text-primary" />
-            Compliance & Risk
-          </h2>
-          <p className="text-sm text-muted-foreground">Fraud detection and compliance monitoring</p>
+      {/* Modern Tech Header */}
+      <div className="relative overflow-hidden rounded-lg border border-border/50 bg-gradient-to-r from-red-500/5 via-orange-500/5 to-background p-4 shadow-sm">
+        <div className="relative z-10 flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center justify-center w-12 h-12 rounded-lg bg-red-500/10 border border-red-500/20">
+              <Shield className="h-6 w-6 text-red-600 dark:text-red-400" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold">Compliance & Risk</h2>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">Fraud detection and compliance monitoring</p>
+            </div>
+          </div>
+          <Badge 
+            variant={complianceRate >= 80 ? "default" : "destructive"}
+            className="gap-2 h-7 text-xs"
+          >
+            <FileCheck className="h-3 w-3" />
+            {complianceRate}% Compliance
+          </Badge>
         </div>
-        <Badge 
-          variant={complianceRate >= 80 ? "default" : "destructive"}
-          className="gap-2"
-        >
-          <FileCheck className="h-3 w-3" />
-          {complianceRate}% Compliance
-        </Badge>
+        <div className="absolute inset-0 bg-grid-pattern opacity-5" />
       </div>
 
       {/* Quick Metrics */}

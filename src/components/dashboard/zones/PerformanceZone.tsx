@@ -23,29 +23,35 @@ export const PerformanceZone: React.FC = () => {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold flex items-center gap-2">
-            <TrendingUp className="h-6 w-6 text-primary" />
-            Performance & Analytics
-          </h2>
-          <p className="text-sm text-muted-foreground">Goals, achievements, and activity tracking</p>
+      {/* Modern Tech Header */}
+      <div className="relative overflow-hidden rounded-lg border border-border/50 bg-gradient-to-r from-purple-500/5 via-pink-500/5 to-background p-4 shadow-sm">
+        <div className="relative z-10 flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center justify-center w-12 h-12 rounded-lg bg-purple-500/10 border border-purple-500/20">
+              <TrendingUp className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold">Performance & Analytics</h2>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">Goals, achievements, and activity tracking</p>
+            </div>
+          </div>
+          <Badge variant="secondary" className="gap-2 h-7 text-xs">
+            <Trophy className="h-3 w-3" />
+            {thisMonthVisits} This Month
+          </Badge>
         </div>
-        <Badge variant="secondary" className="gap-2">
-          <Trophy className="h-3 w-3" />
-          {thisMonthVisits} This Month
-        </Badge>
+        <div className="absolute inset-0 bg-grid-pattern opacity-5" />
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 max-w-md">
-          <TabsTrigger value="achievements" className="gap-2">
-            <Trophy className="h-4 w-4" />
-            Achievements
+        <TabsList className="grid w-full grid-cols-2 max-w-md h-auto p-1 bg-muted/30">
+          <TabsTrigger value="achievements" className="gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <Trophy className="h-3.5 w-3.5" />
+            <span className="text-xs">Achievements</span>
           </TabsTrigger>
-          <TabsTrigger value="activity" className="gap-2">
-            <Activity className="h-4 w-4" />
-            Activity Feed
+          <TabsTrigger value="activity" className="gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <Activity className="h-3.5 w-3.5" />
+            <span className="text-xs">Activity Feed</span>
           </TabsTrigger>
         </TabsList>
 
