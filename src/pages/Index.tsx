@@ -251,14 +251,35 @@ const Index = () => {
             <div className="mb-8 text-center max-w-4xl mx-auto">
               <img src={PactLogo} alt="PACT" className="h-16 w-16 mb-6 mx-auto" />
               <h3 className="text-xl font-bold mb-4">Built for the Field, Designed for Reliability</h3>
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                The PACT mobile application empowers field teams with <strong className="text-foreground">full offline functionality</strong> - 
-                capture site visits, update data, and complete tasks even without internet connectivity. 
-                All changes automatically <strong className="text-foreground">sync when back online</strong>, ensuring no data is ever lost. 
-                Advanced <strong className="text-foreground">interactive maps with real-time GPS tracking</strong> help teams navigate efficiently, while 
-                <strong className="text-foreground"> geofencing technology</strong> automatically triggers location-based actions and verifies site arrivals. 
-                Whether in remote areas or underground facilities, your teams stay productive and connected.
+              <p className="text-sm text-muted-foreground leading-relaxed mb-6">
+                The <strong className="text-foreground">PACT Command Center Platform</strong> delivers powerful capabilities across web and mobile applications, 
+                ensuring seamless operations whether you're in the office or in the field.
               </p>
+              <div className="text-left space-y-4 max-w-3xl mx-auto">
+                <div>
+                  <h4 className="text-sm font-semibold text-foreground mb-2">🖥️ Web Platform</h4>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    The web-based <strong className="text-foreground">Command Center</strong> provides comprehensive oversight with 
+                    <strong className="text-foreground"> real-time dashboard analytics</strong>, 
+                    <strong className="text-foreground"> role-based access control</strong>, and 
+                    <strong className="text-foreground"> live team tracking</strong>. 
+                    Upload and manage Monthly Monitoring Plans, assign site visits to field teams, monitor progress with visual workflows, 
+                    and generate detailed reports. Advanced <strong className="text-foreground">financial tracking</strong> and 
+                    <strong className="text-foreground"> budget management</strong> tools ensure complete visibility into project costs and resource allocation.
+                  </p>
+                </div>
+                <div>
+                  <h4 className="text-sm font-semibold text-foreground mb-2">📱 Mobile Application</h4>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    The mobile application empowers field teams with <strong className="text-foreground">full offline functionality</strong> - 
+                    capture site visits, update data, and complete tasks even without internet connectivity. 
+                    All changes automatically <strong className="text-foreground">sync when back online</strong>, ensuring no data is ever lost. 
+                    Advanced <strong className="text-foreground">interactive maps with real-time GPS tracking</strong> help teams navigate efficiently, while 
+                    <strong className="text-foreground"> geofencing technology</strong> automatically triggers location-based actions and verifies site arrivals. 
+                    Whether in remote areas or underground facilities, your teams stay productive and connected.
+                  </p>
+                </div>
+              </div>
             </div>
             <div className="border-t pt-8 text-center">
               <p className="text-sm text-muted-foreground" data-testid="text-copyright">
