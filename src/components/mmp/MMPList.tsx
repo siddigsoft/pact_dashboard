@@ -9,6 +9,8 @@ import { MMPStatusBadge } from './MMPStatusBadge';
 import { useNavigate } from 'react-router-dom';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { useBudget } from '@/context/budget/BudgetContext';
+import { BudgetStatusBadge } from '@/components/budget/BudgetStatusBadge';
 import ForwardToFOMDialog from './ForwardToFOMDialog';
 import {
   AlertDialog,
@@ -39,6 +41,7 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
   const navigate = useNavigate();
   const { deleteMMPFile } = useMMP();
   const { checkPermission, hasAnyRole, currentUser } = useAuthorization();
+  const { mmpBudgets } = useBudget();
   const [deletingId, setDeletingId] = React.useState<string | null>(null);
   const [confirmId, setConfirmId] = React.useState<string | null>(null);
   const [forwardDialogOpen, setForwardDialogOpen] = useState(false);
@@ -139,8 +142,12 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
                         <span>•</span>
                         <span className="font-semibold">{mmp.entries} sites</span>
                       </div>
-                      <div className="mt-2 flex items-center gap-2">
+                      <div className="mt-2 flex items-center gap-2 flex-wrap">
                         <MMPStatusBadge status={mmp.status} />
+                        <BudgetStatusBadge 
+                          budget={mmpBudgets.find(b => b.mmpFileId === mmp.id) || null}
+                          variant="compact"
+                        />
                         {isForwarded && (
                           <Badge variant="secondary" className="bg-green-100 text-green-800">
                             Forwarded to {forwardedCount} FOM(s)

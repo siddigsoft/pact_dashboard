@@ -1,12 +1,19 @@
 import { useState, useMemo } from 'react';
 import { useBudget } from '@/context/budget/BudgetContext';
 import { useAppContext } from '@/context/AppContext';
+import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Progress } from '@/components/ui/progress';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { 
   DollarSign, 
   TrendingUp, 
@@ -25,6 +32,8 @@ import { CreateMMPBudgetDialog } from '@/components/budget/CreateMMPBudgetDialog
 import { TopUpBudgetDialog } from '@/components/budget/TopUpBudgetDialog';
 import { format } from 'date-fns';
 import { BUDGET_STATUS_COLORS, BUDGET_ALERT_SEVERITY_COLORS } from '@/types/budget';
+import { exportBudgetToPDF, exportBudgetToExcel, exportBudgetToCSV } from '@/utils/budget-export';
+import type { BudgetExportData } from '@/utils/budget-export';
 
 const formatCurrency = (cents: number) => {
   return new Intl.NumberFormat('en-SD', {
@@ -37,6 +46,7 @@ const formatCurrency = (cents: number) => {
 
 const BudgetPage = () => {
   const { currentUser, hasGranularPermission } = useAppContext();
+  const { toast } = useToast();
   const {
     projectBudgets,
     mmpBudgets,
@@ -66,6 +76,51 @@ const BudgetPage = () => {
       refreshBudgetTransactions(),
       refreshBudgetAlerts(),
     ]);
+  };
+
+  const handleExport = (format: 'pdf' | 'excel' | 'csv') => {
+    const exportData: BudgetExportData = {
+      projectBudgets,
+      mmpBudgets,
+      transactions: budgetTransactions,
+      stats,
+    };
+
+    const timestamp = new Date().toISOString().split('T')[0];
+    const baseFilename = `budget_report_${timestamp}`;
+
+    try {
+      switch (format) {
+        case 'pdf':
+          exportBudgetToPDF(exportData, `${baseFilename}.pdf`);
+          toast({
+            title: 'Export Successful',
+            description: 'Budget report exported to PDF',
+          });
+          break;
+        case 'excel':
+          exportBudgetToExcel(exportData, `${baseFilename}.xlsx`);
+          toast({
+            title: 'Export Successful',
+            description: 'Budget report exported to Excel',
+          });
+          break;
+        case 'csv':
+          exportBudgetToCSV(exportData, `${baseFilename}.csv`);
+          toast({
+            title: 'Export Successful',
+            description: 'Budget report exported to CSV',
+          });
+          break;
+      }
+    } catch (error) {
+      console.error('Export failed:', error);
+      toast({
+        title: 'Export Failed',
+        description: 'Failed to export budget report',
+        variant: 'destructive',
+      });
+    }
   };
 
   const activeAlerts = budgetAlerts.filter(a => a.status === 'active');
@@ -123,10 +178,25 @@ const BudgetPage = () => {
             <RefreshCw className="w-4 h-4 mr-2" />
             Refresh
           </Button>
-          <Button variant="outline" size="sm" data-testid="button-export">
-            <Download className="w-4 h-4 mr-2" />
-            Export
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" data-testid="button-export">
+                <Download className="w-4 h-4 mr-2" />
+                Export
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+              <DropdownMenuItem onClick={() => handleExport('pdf')} data-testid="menu-export-pdf">
+                Export as PDF
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleExport('excel')} data-testid="menu-export-excel">
+                Export as Excel
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleExport('csv')} data-testid="menu-export-csv">
+                Export as CSV
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 

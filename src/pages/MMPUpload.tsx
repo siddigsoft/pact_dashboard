@@ -27,8 +27,10 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/components/ui/use-toast";
 import { useAppContext } from "@/context/AppContext";
+import { useBudget } from "@/context/budget/BudgetContext";
+import { CreateMMPBudgetDialog } from "@/components/budget/CreateMMPBudgetDialog";
 import { ArrowUpCircle, CheckCircle, Info, Upload, AlertTriangle, 
-         Eye, Save, X, RefreshCw, MessageSquare, ArrowRight, ListChecks, Download, Pencil, Check } from "lucide-react";
+         Eye, Save, X, RefreshCw, MessageSquare, ArrowRight, ListChecks, Download, Pencil, Check, DollarSign } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
@@ -83,6 +85,7 @@ const MMPUpload = () => {
   const { uploadMMP, currentUser } = useAppContext();
   const { checkPermission, hasAnyRole } = useAuthorization();
   const { projects, loading: projectsLoading } = useProjectContext();
+  const { projectBudgets } = useBudget();
   const [isUploading, setIsUploading] = useState(false);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
@@ -765,6 +768,40 @@ const MMPUpload = () => {
                 </div>
               </div>
             </div>
+
+            {uploadedMmpId && previewData.length > 0 && (
+              <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-md">
+                <div className="flex items-start gap-3">
+                  <DollarSign className="w-5 h-5 text-blue-600 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="font-medium text-blue-800">Optional: Allocate Budget</p>
+                    <p className="text-sm text-blue-700 mt-1">
+                      You can now allocate a budget for this MMP to track costs for {previewData.length} site visits.
+                    </p>
+                    <div className="mt-3">
+                      <CreateMMPBudgetDialog
+                        mmpFileId={uploadedMmpId}
+                        mmpName={form.getValues().name || 'Uploaded MMP'}
+                        projectId={form.getValues().project}
+                        totalSites={previewData.length}
+                        onSuccess={() => {
+                          toast({
+                            title: 'Budget Allocated',
+                            description: 'Budget has been successfully allocated to this MMP',
+                          });
+                        }}
+                        trigger={
+                          <Button variant="outline" size="sm" data-testid="button-allocate-budget-mmp">
+                            <DollarSign className="w-4 h-4 mr-2" />
+                            Allocate Budget
+                          </Button>
+                        }
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="border rounded-md p-4 bg-slate-50">
               <h3 className="font-medium mb-2">What happens next?</h3>
