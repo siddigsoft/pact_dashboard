@@ -16,20 +16,24 @@ import {
 export const fetchSiteVisits = async (): Promise<SiteVisit[]> => {
   // First, try to fetch from site_visits table
   try {
-    const { data, error, status } = await supabase
+    const { data, error } = await supabase
       .from('site_visits')
       .select('*');
     
-    // If site_visits table doesn't exist (status 42P01 = undefined_table)
-    // or if it's empty, try mmp_site_entries
-    if (error && (error.code === '42P01' || error.message.includes('does not exist'))) {
-      console.log('site_visits table not found, using mmp_site_entries');
+    // Handle "table not found" errors (PGRST205 or PGRST204)
+    // PostgREST error codes for missing tables
+    if (error && (error.code === 'PGRST205' || error.code === 'PGRST204' || 
+                  error.code === '42P01' || 
+                  error.message?.includes('does not exist') ||
+                  error.message?.includes('Could not find the table'))) {
+      console.log('✅ site_visits table not found, using mmp_site_entries');
       return await fetchSiteVisitsFromMMPEntries();
     }
     
+    // Handle other errors by trying fallback
     if (error) {
       console.error('Error fetching site visits:', error);
-      // Try fallback to mmp_site_entries
+      console.log('Attempting fallback to mmp_site_entries...');
       try {
         return await fetchSiteVisitsFromMMPEntries();
       } catch (fallbackError) {
@@ -40,6 +44,7 @@ export const fetchSiteVisits = async (): Promise<SiteVisit[]> => {
     
     // If we got data, transform and return it
     if (data && data.length > 0) {
+      console.log(`✅ Loaded ${data.length} site visits from site_visits table`);
       return transformSiteVisitsData(data);
     }
     
@@ -51,6 +56,7 @@ export const fetchSiteVisits = async (): Promise<SiteVisit[]> => {
     console.error('Error in fetchSiteVisits:', error);
     // Final fallback to mmp_site_entries
     try {
+      console.log('Final fallback attempt to mmp_site_entries...');
       return await fetchSiteVisitsFromMMPEntries();
     } catch (fallbackError) {
       console.error('All fetch attempts failed:', fallbackError);
