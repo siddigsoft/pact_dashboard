@@ -22,44 +22,58 @@ export const PerformanceZone: React.FC = () => {
   }).length || 0;
 
   return (
-    <div className="space-y-4">
-      {/* Modern Tech Header */}
-      <div className="relative overflow-hidden rounded-lg border border-border/50 bg-gradient-to-r from-purple-500/5 via-pink-500/5 to-background p-4 shadow-sm">
+    <div className="space-y-3">
+      {/* Professional Tech Header */}
+      <div className="relative overflow-hidden rounded-lg border border-border/50 bg-gradient-to-r from-purple-500/5 via-indigo-500/5 to-background p-3 shadow-sm">
         <div className="relative z-10 flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center w-12 h-12 rounded-lg bg-purple-500/10 border border-purple-500/20">
-              <TrendingUp className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+            <div className="flex items-center justify-center w-11 h-11 rounded-lg bg-gradient-to-br from-purple-500/20 to-indigo-500/20 border border-purple-500/30 shadow-sm">
+              <TrendingUp className="h-5 w-5 text-purple-600 dark:text-purple-400" />
             </div>
             <div>
-              <h2 className="text-xl font-bold">Performance & Analytics</h2>
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Goals, achievements, and activity tracking</p>
+              <h2 className="text-lg font-bold tracking-tight">Performance & Analytics</h2>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Goals & Achievement Tracking</p>
             </div>
           </div>
-          <Badge variant="secondary" className="gap-2 h-7 text-xs">
+          <Badge variant="secondary" className="gap-2 h-7 text-xs px-3 tabular-nums">
             <Trophy className="h-3 w-3" />
             {thisMonthVisits} This Month
           </Badge>
         </div>
         <div className="absolute inset-0 bg-grid-pattern opacity-5" />
+        <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-purple-500/10 to-transparent rounded-full blur-2xl" />
       </div>
 
+      {/* Modern Tab System */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 max-w-md h-auto p-1 bg-muted/30">
-          <TabsTrigger value="achievements" className="gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm">
-            <Trophy className="h-3.5 w-3.5" />
-            <span className="text-xs">Achievements</span>
+        <TabsList className="grid w-full grid-cols-2 h-auto p-0.5 bg-gradient-to-r from-muted/30 via-background to-muted/30 border border-border/30">
+          <TabsTrigger 
+            value="achievements" 
+            className="gap-1.5 px-3 py-2 data-[state=active]:bg-purple-500/10 data-[state=active]:border-purple-500/20 data-[state=active]:shadow-sm border border-transparent"
+            data-testid="tab-achievements"
+          >
+            <div className="w-5 h-5 rounded bg-purple-500/10 flex items-center justify-center">
+              <Trophy className="h-3 w-3 text-purple-600 dark:text-purple-400" />
+            </div>
+            <span className="text-[10px] font-semibold uppercase tracking-wide">Achievements</span>
           </TabsTrigger>
-          <TabsTrigger value="activity" className="gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm">
-            <Activity className="h-3.5 w-3.5" />
-            <span className="text-xs">Activity Feed</span>
+          <TabsTrigger 
+            value="activity" 
+            className="gap-1.5 px-3 py-2 data-[state=active]:bg-blue-500/10 data-[state=active]:border-blue-500/20 data-[state=active]:shadow-sm border border-transparent"
+            data-testid="tab-activity"
+          >
+            <div className="w-5 h-5 rounded bg-blue-500/10 flex items-center justify-center">
+              <Activity className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+            </div>
+            <span className="text-[10px] font-semibold uppercase tracking-wide">Activity Feed</span>
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="achievements" className="mt-4">
+        <TabsContent value="achievements" className="mt-3">
           <AchievementTracker />
         </TabsContent>
 
-        <TabsContent value="activity" className="mt-4">
+        <TabsContent value="activity" className="mt-3">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">

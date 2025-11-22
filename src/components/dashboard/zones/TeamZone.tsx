@@ -107,21 +107,21 @@ export const TeamZone: React.FC = () => {
   };
 
   return (
-    <div className="space-y-4">
-      {/* Modern Tech Header */}
-      <div className="relative overflow-hidden rounded-lg border border-border/50 bg-gradient-to-r from-green-500/5 via-blue-500/5 to-background p-4 shadow-sm">
+    <div className="space-y-3">
+      {/* Professional Tech Header */}
+      <div className="relative overflow-hidden rounded-lg border border-border/50 bg-gradient-to-r from-green-500/5 via-emerald-500/5 to-background p-3 shadow-sm">
         <div className="relative z-10 flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center w-12 h-12 rounded-lg bg-green-500/10 border border-green-500/20">
-              <Users className="h-6 w-6 text-green-600 dark:text-green-400" />
+            <div className="flex items-center justify-center w-11 h-11 rounded-lg bg-gradient-to-br from-green-500/20 to-emerald-500/20 border border-green-500/30 shadow-sm">
+              <Users className="h-5 w-5 text-green-600 dark:text-green-400" />
             </div>
             <div>
-              <h2 className="text-xl font-bold">Team Coordination</h2>
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Field team locations and communication</p>
+              <h2 className="text-lg font-bold tracking-tight">Team Coordination</h2>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Real-time Field Operations</p>
             </div>
           </div>
           <div className="flex gap-2 items-center">
-            <Badge variant="secondary" className="gap-2 text-xs h-7">
+            <Badge variant="secondary" className="gap-2 text-xs h-7 px-3 tabular-nums">
               <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
               {onlineMembers}/{activeFieldTeam} Online
             </Badge>
@@ -137,33 +137,56 @@ export const TeamZone: React.FC = () => {
           </div>
         </div>
         <div className="absolute inset-0 bg-grid-pattern opacity-5" />
+        <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-green-500/10 to-transparent rounded-full blur-2xl" />
       </div>
 
+      {/* Modern Tab System */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-3 max-w-2xl h-auto p-1 bg-muted/30">
-          <TabsTrigger value="overview" className="gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm">
-            <UserCircle className="h-3.5 w-3.5" />
-            <span className="text-xs">Team Overview</span>
+        <TabsList className="grid w-full grid-cols-3 h-auto p-0.5 bg-gradient-to-r from-muted/30 via-background to-muted/30 border border-border/30">
+          <TabsTrigger 
+            value="overview" 
+            className="gap-1.5 px-3 py-2 data-[state=active]:bg-green-500/10 data-[state=active]:border-green-500/20 data-[state=active]:shadow-sm border border-transparent"
+            data-testid="tab-overview"
+          >
+            <div className="w-5 h-5 rounded bg-green-500/10 flex items-center justify-center">
+              <UserCircle className="h-3 w-3 text-green-600 dark:text-green-400" />
+            </div>
+            <span className="text-[10px] font-semibold uppercase tracking-wide">Team Overview</span>
           </TabsTrigger>
-          <TabsTrigger value="map" className="gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm">
-            <MapPin className="h-3.5 w-3.5" />
-            <span className="text-xs">Live Map</span>
+          <TabsTrigger 
+            value="map" 
+            className="gap-1.5 px-3 py-2 data-[state=active]:bg-blue-500/10 data-[state=active]:border-blue-500/20 data-[state=active]:shadow-sm border border-transparent"
+            data-testid="tab-map"
+          >
+            <div className="w-5 h-5 rounded bg-blue-500/10 flex items-center justify-center">
+              <MapPin className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+            </div>
+            <span className="text-[10px] font-semibold uppercase tracking-wide">Live Map</span>
           </TabsTrigger>
-          <TabsTrigger value="communication" className="gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm">
-            <MessageSquare className="h-3.5 w-3.5" />
-            <span className="text-xs">Communication</span>
+          <TabsTrigger 
+            value="communication" 
+            className="gap-1.5 px-3 py-2 data-[state=active]:bg-purple-500/10 data-[state=active]:border-purple-500/20 data-[state=active]:shadow-sm border border-transparent"
+            data-testid="tab-communication"
+          >
+            <div className="w-5 h-5 rounded bg-purple-500/10 flex items-center justify-center">
+              <MessageSquare className="h-3 w-3 text-purple-600 dark:text-purple-400" />
+            </div>
+            <span className="text-[10px] font-semibold uppercase tracking-wide">Communication</span>
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview" className="mt-4 space-y-3">
+        <TabsContent value="overview" className="mt-3 space-y-3">
           {assignableTeamMembers && assignableTeamMembers.length > 0 ? (
             <>
               {/* View Toggle */}
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-                  Team Members ({assignableTeamMembers.length})
-                </h3>
-                <div className="flex gap-1 bg-muted/30 p-1 rounded-lg">
+              <div className="flex items-center justify-between p-2 rounded-lg bg-muted/30 border border-border/50">
+                <div className="flex items-center gap-2">
+                  <Users className="h-4 w-4 text-green-600 dark:text-green-400" />
+                  <h3 className="text-sm font-bold uppercase tracking-wide">
+                    Team Members ({assignableTeamMembers.length})
+                  </h3>
+                </div>
+                <div className="flex gap-1 bg-background/50 p-0.5 rounded-md border border-border/30">
                   <Button
                     variant={viewMode === 'cards' ? 'default' : 'ghost'}
                     size="sm"
@@ -218,14 +241,14 @@ export const TeamZone: React.FC = () => {
           )}
         </TabsContent>
 
-        <TabsContent value="map" className="mt-4">
+        <TabsContent value="map" className="mt-3">
           <TeamLocationMap 
             users={assignableTeamMembers} 
             siteVisits={siteVisits || []}
           />
         </TabsContent>
 
-        <TabsContent value="communication" className="mt-4">
+        <TabsContent value="communication" className="mt-3">
           <TeamCommunication />
         </TabsContent>
       </Tabs>
