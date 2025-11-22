@@ -245,76 +245,14 @@ const Index = () => {
           </div>
         </section>
 
-        {/* CTA Section */}
-        <section className="container mx-auto px-4 py-16 md:py-24">
-          <Card className="max-w-4xl mx-auto border-2" data-testid="card-cta">
-            <CardContent className="p-8 md:p-12">
-              <div className="text-center space-y-6">
-                <h2 className="text-3xl md:text-4xl font-bold">
-                  Ready to Transform Your Operations?
-                </h2>
-                <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                  Join leading organizations using PACT to streamline field operations 
-                  and drive measurable results.
-                </p>
-                <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
-                  <Button
-                    size="lg"
-                    onClick={() => navigate("/auth")}
-                    data-testid="button-start-now"
-                    className="gap-2"
-                  >
-                    Start Now
-                    <ArrowRight className="w-4 h-4" />
-                  </Button>
-                  <Button
-                    size="lg"
-                    variant="outline"
-                    onClick={() => navigate("/auth")}
-                    data-testid="button-contact-sales"
-                  >
-                    Contact Sales
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </section>
-
         {/* Footer */}
         <footer className="border-t bg-muted/10">
           <div className="container mx-auto px-4 py-12">
-            <div className="grid md:grid-cols-4 gap-8 mb-8">
-              <div>
-                <img src={PactLogo} alt="PACT" className="h-12 w-12 mb-4" />
-                <p className="text-sm text-muted-foreground">
-                  Enterprise field operations platform trusted by organizations worldwide.
-                </p>
-              </div>
-              <div>
-                <h4 className="font-semibold mb-4">Product</h4>
-                <ul className="space-y-2 text-sm text-muted-foreground">
-                  <li><a href="#" className="hover:text-foreground transition-colors" data-testid="link-features">Features</a></li>
-                  <li><a href="#" className="hover:text-foreground transition-colors" data-testid="link-pricing">Pricing</a></li>
-                  <li><a href="#" className="hover:text-foreground transition-colors" data-testid="link-security">Security</a></li>
-                </ul>
-              </div>
-              <div>
-                <h4 className="font-semibold mb-4">Company</h4>
-                <ul className="space-y-2 text-sm text-muted-foreground">
-                  <li><a href="#" className="hover:text-foreground transition-colors" data-testid="link-about">About</a></li>
-                  <li><a href="#" className="hover:text-foreground transition-colors" data-testid="link-careers">Careers</a></li>
-                  <li><a href="#" className="hover:text-foreground transition-colors" data-testid="link-contact">Contact</a></li>
-                </ul>
-              </div>
-              <div>
-                <h4 className="font-semibold mb-4">Legal</h4>
-                <ul className="space-y-2 text-sm text-muted-foreground">
-                  <li><a href="#" className="hover:text-foreground transition-colors" data-testid="link-privacy">Privacy</a></li>
-                  <li><a href="#" className="hover:text-foreground transition-colors" data-testid="link-terms">Terms</a></li>
-                  <li><a href="#" className="hover:text-foreground transition-colors" data-testid="link-cookies">Cookies</a></li>
-                </ul>
-              </div>
+            <div className="mb-8">
+              <img src={PactLogo} alt="PACT" className="h-12 w-12 mb-4" />
+              <p className="text-sm text-muted-foreground max-w-md">
+                Enterprise field operations platform trusted by organizations worldwide.
+              </p>
             </div>
             <div className="border-t pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
               <p className="text-sm text-muted-foreground" data-testid="text-copyright">
