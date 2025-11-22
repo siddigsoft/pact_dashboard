@@ -245,6 +245,7 @@ export const TeamMemberDetailModal: React.FC<TeamMemberDetailModalProps> = ({
               <Table>
                 <TableHeader className="sticky top-0 bg-background z-10">
                   <TableRow>
+                    <TableHead>MMP Name</TableHead>
                     <TableHead className="w-[200px]">Site Name</TableHead>
                     <TableHead>Location</TableHead>
                     <TableHead>Due Date</TableHead>
@@ -259,6 +260,11 @@ export const TeamMemberDetailModal: React.FC<TeamMemberDetailModalProps> = ({
                     
                     return (
                       <TableRow key={task.id}>
+                        <TableCell>
+                          <div className="text-xs font-medium text-primary">
+                            {task.mmpDetails?.mmpId || task.projectName || 'N/A'}
+                          </div>
+                        </TableCell>
                         <TableCell className="font-medium">
                           <div className="flex flex-col">
                             <span className="text-sm">{task.siteName}</span>
