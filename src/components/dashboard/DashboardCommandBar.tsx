@@ -24,21 +24,33 @@ export const DashboardCommandBar: React.FC<DashboardCommandBarProps> = ({ onQuic
       icon: Plus, 
       label: 'New Visit', 
       action: () => navigate('/site-visits/new'),
+      gradient: 'from-blue-500/10 to-cyan-500/10',
+      iconColor: 'text-blue-600 dark:text-blue-400',
+      border: 'border-blue-500/20'
     },
     { 
       icon: Upload, 
       label: 'Upload MMP', 
       action: () => navigate('/mmp/upload'),
+      gradient: 'from-purple-500/10 to-indigo-500/10',
+      iconColor: 'text-purple-600 dark:text-purple-400',
+      border: 'border-purple-500/20'
     },
     { 
       icon: Calendar, 
       label: 'Calendar', 
       action: () => navigate('/calendar'),
+      gradient: 'from-green-500/10 to-emerald-500/10',
+      iconColor: 'text-green-600 dark:text-green-400',
+      border: 'border-green-500/20'
     },
     { 
       icon: Users, 
       label: 'Team', 
       action: () => navigate('/field-team'),
+      gradient: 'from-orange-500/10 to-amber-500/10',
+      iconColor: 'text-orange-600 dark:text-orange-400',
+      border: 'border-orange-500/20'
     }
   ];
 
@@ -55,10 +67,10 @@ export const DashboardCommandBar: React.FC<DashboardCommandBarProps> = ({ onQuic
                 size="sm"
                 onClick={action.action}
                 data-testid={`button-quick-${action.label.toLowerCase().replace(' ', '-')}`}
-                className="gap-2"
+                className={`gap-2 relative overflow-hidden bg-gradient-to-r ${action.gradient} ${action.border} hover-elevate active-elevate-2 transition-all duration-200`}
               >
-                <action.icon className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">{action.label}</span>
+                <action.icon className={`h-4 w-4 ${action.iconColor}`} />
+                <span className="hidden sm:inline font-medium">{action.label}</span>
               </Button>
             ))}
           </div>
