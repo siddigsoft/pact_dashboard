@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -9,14 +9,12 @@ import {
   Upload, 
   Calendar, 
   Users,
-  Activity,
-  Bell
+  Activity
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { ConnectionStatus } from './ConnectionStatus';
 import { RefreshButton } from './RefreshButton';
 import { useLiveDashboard } from '@/hooks/useLiveDashboard';
-import { useAppContext } from '@/context/AppContext';
 import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { useProjectContext } from '@/context/project/ProjectContext';
@@ -29,30 +27,36 @@ export const ExecutiveCommandStrip: React.FC = () => {
   const { mmpFiles } = useMMP();
   const { projects } = useProjectContext();
 
-  // KPI Calculations
-  const activeProjects = projects?.filter(p => p.status === 'active').length || 0;
-  const approvedMMPs = mmpFiles?.filter(m => m.status === 'approved').length || 0;
-  const completedVisits = siteVisits?.filter(v => v.status === 'completed').length || 0;
-  const pendingVisits = siteVisits?.filter(v => v.status === 'pending' || v.status === 'assigned').length || 0;
+  // Memoized KPI Calculations
+  const kpis = useMemo(() => {
+    const activeProjects = projects?.filter(p => p.status === 'active').length || 0;
+    const approvedMMPs = mmpFiles?.filter(m => m.status === 'approved').length || 0;
+    const completedVisits = siteVisits?.filter(v => v.status === 'completed').length || 0;
+    const pendingVisits = siteVisits?.filter(v => v.status === 'pending' || v.status === 'assigned').length || 0;
 
-  // Week-on-week trends
-  const now = new Date();
-  const thisWeekStart = startOfWeek(now);
-  const thisWeekEnd = endOfWeek(now);
-  const lastWeekStart = startOfWeek(subWeeks(now, 1));
-  const lastWeekEnd = endOfWeek(subWeeks(now, 1));
+    return { activeProjects, approvedMMPs, completedVisits, pendingVisits };
+  }, [projects, mmpFiles, siteVisits]);
 
-  const thisWeekVisits = siteVisits?.filter(v => {
-    const date = v.createdAt ? new Date(v.createdAt) : null;
-    return date && isAfter(date, thisWeekStart) && isBefore(date, thisWeekEnd);
-  }).length || 0;
+  // Memoized Trend Calculations
+  const visitsTrend = useMemo(() => {
+    const now = new Date();
+    const thisWeekStart = startOfWeek(now);
+    const thisWeekEnd = endOfWeek(now);
+    const lastWeekStart = startOfWeek(subWeeks(now, 1));
+    const lastWeekEnd = endOfWeek(subWeeks(now, 1));
 
-  const lastWeekVisits = siteVisits?.filter(v => {
-    const date = v.createdAt ? new Date(v.createdAt) : null;
-    return date && isAfter(date, lastWeekStart) && isBefore(date, lastWeekEnd);
-  }).length || 0;
+    const thisWeekVisits = siteVisits?.filter(v => {
+      const date = v.createdAt ? new Date(v.createdAt) : null;
+      return date && isAfter(date, thisWeekStart) && isBefore(date, thisWeekEnd);
+    }).length || 0;
 
-  const visitsTrend = thisWeekVisits - lastWeekVisits;
+    const lastWeekVisits = siteVisits?.filter(v => {
+      const date = v.createdAt ? new Date(v.createdAt) : null;
+      return date && isAfter(date, lastWeekStart) && isBefore(date, lastWeekEnd);
+    }).length || 0;
+
+    return thisWeekVisits - lastWeekVisits;
+  }, [siteVisits]);
 
   const quickActions = [
     { icon: Plus, label: 'New Visit', action: () => navigate('/site-visits/new') },
@@ -70,7 +74,7 @@ export const ExecutiveCommandStrip: React.FC = () => {
           <div className="flex flex-col p-3 rounded-lg border bg-card hover-elevate transition-all">
             <span className="text-xs text-muted-foreground mb-1">Active Projects</span>
             <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-bold text-primary">{activeProjects}</span>
+              <span className="text-3xl font-bold text-primary">{kpis.activeProjects}</span>
             </div>
           </div>
 
@@ -78,7 +82,7 @@ export const ExecutiveCommandStrip: React.FC = () => {
           <div className="flex flex-col p-3 rounded-lg border bg-card hover-elevate transition-all">
             <span className="text-xs text-muted-foreground mb-1">Approved MMPs</span>
             <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-bold text-green-600 dark:text-green-400">{approvedMMPs}</span>
+              <span className="text-3xl font-bold text-green-600 dark:text-green-400">{kpis.approvedMMPs}</span>
             </div>
           </div>
 
@@ -86,7 +90,7 @@ export const ExecutiveCommandStrip: React.FC = () => {
           <div className="flex flex-col p-3 rounded-lg border bg-card hover-elevate transition-all">
             <span className="text-xs text-muted-foreground mb-1">Completed Visits</span>
             <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-bold text-blue-600 dark:text-blue-400">{completedVisits}</span>
+              <span className="text-3xl font-bold text-blue-600 dark:text-blue-400">{kpis.completedVisits}</span>
               {visitsTrend !== 0 && (
                 <div className="flex items-center gap-1">
                   {visitsTrend > 0 ? (
@@ -106,10 +110,10 @@ export const ExecutiveCommandStrip: React.FC = () => {
           <div className="flex flex-col p-3 rounded-lg border bg-card hover-elevate transition-all">
             <span className="text-xs text-muted-foreground mb-1">Pending Visits</span>
             <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-bold text-orange-600 dark:text-orange-400">{pendingVisits}</span>
-              {pendingVisits > 0 && (
+              <span className="text-3xl font-bold text-orange-600 dark:text-orange-400">{kpis.pendingVisits}</span>
+              {kpis.pendingVisits > 0 && (
                 <Badge variant="outline" className="text-xs">
-                  {pendingVisits > 5 ? 'High' : 'Normal'}
+                  {kpis.pendingVisits > 5 ? 'High' : 'Normal'}
                 </Badge>
               )}
             </div>
