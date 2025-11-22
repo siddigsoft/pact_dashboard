@@ -136,35 +136,53 @@ export const OperationsZone: React.FC = () => {
 
   const baseFilteredVisits = getFilteredVisits(selectedCard);
 
-  // Extract unique values for filter dropdowns
-  const uniqueHubs = useMemo(() => {
+  // Extract unique values for filter dropdowns with counts
+  const hubsWithCounts = useMemo(() => {
     const hubs = [...new Set(baseFilteredVisits.map(v => v.hub).filter(Boolean))];
-    return hubs.sort();
+    return hubs.map(hub => ({
+      value: hub,
+      count: baseFilteredVisits.filter(v => v.hub === hub).length
+    })).sort((a, b) => a.value.localeCompare(b.value));
   }, [baseFilteredVisits]);
 
-  const uniqueStates = useMemo(() => {
+  const statesWithCounts = useMemo(() => {
     const states = [...new Set(baseFilteredVisits.map(v => v.state).filter(Boolean))];
-    return states.sort();
+    return states.map(state => ({
+      value: state,
+      count: baseFilteredVisits.filter(v => v.state === state).length
+    })).sort((a, b) => a.value.localeCompare(b.value));
   }, [baseFilteredVisits]);
 
-  const uniqueLocalities = useMemo(() => {
+  const localitiesWithCounts = useMemo(() => {
     const localities = [...new Set(baseFilteredVisits.map(v => v.locality).filter(Boolean))];
-    return localities.sort();
+    return localities.map(locality => ({
+      value: locality,
+      count: baseFilteredVisits.filter(v => v.locality === locality).length
+    })).sort((a, b) => a.value.localeCompare(b.value));
   }, [baseFilteredVisits]);
 
-  const uniqueCoordinators = useMemo(() => {
+  const coordinatorsWithCounts = useMemo(() => {
     const coordinators = [...new Set(baseFilteredVisits.map(v => v.team?.coordinator).filter(Boolean))];
-    return coordinators.sort();
+    return coordinators.map(coordinator => ({
+      value: coordinator,
+      count: baseFilteredVisits.filter(v => v.team?.coordinator === coordinator).length
+    })).sort((a, b) => a.value.localeCompare(b.value));
   }, [baseFilteredVisits]);
 
-  const uniqueEnumerators = useMemo(() => {
+  const enumeratorsWithCounts = useMemo(() => {
     const enumerators = [...new Set(baseFilteredVisits.map(v => v.assignedTo).filter(Boolean))];
-    return enumerators.sort();
+    return enumerators.map(enumerator => ({
+      value: enumerator,
+      count: baseFilteredVisits.filter(v => v.assignedTo === enumerator).length
+    })).sort((a, b) => a.value.localeCompare(b.value));
   }, [baseFilteredVisits]);
 
-  const uniqueStatuses = useMemo(() => {
+  const statusesWithCounts = useMemo(() => {
     const statuses = [...new Set(baseFilteredVisits.map(v => v.status).filter(Boolean))];
-    return statuses.sort();
+    return statuses.map(status => ({
+      value: status,
+      count: baseFilteredVisits.filter(v => v.status === status).length
+    })).sort((a, b) => a.value.localeCompare(b.value));
   }, [baseFilteredVisits]);
 
   // Apply filters to data
@@ -493,10 +511,10 @@ export const OperationsZone: React.FC = () => {
                   <SelectValue placeholder="Hub" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Hubs</SelectItem>
-                  {uniqueHubs.map((hub) => (
-                    <SelectItem key={hub} value={hub}>
-                      {hub}
+                  <SelectItem value="all">All Hubs ({baseFilteredVisits.length})</SelectItem>
+                  {hubsWithCounts.map((item) => (
+                    <SelectItem key={item.value} value={item.value}>
+                      {item.value} ({item.count})
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -511,10 +529,10 @@ export const OperationsZone: React.FC = () => {
                   <SelectValue placeholder="State" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All States</SelectItem>
-                  {uniqueStates.map((state) => (
-                    <SelectItem key={state} value={state}>
-                      {state}
+                  <SelectItem value="all">All States ({baseFilteredVisits.length})</SelectItem>
+                  {statesWithCounts.map((item) => (
+                    <SelectItem key={item.value} value={item.value}>
+                      {item.value} ({item.count})
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -529,10 +547,10 @@ export const OperationsZone: React.FC = () => {
                   <SelectValue placeholder="Locality" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Localities</SelectItem>
-                  {uniqueLocalities.map((locality) => (
-                    <SelectItem key={locality} value={locality}>
-                      {locality}
+                  <SelectItem value="all">All Localities ({baseFilteredVisits.length})</SelectItem>
+                  {localitiesWithCounts.map((item) => (
+                    <SelectItem key={item.value} value={item.value}>
+                      {item.value} ({item.count})
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -547,10 +565,10 @@ export const OperationsZone: React.FC = () => {
                   <SelectValue placeholder="Coordinator" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Coordinators</SelectItem>
-                  {uniqueCoordinators.map((coordinator) => (
-                    <SelectItem key={coordinator} value={coordinator}>
-                      {coordinator}
+                  <SelectItem value="all">All Coordinators ({baseFilteredVisits.length})</SelectItem>
+                  {coordinatorsWithCounts.map((item) => (
+                    <SelectItem key={item.value} value={item.value}>
+                      {item.value} ({item.count})
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -565,10 +583,10 @@ export const OperationsZone: React.FC = () => {
                   <SelectValue placeholder="Enumerator" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Enumerators</SelectItem>
-                  {uniqueEnumerators.map((enumerator) => (
-                    <SelectItem key={enumerator} value={enumerator}>
-                      {enumerator}
+                  <SelectItem value="all">All Enumerators ({baseFilteredVisits.length})</SelectItem>
+                  {enumeratorsWithCounts.map((item) => (
+                    <SelectItem key={item.value} value={item.value}>
+                      {item.value} ({item.count})
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -583,10 +601,10 @@ export const OperationsZone: React.FC = () => {
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Statuses</SelectItem>
-                  {uniqueStatuses.map((status) => (
-                    <SelectItem key={status} value={status}>
-                      {status}
+                  <SelectItem value="all">All Statuses ({baseFilteredVisits.length})</SelectItem>
+                  {statusesWithCounts.map((item) => (
+                    <SelectItem key={item.value} value={item.value}>
+                      {item.value} ({item.count})
                     </SelectItem>
                   ))}
                 </SelectContent>
