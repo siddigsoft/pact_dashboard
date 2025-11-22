@@ -68,72 +68,73 @@ export const DashboardCommandBar: React.FC<DashboardCommandBarProps> = ({ onQuic
 
   return (
     <Card className="border-b rounded-none shadow-lg bg-gradient-to-r from-primary/5 via-blue-500/5 to-purple-500/5 dark:from-primary/10 dark:via-blue-600/10 dark:to-purple-600/10 backdrop-blur-sm">
-      <CardContent className="p-3 lg:p-4">
-        <div className="flex flex-col lg:flex-row gap-3 items-start lg:items-center justify-between">
-          {/* Left: KPI Metrics - Compact Tech Style */}
-          <div className="flex flex-wrap gap-2 lg:gap-4 items-center flex-1">
+      <CardContent className="p-2.5 lg:p-3">
+        <div className="flex flex-col lg:flex-row gap-2 items-start lg:items-center justify-between">
+          {/* Left: Quick Actions - Compact & Priority */}
+          <div className="flex flex-wrap gap-1.5 items-center">
+            {quickActions.filter(a => a.permission).map((action, idx) => (
+              <Button
+                key={idx}
+                size="icon"
+                variant="ghost"
+                onClick={action.action}
+                className="h-7 w-7 lg:h-8 lg:w-auto lg:px-2.5 border border-border/50 hover:border-primary/50 hover:bg-primary/5"
+                data-testid={`button-quick-${action.label.toLowerCase().replace(' ', '-')}`}
+                title={action.label}
+              >
+                <action.icon className="h-3.5 w-3.5 flex-shrink-0" />
+                <span className="hidden lg:inline text-xs ml-1.5">{action.label}</span>
+              </Button>
+            ))}
+            
+            <div className="h-6 w-px bg-border/50 mx-0.5" />
+            
+            <ConnectionStatus isConnected={isConnected} />
+            <RefreshButton />
+          </div>
+
+          {/* Center: KPI Metrics - Compact Tech Style */}
+          <div className="flex flex-wrap gap-1.5 lg:gap-2 items-center flex-1 lg:justify-center">
             <div className="group relative" data-testid="kpi-projects">
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-primary/10 dark:bg-primary/20 border border-primary/20 hover-elevate transition-all">
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-primary/10 dark:bg-primary/20 border border-primary/20 hover-elevate transition-all">
                 <div className="flex flex-col">
-                  <span className="text-xl lg:text-2xl font-bold text-primary tabular-nums">{activeProjects}</span>
-                  <span className="text-[10px] lg:text-xs text-muted-foreground uppercase tracking-wide">Projects</span>
+                  <span className="text-lg lg:text-xl font-bold text-primary tabular-nums leading-tight">{activeProjects}</span>
+                  <span className="text-[9px] lg:text-[10px] text-muted-foreground uppercase tracking-wide">Projects</span>
                 </div>
               </div>
             </div>
 
             <div className="group relative" data-testid="kpi-mmps">
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-green-500/10 dark:bg-green-500/20 border border-green-500/20 hover-elevate transition-all">
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-green-500/10 dark:bg-green-500/20 border border-green-500/20 hover-elevate transition-all">
                 <div className="flex flex-col">
-                  <span className="text-xl lg:text-2xl font-bold text-green-600 dark:text-green-400 tabular-nums">{approvedMMPs}</span>
-                  <span className="text-[10px] lg:text-xs text-muted-foreground uppercase tracking-wide">MMPs</span>
+                  <span className="text-lg lg:text-xl font-bold text-green-600 dark:text-green-400 tabular-nums leading-tight">{approvedMMPs}</span>
+                  <span className="text-[9px] lg:text-[10px] text-muted-foreground uppercase tracking-wide">MMPs</span>
                 </div>
               </div>
             </div>
 
             <div className="group relative" data-testid="kpi-completed">
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-blue-500/10 dark:bg-blue-500/20 border border-blue-500/20 hover-elevate transition-all">
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-blue-500/10 dark:bg-blue-500/20 border border-blue-500/20 hover-elevate transition-all">
                 <div className="flex flex-col">
-                  <span className="text-xl lg:text-2xl font-bold text-blue-600 dark:text-blue-400 tabular-nums">{completedVisits}</span>
-                  <span className="text-[10px] lg:text-xs text-muted-foreground uppercase tracking-wide">Done</span>
+                  <span className="text-lg lg:text-xl font-bold text-blue-600 dark:text-blue-400 tabular-nums leading-tight">{completedVisits}</span>
+                  <span className="text-[9px] lg:text-[10px] text-muted-foreground uppercase tracking-wide">Done</span>
                 </div>
               </div>
             </div>
 
             <div className="group relative" data-testid="kpi-pending">
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-orange-500/10 dark:bg-orange-500/20 border border-orange-500/20 hover-elevate transition-all">
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-orange-500/10 dark:bg-orange-500/20 border border-orange-500/20 hover-elevate transition-all">
                 <div className="flex flex-col">
-                  <span className="text-xl lg:text-2xl font-bold text-orange-600 dark:text-orange-400 tabular-nums">{pendingVisits}</span>
-                  <span className="text-[10px] lg:text-xs text-muted-foreground uppercase tracking-wide">Pending</span>
+                  <span className="text-lg lg:text-xl font-bold text-orange-600 dark:text-orange-400 tabular-nums leading-tight">{pendingVisits}</span>
+                  <span className="text-[9px] lg:text-[10px] text-muted-foreground uppercase tracking-wide">Pending</span>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Center: MoDa Countdown */}
-          <div className="hidden xl:block">
+          {/* Right: MoDa Countdown */}
+          <div className="hidden xl:flex items-center">
             <EnhancedMoDaCountdown />
-          </div>
-
-          {/* Right: Status & Actions - Tech Styled */}
-          <div className="flex flex-wrap gap-2 items-center">
-            <ConnectionStatus isConnected={isConnected} />
-            <RefreshButton />
-            
-            <div className="h-6 w-px bg-border/50 hidden lg:block mx-1" />
-            
-            {quickActions.filter(a => a.permission).map((action, idx) => (
-              <Button
-                key={idx}
-                size="sm"
-                variant="ghost"
-                onClick={action.action}
-                className="gap-1.5 h-8 px-2 lg:px-3 border border-border/50 hover:border-primary/50 hover:bg-primary/5"
-                data-testid={`button-quick-${action.label.toLowerCase().replace(' ', '-')}`}
-              >
-                <action.icon className="h-3.5 w-3.5" />
-                <span className="hidden lg:inline text-xs">{action.label}</span>
-              </Button>
-            ))}
           </div>
         </div>
       </CardContent>
