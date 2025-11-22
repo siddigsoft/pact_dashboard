@@ -25,12 +25,9 @@ export function CreateProjectBudgetDialog({ projectId, projectName, onSuccess }:
   const [fiscalYear, setFiscalYear] = useState(new Date().getFullYear().toString());
   const [notes, setNotes] = useState('');
 
-  const [categorySiteVisits, setCategorySiteVisits] = useState('');
-  const [categoryTransportation, setCategoryTransportation] = useState('');
-  const [categoryAccommodation, setCategoryAccommodation] = useState('');
-  const [categoryMeals, setCategoryMeals] = useState('');
-  const [categoryEquipment, setCategoryEquipment] = useState('');
-  const [categoryOther, setCategoryOther] = useState('');
+  const [categoryTransportAndVisit, setCategoryTransportAndVisit] = useState('');
+  const [categoryPermitFee, setCategoryPermitFee] = useState('');
+  const [categoryInternetComm, setCategoryInternetComm] = useState('');
 
   const handleSubmit = async () => {
     if (!totalBudget || parseFloat(totalBudget) <= 0) return;
@@ -40,12 +37,9 @@ export function CreateProjectBudgetDialog({ projectId, projectName, onSuccess }:
       const totalBudgetCents = Math.round(parseFloat(totalBudget) * 100);
       
       const categoryAllocations = {
-        site_visits: categorySiteVisits ? Math.round(parseFloat(categorySiteVisits) * 100) : 0,
-        transportation: categoryTransportation ? Math.round(parseFloat(categoryTransportation) * 100) : 0,
-        accommodation: categoryAccommodation ? Math.round(parseFloat(categoryAccommodation) * 100) : 0,
-        meals: categoryMeals ? Math.round(parseFloat(categoryMeals) * 100) : 0,
-        equipment: categoryEquipment ? Math.round(parseFloat(categoryEquipment) * 100) : 0,
-        other: categoryOther ? Math.round(parseFloat(categoryOther) * 100) : 0,
+        transportation_and_visit_fees: categoryTransportAndVisit ? Math.round(parseFloat(categoryTransportAndVisit) * 100) : 0,
+        permit_fee: categoryPermitFee ? Math.round(parseFloat(categoryPermitFee) * 100) : 0,
+        internet_and_communication_fees: categoryInternetComm ? Math.round(parseFloat(categoryInternetComm) * 100) : 0,
       };
 
       const periodStart = budgetPeriod === 'annual' 
@@ -86,21 +80,15 @@ export function CreateProjectBudgetDialog({ projectId, projectName, onSuccess }:
     setBudgetPeriod('annual');
     setFiscalYear(new Date().getFullYear().toString());
     setNotes('');
-    setCategorySiteVisits('');
-    setCategoryTransportation('');
-    setCategoryAccommodation('');
-    setCategoryMeals('');
-    setCategoryEquipment('');
-    setCategoryOther('');
+    setCategoryTransportAndVisit('');
+    setCategoryPermitFee('');
+    setCategoryInternetComm('');
   };
 
   const categoryTotal = [
-    categorySiteVisits,
-    categoryTransportation,
-    categoryAccommodation,
-    categoryMeals,
-    categoryEquipment,
-    categoryOther,
+    categoryTransportAndVisit,
+    categoryPermitFee,
+    categoryInternetComm,
   ].reduce((sum, val) => sum + (parseFloat(val) || 0), 0);
 
   return (
@@ -165,88 +153,46 @@ export function CreateProjectBudgetDialog({ projectId, projectName, onSuccess }:
 
           <div className="border-t pt-4">
             <h4 className="font-medium mb-3">Category Allocations (Optional)</h4>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-3">
               <div className="grid gap-2">
-                <Label htmlFor="cat-site-visits">Site Visits (SDG)</Label>
+                <Label htmlFor="cat-transport-visit">Transportation and Visit Fees (SDG)</Label>
                 <Input
-                  id="cat-site-visits"
+                  id="cat-transport-visit"
                   type="number"
                   min="0"
                   step="0.01"
-                  value={categorySiteVisits}
-                  onChange={(e) => setCategorySiteVisits(e.target.value)}
+                  value={categoryTransportAndVisit}
+                  onChange={(e) => setCategoryTransportAndVisit(e.target.value)}
                   placeholder="0.00"
-                  data-testid="input-category-site-visits"
+                  data-testid="input-category-transport-visit"
                 />
               </div>
 
               <div className="grid gap-2">
-                <Label htmlFor="cat-transportation">Transportation (SDG)</Label>
+                <Label htmlFor="cat-permit-fee">Permit Fee (SDG)</Label>
                 <Input
-                  id="cat-transportation"
+                  id="cat-permit-fee"
                   type="number"
                   min="0"
                   step="0.01"
-                  value={categoryTransportation}
-                  onChange={(e) => setCategoryTransportation(e.target.value)}
+                  value={categoryPermitFee}
+                  onChange={(e) => setCategoryPermitFee(e.target.value)}
                   placeholder="0.00"
-                  data-testid="input-category-transportation"
+                  data-testid="input-category-permit-fee"
                 />
               </div>
 
               <div className="grid gap-2">
-                <Label htmlFor="cat-accommodation">Accommodation (SDG)</Label>
+                <Label htmlFor="cat-internet-comm">Internet & Communication Fees (SDG)</Label>
                 <Input
-                  id="cat-accommodation"
+                  id="cat-internet-comm"
                   type="number"
                   min="0"
                   step="0.01"
-                  value={categoryAccommodation}
-                  onChange={(e) => setCategoryAccommodation(e.target.value)}
+                  value={categoryInternetComm}
+                  onChange={(e) => setCategoryInternetComm(e.target.value)}
                   placeholder="0.00"
-                  data-testid="input-category-accommodation"
-                />
-              </div>
-
-              <div className="grid gap-2">
-                <Label htmlFor="cat-meals">Meals (SDG)</Label>
-                <Input
-                  id="cat-meals"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={categoryMeals}
-                  onChange={(e) => setCategoryMeals(e.target.value)}
-                  placeholder="0.00"
-                  data-testid="input-category-meals"
-                />
-              </div>
-
-              <div className="grid gap-2">
-                <Label htmlFor="cat-equipment">Equipment (SDG)</Label>
-                <Input
-                  id="cat-equipment"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={categoryEquipment}
-                  onChange={(e) => setCategoryEquipment(e.target.value)}
-                  placeholder="0.00"
-                  data-testid="input-category-equipment"
-                />
-              </div>
-
-              <div className="grid gap-2">
-                <Label htmlFor="cat-other">Other (SDG)</Label>
-                <Input
-                  id="cat-other"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={categoryOther}
-                  onChange={(e) => setCategoryOther(e.target.value)}
-                  placeholder="0.00"
-                  data-testid="input-category-other"
+                  data-testid="input-category-internet-comm"
                 />
               </div>
             </div>
