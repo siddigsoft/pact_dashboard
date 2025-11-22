@@ -243,9 +243,14 @@ export function ProjectBudgetCard({ budget, projectName, onClick }: ProjectBudge
                   {Object.entries(budget.categoryAllocations).map(([key, value]) => {
                     const amount = typeof value === 'number' ? value : 0;
                     if (amount === 0) return null;
+                    const displayName = 
+                      key === 'transportation_and_visit_fees' ? 'Transportation and Visit Fees' :
+                      key === 'permit_fee' ? 'Permit Fee' :
+                      key === 'internet_and_communication_fees' ? 'Internet & Communication Fees' :
+                      key.replace(/_/g, ' ');
                     return (
                       <div key={key} className="flex items-center justify-between">
-                        <span className="text-sm capitalize">{key.replace(/_/g, ' ')}</span>
+                        <span className="text-sm">{displayName}</span>
                         <span className="font-semibold">{formatCurrency(amount)}</span>
                       </div>
                     );
@@ -439,9 +444,14 @@ export function MMPBudgetCard({ budget, mmpName, onClick }: MMPBudgetCardProps) 
                   {Object.entries(budget.categoryBreakdown).map(([key, value]) => {
                     const amount = typeof value === 'number' ? value : 0;
                     if (amount === 0) return null;
+                    const displayName = 
+                      key === 'transportation_and_visit_fees' ? 'Transportation and Visit Fees' :
+                      key === 'permit_fee' ? 'Permit Fee' :
+                      key === 'internet_and_communication_fees' ? 'Internet & Communication Fees' :
+                      key.replace(/_/g, ' ');
                     return (
                       <div key={key} className="flex items-center justify-between">
-                        <span className="text-sm capitalize">{key.replace(/_/g, ' ')}</span>
+                        <span className="text-sm">{displayName}</span>
                         <span className="font-semibold">{formatCurrency(amount)}</span>
                       </div>
                     );
