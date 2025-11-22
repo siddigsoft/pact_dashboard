@@ -89,20 +89,50 @@ const Index = () => {
       {/* Loading Overlay */}
       {isNavigating && (
         <div 
-          className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-md"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-background/90 backdrop-blur-lg"
           data-testid="overlay-loading-navigation"
         >
-          <div className="flex flex-col items-center gap-6">
-            <img src={PactLogo} alt="PACT" className="h-16 w-16 animate-pulse" />
+          <div className="flex flex-col items-center gap-8">
+            {/* PACT Logo with subtle pulse */}
             <div className="relative">
-              <div className="w-16 h-16 border-4 border-primary/30 rounded-full" />
-              <div className="absolute inset-0 w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+              <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 via-orange-500/20 to-purple-500/20 dark:from-blue-400/20 dark:via-orange-400/20 dark:to-purple-400/20 rounded-full blur-xl animate-pulse" />
+              <img 
+                src={PactLogo} 
+                alt="PACT" 
+                className="h-20 w-20 relative z-10 drop-shadow-lg"
+              />
             </div>
+
+            {/* Modern Gradient Spinner */}
+            <div className="relative w-20 h-20">
+              {/* Background rings */}
+              <div className="absolute inset-0 rounded-full border-4 border-muted/20" />
+              {/* Animated gradient ring */}
+              <div className="absolute inset-0 rounded-full border-4 border-transparent bg-gradient-to-r from-blue-600 via-orange-600 to-purple-600 dark:from-blue-400 dark:via-orange-400 dark:to-purple-400 bg-clip-padding animate-spin" 
+                   style={{ 
+                     maskImage: 'linear-gradient(transparent 50%, black 50%)',
+                     WebkitMaskImage: 'linear-gradient(transparent 50%, black 50%)'
+                   }}
+              />
+              {/* Center gradient glow */}
+              <div className="absolute inset-2 rounded-full bg-gradient-to-r from-blue-500/10 via-orange-500/10 to-purple-500/10 dark:from-blue-400/10 dark:via-orange-400/10 dark:to-purple-400/10 animate-pulse" />
+            </div>
+
+            {/* Brand Gradient Text */}
             <div className="text-center space-y-2">
-              <p className="text-lg font-semibold text-foreground" data-testid="text-loading-title">
-                Initializing PACT Command Center
+              <h2 
+                className="text-2xl font-bold bg-gradient-to-r from-blue-600 via-orange-600 to-purple-600 dark:from-blue-400 dark:via-orange-400 dark:to-purple-400 bg-clip-text text-transparent"
+                data-testid="text-loading-title"
+              >
+                Initializing PACT
+              </h2>
+              <p 
+                className="text-lg font-semibold bg-gradient-to-r from-blue-600 via-orange-600 to-purple-600 dark:from-blue-400 dark:via-orange-400 dark:to-purple-400 bg-clip-text text-transparent"
+                data-testid="text-loading-subtitle"
+              >
+                Command Center
               </p>
-              <p className="text-sm text-muted-foreground" data-testid="text-loading-message">
+              <p className="text-sm text-muted-foreground pt-2" data-testid="text-loading-message">
                 Preparing your workspace...
               </p>
             </div>
