@@ -3,6 +3,21 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { 
   ClipboardList, 
   Calendar, 
@@ -16,8 +31,11 @@ import {
   Users,
   Zap,
   Target,
-  BarChart3
+  BarChart3,
+  ExternalLink
 } from 'lucide-react';
+import { format } from 'date-fns';
+import { Button } from '@/components/ui/button';
 import SiteVisitsOverview from '../SiteVisitsOverview';
 import UpcomingSiteVisitsCard from '../UpcomingSiteVisitsCard';
 import { SiteVisitCostSummary } from '../SiteVisitCostSummary';
@@ -25,9 +43,12 @@ import { DashboardCalendar } from '../DashboardCalendar';
 import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
 import { isAfter, addDays } from 'date-fns';
 
+type MetricCardType = 'total' | 'completed' | 'assigned' | 'pending' | 'overdue' | 'performance' | null;
+
 export const OperationsZone: React.FC = () => {
   const { siteVisits } = useSiteVisitContext();
   const [activeTab, setActiveTab] = useState('overview');
+  const [selectedCard, setSelectedCard] = useState<MetricCardType>(null);
 
   const upcomingVisits = siteVisits
     .filter(v => {
@@ -51,12 +72,54 @@ export const OperationsZone: React.FC = () => {
   }).length;
   const completionRate = totalVisits > 0 ? Math.round((completedVisits / totalVisits) * 100) : 0;
 
+  // Get filtered visits based on selected card
+  const getFilteredVisits = (cardType: MetricCardType) => {
+    switch (cardType) {
+      case 'total':
+        return siteVisits;
+      case 'completed':
+        return siteVisits.filter(v => v.status === 'completed');
+      case 'assigned':
+        return siteVisits.filter(v => v.status === 'assigned' || v.status === 'inProgress');
+      case 'pending':
+        return siteVisits.filter(v => v.status === 'pending' || v.status === 'permitVerified');
+      case 'overdue':
+        return siteVisits.filter(v => {
+          const dueDate = new Date(v.dueDate);
+          const today = new Date();
+          return dueDate < today && v.status !== 'completed';
+        });
+      case 'performance':
+        return siteVisits.filter(v => v.status === 'completed');
+      default:
+        return [];
+    }
+  };
+
+  const getCardTitle = (cardType: MetricCardType) => {
+    switch (cardType) {
+      case 'total': return 'All Operations';
+      case 'completed': return 'Completed Visits';
+      case 'assigned': return 'Active Operations';
+      case 'pending': return 'Pending Queue';
+      case 'overdue': return 'Overdue Alerts';
+      case 'performance': return 'Performance Metrics';
+      default: return '';
+    }
+  };
+
+  const filteredVisits = getFilteredVisits(selectedCard);
+
   return (
     <div className="space-y-3">
       {/* Compact IT-Style Metrics Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-6 gap-2">
         {/* Total Operations Card */}
-        <Card className="relative overflow-hidden border-primary/20 bg-gradient-to-br from-primary/10 via-primary/5 to-background hover-elevate">
+        <Card 
+          className="relative overflow-hidden border-primary/20 bg-gradient-to-br from-primary/10 via-primary/5 to-background hover-elevate cursor-pointer transition-all hover:shadow-md hover:scale-[1.02]"
+          onClick={() => setSelectedCard('total')}
+          data-testid="card-metric-total"
+        >
           <CardContent className="p-3">
             <div className="flex items-start justify-between gap-2">
               <div className="flex-1 min-w-0">
@@ -78,7 +141,11 @@ export const OperationsZone: React.FC = () => {
         </Card>
 
         {/* Completed Card */}
-        <Card className="relative overflow-hidden border-green-500/20 bg-gradient-to-br from-green-500/10 via-green-500/5 to-background hover-elevate">
+        <Card 
+          className="relative overflow-hidden border-green-500/20 bg-gradient-to-br from-green-500/10 via-green-500/5 to-background hover-elevate cursor-pointer transition-all hover:shadow-md hover:scale-[1.02]"
+          onClick={() => setSelectedCard('completed')}
+          data-testid="card-metric-completed"
+        >
           <CardContent className="p-3">
             <div className="flex items-start justify-between gap-2">
               <div className="flex-1 min-w-0">
@@ -100,7 +167,11 @@ export const OperationsZone: React.FC = () => {
         </Card>
 
         {/* Assigned Card */}
-        <Card className="relative overflow-hidden border-blue-500/20 bg-gradient-to-br from-blue-500/10 via-blue-500/5 to-background hover-elevate">
+        <Card 
+          className="relative overflow-hidden border-blue-500/20 bg-gradient-to-br from-blue-500/10 via-blue-500/5 to-background hover-elevate cursor-pointer transition-all hover:shadow-md hover:scale-[1.02]"
+          onClick={() => setSelectedCard('assigned')}
+          data-testid="card-metric-assigned"
+        >
           <CardContent className="p-3">
             <div className="flex items-start justify-between gap-2">
               <div className="flex-1 min-w-0">
@@ -121,7 +192,11 @@ export const OperationsZone: React.FC = () => {
         </Card>
 
         {/* Pending Card */}
-        <Card className="relative overflow-hidden border-orange-500/20 bg-gradient-to-br from-orange-500/10 via-orange-500/5 to-background hover-elevate">
+        <Card 
+          className="relative overflow-hidden border-orange-500/20 bg-gradient-to-br from-orange-500/10 via-orange-500/5 to-background hover-elevate cursor-pointer transition-all hover:shadow-md hover:scale-[1.02]"
+          onClick={() => setSelectedCard('pending')}
+          data-testid="card-metric-pending"
+        >
           <CardContent className="p-3">
             <div className="flex items-start justify-between gap-2">
               <div className="flex-1 min-w-0">
@@ -142,7 +217,11 @@ export const OperationsZone: React.FC = () => {
         </Card>
 
         {/* Overdue Card */}
-        <Card className="relative overflow-hidden border-red-500/20 bg-gradient-to-br from-red-500/10 via-red-500/5 to-background hover-elevate">
+        <Card 
+          className="relative overflow-hidden border-red-500/20 bg-gradient-to-br from-red-500/10 via-red-500/5 to-background hover-elevate cursor-pointer transition-all hover:shadow-md hover:scale-[1.02]"
+          onClick={() => setSelectedCard('overdue')}
+          data-testid="card-metric-overdue"
+        >
           <CardContent className="p-3">
             <div className="flex items-start justify-between gap-2">
               <div className="flex-1 min-w-0">
@@ -165,7 +244,11 @@ export const OperationsZone: React.FC = () => {
         </Card>
 
         {/* Performance Card */}
-        <Card className="relative overflow-hidden border-purple-500/20 bg-gradient-to-br from-purple-500/10 via-purple-500/5 to-background hover-elevate">
+        <Card 
+          className="relative overflow-hidden border-purple-500/20 bg-gradient-to-br from-purple-500/10 via-purple-500/5 to-background hover-elevate cursor-pointer transition-all hover:shadow-md hover:scale-[1.02]"
+          onClick={() => setSelectedCard('performance')}
+          data-testid="card-metric-performance"
+        >
           <CardContent className="p-3">
             <div className="flex items-start justify-between gap-2">
               <div className="flex-1 min-w-0">
@@ -256,6 +339,119 @@ export const OperationsZone: React.FC = () => {
           </Tabs>
         </CardContent>
       </Card>
+
+      {/* Detail Modal */}
+      <Dialog open={selectedCard !== null} onOpenChange={(open) => !open && setSelectedCard(null)}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {selectedCard === 'total' && <Activity className="h-5 w-5 text-primary" />}
+              {selectedCard === 'completed' && <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />}
+              {selectedCard === 'assigned' && <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />}
+              {selectedCard === 'pending' && <Clock className="h-5 w-5 text-orange-600 dark:text-orange-400" />}
+              {selectedCard === 'overdue' && <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />}
+              {selectedCard === 'performance' && <BarChart3 className="h-5 w-5 text-purple-600 dark:text-purple-400" />}
+              <span>{getCardTitle(selectedCard)}</span>
+              <Badge variant="outline" className="ml-auto">
+                {filteredVisits.length} {filteredVisits.length === 1 ? 'visit' : 'visits'}
+              </Badge>
+            </DialogTitle>
+            <DialogDescription>
+              Detailed breakdown of {getCardTitle(selectedCard).toLowerCase()}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="flex-1 overflow-auto border rounded-md">
+            {filteredVisits.length > 0 ? (
+              <Table>
+                <TableHeader className="sticky top-0 bg-background z-10">
+                  <TableRow>
+                    <TableHead className="w-[200px]">Site Name</TableHead>
+                    <TableHead>Location</TableHead>
+                    <TableHead>Due Date</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Assigned To</TableHead>
+                    <TableHead className="text-right">Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredVisits.map((visit) => {
+                    const dueDate = new Date(visit.dueDate);
+                    const isOverdue = dueDate < new Date() && visit.status !== 'completed';
+                    
+                    return (
+                      <TableRow key={visit.id} className="hover:bg-muted/50">
+                        <TableCell className="font-medium">
+                          <div className="flex flex-col">
+                            <span className="text-sm">{visit.siteName}</span>
+                            {visit.siteCode && (
+                              <span className="text-xs text-muted-foreground">{visit.siteCode}</span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            <MapPin className="h-3 w-3 text-muted-foreground" />
+                            <span className="text-xs">{visit.locality}, {visit.state}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col">
+                            <span className={`text-xs ${isOverdue ? 'text-red-600 dark:text-red-400 font-semibold' : ''}`}>
+                              {format(dueDate, 'MMM dd, yyyy')}
+                            </span>
+                            {isOverdue && (
+                              <span className="text-[10px] text-red-600 dark:text-red-400">Overdue</span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge 
+                            variant={
+                              visit.status === 'completed' ? 'default' : 
+                              visit.status === 'assigned' || visit.status === 'inProgress' ? 'secondary' : 
+                              'outline'
+                            }
+                            className="text-[10px]"
+                          >
+                            {visit.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-xs text-muted-foreground">
+                            {visit.assignedTo || 'Unassigned'}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2"
+                            onClick={() => window.location.href = `/site-visits/${visit.id}`}
+                            data-testid={`button-view-visit-${visit.id}`}
+                          >
+                            <ExternalLink className="h-3 w-3" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
+                  <Activity className="h-8 w-8 text-muted-foreground" />
+                </div>
+                <p className="text-sm font-medium text-muted-foreground">No visits found</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  There are no site visits in this category
+                </p>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
