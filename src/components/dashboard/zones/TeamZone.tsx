@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Users, MapPin, MessageSquare } from 'lucide-react';
+import { Users, MapPin, MessageSquare, UserCircle } from 'lucide-react';
 import { TeamCommunication } from '../TeamCommunication';
 import LiveTeamMapWidget from '../LiveTeamMapWidget';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,17 +8,72 @@ import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '@/context/user/UserContext';
 import { Badge } from '@/components/ui/badge';
+import { useSiteVisit } from '@/context/siteVisit/SiteVisitContext';
+import { TeamMemberCard } from '../TeamMemberCard';
+import { TeamMemberDetailModal } from '../TeamMemberDetailModal';
+import { User } from '@/types/user';
 
 export const TeamZone: React.FC = () => {
-  const [activeTab, setActiveTab] = useState('map');
+  const [activeTab, setActiveTab] = useState('overview');
+  const [selectedMember, setSelectedMember] = useState<User | null>(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  
   const navigate = useNavigate();
   const { users } = useUser();
+  const { siteVisits } = useSiteVisit();
 
   const activeFieldTeam = users?.filter(u => 
     u.roles?.some(r => r.toLowerCase() === 'datacollector' || r.toLowerCase() === 'coordinator' || r.toLowerCase() === 'supervisor')
   ).length || 0;
 
   const onlineMembers = users?.filter(u => u.location?.latitude && u.location?.longitude).length || 0;
+
+  // Calculate workload for each user
+  const userWorkloads = useMemo(() => {
+    if (!users || !siteVisits) return new Map();
+
+    const workloadMap = new Map<string, {
+      active: number;
+      completed: number;
+      pending: number;
+      overdue: number;
+    }>();
+
+    users.forEach(user => {
+      const userTasks = siteVisits.filter(visit => visit.assignedTo === user.id || visit.assignedTo === user.name);
+      const now = new Date();
+
+      const active = userTasks.filter(t => t.status === 'assigned' || t.status === 'inProgress').length;
+      const completed = userTasks.filter(t => t.status === 'completed').length;
+      const pending = userTasks.filter(t => t.status === 'pending' || t.status === 'permitVerified').length;
+      const overdue = userTasks.filter(t => {
+        const dueDate = new Date(t.dueDate);
+        return dueDate < now && t.status !== 'completed';
+      }).length;
+
+      workloadMap.set(user.id, { active, completed, pending, overdue });
+    });
+
+    return workloadMap;
+  }, [users, siteVisits]);
+
+  // Get tasks for selected member
+  const selectedMemberTasks = useMemo(() => {
+    if (!selectedMember || !siteVisits) return [];
+    return siteVisits.filter(visit => 
+      visit.assignedTo === selectedMember.id || visit.assignedTo === selectedMember.name
+    );
+  }, [selectedMember, siteVisits]);
+
+  const handleMemberClick = (user: User) => {
+    setSelectedMember(user);
+    setIsDetailModalOpen(true);
+  };
+
+  const handleModalClose = () => {
+    setIsDetailModalOpen(false);
+    setSelectedMember(null);
+  };
 
   return (
     <div className="space-y-4">
@@ -54,7 +109,11 @@ export const TeamZone: React.FC = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 max-w-md h-auto p-1 bg-muted/30">
+        <TabsList className="grid w-full grid-cols-3 max-w-2xl h-auto p-1 bg-muted/30">
+          <TabsTrigger value="overview" className="gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <UserCircle className="h-3.5 w-3.5" />
+            <span className="text-xs">Team Overview</span>
+          </TabsTrigger>
           <TabsTrigger value="map" className="gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm">
             <MapPin className="h-3.5 w-3.5" />
             <span className="text-xs">Live Map</span>
@@ -65,6 +124,28 @@ export const TeamZone: React.FC = () => {
           </TabsTrigger>
         </TabsList>
 
+        <TabsContent value="overview" className="mt-4">
+          {users && users.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+              {users.map(user => (
+                <TeamMemberCard
+                  key={user.id}
+                  user={user}
+                  workload={userWorkloads.get(user.id) || { active: 0, completed: 0, pending: 0, overdue: 0 }}
+                  onClick={() => handleMemberClick(user)}
+                />
+              ))}
+            </div>
+          ) : (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                <Users className="h-12 w-12 mb-3 opacity-50" />
+                <p>No team members found</p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
         <TabsContent value="map" className="mt-4">
           <LiveTeamMapWidget />
         </TabsContent>
@@ -73,6 +154,14 @@ export const TeamZone: React.FC = () => {
           <TeamCommunication />
         </TabsContent>
       </Tabs>
+
+      {/* Team Member Detail Modal */}
+      <TeamMemberDetailModal
+        open={isDetailModalOpen}
+        onOpenChange={handleModalClose}
+        user={selectedMember}
+        userTasks={selectedMemberTasks}
+      />
     </div>
   );
 };
