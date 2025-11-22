@@ -214,6 +214,52 @@ export const fetchSiteVisitsFromMMPEntries = async (): Promise<SiteVisit[]> => {
 };
 
 /**
+ * Gets or creates a default MMP file for standalone site visits
+ * This is used when site_visits table doesn't exist and no MMP context is provided
+ */
+export const getOrCreateDefaultMMPFile = async (): Promise<string> => {
+  const defaultMMPId = 'standalone-visits-default';
+  const defaultMMPName = 'Standalone Site Visits (Auto-generated)';
+  
+  // Check if default MMP file already exists
+  const { data: existing } = await supabase
+    .from('mmp_files')
+    .select('id')
+    .eq('mmp_id', defaultMMPId)
+    .single();
+  
+  if (existing) {
+    return existing.id;
+  }
+  
+  // Create default MMP file
+  const { data: newMMP, error } = await supabase
+    .from('mmp_files')
+    .insert({
+      mmp_id: defaultMMPId,
+      name: defaultMMPName,
+      status: 'Approved',
+      month: new Date().toISOString().slice(0, 7), // YYYY-MM format
+      hub: 'All Hubs',
+      uploaded_by: 'system',
+      uploaded_at: new Date().toISOString(),
+      approved_by: 'system',
+      approved_at: new Date().toISOString(),
+      file_path: 'system/default-standalone-visits',
+    })
+    .select('id')
+    .single();
+  
+  if (error) {
+    console.error('Error creating default MMP file:', error);
+    throw error;
+  }
+  
+  console.log(`✅ Created default MMP file for standalone visits: ${newMMP.id}`);
+  return newMMP.id;
+};
+
+/**
  * Creates a site visit in mmp_site_entries
  * This is used when creating site visits that should be part of an MMP
  */

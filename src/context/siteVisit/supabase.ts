@@ -6,7 +6,8 @@ import {
   mapMMPSiteEntryToSiteVisit,
   createMMPSiteEntry,
   updateMMPSiteEntry,
-  deleteMMPSiteEntry
+  deleteMMPSiteEntry,
+  getOrCreateDefaultMMPFile
 } from './mmpSiteEntriesAdapter';
 
 /**
@@ -142,66 +143,111 @@ const transformSiteVisitsData = (data: any[]): SiteVisit[] => {
 };
 
 export const createSiteVisitInDb = async (siteVisit: Partial<SiteVisit>) => {
-  // Transform camelCase to snake_case for the database
-  const dbSiteVisit = {
-    site_name: siteVisit.siteName,
-    site_code: siteVisit.siteCode,
-    status: siteVisit.status,
-    locality: siteVisit.locality,
-    state: siteVisit.state,
-    activity: siteVisit.activity,
-    priority: siteVisit.priority,
-    due_date: siteVisit.dueDate ? (() => {
-      const date = new Date(siteVisit.dueDate);
-      return isNaN(date.getTime()) ? null : date.toISOString();
-    })() : null,
-    notes: siteVisit.notes,
-    main_activity: siteVisit.mainActivity,
-    location: siteVisit.location,
-    fees: siteVisit.fees,
-    mmp_id: (siteVisit as any).mmpId || siteVisit.mmpDetails?.mmpId,
-    visit_data: {
-      permitDetails: siteVisit.permitDetails,
-      complexity: siteVisit.complexity,
-      visitType: siteVisit.visitType,
-      visitTypeRaw: siteVisit.visitTypeRaw,
-      projectActivities: siteVisit.projectActivities,
-      mmpDetails: siteVisit.mmpDetails,
-      hub: siteVisit.hub,
-      cpName: siteVisit.cpName,
-      // Monitoring Plan Structure Fields
-      hubOffice: siteVisit.hubOffice,
-      siteActivity: siteVisit.siteActivity,
-      monitoringBy: siteVisit.monitoringBy,
-      surveyTool: siteVisit.surveyTool,
-      useMarketDiversion: siteVisit.useMarketDiversion,
-      useWarehouseMonitoring: siteVisit.useWarehouseMonitoring
-    },
-    // Direct database fields for monitoring plan
-    hub_office: siteVisit.hubOffice,
-    activity_at_site: siteVisit.siteActivity,
-    monitoring_by: siteVisit.monitoringBy,
-    survey_tool: siteVisit.surveyTool,
-    use_market_diversion: siteVisit.useMarketDiversion,
-    use_warehouse_monitoring: siteVisit.useWarehouseMonitoring,
-    arrival_latitude: siteVisit.arrivalLatitude,
-    arrival_longitude: siteVisit.arrivalLongitude,
-    arrival_timestamp: siteVisit.arrivalTimestamp,
-    journey_path: siteVisit.journeyPath,
-    arrival_recorded: siteVisit.arrivalRecorded
-  };
+  // Determine if this is MMP-related (has mmpId or mmpDetails)
+  const mmpFileId = (siteVisit as any).mmpId || siteVisit.mmpDetails?.mmpId;
+  const hasMmpContext = Boolean(mmpFileId);
   
-  // Insert and return the created row in one round-trip
-  const { data, error } = await supabase
-    .from('site_visits')
-    .insert(dbSiteVisit)
-    .select('*')
-    .single();
+  // Try site_visits first
+  try {
+    // Transform camelCase to snake_case for the database
+    const dbSiteVisit = {
+      site_name: siteVisit.siteName,
+      site_code: siteVisit.siteCode,
+      status: siteVisit.status,
+      locality: siteVisit.locality,
+      state: siteVisit.state,
+      activity: siteVisit.activity,
+      priority: siteVisit.priority,
+      due_date: siteVisit.dueDate ? (() => {
+        const date = new Date(siteVisit.dueDate);
+        return isNaN(date.getTime()) ? null : date.toISOString();
+      })() : null,
+      notes: siteVisit.notes,
+      main_activity: siteVisit.mainActivity,
+      location: siteVisit.location,
+      fees: siteVisit.fees,
+      mmp_id: mmpFileId,
+      visit_data: {
+        permitDetails: siteVisit.permitDetails,
+        complexity: siteVisit.complexity,
+        visitType: siteVisit.visitType,
+        visitTypeRaw: siteVisit.visitTypeRaw,
+        projectActivities: siteVisit.projectActivities,
+        mmpDetails: siteVisit.mmpDetails,
+        hub: siteVisit.hub,
+        cpName: siteVisit.cpName,
+        // Monitoring Plan Structure Fields
+        hubOffice: siteVisit.hubOffice,
+        siteActivity: siteVisit.siteActivity,
+        monitoringBy: siteVisit.monitoringBy,
+        surveyTool: siteVisit.surveyTool,
+        useMarketDiversion: siteVisit.useMarketDiversion,
+        useWarehouseMonitoring: siteVisit.useWarehouseMonitoring
+      },
+      // Direct database fields for monitoring plan
+      hub_office: siteVisit.hubOffice,
+      activity_at_site: siteVisit.siteActivity,
+      monitoring_by: siteVisit.monitoringBy,
+      survey_tool: siteVisit.surveyTool,
+      use_market_diversion: siteVisit.useMarketDiversion,
+      use_warehouse_monitoring: siteVisit.useWarehouseMonitoring,
+      arrival_latitude: siteVisit.arrivalLatitude,
+      arrival_longitude: siteVisit.arrivalLongitude,
+      arrival_timestamp: siteVisit.arrivalTimestamp,
+      journey_path: siteVisit.journeyPath,
+      arrival_recorded: siteVisit.arrivalRecorded
+    };
     
-  if (error) {
-    console.error('Error fetching created site visit:', error);
-    throw error;
-  }
+    // Insert and return the created row in one round-trip
+    const { data, error } = await supabase
+      .from('site_visits')
+      .insert(dbSiteVisit)
+      .select('*')
+      .single();
+    
+    // If site_visits table doesn't exist, use mmp_site_entries
+    if (error && (error.code === 'PGRST205' || error.code === 'PGRST204' || 
+                  error.code === '42P01' || 
+                  error.message?.includes('does not exist') ||
+                  error.message?.includes('Could not find the table'))) {
+      console.log('✅ site_visits table not found, using mmp_site_entries fallback');
+      
+      // If no mmpFileId provided, use default MMP file for standalone visits
+      let finalMmpFileId = mmpFileId;
+      if (!finalMmpFileId) {
+        console.log('No MMP context provided, creating/using default MMP file for standalone visit');
+        try {
+          finalMmpFileId = await getOrCreateDefaultMMPFile();
+        } catch (defaultError) {
+          console.error('Failed to create default MMP file:', defaultError);
+          throw new Error(
+            'Unable to create site visit: site_visits table not available and could not create default MMP file. ' +
+            'Please run the SQL migration in supabase/migrations/20250122_add_missing_tables.sql. ' +
+            'See DATABASE_MIGRATION_GUIDE.md for instructions.'
+          );
+        }
+      }
+      
+      console.log(`✅ Creating site visit in mmp_site_entries with MMP file ID: ${finalMmpFileId}`);
+      return await createMMPSiteEntry(finalMmpFileId, siteVisit);
+    }
+      
+    if (error) {
+      console.error('Error creating site visit:', error);
+      
+      // Fallback to mmp_site_entries if we have MMP context
+      if (hasMmpContext && mmpFileId) {
+        console.log('Attempting fallback to mmp_site_entries...');
+        try {
+          return await createMMPSiteEntry(mmpFileId, siteVisit);
+        } catch (fallbackError) {
+          console.error('Error creating in mmp_site_entries:', fallbackError);
+          throw error; // Throw original error
+        }
+      }
+      
+      throw error;
+    }
   
   // Transform back to camelCase for frontend use
   return {
@@ -261,15 +307,39 @@ export const createSiteVisitInDb = async (siteVisit: Partial<SiteVisit>) => {
 };
 
 export const deleteSiteVisitInDb = async (id: string) => {
-  const { error } = await supabase
-    .from('site_visits')
-    .delete()
-    .eq('id', id);
-  if (error) {
-    console.error('Error deleting site visit:', error);
+  try {
+    const { error } = await supabase
+      .from('site_visits')
+      .delete()
+      .eq('id', id);
+    
+    // If site_visits table doesn't exist, use mmp_site_entries
+    if (error && (error.code === 'PGRST205' || error.code === 'PGRST204' || 
+                  error.code === '42P01' || 
+                  error.message?.includes('does not exist') ||
+                  error.message?.includes('Could not find the table'))) {
+      console.log('✅ site_visits table not found, deleting from mmp_site_entries');
+      return await deleteMMPSiteEntry(id);
+    }
+    
+    if (error) {
+      console.error('Error deleting site visit:', error);
+      
+      // Try fallback to mmp_site_entries
+      try {
+        console.log('Attempting fallback to mmp_site_entries...');
+        return await deleteMMPSiteEntry(id);
+      } catch (fallbackError) {
+        console.error('Error deleting from mmp_site_entries:', fallbackError);
+        throw error; // Throw original error
+      }
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Error in deleteSiteVisitInDb:', error);
     throw error;
   }
-  return true;
 };
 
 export const updateSiteVisitInDb = async (id: string, updates: Partial<SiteVisit>) => {
@@ -347,9 +417,26 @@ export const updateSiteVisitInDb = async (id: string, updates: Partial<SiteVisit
     .update(dbUpdates)
     .eq('id', id);
     
+  // If site_visits table doesn't exist, use mmp_site_entries
+  if (updateError && (updateError.code === 'PGRST205' || updateError.code === 'PGRST204' || 
+                      updateError.code === '42P01' || 
+                      updateError.message?.includes('does not exist') ||
+                      updateError.message?.includes('Could not find the table'))) {
+    console.log('✅ site_visits table not found, updating in mmp_site_entries');
+    return await updateMMPSiteEntry(id, updates);
+  }
+    
   if (updateError) {
     console.error('Error updating site visit:', updateError);
-    throw updateError;
+    
+    // Try fallback to mmp_site_entries
+    try {
+      console.log('Attempting fallback to mmp_site_entries...');
+      return await updateMMPSiteEntry(id, updates);
+    } catch (fallbackError) {
+      console.error('Error updating in mmp_site_entries:', fallbackError);
+      throw updateError; // Throw original error
+    }
   }
   
   // Then fetch the updated data in a separate query
