@@ -3,7 +3,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { RefreshCw, Archive, Trash2, Check, ShieldCheck } from 'lucide-react';
+import { RefreshCw, Archive, Trash2, Upload } from 'lucide-react';
 import { 
   AlertDialog, 
   AlertDialogAction, 
@@ -59,42 +59,6 @@ const MMPFileManagement = ({
         </CardHeader>
         <CardContent>
           <div className="flex flex-col sm:flex-row gap-4">
-            {canApprove && (
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button 
-                    variant="outline" 
-                    className={`border-green-200 hover:bg-green-50 hover:text-green-700 ${
-                      !isVerificationComplete ? 'opacity-50 cursor-not-allowed' : ''
-                    }`}
-                    disabled={!isVerificationComplete}
-                  >
-                    <Check className="h-4 w-4 mr-2" />
-                    Approve MMP
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Approve MMP File?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      {isVerificationComplete 
-                        ? "This will mark the MMP file as approved. This action can be reset later."
-                        : "Cannot approve MMP file. All verification steps must be completed first."
-                      }
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction 
-                      onClick={onApprove}
-                      disabled={!isVerificationComplete}
-                    >
-                      Approve
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            )}
 
             {/* Verification Button - removed for admin overview */}
             {/* {canApprove && !isVerificationComplete && (
@@ -108,16 +72,12 @@ const MMPFileManagement = ({
               </Button>
             )} */}
 
-            {canApprove && isVerificationComplete && (
-              <div className="text-sm text-green-600 bg-green-50 p-2 rounded border border-green-200">
-                <strong>✓ Verification Complete:</strong> Ready for approval.
-              </div>
-            )}
+            {/* Approve button removed per UX request - approvals should be handled via workflow tools */}
 
             {(isApproved || isRejected) && (
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button variant="outline" className="border-blue-200 hover:bg-blue-50 hover:text-blue-700">
+                  <Button variant="outline" className="border-blue-200 hover:bg-blue-50 hover:text-blue-700 shadow hover:shadow-md active:scale-95 active:translate-y-0.5 transition transform">
                     <RefreshCw className="h-4 w-4 mr-2" />
                     Reset Approval Status
                   </Button>
@@ -140,7 +100,7 @@ const MMPFileManagement = ({
             {canArchive && (
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button variant="outline" className="border-yellow-200 hover:bg-yellow-50 hover:text-yellow-700">
+                  <Button variant="outline" className="border-yellow-200 hover:bg-yellow-50 hover:text-yellow-700 shadow hover:shadow-md active:scale-95 active:translate-y-0.5 transition transform">
                     <Archive className="h-4 w-4 mr-2" />
                     Archive MMP
                   </Button>
@@ -159,11 +119,21 @@ const MMPFileManagement = ({
                 </AlertDialogContent>
               </AlertDialog>
             )}
-            
+            {/* View details button - opens the MMP detail page */}
+            <Button variant="outline" onClick={() => navigate(`/mmp/${mmpFile.id}/view`)} className="shadow hover:shadow-md active:scale-95 active:translate-y-0.5 transition transform">
+              View MMP Details
+            </Button>
+
+            {/* Quick link to MMP management page (between Archive and Delete) */}
+            <Button onClick={() => navigate('/mmp')} className="bg-blue-600 text-white hover:bg-blue-700 shadow hover:shadow-md active:scale-95 active:translate-y-0.5 transition transform duration-150">
+              <Upload className="h-4 w-4 mr-2" />
+              Go to MMP List
+            </Button>
+
             {canDelete && (
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button variant="destructive">
+                  <Button variant="destructive" className="shadow hover:shadow-md active:scale-95 active:translate-y-0.5 transition transform">
                     <Trash2 className="h-4 w-4 mr-2" />
                     Delete MMP
                   </Button>

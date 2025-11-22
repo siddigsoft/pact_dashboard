@@ -438,6 +438,8 @@ const MMPUpload = () => {
       includeComments: true,
     },
   });
+  const today = new Date();
+  const currentMonthNumber = today.getMonth() + 1; // 1-12
   
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -636,11 +638,8 @@ const MMPUpload = () => {
   };
 
   const handleReturnToMmpList = () => {
-    if (uploadedMmpId) {
-      navigate(`/mmp-verification?mmpId=${uploadedMmpId}`);
-    } else {
-      navigate("/mmp");
-    }
+    // Always return to the MMP management page (same as Go to MMP List)
+    navigate('/mmp');
   };
 
   const uploadedMmp = uploadedMmpId ? getMMPById(uploadedMmpId) : undefined;
@@ -783,19 +782,6 @@ const MMPUpload = () => {
               </div>
             )}
           </CardContent>
-          <CardFooter className="flex gap-3 justify-end">
-            <Button variant="outline" onClick={handleReturnToMmpList}>
-              Return to MMP List
-            </Button>
-            <Button 
-              onClick={handleViewMmp} 
-              className="bg-blue-600 hover:bg-blue-700 shadow-lg"
-            >
-              <Eye className="mr-2 h-4 w-4" />
-              View MMP Details
-              <ArrowRight className="ml-1 h-4 w-4" />
-            </Button>
-          </CardFooter>
         </Card>
       ) : (
         <Form {...form}>
@@ -901,18 +887,18 @@ const MMPUpload = () => {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="1">January</SelectItem>
-                            <SelectItem value="2">February</SelectItem>
-                            <SelectItem value="3">March</SelectItem>
-                            <SelectItem value="4">April</SelectItem>
-                            <SelectItem value="5">May</SelectItem>
-                            <SelectItem value="6">June</SelectItem>
-                            <SelectItem value="7">July</SelectItem>
-                            <SelectItem value="8">August</SelectItem>
-                            <SelectItem value="9">September</SelectItem>
-                            <SelectItem value="10">October</SelectItem>
-                            <SelectItem value="11">November</SelectItem>
-                            <SelectItem value="12">December</SelectItem>
+                            <SelectItem value="1" disabled={1 < currentMonthNumber} className={1 < currentMonthNumber ? 'opacity-50 cursor-not-allowed' : ''}>January</SelectItem>
+                            <SelectItem value="2" disabled={2 < currentMonthNumber} className={2 < currentMonthNumber ? 'opacity-50 cursor-not-allowed' : ''}>February</SelectItem>
+                            <SelectItem value="3" disabled={3 < currentMonthNumber} className={3 < currentMonthNumber ? 'opacity-50 cursor-not-allowed' : ''}>March</SelectItem>
+                            <SelectItem value="4" disabled={4 < currentMonthNumber} className={4 < currentMonthNumber ? 'opacity-50 cursor-not-allowed' : ''}>April</SelectItem>
+                            <SelectItem value="5" disabled={5 < currentMonthNumber} className={5 < currentMonthNumber ? 'opacity-50 cursor-not-allowed' : ''}>May</SelectItem>
+                            <SelectItem value="6" disabled={6 < currentMonthNumber} className={6 < currentMonthNumber ? 'opacity-50 cursor-not-allowed' : ''}>June</SelectItem>
+                            <SelectItem value="7" disabled={7 < currentMonthNumber} className={7 < currentMonthNumber ? 'opacity-50 cursor-not-allowed' : ''}>July</SelectItem>
+                            <SelectItem value="8" disabled={8 < currentMonthNumber} className={8 < currentMonthNumber ? 'opacity-50 cursor-not-allowed' : ''}>August</SelectItem>
+                            <SelectItem value="9" disabled={9 < currentMonthNumber} className={9 < currentMonthNumber ? 'opacity-50 cursor-not-allowed' : ''}>September</SelectItem>
+                            <SelectItem value="10" disabled={10 < currentMonthNumber} className={10 < currentMonthNumber ? 'opacity-50 cursor-not-allowed' : ''}>October</SelectItem>
+                            <SelectItem value="11" disabled={11 < currentMonthNumber} className={11 < currentMonthNumber ? 'opacity-50 cursor-not-allowed' : ''}>November</SelectItem>
+                            <SelectItem value="12" disabled={12 < currentMonthNumber} className={12 < currentMonthNumber ? 'opacity-50 cursor-not-allowed' : ''}>December</SelectItem>
                           </SelectContent>
                         </Select>
                         <FormDescription>
