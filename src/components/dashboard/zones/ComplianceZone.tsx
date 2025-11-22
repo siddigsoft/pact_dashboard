@@ -7,7 +7,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { Progress } from '@/components/ui/progress';
-import { ZoneHeader } from '../ZoneHeader';
 
 export const ComplianceZone: React.FC = () => {
   const [activeTab, setActiveTab] = useState('detection');
@@ -20,94 +19,95 @@ export const ComplianceZone: React.FC = () => {
 
   return (
     <div className="space-y-4">
-      {/* Enterprise Header */}
-      <ZoneHeader
-        title="Compliance & Risk"
-        subtitle="Fraud detection and monitoring"
-        color="red"
-      >
-        <div className="text-right">
-          <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">Compliance Rate</p>
-          <p className={`text-2xl font-bold tabular-nums ${complianceRate >= 80 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-            {complianceRate}%
-          </p>
+      {/* Modern Tech Header */}
+      <div className="relative overflow-hidden rounded-lg border border-border/50 bg-gradient-to-r from-red-500/5 via-orange-500/5 to-background p-4 shadow-sm">
+        <div className="relative z-10 flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center justify-center w-12 h-12 rounded-lg bg-red-500/10 border border-red-500/20">
+              <Shield className="h-6 w-6 text-red-600 dark:text-red-400" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold">Compliance & Risk</h2>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">Fraud detection and compliance monitoring</p>
+            </div>
+          </div>
+          <Badge 
+            variant={complianceRate >= 80 ? "default" : "destructive"}
+            className="gap-2 h-7 text-xs"
+          >
+            <FileCheck className="h-3 w-3" />
+            {complianceRate}% Compliance
+          </Badge>
         </div>
-      </ZoneHeader>
+        <div className="absolute inset-0 bg-grid-pattern opacity-5" />
+      </div>
 
       {/* Quick Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="border-t-2 border-t-green-500">
-          <CardContent className="p-3">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-6 h-6 rounded bg-green-500/20 flex items-center justify-center">
-                <FileCheck className="h-3 w-3 text-green-600 dark:text-green-400" />
-              </div>
-              <span className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold">
-                Approved
-              </span>
-            </div>
-            <div className="text-2xl font-bold text-green-600 dark:text-green-400 tabular-nums">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Approved MMPs
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600 dark:text-green-400">
               {approvedMMPs}
             </div>
-            <Progress value={complianceRate} className="h-1 mt-2" />
+            <Progress value={complianceRate} className="mt-2" />
           </CardContent>
         </Card>
 
-        <Card className="border-t-2 border-t-orange-500">
-          <CardContent className="p-3">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-6 h-6 rounded bg-orange-500/20 flex items-center justify-center">
-                <AlertTriangle className="h-3 w-3 text-orange-600 dark:text-orange-400" />
-              </div>
-              <span className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold">
-                Pending
-              </span>
-            </div>
-            <div className="text-2xl font-bold text-orange-600 dark:text-orange-400 tabular-nums">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Pending Review
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">
               {pendingMMPs}
             </div>
-            <p className="text-[10px] text-muted-foreground mt-2">
+            <p className="text-xs text-muted-foreground mt-2">
               Awaiting approval
             </p>
           </CardContent>
         </Card>
 
-        <Card className="border-t-2 border-t-blue-500">
-          <CardContent className="p-3">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-6 h-6 rounded bg-primary/20 flex items-center justify-center">
-                <Shield className="h-3 w-3 text-primary" />
-              </div>
-              <span className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold">
-                Total
-              </span>
-            </div>
-            <div className="text-2xl font-bold tabular-nums">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Total MMPs
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
               {totalMMPs}
             </div>
-            <p className="text-[10px] text-muted-foreground mt-2">
+            <p className="text-xs text-muted-foreground mt-2">
               All monitoring plans
             </p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Professional Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="w-full justify-start">
-          <TabsTrigger value="detection" data-testid="tab-detection">
+        <TabsList className="grid w-full grid-cols-2 max-w-md">
+          <TabsTrigger value="detection" className="gap-2">
+            <AlertTriangle className="h-4 w-4" />
             Detection
           </TabsTrigger>
-          <TabsTrigger value="prevention" data-testid="tab-prevention">
+          <TabsTrigger value="prevention" className="gap-2">
+            <ShieldAlert className="h-4 w-4" />
             Prevention
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="detection" className="mt-3">
+        <TabsContent value="detection" className="mt-4">
           <FraudDetectionWidget />
         </TabsContent>
 
-        <TabsContent value="prevention" className="mt-3">
+        <TabsContent value="prevention" className="mt-4">
           <FraudPreventionDashboardWidget />
         </TabsContent>
       </Tabs>

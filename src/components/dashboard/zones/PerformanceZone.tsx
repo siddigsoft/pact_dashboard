@@ -8,7 +8,6 @@ import { Badge } from '@/components/ui/badge';
 import { useAppContext } from '@/context/AppContext';
 import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
 import { startOfMonth } from 'date-fns';
-import { ZoneHeader } from '../ZoneHeader';
 
 export const PerformanceZone: React.FC = () => {
   const [activeTab, setActiveTab] = useState('achievements');
@@ -24,34 +23,43 @@ export const PerformanceZone: React.FC = () => {
 
   return (
     <div className="space-y-4">
-      {/* Enterprise Header */}
-      <ZoneHeader
-        title="Performance & Analytics"
-        subtitle="Goals and achievement tracking"
-        color="purple"
-      >
-        <div className="text-right">
-          <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">This Month</p>
-          <p className="text-2xl font-bold tabular-nums">{thisMonthVisits}</p>
+      {/* Modern Tech Header */}
+      <div className="relative overflow-hidden rounded-lg border border-border/50 bg-gradient-to-r from-purple-500/5 via-pink-500/5 to-background p-4 shadow-sm">
+        <div className="relative z-10 flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center justify-center w-12 h-12 rounded-lg bg-purple-500/10 border border-purple-500/20">
+              <TrendingUp className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold">Performance & Analytics</h2>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">Goals, achievements, and activity tracking</p>
+            </div>
+          </div>
+          <Badge variant="secondary" className="gap-2 h-7 text-xs">
+            <Trophy className="h-3 w-3" />
+            {thisMonthVisits} This Month
+          </Badge>
         </div>
-      </ZoneHeader>
+        <div className="absolute inset-0 bg-grid-pattern opacity-5" />
+      </div>
 
-      {/* Professional Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="w-full justify-start">
-          <TabsTrigger value="achievements" data-testid="tab-achievements">
-            Achievements
+        <TabsList className="grid w-full grid-cols-2 max-w-md h-auto p-1 bg-muted/30">
+          <TabsTrigger value="achievements" className="gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <Trophy className="h-3.5 w-3.5" />
+            <span className="text-xs">Achievements</span>
           </TabsTrigger>
-          <TabsTrigger value="activity" data-testid="tab-activity">
-            Activity Feed
+          <TabsTrigger value="activity" className="gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <Activity className="h-3.5 w-3.5" />
+            <span className="text-xs">Activity Feed</span>
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="achievements" className="mt-3">
+        <TabsContent value="achievements" className="mt-4">
           <AchievementTracker />
         </TabsContent>
 
-        <TabsContent value="activity" className="mt-3">
+        <TabsContent value="activity" className="mt-4">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">

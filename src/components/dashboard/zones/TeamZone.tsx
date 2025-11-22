@@ -13,7 +13,6 @@ import { TeamMemberCard } from '../TeamMemberCard';
 import { TeamMemberTable } from '../TeamMemberTable';
 import { TeamMemberDetailModal } from '../TeamMemberDetailModal';
 import { User } from '@/types/user';
-import { ZoneHeader } from '../ZoneHeader';
 
 export const TeamZone: React.FC = () => {
   const [activeTab, setActiveTab] = useState('overview');
@@ -109,56 +108,62 @@ export const TeamZone: React.FC = () => {
 
   return (
     <div className="space-y-4">
-      {/* Enterprise Header */}
-      <ZoneHeader
-        title="Team Coordination"
-        subtitle="Real-time field operations and team management"
-        color="green"
-      >
-        <div className="text-right">
-          <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">Online/Total</p>
-          <p className="text-2xl font-bold tabular-nums">
-            <span className="text-green-600 dark:text-green-400">{onlineMembers}</span>
-            <span className="text-muted-foreground mx-1">/</span>
-            {activeFieldTeam}
-          </p>
+      {/* Modern Tech Header */}
+      <div className="relative overflow-hidden rounded-lg border border-border/50 bg-gradient-to-r from-green-500/5 via-blue-500/5 to-background p-4 shadow-sm">
+        <div className="relative z-10 flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center justify-center w-12 h-12 rounded-lg bg-green-500/10 border border-green-500/20">
+              <Users className="h-6 w-6 text-green-600 dark:text-green-400" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold">Team Coordination</h2>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">Field team locations and communication</p>
+            </div>
+          </div>
+          <div className="flex gap-2 items-center">
+            <Badge variant="secondary" className="gap-2 text-xs h-7">
+              <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+              {onlineMembers}/{activeFieldTeam} Online
+            </Badge>
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => navigate('/field-team')}
+              data-testid="button-view-full-team"
+              className="h-7 text-xs"
+            >
+              View Full Team
+            </Button>
+          </div>
         </div>
-        <Button 
-          variant="outline" 
-          size="sm"
-          onClick={() => navigate('/field-team')}
-          data-testid="button-view-full-team"
-        >
-          View Full Team
-        </Button>
-      </ZoneHeader>
+        <div className="absolute inset-0 bg-grid-pattern opacity-5" />
+      </div>
 
-      {/* Professional Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="w-full justify-start">
-          <TabsTrigger value="overview" data-testid="tab-overview">
-            Team Overview
+        <TabsList className="grid w-full grid-cols-3 max-w-2xl h-auto p-1 bg-muted/30">
+          <TabsTrigger value="overview" className="gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <UserCircle className="h-3.5 w-3.5" />
+            <span className="text-xs">Team Overview</span>
           </TabsTrigger>
-          <TabsTrigger value="map" data-testid="tab-map">
-            Live Map
+          <TabsTrigger value="map" className="gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <MapPin className="h-3.5 w-3.5" />
+            <span className="text-xs">Live Map</span>
           </TabsTrigger>
-          <TabsTrigger value="communication" data-testid="tab-communication">
-            Communication
+          <TabsTrigger value="communication" className="gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <MessageSquare className="h-3.5 w-3.5" />
+            <span className="text-xs">Communication</span>
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview" className="mt-3 space-y-3">
+        <TabsContent value="overview" className="mt-4 space-y-3">
           {assignableTeamMembers && assignableTeamMembers.length > 0 ? (
             <>
               {/* View Toggle */}
-              <div className="flex items-center justify-between p-2 rounded-lg bg-muted/30 border border-border/50">
-                <div className="flex items-center gap-2">
-                  <Users className="h-4 w-4 text-green-600 dark:text-green-400" />
-                  <h3 className="text-sm font-bold uppercase tracking-wide">
-                    Team Members ({assignableTeamMembers.length})
-                  </h3>
-                </div>
-                <div className="flex gap-1 bg-background/50 p-0.5 rounded-md border border-border/30">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                  Team Members ({assignableTeamMembers.length})
+                </h3>
+                <div className="flex gap-1 bg-muted/30 p-1 rounded-lg">
                   <Button
                     variant={viewMode === 'cards' ? 'default' : 'ghost'}
                     size="sm"
@@ -213,14 +218,14 @@ export const TeamZone: React.FC = () => {
           )}
         </TabsContent>
 
-        <TabsContent value="map" className="mt-3">
+        <TabsContent value="map" className="mt-4">
           <TeamLocationMap 
             users={assignableTeamMembers} 
             siteVisits={siteVisits || []}
           />
         </TabsContent>
 
-        <TabsContent value="communication" className="mt-3">
+        <TabsContent value="communication" className="mt-4">
           <TeamCommunication />
         </TabsContent>
       </Tabs>
