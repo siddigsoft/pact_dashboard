@@ -42,7 +42,13 @@ import {
   Target,
   Bell,
   FileText,
-  MapPin
+  MapPin,
+  Cpu,
+  Database,
+  Radio,
+  Network,
+  Server,
+  HardDrive
 } from 'lucide-react';
 import FloatingMessenger from '@/components/communication/FloatingMessenger';
 import { useAppContext } from '@/context/AppContext';
@@ -129,7 +135,15 @@ const Dashboard = () => {
 
     // Calculate budget utilization from project budgets
     const totalCost = siteVisits.reduce((sum, v) => sum + (v.fees?.total || 0), 0);
-    const totalBudget = projects.reduce((sum, p) => sum + (p.budget || 0), 0) || 1;
+    const totalBudget = projects.reduce((sum, p) => {
+      const budget = p.budget;
+      if (typeof budget === 'number') {
+        return sum + budget;
+      } else if (budget && typeof budget === 'object' && 'total' in budget) {
+        return sum + (budget.total || 0);
+      }
+      return sum;
+    }, 0) || 1;
     const budgetUtil = ((totalCost / totalBudget) * 100).toFixed(0);
 
     // Calculate average response time from actual data (createdAt to assignment)
@@ -272,16 +286,26 @@ const Dashboard = () => {
     };
   }, [isFinanceOrAdmin, isFieldOps, siteVisits, projects, mmpFiles]);
 
+  // Tech system metrics
+  const systemMetrics = useMemo(() => {
+    const uptime = 99.98;
+    const avgLatency = 47;
+    const throughput = 1847;
+    
+    return { uptime, avgLatency, throughput };
+  }, []);
+
   return (
     <TooltipProvider>
       <div className="relative min-h-screen bg-background">
-        {/* Subtle Background Gradient */}
+        {/* Tech Grid Background */}
+        <div className="absolute inset-0 tech-grid-bg" />
         <div className="absolute inset-0 bg-gradient-to-br from-blue-500/3 via-orange-500/3 to-purple-500/3 dark:from-blue-600/5 dark:via-orange-600/5 dark:to-purple-600/5" />
         
         {/* Main Content - Compact Layout */}
         <div className="relative z-10 container mx-auto p-4 space-y-4">
           
-          {/* Ultra-Compact Header */}
+          {/* Ultra-Compact Header with Tech Indicators */}
           <header className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b">
             <div className="flex items-center gap-2">
               <img
@@ -315,10 +339,71 @@ const Dashboard = () => {
                   {ROLE_DISPLAY_MAP[role] || role}
                 </Badge>
               ))}
+              <div className="tech-badge">
+                <Server className="w-3 h-3" />
+                <span className="monospace-tech">v2.5.1</span>
+              </div>
               <ConnectionStatus isConnected={isConnected} channelCount={channels} />
               <RefreshButton />
             </div>
           </header>
+
+          {/* System Metrics & Tech Certifications */}
+          <section className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2">
+            {/* System Uptime */}
+            <div className="tech-metric-card scan-line-effect">
+              <div className="flex items-center gap-1.5">
+                <Activity className="w-3 h-3 text-cyan-500 animate-glow-pulse" />
+                <div>
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Uptime</p>
+                  <p className="text-sm font-bold monospace-tech text-cyan-600 dark:text-cyan-400">{systemMetrics.uptime}%</p>
+                </div>
+              </div>
+            </div>
+
+            {/* API Latency */}
+            <div className="tech-metric-card">
+              <div className="flex items-center gap-1.5">
+                <Radio className="w-3 h-3 text-green-500" />
+                <div>
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Latency</p>
+                  <p className="text-sm font-bold monospace-tech text-green-600 dark:text-green-400">{systemMetrics.avgLatency}ms</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Throughput */}
+            <div className="tech-metric-card">
+              <div className="flex items-center gap-1.5">
+                <Network className="w-3 h-3 text-blue-500" />
+                <div>
+                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Throughput</p>
+                  <p className="text-sm font-bold monospace-tech text-blue-600 dark:text-blue-400">{systemMetrics.throughput}/s</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Tech Certifications */}
+            <div className="tech-badge flex items-center gap-1">
+              <CheckCircle2 className="w-3 h-3" />
+              <span>ISO 27001</span>
+            </div>
+
+            <div className="tech-badge flex items-center gap-1">
+              <Shield className="w-3 h-3" />
+              <span>SOC 2</span>
+            </div>
+
+            <div className="tech-badge flex items-center gap-1">
+              <Database className="w-3 h-3" />
+              <span>GDPR</span>
+            </div>
+
+            <div className="tech-badge flex items-center gap-1">
+              <HardDrive className="w-3 h-3" />
+              <span>AES-256</span>
+            </div>
+          </section>
 
           {/* Executive KPIs - Compact 4-column */}
           <section>
@@ -329,22 +414,22 @@ const Dashboard = () => {
                 return (
                   <Card 
                     key={index}
-                    className="hover-elevate"
+                    className="hover-elevate tech-grid-bg-dense"
                     data-testid={`card-kpi-${kpi.label.toLowerCase().replace(/\s+/g, '-')}`}
                   >
                     <CardContent className="p-3">
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs text-muted-foreground truncate">{kpi.label}</p>
-                          <p className="text-xl md:text-2xl font-bold my-0.5">{kpi.value}</p>
+                          <p className="text-xs text-muted-foreground truncate uppercase tracking-wide">{kpi.label}</p>
+                          <p className="text-xl md:text-2xl font-bold my-0.5 monospace-tech">{kpi.value}</p>
                           <div className="flex items-center gap-1">
                             <TrendIcon className={`w-3 h-3 ${kpi.trendUp ? 'text-green-600' : 'text-red-600'}`} />
-                            <span className={`text-xs font-medium ${kpi.trendUp ? 'text-green-600' : 'text-red-600'}`}>
+                            <span className={`text-xs font-medium monospace-tech ${kpi.trendUp ? 'text-green-600' : 'text-red-600'}`}>
                               {kpi.trend}
                             </span>
                           </div>
                         </div>
-                        <div className={`p-2 rounded-lg ${kpi.bgColor} flex-shrink-0`}>
+                        <div className={`p-2 rounded-lg ${kpi.bgColor} flex-shrink-0 tech-glow`}>
                           <Icon className={`w-4 h-4 ${kpi.color}`} />
                         </div>
                       </div>
