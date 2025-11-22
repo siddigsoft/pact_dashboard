@@ -4,140 +4,162 @@ import { SiteVisit } from '@/types';
 
 export const fetchSiteVisits = async () => {
   const { data, error } = await supabase
-    .from('site_visits')
+    .from('mmp_site_entries')
     .select('*');
     
   if (error) {
-    console.error('Error fetching site visits:', error);
+    console.error('Error fetching site entries:', error);
     throw error;
   }
   
   // Transform the snake_case database fields to camelCase for the frontend
-  const transformedData = data?.map(visit => ({
-    id: visit.id,
-    siteName: visit.site_name,
-    siteCode: visit.site_code,
-    status: visit.status,
-    locality: visit.locality,
-    state: visit.state,
-    activity: visit.activity,
-    priority: visit.priority,
-    dueDate: visit.due_date,
-    assignedTo: visit.assigned_to,
-    assignedBy: visit.assigned_by,
-    assignedAt: visit.assigned_at,
-    notes: visit.notes,
-    attachments: visit.attachments,
-    completedAt: visit.completed_at,
-    rating: visit.rating,
-    fees: visit.fees || {},
-    scheduledDate: visit.due_date,
-    description: visit.notes,
-    // Additional fields persisted in visit_data
-    hub: visit.visit_data?.hub || visit.hub || "",
-    cpName: visit.visit_data?.cpName,
-    // Monitoring Plan Structure Fields
-    hubOffice: visit.visit_data?.hubOffice || visit.hub_office || "Farchana Hub",
-    siteActivity: visit.visit_data?.siteActivity || visit.activity_at_site || visit.activity || "GFA",
-    monitoringBy: visit.visit_data?.monitoringBy || visit.monitoring_by || "PACT",
-    surveyTool: visit.visit_data?.surveyTool || visit.survey_tool || "PDM",
-    useMarketDiversion: visit.visit_data?.useMarketDiversion || visit.use_market_diversion || false,
-    useWarehouseMonitoring: visit.visit_data?.useWarehouseMonitoring || visit.use_warehouse_monitoring || false,
-    arrivalLatitude: visit.arrival_latitude,
-    arrivalLongitude: visit.arrival_longitude,
-    arrivalTimestamp: visit.arrival_timestamp,
-    journeyPath: visit.journey_path,
-    arrivalRecorded: visit.arrival_recorded || false,
-    permitDetails: visit.visit_data?.permitDetails || {
-      federal: false,
-      state: false,
-      locality: false
-    },
-    location: visit.location || {
-      address: "",
-      latitude: 0,
-      longitude: 0,
-      region: visit.state || ""
-    },
-    coordinates: visit.location ? {
-      latitude: visit.location.latitude || 0,
-      longitude: visit.location.longitude || 0
-    } : {
-      latitude: 0,
-      longitude: 0
-    },
-    mmpDetails: visit.visit_data?.mmpDetails || {
-      mmpId: visit.mmp_id || "",
-      projectName: "",
-      uploadedBy: "",
-      uploadedAt: "",
-      region: visit.location?.region || ""
-    },
-    complexity: visit.visit_data?.complexity || "medium",
-    visitType: visit.visit_data?.visitType || "regular",
-    visitTypeRaw: visit.visit_data?.visitTypeRaw,
-    mainActivity: visit.main_activity || "",
-    projectActivities: visit.visit_data?.projectActivities || [],
-    createdAt: visit.created_at
-  }));
+  // Map mmp_site_entries to SiteVisit format
+  const transformedData = data?.map(entry => {
+    const additionalData = entry.additional_data || {};
+    const enumeratorFee = entry.enumerator_fee || additionalData.enumerator_fee || 20;
+    const transportFee = entry.transport_fee || additionalData.transport_fee || 10;
+    const totalCost = entry.cost || (enumeratorFee + transportFee);
+    const fees = {
+      total: totalCost,
+      currency: 'SDG',
+      distanceFee: transportFee,
+      complexityFee: 0,
+      urgencyFee: 0,
+      baseAmount: enumeratorFee,
+      transportation: transportFee
+    };
+    
+    return {
+      id: entry.id,
+      siteName: entry.site_name,
+      siteCode: entry.site_code,
+      status: entry.status || 'Pending',
+      locality: entry.locality,
+      state: entry.state,
+      activity: entry.activity_at_site || entry.main_activity,
+      priority: additionalData.priority || 'medium',
+      dueDate: entry.visit_date ? new Date(entry.visit_date).toISOString() : undefined,
+      assignedTo: additionalData.assigned_to || undefined,
+      assignedBy: additionalData.assigned_by || undefined,
+      assignedAt: additionalData.assigned_at || undefined,
+      notes: entry.comments,
+      attachments: additionalData.attachments || [],
+      completedAt: additionalData.completed_at || undefined,
+      rating: additionalData.rating || undefined,
+      fees: fees,
+      scheduledDate: entry.visit_date ? new Date(entry.visit_date).toISOString() : undefined,
+      description: entry.comments,
+      // Additional fields
+      hub: entry.hub_office || "",
+      cpName: entry.cp_name,
+      // Monitoring Plan Structure Fields
+      hubOffice: entry.hub_office || "Farchana Hub",
+      siteActivity: entry.activity_at_site || "GFA",
+      monitoringBy: entry.monitoring_by || "PACT",
+      surveyTool: entry.survey_tool || "PDM",
+      useMarketDiversion: entry.use_market_diversion || false,
+      useWarehouseMonitoring: entry.use_warehouse_monitoring || false,
+      arrivalLatitude: additionalData.arrival_latitude || undefined,
+      arrivalLongitude: additionalData.arrival_longitude || undefined,
+      arrivalTimestamp: additionalData.arrival_timestamp || undefined,
+      journeyPath: additionalData.journey_path || undefined,
+      arrivalRecorded: additionalData.arrival_recorded || false,
+      permitDetails: additionalData.permitDetails || {
+        federal: false,
+        state: false,
+        locality: false
+      },
+      location: additionalData.location || {
+        address: "",
+        latitude: 0,
+        longitude: 0,
+        region: entry.state || ""
+      },
+      coordinates: additionalData.location ? {
+        latitude: additionalData.location.latitude || 0,
+        longitude: additionalData.location.longitude || 0
+      } : {
+        latitude: 0,
+        longitude: 0
+      },
+      mmpDetails: {
+        mmpId: entry.mmp_file_id || "",
+        projectName: "",
+        uploadedBy: "",
+        uploadedAt: "",
+        region: entry.state || ""
+      },
+      complexity: additionalData.complexity || "medium",
+      visitType: entry.visit_type || "regular",
+      visitTypeRaw: additionalData.visitTypeRaw,
+      mainActivity: entry.main_activity || "",
+      projectActivities: additionalData.projectActivities || [],
+      createdAt: entry.created_at
+    };
+  });
   
   return transformedData as SiteVisit[];
 };
 
 export const createSiteVisitInDb = async (siteVisit: Partial<SiteVisit>) => {
-  // Transform camelCase to snake_case for the database
-  const dbSiteVisit = {
-    site_name: siteVisit.siteName,
-    site_code: siteVisit.siteCode,
-    status: siteVisit.status,
-    locality: siteVisit.locality,
-    state: siteVisit.state,
-    activity: siteVisit.activity,
-    priority: siteVisit.priority,
-    due_date: siteVisit.dueDate ? (() => {
-      const date = new Date(siteVisit.dueDate);
-      return isNaN(date.getTime()) ? null : date.toISOString();
-    })() : null,
-    notes: siteVisit.notes,
-    main_activity: siteVisit.mainActivity,
-    location: siteVisit.location,
-    fees: siteVisit.fees,
-    mmp_id: (siteVisit as any).mmpId || siteVisit.mmpDetails?.mmpId,
-    visit_data: {
-      permitDetails: siteVisit.permitDetails,
-      complexity: siteVisit.complexity,
-      visitType: siteVisit.visitType,
-      visitTypeRaw: siteVisit.visitTypeRaw,
-      projectActivities: siteVisit.projectActivities,
-      mmpDetails: siteVisit.mmpDetails,
-      hub: siteVisit.hub,
-      cpName: siteVisit.cpName,
-      // Monitoring Plan Structure Fields
-      hubOffice: siteVisit.hubOffice,
-      siteActivity: siteVisit.siteActivity,
-      monitoringBy: siteVisit.monitoringBy,
-      surveyTool: siteVisit.surveyTool,
-      useMarketDiversion: siteVisit.useMarketDiversion,
-      useWarehouseMonitoring: siteVisit.useWarehouseMonitoring
-    },
-    // Direct database fields for monitoring plan
-    hub_office: siteVisit.hubOffice,
-    activity_at_site: siteVisit.siteActivity,
-    monitoring_by: siteVisit.monitoringBy,
-    survey_tool: siteVisit.surveyTool,
-    use_market_diversion: siteVisit.useMarketDiversion,
-    use_warehouse_monitoring: siteVisit.useWarehouseMonitoring,
+  // Transform camelCase to snake_case for mmp_site_entries
+  const mmpFileId = (siteVisit as any).mmpId || siteVisit.mmpDetails?.mmpId;
+  if (!mmpFileId) {
+    throw new Error('mmp_file_id is required to create a site entry');
+  }
+  
+  const additionalData: any = {
+    priority: siteVisit.priority || 'medium',
+    assigned_to: siteVisit.assignedTo,
+    assigned_by: siteVisit.assignedBy,
+    assigned_at: siteVisit.assignedAt,
+    attachments: siteVisit.attachments || [],
+    completed_at: siteVisit.completedAt,
+    rating: siteVisit.rating,
+    permitDetails: siteVisit.permitDetails,
+    complexity: siteVisit.complexity,
+    visitTypeRaw: siteVisit.visitTypeRaw,
+    projectActivities: siteVisit.projectActivities,
+    mmpDetails: siteVisit.mmpDetails,
     arrival_latitude: siteVisit.arrivalLatitude,
     arrival_longitude: siteVisit.arrivalLongitude,
     arrival_timestamp: siteVisit.arrivalTimestamp,
     journey_path: siteVisit.journeyPath,
-    arrival_recorded: siteVisit.arrivalRecorded
+    arrival_recorded: siteVisit.arrivalRecorded,
+    location: siteVisit.location
+  };
+  
+  const dbEntry = {
+    mmp_file_id: mmpFileId,
+    site_name: siteVisit.siteName,
+    site_code: siteVisit.siteCode,
+    status: siteVisit.status || 'Pending',
+    locality: siteVisit.locality,
+    state: siteVisit.state,
+    main_activity: siteVisit.mainActivity,
+    activity_at_site: siteVisit.siteActivity || siteVisit.activity,
+    visit_date: siteVisit.dueDate ? (() => {
+      const date = new Date(siteVisit.dueDate);
+      return isNaN(date.getTime()) ? null : date.toISOString().split('T')[0];
+    })() : null,
+    comments: siteVisit.notes,
+    hub_office: siteVisit.hubOffice || siteVisit.hub,
+    cp_name: siteVisit.cpName,
+    monitoring_by: siteVisit.monitoringBy,
+    survey_tool: siteVisit.surveyTool,
+    use_market_diversion: siteVisit.useMarketDiversion || false,
+    use_warehouse_monitoring: siteVisit.useWarehouseMonitoring || false,
+    visit_type: siteVisit.visitType,
+    cost: siteVisit.fees?.total || 0,
+    enumerator_fee: siteVisit.fees?.baseAmount || (siteVisit.fees as any)?.enumerator_fee,
+    transport_fee: siteVisit.fees?.transportation || (siteVisit.fees as any)?.transport_fee,
+    additional_data: additionalData
   };
   
   // Insert and return the created row in one round-trip
   const { data, error } = await supabase
-    .from('site_visits')
-    .insert(dbSiteVisit)
+    .from('mmp_site_entries')
+    .insert(dbEntry)
     .select('*')
     .single();
     
@@ -147,296 +169,273 @@ export const createSiteVisitInDb = async (siteVisit: Partial<SiteVisit>) => {
   }
   
   // Transform back to camelCase for frontend use
+  const ad = data.additional_data || {};
+  const enumeratorFee = data.enumerator_fee || ad.enumerator_fee || 20;
+  const transportFee = data.transport_fee || ad.transport_fee || 10;
+  const totalCost = data.cost || (enumeratorFee + transportFee);
+  const fees = {
+    total: totalCost,
+    currency: 'SDG',
+    distanceFee: transportFee,
+    complexityFee: 0,
+    urgencyFee: 0,
+    baseAmount: enumeratorFee,
+    transportation: transportFee
+  };
+  
   return {
     id: data.id,
     siteName: data.site_name,
     siteCode: data.site_code,
-    status: data.status,
+    status: data.status || 'Pending',
     locality: data.locality,
     state: data.state,
-    activity: data.activity,
-    priority: data.priority,
-    dueDate: data.due_date,
-    assignedTo: data.assigned_to,
-    assignedBy: data.assigned_by,
-    assignedAt: data.assigned_at,
-    notes: data.notes,
-    attachments: data.attachments,
-    completedAt: data.completed_at,
-    rating: data.rating,
-    fees: data.fees || {},
-    scheduledDate: data.due_date,
-    description: data.notes,
-    hub: data.visit_data?.hub || data.hub || "",
-    cpName: data.visit_data?.cpName,
-    permitDetails: data.visit_data?.permitDetails || {
+    activity: data.activity_at_site || data.main_activity,
+    priority: ad.priority || 'medium',
+    dueDate: data.visit_date ? new Date(data.visit_date).toISOString() : undefined,
+    assignedTo: ad.assigned_to || undefined,
+    assignedBy: ad.assigned_by || undefined,
+    assignedAt: ad.assigned_at || undefined,
+    notes: data.comments,
+    attachments: ad.attachments || [],
+    completedAt: ad.completed_at || undefined,
+    rating: ad.rating || undefined,
+    fees: fees,
+    scheduledDate: data.visit_date ? new Date(data.visit_date).toISOString() : undefined,
+    description: data.comments,
+    hub: data.hub_office || "",
+    cpName: data.cp_name,
+    permitDetails: ad.permitDetails || {
       federal: false,
       state: false,
       locality: false
     },
-    location: data.location || {
+    location: ad.location || {
       address: "",
       latitude: 0,
       longitude: 0,
       region: data.state || ""
     },
-    coordinates: data.location ? {
-      latitude: data.location.latitude || 0,
-      longitude: data.location.longitude || 0
+    coordinates: ad.location ? {
+      latitude: ad.location.latitude || 0,
+      longitude: ad.location.longitude || 0
     } : {
       latitude: 0,
       longitude: 0
     },
-    mmpDetails: data.visit_data?.mmpDetails || {
-      mmpId: data.mmp_id || "",
+    mmpDetails: {
+      mmpId: data.mmp_file_id || "",
       projectName: "",
       uploadedBy: "",
       uploadedAt: "",
-      region: data.location?.region || ""
+      region: data.state || ""
     },
-    complexity: data.visit_data?.complexity || "medium",
-    visitType: data.visit_data?.visitType || "regular",
-    visitTypeRaw: data.visit_data?.visitTypeRaw,
+    complexity: ad.complexity || "medium",
+    visitType: data.visit_type || "regular",
+    visitTypeRaw: ad.visitTypeRaw,
     mainActivity: data.main_activity || "",
-    projectActivities: data.visit_data?.projectActivities || [],
+    projectActivities: ad.projectActivities || [],
+    hubOffice: data.hub_office,
+    siteActivity: data.activity_at_site,
+    monitoringBy: data.monitoring_by,
+    surveyTool: data.survey_tool,
+    useMarketDiversion: data.use_market_diversion || false,
+    useWarehouseMonitoring: data.use_warehouse_monitoring || false,
+    arrivalLatitude: ad.arrival_latitude,
+    arrivalLongitude: ad.arrival_longitude,
+    arrivalTimestamp: ad.arrival_timestamp,
+    journeyPath: ad.journey_path,
+    arrivalRecorded: ad.arrival_recorded || false,
     createdAt: data.created_at
   } as SiteVisit;
 };
 
 export const deleteSiteVisitInDb = async (id: string) => {
   const { error } = await supabase
-    .from('site_visits')
+    .from('mmp_site_entries')
     .delete()
     .eq('id', id);
   if (error) {
-    console.error('Error deleting site visit:', error);
+    console.error('Error deleting site entry:', error);
     throw error;
   }
   return true;
 };
 
 export const updateSiteVisitInDb = async (id: string, updates: Partial<SiteVisit>) => {
-  // Transform camelCase to snake_case for the database
-  const dbUpdates: any = {};
+  // Get current entry first
+  const { data: currentEntry, error: fetchError } = await supabase
+    .from('mmp_site_entries')
+    .select('*')
+    .eq('id', id)
+    .single();
+    
+  if (fetchError || !currentEntry) {
+    console.error('Error fetching site entry:', fetchError);
+    throw fetchError || new Error('Site entry not found');
+  }
   
+  // Transform camelCase to snake_case for mmp_site_entries
+  const dbUpdates: any = {};
+  const additionalData = { ...(currentEntry.additional_data || {}) };
+  
+  // Direct column updates
   if (updates.siteName !== undefined) dbUpdates.site_name = updates.siteName;
   if (updates.siteCode !== undefined) dbUpdates.site_code = updates.siteCode;
   if (updates.status !== undefined) dbUpdates.status = updates.status;
   if (updates.locality !== undefined) dbUpdates.locality = updates.locality;
   if (updates.state !== undefined) dbUpdates.state = updates.state;
-  if (updates.activity !== undefined) dbUpdates.activity = updates.activity;
-  if (updates.priority !== undefined) dbUpdates.priority = updates.priority;
-  if (updates.dueDate !== undefined) dbUpdates.due_date = updates.dueDate;
-  if (updates.notes !== undefined) dbUpdates.notes = updates.notes;
   if (updates.mainActivity !== undefined) dbUpdates.main_activity = updates.mainActivity;
-  if (updates.location !== undefined) dbUpdates.location = updates.location;
-  if (updates.fees !== undefined) dbUpdates.fees = updates.fees;
+  if (updates.siteActivity !== undefined) dbUpdates.activity_at_site = updates.siteActivity;
+  if (updates.activity !== undefined) dbUpdates.activity_at_site = updates.activity;
+  if (updates.notes !== undefined) dbUpdates.comments = updates.notes;
+  if (updates.hubOffice !== undefined) dbUpdates.hub_office = updates.hubOffice;
+  if (updates.hub !== undefined) dbUpdates.hub_office = updates.hub;
+  if (updates.cpName !== undefined) dbUpdates.cp_name = updates.cpName;
+  if (updates.monitoringBy !== undefined) dbUpdates.monitoring_by = updates.monitoringBy;
+  if (updates.surveyTool !== undefined) dbUpdates.survey_tool = updates.surveyTool;
+  if (updates.useMarketDiversion !== undefined) dbUpdates.use_market_diversion = updates.useMarketDiversion;
+  if (updates.useWarehouseMonitoring !== undefined) dbUpdates.use_warehouse_monitoring = updates.useWarehouseMonitoring;
+  if (updates.visitType !== undefined) dbUpdates.visit_type = updates.visitType;
   
-  if (updates.assignedTo !== undefined) dbUpdates.assigned_to = updates.assignedTo;
-  if (updates.assignedBy !== undefined) dbUpdates.assigned_by = updates.assignedBy;
-  if (updates.assignedAt !== undefined) dbUpdates.assigned_at = updates.assignedAt;
-  if (updates.attachments !== undefined) dbUpdates.attachments = updates.attachments;
-  if (updates.completedAt !== undefined) dbUpdates.completed_at = updates.completedAt;
-  if (updates.rating !== undefined) dbUpdates.rating = updates.rating;
-  
-  // Handle nested properties within visit_data
-  const visitDataUpdates: any = {};
-  let hasVisitDataUpdates = false;
-  
-  if (updates.permitDetails !== undefined) {
-    visitDataUpdates.permitDetails = updates.permitDetails;
-    hasVisitDataUpdates = true;
-  }
-  if (updates.complexity !== undefined) {
-    visitDataUpdates.complexity = updates.complexity;
-    hasVisitDataUpdates = true;
-  }
-  if (updates.visitType !== undefined) {
-    visitDataUpdates.visitType = updates.visitType;
-    hasVisitDataUpdates = true;
-  }
-  if (updates.visitTypeRaw !== undefined) {
-    visitDataUpdates.visitTypeRaw = updates.visitTypeRaw;
-    hasVisitDataUpdates = true;
-  }
-  if (updates.projectActivities !== undefined) {
-    visitDataUpdates.projectActivities = updates.projectActivities;
-    hasVisitDataUpdates = true;
-  }
-  if ((updates as any).visitDate !== undefined) {
-    (visitDataUpdates as any).visitDate = (updates as any).visitDate;
-    hasVisitDataUpdates = true;
-  }
-  if (updates.mmpDetails !== undefined) {
-    visitDataUpdates.mmpDetails = updates.mmpDetails;
-    hasVisitDataUpdates = true;
-  }
-  if (updates.hub !== undefined) {
-    visitDataUpdates.hub = updates.hub;
-    hasVisitDataUpdates = true;
-  }
-  if (updates.cpName !== undefined) {
-    visitDataUpdates.cpName = updates.cpName;
-    hasVisitDataUpdates = true;
+  if (updates.dueDate !== undefined) {
+    const date = new Date(updates.dueDate);
+    dbUpdates.visit_date = isNaN(date.getTime()) ? null : date.toISOString().split('T')[0];
   }
   
-  if (hasVisitDataUpdates) {
-    dbUpdates.visit_data = visitDataUpdates;
+  if (updates.fees !== undefined) {
+    dbUpdates.cost = updates.fees.total || 0;
+    // Map fees structure - use baseAmount as enumerator_fee and transportation as transport_fee
+    if (updates.fees.baseAmount !== undefined) dbUpdates.enumerator_fee = updates.fees.baseAmount;
+    if (updates.fees.transportation !== undefined) dbUpdates.transport_fee = updates.fees.transportation;
+    // Also check for direct enumerator_fee/transport_fee if present (for backward compatibility)
+    if ((updates.fees as any).enumerator_fee !== undefined) dbUpdates.enumerator_fee = (updates.fees as any).enumerator_fee;
+    if ((updates.fees as any).transport_fee !== undefined) dbUpdates.transport_fee = (updates.fees as any).transport_fee;
   }
   
-  // First update the data
+  // Store workflow fields in additional_data
+  if (updates.priority !== undefined) additionalData.priority = updates.priority;
+  if (updates.assignedTo !== undefined) additionalData.assigned_to = updates.assignedTo;
+  if (updates.assignedBy !== undefined) additionalData.assigned_by = updates.assignedBy;
+  if (updates.assignedAt !== undefined) additionalData.assigned_at = updates.assignedAt;
+  if (updates.attachments !== undefined) additionalData.attachments = updates.attachments;
+  if (updates.completedAt !== undefined) additionalData.completed_at = updates.completedAt;
+  if (updates.rating !== undefined) additionalData.rating = updates.rating;
+  if (updates.permitDetails !== undefined) additionalData.permitDetails = updates.permitDetails;
+  if (updates.complexity !== undefined) additionalData.complexity = updates.complexity;
+  if (updates.visitTypeRaw !== undefined) additionalData.visitTypeRaw = updates.visitTypeRaw;
+  if (updates.projectActivities !== undefined) additionalData.projectActivities = updates.projectActivities;
+  if (updates.mmpDetails !== undefined) additionalData.mmpDetails = updates.mmpDetails;
+  if (updates.location !== undefined) additionalData.location = updates.location;
+  if (updates.arrivalLatitude !== undefined) additionalData.arrival_latitude = updates.arrivalLatitude;
+  if (updates.arrivalLongitude !== undefined) additionalData.arrival_longitude = updates.arrivalLongitude;
+  if (updates.arrivalTimestamp !== undefined) additionalData.arrival_timestamp = updates.arrivalTimestamp;
+  if (updates.journeyPath !== undefined) additionalData.journey_path = updates.journeyPath;
+  if (updates.arrivalRecorded !== undefined) additionalData.arrival_recorded = updates.arrivalRecorded;
+  
+  dbUpdates.additional_data = additionalData;
+  
+  // Update the entry
   const { error: updateError } = await supabase
-    .from('site_visits')
+    .from('mmp_site_entries')
     .update(dbUpdates)
     .eq('id', id);
     
   if (updateError) {
-    console.error('Error updating site visit:', updateError);
+    console.error('Error updating site entry:', updateError);
     throw updateError;
   }
   
-  // Then fetch the updated data in a separate query
-  const { data, error } = await supabase
-    .from('site_visits')
+  // Fetch the updated data
+  const { data: updatedData, error: fetchUpdatedError } = await supabase
+    .from('mmp_site_entries')
     .select('*')
     .eq('id', id)
     .single();
     
-  if (error) {
-    console.error('Error fetching updated site visit:', error);
-    throw error;
-  }
-  
-  try {
-    const mmpId = data?.mmp_id;
-    const siteCode = data?.site_code;
-    if (mmpId && siteCode) {
-      const statusMap: Record<string, string> = {
-        verified: 'Verified',
-        rejected: 'Rejected',
-        approved: 'Approved',
-        completed: 'Completed',
-      };
-      // Get current entry to check existing cost
-      const { data: currentEntry } = await supabase
-        .from('mmp_site_entries')
-        .select('cost, status, additional_data')
-        .eq('mmp_file_id', mmpId)
-        .eq('site_code', siteCode)
-        .single();
-
-      const updatePayload: any = {
-        site_name: data.site_name ?? undefined,
-        state: data.state ?? undefined,
-        locality: data.locality ?? undefined,
-        main_activity: data.main_activity ?? undefined,
-        visit_date: (data.visit_data && data.visit_data.visitDate) ? data.visit_data.visitDate : (data.due_date ?? undefined),
-        activity_at_site: data.activity_at_site ?? data.activity ?? undefined,
-        monitoring_by: data.monitoring_by ?? (data.visit_data?.monitoringBy ?? undefined),
-        survey_tool: data.survey_tool ?? (data.visit_data?.surveyTool ?? undefined),
-        use_market_diversion: (typeof data.use_market_diversion !== 'undefined') ? data.use_market_diversion : (data.visit_data?.useMarketDiversion ?? undefined),
-        use_warehouse_monitoring: (typeof data.use_warehouse_monitoring !== 'undefined') ? data.use_warehouse_monitoring : (data.visit_data?.useWarehouseMonitoring ?? undefined),
-        comments: data.notes ?? undefined,
-        cost: (() => { try { const t = Number(data?.fees?.total); return isNaN(t) ? undefined : t; } catch { return undefined; } })(),
-      };
-      
-      if (typeof updates.status !== 'undefined') {
-        const mapped = statusMap[String(updates.status).toLowerCase()];
-        if (mapped) {
-          updatePayload.status = mapped;
-          
-          // If status is being set to 'Verified' and cost is 0 or null, set default fees
-          // Default: Enumerator fees ($20) + Transport fees ($10 minimum) = $30
-          if (mapped === 'Verified') {
-            const existingCost = currentEntry?.cost;
-            const feesCost = updatePayload.cost;
-            const additionalData = currentEntry?.additional_data || {};
-            const existingEnumFee = additionalData?.enumerator_fee;
-            const existingTransFee = additionalData?.transport_fee;
-            
-            // Only set default if no cost exists (0, null, undefined) and no cost from fees
-            if ((!existingCost || existingCost === 0 || existingCost === null) && (!feesCost || feesCost === 0)) {
-              additionalData.enumerator_fee = 20; // $20 enumerator fee
-              additionalData.transport_fee = 10; // $10 transport fee (minimum)
-              updatePayload.cost = 30; // Total: $30
-              updatePayload.additional_data = additionalData;
-            } else if ((!existingEnumFee || existingEnumFee === 0) && (!existingTransFee || existingTransFee === 0)) {
-              // If cost exists but fees don't, set fees based on cost
-              if (existingCost === 30) {
-                additionalData.enumerator_fee = 20;
-                additionalData.transport_fee = 10;
-              } else if (existingCost) {
-                additionalData.enumerator_fee = existingCost - 10;
-                additionalData.transport_fee = 10;
-              }
-              updatePayload.additional_data = additionalData;
-            }
-          }
-        }
-      }
-      Object.keys(updatePayload).forEach(k => updatePayload[k] === undefined && delete updatePayload[k]);
-      if (Object.keys(updatePayload).length > 0) {
-        await supabase
-          .from('mmp_site_entries')
-          .update(updatePayload)
-          .eq('mmp_file_id', mmpId)
-          .eq('site_code', siteCode);
-      }
-    }
-  } catch (e) {
-    console.warn('Non-fatal: failed to sync mmp_site_entries from site_visits update', e);
+  if (fetchUpdatedError) {
+    console.error('Error fetching updated site entry:', fetchUpdatedError);
+    throw fetchUpdatedError;
   }
   
   // Transform back to camelCase for frontend use
+  const ad = updatedData.additional_data || {};
+  const enumeratorFee = updatedData.enumerator_fee || ad.enumerator_fee || 20;
+  const transportFee = updatedData.transport_fee || ad.transport_fee || 10;
+  const totalCost = updatedData.cost || (enumeratorFee + transportFee);
+  const fees = {
+    total: totalCost,
+    currency: 'SDG',
+    distanceFee: transportFee,
+    complexityFee: 0,
+    urgencyFee: 0,
+    baseAmount: enumeratorFee,
+    transportation: transportFee
+  };
+  
   return {
-    id: data.id,
-    siteName: data.site_name,
-    siteCode: data.site_code,
-    status: data.status,
-    locality: data.locality,
-    state: data.state,
-    activity: data.activity,
-    priority: data.priority,
-    dueDate: data.due_date,
-    assignedTo: data.assigned_to,
-    assignedBy: data.assigned_by,
-    assignedAt: data.assigned_at,
-    notes: data.notes,
-    attachments: data.attachments,
-    completedAt: data.completed_at,
-    rating: data.rating,
-    fees: data.fees || {},
-    scheduledDate: data.due_date,
-    description: data.notes,
-    permitDetails: data.visit_data?.permitDetails || {
+    id: updatedData.id,
+    siteName: updatedData.site_name,
+    siteCode: updatedData.site_code,
+    status: updatedData.status || 'Pending',
+    locality: updatedData.locality,
+    state: updatedData.state,
+    activity: updatedData.activity_at_site || updatedData.main_activity,
+    priority: ad.priority || 'medium',
+    dueDate: updatedData.visit_date ? new Date(updatedData.visit_date).toISOString() : undefined,
+    assignedTo: ad.assigned_to || undefined,
+    assignedBy: ad.assigned_by || undefined,
+    assignedAt: ad.assigned_at || undefined,
+    notes: updatedData.comments,
+    attachments: ad.attachments || [],
+    completedAt: ad.completed_at || undefined,
+    rating: ad.rating || undefined,
+    fees: fees,
+    scheduledDate: updatedData.visit_date ? new Date(updatedData.visit_date).toISOString() : undefined,
+    description: updatedData.comments,
+    hub: updatedData.hub_office || "",
+    cpName: updatedData.cp_name,
+    permitDetails: ad.permitDetails || {
       federal: false,
       state: false,
       locality: false
     },
-    location: data.location || {
+    location: ad.location || {
       address: "",
       latitude: 0,
       longitude: 0,
-      region: data.state || ""
+      region: updatedData.state || ""
     },
-    coordinates: data.location ? {
-      latitude: data.location.latitude || 0,
-      longitude: data.location.longitude || 0
+    coordinates: ad.location ? {
+      latitude: ad.location.latitude || 0,
+      longitude: ad.location.longitude || 0
     } : {
       latitude: 0,
       longitude: 0
     },
-    mmpDetails: data.visit_data?.mmpDetails || {
-      mmpId: data.mmp_id || "",
+    mmpDetails: {
+      mmpId: updatedData.mmp_file_id || "",
       projectName: "",
       uploadedBy: "",
       uploadedAt: "",
-      region: data.location?.region || ""
+      region: updatedData.state || ""
     },
-    complexity: data.visit_data?.complexity || "medium",
-    visitType: data.visit_data?.visitType || "regular",
-    mainActivity: data.main_activity || "",
-    projectActivities: data.visit_data?.projectActivities || [],
-    createdAt: data.created_at
+    complexity: ad.complexity || "medium",
+    visitType: updatedData.visit_type || "regular",
+    visitTypeRaw: ad.visitTypeRaw,
+    mainActivity: updatedData.main_activity || "",
+    projectActivities: ad.projectActivities || [],
+    hubOffice: updatedData.hub_office,
+    siteActivity: updatedData.activity_at_site,
+    monitoringBy: updatedData.monitoring_by,
+    surveyTool: updatedData.survey_tool,
+    useMarketDiversion: updatedData.use_market_diversion || false,
+    useWarehouseMonitoring: updatedData.use_warehouse_monitoring || false,
+    arrivalLatitude: ad.arrival_latitude,
+    arrivalLongitude: ad.arrival_longitude,
+    arrivalTimestamp: ad.arrival_timestamp,
+    journeyPath: ad.journey_path,
+    arrivalRecorded: ad.arrival_recorded || false,
+    createdAt: updatedData.created_at
   } as SiteVisit;
 };

@@ -76,32 +76,35 @@ const CoordinatorSites: React.FC = () => {
         const userId = currentUser.id;
         
         // Load all counts in parallel using database count queries
-        const [newCount, verifiedCount, approvedCount, completedCount, rejectedCount] = await Promise.all([
-          supabase
-            .from('site_visits')
-            .select('*', { count: 'exact', head: true })
-            .eq('assigned_to', userId)
-            .or('status.eq.assigned,status.eq.inProgress'),
-          supabase
-            .from('site_visits')
-            .select('*', { count: 'exact', head: true })
-            .eq('assigned_to', userId)
-            .eq('status', 'verified'),
-          supabase
-            .from('site_visits')
-            .select('*', { count: 'exact', head: true })
-            .eq('assigned_to', userId)
-            .eq('status', 'approved'),
-          supabase
-            .from('site_visits')
-            .select('*', { count: 'exact', head: true })
-            .eq('assigned_to', userId)
-            .eq('status', 'completed'),
-          supabase
-            .from('site_visits')
-            .select('*', { count: 'exact', head: true })
-            .eq('assigned_to', userId)
-            .eq('status', 'rejected')
+        // Note: assigned_to is now stored in additional_data.assigned_to for mmp_site_entries
+        // We need to load entries and filter in memory since we can't query JSONB fields directly with count
+        const { data: allEntries, error: entriesError } = await supabase
+          .from('mmp_site_entries')
+          .select('id, status, additional_data');
+        
+        if (entriesError) throw entriesError;
+        
+        // Filter entries by assigned_to in additional_data
+        const userEntries = (allEntries || []).filter((entry: any) => {
+          const ad = entry.additional_data || {};
+          return ad.assigned_to === userId;
+        });
+        
+        const newCount = { count: userEntries.filter((e: any) => 
+          e.status === 'assigned' || e.status === 'inProgress' || e.status === 'in_progress'
+        ).length };
+        const verifiedCount = { count: userEntries.filter((e: any) => 
+          e.status?.toLowerCase() === 'verified'
+        ).length };
+        const approvedCount = { count: userEntries.filter((e: any) => 
+          e.status?.toLowerCase() === 'approved'
+        ).length };
+        const completedCount = { count: userEntries.filter((e: any) => 
+          e.status?.toLowerCase() === 'completed'
+        ).length };
+        const rejectedCount = { count: userEntries.filter((e: any) => 
+          e.status?.toLowerCase() === 'rejected'
+        ).length };
         ]);
 
         setNewSitesCount(newCount.count || 0);

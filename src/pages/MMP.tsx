@@ -54,33 +54,14 @@ const SitesDisplayTable: React.FC<{
 
         if (mmpError) throw mmpError;
 
-        // Load from site_visits to get verified_by and other info
-        const { data: siteVisits, error: siteVisitsError } = await supabase
-          .from('site_visits')
-          .select('id,mmp_id,site_code,verified_by,verified_at,verification_notes,status')
-          .in('mmp_id', mmpIds);
-
-        if (siteVisitsError) console.warn('Failed to load site_visits:', siteVisitsError);
-
-        // Create a map of site_visits by mmp_id and site_code
-        const siteVisitMap = new Map<string, any>();
-        (siteVisits || []).forEach(sv => {
-          if (sv.mmp_id && sv.site_code) {
-            siteVisitMap.set(`${sv.mmp_id}-${sv.site_code}`, sv);
-          }
-        });
-
-        // Merge mmp_site_entries with site_visits data and format for MMPSiteEntriesTable
+        // Format mmp_site_entries for MMPSiteEntriesTable
         const mergedEntries = (mmpEntries || []).map(entry => {
-          const key = `${entry.mmp_file_id}-${entry.site_code}`;
-          const siteVisit = siteVisitMap.get(key);
-          
           return {
             ...entry,
-            verified_by: siteVisit?.verified_by || undefined,
-            verified_at: siteVisit?.verified_at || undefined,
-            verification_notes: entry.verification_notes || siteVisit?.verification_notes || undefined,
-            status: entry.status || siteVisit?.status || 'Pending',
+            verified_by: entry.verified_by || undefined,
+            verified_at: entry.verified_at || undefined,
+            verification_notes: entry.verification_notes || undefined,
+            status: entry.status || 'Pending',
             // Map to camelCase for MMPSiteEntriesTable
             siteName: entry.site_name,
             siteCode: entry.site_code,
@@ -206,19 +187,7 @@ const SitesDisplayTable: React.FC<{
                   .eq('id', site.id);
               }
 
-              // Also update site_visits if verified_by is set
-              if (site.verified_by && site.mmp_file_id && site.site_code) {
-                await supabase
-                  .from('site_visits')
-                  .update({
-                    verified_by: site.verified_by,
-                    verified_at: site.verified_at || new Date().toISOString(),
-                    verification_notes: site.verification_notes || site.verificationNotes,
-                    status: site.status || 'verified'
-                  })
-                  .eq('mmp_id', site.mmp_file_id)
-                  .eq('site_code', site.site_code);
-              }
+              // Verification data is now stored directly in mmp_site_entries, no need to update site_visits
             }
             setSiteEntries(sites as any[]);
             return true;
@@ -264,33 +233,13 @@ const VerifiedSitesDisplay: React.FC<{ verifiedSites: SiteVisitRow[] }> = ({ ver
 
         if (mmpError) throw mmpError;
 
-        // Load from site_visits to get verified_by
-        const { data: siteVisits, error: siteVisitsError } = await supabase
-          .from('site_visits')
-          .select('id,mmp_id,site_code,verified_by,verified_at,verification_notes')
-          .in('mmp_id', mmpIds)
-          .eq('status', 'verified');
-
-        if (siteVisitsError) console.warn('Failed to load site_visits:', siteVisitsError);
-
-        // Create a map of site_visits by mmp_id and site_code
-        const siteVisitMap = new Map<string, any>();
-        (siteVisits || []).forEach(sv => {
-          if (sv.mmp_id && sv.site_code) {
-            siteVisitMap.set(`${sv.mmp_id}-${sv.site_code}`, sv);
-          }
-        });
-
-        // Merge mmp_site_entries with site_visits data and format for MMPSiteEntriesTable
+        // Format mmp_site_entries for MMPSiteEntriesTable
         const mergedEntries = (mmpEntries || []).map(entry => {
-          const key = `${entry.mmp_file_id}-${entry.site_code}`;
-          const siteVisit = siteVisitMap.get(key);
-          
           return {
             ...entry,
-            verified_by: siteVisit?.verified_by || undefined,
-            verified_at: siteVisit?.verified_at || undefined,
-            verification_notes: entry.verification_notes || siteVisit?.verification_notes || undefined,
+            verified_by: entry.verified_by || undefined,
+            verified_at: entry.verified_at || undefined,
+            verification_notes: entry.verification_notes || undefined,
             // Map to camelCase for MMPSiteEntriesTable
             siteName: entry.site_name,
             siteCode: entry.site_code,
@@ -409,19 +358,7 @@ const VerifiedSitesDisplay: React.FC<{ verifiedSites: SiteVisitRow[] }> = ({ ver
                   .eq('id', site.id);
               }
 
-              // Also update site_visits if verified_by is set
-              if (site.verified_by && site.mmp_file_id && site.site_code) {
-                await supabase
-                  .from('site_visits')
-                  .update({
-                    verified_by: site.verified_by,
-                    verified_at: site.verified_at || new Date().toISOString(),
-                    verification_notes: site.verification_notes || site.verificationNotes,
-                    status: site.status || 'verified'
-                  })
-                  .eq('mmp_id', site.mmp_file_id)
-                  .eq('site_code', site.site_code);
-              }
+              // Verification data is now stored directly in mmp_site_entries, no need to update site_visits
             }
             setVerifiedSiteEntries(sites as any[]);
             return true;
@@ -1071,7 +1008,7 @@ const MMP = () => {
     
     // Filter to only count verified sites from any MMP
     const verifiedSites = buildSiteRowsFromMMPs(allVerifiedMMPs, (row) => {
-      // Show sites that are verified (from site_visits or mmp_site_entries)
+      // Show sites that are verified (from mmp_site_entries)
       // Check both lowercase and capitalized versions
       const status = row.status?.toLowerCase() || '';
       return status === 'verified';
@@ -1093,7 +1030,7 @@ const MMP = () => {
       
       // Filter to only show verified sites from any MMP
       const verifiedSites = buildSiteRowsFromMMPs(allVerifiedMMPs, (row) => {
-        // Show sites that are verified (from site_visits or mmp_site_entries)
+        // Show sites that are verified (from mmp_site_entries)
         // Check both lowercase and capitalized versions
         const status = row.status?.toLowerCase() || '';
         return status === 'verified';
@@ -1202,25 +1139,17 @@ const MMP = () => {
       }
       const ids = list.map(m => m.id);
       try {
-        // Load from site_visits
-        const { data: siteVisitsData, error: siteVisitsError } = await supabase
-          .from('site_visits')
-          .select('id,mmp_id,status,fees,site_name,site_code,state,locality,assigned_at,completed_at,rejection_reason,verified_by,verified_at')
-          .in('mmp_id', ids);
-        if (siteVisitsError) throw siteVisitsError;
-        
-        // Load ALL mmp_site_entries (not just verified) to check cost and status for "Approved & Costed"
+        // Load ALL mmp_site_entries to check cost and status for "Approved & Costed"
         const { data: mmpEntriesData, error: mmpEntriesError } = await supabase
           .from('mmp_site_entries')
-          .select('id,mmp_file_id,status,site_code,state,locality,site_name,verification_notes,cost')
+          .select('id,mmp_file_id,status,site_code,state,locality,site_name,verification_notes,cost,verified_by,verified_at,dispatched_at,accepted_by,accepted_at')
           .in('mmp_file_id', ids);
-        if (mmpEntriesError) console.warn('Failed to load mmp_site_entries:', mmpEntriesError);
+        if (mmpEntriesError) throw mmpEntriesError;
         
         const map: Record<string, {
           exists: boolean; hasCosted: boolean; hasAssigned: boolean; hasInProgress: boolean; hasAccepted: boolean; hasCompleted: boolean; hasRejected: boolean; hasDispatched: boolean; allApprovedAndCosted: boolean;
         }> = {};
         const rows: SiteVisitRow[] = [];
-        const siteVisitMap = new Map<string, SiteVisitRow>();
         
         // Initialize map for all MMPs
         for (const id of ids) {
@@ -1229,47 +1158,7 @@ const MMP = () => {
           }
         }
         
-        // Process site_visits
-        for (const row of (siteVisitsData || []) as any[]) {
-          const id = row.mmp_id;
-          if (!map[id]) {
-            map[id] = { exists: false, hasCosted: false, hasAssigned: false, hasInProgress: false, hasAccepted: false, hasCompleted: false, hasRejected: false, hasDispatched: false, allApprovedAndCosted: false };
-          }
-          map[id].exists = true;
-          const status = String(row.status || '').toLowerCase();
-          if (status === 'assigned') map[id].hasAssigned = true;
-          if (status === 'accepted') map[id].hasAccepted = true;
-          if (status === 'inprogress') map[id].hasInProgress = true;
-          if (status === 'completed') map[id].hasCompleted = true;
-          if (status === 'rejected' || status === 'declined') map[id].hasRejected = true;
-          const fees = row.fees || {};
-          const total = Number(fees.total || 0);
-          if (total > 0) map[id].hasCosted = true;
-          
-          const siteRow: SiteVisitRow = {
-            id: row.id,
-            mmpId: row.mmp_id,
-            siteName: row.site_name || row.site_code || row.id,
-            siteCode: row.site_code || undefined,
-            state: row.state || undefined,
-            locality: row.locality || undefined,
-            status: row.status || 'unknown',
-            feesTotal: total,
-            assignedAt: row.assigned_at || undefined,
-            completedAt: row.completed_at || undefined,
-            rejectionReason: row.rejection_reason || undefined,
-            verifiedBy: row.verified_by || undefined,
-            verifiedAt: row.verified_at || undefined,
-          };
-          rows.push(siteRow);
-          // Map by mmp_id and site_code for merging
-          if (row.site_code) {
-            siteVisitMap.set(`${row.mmp_id}-${row.site_code}`, siteRow);
-          }
-        }
-        
-        // Process mmp_site_entries - add verified sites that might not be in site_visits
-        // Also check if all entries are approved and costed, and check for dispatched status
+        // Process mmp_site_entries - this is now the single source of truth
         const entriesByMmp = new Map<string, any[]>();
         for (const entry of (mmpEntriesData || []) as any[]) {
           const mmpId = entry.mmp_file_id;
@@ -1278,9 +1167,23 @@ const MMP = () => {
           }
           entriesByMmp.get(mmpId)!.push(entry);
           
-          const key = `${entry.mmp_file_id}-${entry.site_code}`;
-          // If we don't have this site in site_visits, add it from mmp_site_entries
-          if (!siteVisitMap.has(key)) {
+          // Update stats based on entry status
+          if (!map[mmpId]) {
+            map[mmpId] = { exists: false, hasCosted: false, hasAssigned: false, hasInProgress: false, hasAccepted: false, hasCompleted: false, hasRejected: false, hasDispatched: false, allApprovedAndCosted: false };
+          }
+          map[mmpId].exists = true;
+          
+          const status = String(entry.status || '').toLowerCase();
+          if (status === 'assigned') map[mmpId].hasAssigned = true;
+          if (status === 'accepted' || entry.accepted_by) map[mmpId].hasAccepted = true;
+          if (status === 'inprogress' || status === 'in_progress') map[mmpId].hasInProgress = true;
+          if (status === 'completed') map[mmpId].hasCompleted = true;
+          if (status === 'rejected' || status === 'declined') map[mmpId].hasRejected = true;
+          if (status === 'dispatched' || entry.dispatched_at) map[mmpId].hasDispatched = true;
+          
+          const cost = Number(entry.cost || 0);
+          if (cost > 0) map[mmpId].hasCosted = true;
+          
             const siteRow: SiteVisitRow = {
               id: entry.id || `${entry.mmp_file_id}-${entry.site_code}`,
               mmpId: entry.mmp_file_id,
@@ -1288,27 +1191,15 @@ const MMP = () => {
               siteCode: entry.site_code || undefined,
               state: entry.state || undefined,
               locality: entry.locality || undefined,
-              status: entry.status || 'Pending', // Use actual status from mmp_site_entries
-              feesTotal: Number(entry.cost || 0),
-              verifiedBy: undefined, // mmp_site_entries doesn't have verified_by, will need to get from site_visits if exists
-              verifiedAt: undefined,
+            status: entry.status || 'Pending',
+            feesTotal: cost,
+            verifiedBy: entry.verified_by || undefined,
+            verifiedAt: entry.verified_at || undefined,
             };
             rows.push(siteRow);
-            siteVisitMap.set(key, siteRow);
-          } else {
-            // Update existing row with verified status if it's verified in mmp_site_entries
-            const existingRow = siteVisitMap.get(key);
-            if (existingRow && entry.status === 'Verified' && existingRow.status?.toLowerCase() !== 'verified') {
-              existingRow.status = 'Verified';
-            }
-            // Update cost if available
-            if (entry.cost && Number(entry.cost) > 0) {
-              existingRow.feesTotal = Number(entry.cost);
-            }
-          }
         }
         
-        // Check if all entries for each MMP are approved and costed, and check for dispatched status
+        // Check if all entries for each MMP are approved and costed
         for (const [mmpId, entries] of entriesByMmp.entries()) {
           if (!map[mmpId]) {
             map[mmpId] = { exists: false, hasCosted: false, hasAssigned: false, hasInProgress: false, hasAccepted: false, hasCompleted: false, hasRejected: false, hasDispatched: false, allApprovedAndCosted: false };
@@ -1322,15 +1213,6 @@ const MMP = () => {
               return cost > 0 && status === 'verified';
             });
             map[mmpId].allApprovedAndCosted = allApprovedAndCosted;
-            
-            // Check if any entry is dispatched
-            const hasDispatched = entries.some(entry => {
-              const status = String(entry.status || '').toLowerCase();
-              return status === 'dispatched';
-            });
-            if (hasDispatched) {
-              map[mmpId].hasDispatched = true;
-            }
           }
         }
         

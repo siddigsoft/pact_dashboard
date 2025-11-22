@@ -124,13 +124,15 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
         let workloadCounts: Record<string, number> = {};
         try {
-          const { data: activeVisits } = await supabase
-            .from('site_visits')
-            .select('assigned_to, status');
+          const { data: activeEntries } = await supabase
+            .from('mmp_site_entries')
+            .select('additional_data, status');
           const counts: Record<string, number> = {};
-          (activeVisits || []).forEach((r: any) => {
-            if (r.assigned_to && (r.status === 'assigned' || r.status === 'inProgress')) {
-              counts[r.assigned_to] = (counts[r.assigned_to] || 0) + 1;
+          (activeEntries || []).forEach((r: any) => {
+            const ad = r.additional_data || {};
+            const assignedTo = ad.assigned_to;
+            if (assignedTo && (r.status === 'assigned' || r.status === 'inProgress' || r.status === 'in_progress')) {
+              counts[assignedTo] = (counts[assignedTo] || 0) + 1;
             }
           });
           workloadCounts = counts;

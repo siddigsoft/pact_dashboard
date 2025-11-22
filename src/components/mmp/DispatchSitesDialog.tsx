@@ -212,157 +212,28 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
       const { data: { user: authUserForAssign } } = await supabase.auth.getUser();
       const assignedBy = authUserForAssign?.id;
 
-      // Create site_visits for each site and collector combination
-      const siteVisitPromises: Promise<any>[] = [];
+      // Prepare notifications for collectors
       const notificationRows: any[] = [];
 
       for (const siteEntry of selectedSiteObjects) {
         const additionalData = siteEntry.additional_data || {};
-        const enumeratorFee = additionalData.enumerator_fee || 20;
-        const transportFee = additionalData.transport_fee || 10;
+        const enumeratorFee = siteEntry.enumerator_fee || additionalData.enumerator_fee || 20;
+        const transportFee = siteEntry.transport_fee || additionalData.transport_fee || 10;
         const totalCost = siteEntry.cost || (enumeratorFee + transportFee);
 
-        // For locality dispatch, create one site_visit that all collectors can see
-        // For individual dispatch, create one site_visit assigned to that collector
-        // For state dispatch, create site_visits for all collectors in that state
-        
-        if (dispatchType === 'locality') {
-          // For locality: create one site_visit per site (not assigned yet, collectors can claim it)
-          const siteVisitData = {
-            site_name: siteEntry.site_name || siteEntry.siteName || 'Unknown Site',
-            site_code: siteEntry.site_code || siteEntry.siteCode || siteEntry.id,
-            status: 'pending', // Not assigned yet, waiting for collector to accept
-            locality: siteEntry.locality || '',
-            state: siteEntry.state || '',
-            activity: siteEntry.activity_at_site || siteEntry.siteActivity || 'Site Visit',
-            priority: 'medium',
-            due_date: siteEntry.visit_date ? new Date(siteEntry.visit_date).toISOString() : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-            notes: siteEntry.comments || `Dispatched from MMP site entry`,
-            main_activity: siteEntry.main_activity || '',
-            hub_office: siteEntry.hub_office || siteEntry.hubOffice || '',
-            activity_at_site: siteEntry.activity_at_site || siteEntry.siteActivity || '',
-            monitoring_by: siteEntry.monitoring_by || siteEntry.monitoringBy || '',
-            survey_tool: siteEntry.survey_tool || siteEntry.surveyTool || '',
-            use_market_diversion: siteEntry.use_market_diversion || siteEntry.useMarketDiversion || false,
-            use_warehouse_monitoring: siteEntry.use_warehouse_monitoring || siteEntry.useWarehouseMonitoring || false,
-            mmp_id: siteEntry.mmp_file_id,
-            fees: {
-              total: totalCost,
-              currency: 'SDG',
-              enumerator_fee: enumeratorFee,
-              transport_fee: transportFee
-            },
-            visit_data: {
-              hub: siteEntry.hub_office || siteEntry.hubOffice,
-              cpName: siteEntry.cp_name || siteEntry.cpName,
-              visitType: siteEntry.visit_type || siteEntry.visitType,
-              complexity: 'medium'
-            },
-            location: {
-              address: `${siteEntry.locality || ''}, ${siteEntry.state || ''}`,
-              latitude: 0,
-              longitude: 0,
-              region: siteEntry.state || ''
-            }
-          };
-
-          const { data: siteVisit, error: svError } = await supabase
-            .from('site_visits')
-            .insert([siteVisitData])
-            .select()
-            .single();
-
-          if (svError) {
-            console.error('Error creating site visit:', svError);
-            throw svError;
-          }
-
-          // Send notification to all collectors in the locality
-          for (const collectorId of targetCollectors) {
-            notificationRows.push({
-              user_id: collectorId,
-              title: 'New Site Visit Available',
-              message: `Site "${siteEntry.site_name || siteEntry.siteName}" in ${siteEntry.locality} is available. Fee: ${totalCost} SDG (Enumerator: ${enumeratorFee} SDG, Transport: ${transportFee} SDG)`,
-              type: 'info',
-              link: `/site-visits/${siteVisit.id}`,
-              related_entity_id: siteVisit.id,
-              related_entity_type: 'siteVisit'
-            });
-          }
-        } else {
-          // For state or individual: create site_visits for each collector
-          for (const collectorId of targetCollectors) {
-            const siteVisitData = {
-              site_name: siteEntry.site_name || siteEntry.siteName || 'Unknown Site',
-              site_code: siteEntry.site_code || siteEntry.siteCode || siteEntry.id,
-              status: dispatchType === 'individual' ? 'assigned' : 'pending',
-              locality: siteEntry.locality || '',
-              state: siteEntry.state || '',
-              activity: siteEntry.activity_at_site || siteEntry.siteActivity || 'Site Visit',
-              priority: 'medium',
-              due_date: siteEntry.visit_date ? new Date(siteEntry.visit_date).toISOString() : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-              assigned_to: dispatchType === 'individual' ? collectorId : null,
-              assigned_by: dispatchType === 'individual' ? assignedBy : null,
-              assigned_at: dispatchType === 'individual' ? new Date().toISOString() : null,
-              notes: siteEntry.comments || `Dispatched from MMP site entry`,
-              main_activity: siteEntry.main_activity || '',
-              hub_office: siteEntry.hub_office || siteEntry.hubOffice || '',
-              activity_at_site: siteEntry.activity_at_site || siteEntry.siteActivity || '',
-              monitoring_by: siteEntry.monitoring_by || siteEntry.monitoringBy || '',
-              survey_tool: siteEntry.survey_tool || siteEntry.surveyTool || '',
-              use_market_diversion: siteEntry.use_market_diversion || siteEntry.useMarketDiversion || false,
-              use_warehouse_monitoring: siteEntry.use_warehouse_monitoring || siteEntry.useWarehouseMonitoring || false,
-              mmp_id: siteEntry.mmp_file_id,
-              fees: {
-                total: totalCost,
-                currency: 'SDG',
-                enumerator_fee: enumeratorFee,
-                transport_fee: transportFee
-              },
-              visit_data: {
-                hub: siteEntry.hub_office || siteEntry.hubOffice,
-                cpName: siteEntry.cp_name || siteEntry.cpName,
-                visitType: siteEntry.visit_type || siteEntry.visitType,
-                complexity: 'medium'
-              },
-              location: {
-                address: `${siteEntry.locality || ''}, ${siteEntry.state || ''}`,
-                latitude: 0,
-                longitude: 0,
-                region: siteEntry.state || ''
-              }
-            };
-
-            const siteVisitPromise = (async () => {
-              const { data, error } = await supabase
-                .from('site_visits')
-                .insert([siteVisitData])
-                .select()
-                .single();
-              
-              if (error) throw error;
-              
-              // Create notification
-              notificationRows.push({
-                user_id: collectorId,
-                title: dispatchType === 'individual' ? 'Site Visit Assigned' : 'New Site Visit Available',
-                message: `Site "${siteEntry.site_name || siteEntry.siteName}" ${dispatchType === 'individual' ? 'has been assigned to you' : 'is available'}. Fee: ${totalCost} SDG (Enumerator: ${enumeratorFee} SDG, Transport: ${transportFee} SDG)`,
-                type: 'info',
-                link: `/site-visits/${data.id}`,
-                related_entity_id: data.id,
-                related_entity_type: 'siteVisit'
-              });
-              
-              return data;
-            })();
-            
-            siteVisitPromises.push(siteVisitPromise);
-          }
+        // Send notification to all target collectors
+        for (const collectorId of targetCollectors) {
+          notificationRows.push({
+            user_id: collectorId,
+            title: dispatchType === 'individual' ? 'Site Visit Assigned' : 'New Site Visit Available',
+            message: `Site "${siteEntry.site_name || siteEntry.siteName}" ${dispatchType === 'individual' ? 'has been assigned to you' : 'is available'}. Fee: ${totalCost} SDG (Enumerator: ${enumeratorFee} SDG, Transport: ${transportFee} SDG)`,
+            type: 'info',
+            link: `/mmp?entry=${siteEntry.id}`,
+            related_entity_id: siteEntry.id,
+            related_entity_type: 'mmpFile'
+          });
         }
       }
-
-      // Wait for all site visits to be created
-      await Promise.all(siteVisitPromises);
 
       // Send all notifications
       if (notificationRows.length > 0) {

@@ -48,14 +48,14 @@ export const BulkClearForwardedDialog: React.FC<BulkClearForwardedDialogProps> =
         setMmpRows(forwarded as MMPRow[]);
         const ids = forwarded.map((r: any) => r.id);
         if (ids.length) {
-          const { data: visits, error: vErr } = await supabase
-            .from('site_visits')
-            .select('id,mmp_id')
-            .in('mmp_id', ids);
+          const { data: entries, error: vErr } = await supabase
+            .from('mmp_site_entries')
+            .select('id,mmp_file_id')
+            .in('mmp_file_id', ids);
           if (vErr) throw vErr;
           const counts: Record<string, number> = {};
-          for (const v of (visits || []) as any[]) {
-            counts[v.mmp_id] = (counts[v.mmp_id] || 0) + 1;
+          for (const e of (entries || []) as any[]) {
+            counts[e.mmp_file_id] = (counts[e.mmp_file_id] || 0) + 1;
           }
           setSiteVisitCounts(counts);
         } else {
@@ -104,10 +104,19 @@ export const BulkClearForwardedDialog: React.FC<BulkClearForwardedDialogProps> =
         await supabase.from('mmp_files').update({ workflow: next }).eq('id', mmp.id);
       }
 
-      // Delete site visits if opted in
+      // Reset site entries status if opted in (don't delete, just reset to pending)
       if (includeSiteVisitDeletion && mmpRows.length) {
         const ids = mmpRows.map(r => r.id);
-        await supabase.from('site_visits').delete().in('mmp_id', ids);
+        await supabase
+          .from('mmp_site_entries')
+          .update({ 
+            status: 'Pending',
+            dispatched_by: null,
+            dispatched_at: null,
+            accepted_by: null,
+            accepted_at: null
+          })
+          .in('mmp_file_id', ids);
       }
 
       // Notification summary
@@ -115,7 +124,7 @@ export const BulkClearForwardedDialog: React.FC<BulkClearForwardedDialogProps> =
         await supabase.from('notifications').insert({
           user_id: adminId,
           title: 'Forwarded sites cleared',
-          message: `Cleared ${mmpRows.length} MMP(s); removed ${includeSiteVisitDeletion ? totalSiteVisits : 0} site visit record(s).`,
+          message: `Cleared ${mmpRows.length} MMP(s); reset ${includeSiteVisitDeletion ? totalSiteVisits : 0} site entry status(es).`,
           type: 'info',
           related_entity_type: 'mmpFile',
         });
@@ -123,7 +132,7 @@ export const BulkClearForwardedDialog: React.FC<BulkClearForwardedDialogProps> =
 
       toast({
         title: 'Forwarded sites cleared',
-        description: `Reset ${mmpRows.length} MMP(s); deleted ${includeSiteVisitDeletion ? totalSiteVisits : 0} site visit(s).`,
+        description: `Reset ${mmpRows.length} MMP(s); reset ${includeSiteVisitDeletion ? totalSiteVisits : 0} site entry status(es).`,
       });
       onOpenChange(false);
       setConfirmText('');
@@ -141,7 +150,7 @@ export const BulkClearForwardedDialog: React.FC<BulkClearForwardedDialogProps> =
         <DialogHeader>
           <DialogTitle>Bulk Clear Forwarded Sites</DialogTitle>
           <DialogDescription>
-            This action will remove forwarding flags (FOM & Coordinator) from all MMPs currently forwarded. Optionally delete their site visit records. Type CLEAR to confirm.
+            This action will remove forwarding flags (FOM & Coordinator) from all MMPs currently forwarded. Optionally reset their site entry statuses. Type CLEAR to confirm.
           </DialogDescription>
         </DialogHeader>
 
@@ -154,22 +163,22 @@ export const BulkClearForwardedDialog: React.FC<BulkClearForwardedDialogProps> =
                 <div className="text-2xl font-bold">{mmpRows.length}</div>
               </div>
               <div className="p-3 rounded-lg border bg-muted/40">
-                <div className="text-xs uppercase tracking-wide text-muted-foreground">Site Visits {includeSiteVisitDeletion ? '(will delete)' : '(retain)'}</div>
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">Site Entries {includeSiteVisitDeletion ? '(will reset)' : '(retain)'}</div>
                 <div className="text-2xl font-bold">{totalSiteVisits}</div>
               </div>
             </div>
 
             <div className="flex items-center justify-between border rounded-md p-3">
               <div className="flex flex-col">
-                <span className="text-sm font-medium">Delete site visit records</span>
+                <span className="text-sm font-medium">Reset site entry statuses</span>
                 <span className="text-xs text-muted-foreground">Uncheck to only reset workflow flags</span>
               </div>
               <Button
                 variant={includeSiteVisitDeletion ? 'destructive' : 'outline'}
                 onClick={() => setIncludeSiteVisitDeletion(v => !v)}
-                className={includeSiteVisitDeletion ? 'bg-red-600 hover:bg-red-700 text-white' : ''}
+                className={includeSiteVisitDeletion ? 'bg-orange-600 hover:bg-orange-700 text-white' : ''}
               >
-                {includeSiteVisitDeletion ? 'Will Delete' : 'Keep Records'}
+                {includeSiteVisitDeletion ? 'Will Reset' : 'Keep Status'}
               </Button>
             </div>
 
