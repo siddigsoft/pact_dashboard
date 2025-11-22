@@ -1,17 +1,68 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import { SiteVisit } from '@/types';
+import { 
+  fetchSiteVisitsFromMMPEntries, 
+  mapMMPSiteEntryToSiteVisit,
+  createMMPSiteEntry,
+  updateMMPSiteEntry,
+  deleteMMPSiteEntry
+} from './mmpSiteEntriesAdapter';
 
-export const fetchSiteVisits = async () => {
-  const { data, error } = await supabase
-    .from('site_visits')
-    .select('*');
+/**
+ * Fetches site visits from both site_visits table and mmp_site_entries table
+ * Tries site_visits first (if it exists), then falls back to mmp_site_entries
+ */
+export const fetchSiteVisits = async (): Promise<SiteVisit[]> => {
+  // First, try to fetch from site_visits table
+  try {
+    const { data, error, status } = await supabase
+      .from('site_visits')
+      .select('*');
     
-  if (error) {
-    console.error('Error fetching site visits:', error);
-    throw error;
+    // If site_visits table doesn't exist (status 42P01 = undefined_table)
+    // or if it's empty, try mmp_site_entries
+    if (error && (error.code === '42P01' || error.message.includes('does not exist'))) {
+      console.log('site_visits table not found, using mmp_site_entries');
+      return await fetchSiteVisitsFromMMPEntries();
+    }
+    
+    if (error) {
+      console.error('Error fetching site visits:', error);
+      // Try fallback to mmp_site_entries
+      try {
+        return await fetchSiteVisitsFromMMPEntries();
+      } catch (fallbackError) {
+        console.error('Error fetching from mmp_site_entries:', fallbackError);
+        throw error; // Throw original error
+      }
+    }
+    
+    // If we got data, transform and return it
+    if (data && data.length > 0) {
+      return transformSiteVisitsData(data);
+    }
+    
+    // If site_visits is empty, try to fetch from mmp_site_entries as fallback
+    console.log('site_visits table is empty, fetching from mmp_site_entries');
+    return await fetchSiteVisitsFromMMPEntries();
+    
+  } catch (error) {
+    console.error('Error in fetchSiteVisits:', error);
+    // Final fallback to mmp_site_entries
+    try {
+      return await fetchSiteVisitsFromMMPEntries();
+    } catch (fallbackError) {
+      console.error('All fetch attempts failed:', fallbackError);
+      return [];
+    }
   }
-  
+};
+
+/**
+ * Transform site_visits table data to SiteVisit format
+ */
+const transformSiteVisitsData = (data: any[]): SiteVisit[] => {
   // Transform the snake_case database fields to camelCase for the frontend
   const transformedData = data?.map(visit => ({
     id: visit.id,
