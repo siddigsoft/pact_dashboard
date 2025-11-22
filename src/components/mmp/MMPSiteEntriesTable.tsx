@@ -1,12 +1,12 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Search, Eye, Pencil, Check, X } from 'lucide-react';
+import { Search, Eye, Pencil, Check, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 
 interface MMPSiteEntriesTableProps {
@@ -18,11 +18,24 @@ interface MMPSiteEntriesTableProps {
 
 const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, onUpdateSites }: MMPSiteEntriesTableProps) => {
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(50); // Show 50 items per page
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedSite, setSelectedSite] = useState<any | null>(null);
   const [editingId, setEditingId] = useState<string | number | null>(null);
   const [draft, setDraft] = useState<any | null>(null);
   const [savingId, setSavingId] = useState<string | number | null>(null);
+
+  // Debounce search query to reduce filtering operations
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+      setCurrentPage(1); // Reset to first page when search changes
+    }, 300); // 300ms debounce delay
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   // Normalize a row from either MMP siteEntries (camelCase) or site_visits (snake_case)
   const normalizeSite = (site: any) => {
@@ -125,15 +138,28 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
     setDetailOpen(true);
   };
 
-  const filteredSites = searchQuery.trim() === ""
-    ? siteEntries
-    : siteEntries.filter(site => {
-        const s = normalizeSite(site);
-        const q = searchQuery.toLowerCase();
-        return [s.hubOffice, s.state, s.locality, s.siteName, s.cpName, s.siteActivity, s.monitoringBy, s.surveyTool, s.visitDate, s.comments]
-          .filter(Boolean)
-          .some((v) => String(v).toLowerCase().includes(q));
-      });
+  // Memoize filtered sites for performance
+  const filteredSites = useMemo(() => {
+    if (debouncedSearchQuery.trim() === "") {
+      return siteEntries;
+    }
+    const q = debouncedSearchQuery.toLowerCase();
+    return siteEntries.filter(site => {
+      const s = normalizeSite(site);
+      return [s.hubOffice, s.state, s.locality, s.siteName, s.cpName, s.siteActivity, s.monitoringBy, s.surveyTool, s.visitDate, s.comments]
+        .filter(Boolean)
+        .some((v) => String(v).toLowerCase().includes(q));
+    });
+  }, [siteEntries, debouncedSearchQuery]);
+
+  // Paginate filtered results
+  const paginatedSites = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return filteredSites.slice(startIndex, endIndex);
+  }, [filteredSites, currentPage, itemsPerPage]);
+
+  const totalPages = Math.ceil(filteredSites.length / itemsPerPage);
 
   const toBool = (v: any) => {
     if (typeof v === 'boolean') return v;
@@ -394,9 +420,9 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
           <div>
             <CardTitle>MMP Site Entries</CardTitle>
             <CardDescription>
-              Total: {siteEntries.length} sites | 
-              Visited: {siteEntries.filter(site => site.siteVisited).length} | 
-              Pending: {siteEntries.filter(site => !site.siteVisited).length}
+              Showing {paginatedSites.length} of {filteredSites.length} sites
+              {debouncedSearchQuery && ` (filtered from ${siteEntries.length} total)`}
+              {!debouncedSearchQuery && ` (${siteEntries.length} total)`}
             </CardDescription>
           </div>
           <div className="w-full sm:w-auto">
@@ -446,8 +472,8 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredSites.length > 0 ? (
-                filteredSites.map((site, idx) => {
+              {paginatedSites.length > 0 ? (
+                paginatedSites.map((site, idx) => {
                   const row = normalizeSite(site);
                   const isEditing = editable && (editingId === (site.id ?? site._key ?? site.siteCode));
                   return (
@@ -766,6 +792,37 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
           </Table>
           </div>
         </div>
+        {/* Pagination Controls */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between mt-4 px-2">
+            <div className="text-sm text-muted-foreground">
+              Page {currentPage} of {totalPages}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Previous
+              </Button>
+              <div className="text-sm">
+                {((currentPage - 1) * itemsPerPage) + 1} - {Math.min(currentPage * itemsPerPage, filteredSites.length)} of {filteredSites.length}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                disabled={currentPage === totalPages}
+              >
+                Next
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
       </CardContent>
 
       {/* Local fallback dialog for site detail view */}

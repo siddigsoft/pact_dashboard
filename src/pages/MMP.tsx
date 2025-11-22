@@ -461,6 +461,9 @@ const MMP = () => {
   const [approvedCostedSiteEntries, setApprovedCostedSiteEntries] = useState<any[]>([]);
   const [loadingApprovedCosted, setLoadingApprovedCosted] = useState(false);
   const [approvedCostedCount, setApprovedCostedCount] = useState(0);
+  const [dispatchedSiteEntries, setDispatchedSiteEntries] = useState<any[]>([]);
+  const [loadingDispatched, setLoadingDispatched] = useState(false);
+  const [dispatchedCount, setDispatchedCount] = useState(0);
   const [dispatchDialogOpen, setDispatchDialogOpen] = useState(false);
   const [dispatchType, setDispatchType] = useState<'state' | 'locality' | 'individual'>('state');
 
@@ -617,23 +620,18 @@ const MMP = () => {
   useEffect(() => {
     const loadApprovedCostedCount = async () => {
       try {
-        // Load all site entries, then filter for verified ones
-        const { data: allEntries, error } = await supabase
+        // Use database count instead of loading all entries
+        // Count entries with status = 'verified' (case-insensitive) using ilike
+        const { count, error } = await supabase
           .from('mmp_site_entries')
-          .select('id,status,cost');
+          .select('*', { count: 'exact', head: true })
+          .ilike('status', 'verified');
 
         if (error) throw error;
 
-        // Filter to only include entries with status = 'verified' (case-insensitive)
-        // Count includes entries with default cost (will be set when tab is opened)
-        const verifiedEntries = (allEntries || []).filter(entry => {
-          const status = String(entry.status || '').toLowerCase();
-          return status === 'verified';
-        });
-
         // Count verified entries (including those that will get default cost of 30)
         // We count all verified entries since they'll either have cost > 0 or get default cost
-        setApprovedCostedCount(verifiedEntries.length);
+        setApprovedCostedCount(count || 0);
       } catch (error) {
         console.error('Failed to load approved and costed count:', error);
         setApprovedCostedCount(0);
@@ -653,25 +651,24 @@ const MMP = () => {
 
       setLoadingApprovedCosted(true);
       try {
-        // Load all site entries with status = 'verified' (case-insensitive), regardless of cost
-        // We'll set default costs for verified entries that don't have costs
-        const { data: allEntries, error: allError } = await supabase
+        // Use database-level filtering instead of loading all entries
+        // Filter at database level for status = 'verified' (case-insensitive) using ilike
+        const { data: verifiedEntries, error: allError } = await supabase
           .from('mmp_site_entries')
           .select('*')
-          .order('created_at', { ascending: false });
+          .ilike('status', 'verified')
+          .order('created_at', { ascending: false })
+          .limit(1000); // Limit to 1000 entries for performance
 
         if (allError) throw allError;
 
-        // Filter to only include entries with status = 'verified' (case-insensitive) and not dispatched
-        let verifiedEntries = (allEntries || []).filter(entry => {
-          const status = String(entry.status || '').toLowerCase();
-          return status === 'verified';
-        });
+        // Process verified entries
+        let processedEntries = verifiedEntries || [];
 
         // Set default fees for verified entries that don't have a cost
         // Default: Enumerator fees ($20) + Transport fees ($10 minimum) = $30
         const entriesToUpdate: any[] = [];
-        for (const entry of verifiedEntries) {
+        for (const entry of processedEntries) {
           const currentCost = entry.cost;
           const additionalData = entry.additional_data || {};
           const currentEnumFee = additionalData?.enumerator_fee;
@@ -723,7 +720,7 @@ const MMP = () => {
               .eq('id', entryUpdate.id);
           }
           // Update the local entries array with the new fees
-          verifiedEntries = verifiedEntries.map(entry => {
+          processedEntries = processedEntries.map(entry => {
             const update = entriesToUpdate.find(u => u.id === entry.id);
             if (update) {
               return {
@@ -739,13 +736,13 @@ const MMP = () => {
         }
 
         // Filter to only include entries with cost > 0 (after setting defaults)
-        verifiedEntries = verifiedEntries.filter(entry => {
+        processedEntries = processedEntries.filter(entry => {
           const cost = Number(entry.cost || 0);
           return cost > 0;
         });
 
         // Format entries for MMPSiteEntriesTable
-        const formattedEntries = verifiedEntries.map(entry => {
+        const formattedEntries = processedEntries.map(entry => {
           const additionalData = entry.additional_data || {};
           const enumFee = entry.enumerator_fee ?? additionalData.enumerator_fee;
           const transFee = entry.transport_fee ?? additionalData.transport_fee;
@@ -784,6 +781,75 @@ const MMP = () => {
     };
 
     loadApprovedCostedEntries();
+  }, [verifiedSubTab]);
+
+  // Load dispatched site entries only when the tab is active
+  useEffect(() => {
+    const loadDispatchedEntries = async () => {
+      if (verifiedSubTab !== 'dispatched') {
+        setDispatchedSiteEntries([]);
+        return;
+      }
+
+      setLoadingDispatched(true);
+      try {
+        // Use database-level filtering: entries with status = 'dispatched' OR dispatched_at is not null
+        // Use or() to combine conditions at database level
+        const { data: dispatchedEntries, error: allError } = await supabase
+          .from('mmp_site_entries')
+          .select('*')
+          .or('status.ilike.dispatched,dispatched_at.not.is.null')
+          .order('dispatched_at', { ascending: false })
+          .limit(1000); // Limit to 1000 entries for performance
+
+        if (allError) throw allError;
+
+        // Format entries for MMPSiteEntriesTable
+        const formattedEntries = dispatchedEntries.map(entry => {
+          const additionalData = entry.additional_data || {};
+          // Read fees from columns first, fallback to additional_data
+          const enumeratorFee = entry.enumerator_fee ?? additionalData.enumerator_fee;
+          const transportFee = entry.transport_fee ?? additionalData.transport_fee;
+          return {
+            ...entry,
+            siteName: entry.site_name,
+            siteCode: entry.site_code,
+            hubOffice: entry.hub_office,
+            cpName: entry.cp_name,
+            siteActivity: entry.activity_at_site,
+            monitoringBy: entry.monitoring_by,
+            surveyTool: entry.survey_tool,
+            useMarketDiversion: entry.use_market_diversion,
+            useWarehouseMonitoring: entry.use_warehouse_monitoring,
+            visitDate: entry.visit_date,
+            comments: entry.comments,
+            enumerator_fee: enumeratorFee,
+            enumeratorFee: enumeratorFee,
+            transport_fee: transportFee,
+            transportFee: transportFee,
+            cost: entry.cost,
+            status: entry.status,
+            verified_by: entry.verified_by,
+            verified_at: entry.verified_at,
+            dispatched_by: entry.dispatched_by,
+            dispatched_at: entry.dispatched_at,
+            updated_at: entry.updated_at,
+            additionalData: additionalData
+          };
+        });
+
+        setDispatchedSiteEntries(formattedEntries);
+        setDispatchedCount(formattedEntries.length);
+      } catch (error) {
+        console.error('Failed to load dispatched site entries:', error);
+        setDispatchedSiteEntries([]);
+        setDispatchedCount(0);
+      } finally {
+        setLoadingDispatched(false);
+      }
+    };
+
+    loadDispatchedEntries();
   }, [verifiedSubTab]);
 
   // Verified subcategories for Admin/ICT
@@ -894,6 +960,21 @@ const MMP = () => {
       
       // Only return sites that are actually verified
       return verifiedSites;
+    }
+    
+    // For "dispatched" subcategory, filter to only show dispatched entries
+    if (subKey === 'dispatched') {
+      const mmps = verifiedSubcategories[subKey] || [];
+      if (mmps.length === 0) return [];
+      
+      // Filter to only show entries with dispatched status
+      const dispatchedSites = buildSiteRowsFromMMPs(mmps, (row) => {
+        const status = row.status?.toLowerCase() || '';
+        // Show entries with status = 'dispatched' or entries that have dispatched_at set
+        return status === 'dispatched' || (row as any).dispatched_at !== undefined;
+      });
+      
+      return dispatchedSites;
     }
     
     const mmps = verifiedSubcategories[subKey] || [];
@@ -1258,7 +1339,7 @@ const MMP = () => {
                   </Button>
                   <Button variant={verifiedSubTab === 'dispatched' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('dispatched')} className={verifiedSubTab === 'dispatched' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''}>
                     Dispatched
-                    <Badge variant="secondary" className="ml-2">{verifiedSubcategories.dispatched.length}</Badge>
+                    <Badge variant="secondary" className="ml-2">{dispatchedCount}</Badge>
                   </Button>
                   <Button variant={verifiedSubTab === 'completed' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('completed')} className={verifiedSubTab === 'completed' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''}>
                     Completed
@@ -1266,7 +1347,7 @@ const MMP = () => {
                   </Button>
                 </div>
               )}
-              {verifiedSubTab !== 'approvedCosted' && <MMPList mmpFiles={verifiedVisibleMMPs} />}
+              {verifiedSubTab !== 'approvedCosted' && verifiedSubTab !== 'dispatched' && <MMPList mmpFiles={verifiedVisibleMMPs} />}
               {(isAdmin || isICT || isFOM || isCoordinator) && verifiedSubTab === 'newSites' && <VerifiedSitesDisplay verifiedSites={verifiedCategorySiteRows} />}
               {(isAdmin || isICT || isFOM || isCoordinator) && verifiedSubTab === 'approvedCosted' && (
                 <div className="mt-6">
@@ -1390,19 +1471,16 @@ const MMP = () => {
                                   .eq('id', site.id);
                               }
                             }
-                            // Reload the entries after update
-                            const { data: entries, error } = await supabase
+                            // Reload the entries after update with database-level filtering
+                            const { data: verifiedEntries, error } = await supabase
                               .from('mmp_site_entries')
                               .select('*')
+                              .ilike('status', 'verified')
                               .gt('cost', 0)
-                              .order('created_at', { ascending: false });
+                              .order('created_at', { ascending: false })
+                              .limit(1000);
 
-                            if (!error && entries) {
-                              // Filter to only include entries with status = 'verified' (case-insensitive)
-                              const verifiedEntries = entries.filter(entry => {
-                                const status = String(entry.status || '').toLowerCase();
-                                return status === 'verified';
-                              });
+                            if (!error && verifiedEntries) {
                               
                               const formattedEntries = verifiedEntries.map(entry => {
                                 const additionalData = entry.additional_data || {};
@@ -1451,7 +1529,35 @@ const MMP = () => {
                   )}
                 </div>
               )}
-              {(isAdmin || isICT || isFOM || isCoordinator) && verifiedSubTab !== 'newSites' && verifiedSubTab !== 'approvedCosted' && (
+              {(isAdmin || isICT || isFOM || isCoordinator) && verifiedSubTab === 'dispatched' && (
+                <div className="mt-6">
+                  {loadingDispatched ? (
+                    <Card>
+                      <CardContent className="py-8">
+                        <div className="text-center text-muted-foreground">Loading dispatched site entries...</div>
+                      </CardContent>
+                    </Card>
+                  ) : dispatchedSiteEntries.length === 0 ? (
+                    <Card>
+                      <CardContent className="py-8">
+                        <div className="text-center text-muted-foreground">No dispatched site entries found.</div>
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    <div>
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-semibold">Dispatched Site Entries</h3>
+                        <Badge variant="secondary">{dispatchedSiteEntries.length} entries</Badge>
+                      </div>
+                      <MMPSiteEntriesTable 
+                        siteEntries={dispatchedSiteEntries} 
+                        editable={false}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+              {(isAdmin || isICT || isFOM || isCoordinator) && verifiedSubTab !== 'newSites' && verifiedSubTab !== 'approvedCosted' && verifiedSubTab !== 'dispatched' && (
                 <div className="mt-6">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-lg font-semibold">Sites by MMP</h3>
@@ -1492,23 +1598,64 @@ const MMP = () => {
             siteEntries={approvedCostedSiteEntries}
             dispatchType={dispatchType}
             onDispatched={async () => {
-              // Reload approved and costed entries after dispatch
-              if (verifiedSubTab === 'approvedCosted') {
-                const { data: entries, error } = await supabase
+              // Reload dispatched entries after dispatch
+              if (verifiedSubTab === 'dispatched') {
+                const { data: dispatchedEntries, error: allError } = await supabase
                   .from('mmp_site_entries')
                   .select('*')
-                  .order('created_at', { ascending: false });
+                  .or('status.ilike.dispatched,dispatched_at.not.is.null')
+                  .order('dispatched_at', { ascending: false })
+                  .limit(1000);
 
-                if (!error && entries) {
-                  const verifiedEntries = entries.filter(entry => {
-                    const status = String(entry.status || '').toLowerCase();
-                    return status === 'verified';
-                  });
+                if (!allError && dispatchedEntries) {
 
-                  const entriesWithCost = verifiedEntries.filter(entry => {
-                    const cost = Number(entry.cost || 0);
-                    return cost > 0;
+                  const formattedEntries = dispatchedEntries.map(entry => {
+                    const additionalData = entry.additional_data || {};
+                    const enumeratorFee = entry.enumerator_fee ?? additionalData.enumerator_fee;
+                    const transportFee = entry.transport_fee ?? additionalData.transport_fee;
+                    return {
+                      ...entry,
+                      siteName: entry.site_name,
+                      siteCode: entry.site_code,
+                      hubOffice: entry.hub_office,
+                      cpName: entry.cp_name,
+                      siteActivity: entry.activity_at_site,
+                      monitoringBy: entry.monitoring_by,
+                      surveyTool: entry.survey_tool,
+                      useMarketDiversion: entry.use_market_diversion,
+                      useWarehouseMonitoring: entry.use_warehouse_monitoring,
+                      visitDate: entry.visit_date,
+                      comments: entry.comments,
+                      enumerator_fee: enumeratorFee,
+                      enumeratorFee: enumeratorFee,
+                      transport_fee: transportFee,
+                      transportFee: transportFee,
+                      cost: entry.cost,
+                      status: entry.status,
+                      verified_by: entry.verified_by,
+                      verified_at: entry.verified_at,
+                      dispatched_by: entry.dispatched_by,
+                      dispatched_at: entry.dispatched_at,
+                      updated_at: entry.updated_at,
+                      additionalData: additionalData
+                    };
                   });
+                  setDispatchedSiteEntries(formattedEntries);
+                  setDispatchedCount(formattedEntries.length);
+                }
+              }
+              // Reload approved and costed entries after dispatch
+              if (verifiedSubTab === 'approvedCosted') {
+                const { data: verifiedEntries, error } = await supabase
+                  .from('mmp_site_entries')
+                  .select('*')
+                  .ilike('status', 'verified')
+                  .gt('cost', 0)
+                  .order('created_at', { ascending: false })
+                  .limit(1000);
+
+                if (!error && verifiedEntries) {
+                  const entriesWithCost = verifiedEntries;
 
                   const formattedEntries = entriesWithCost.map(entry => {
                     const additionalData = entry.additional_data || {};
