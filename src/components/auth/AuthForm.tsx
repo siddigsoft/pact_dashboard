@@ -221,13 +221,12 @@ const AuthForm = ({ mode }: AuthFormProps) => {
           <div className="relative">
             <Mail className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
             <Input
-              type="text"
-              placeholder="Email or Username"
+              type="email"
+              placeholder="Email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
               className="pl-10 bg-white/50 focus:bg-white transition-colors"
-              data-testid="input-email-username"
             />
           </div>
         </div>
