@@ -35,6 +35,11 @@ interface SiteVisit {
   cpName?: string;
   visitType?: string;
   visitTypeRaw?: string;
+  projectName?: string;
+  mmpDetails?: {
+    mmpId: string;
+    projectName: string;
+  };
 }
 
 interface SiteVisitsOverviewProps {
@@ -166,6 +171,7 @@ const SiteVisitsOverview: React.FC<SiteVisitsOverviewProps> = ({ currentUserId, 
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead>MMP Name</TableHead>
                       <TableHead>Site Name</TableHead>
                       <TableHead>Location</TableHead>
                       <TableHead>Due Date</TableHead>
@@ -176,6 +182,11 @@ const SiteVisitsOverview: React.FC<SiteVisitsOverviewProps> = ({ currentUserId, 
                   <TableBody>
                     {pendingVisits.map((visit) => (
                       <TableRow key={visit.id}>
+                        <TableCell>
+                          <div className="text-xs font-medium text-primary">
+                            {visit.mmpDetails?.mmpId || visit.projectName || 'N/A'}
+                          </div>
+                        </TableCell>
                         <TableCell className="font-medium">
                           <div className="font-medium">{visit.siteName}</div>
                           <div className="text-xs text-muted-foreground">
@@ -224,6 +235,7 @@ const SiteVisitsOverview: React.FC<SiteVisitsOverviewProps> = ({ currentUserId, 
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead>MMP Name</TableHead>
                       <TableHead>Site Name</TableHead>
                       <TableHead>Location</TableHead>
                       <TableHead>Due Date</TableHead>
@@ -234,6 +246,11 @@ const SiteVisitsOverview: React.FC<SiteVisitsOverviewProps> = ({ currentUserId, 
                   <TableBody>
                     {assignedVisits.map((visit) => (
                       <TableRow key={visit.id}>
+                        <TableCell>
+                          <div className="text-xs font-medium text-primary">
+                            {visit.mmpDetails?.mmpId || visit.projectName || 'N/A'}
+                          </div>
+                        </TableCell>
                         <TableCell className="font-medium">
                           <div className="font-medium">{visit.siteName}</div>
                           <div className="text-xs text-muted-foreground">
@@ -284,6 +301,7 @@ const SiteVisitsOverview: React.FC<SiteVisitsOverviewProps> = ({ currentUserId, 
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead>MMP Name</TableHead>
                       <TableHead>Site Name</TableHead>
                       <TableHead>Location</TableHead>
                       <TableHead>Completed Date</TableHead>
@@ -294,6 +312,11 @@ const SiteVisitsOverview: React.FC<SiteVisitsOverviewProps> = ({ currentUserId, 
                   <TableBody>
                     {completedVisits.map((visit) => (
                       <TableRow key={visit.id}>
+                        <TableCell>
+                          <div className="text-xs font-medium text-primary">
+                            {visit.mmpDetails?.mmpId || visit.projectName || 'N/A'}
+                          </div>
+                        </TableCell>
                         <TableCell className="font-medium">
                           <div className="font-medium">{visit.siteName}</div>
                           <div className="text-xs text-muted-foreground">

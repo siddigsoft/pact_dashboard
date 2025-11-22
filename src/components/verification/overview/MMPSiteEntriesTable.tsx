@@ -82,6 +82,7 @@ const MMPSiteEntriesTable: React.FC<MMPSiteEntriesTableProps> = ({
           <TableHeader>
             <TableRow>
               <TableHead>Site Code</TableHead>
+              <TableHead>MMP Name</TableHead>
               <TableHead>Site Name</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>State</TableHead>
@@ -93,6 +94,7 @@ const MMPSiteEntriesTable: React.FC<MMPSiteEntriesTableProps> = ({
             {currentItems.map((site, index) => (
               <TableRow key={site.id || index} className={index % 2 === 0 ? "bg-white" : "bg-muted/20"}>
                 <TableCell>{site.siteCode}</TableCell>
+                <TableCell>{site.mmpName || site.mmp_name || (site as any).mmpFiles?.name || '—'}</TableCell>
                 <TableCell>{site.siteName}</TableCell>
                 <TableCell>{site.status || 'Pending'}</TableCell>
                 <TableCell>{site.state || 'N/A'}</TableCell>
@@ -112,7 +114,7 @@ const MMPSiteEntriesTable: React.FC<MMPSiteEntriesTableProps> = ({
             ))}
             {currentItems.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-4 text-muted-foreground">
+                <TableCell colSpan={7} className="text-center py-4 text-muted-foreground">
                   No site entries available
                 </TableCell>
               </TableRow>

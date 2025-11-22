@@ -49,10 +49,52 @@ export const ArchiveProvider: React.FC<ArchiveProviderProps> = ({ children, curr
       try {
         setLoading(true);
 
-        const [{ data: mmpRows, error: mmpErr }, { data: svRows, error: svErr }] = await Promise.all([
-          supabase.from('mmp_files').select('*').order('created_at', { ascending: false }),
-          supabase.from('mmp_site_entries').select('*').order('created_at', { ascending: false }),
-        ]);
+        // Fetch MMP files
+        const { data: mmpRows, error: mmpErr } = await supabase
+          .from('mmp_files')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (mmpErr) throw mmpErr;
+
+        // Fetch site visits from mmp_site_entries
+        const { data: mmpEntriesData, error: svErr } = await supabase
+          .from('mmp_site_entries')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (svErr) {
+          console.error('Error fetching site entries for archive:', svErr);
+          throw svErr;
+        }
+
+        // Transform mmp_site_entries to site_visits format for archive processing
+        const svRows = (mmpEntriesData || []).map((entry: any) => {
+          const additionalData = entry.additional_data || {};
+          return {
+            id: entry.id,
+            site_name: entry.site_name,
+            site_code: entry.site_code,
+            status: entry.status || 'pending',
+            locality: entry.locality,
+            state: entry.state,
+            activity: entry.activity_at_site || entry.main_activity,
+            main_activity: entry.main_activity || entry.activity_at_site,
+            priority: additionalData.priority || 'medium',
+            due_date: entry.visit_date,
+            assigned_to: additionalData.assigned_to,
+            assigned_by: additionalData.assigned_by,
+            assigned_at: additionalData.assigned_at,
+            notes: entry.comments,
+            attachments: additionalData.attachments || [],
+            completed_at: additionalData.completed_at,
+            rating: additionalData.rating,
+            fees: entry.fees || { total: entry.cost || 0, currency: 'SDG' },
+            location: additionalData.location || {},
+            created_at: entry.created_at,
+            updated_at: entry.updated_at,
+          };
+        });
 
         let photoRows: any[] = [];
         try {
@@ -62,9 +104,6 @@ export const ArchiveProvider: React.FC<ArchiveProviderProps> = ({ children, curr
             .order('created_at', { ascending: false });
           if (!perr && pr) photoRows = pr as any[];
         } catch {}
-
-        if (mmpErr) throw mmpErr;
-        if (svErr) throw svErr;
 
         const toArchivedMMP = (r: any): ArchivedMMPFile => {
           const uploadedAt = r.uploaded_at || r.created_at;

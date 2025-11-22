@@ -1,17 +1,26 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import { SiteVisit } from '@/types';
+import { 
+  fetchSiteVisitsFromMMPEntries, 
+  mapMMPSiteEntryToSiteVisit,
+  createMMPSiteEntry,
+  updateMMPSiteEntry,
+  deleteMMPSiteEntry,
+  getOrCreateDefaultMMPFile
+} from './mmpSiteEntriesAdapter';
 
-export const fetchSiteVisits = async () => {
-  const { data, error } = await supabase
-    .from('mmp_site_entries')
-    .select('*');
-    
-  if (error) {
-    console.error('Error fetching site entries:', error);
-    throw error;
-  }
-  
+/**
+ * Fetches site visits from mmp_site_entries table
+ */
+export const fetchSiteVisits = async (): Promise<SiteVisit[]> => {
+  return await fetchSiteVisitsFromMMPEntries();
+};
+
+/**
+ * Transform site_visits table data to SiteVisit format
+ */
+const transformSiteVisitsData = (data: any[]): SiteVisit[] => {
   // Transform the snake_case database fields to camelCase for the frontend
   // Map mmp_site_entries to SiteVisit format
   const transformedData = data?.map(entry => {
@@ -102,164 +111,30 @@ export const fetchSiteVisits = async () => {
 };
 
 export const createSiteVisitInDb = async (siteVisit: Partial<SiteVisit>) => {
-  // Transform camelCase to snake_case for mmp_site_entries
+  // Determine if this is MMP-related (has mmpId or mmpDetails)
   const mmpFileId = (siteVisit as any).mmpId || siteVisit.mmpDetails?.mmpId;
-  if (!mmpFileId) {
-    throw new Error('mmp_file_id is required to create a site entry');
+  
+  // If no mmpFileId provided, use default MMP file for standalone visits
+  let finalMmpFileId = mmpFileId;
+  if (!finalMmpFileId) {
+    console.log('No MMP context provided, creating/using default MMP file for standalone visit');
+    try {
+      finalMmpFileId = await getOrCreateDefaultMMPFile();
+    } catch (defaultError) {
+      console.error('Failed to create default MMP file:', defaultError);
+      throw new Error(
+        'Unable to create site visit: could not create default MMP file. ' +
+        'Please ensure the database is properly initialized.'
+      );
+    }
   }
   
-  const additionalData: any = {
-    priority: siteVisit.priority || 'medium',
-    assigned_to: siteVisit.assignedTo,
-    assigned_by: siteVisit.assignedBy,
-    assigned_at: siteVisit.assignedAt,
-    attachments: siteVisit.attachments || [],
-    completed_at: siteVisit.completedAt,
-    rating: siteVisit.rating,
-    permitDetails: siteVisit.permitDetails,
-    complexity: siteVisit.complexity,
-    visitTypeRaw: siteVisit.visitTypeRaw,
-    projectActivities: siteVisit.projectActivities,
-    mmpDetails: siteVisit.mmpDetails,
-    arrival_latitude: siteVisit.arrivalLatitude,
-    arrival_longitude: siteVisit.arrivalLongitude,
-    arrival_timestamp: siteVisit.arrivalTimestamp,
-    journey_path: siteVisit.journeyPath,
-    arrival_recorded: siteVisit.arrivalRecorded,
-    location: siteVisit.location
-  };
-  
-  const dbEntry = {
-    mmp_file_id: mmpFileId,
-    site_name: siteVisit.siteName,
-    site_code: siteVisit.siteCode,
-    status: siteVisit.status || 'Pending',
-    locality: siteVisit.locality,
-    state: siteVisit.state,
-    main_activity: siteVisit.mainActivity,
-    activity_at_site: siteVisit.siteActivity || siteVisit.activity,
-    visit_date: siteVisit.dueDate ? (() => {
-      const date = new Date(siteVisit.dueDate);
-      return isNaN(date.getTime()) ? null : date.toISOString().split('T')[0];
-    })() : null,
-    comments: siteVisit.notes,
-    hub_office: siteVisit.hubOffice || siteVisit.hub,
-    cp_name: siteVisit.cpName,
-    monitoring_by: siteVisit.monitoringBy,
-    survey_tool: siteVisit.surveyTool,
-    use_market_diversion: siteVisit.useMarketDiversion || false,
-    use_warehouse_monitoring: siteVisit.useWarehouseMonitoring || false,
-    visit_type: siteVisit.visitType,
-    cost: siteVisit.fees?.total || 0,
-    enumerator_fee: siteVisit.fees?.baseAmount || (siteVisit.fees as any)?.enumerator_fee,
-    transport_fee: siteVisit.fees?.transportation || (siteVisit.fees as any)?.transport_fee,
-    additional_data: additionalData
-  };
-  
-  // Insert and return the created row in one round-trip
-  const { data, error } = await supabase
-    .from('mmp_site_entries')
-    .insert(dbEntry)
-    .select('*')
-    .single();
-    
-  if (error) {
-    console.error('Error fetching created site visit:', error);
-    throw error;
-  }
-  
-  // Transform back to camelCase for frontend use
-  const ad = data.additional_data || {};
-  const enumeratorFee = data.enumerator_fee || ad.enumerator_fee || 20;
-  const transportFee = data.transport_fee || ad.transport_fee || 10;
-  const totalCost = data.cost || (enumeratorFee + transportFee);
-  const fees = {
-    total: totalCost,
-    currency: 'SDG',
-    distanceFee: transportFee,
-    complexityFee: 0,
-    urgencyFee: 0,
-    baseAmount: enumeratorFee,
-    transportation: transportFee
-  };
-  
-  return {
-    id: data.id,
-    siteName: data.site_name,
-    siteCode: data.site_code,
-    status: data.status || 'Pending',
-    locality: data.locality,
-    state: data.state,
-    activity: data.activity_at_site || data.main_activity,
-    priority: ad.priority || 'medium',
-    dueDate: data.visit_date ? new Date(data.visit_date).toISOString() : undefined,
-    assignedTo: ad.assigned_to || undefined,
-    assignedBy: ad.assigned_by || undefined,
-    assignedAt: ad.assigned_at || undefined,
-    notes: data.comments,
-    attachments: ad.attachments || [],
-    completedAt: ad.completed_at || undefined,
-    rating: ad.rating || undefined,
-    fees: fees,
-    scheduledDate: data.visit_date ? new Date(data.visit_date).toISOString() : undefined,
-    description: data.comments,
-    hub: data.hub_office || "",
-    cpName: data.cp_name,
-    permitDetails: ad.permitDetails || {
-      federal: false,
-      state: false,
-      locality: false
-    },
-    location: ad.location || {
-      address: "",
-      latitude: 0,
-      longitude: 0,
-      region: data.state || ""
-    },
-    coordinates: ad.location ? {
-      latitude: ad.location.latitude || 0,
-      longitude: ad.location.longitude || 0
-    } : {
-      latitude: 0,
-      longitude: 0
-    },
-    mmpDetails: {
-      mmpId: data.mmp_file_id || "",
-      projectName: "",
-      uploadedBy: "",
-      uploadedAt: "",
-      region: data.state || ""
-    },
-    complexity: ad.complexity || "medium",
-    visitType: data.visit_type || "regular",
-    visitTypeRaw: ad.visitTypeRaw,
-    mainActivity: data.main_activity || "",
-    projectActivities: ad.projectActivities || [],
-    hubOffice: data.hub_office,
-    siteActivity: data.activity_at_site,
-    monitoringBy: data.monitoring_by,
-    surveyTool: data.survey_tool,
-    useMarketDiversion: data.use_market_diversion || false,
-    useWarehouseMonitoring: data.use_warehouse_monitoring || false,
-    arrivalLatitude: ad.arrival_latitude,
-    arrivalLongitude: ad.arrival_longitude,
-    arrivalTimestamp: ad.arrival_timestamp,
-    journeyPath: ad.journey_path,
-    arrivalRecorded: ad.arrival_recorded || false,
-    createdAt: data.created_at
-  } as SiteVisit;
+  console.log(`✅ Creating site visit in mmp_site_entries with MMP file ID: ${finalMmpFileId}`);
+  return await createMMPSiteEntry(finalMmpFileId, siteVisit);
 };
 
 export const deleteSiteVisitInDb = async (id: string) => {
-  const { error } = await supabase
-    .from('mmp_site_entries')
-    .delete()
-    .eq('id', id);
-  if (error) {
-    console.error('Error deleting site entry:', error);
-    throw error;
-  }
-  return true;
+  return await deleteMMPSiteEntry(id);
 };
 
 export const updateSiteVisitInDb = async (id: string, updates: Partial<SiteVisit>) => {
