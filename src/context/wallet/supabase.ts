@@ -72,10 +72,15 @@ export const listMyEarnings = async (userId: string, params: { from?: string; to
   let siteVisits: Record<string, any> = {};
   if (ids.length > 0) {
     const { data } = await supabase
-      .from('site_visits')
-      .select('id, site_name, site_code, completed_at')
+      .from('mmp_site_entries')
+      .select('id, site_name, site_code, additional_data')
       .in('id', ids);
-    (data || []).forEach((sv: any) => { siteVisits[sv.id] = sv; });
+    (data || []).forEach((sv: any) => { 
+      siteVisits[sv.id] = {
+        ...sv,
+        completed_at: sv.additional_data?.completed_at
+      };
+    });
   }
   return txns
     .filter(t => {
@@ -91,7 +96,7 @@ export const listMyEarnings = async (userId: string, params: { from?: string; to
         siteName: sv?.site_name || '',
         visitId: t.relatedSiteVisitId || '',
         visitCode: sv?.site_code || t.visitCode,
-        visitDate: sv?.completed_at || undefined,
+        visitDate: sv?.completed_at || sv?.additional_data?.completed_at || undefined,
         earningAmountCents: t.amountCents,
         status: t.status === 'posted' ? 'approved' : t.status === 'pending' ? 'pending' : 'rejected',
       } as EarningRow;

@@ -23,14 +23,15 @@ interface SiteVisit {
   locality: string;
   activity: string;
   main_activity: string;
-  due_date: string;
+  visit_date: string;
   assigned_at: string;
-  notes: string;
-  mmp_id: string;
+  comments: string;
+  mmp_file_id: string;
   hub_office: string;
   verified_at?: string;
   verified_by?: string;
   verification_notes?: string;
+  additional_data?: any;
 }
 
 const CoordinatorSites: React.FC = () => {
@@ -91,7 +92,7 @@ const CoordinatorSites: React.FC = () => {
         });
         
         const newCount = { count: userEntries.filter((e: any) => 
-          e.status === 'assigned' || e.status === 'inProgress' || e.status === 'in_progress'
+          e.status === 'Dispatched' || e.status === 'assigned' || e.status === 'inProgress' || e.status === 'in_progress'
         ).length };
         const verifiedCount = { count: userEntries.filter((e: any) => 
           e.status?.toLowerCase() === 'verified'
@@ -105,7 +106,6 @@ const CoordinatorSites: React.FC = () => {
         const rejectedCount = { count: userEntries.filter((e: any) => 
           e.status?.toLowerCase() === 'rejected'
         ).length };
-        ]);
 
         setNewSitesCount(newCount.count || 0);
         setVerifiedSitesCount(verifiedCount.count || 0);
@@ -133,36 +133,75 @@ const CoordinatorSites: React.FC = () => {
     
     setLoading(true);
     try {
-      let query = supabase
-        .from('site_visits')
+      // Load all mmp_site_entries and filter by assigned_to in additional_data
+      const { data: allEntries, error } = await supabase
+        .from('mmp_site_entries')
         .select('*')
-        .eq('assigned_to', currentUser.id);
-
-      // Filter by status based on active tab at database level
-      switch (activeTab) {
-        case 'new':
-          query = query.or('status.eq.assigned,status.eq.inProgress');
-          break;
-        case 'verified':
-          query = query.eq('status', 'verified');
-          break;
-        case 'approved':
-          query = query.eq('status', 'approved');
-          break;
-        case 'completed':
-          query = query.eq('status', 'completed');
-          break;
-        case 'rejected':
-          query = query.eq('status', 'rejected');
-          break;
-      }
-
-      const { data, error } = await query
-        .order('assigned_at', { ascending: false })
         .limit(1000); // Limit for performance
 
       if (error) throw error;
-      setSites(data || []);
+      
+      // Filter entries assigned to current user and transform to SiteVisit format
+      let filtered = (allEntries || []).filter((entry: any) => {
+        const ad = entry.additional_data || {};
+        return ad.assigned_to === currentUser.id;
+      }).map((entry: any) => ({
+        id: entry.id,
+        site_name: entry.site_name,
+        site_code: entry.site_code,
+        status: entry.status,
+        state: entry.state,
+        locality: entry.locality,
+        activity: entry.activity_at_site || entry.main_activity,
+        main_activity: entry.main_activity,
+        visit_date: entry.visit_date,
+        assigned_at: entry.additional_data?.assigned_at || entry.created_at,
+        comments: entry.comments,
+        mmp_file_id: entry.mmp_file_id,
+        hub_office: entry.hub_office,
+        verified_at: entry.verified_at,
+        verified_by: entry.verified_by,
+        verification_notes: entry.verification_notes,
+        additional_data: entry.additional_data
+      }));
+
+      // Filter by status based on active tab
+      switch (activeTab) {
+        case 'new':
+          filtered = filtered.filter((e: any) => 
+            e.status === 'Dispatched' || e.status === 'assigned' || e.status === 'inProgress' || e.status === 'in_progress'
+          );
+          break;
+        case 'verified':
+          filtered = filtered.filter((e: any) => 
+            e.status?.toLowerCase() === 'verified'
+          );
+          break;
+        case 'approved':
+          filtered = filtered.filter((e: any) => 
+            e.status?.toLowerCase() === 'approved'
+          );
+          break;
+        case 'completed':
+          filtered = filtered.filter((e: any) => 
+            e.status?.toLowerCase() === 'completed'
+          );
+          break;
+        case 'rejected':
+          filtered = filtered.filter((e: any) => 
+            e.status?.toLowerCase() === 'rejected'
+          );
+          break;
+      }
+
+      // Sort by assigned_at
+      filtered.sort((a: any, b: any) => {
+        const aAt = a.assigned_at || a.created_at;
+        const bAt = b.assigned_at || b.created_at;
+        return new Date(bAt).getTime() - new Date(aAt).getTime();
+      });
+
+      setSites(filtered);
       setCurrentPage(1); // Reset pagination when tab changes
     } catch (error) {
       console.error('Error loading sites:', error);
@@ -190,19 +229,19 @@ const CoordinatorSites: React.FC = () => {
       }
 
       const { error } = await supabase
-        .from('site_visits')
+        .from('mmp_site_entries')
         .update(updateData)
         .eq('id', siteId);
 
       if (error) throw error;
       try {
         const site = sites.find(s => s.id === siteId);
-        if (site?.mmp_id && site?.site_code) {
+        if (site?.mmp_file_id && site?.site_code) {
           // Get current site entry to check if cost exists
           const { data: currentEntry } = await supabase
             .from('mmp_site_entries')
             .select('cost, additional_data')
-            .eq('mmp_file_id', site.mmp_id)
+            .eq('mmp_file_id', site.mmp_file_id)
             .eq('site_code', site.site_code)
             .single();
 
@@ -253,7 +292,7 @@ const CoordinatorSites: React.FC = () => {
           await supabase
             .from('mmp_site_entries')
             .update(mmpUpdateData)
-            .eq('mmp_file_id', site.mmp_id)
+            .eq('mmp_file_id', site.mmp_file_id)
             .eq('site_code', site.site_code);
 
           // Mark MMP as coordinator-verified when first site is verified
@@ -261,7 +300,7 @@ const CoordinatorSites: React.FC = () => {
           const { data: mmpData, error: mmpError } = await supabase
             .from('mmp_files')
             .select('workflow, status')
-            .eq('id', site.mmp_id)
+            .eq('id', site.mmp_file_id)
             .single();
 
           if (!mmpError && mmpData) {
@@ -280,7 +319,7 @@ const CoordinatorSites: React.FC = () => {
               };
 
               // Update MMP workflow - keep status as 'pending' so it shows in "New Sites Verified by Coordinators"
-              await updateMMP(site.mmp_id, {
+              await updateMMP(site.mmp_file_id, {
                 workflow: updatedWorkflow,
                 status: mmpData.status === 'pending' ? 'pending' : 'pending' // Ensure it's pending
               });
@@ -301,18 +340,23 @@ const CoordinatorSites: React.FC = () => {
       // Reload badge counts
       if (currentUser?.id) {
         const userId = currentUser.id;
-        const [newCount, verifiedCount] = await Promise.all([
-          supabase
-            .from('site_visits')
-            .select('*', { count: 'exact', head: true })
-            .eq('assigned_to', userId)
-            .or('status.eq.assigned,status.eq.inProgress'),
-          supabase
-            .from('site_visits')
-            .select('*', { count: 'exact', head: true })
-            .eq('assigned_to', userId)
-            .eq('status', 'verified')
-        ]);
+        // Load entries and filter by assigned_to in additional_data
+        const { data: allEntries } = await supabase
+          .from('mmp_site_entries')
+          .select('id, status, additional_data');
+        
+        const userEntries = (allEntries || []).filter((entry: any) => {
+          const ad = entry.additional_data || {};
+          return ad.assigned_to === userId;
+        });
+        
+        const newCount = { count: userEntries.filter((e: any) => 
+          e.status === 'Dispatched' || e.status === 'assigned' || e.status === 'inProgress' || e.status === 'in_progress'
+        ).length };
+        const verifiedCount = { count: userEntries.filter((e: any) => 
+          e.status?.toLowerCase() === 'verified'
+        ).length };
+        
         setNewSitesCount(newCount.count || 0);
         setVerifiedSitesCount(verifiedCount.count || 0);
       }
@@ -344,14 +388,14 @@ const CoordinatorSites: React.FC = () => {
       }
 
       const { error } = await supabase
-        .from('site_visits')
+        .from('mmp_site_entries')
         .update(updateData)
         .eq('id', siteId);
 
       if (error) throw error;
       try {
         const site = sites.find(s => s.id === siteId);
-        if (site?.mmp_id && site?.site_code) {
+        if (site?.mmp_file_id && site?.site_code) {
           const mmpUpdateData: any = { status: 'Rejected' };
           if (notes) {
             mmpUpdateData.verification_notes = notes;
@@ -359,7 +403,7 @@ const CoordinatorSites: React.FC = () => {
           await supabase
             .from('mmp_site_entries')
             .update(mmpUpdateData)
-            .eq('mmp_file_id', site.mmp_id)
+            .eq('mmp_file_id', site.mmp_file_id)
             .eq('site_code', site.site_code);
         }
       } catch (syncErr) {
@@ -376,18 +420,23 @@ const CoordinatorSites: React.FC = () => {
       // Reload badge counts
       if (currentUser?.id) {
         const userId = currentUser.id;
-        const [newCount, rejectedCount] = await Promise.all([
-          supabase
-            .from('site_visits')
-            .select('*', { count: 'exact', head: true })
-            .eq('assigned_to', userId)
-            .or('status.eq.assigned,status.eq.inProgress'),
-          supabase
-            .from('site_visits')
-            .select('*', { count: 'exact', head: true })
-            .eq('assigned_to', userId)
-            .eq('status', 'rejected')
-        ]);
+        // Load entries and filter by assigned_to in additional_data
+        const { data: allEntries } = await supabase
+          .from('mmp_site_entries')
+          .select('id, status, additional_data');
+        
+        const userEntries = (allEntries || []).filter((entry: any) => {
+          const ad = entry.additional_data || {};
+          return ad.assigned_to === userId;
+        });
+        
+        const newCount = { count: userEntries.filter((e: any) => 
+          e.status === 'Dispatched' || e.status === 'assigned' || e.status === 'inProgress' || e.status === 'in_progress'
+        ).length };
+        const rejectedCount = { count: userEntries.filter((e: any) => 
+          e.status?.toLowerCase() === 'rejected'
+        ).length };
+        
         setNewSitesCount(newCount.count || 0);
         setRejectedSitesCount(rejectedCount.count || 0);
       }
@@ -465,8 +514,8 @@ const CoordinatorSites: React.FC = () => {
             <p className="font-medium">{site.main_activity || site.activity}</p>
           </div>
           <div>
-            <span className="text-muted-foreground">Due Date:</span>
-            <p className="font-medium">{site.due_date ? format(new Date(site.due_date), 'MMM d, yyyy') : 'N/A'}</p>
+            <span className="text-muted-foreground">Visit Date:</span>
+            <p className="font-medium">{site.visit_date ? format(new Date(site.visit_date), 'MMM d, yyyy') : 'N/A'}</p>
           </div>
         </div>
 
@@ -477,9 +526,9 @@ const CoordinatorSites: React.FC = () => {
           </div>
         )}
 
-        {site.notes && (
+        {site.comments && (
           <div className="mb-3 p-2 bg-muted rounded text-sm">
-            <p className="text-muted-foreground">{site.notes}</p>
+            <p className="text-muted-foreground">{site.comments}</p>
           </div>
         )}
 

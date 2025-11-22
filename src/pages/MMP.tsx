@@ -942,8 +942,8 @@ const MMP = () => {
       }),
       dispatched: base.filter(mmp => {
         const stats = siteVisitStats[mmp.id];
-        // Dispatched: sites that have been dispatched (have site_visits created) or marked as dispatched
-        // Check if any site entries are marked as 'Dispatched' or have site_visits assigned
+        // Dispatched: sites that have been dispatched (mmp_site_entries marked as dispatched) or marked as dispatched
+        // Check if any site entries are marked as 'Dispatched' or have been assigned
         return Boolean(stats?.hasAssigned || stats?.hasDispatched);
       }),
       accepted: base.filter(mmp => {
@@ -964,12 +964,12 @@ const MMP = () => {
     };
   }, [categorizedMMPs.verified, siteVisitStats]);
 
-  // Build unified site rows (site_visits + fallback to mmp.siteEntries) for given MMP list
+  // Build unified site rows (mmp_site_entries + fallback to mmp.siteEntries) for given MMP list
   const buildSiteRowsFromMMPs = (mmps: any[], filterFn?: (row: SiteVisitRow) => boolean): SiteVisitRow[] => {
     const rows: SiteVisitRow[] = [];
     const existingIds = new Set(siteVisitRows.map(r => r.mmpId));
     for (const mmp of mmps) {
-      // Use siteEntries when we don't yet have site_visits for this MMP
+      // Use siteEntries when we don't yet have mmp_site_entries for this MMP
       if (!existingIds.has(mmp.id) && Array.isArray(mmp.siteEntries)) {
         for (const se of mmp.siteEntries) {
           const row: SiteVisitRow = {

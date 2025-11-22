@@ -32,12 +32,12 @@ This project uses Supabase for database, authentication, storage and realtime. T
 - **Site Visits**
   - Path: `src/context/siteVisit/supabase.ts`
   - Functions:
-    - `fetchSiteVisits()` – `select *` from `site_visits`, transforms snake_case→camelCase
-    - `createSiteVisitInDb(partial)` – insert into `site_visits`, returns transformed row
-    - `updateSiteVisitInDb(id, updates)` – partial update with nested `visit_data`
+    - `fetchSiteVisits()` – `select *` from `mmp_site_entries`, transforms snake_case→camelCase
+    - `createSiteVisitInDb(partial)` – insert into `mmp_site_entries`, returns transformed row
+    - `updateSiteVisitInDb(id, updates)` – partial update with nested `additional_data`
     - `deleteSiteVisitInDb(id)` – delete
   - Path: `src/context/siteVisit/SiteVisitContext.tsx`
-    - Orchestrates create/update flows, auto-assignment logic (extra queries to `profiles`, `user_roles`, active work from `site_visits`) and notifications
+    - Orchestrates create/update flows, auto-assignment logic (extra queries to `profiles`, `user_roles`, active work from `mmp_site_entries`) and notifications
 
 - **Monthly Monitoring Plan (MMP)**
   - Path: `src/context/mmp/MMPContext.tsx`
@@ -91,7 +91,7 @@ This project uses Supabase for database, authentication, storage and realtime. T
 
 - **Reports**
   - Path: `src/pages/Reports.tsx`
-    - Reads `site_visits`, `mmp_files`, `projects`, `profiles` with date filters and ordering
+    - Reads `mmp_site_entries`, `mmp_files`, `projects`, `profiles` with date filters and ordering
 
 - **Debug Utilities**
   - Path: `src/utils/debug-db.ts`
@@ -137,7 +137,7 @@ This project uses Supabase for database, authentication, storage and realtime. T
 ## Tables & RPC Used (quick reference)
 
 - **Tables**
-  - `site_visits`, `mmp_files`, `notifications`
+  - `mmp_site_entries`, `mmp_files`, `notifications`
   - `projects`, `project_activities`, `sub_activities`
   - `profiles`, `user_roles`, `roles`, `permissions`
   - `wallets`, `wallet_transactions`, `payout_requests`

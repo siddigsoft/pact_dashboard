@@ -47,12 +47,13 @@ const SmartCollectorSelector: React.FC<SmartCollectorSelectorProps> = ({
     (async () => {
       try {
         const { data: activeVisits } = await supabase
-          .from('site_visits')
-          .select('assigned_to, status');
+          .from('mmp_site_entries')
+          .select('additional_data, status');
         const counts: Record<string, number> = {};
         (activeVisits || []).forEach((r: any) => {
-          if (r.assigned_to && (r.status === 'assigned' || r.status === 'inProgress')) {
-            counts[r.assigned_to] = (counts[r.assigned_to] || 0) + 1;
+          const assignedTo = r.additional_data?.assigned_to;
+          if (assignedTo && (r.status === 'Dispatched' || r.status === 'Assigned' || r.status === 'In Progress')) {
+            counts[assignedTo] = (counts[assignedTo] || 0) + 1;
           }
         });
         if (!cancelled) setWorkloadCounts(counts);

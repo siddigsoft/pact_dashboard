@@ -51,7 +51,7 @@ export const ArchiveProvider: React.FC<ArchiveProviderProps> = ({ children, curr
 
         const [{ data: mmpRows, error: mmpErr }, { data: svRows, error: svErr }] = await Promise.all([
           supabase.from('mmp_files').select('*').order('created_at', { ascending: false }),
-          supabase.from('site_visits').select('*').order('created_at', { ascending: false }),
+          supabase.from('mmp_site_entries').select('*').order('created_at', { ascending: false }),
         ]);
 
         let photoRows: any[] = [];

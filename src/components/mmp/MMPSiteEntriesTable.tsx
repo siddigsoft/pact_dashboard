@@ -37,7 +37,7 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Normalize a row from either MMP siteEntries (camelCase) or site_visits (snake_case)
+  // Normalize a row from either MMP siteEntries (camelCase) or mmp_site_entries (snake_case)
   const normalizeSite = (site: any) => {
     // visit_data may be stored as JSON or stringified JSON
     const vd = site?.visit_data

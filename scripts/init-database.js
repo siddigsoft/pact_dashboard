@@ -39,7 +39,7 @@ async function initializeDatabase() {
     console.log('   - project_activities table');
     console.log('   - sub_activities table');
     console.log('   - mmp_files table');
-    console.log('   - site_visits table');
+    console.log('   - mmp_site_entries table');
     console.log('   - communications table');
     console.log('   - And many more...\n');
     
@@ -101,7 +101,7 @@ async function initializeDatabase() {
         'user_roles',
         'projects',
         'mmp_files',
-        'site_visits'
+        'mmp_site_entries'
       ];
       
       const foundTables = tables.map(t => t.table_name);

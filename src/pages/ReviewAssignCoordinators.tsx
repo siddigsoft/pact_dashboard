@@ -116,56 +116,39 @@ const ReviewAssignCoordinators: React.FC = () => {
       // Get the site entries for the selected sites
       const selectedSiteEntries = groupMap[groupKey]?.filter((site: any) => siteIds.includes(site.id)) || [];
 
-      // Create site visit records for each selected site
-      const siteVisitPromises = selectedSiteEntries.map(async (siteEntry: any) => {
-        const siteVisitData = {
-          site_name: siteEntry.siteName || siteEntry.name || `Site ${siteEntry.id}`,
-          site_code: siteEntry.siteCode || siteEntry.code || siteEntry.id,
-          status: 'assigned',
-          locality: siteEntry.locality || '',
-          state: siteEntry.state || '',
-          activity: siteEntry.activity || siteEntry.mainActivity || 'Site Verification',
-          priority: 'medium',
-          due_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-          assigned_to: coordinatorId,
-          assigned_by: currentUser?.id || null,
-          assigned_at: new Date().toISOString(),
-          notes: `Forwarded from MMP ${mmpFile?.name || mmpFile?.mmpId} for CP verification`,
-          fees: {
-            total: 0,
-            currency: 'SDG',
-            distanceFee: 0,
-            complexityFee: 0,
-            urgencyFee: 0,
-          },
-          location: {
-            address: siteEntry.location || '',
-            latitude: siteEntry.latitude || 0,
-            longitude: siteEntry.longitude || 0,
-            region: siteEntry.region || siteEntry.state || '',
-          },
-          main_activity: siteEntry.activity || siteEntry.mainActivity || 'Site Verification',
-          hub_office: siteEntry.hub || mmpFile?.hub || '',
-          mmp_id: mmpId || '',
-        };
-
-        // Create the site visit in the database
+      // Update mmp_site_entries to mark them as dispatched and assign to coordinator
+      const updatePromises = selectedSiteEntries.map(async (siteEntry: any) => {
+        const existingAdditionalData = siteEntry.additional_data || {};
+        
+        // Update the mmp_site_entry in the database (mark as dispatched)
         const { data, error } = await supabase
-          .from('site_visits')
-          .insert([siteVisitData])
+          .from('mmp_site_entries')
+          .update({
+            status: 'Dispatched',
+            dispatched_by: currentUser?.id || null,
+            dispatched_at: new Date().toISOString(),
+            additional_data: {
+              ...existingAdditionalData,
+              assigned_to: coordinatorId,
+              assigned_by: currentUser?.id || null,
+              assigned_at: new Date().toISOString(),
+              notes: `Forwarded from MMP ${mmpFile?.name || mmpFile?.mmpId} for CP verification`,
+            }
+          })
+          .eq('id', siteEntry.id)
           .select()
           .single();
 
         if (error) {
-          console.error('Error creating site visit:', error);
+          console.error('Error updating site entry:', error);
           throw error;
         }
 
         return data;
       });
 
-      // Wait for all site visits to be created
-      await Promise.all(siteVisitPromises);
+      // Wait for all site entries to be updated
+      await Promise.all(updatePromises);
 
       // Send notification to coordinator
       await supabase.from('notifications').insert([
