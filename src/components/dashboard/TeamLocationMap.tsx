@@ -6,6 +6,7 @@ import { MapPin, Users } from 'lucide-react';
 import { User } from '@/types/user';
 import { SiteVisit } from '@/types/siteVisit';
 import { formatDistanceToNow } from 'date-fns';
+import { getUserStatus } from '@/utils/userStatusUtils';
 
 interface TeamLocationMapProps {
   users: User[];
@@ -38,10 +39,19 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({ users, siteVisits = [
       }
     });
 
-    // Add team member markers (green for online, gray for offline)
+    // Add team member markers (three-tier status: online=green, same-day=orange, offline=gray)
     users.forEach((user) => {
       if (user.location?.latitude && user.location?.longitude) {
-        const isOnline = user.availability === 'online' || user.location?.isSharing;
+        const userStatus = getUserStatus(user);
+        
+        // Map status colors to hex values for the SVG
+        const statusColorMap: Record<string, string> = {
+          'bg-green-500': '#22c55e',
+          'bg-orange-500': '#f97316',
+          'bg-gray-400 dark:bg-gray-600': '#9ca3af'
+        };
+        const markerColor = statusColorMap[userStatus.color] || '#9ca3af';
+        const isOnline = userStatus.type === 'online';
         
         const markerIcon = L.divIcon({
           className: 'custom-marker',
@@ -49,7 +59,7 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({ users, siteVisits = [
             <div style="position: relative;">
               <svg width="32" height="40" viewBox="0 0 32 40" xmlns="http://www.w3.org/2000/svg">
                 <path d="M16 0C7.163 0 0 7.163 0 16c0 12 16 24 16 24s16-12 16-24c0-8.837-7.163-16-16-16z" 
-                  fill="${isOnline ? '#22c55e' : '#9ca3af'}" 
+                  fill="${markerColor}" 
                   stroke="#fff" 
                   stroke-width="2"/>
                 <circle cx="16" cy="16" r="6" fill="#fff"/>
@@ -71,17 +81,21 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({ users, siteVisits = [
           ? formatDistanceToNow(new Date(lastSeenTime), { addSuffix: true })
           : 'Never';
 
+        // Status emoji mapping
+        const statusEmoji = userStatus.type === 'online' ? '🟢' : 
+                           userStatus.type === 'same-day' ? '🟠' : '⚫';
+
         const popupContent = `
-          <div style="min-width: 200px;">
+          <div style="min-width: 220px;">
             <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-              <div style="width: 8px; height: 8px; background: ${isOnline ? '#22c55e' : '#9ca3af'}; border-radius: 50%;"></div>
+              <div style="width: 8px; height: 8px; background: ${markerColor}; border-radius: 50%;"></div>
               <strong style="font-size: 14px;">${user.name}</strong>
             </div>
             <div style="font-size: 12px; color: #666; margin-bottom: 4px;">
               <strong>Role:</strong> ${user.roles?.[0] || user.role || 'N/A'}
             </div>
             <div style="font-size: 12px; color: #666; margin-bottom: 4px;">
-              <strong>Status:</strong> ${isOnline ? '🟢 Online' : '⚫ Offline'}
+              <strong>Status:</strong> ${statusEmoji} ${userStatus.label}
             </div>
             <div style="font-size: 12px; color: #666; margin-bottom: 4px;">
               <strong>Last Seen:</strong> ${lastSeenText}
@@ -91,6 +105,9 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({ users, siteVisits = [
                 📍 ${user.location.address}
               </div>
             ` : ''}
+            <div style="font-size: 11px; color: #999; margin-top: 8px; padding-top: 8px; border-top: 1px solid #e5e7eb; font-style: italic;">
+              💬 Click card/table row for messaging & assignment options
+            </div>
           </div>
         `;
 
@@ -188,14 +205,12 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({ users, siteVisits = [
   const teamWithLocation = users.filter(u => u.location?.latitude && u.location?.longitude);
   const sitesWithLocation = siteVisits.filter(v => v.location?.latitude && v.location?.longitude);
   
-  // Calculate online/offline counts ONLY from users with location data
-  const onlineWithLocation = teamWithLocation.filter(u => 
-    u.availability === 'online' || u.location?.isSharing
-  );
-  const offlineWithLocation = teamWithLocation.filter(u => 
-    u.availability !== 'online' && !u.location?.isSharing
-  );
+  // Calculate status counts ONLY from users with location data using three-tier system
+  const onlineWithLocation = teamWithLocation.filter(u => getUserStatus(u).type === 'online');
+  const sameDayWithLocation = teamWithLocation.filter(u => getUserStatus(u).type === 'same-day');
+  const offlineWithLocation = teamWithLocation.filter(u => getUserStatus(u).type === 'offline');
   const onlineCount = onlineWithLocation.length;
+  const sameDayCount = sameDayWithLocation.length;
   const offlineCount = offlineWithLocation.length;
 
   return (
@@ -204,14 +219,18 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({ users, siteVisits = [
       <Card className="bg-muted/30 border-border/50">
         <CardContent className="p-3">
           <div className="flex items-center justify-between flex-wrap gap-3">
-            <div className="flex items-center gap-4 text-xs">
+            <div className="flex items-center gap-4 text-xs flex-wrap">
               <div className="flex items-center gap-1.5">
                 <div className="w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>
-                <span>Online Team ({onlineCount})</span>
+                <span>Online ({onlineCount})</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-3 bg-orange-500 rounded-full border-2 border-white"></div>
+                <span>Active Today ({sameDayCount})</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <div className="w-3 h-3 bg-gray-400 rounded-full border-2 border-white"></div>
-                <span>Offline Team ({offlineCount})</span>
+                <span>Offline ({offlineCount})</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <div className="w-3 h-3 bg-indigo-500 rounded-full border-2 border-white"></div>

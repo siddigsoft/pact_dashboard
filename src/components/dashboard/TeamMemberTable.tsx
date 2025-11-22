@@ -12,6 +12,8 @@ import { Badge } from '@/components/ui/badge';
 import { Circle, MapPin, Clock } from 'lucide-react';
 import { User } from '@/types/user';
 import { formatDistanceToNow, format } from 'date-fns';
+import { getUserStatus } from '@/utils/userStatusUtils';
+import { TeamMemberActions } from '@/components/team/TeamMemberActions';
 
 interface TeamMemberTableProps {
   users: User[];
@@ -36,11 +38,6 @@ export const TeamMemberTable: React.FC<TeamMemberTableProps> = ({
       .join('')
       .toUpperCase()
       .slice(0, 2) || '??';
-  };
-
-  const isOnline = (user: User) => {
-    return user.availability === 'online' || 
-      (user.location?.isSharing && user.location?.latitude && user.location?.longitude);
   };
 
   const getLastLogin = (user: User) => {
@@ -70,6 +67,7 @@ export const TeamMemberTable: React.FC<TeamMemberTableProps> = ({
             <TableHead className="text-center">Pending</TableHead>
             <TableHead className="text-center">Overdue</TableHead>
             <TableHead className="text-right">Workload</TableHead>
+            <TableHead className="text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -77,7 +75,7 @@ export const TeamMemberTable: React.FC<TeamMemberTableProps> = ({
             const workload = workloads.get(user.id) || { active: 0, completed: 0, pending: 0, overdue: 0 };
             const totalTasks = workload.active + workload.pending;
             const workloadPercentage = Math.min(Math.round((totalTasks / 20) * 100), 100);
-            const online = isOnline(user);
+            const userStatus = getUserStatus(user);
             const primaryRole = user.roles?.[0] || user.role;
 
             return (
@@ -89,7 +87,7 @@ export const TeamMemberTable: React.FC<TeamMemberTableProps> = ({
               >
                 <TableCell>
                   <Circle 
-                    className={`h-3 w-3 ${online ? 'text-green-500' : 'text-gray-400 dark:text-gray-600'}`}
+                    className={`h-3 w-3 ${userStatus.color.replace('bg-', 'text-')}`}
                     fill="currentColor"
                     data-testid={`status-indicator-${user.id}`}
                   />
@@ -105,11 +103,9 @@ export const TeamMemberTable: React.FC<TeamMemberTableProps> = ({
                     </Avatar>
                     <div className="flex flex-col">
                       <span className="font-medium text-sm">{user.name}</span>
-                      {online && (
-                        <Badge variant="outline" className="w-fit text-[9px] h-4 px-1">
-                          Online
-                        </Badge>
-                      )}
+                      <Badge variant={userStatus.badgeVariant} className="w-fit text-[9px] h-4 px-1">
+                        {userStatus.label}
+                      </Badge>
                     </div>
                   </div>
                 </TableCell>
@@ -177,6 +173,10 @@ export const TeamMemberTable: React.FC<TeamMemberTableProps> = ({
                   }`}>
                     {workloadPercentage}%
                   </span>
+                </TableCell>
+                
+                <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                  <TeamMemberActions user={user} variant="dropdown" />
                 </TableCell>
               </TableRow>
             );

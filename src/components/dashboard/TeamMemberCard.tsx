@@ -12,6 +12,8 @@ import {
 } from 'lucide-react';
 import { User } from '@/types/user';
 import { formatDistanceToNow } from 'date-fns';
+import { getUserStatus } from '@/utils/userStatusUtils';
+import { TeamMemberActions } from '@/components/team/TeamMemberActions';
 
 interface TeamMemberCardProps {
   user: User;
@@ -25,9 +27,8 @@ interface TeamMemberCardProps {
 }
 
 export const TeamMemberCard: React.FC<TeamMemberCardProps> = ({ user, workload, onClick }) => {
-  // Determine online status
-  const isOnline = user.availability === 'online' || (user.location?.isSharing && user.location?.latitude && user.location?.longitude);
-  const statusColor = isOnline ? 'bg-green-500' : 'bg-gray-400 dark:bg-gray-600';
+  // Get enhanced user status with three-tier color system
+  const userStatus = getUserStatus(user);
   
   // Calculate last seen time
   const lastSeenTime = user.location?.lastUpdated || user.lastActive;
@@ -75,7 +76,7 @@ export const TeamMemberCard: React.FC<TeamMemberCardProps> = ({ user, workload, 
             </Avatar>
             <div className="absolute -bottom-0.5 -right-0.5">
               <Circle 
-                className={`h-4 w-4 ${statusColor} border-2 border-background rounded-full`}
+                className={`h-4 w-4 ${userStatus.color} border-2 border-background rounded-full`}
                 fill="currentColor"
                 data-testid={`status-indicator-${user.id}`}
               />
@@ -91,10 +92,10 @@ export const TeamMemberCard: React.FC<TeamMemberCardProps> = ({ user, workload, 
                 </p>
               </div>
               <Badge 
-                variant={isOnline ? "default" : "outline"} 
+                variant={userStatus.badgeVariant} 
                 className="text-[10px] h-5 px-1.5"
               >
-                {isOnline ? 'Online' : 'Offline'}
+                {userStatus.label}
               </Badge>
             </div>
 
@@ -163,6 +164,11 @@ export const TeamMemberCard: React.FC<TeamMemberCardProps> = ({ user, workload, 
               <span className="text-[9px] text-muted-foreground uppercase">Late</span>
             </div>
           </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="mt-3 pt-3 border-t" onClick={(e) => e.stopPropagation()}>
+          <TeamMemberActions user={user} variant="buttons" size="sm" />
         </div>
 
         {/* Performance Badge (if available) */}
