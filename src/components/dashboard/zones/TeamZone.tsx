@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '@/context/user/UserContext';
 import { Badge } from '@/components/ui/badge';
-import { useSiteVisit } from '@/context/siteVisit/SiteVisitContext';
+import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
 import { TeamMemberCard } from '../TeamMemberCard';
 import { TeamMemberDetailModal } from '../TeamMemberDetailModal';
 import { User } from '@/types/user';
@@ -20,7 +20,7 @@ export const TeamZone: React.FC = () => {
   
   const navigate = useNavigate();
   const { users } = useUser();
-  const { siteVisits } = useSiteVisit();
+  const { siteVisits } = useSiteVisitContext();
 
   const activeFieldTeam = users?.filter(u => 
     u.roles?.some(r => r.toLowerCase() === 'datacollector' || r.toLowerCase() === 'coordinator' || r.toLowerCase() === 'supervisor')
