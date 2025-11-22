@@ -13,6 +13,7 @@ import { TeamMemberCard } from '../TeamMemberCard';
 import { TeamMemberTable } from '../TeamMemberTable';
 import { TeamMemberDetailModal } from '../TeamMemberDetailModal';
 import { User } from '@/types/user';
+import { ZoneHeader } from '../ZoneHeader';
 
 export const TeamZone: React.FC = () => {
   const [activeTab, setActiveTab] = useState('overview');
