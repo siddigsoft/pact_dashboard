@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { useAppContext } from '@/context/AppContext';
 import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
 import { startOfMonth } from 'date-fns';
+import { ZoneHeader } from '../ZoneHeader';
 
 export const PerformanceZone: React.FC = () => {
   const [activeTab, setActiveTab] = useState('achievements');
@@ -22,50 +23,27 @@ export const PerformanceZone: React.FC = () => {
   }).length || 0;
 
   return (
-    <div className="space-y-3">
-      {/* Professional Tech Header */}
-      <div className="relative overflow-hidden rounded-lg border border-border/50 bg-gradient-to-r from-purple-500/5 via-indigo-500/5 to-background p-3 shadow-sm">
-        <div className="relative z-10 flex items-center justify-between flex-wrap gap-3">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center w-11 h-11 rounded-lg bg-gradient-to-br from-purple-500/20 to-indigo-500/20 border border-purple-500/30 shadow-sm">
-              <TrendingUp className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-            </div>
-            <div>
-              <h2 className="text-lg font-bold tracking-tight">Performance & Analytics</h2>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Goals & Achievement Tracking</p>
-            </div>
-          </div>
-          <Badge variant="secondary" className="gap-2 h-7 text-xs px-3 tabular-nums">
-            <Trophy className="h-3 w-3" />
-            {thisMonthVisits} This Month
-          </Badge>
+    <div className="space-y-4">
+      {/* Enterprise Header */}
+      <ZoneHeader
+        title="Performance & Analytics"
+        subtitle="Goals and achievement tracking"
+        color="purple"
+      >
+        <div className="text-right">
+          <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">This Month</p>
+          <p className="text-2xl font-bold tabular-nums">{thisMonthVisits}</p>
         </div>
-        <div className="absolute inset-0 bg-grid-pattern opacity-5" />
-        <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-purple-500/10 to-transparent rounded-full blur-2xl" />
-      </div>
+      </ZoneHeader>
 
-      {/* Modern Tab System */}
+      {/* Professional Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 h-auto p-0.5 bg-gradient-to-r from-muted/30 via-background to-muted/30 border border-border/30">
-          <TabsTrigger 
-            value="achievements" 
-            className="gap-1.5 px-3 py-2 data-[state=active]:bg-purple-500/10 data-[state=active]:border-purple-500/20 data-[state=active]:shadow-sm border border-transparent"
-            data-testid="tab-achievements"
-          >
-            <div className="w-5 h-5 rounded bg-purple-500/10 flex items-center justify-center">
-              <Trophy className="h-3 w-3 text-purple-600 dark:text-purple-400" />
-            </div>
-            <span className="text-[10px] font-semibold uppercase tracking-wide">Achievements</span>
+        <TabsList className="w-full justify-start">
+          <TabsTrigger value="achievements" data-testid="tab-achievements">
+            Achievements
           </TabsTrigger>
-          <TabsTrigger 
-            value="activity" 
-            className="gap-1.5 px-3 py-2 data-[state=active]:bg-blue-500/10 data-[state=active]:border-blue-500/20 data-[state=active]:shadow-sm border border-transparent"
-            data-testid="tab-activity"
-          >
-            <div className="w-5 h-5 rounded bg-blue-500/10 flex items-center justify-center">
-              <Activity className="h-3 w-3 text-blue-600 dark:text-blue-400" />
-            </div>
-            <span className="text-[10px] font-semibold uppercase tracking-wide">Activity Feed</span>
+          <TabsTrigger value="activity" data-testid="tab-activity">
+            Activity Feed
           </TabsTrigger>
         </TabsList>
 

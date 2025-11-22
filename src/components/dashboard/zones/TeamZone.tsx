@@ -108,71 +108,42 @@ export const TeamZone: React.FC = () => {
   };
 
   return (
-    <div className="space-y-3">
-      {/* Professional Tech Header */}
-      <div className="relative overflow-hidden rounded-lg border border-border/50 bg-gradient-to-r from-green-500/5 via-emerald-500/5 to-background p-3 shadow-sm">
-        <div className="relative z-10 flex items-center justify-between flex-wrap gap-3">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center w-11 h-11 rounded-lg bg-gradient-to-br from-green-500/20 to-emerald-500/20 border border-green-500/30 shadow-sm">
-              <Users className="h-5 w-5 text-green-600 dark:text-green-400" />
-            </div>
-            <div>
-              <h2 className="text-lg font-bold tracking-tight">Team Coordination</h2>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Real-time Field Operations</p>
-            </div>
-          </div>
-          <div className="flex gap-2 items-center">
-            <Badge variant="secondary" className="gap-2 text-xs h-7 px-3 tabular-nums">
-              <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-              {onlineMembers}/{activeFieldTeam} Online
-            </Badge>
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={() => navigate('/field-team')}
-              data-testid="button-view-full-team"
-              className="h-7 text-xs"
-            >
-              View Full Team
-            </Button>
-          </div>
+    <div className="space-y-4">
+      {/* Enterprise Header */}
+      <ZoneHeader
+        title="Team Coordination"
+        subtitle="Real-time field operations and team management"
+        color="green"
+      >
+        <div className="text-right">
+          <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium">Online/Total</p>
+          <p className="text-2xl font-bold tabular-nums">
+            <span className="text-green-600 dark:text-green-400">{onlineMembers}</span>
+            <span className="text-muted-foreground mx-1">/</span>
+            {activeFieldTeam}
+          </p>
         </div>
-        <div className="absolute inset-0 bg-grid-pattern opacity-5" />
-        <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-green-500/10 to-transparent rounded-full blur-2xl" />
-      </div>
+        <Button 
+          variant="outline" 
+          size="sm"
+          onClick={() => navigate('/field-team')}
+          data-testid="button-view-full-team"
+        >
+          View Full Team
+        </Button>
+      </ZoneHeader>
 
-      {/* Modern Tab System */}
+      {/* Professional Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-3 h-auto p-0.5 bg-gradient-to-r from-muted/30 via-background to-muted/30 border border-border/30">
-          <TabsTrigger 
-            value="overview" 
-            className="gap-1.5 px-3 py-2 data-[state=active]:bg-green-500/10 data-[state=active]:border-green-500/20 data-[state=active]:shadow-sm border border-transparent"
-            data-testid="tab-overview"
-          >
-            <div className="w-5 h-5 rounded bg-green-500/10 flex items-center justify-center">
-              <UserCircle className="h-3 w-3 text-green-600 dark:text-green-400" />
-            </div>
-            <span className="text-[10px] font-semibold uppercase tracking-wide">Team Overview</span>
+        <TabsList className="w-full justify-start">
+          <TabsTrigger value="overview" data-testid="tab-overview">
+            Team Overview
           </TabsTrigger>
-          <TabsTrigger 
-            value="map" 
-            className="gap-1.5 px-3 py-2 data-[state=active]:bg-blue-500/10 data-[state=active]:border-blue-500/20 data-[state=active]:shadow-sm border border-transparent"
-            data-testid="tab-map"
-          >
-            <div className="w-5 h-5 rounded bg-blue-500/10 flex items-center justify-center">
-              <MapPin className="h-3 w-3 text-blue-600 dark:text-blue-400" />
-            </div>
-            <span className="text-[10px] font-semibold uppercase tracking-wide">Live Map</span>
+          <TabsTrigger value="map" data-testid="tab-map">
+            Live Map
           </TabsTrigger>
-          <TabsTrigger 
-            value="communication" 
-            className="gap-1.5 px-3 py-2 data-[state=active]:bg-purple-500/10 data-[state=active]:border-purple-500/20 data-[state=active]:shadow-sm border border-transparent"
-            data-testid="tab-communication"
-          >
-            <div className="w-5 h-5 rounded bg-purple-500/10 flex items-center justify-center">
-              <MessageSquare className="h-3 w-3 text-purple-600 dark:text-purple-400" />
-            </div>
-            <span className="text-[10px] font-semibold uppercase tracking-wide">Communication</span>
+          <TabsTrigger value="communication" data-testid="tab-communication">
+            Communication
           </TabsTrigger>
         </TabsList>
 
