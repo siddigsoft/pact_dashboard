@@ -59,12 +59,9 @@ const MMPDetailedVerification: React.FC = () => {
     setVerificationProgress(calculatedProgress);
   }, [mmpFile]);
   
+  // Return to the main MMP management list (same as Go to MMP List)
   const handleGoBack = () => {
-    if (id) {
-      navigate(`/mmp/verify/${id}`);
-    } else {
-      navigate('/mmp');
-    }
+    navigate('/mmp');
   };
 
   const handleVerificationComplete = (type: 'permits' | 'cp', data: any) => {
