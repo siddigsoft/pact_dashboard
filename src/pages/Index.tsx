@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -16,17 +16,35 @@ import {
   Clock,
   BarChart3,
   FileCheck,
-  Radio
+  Radio,
+  Loader2
 } from "lucide-react";
 
 const Index = () => {
   const navigate = useNavigate();
+  const [isNavigating, setIsNavigating] = useState(false);
+  const navigationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (!localStorage.getItem("mock_mmp_files")) {
       localStorage.setItem("mock_mmp_files", JSON.stringify([]));
     }
+
+    // Cleanup timeout on unmount
+    return () => {
+      if (navigationTimeoutRef.current) {
+        clearTimeout(navigationTimeoutRef.current);
+      }
+    };
   }, []);
+
+  const handleGetStarted = () => {
+    setIsNavigating(true);
+    // Add a smooth transition delay
+    navigationTimeoutRef.current = setTimeout(() => {
+      navigate("/auth");
+    }, 800);
+  };
 
   const kpiData = [
     { icon: Activity, label: "Live Sites", value: "127", trend: "+12%" },
@@ -68,6 +86,29 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background relative overflow-hidden">
+      {/* Loading Overlay */}
+      {isNavigating && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-md"
+          data-testid="overlay-loading-navigation"
+        >
+          <div className="flex flex-col items-center gap-4">
+            <div className="relative">
+              <div className="w-16 h-16 border-4 border-primary/30 rounded-full" />
+              <div className="absolute inset-0 w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+            </div>
+            <div className="text-center space-y-2">
+              <p className="text-lg font-semibold text-foreground" data-testid="text-loading-title">
+                Initializing Command Center
+              </p>
+              <p className="text-sm text-muted-foreground" data-testid="text-loading-message">
+                Preparing your workspace...
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Animated Background Layer */}
       <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-orange-500/5 to-purple-500/5 dark:from-blue-600/10 dark:via-orange-600/10 dark:to-purple-600/10" />
       <div className="absolute inset-0">
@@ -127,12 +168,22 @@ const Index = () => {
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center pt-4">
               <Button
                 size="lg"
-                onClick={() => navigate("/auth")}
+                onClick={handleGetStarted}
+                disabled={isNavigating}
                 data-testid="button-get-started"
-                className="gap-2 text-lg px-8"
+                className="gap-2 text-lg px-8 relative"
               >
-                Get Started
-                <ArrowRight className="w-5 h-5" />
+                {isNavigating ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Loading...
+                  </>
+                ) : (
+                  <>
+                    Get Started
+                    <ArrowRight className="w-5 h-5" />
+                  </>
+                )}
               </Button>
             </div>
           </div>
