@@ -28,6 +28,7 @@ interface WalletContextType {
   assignSiteVisitCost: (siteVisitId: string, costs: Partial<SiteVisitCost>) => Promise<void>;
   updateSiteVisitCost: (costId: string, costs: Partial<SiteVisitCost>) => Promise<void>;
   addSiteVisitFeeToWallet: (userId: string, siteVisitId: string, amount: number) => Promise<void>;
+  listWallets: () => Promise<Wallet[]>;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
@@ -550,6 +551,22 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const listWallets = async (): Promise<Wallet[]> => {
+    try {
+      const { data, error } = await supabase
+        .from('wallets')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      return data.map(transformWalletFromDB);
+    } catch (error: any) {
+      console.error('Failed to list wallets:', error);
+      return [];
+    }
+  };
+
   useEffect(() => {
     const initWallet = async () => {
       if (!currentUser?.id) {
@@ -637,6 +654,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         assignSiteVisitCost,
         updateSiteVisitCost,
         addSiteVisitFeeToWallet,
+        listWallets,
       }}
     >
       {children}
