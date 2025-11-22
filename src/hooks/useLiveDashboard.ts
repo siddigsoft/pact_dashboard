@@ -33,16 +33,16 @@ export const useLiveDashboard = () => {
           duration: 3000
         });
       }
-    } else if (table === 'site_visits') {
+    } else if (table === 'mmp_site_entries') {
       if (eventType === 'INSERT') {
         toast({
-          title: 'New Site Visit Created',
+          title: 'New Site Entry Created',
           description: 'Click Refresh to see the latest changes.',
           duration: 3000
         });
       } else if (eventType === 'UPDATE') {
         toast({
-          title: 'Site Visit Updated',
+          title: 'Site Entry Updated',
           description: 'Click Refresh to see the latest changes.',
           duration: 3000
         });
@@ -76,12 +76,12 @@ export const useLiveDashboard = () => {
         {
           event: '*',
           schema: 'public',
-          table: 'site_visits'
+          table: 'mmp_site_entries'
         },
-        (payload) => handleDataChange('site_visits', payload.eventType)
+        (payload) => handleDataChange('mmp_site_entries', payload.eventType)
       )
       .subscribe((status) => {
-        console.log('[LiveDashboard] Site visit channel:', status);
+        console.log('[LiveDashboard] Site entry channel:', status);
         setIsConnected(status === 'SUBSCRIBED');
       });
 

@@ -50,9 +50,9 @@ const SiteVisitsOverview: React.FC<SiteVisitsOverviewProps> = ({ currentUserId, 
     setLoading(true);
     const fetchVisits = async () => {
       const { data, error } = await supabase
-        .from('site_visits')
+        .from('mmp_site_entries')
         .select('*')
-        .order('due_date', { ascending: true });
+        .order('visit_date', { ascending: true });
 
       if (error) {
         setLoading(false);
@@ -62,22 +62,22 @@ const SiteVisitsOverview: React.FC<SiteVisitsOverviewProps> = ({ currentUserId, 
       const mappedVisits: SiteVisit[] = (data || []).map((visit: any) => ({
         id: visit.id,
         siteName: visit.site_name,
-        locality: visit.locality || visit.location?.locality || '',
-        state: visit.state || visit.location?.state || '',
-        dueDate: visit.due_date,
-        status: visit.status,
-        assignedTo: visit.assigned_to,
-        completedAt: visit.visit_data?.completedAt,
-        rating: visit.visit_data?.rating,
-        siteCode: visit.visit_data?.siteCode,
-        activity: visit.visit_data?.activity,
-        mainActivity: visit.visit_data?.mainActivity,
-        priority: visit.visit_data?.priority || 'medium',
-        fees: visit.visit_data?.fees || {},
-        hub: visit.visit_data?.hub || visit.hub || '',
-        cpName: visit.visit_data?.cpName || '',
-        visitType: visit.visit_data?.visitType || '',
-        visitTypeRaw: visit.visit_data?.visitTypeRaw || '',
+        locality: visit.locality || '',
+        state: visit.state || '',
+        dueDate: visit.visit_date || visit.created_at,
+        status: visit.status || 'Pending',
+        assignedTo: visit.additional_data?.assigned_to,
+        completedAt: visit.additional_data?.completed_at,
+        rating: visit.additional_data?.rating,
+        siteCode: visit.site_code,
+        activity: visit.activity_at_site || visit.main_activity,
+        mainActivity: visit.main_activity,
+        priority: visit.additional_data?.priority || 'medium',
+        fees: visit.additional_data?.fees || { total: visit.cost || 0 },
+        hub: visit.hub_office || '',
+        cpName: visit.cp_name || '',
+        visitType: visit.visit_type || '',
+        visitTypeRaw: visit.visit_type || '',
       }));
 
       setSiteVisits(mappedVisits);

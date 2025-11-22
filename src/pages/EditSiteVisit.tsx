@@ -38,7 +38,7 @@ const EditSiteVisit: React.FC = () => {
       setLoading(true);
       try {
         const { data, error } = await supabase
-          .from('site_visits')
+          .from('mmp_site_entries')
           .select('*')
           .eq('id', id)
           .single();

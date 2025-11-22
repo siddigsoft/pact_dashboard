@@ -99,26 +99,26 @@ const Reports: React.FC = () => {
         setLoading(true);
         setError(null);
 
-        let svQuery = supabase.from("site_visits").select("*");
+        let svQuery = supabase.from("mmp_site_entries").select("*");
         let mmpQuery = supabase.from("mmp_files").select("*");
         let projQuery = supabase.from("projects").select("*");
         let profQuery = supabase.from("profiles").select("id, full_name, role, email");
 
         if (dateRange?.from) {
           const from = startOfDay(dateRange.from).toISOString();
-          svQuery = svQuery.gte("due_date", from);
+          svQuery = svQuery.gte("visit_date", from);
           mmpQuery = mmpQuery.gte("created_at", from);
           projQuery = projQuery.gte("created_at", from);
         }
         if (dateRange?.to) {
           const to = endOfDay(dateRange.to).toISOString();
-          svQuery = svQuery.lte("due_date", to);
+          svQuery = svQuery.lte("visit_date", to);
           mmpQuery = mmpQuery.lte("created_at", to);
           projQuery = projQuery.lte("created_at", to);
         }
 
         // Sensible ordering for display/export
-        svQuery = svQuery.order("due_date", { ascending: false });
+        svQuery = svQuery.order("visit_date", { ascending: false });
         mmpQuery = mmpQuery.order("created_at", { ascending: false });
         projQuery = projQuery.order("created_at", { ascending: false });
 
@@ -152,7 +152,7 @@ const Reports: React.FC = () => {
       setLoading(true);
       setError(null);
 
-      let svQuery = supabase.from("site_visits").select("*");
+      let svQuery = supabase.from("mmp_site_entries").select("*");
       let mmpQuery = supabase.from("mmp_files").select("*");
       let projQuery = supabase.from("projects").select("*");
       let profQuery = supabase.from("profiles").select("id, full_name, role, email");

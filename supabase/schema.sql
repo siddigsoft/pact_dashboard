@@ -213,39 +213,8 @@ create trigger set_mmp_files_updated_at
 before update on public.mmp_files
 for each row execute function public.set_mmp_files_updated_at();
 
--- SITE VISITS
-create table if not exists public.site_visits (
-  id uuid primary key default gen_random_uuid(),
-  site_name text,
-  site_code text,
-  status text,
-  locality text,
-  state text,
-  activity text,
-  priority text,
-  due_date timestamptz,
-  notes text,
-  main_activity text,
-  location jsonb,
-  fees jsonb,
-  visit_data jsonb,
-  assigned_to uuid,
-  assigned_by uuid,
-  assigned_at timestamptz,
-  attachments text[],
-  completed_at timestamptz,
-  rating integer,
-  mmp_id text,
-  arrival_latitude double precision,
-  arrival_longitude double precision,
-  arrival_timestamp timestamp without time zone,
-  journey_path jsonb,
-  arrival_recorded boolean DEFAULT false,
-  created_at timestamptz default now()
-);
-
-alter table public.site_visits enable row level security;
-create policy "site_visits_all_auth" on public.site_visits for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+-- SITE VISITS: Now using mmp_site_entries table instead
+-- The site_visits table has been removed and all references point to mmp_site_entries
 
 -- SETTINGS TABLES
 create table if not exists public.user_settings (
@@ -402,7 +371,7 @@ create policy "incident_reports_all_auth" on public.incident_reports for all usi
 -- LOCATION LOGS TABLE
 create table if not exists public.location_logs (
   id uuid primary key default gen_random_uuid(),
-  site_visit_id uuid references public.site_visits(id),
+  site_visit_id uuid references public.mmp_site_entries(id),
   latitude double precision not null,
   longitude double precision not null,
   timestamp timestamp without time zone default now(),
@@ -417,7 +386,7 @@ create policy "location_logs_all_auth" on public.location_logs for all using (au
 -- REPORTS TABLE
 create table if not exists public.reports (
   id uuid primary key default gen_random_uuid(),
-  site_visit_id uuid references public.site_visits(id),
+  site_visit_id uuid references public.mmp_site_entries(id),
   notes text not null,
   submitted_at timestamp without time zone default now(),
   is_synced boolean default false,
@@ -448,7 +417,7 @@ create table if not exists public.safety_checklists (
   title text not null,
   items jsonb,
   completed_by uuid references public.profiles(id),
-  site_visit_id uuid references public.site_visits(id),
+  site_visit_id uuid references public.mmp_site_entries(id),
   completed_at timestamp without time zone,
   is_synced boolean default false,
   last_modified timestamp without time zone default now()
@@ -460,7 +429,7 @@ create policy "safety_checklists_all_auth" on public.safety_checklists for all u
 -- VISIT STATUS TABLE
 create table if not exists public.visit_status (
   id uuid primary key default gen_random_uuid(),
-  site_visit_id uuid references public.site_visits(id),
+  site_visit_id uuid references public.mmp_site_entries(id),
   status text not null,
   updated_at timestamp without time zone default now(),
   updated_by uuid references public.profiles(id),
