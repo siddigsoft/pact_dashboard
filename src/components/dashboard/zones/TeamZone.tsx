@@ -22,11 +22,22 @@ export const TeamZone: React.FC = () => {
   const { users } = useUser();
   const { siteVisits } = useSiteVisitContext();
 
-  const activeFieldTeam = users?.filter(u => 
-    u.roles?.some(r => r.toLowerCase() === 'datacollector' || r.toLowerCase() === 'coordinator' || r.toLowerCase() === 'supervisor')
-  ).length || 0;
+  // Filter team members who can be assigned to site visits (coordinators and data collectors only)
+  const assignableTeamMembers = useMemo(() => {
+    if (!users) return [];
+    return users.filter(user => 
+      user.roles?.some(role => {
+        const normalizedRole = role.toLowerCase();
+        return normalizedRole === 'coordinator' || normalizedRole === 'datacollector';
+      })
+    );
+  }, [users]);
 
-  const onlineMembers = users?.filter(u => u.location?.latitude && u.location?.longitude).length || 0;
+  const activeFieldTeam = assignableTeamMembers.length;
+
+  const onlineMembers = assignableTeamMembers.filter(u => 
+    u.availability === 'online' || (u.location?.latitude && u.location?.longitude)
+  ).length;
 
   // Calculate workload for each user
   const userWorkloads = useMemo(() => {
@@ -125,9 +136,9 @@ export const TeamZone: React.FC = () => {
         </TabsList>
 
         <TabsContent value="overview" className="mt-4">
-          {users && users.length > 0 ? (
+          {assignableTeamMembers && assignableTeamMembers.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-              {users.map(user => (
+              {assignableTeamMembers.map(user => (
                 <TeamMemberCard
                   key={user.id}
                   user={user}
@@ -140,7 +151,8 @@ export const TeamZone: React.FC = () => {
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-12 text-muted-foreground">
                 <Users className="h-12 w-12 mb-3 opacity-50" />
-                <p>No team members found</p>
+                <p>No assignable team members found</p>
+                <p className="text-xs mt-1">Only Coordinators and Data Collectors are shown</p>
               </CardContent>
             </Card>
           )}
