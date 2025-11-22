@@ -1,17 +1,14 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { 
   ClipboardList, 
   Users, 
   Calendar, 
   Shield, 
-  TrendingUp,
-  Menu,
-  X
+  TrendingUp
 } from 'lucide-react';
 import { useAppContext } from '@/context/AppContext';
+import { DashboardCommandBar } from './DashboardCommandBar';
 
 export type DashboardZone = 'operations' | 'team' | 'planning' | 'compliance' | 'performance';
 
@@ -69,7 +66,6 @@ export const DashboardZoneLayout: React.FC<DashboardZoneLayoutProps> = ({
   onZoneChange,
   children
 }) => {
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const { roles } = useAppContext();
 
   const hasRoleAccess = (zoneRoles: string[]) => {
@@ -80,9 +76,9 @@ export const DashboardZoneLayout: React.FC<DashboardZoneLayoutProps> = ({
   const availableZones = zones.filter(z => hasRoleAccess(z.roles));
 
   return (
-    <div className="flex flex-col h-full w-full">
+    <div className="flex flex-col min-h-screen">
       {/* Horizontal Zone Navigation - Tech Style */}
-      <nav className="sticky top-0 z-30 bg-gradient-to-r from-card via-background to-card border-b border-border/50 backdrop-blur-sm shadow-sm">
+      <nav className="sticky top-0 z-40 bg-gradient-to-r from-card via-background to-card border-b border-border/50 backdrop-blur-sm shadow-sm">
         <div className="flex items-center gap-1 px-3 py-2 overflow-x-auto scrollbar-hide">
           <div className="flex-shrink-0 mr-2 hidden md:block">
             <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Zones:</span>
@@ -145,8 +141,13 @@ export const DashboardZoneLayout: React.FC<DashboardZoneLayoutProps> = ({
         </div>
       </nav>
 
-      {/* Main Content Area */}
-      <main className="flex-1 overflow-auto p-4 lg:p-6">
+      {/* Command Bar - Sticky with zones */}
+      <div className="sticky top-[52px] z-30 border-b border-border/50">
+        <DashboardCommandBar />
+      </div>
+
+      {/* Main Content Area - Scrollable */}
+      <main className="flex-1 p-4 lg:p-6">
         {children}
       </main>
     </div>

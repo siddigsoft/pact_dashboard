@@ -3,7 +3,6 @@ import { useSiteVisitRemindersUI } from '@/hooks/use-site-visit-reminders-ui';
 import { useAppContext } from '@/context/AppContext';
 import FloatingMessenger from '@/components/communication/FloatingMessenger';
 import LocationPermissionPrompt from '@/components/location/LocationPermissionPrompt';
-import { DashboardCommandBar } from '@/components/dashboard/DashboardCommandBar';
 import { DashboardZoneLayout, DashboardZone } from '@/components/dashboard/DashboardZoneLayout';
 import { OperationsZone } from '@/components/dashboard/zones/OperationsZone';
 import { TeamZone } from '@/components/dashboard/zones/TeamZone';
@@ -75,10 +74,7 @@ const Dashboard = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Command Bar - Always Visible */}
-      <DashboardCommandBar />
-
-      {/* Zone-based Layout */}
+      {/* Zone-based Layout with Sticky Header */}
       <DashboardZoneLayout 
         activeZone={activeZone} 
         onZoneChange={setActiveZone}
