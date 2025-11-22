@@ -59,6 +59,7 @@ import GlobalSearchPage from './pages/GlobalSearchPage';
 import WalletPage from './pages/Wallet';
 import AdminWallets from './pages/AdminWallets';
 import AdminWalletDetail from './pages/AdminWalletDetail';
+import AdminSetup from './pages/AdminSetup';
 
 // Components
 import MainLayout from './components/MainLayout';
@@ -119,6 +120,7 @@ const AppRoutes = () => {
       <Route path="/register" element={<Register />} />
       <Route path="/registration-success" element={<RegistrationSuccess />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/admin-setup" element={<AdminSetup />} />
 
       {/* Protected routes */}
   <Route element={<AuthGuard><MainLayout /></AuthGuard>}>
