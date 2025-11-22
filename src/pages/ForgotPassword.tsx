@@ -62,7 +62,7 @@ const ForgotPassword = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center relative overflow-hidden bg-gradient-to-br from-[#9b87f5]/10 via-[#7E69AB]/20 to-[#4361EE]/10 before:absolute before:top-0 before:left-0 before:right-0 before:bottom-0 before:bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] before:from-[#9b87f5]/10 before:via-[#7E69AB]/5 before:to-transparent before:-z-10 before:opacity-70">
+    <div className="min-h-screen flex items-center justify-center relative overflow-hidden bg-indigo-50">
       <div className="w-full max-w-md p-4">
         <Card className="backdrop-blur-sm bg-white/80 border border-white/20 shadow-xl animate-fade-in">
           <CardHeader className="space-y-1 text-center">

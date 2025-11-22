@@ -409,15 +409,14 @@ const CoordinatorSites: React.FC = () => {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex items-center justify-between bg-blue-600 text-white p-5 rounded-2xl shadow">
         <div>
           <h1 className="text-3xl font-bold">Site Verification</h1>
-          <p className="text-muted-foreground mt-1">Review and verify sites assigned to you</p>
+          <p className="mt-1 text-blue-100/90">Review and verify sites assigned to you</p>
         </div>
         <Button
-          variant="outline"
           onClick={() => navigate(-1)}
-          className="flex items-center gap-2"
+          className="flex items-center gap-2 bg-white text-blue-600 hover:bg-white/90"
         >
           <ArrowLeft className="h-4 w-4" />
           Back
@@ -425,30 +424,25 @@ const CoordinatorSites: React.FC = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="new" className="flex items-center gap-2">
-            <Clock className="h-4 w-4" />
-            New Sites
+        <TabsList className="grid w-full grid-cols-5 gap-2">
+          <TabsTrigger value="new" className="flex items-center justify-center gap-2 rounded-md py-2 px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm">
+            <span>New Sites</span>
             <Badge variant="secondary">{newSites.length}</Badge>
           </TabsTrigger>
-          <TabsTrigger value="verified" className="flex items-center gap-2">
-            <CheckCircle className="h-4 w-4" />
-            Verified
+          <TabsTrigger value="verified" className="flex items-center justify-center gap-2 rounded-md py-2 px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm">
+            <span>Verified</span>
             <Badge variant="secondary">{verifiedSites.length}</Badge>
           </TabsTrigger>
-          <TabsTrigger value="approved" className="flex items-center gap-2">
-            <FileCheck className="h-4 w-4" />
-            Approved
+          <TabsTrigger value="approved" className="flex items-center justify-center gap-2 rounded-md py-2 px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm">
+            <span>Approved</span>
             <Badge variant="secondary">{approvedSites.length}</Badge>
           </TabsTrigger>
-          <TabsTrigger value="completed" className="flex items-center gap-2">
-            <CheckCircle className="h-4 w-4" />
-            Completed
+          <TabsTrigger value="completed" className="flex items-center justify-center gap-2 rounded-md py-2 px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm">
+            <span>Completed</span>
             <Badge variant="secondary">{completedSites.length}</Badge>
           </TabsTrigger>
-          <TabsTrigger value="rejected" className="flex items-center gap-2">
-            <XCircle className="h-4 w-4" />
-            Rejected
+          <TabsTrigger value="rejected" className="flex items-center justify-center gap-2 rounded-md py-2 px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm">
+            <span>Rejected</span>
             <Badge variant="secondary">{rejectedSites.length}</Badge>
           </TabsTrigger>
         </TabsList>

@@ -7,7 +7,7 @@ import type { MMPStatus } from '@/types';
 import jsPDF from 'jspdf'; // npm install jspdf
 import autoTable from 'jspdf-autotable'; // npm install jspdf-autotable
 
-const FIELD_OP_ROLE = 'fieldOpManager'; // Adjust if your AppRole uses a different value
+const FIELD_OP_ROLE: import('@/types/roles').AppRole = 'Field Operation Manager (FOM)';
 
 const CATEGORY_LABELS = [
   { key: 'all', label: 'All' },
@@ -91,7 +91,7 @@ const FieldOperationManagerPage = () => {
     return false;
   };
 
-  const allowed = roles?.includes('admin') || roles?.includes(FIELD_OP_ROLE as any) || roles?.includes('fom' as any);
+  const allowed = roles?.includes('Admin') || roles?.includes(FIELD_OP_ROLE) || roles?.includes('Field Operation Manager (FOM)');
   if (!allowed) {
     return (
       <div className="max-w-xl mx-auto mt-20 p-8 bg-white rounded-xl shadow text-center">
@@ -337,7 +337,7 @@ const FieldOperationManagerPage = () => {
       }
     } else if (roles && roles.length > 0) {
       userRole = roles.join(', ');
-      userName = roles.includes('admin') ? 'admin' : roles[0];
+      userName = roles.includes('Admin') ? 'Admin' : roles[0];
     }
 
     return { userName, userRole };
@@ -971,11 +971,11 @@ const FieldOperationManagerPage = () => {
   }, [currentUser?.id]);
 
   return (
-    <div className="min-h-screen py-10 px-2 md:px-8 bg-gradient-to-br from-slate-50 via-blue-50 to-blue-100 dark:from-gray-900 dark:via-gray-950 dark:to-gray-900 space-y-10">
+    <div className="min-h-screen py-10 px-2 md:px-8 bg-slate-50 dark:bg-gray-900 space-y-10">
       <div className="max-w-5xl mx-auto">
-        <div className="bg-gradient-to-r from-blue-700/90 to-blue-500/80 dark:from-blue-900 dark:to-blue-700 p-8 rounded-2xl shadow-xl border border-blue-100 dark:border-blue-900 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+  <div className="bg-blue-700 dark:bg-blue-900 p-8 rounded-2xl shadow-xl border border-blue-100 dark:border-blue-900 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
           <div>
-            <h1 className="text-3xl md:text-4xl font-extrabold bg-gradient-to-r from-white to-blue-200 dark:from-blue-200 dark:to-blue-400 bg-clip-text text-transparent tracking-tight mb-2">
+            <h1 className="text-3xl md:text-4xl font-extrabold text-white tracking-tight mb-2">
               Field Operation Manager
             </h1>
             <p className="text-blue-100 dark:text-blue-200/80 font-medium">
@@ -1107,7 +1107,7 @@ const FieldOperationManagerPage = () => {
                       <td className="px-4 py-3">{uploadDate}</td>
                       <td className="px-4 py-3">{uploadedByName}</td>
                       <td className="px-4 py-3">
-                        <Badge variant={uploadedByRole === 'admin' ? 'default' : 'outline'}>
+                        <Badge variant={uploadedByRole === 'Admin' ? 'default' : 'outline'}>
                           {uploadedByRole}
                         </Badge>
                       </td>

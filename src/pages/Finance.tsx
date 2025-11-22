@@ -34,8 +34,10 @@ import {
 } from "@/components/ui/table";
 
 const Finance: React.FC = () => {
-  const { transactions } = useAppContext();
+  const appContext = useAppContext();
   const [activeTab, setActiveTab] = useState("financial-tracking");
+  // transactions may not be exposed on CompositeContextType in some builds — use any-cast and default to empty array
+  const transactions: any[] = (appContext as any).transactions ?? [];
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -130,8 +132,8 @@ const Finance: React.FC = () => {
         </Button>
       </div>
 
-      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-lg shadow-sm border animate-fade-in">
-        <h1 className="text-2xl md:text-3xl font-bold tracking-tight bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+      <div className="bg-blue-50 p-6 rounded-lg shadow-sm border animate-fade-in">
+        <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-blue-700">
           Financial Management
         </h1>
         <p className="text-muted-foreground mt-2">
@@ -320,9 +322,11 @@ const Finance: React.FC = () => {
               Payment Processing
             </h2>
           
-            <FraudPreventionDashboard 
-              suspiciousTransactionsCount={8}
-            />
+              <FraudPreventionDashboard 
+                suspiciousTransactionsCount={transactions.length > 0 ? transactions.filter(t => t.status === 'suspicious').length : mockRecentTransactions.filter(t => t.status === 'suspicious').length}
+                blockedTransactionsCount={transactions.length > 0 ? transactions.filter(t => t.status === 'blocked').length : mockRecentTransactions.filter(t => t.status === 'blocked').length}
+                highRiskAccountsCount={transactions.length > 0 ? transactions.filter(t => (t.amount || 0) > 2000).length : mockRecentTransactions.filter(t => (t.amount || 0) > 2000).length}
+              />
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <Card className="border-t-4 border-t-green-500 overflow-hidden transition-all hover:shadow-md">
