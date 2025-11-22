@@ -23,7 +23,7 @@ import { DashboardDesktopView } from '@/components/dashboard/DashboardDesktopVie
 import { DashboardMobileView } from '@/components/dashboard/DashboardMobileView';
 import { DashboardStatsOverview } from '@/components/dashboard/DashboardStatsOverview';
 import { useViewMode } from '@/context/ViewModeContext';
-import { TooltipProvider } from '@/components/ui/tooltip';
+import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { 
   BarChart, 
   Activity, 
@@ -339,10 +339,26 @@ const Dashboard = () => {
                   {ROLE_DISPLAY_MAP[role] || role}
                 </Badge>
               ))}
-              <div className="tech-badge">
-                <Server className="w-3 h-3" />
-                <span className="monospace-tech">v2.5.1</span>
-              </div>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="tech-badge cursor-help">
+                    <Server className="w-3 h-3" />
+                    <span className="monospace-tech">v2.5.1</span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <div className="text-xs space-y-1">
+                    <p className="font-semibold">PACT Platform Version 2.5.1</p>
+                    <p className="text-muted-foreground">Current Release: November 2025</p>
+                    <ul className="text-muted-foreground list-disc pl-4 space-y-0.5">
+                      <li>Real-time dashboard updates</li>
+                      <li>Enhanced ICT professional UI</li>
+                      <li>Live system metrics monitoring</li>
+                      <li>Optimized performance</li>
+                    </ul>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
               <ConnectionStatus isConnected={isConnected} channelCount={channels} />
               <RefreshButton />
             </div>
