@@ -68,30 +68,41 @@ export const DashboardCommandBar: React.FC<DashboardCommandBarProps> = ({ onQuic
 
   return (
     <Card className="border-b rounded-none shadow-lg bg-gradient-to-r from-primary/5 via-blue-500/5 to-purple-500/5 dark:from-primary/10 dark:via-blue-600/10 dark:to-purple-600/10 backdrop-blur-sm">
-      <CardContent className="p-2.5 lg:p-3">
-        <div className="flex flex-col lg:flex-row gap-2 items-start lg:items-center justify-between">
-          {/* Left: Quick Actions - Compact & Priority */}
-          <div className="flex flex-wrap gap-1.5 items-center">
+      <CardContent className="p-3 lg:p-4">
+        <div className="flex flex-col gap-3">
+          {/* Top: Quick Actions as Cards */}
+          <div className="flex flex-wrap gap-2 items-stretch">
             {quickActions.filter(a => a.permission).map((action, idx) => (
-              <Button
+              <Card
                 key={idx}
-                size="icon"
-                variant="ghost"
+                className="group hover-elevate cursor-pointer border-border/50 hover:border-primary/50 transition-all flex-1 min-w-[140px] max-w-[200px]"
                 onClick={action.action}
-                className="h-7 w-7 lg:h-8 lg:w-auto lg:px-2.5 border border-border/50 hover:border-primary/50 hover:bg-primary/5"
-                data-testid={`button-quick-${action.label.toLowerCase().replace(' ', '-')}`}
-                title={action.label}
+                data-testid={`card-quick-${action.label.toLowerCase().replace(' ', '-')}`}
               >
-                <action.icon className="h-3.5 w-3.5 flex-shrink-0" />
-                <span className="hidden lg:inline text-xs ml-1.5">{action.label}</span>
-              </Button>
+                <CardContent className="p-3 flex items-center gap-2.5">
+                  <div className="flex items-center justify-center w-9 h-9 rounded-md bg-primary/10 dark:bg-primary/20 border border-primary/20 group-hover:bg-primary/20 transition-all">
+                    <action.icon className="h-4 w-4 text-primary" />
+                  </div>
+                  <div className="flex flex-col flex-1 min-w-0">
+                    <span className="text-xs font-semibold text-foreground truncate">{action.label}</span>
+                    <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Quick Action</span>
+                  </div>
+                </CardContent>
+              </Card>
             ))}
             
-            <div className="h-6 w-px bg-border/50 mx-0.5" />
-            
-            <ConnectionStatus isConnected={isConnected} />
-            <RefreshButton />
+            <div className="flex items-center gap-2 ml-auto">
+              <ConnectionStatus isConnected={isConnected} />
+              <RefreshButton />
+            </div>
           </div>
+          
+          {/* Bottom: KPI Metrics & Status */}
+          <div className="flex flex-col lg:flex-row gap-2 items-start lg:items-center justify-between">
+            {/* Left: Status Bar Label */}
+            <div className="hidden lg:block">
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Dashboard:</span>
+            </div>
 
           {/* Center: KPI Metrics - Compact Tech Style */}
           <div className="flex flex-wrap gap-1.5 lg:gap-2 items-center flex-1 lg:justify-center">
@@ -135,6 +146,7 @@ export const DashboardCommandBar: React.FC<DashboardCommandBarProps> = ({ onQuic
           {/* Right: MoDa Countdown */}
           <div className="hidden xl:flex items-center">
             <EnhancedMoDaCountdown />
+          </div>
           </div>
         </div>
       </CardContent>
