@@ -112,24 +112,32 @@ const EditMMP: React.FC = () => {
     try {
       // Persist each edited site directly to mmp_site_entries
       for (const site of sites) {
+        // Migrate data from additional_data to columns if needed
+        const ad = site.additionalData || site.additional_data || {};
         const updateData: any = {
-          site_name: site.siteName || site.site_name,
-          site_code: site.siteCode || site.site_code,
-          hub_office: site.hubOffice || site.hub_office,
-          state: site.state,
-          locality: site.locality,
-          cp_name: site.cpName || site.cp_name,
-          activity_at_site: site.siteActivity || site.activity_at_site,
-          monitoring_by: site.monitoringBy || site.monitoring_by,
-          survey_tool: site.surveyTool || site.survey_tool,
-          use_market_diversion: site.useMarketDiversion || site.use_market_diversion,
-          use_warehouse_monitoring: site.useWarehouseMonitoring || site.use_warehouse_monitoring,
-          visit_date: site.visitDate || site.visit_date,
-          comments: site.comments,
-          cost: site.cost,
-          status: site.status,
-          verification_notes: site.verification_notes || site.verificationNotes,
-          additional_data: site.additionalData || site.additional_data,
+          site_name: site.site_name || site.siteName || ad['Site Name'] || ad['Site Name:'] || null,
+          site_code: site.site_code || site.siteCode || ad['Site Code'] || null,
+          hub_office: site.hub_office || site.hubOffice || ad['Hub Office'] || ad['Hub Office:'] || null,
+          state: site.state || ad['State'] || ad['State:'] || null,
+          locality: site.locality || ad['Locality'] || ad['Locality:'] || null,
+          cp_name: site.cp_name || site.cpName || ad['CP Name'] || ad['CP name'] || ad['CP Name:'] || null,
+          activity_at_site: site.activity_at_site || site.siteActivity || ad['Activity at Site'] || ad['Activity at the site'] || null,
+          monitoring_by: site.monitoring_by || site.monitoringBy || ad['Monitoring By'] || ad['monitoring by'] || null,
+          survey_tool: site.survey_tool || site.surveyTool || ad['Survey Tool'] || ad['Survey under Master tool'] || null,
+          use_market_diversion: site.use_market_diversion !== undefined ? site.use_market_diversion : (site.useMarketDiversion !== undefined ? site.useMarketDiversion : (ad['Use Market Diversion Monitoring'] === 'Yes' || ad['Use Market Diversion Monitoring'] === 'true' || null)),
+          use_warehouse_monitoring: site.use_warehouse_monitoring !== undefined ? site.use_warehouse_monitoring : (site.useWarehouseMonitoring !== undefined ? site.useWarehouseMonitoring : (ad['Use Warehouse Monitoring'] === 'Yes' || ad['Use Warehouse Monitoring'] === 'true' || null)),
+          visit_date: site.visit_date || site.visitDate || ad['Visit Date'] || null,
+          comments: site.comments || ad['Comments'] || null,
+          cost: site.cost !== undefined ? site.cost : (ad['Cost'] ? Number(ad['Cost']) : null),
+          enumerator_fee: site.enumerator_fee !== undefined ? site.enumerator_fee : (ad['Enumerator Fee'] ? Number(ad['Enumerator Fee']) : null),
+          transport_fee: site.transport_fee !== undefined ? site.transport_fee : (ad['Transport Fee'] ? Number(ad['Transport Fee']) : null),
+          status: site.status || ad['Status'] || ad['Status:'] || 'Pending',
+          verification_notes: site.verification_notes || site.verificationNotes || ad['Verification Notes'] || ad['Verification Notes:'] || null,
+          verified_by: site.verified_by || site.verifiedBy || ad['Verified By'] || ad['Verified By:'] || null,
+          verified_at: site.verified_at || site.verifiedAt || (ad['Verified At'] ? new Date(ad['Verified At']).toISOString() : null),
+          dispatched_by: site.dispatched_by || site.dispatchedBy || ad['Dispatched By'] || null,
+          dispatched_at: site.dispatched_at || site.dispatchedAt || (ad['Dispatched At'] ? new Date(ad['Dispatched At']).toISOString() : null),
+          additional_data: site.additionalData || site.additional_data || {},
         };
 
         // Remove undefined to avoid overwriting with nulls

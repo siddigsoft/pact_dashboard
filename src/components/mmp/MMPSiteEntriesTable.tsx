@@ -152,8 +152,95 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
     setDraft(null);
   };
 
+  // Migration helper: Move data from additional_data to columns if column is empty
+  const migrateAdditionalDataToColumns = (entry: any): any => {
+    const migrated = { ...entry };
+    const ad = migrated.additional_data || migrated.additionalData || {};
+    
+    const columnMappings: Record<string, string> = {
+      'Site Code': 'site_code', 'site_code': 'site_code', 'siteCode': 'site_code',
+      'Hub Office': 'hub_office', 'Hub Office:': 'hub_office', 'hub_office': 'hub_office', 'hubOffice': 'hub_office',
+      'State': 'state', 'State:': 'state', 'state': 'state', 'state_name': 'state',
+      'Locality': 'locality', 'Locality:': 'locality', 'locality': 'locality', 'locality_name': 'locality',
+      'Site Name': 'site_name', 'Site Name:': 'site_name', 'site_name': 'site_name', 'siteName': 'site_name',
+      'CP Name': 'cp_name', 'CP name': 'cp_name', 'CP Name:': 'cp_name', 'cp_name': 'cp_name', 'cpName': 'cp_name',
+      'Visit Type': 'visit_type', 'visit_type': 'visit_type', 'visitType': 'visit_type',
+      'Visit Date': 'visit_date', 'visit_date': 'visit_date', 'visitDate': 'visit_date',
+      'Main Activity': 'main_activity', 'main_activity': 'main_activity', 'mainActivity': 'main_activity',
+      'Activity at Site': 'activity_at_site', 'Activity at the site': 'activity_at_site', 'Activity at the site:': 'activity_at_site',
+      'activity_at_site': 'activity_at_site', 'siteActivity': 'activity_at_site',
+      'Monitoring By': 'monitoring_by', 'monitoring by': 'monitoring_by', 'monitoring by:': 'monitoring_by',
+      'monitoring_by': 'monitoring_by', 'monitoringBy': 'monitoring_by',
+      'Survey Tool': 'survey_tool', 'Survey under Master tool': 'survey_tool', 'Survey under Master tool:': 'survey_tool',
+      'survey_tool': 'survey_tool', 'surveyTool': 'survey_tool',
+      'Use Market Diversion Monitoring': 'use_market_diversion', 'use_market_diversion': 'use_market_diversion', 'useMarketDiversion': 'use_market_diversion',
+      'Use Warehouse Monitoring': 'use_warehouse_monitoring', 'use_warehouse_monitoring': 'use_warehouse_monitoring', 'useWarehouseMonitoring': 'use_warehouse_monitoring',
+      'Comments': 'comments', 'comments': 'comments',
+      'Cost': 'cost', 'Price': 'cost', 'Amount': 'cost', 'cost': 'cost', 'price': 'cost',
+      'Enumerator Fee': 'enumerator_fee', 'enumerator_fee': 'enumerator_fee',
+      'Transport Fee': 'transport_fee', 'transport_fee': 'transport_fee',
+      'Verification Notes': 'verification_notes', 'Verification Notes:': 'verification_notes', 'verification_notes': 'verification_notes',
+      'Verified By': 'verified_by', 'Verified By:': 'verified_by', 'verified_by': 'verified_by',
+      'Verified At': 'verified_at', 'verified_at': 'verified_at',
+      'Dispatched By': 'dispatched_by', 'dispatched_by': 'dispatched_by',
+      'Dispatched At': 'dispatched_at', 'dispatched_at': 'dispatched_at',
+      'Status': 'status', 'Status:': 'status', 'status': 'status',
+    };
+
+    const toBool = (v: any): boolean | null => {
+      if (typeof v === 'boolean') return v;
+      if (v === null || v === undefined || v === '') return null;
+      const s = String(v).toLowerCase().trim();
+      return s === 'yes' || s === 'true' || s === '1' || s === 'y';
+    };
+
+    const toNum = (v: any): number | null => {
+      if (v === null || v === undefined || v === '') return null;
+      if (typeof v === 'number') return v;
+      const s = String(v).replace(/[^0-9.\-]/g, '');
+      if (!s) return null;
+      const n = parseFloat(s);
+      return isNaN(n) ? null : n;
+    };
+
+    const toDate = (v: any): string | null => {
+      if (!v) return null;
+      try {
+        const d = new Date(v);
+        return isNaN(d.getTime()) ? null : d.toISOString();
+      } catch {
+        return null;
+      }
+    };
+
+    for (const [adKey, columnName] of Object.entries(columnMappings)) {
+      const columnValue = migrated[columnName];
+      const adValue = ad[adKey];
+      
+      if ((columnValue === null || columnValue === undefined || columnValue === '') && 
+          adValue !== null && adValue !== undefined && adValue !== '') {
+        if (columnName === 'use_market_diversion' || columnName === 'use_warehouse_monitoring') {
+          const boolVal = toBool(adValue);
+          if (boolVal !== null) migrated[columnName] = boolVal;
+        } else if (columnName === 'cost' || columnName === 'enumerator_fee' || columnName === 'transport_fee') {
+          const numVal = toNum(adValue);
+          if (numVal !== null) migrated[columnName] = numVal;
+        } else if (columnName === 'verified_at' || columnName === 'dispatched_at') {
+          const dateVal = toDate(adValue);
+          if (dateVal !== null) migrated[columnName] = dateVal;
+        } else {
+          migrated[columnName] = String(adValue).trim();
+        }
+      }
+    }
+
+    return migrated;
+  };
+
   const applyDraftToSite = (site: any, d: any) => {
-    const updated = { ...site };
+    // First migrate data from additional_data to columns
+    const migratedSite = migrateAdditionalDataToColumns(site);
+    const updated = { ...migratedSite };
     // Update top-level canonical fields if present or attach
     updated.hubOffice = d.hubOffice;
     updated.state = d.state;
@@ -172,6 +259,10 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
     let enumFeeNum: number | undefined;
     let transFeeNum: number | undefined;
     
+    // Get existing fees from multiple possible locations
+    const existingEnumFee = site.enumerator_fee ?? (site.additional_data?.enumerator_fee ? Number(site.additional_data.enumerator_fee) : undefined) ?? (site.additionalData?.['Enumerator Fee'] ? Number(site.additionalData['Enumerator Fee']) : undefined);
+    const existingTransFee = site.transport_fee ?? (site.additional_data?.transport_fee ? Number(site.additional_data.transport_fee) : undefined) ?? (site.additionalData?.['Transport Fee'] ? Number(site.additionalData['Transport Fee']) : undefined);
+    
     if (typeof d.enumeratorFee !== 'undefined') {
       const enumFee = d.enumeratorFee === '—' || d.enumeratorFee === '' ? undefined : Number(d.enumeratorFee);
       enumFeeNum = !isNaN(enumFee as number) ? enumFee : undefined;
@@ -181,9 +272,11 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
       updated.additional_data.enumerator_fee = updated.enumerator_fee;
     } else {
       // Preserve existing enumerator_fee if not being edited
-      enumFeeNum = updated.enumerator_fee ?? site.enumerator_fee ?? (site.additional_data?.enumerator_fee ? Number(site.additional_data.enumerator_fee) : undefined);
+      enumFeeNum = existingEnumFee;
       if (enumFeeNum !== undefined) {
         updated.enumerator_fee = enumFeeNum;
+        if (!updated.additional_data) updated.additional_data = {};
+        updated.additional_data.enumerator_fee = enumFeeNum;
       }
     }
     
@@ -196,9 +289,11 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
       updated.additional_data.transport_fee = updated.transport_fee;
     } else {
       // Preserve existing transport_fee if not being edited
-      transFeeNum = updated.transport_fee ?? site.transport_fee ?? (site.additional_data?.transport_fee ? Number(site.additional_data.transport_fee) : undefined);
+      transFeeNum = existingTransFee;
       if (transFeeNum !== undefined) {
         updated.transport_fee = transFeeNum;
+        if (!updated.additional_data) updated.additional_data = {};
+        updated.additional_data.transport_fee = transFeeNum;
       }
     }
     

@@ -729,6 +729,8 @@ const MMP = () => {
               return {
                 ...entry,
                 cost: update.cost || (update.additional_data.enumerator_fee + update.additional_data.transport_fee),
+                enumerator_fee: update.additional_data.enumerator_fee,
+                transport_fee: update.additional_data.transport_fee,
                 additional_data: update.additional_data
               };
             }
@@ -1367,11 +1369,13 @@ const MMP = () => {
                                 visit_date: site.visitDate || site.visit_date,
                                 comments: site.comments,
                                 cost: finalCost, // Save calculated cost to the cost column
+                                enumerator_fee: enumFee !== undefined ? Number(enumFee) : undefined,
+                                transport_fee: transFee !== undefined ? Number(transFee) : undefined,
                                 status: site.status,
                                 verification_notes: site.verification_notes || site.verificationNotes,
                                 verified_by: site.verified_by || site.verifiedBy,
                                 verified_at: site.verified_at || site.verifiedAt,
-                                additional_data: updatedAdditionalData // Store fees in additional_data
+                                additional_data: updatedAdditionalData // Store fees in additional_data for backward compatibility
                               };
 
                               // Remove undefined values
@@ -1402,6 +1406,9 @@ const MMP = () => {
                               
                               const formattedEntries = verifiedEntries.map(entry => {
                                 const additionalData = entry.additional_data || {};
+                                // Read fees from columns first, fallback to additional_data
+                                const enumeratorFee = entry.enumerator_fee ?? additionalData.enumerator_fee;
+                                const transportFee = entry.transport_fee ?? additionalData.transport_fee;
                                 return {
                                   ...entry,
                                   siteName: entry.site_name,
@@ -1415,10 +1422,10 @@ const MMP = () => {
                                   useWarehouseMonitoring: entry.use_warehouse_monitoring,
                                   visitDate: entry.visit_date,
                                   comments: entry.comments,
-                                  enumerator_fee: additionalData.enumerator_fee,
-                                  enumeratorFee: additionalData.enumerator_fee,
-                                  transport_fee: additionalData.transport_fee,
-                                  transportFee: additionalData.transport_fee,
+                                  enumerator_fee: enumeratorFee,
+                                  enumeratorFee: enumeratorFee,
+                                  transport_fee: transportFee,
+                                  transportFee: transportFee,
                                   cost: entry.cost,
                                   status: entry.status,
                                   verified_by: entry.verified_by,
