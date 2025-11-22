@@ -79,7 +79,7 @@ const Index = () => {
 
   const features = [
     { icon: Zap, label: "Real-time Updates", description: "Live data synchronization" },
-    { icon: Shield, label: "Enterprise Security", description: "SOC 2 compliant" },
+    { icon: Shield, label: "Enterprise Security", description: "Enterprise-grade protection" },
     { icon: Radio, label: "Always Connected", description: "99.9% uptime SLA" },
     { icon: Clock, label: "24/7 Support", description: "Round-the-clock assistance" }
   ];
