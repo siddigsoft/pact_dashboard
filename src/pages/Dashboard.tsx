@@ -302,30 +302,6 @@ const Dashboard = () => {
         <div className="absolute inset-0 tech-grid-bg" />
         <div className="absolute inset-0 bg-gradient-to-br from-blue-500/3 via-orange-500/3 to-purple-500/3 dark:from-blue-600/5 dark:via-orange-600/5 dark:to-purple-600/5" />
         
-        {/* Version Badge - Top Right Corner */}
-        <div className="fixed top-4 right-4 z-50">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div className="tech-badge cursor-help">
-                <Server className="w-3 h-3" />
-                <span className="monospace-tech">v2.5.1</span>
-              </div>
-            </TooltipTrigger>
-            <TooltipContent>
-              <div className="text-xs space-y-1">
-                <p className="font-semibold">PACT Platform Version 2.5.1</p>
-                <p className="text-muted-foreground">Current Release: November 2025</p>
-                <ul className="text-muted-foreground list-disc pl-4 space-y-0.5">
-                  <li>Real-time dashboard updates</li>
-                  <li>Enhanced ICT professional UI</li>
-                  <li>Live system metrics monitoring</li>
-                  <li>Optimized performance</li>
-                </ul>
-              </div>
-            </TooltipContent>
-          </Tooltip>
-        </div>
-        
         {/* Main Content - Compact Layout */}
         <div className="relative z-10 container mx-auto p-4 space-y-4">
           
