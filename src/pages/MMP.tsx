@@ -645,6 +645,29 @@ const MMP = () => {
     loadApprovedCostedCount();
   }, [mmpFiles]); // Reload when MMP files change
 
+  // Always load the dispatched count for the badge, regardless of active tab
+  useEffect(() => {
+    const loadDispatchedCount = async () => {
+      try {
+        // Use database count instead of loading all entries
+        // Count entries with status = 'dispatched' OR dispatched_at is not null
+        const { count, error } = await supabase
+          .from('mmp_site_entries')
+          .select('*', { count: 'exact', head: true })
+          .or('status.ilike.dispatched,dispatched_at.not.is.null');
+
+        if (error) throw error;
+
+        setDispatchedCount(count || 0);
+      } catch (error) {
+        console.error('Failed to load dispatched count:', error);
+        setDispatchedCount(0);
+      }
+    };
+
+    loadDispatchedCount();
+  }, [mmpFiles]); // Reload when MMP files change
+
   // Load approved and costed site entries only when the tab is active
   useEffect(() => {
     const loadApprovedCostedEntries = async () => {
@@ -843,6 +866,7 @@ const MMP = () => {
         });
 
         setDispatchedSiteEntries(formattedEntries);
+        // Update count when entries are loaded (count is also loaded separately for badge)
         setDispatchedCount(formattedEntries.length);
       } catch (error) {
         console.error('Failed to load dispatched site entries:', error);

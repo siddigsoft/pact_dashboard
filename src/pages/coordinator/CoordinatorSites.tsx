@@ -1,16 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
 import { useMMP } from '@/context/mmp/MMPContext';
-import { CheckCircle, Clock, FileCheck, XCircle, ArrowLeft, Eye, Edit } from 'lucide-react';
+import { CheckCircle, Clock, FileCheck, XCircle, ArrowLeft, Eye, Edit, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { format } from 'date-fns';
 
 interface SiteVisit {
@@ -44,24 +45,122 @@ const CoordinatorSites: React.FC = () => {
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
   const [verificationNotes, setVerificationNotes] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(20);
+  
+  // Badge counts - loaded separately for performance
+  const [newSitesCount, setNewSitesCount] = useState(0);
+  const [verifiedSitesCount, setVerifiedSitesCount] = useState(0);
+  const [approvedSitesCount, setApprovedSitesCount] = useState(0);
+  const [completedSitesCount, setCompletedSitesCount] = useState(0);
+  const [rejectedSitesCount, setRejectedSitesCount] = useState(0);
 
+  // Debounce search query
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+      setCurrentPage(1); // Reset to first page when search changes
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Load badge counts for all tabs (always loaded)
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    
+    const loadBadgeCounts = async () => {
+      try {
+        const userId = currentUser.id;
+        
+        // Load all counts in parallel using database count queries
+        const [newCount, verifiedCount, approvedCount, completedCount, rejectedCount] = await Promise.all([
+          supabase
+            .from('site_visits')
+            .select('*', { count: 'exact', head: true })
+            .eq('assigned_to', userId)
+            .or('status.eq.assigned,status.eq.inProgress'),
+          supabase
+            .from('site_visits')
+            .select('*', { count: 'exact', head: true })
+            .eq('assigned_to', userId)
+            .eq('status', 'verified'),
+          supabase
+            .from('site_visits')
+            .select('*', { count: 'exact', head: true })
+            .eq('assigned_to', userId)
+            .eq('status', 'approved'),
+          supabase
+            .from('site_visits')
+            .select('*', { count: 'exact', head: true })
+            .eq('assigned_to', userId)
+            .eq('status', 'completed'),
+          supabase
+            .from('site_visits')
+            .select('*', { count: 'exact', head: true })
+            .eq('assigned_to', userId)
+            .eq('status', 'rejected')
+        ]);
+
+        setNewSitesCount(newCount.count || 0);
+        setVerifiedSitesCount(verifiedCount.count || 0);
+        setApprovedSitesCount(approvedCount.count || 0);
+        setCompletedSitesCount(completedCount.count || 0);
+        setRejectedSitesCount(rejectedCount.count || 0);
+      } catch (error) {
+        console.error('Error loading badge counts:', error);
+      }
+    };
+
+    loadBadgeCounts();
+  }, [currentUser?.id]);
+
+  // Load sites for active tab only
   useEffect(() => {
     loadSites();
-  }, [currentUser]);
+    // Reset search and pagination when tab changes
+    setSearchQuery('');
+    setCurrentPage(1);
+  }, [currentUser, activeTab]);
 
   const loadSites = async () => {
     if (!currentUser?.id) return;
     
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('site_visits')
         .select('*')
-        .eq('assigned_to', currentUser.id)
-        .order('assigned_at', { ascending: false });
+        .eq('assigned_to', currentUser.id);
+
+      // Filter by status based on active tab at database level
+      switch (activeTab) {
+        case 'new':
+          query = query.or('status.eq.assigned,status.eq.inProgress');
+          break;
+        case 'verified':
+          query = query.eq('status', 'verified');
+          break;
+        case 'approved':
+          query = query.eq('status', 'approved');
+          break;
+        case 'completed':
+          query = query.eq('status', 'completed');
+          break;
+        case 'rejected':
+          query = query.eq('status', 'rejected');
+          break;
+      }
+
+      const { data, error } = await query
+        .order('assigned_at', { ascending: false })
+        .limit(1000); // Limit for performance
 
       if (error) throw error;
       setSites(data || []);
+      setCurrentPage(1); // Reset pagination when tab changes
     } catch (error) {
       console.error('Error loading sites:', error);
       toast({
@@ -194,8 +293,26 @@ const CoordinatorSites: React.FC = () => {
         description: 'The site has been marked as verified.',
       });
 
-      // Reload sites
+      // Reload sites and badge counts
       loadSites();
+      // Reload badge counts
+      if (currentUser?.id) {
+        const userId = currentUser.id;
+        const [newCount, verifiedCount] = await Promise.all([
+          supabase
+            .from('site_visits')
+            .select('*', { count: 'exact', head: true })
+            .eq('assigned_to', userId)
+            .or('status.eq.assigned,status.eq.inProgress'),
+          supabase
+            .from('site_visits')
+            .select('*', { count: 'exact', head: true })
+            .eq('assigned_to', userId)
+            .eq('status', 'verified')
+        ]);
+        setNewSitesCount(newCount.count || 0);
+        setVerifiedSitesCount(verifiedCount.count || 0);
+      }
       setActiveTab('verified');
       setVerifyDialogOpen(false);
       setVerificationNotes('');
@@ -251,8 +368,26 @@ const CoordinatorSites: React.FC = () => {
         description: 'The site has been marked as rejected.',
       });
 
-      // Reload sites
+      // Reload sites and badge counts
       loadSites();
+      // Reload badge counts
+      if (currentUser?.id) {
+        const userId = currentUser.id;
+        const [newCount, rejectedCount] = await Promise.all([
+          supabase
+            .from('site_visits')
+            .select('*', { count: 'exact', head: true })
+            .eq('assigned_to', userId)
+            .or('status.eq.assigned,status.eq.inProgress'),
+          supabase
+            .from('site_visits')
+            .select('*', { count: 'exact', head: true })
+            .eq('assigned_to', userId)
+            .eq('status', 'rejected')
+        ]);
+        setNewSitesCount(newCount.count || 0);
+        setRejectedSitesCount(rejectedCount.count || 0);
+      }
       setRejectDialogOpen(false);
       setVerificationNotes('');
       setSelectedSiteId(null);
@@ -266,12 +401,31 @@ const CoordinatorSites: React.FC = () => {
     }
   };
 
-  // Filter sites by status
-  const newSites = sites.filter(s => s.status === 'assigned' || s.status === 'inProgress');
-  const verifiedSites = sites.filter(s => s.status === 'verified');
-  const approvedSites = sites.filter(s => s.status === 'approved');
-  const completedSites = sites.filter(s => s.status === 'completed');
-  const rejectedSites = sites.filter(s => s.status === 'rejected');
+  // Filter sites by search query (client-side filtering for search)
+  const filteredSites = useMemo(() => {
+    if (!debouncedSearchQuery.trim()) {
+      return sites;
+    }
+    const q = debouncedSearchQuery.toLowerCase();
+    return sites.filter(site => 
+      site.site_name?.toLowerCase().includes(q) ||
+      site.site_code?.toLowerCase().includes(q) ||
+      site.state?.toLowerCase().includes(q) ||
+      site.locality?.toLowerCase().includes(q) ||
+      site.activity?.toLowerCase().includes(q) ||
+      site.main_activity?.toLowerCase().includes(q) ||
+      site.hub_office?.toLowerCase().includes(q)
+    );
+  }, [sites, debouncedSearchQuery]);
+
+  // Paginate filtered results
+  const paginatedSites = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return filteredSites.slice(startIndex, endIndex);
+  }, [filteredSites, currentPage, itemsPerPage]);
+
+  const totalPages = Math.ceil(filteredSites.length / itemsPerPage);
 
   const renderSiteCard = (site: SiteVisit, showActions: boolean = true) => (
     <Card key={site.id} className="overflow-hidden hover:shadow-md transition-shadow">
@@ -427,41 +581,85 @@ const CoordinatorSites: React.FC = () => {
         <TabsList className="grid w-full grid-cols-5 gap-2">
           <TabsTrigger value="new" className="flex items-center justify-center gap-2 rounded-md py-2 px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm">
             <span>New Sites</span>
-            <Badge variant="secondary">{newSites.length}</Badge>
+            <Badge variant="secondary">{newSitesCount}</Badge>
           </TabsTrigger>
           <TabsTrigger value="verified" className="flex items-center justify-center gap-2 rounded-md py-2 px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm">
             <span>Verified</span>
-            <Badge variant="secondary">{verifiedSites.length}</Badge>
+            <Badge variant="secondary">{verifiedSitesCount}</Badge>
           </TabsTrigger>
           <TabsTrigger value="approved" className="flex items-center justify-center gap-2 rounded-md py-2 px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm">
             <span>Approved</span>
-            <Badge variant="secondary">{approvedSites.length}</Badge>
+            <Badge variant="secondary">{approvedSitesCount}</Badge>
           </TabsTrigger>
           <TabsTrigger value="completed" className="flex items-center justify-center gap-2 rounded-md py-2 px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm">
             <span>Completed</span>
-            <Badge variant="secondary">{completedSites.length}</Badge>
+            <Badge variant="secondary">{completedSitesCount}</Badge>
           </TabsTrigger>
           <TabsTrigger value="rejected" className="flex items-center justify-center gap-2 rounded-md py-2 px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm">
             <span>Rejected</span>
-            <Badge variant="secondary">{rejectedSites.length}</Badge>
+            <Badge variant="secondary">{rejectedSitesCount}</Badge>
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="new" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>New Sites for Verification</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle>New Sites for Verification</CardTitle>
+                <div className="relative w-full sm:w-auto max-w-sm">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="search"
+                    placeholder="Search sites..."
+                    className="pl-8 w-full sm:w-[300px]"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
-              {newSites.length === 0 ? (
+              {filteredSites.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <Clock className="h-12 w-12 mx-auto mb-4 opacity-20" />
-                  <p>No new sites assigned to you for verification.</p>
+                  <p>{searchQuery ? 'No sites match your search.' : 'No new sites assigned to you for verification.'}</p>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {newSites.map(site => renderSiteCard(site, true))}
-                </div>
+                <>
+                  <div className="space-y-4">
+                    {paginatedSites.map(site => renderSiteCard(site, true))}
+                  </div>
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                      <div className="text-sm text-muted-foreground">
+                        Showing {((currentPage - 1) * itemsPerPage) + 1} - {Math.min(currentPage * itemsPerPage, filteredSites.length)} of {filteredSites.length}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                          disabled={currentPage === 1}
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                          Previous
+                        </Button>
+                        <div className="text-sm">
+                          Page {currentPage} of {totalPages}
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                          disabled={currentPage === totalPages}
+                        >
+                          Next
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </CardContent>
           </Card>
@@ -470,18 +668,62 @@ const CoordinatorSites: React.FC = () => {
         <TabsContent value="verified" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Verified Sites</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle>Verified Sites</CardTitle>
+                <div className="relative w-full sm:w-auto max-w-sm">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="search"
+                    placeholder="Search sites..."
+                    className="pl-8 w-full sm:w-[300px]"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
-              {verifiedSites.length === 0 ? (
+              {filteredSites.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <CheckCircle className="h-12 w-12 mx-auto mb-4 opacity-20" />
-                  <p>No verified sites yet.</p>
+                  <p>{searchQuery ? 'No sites match your search.' : 'No verified sites yet.'}</p>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {verifiedSites.map(site => renderSiteCard(site, false))}
-                </div>
+                <>
+                  <div className="space-y-4">
+                    {paginatedSites.map(site => renderSiteCard(site, false))}
+                  </div>
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                      <div className="text-sm text-muted-foreground">
+                        Showing {((currentPage - 1) * itemsPerPage) + 1} - {Math.min(currentPage * itemsPerPage, filteredSites.length)} of {filteredSites.length}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                          disabled={currentPage === 1}
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                          Previous
+                        </Button>
+                        <div className="text-sm">
+                          Page {currentPage} of {totalPages}
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                          disabled={currentPage === totalPages}
+                        >
+                          Next
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </CardContent>
           </Card>
@@ -490,14 +732,64 @@ const CoordinatorSites: React.FC = () => {
         <TabsContent value="approved" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Approved Sites</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle>Approved Sites</CardTitle>
+                <div className="relative w-full sm:w-auto max-w-sm">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="search"
+                    placeholder="Search sites..."
+                    className="pl-8 w-full sm:w-[300px]"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="text-center py-8 text-muted-foreground">
-                <FileCheck className="h-12 w-12 mx-auto mb-4 opacity-20" />
-                <p>Approved sites will appear here.</p>
-                <p className="text-sm mt-2">This feature is coming soon.</p>
-              </div>
+              {filteredSites.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <FileCheck className="h-12 w-12 mx-auto mb-4 opacity-20" />
+                  <p>{searchQuery ? 'No sites match your search.' : 'Approved sites will appear here.'}</p>
+                  {!searchQuery && <p className="text-sm mt-2">This feature is coming soon.</p>}
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-4">
+                    {paginatedSites.map(site => renderSiteCard(site, false))}
+                  </div>
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                      <div className="text-sm text-muted-foreground">
+                        Showing {((currentPage - 1) * itemsPerPage) + 1} - {Math.min(currentPage * itemsPerPage, filteredSites.length)} of {filteredSites.length}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                          disabled={currentPage === 1}
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                          Previous
+                        </Button>
+                        <div className="text-sm">
+                          Page {currentPage} of {totalPages}
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                          disabled={currentPage === totalPages}
+                        >
+                          Next
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -505,14 +797,64 @@ const CoordinatorSites: React.FC = () => {
         <TabsContent value="completed" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Completed Sites</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle>Completed Sites</CardTitle>
+                <div className="relative w-full sm:w-auto max-w-sm">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="search"
+                    placeholder="Search sites..."
+                    className="pl-8 w-full sm:w-[300px]"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="text-center py-8 text-muted-foreground">
-                <CheckCircle className="h-12 w-12 mx-auto mb-4 opacity-20" />
-                <p>Completed sites will appear here.</p>
-                <p className="text-sm mt-2">This feature is coming soon.</p>
-              </div>
+              {filteredSites.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <CheckCircle className="h-12 w-12 mx-auto mb-4 opacity-20" />
+                  <p>{searchQuery ? 'No sites match your search.' : 'Completed sites will appear here.'}</p>
+                  {!searchQuery && <p className="text-sm mt-2">This feature is coming soon.</p>}
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-4">
+                    {paginatedSites.map(site => renderSiteCard(site, false))}
+                  </div>
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                      <div className="text-sm text-muted-foreground">
+                        Showing {((currentPage - 1) * itemsPerPage) + 1} - {Math.min(currentPage * itemsPerPage, filteredSites.length)} of {filteredSites.length}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                          disabled={currentPage === 1}
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                          Previous
+                        </Button>
+                        <div className="text-sm">
+                          Page {currentPage} of {totalPages}
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                          disabled={currentPage === totalPages}
+                        >
+                          Next
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -520,18 +862,62 @@ const CoordinatorSites: React.FC = () => {
         <TabsContent value="rejected" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Rejected Sites</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle>Rejected Sites</CardTitle>
+                <div className="relative w-full sm:w-auto max-w-sm">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="search"
+                    placeholder="Search sites..."
+                    className="pl-8 w-full sm:w-[300px]"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
-              {rejectedSites.length === 0 ? (
+              {filteredSites.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <XCircle className="h-12 w-12 mx-auto mb-4 opacity-20" />
-                  <p>No rejected sites.</p>
+                  <p>{searchQuery ? 'No sites match your search.' : 'No rejected sites.'}</p>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {rejectedSites.map(site => renderSiteCard(site, false))}
-                </div>
+                <>
+                  <div className="space-y-4">
+                    {paginatedSites.map(site => renderSiteCard(site, false))}
+                  </div>
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                      <div className="text-sm text-muted-foreground">
+                        Showing {((currentPage - 1) * itemsPerPage) + 1} - {Math.min(currentPage * itemsPerPage, filteredSites.length)} of {filteredSites.length}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                          disabled={currentPage === 1}
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                          Previous
+                        </Button>
+                        <div className="text-sm">
+                          Page {currentPage} of {totalPages}
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                          disabled={currentPage === totalPages}
+                        >
+                          Next
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </CardContent>
           </Card>
