@@ -49,10 +49,70 @@ export const ArchiveProvider: React.FC<ArchiveProviderProps> = ({ children, curr
       try {
         setLoading(true);
 
-        const [{ data: mmpRows, error: mmpErr }, { data: svRows, error: svErr }] = await Promise.all([
-          supabase.from('mmp_files').select('*').order('created_at', { ascending: false }),
-          supabase.from('site_visits').select('*').order('created_at', { ascending: false }),
-        ]);
+        // Fetch MMP files
+        const { data: mmpRows, error: mmpErr } = await supabase
+          .from('mmp_files')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (mmpErr) throw mmpErr;
+
+        // Fetch site visits with dual-table fallback strategy
+        let svRows: any[] = [];
+        const { data: siteVisitsData, error: svErr } = await supabase
+          .from('site_visits')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        // Handle "table not found" errors - fallback to mmp_site_entries
+        if (svErr && (svErr.code === 'PGRST205' || svErr.code === 'PGRST204' || 
+                      svErr.code === '42P01' || 
+                      svErr.message?.includes('does not exist') ||
+                      svErr.message?.includes('Could not find the table'))) {
+          console.log('✅ site_visits table not found for archive, using mmp_site_entries');
+          
+          // Fetch from mmp_site_entries instead (without foreign key join to avoid column errors)
+          const { data: mmpEntriesData, error: mmpEntriesErr } = await supabase
+            .from('mmp_site_entries')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+          if (mmpEntriesErr) {
+            console.error('Failed to fetch from mmp_site_entries:', mmpEntriesErr);
+            throw mmpEntriesErr;
+          }
+
+          // Transform mmp_site_entries to site_visits format
+          svRows = (mmpEntriesData || []).map((entry: any) => ({
+            id: entry.id,
+            site_name: entry.site_name,
+            site_code: entry.site_code,
+            status: entry.status || 'pending',
+            locality: entry.locality,
+            state: entry.state,
+            activity: entry.activity,
+            main_activity: entry.main_activity || entry.activity,
+            priority: entry.priority,
+            due_date: entry.due_date,
+            assigned_to: entry.assigned_to,
+            assigned_by: entry.assigned_by,
+            assigned_at: entry.assigned_at,
+            notes: entry.notes,
+            attachments: entry.attachments || [],
+            completed_at: entry.completed_at,
+            rating: entry.rating,
+            fees: entry.fees || {},
+            location: entry.location,
+            created_at: entry.created_at,
+            updated_at: entry.updated_at,
+          }));
+        } else if (svErr) {
+          // If it's a different error, throw it
+          throw svErr;
+        } else {
+          // No error, use site_visits data
+          svRows = siteVisitsData || [];
+        }
 
         let photoRows: any[] = [];
         try {
@@ -62,9 +122,6 @@ export const ArchiveProvider: React.FC<ArchiveProviderProps> = ({ children, curr
             .order('created_at', { ascending: false });
           if (!perr && pr) photoRows = pr as any[];
         } catch {}
-
-        if (mmpErr) throw mmpErr;
-        if (svErr) throw svErr;
 
         const toArchivedMMP = (r: any): ArchivedMMPFile => {
           const uploadedAt = r.uploaded_at || r.created_at;
