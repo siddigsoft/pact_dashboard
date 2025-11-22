@@ -30,6 +30,9 @@ const PlanningSiteVisitsList: React.FC<PlanningSiteVisitsListProps> = ({ siteVis
       filtered = filtered.filter(v => v.status === statusFilter);
     }
 
+
+
+    
     // Priority filter
     if (priorityFilter !== 'all') {
       filtered = filtered.filter(v => v.priority === priorityFilter);
