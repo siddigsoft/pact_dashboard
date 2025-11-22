@@ -456,33 +456,10 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
-  const login = async (emailOrUsername: string, password: string): Promise<boolean> => {
+  const login = async (email: string, password: string): Promise<boolean> => {
     try {
-      // Check if input is email or username
-      let loginEmail = emailOrUsername;
-      
-      // If input doesn't contain @, treat it as username and lookup email
-      if (!emailOrUsername.includes('@')) {
-        const { data: profileData, error: lookupError } = await supabase
-          .from('profiles')
-          .select('email')
-          .eq('username', emailOrUsername)
-          .single();
-        
-        if (lookupError || !profileData?.email) {
-          toast({
-            title: "Login failed",
-            description: "Username not found. Please check your credentials.",
-            variant: "destructive",
-          });
-          return false;
-        }
-        
-        loginEmail = profileData.email;
-      }
-      
       const { data: authData, error: authError } = await supabase.auth
-        .signInWithPassword({ email: loginEmail, password });
+        .signInWithPassword({ email, password });
       
       if (authError) {
         console.log("Supabase auth failed:", authError);
@@ -491,9 +468,9 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const isEmailNotConfirmed = /email\s*not\s*confirm|email\s*not\s*verified/.test(msg);
 
         if (isEmailNotConfirmed) {
-          setEmailVerification({ pending: true, email: loginEmail });
+          setEmailVerification({ pending: true, email });
           try {
-            const { error: resendError } = await supabase.auth.resend({ type: 'signup', email: loginEmail });
+            const { error: resendError } = await supabase.auth.resend({ type: 'signup', email });
             if (resendError) {
               console.warn('Resend verification failed:', resendError);
               toast({
@@ -504,7 +481,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             } else {
               toast({
                 title: "Verify your email",
-                description: `We just sent a new verification link to ${loginEmail}. Check your inbox and spam folder.`,
+                description: `We just sent a new verification link to ${email}. Check your inbox and spam folder.`,
               });
             }
           } catch (e) {
