@@ -1,57 +1,89 @@
-export type WalletTransactionType =
-  | 'earning'
-  | 'adjustment_credit'
-  | 'adjustment_debit'
-  | 'payout_hold'
-  | 'payout_paid'
-  | 'reversal'
-  | 'correction';
+export interface Wallet {
+  id: string;
+  userId: string;
+  balances: Record<string, number>;
+  totalEarned: number;
+  totalWithdrawn: number;
+  createdAt: string;
+  updatedAt: string;
+}
 
-export type WalletTransactionStatus = 'pending' | 'posted' | 'reversed' | 'failed';
+export type WalletTransactionType = 
+  | 'site_visit_fee' 
+  | 'withdrawal' 
+  | 'adjustment' 
+  | 'bonus' 
+  | 'penalty';
 
 export interface WalletTransaction {
   id: string;
+  walletId: string;
   userId: string;
-  amountCents: number;
-  currency: string;
   type: WalletTransactionType;
-  status: WalletTransactionStatus;
-  createdAt: string;
-  postedAt?: string;
-  memo?: string;
-  relatedSiteVisitId?: string;
-  visitCode?: string;
-  siteName?: string;
-}
-
-export interface WalletSummary {
-  userId: string;
+  amount: number;
   currency: string;
-  balanceCents: number;
-  pendingPayoutCents: number;
-  totalEarnedCents: number;
-  totalPaidOutCents: number;
-  lifetimeEarningsCents: number;
-  periodEarningsCents: number;
-  pendingEarningsCents: number;
-  completedEarningsCents: number;
+  siteVisitId?: string;
+  withdrawalRequestId?: string;
+  description?: string;
+  metadata?: Record<string, any>;
+  balanceBefore?: number;
+  balanceAfter?: number;
+  createdBy?: string;
+  createdAt: string;
 }
 
-export interface PayoutRequest {
+export type WithdrawalStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
+
+export interface WithdrawalRequest {
   id: string;
   userId: string;
-  amountCents: number;
-  method: 'bank' | 'mobile_money' | 'manual';
-  destination: any;
-  status: 'requested' | 'approved' | 'declined' | 'paid' | 'cancelled';
-  requestedAt: string;
+  walletId: string;
+  amount: number;
+  currency: string;
+  status: WithdrawalStatus;
+  requestReason?: string;
+  supervisorId?: string;
+  supervisorNotes?: string;
+  approvedAt?: string;
+  rejectedAt?: string;
+  paymentMethod?: string;
+  paymentDetails?: Record<string, any>;
+  createdAt: string;
+  updatedAt: string;
 }
 
-export interface EarningRow {
-  siteName: string;
-  visitId: string;
-  visitCode?: string;
-  visitDate?: string;
-  earningAmountCents: number;
-  status: 'approved' | 'pending' | 'rejected';
+export interface SiteVisitCost {
+  id: string;
+  siteVisitId: string;
+  transportationCost: number;
+  accommodationCost: number;
+  mealAllowance: number;
+  otherCosts: number;
+  totalCost: number;
+  currency: string;
+  assignedBy?: string;
+  adjustedBy?: string;
+  adjustmentReason?: string;
+  costNotes?: string;
+  createdAt: string;
+  updatedAt: string;
 }
+
+export interface WalletBalance {
+  currency: string;
+  balance: number;
+}
+
+export interface WalletStats {
+  totalEarned: number;
+  totalWithdrawn: number;
+  pendingWithdrawals: number;
+  currentBalance: number;
+  totalTransactions: number;
+  completedSiteVisits: number;
+}
+
+export const SUPPORTED_CURRENCIES = ['SDG', 'USD', 'EUR', 'GBP', 'SAR', 'AED'] as const;
+export type SupportedCurrency = typeof SUPPORTED_CURRENCIES[number];
+
+export const DEFAULT_CURRENCY = 'SDG';
