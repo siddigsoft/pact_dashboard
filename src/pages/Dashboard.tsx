@@ -11,6 +11,13 @@ import { PlanningZone } from '@/components/dashboard/zones/PlanningZone';
 import { ComplianceZone } from '@/components/dashboard/zones/ComplianceZone';
 import { PerformanceZone } from '@/components/dashboard/zones/PerformanceZone';
 
+// Helper to normalize roles for matching
+const normalizeRole = (role: string): string => {
+  return role.toLowerCase()
+    .replace(/\s+/g, '')
+    .replace(/[()]/g, '');
+};
+
 const Dashboard = () => {
   const { SiteVisitRemindersDialog, showDueReminders } = useSiteVisitRemindersUI();
   const { roles } = useAppContext();
@@ -19,7 +26,7 @@ const Dashboard = () => {
   const defaultZone = useMemo((): DashboardZone => {
     if (!roles || roles.length === 0) return 'operations';
 
-    const normalizedRoles = roles.map(r => r.toLowerCase());
+    const normalizedRoles = roles.map(normalizeRole);
 
     // Admin sees performance/analytics by default
     if (normalizedRoles.includes('admin')) return 'performance';
@@ -30,8 +37,8 @@ const Dashboard = () => {
     // ICT sees compliance/fraud detection
     if (normalizedRoles.includes('ict')) return 'compliance';
     
-    // Field managers see operations
-    if (normalizedRoles.includes('fom') || normalizedRoles.includes('supervisor')) return 'operations';
+    // Field managers see operations (match both "fom" and "fieldoperationmanagerfom")
+    if (normalizedRoles.some(r => r.includes('fom') || r === 'supervisor')) return 'operations';
     
     // Coordinators see team coordination
     if (normalizedRoles.includes('coordinator')) return 'team';
