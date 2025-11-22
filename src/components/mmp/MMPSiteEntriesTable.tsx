@@ -1,12 +1,12 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Search, Eye, Pencil, Check, X } from 'lucide-react';
+import { Search, Eye, Pencil, Check, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 
 interface MMPSiteEntriesTableProps {
@@ -18,11 +18,24 @@ interface MMPSiteEntriesTableProps {
 
 const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, onUpdateSites }: MMPSiteEntriesTableProps) => {
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(50); // Show 50 items per page
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedSite, setSelectedSite] = useState<any | null>(null);
   const [editingId, setEditingId] = useState<string | number | null>(null);
   const [draft, setDraft] = useState<any | null>(null);
   const [savingId, setSavingId] = useState<string | number | null>(null);
+
+  // Debounce search query to reduce filtering operations
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+      setCurrentPage(1); // Reset to first page when search changes
+    }, 300); // 300ms debounce delay
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   // Normalize a row from either MMP siteEntries (camelCase) or site_visits (snake_case)
   const normalizeSite = (site: any) => {
@@ -125,15 +138,28 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
     setDetailOpen(true);
   };
 
-  const filteredSites = searchQuery.trim() === ""
-    ? siteEntries
-    : siteEntries.filter(site => {
-        const s = normalizeSite(site);
-        const q = searchQuery.toLowerCase();
-        return [s.hubOffice, s.state, s.locality, s.siteName, s.cpName, s.siteActivity, s.monitoringBy, s.surveyTool, s.visitDate, s.comments]
-          .filter(Boolean)
-          .some((v) => String(v).toLowerCase().includes(q));
-      });
+  // Memoize filtered sites for performance
+  const filteredSites = useMemo(() => {
+    if (debouncedSearchQuery.trim() === "") {
+      return siteEntries;
+    }
+    const q = debouncedSearchQuery.toLowerCase();
+    return siteEntries.filter(site => {
+      const s = normalizeSite(site);
+      return [s.hubOffice, s.state, s.locality, s.siteName, s.cpName, s.siteActivity, s.monitoringBy, s.surveyTool, s.visitDate, s.comments]
+        .filter(Boolean)
+        .some((v) => String(v).toLowerCase().includes(q));
+    });
+  }, [siteEntries, debouncedSearchQuery]);
+
+  // Paginate filtered results
+  const paginatedSites = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return filteredSites.slice(startIndex, endIndex);
+  }, [filteredSites, currentPage, itemsPerPage]);
+
+  const totalPages = Math.ceil(filteredSites.length / itemsPerPage);
 
   const toBool = (v: any) => {
     if (typeof v === 'boolean') return v;
@@ -152,8 +178,95 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
     setDraft(null);
   };
 
+  // Migration helper: Move data from additional_data to columns if column is empty
+  const migrateAdditionalDataToColumns = (entry: any): any => {
+    const migrated = { ...entry };
+    const ad = migrated.additional_data || migrated.additionalData || {};
+    
+    const columnMappings: Record<string, string> = {
+      'Site Code': 'site_code', 'site_code': 'site_code', 'siteCode': 'site_code',
+      'Hub Office': 'hub_office', 'Hub Office:': 'hub_office', 'hub_office': 'hub_office', 'hubOffice': 'hub_office',
+      'State': 'state', 'State:': 'state', 'state': 'state', 'state_name': 'state',
+      'Locality': 'locality', 'Locality:': 'locality', 'locality': 'locality', 'locality_name': 'locality',
+      'Site Name': 'site_name', 'Site Name:': 'site_name', 'site_name': 'site_name', 'siteName': 'site_name',
+      'CP Name': 'cp_name', 'CP name': 'cp_name', 'CP Name:': 'cp_name', 'cp_name': 'cp_name', 'cpName': 'cp_name',
+      'Visit Type': 'visit_type', 'visit_type': 'visit_type', 'visitType': 'visit_type',
+      'Visit Date': 'visit_date', 'visit_date': 'visit_date', 'visitDate': 'visit_date',
+      'Main Activity': 'main_activity', 'main_activity': 'main_activity', 'mainActivity': 'main_activity',
+      'Activity at Site': 'activity_at_site', 'Activity at the site': 'activity_at_site', 'Activity at the site:': 'activity_at_site',
+      'activity_at_site': 'activity_at_site', 'siteActivity': 'activity_at_site',
+      'Monitoring By': 'monitoring_by', 'monitoring by': 'monitoring_by', 'monitoring by:': 'monitoring_by',
+      'monitoring_by': 'monitoring_by', 'monitoringBy': 'monitoring_by',
+      'Survey Tool': 'survey_tool', 'Survey under Master tool': 'survey_tool', 'Survey under Master tool:': 'survey_tool',
+      'survey_tool': 'survey_tool', 'surveyTool': 'survey_tool',
+      'Use Market Diversion Monitoring': 'use_market_diversion', 'use_market_diversion': 'use_market_diversion', 'useMarketDiversion': 'use_market_diversion',
+      'Use Warehouse Monitoring': 'use_warehouse_monitoring', 'use_warehouse_monitoring': 'use_warehouse_monitoring', 'useWarehouseMonitoring': 'use_warehouse_monitoring',
+      'Comments': 'comments', 'comments': 'comments',
+      'Cost': 'cost', 'Price': 'cost', 'Amount': 'cost', 'cost': 'cost', 'price': 'cost',
+      'Enumerator Fee': 'enumerator_fee', 'enumerator_fee': 'enumerator_fee',
+      'Transport Fee': 'transport_fee', 'transport_fee': 'transport_fee',
+      'Verification Notes': 'verification_notes', 'Verification Notes:': 'verification_notes', 'verification_notes': 'verification_notes',
+      'Verified By': 'verified_by', 'Verified By:': 'verified_by', 'verified_by': 'verified_by',
+      'Verified At': 'verified_at', 'verified_at': 'verified_at',
+      'Dispatched By': 'dispatched_by', 'dispatched_by': 'dispatched_by',
+      'Dispatched At': 'dispatched_at', 'dispatched_at': 'dispatched_at',
+      'Status': 'status', 'Status:': 'status', 'status': 'status',
+    };
+
+    const toBool = (v: any): boolean | null => {
+      if (typeof v === 'boolean') return v;
+      if (v === null || v === undefined || v === '') return null;
+      const s = String(v).toLowerCase().trim();
+      return s === 'yes' || s === 'true' || s === '1' || s === 'y';
+    };
+
+    const toNum = (v: any): number | null => {
+      if (v === null || v === undefined || v === '') return null;
+      if (typeof v === 'number') return v;
+      const s = String(v).replace(/[^0-9.\-]/g, '');
+      if (!s) return null;
+      const n = parseFloat(s);
+      return isNaN(n) ? null : n;
+    };
+
+    const toDate = (v: any): string | null => {
+      if (!v) return null;
+      try {
+        const d = new Date(v);
+        return isNaN(d.getTime()) ? null : d.toISOString();
+      } catch {
+        return null;
+      }
+    };
+
+    for (const [adKey, columnName] of Object.entries(columnMappings)) {
+      const columnValue = migrated[columnName];
+      const adValue = ad[adKey];
+      
+      if ((columnValue === null || columnValue === undefined || columnValue === '') && 
+          adValue !== null && adValue !== undefined && adValue !== '') {
+        if (columnName === 'use_market_diversion' || columnName === 'use_warehouse_monitoring') {
+          const boolVal = toBool(adValue);
+          if (boolVal !== null) migrated[columnName] = boolVal;
+        } else if (columnName === 'cost' || columnName === 'enumerator_fee' || columnName === 'transport_fee') {
+          const numVal = toNum(adValue);
+          if (numVal !== null) migrated[columnName] = numVal;
+        } else if (columnName === 'verified_at' || columnName === 'dispatched_at') {
+          const dateVal = toDate(adValue);
+          if (dateVal !== null) migrated[columnName] = dateVal;
+        } else {
+          migrated[columnName] = String(adValue).trim();
+        }
+      }
+    }
+
+    return migrated;
+  };
+
   const applyDraftToSite = (site: any, d: any) => {
-    const updated = { ...site };
+    // First migrate data from additional_data to columns
+    const migratedSite = migrateAdditionalDataToColumns(site);
+    const updated = { ...migratedSite };
     // Update top-level canonical fields if present or attach
     updated.hubOffice = d.hubOffice;
     updated.state = d.state;
@@ -172,6 +285,10 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
     let enumFeeNum: number | undefined;
     let transFeeNum: number | undefined;
     
+    // Get existing fees from multiple possible locations
+    const existingEnumFee = site.enumerator_fee ?? (site.additional_data?.enumerator_fee ? Number(site.additional_data.enumerator_fee) : undefined) ?? (site.additionalData?.['Enumerator Fee'] ? Number(site.additionalData['Enumerator Fee']) : undefined);
+    const existingTransFee = site.transport_fee ?? (site.additional_data?.transport_fee ? Number(site.additional_data.transport_fee) : undefined) ?? (site.additionalData?.['Transport Fee'] ? Number(site.additionalData['Transport Fee']) : undefined);
+    
     if (typeof d.enumeratorFee !== 'undefined') {
       const enumFee = d.enumeratorFee === '—' || d.enumeratorFee === '' ? undefined : Number(d.enumeratorFee);
       enumFeeNum = !isNaN(enumFee as number) ? enumFee : undefined;
@@ -181,9 +298,11 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
       updated.additional_data.enumerator_fee = updated.enumerator_fee;
     } else {
       // Preserve existing enumerator_fee if not being edited
-      enumFeeNum = updated.enumerator_fee ?? site.enumerator_fee ?? (site.additional_data?.enumerator_fee ? Number(site.additional_data.enumerator_fee) : undefined);
+      enumFeeNum = existingEnumFee;
       if (enumFeeNum !== undefined) {
         updated.enumerator_fee = enumFeeNum;
+        if (!updated.additional_data) updated.additional_data = {};
+        updated.additional_data.enumerator_fee = enumFeeNum;
       }
     }
     
@@ -196,9 +315,11 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
       updated.additional_data.transport_fee = updated.transport_fee;
     } else {
       // Preserve existing transport_fee if not being edited
-      transFeeNum = updated.transport_fee ?? site.transport_fee ?? (site.additional_data?.transport_fee ? Number(site.additional_data.transport_fee) : undefined);
+      transFeeNum = existingTransFee;
       if (transFeeNum !== undefined) {
         updated.transport_fee = transFeeNum;
+        if (!updated.additional_data) updated.additional_data = {};
+        updated.additional_data.transport_fee = transFeeNum;
       }
     }
     
@@ -299,9 +420,9 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
           <div>
             <CardTitle>MMP Site Entries</CardTitle>
             <CardDescription>
-              Total: {siteEntries.length} sites | 
-              Visited: {siteEntries.filter(site => site.siteVisited).length} | 
-              Pending: {siteEntries.filter(site => !site.siteVisited).length}
+              Showing {paginatedSites.length} of {filteredSites.length} sites
+              {debouncedSearchQuery && ` (filtered from ${siteEntries.length} total)`}
+              {!debouncedSearchQuery && ` (${siteEntries.length} total)`}
             </CardDescription>
           </div>
           <div className="w-full sm:w-auto">
@@ -351,8 +472,8 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredSites.length > 0 ? (
-                filteredSites.map((site, idx) => {
+              {paginatedSites.length > 0 ? (
+                paginatedSites.map((site, idx) => {
                   const row = normalizeSite(site);
                   const isEditing = editable && (editingId === (site.id ?? site._key ?? site.siteCode));
                   return (
@@ -671,6 +792,37 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
           </Table>
           </div>
         </div>
+        {/* Pagination Controls */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between mt-4 px-2">
+            <div className="text-sm text-muted-foreground">
+              Page {currentPage} of {totalPages}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Previous
+              </Button>
+              <div className="text-sm">
+                {((currentPage - 1) * itemsPerPage) + 1} - {Math.min(currentPage * itemsPerPage, filteredSites.length)} of {filteredSites.length}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                disabled={currentPage === totalPages}
+              >
+                Next
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
       </CardContent>
 
       {/* Local fallback dialog for site detail view */}
