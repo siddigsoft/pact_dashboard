@@ -77,8 +77,13 @@ export const DashboardZoneLayout: React.FC<DashboardZoneLayoutProps> = ({
 
   return (
     <div className="flex flex-col min-h-screen">
+      {/* Command Bar - Top most */}
+      <div className="sticky top-0 z-50 border-b border-border/50">
+        <DashboardCommandBar />
+      </div>
+
       {/* Horizontal Zone Navigation - Tech Style */}
-      <nav className="sticky top-0 z-40 bg-gradient-to-r from-card via-background to-card border-b border-border/50 backdrop-blur-sm shadow-sm">
+      <nav className="sticky top-[49px] z-40 bg-gradient-to-r from-card via-background to-card border-b border-border/50 backdrop-blur-sm shadow-sm">
         <div className="flex items-center gap-1 px-3 py-2 overflow-x-auto scrollbar-hide">
           <div className="flex-shrink-0 mr-2 hidden md:block">
             <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Zones:</span>
@@ -140,11 +145,6 @@ export const DashboardZoneLayout: React.FC<DashboardZoneLayoutProps> = ({
           })}
         </div>
       </nav>
-
-      {/* Command Bar - Sticky with zones */}
-      <div className="sticky top-[52px] z-30 border-b border-border/50">
-        <DashboardCommandBar />
-      </div>
 
       {/* Main Content Area - Scrollable */}
       <main className="flex-1 p-4 lg:p-6">

@@ -95,13 +95,7 @@ export interface SiteVisit {
   journeyPath?: any[];
   arrivalRecorded?: boolean;
 
-  // new optional legacy/compat fields and location region to satisfy dashboard lookups
+  // new optional legacy/compat fields to satisfy dashboard lookups
   region?: string;         // some records may have region at top-level
   site_code?: string;      // legacy snake_case field used in older codepaths
-  location?: {             // minimal location shape used in several components
-    region?: string;
-    latitude?: number;
-    longitude?: number;
-    [address?: string];
-  };
 }
