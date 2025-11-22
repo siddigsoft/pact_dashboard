@@ -465,6 +465,9 @@ const MMP = () => {
   const [dispatchedSiteEntries, setDispatchedSiteEntries] = useState<any[]>([]);
   const [loadingDispatched, setLoadingDispatched] = useState(false);
   const [dispatchedCount, setDispatchedCount] = useState(0);
+  const [acceptedSiteEntries, setAcceptedSiteEntries] = useState<any[]>([]);
+  const [loadingAccepted, setLoadingAccepted] = useState(false);
+  const [acceptedCount, setAcceptedCount] = useState(0);
   const [dispatchDialogOpen, setDispatchDialogOpen] = useState(false);
   const [dispatchType, setDispatchType] = useState<'state' | 'locality' | 'individual'>('state');
 
@@ -651,10 +654,13 @@ const MMP = () => {
       try {
         // Use database count instead of loading all entries
         // Count entries with status = 'dispatched' OR dispatched_at is not null
+        // BUT exclude entries that are already accepted (status = 'accepted' or accepted_by is not null)
         const { count, error } = await supabase
           .from('mmp_site_entries')
           .select('*', { count: 'exact', head: true })
-          .or('status.ilike.dispatched,dispatched_at.not.is.null');
+          .or('status.ilike.dispatched,dispatched_at.not.is.null')
+          .not('status', 'ilike', 'accepted')
+          .is('accepted_by', null);
 
         if (error) throw error;
 
@@ -666,6 +672,29 @@ const MMP = () => {
     };
 
     loadDispatchedCount();
+  }, [mmpFiles]); // Reload when MMP files change
+
+  // Always load the accepted count for the badge, regardless of active tab
+  useEffect(() => {
+    const loadAcceptedCount = async () => {
+      try {
+        // Use database count instead of loading all entries
+        // Count entries with status = 'accepted' OR accepted_by is not null
+        const { count, error } = await supabase
+          .from('mmp_site_entries')
+          .select('*', { count: 'exact', head: true })
+          .or('status.ilike.accepted,accepted_by.not.is.null');
+
+        if (error) throw error;
+
+        setAcceptedCount(count || 0);
+      } catch (error) {
+        console.error('Failed to load accepted count:', error);
+        setAcceptedCount(0);
+      }
+    };
+
+    loadAcceptedCount();
   }, [mmpFiles]); // Reload when MMP files change
 
   // Load approved and costed site entries only when the tab is active
@@ -821,11 +850,14 @@ const MMP = () => {
       setLoadingDispatched(true);
       try {
         // Use database-level filtering: entries with status = 'dispatched' OR dispatched_at is not null
+        // BUT exclude entries that are already accepted (status = 'accepted' or accepted_by is not null)
         // Use or() to combine conditions at database level
         const { data: dispatchedEntries, error: allError } = await supabase
           .from('mmp_site_entries')
           .select('*')
           .or('status.ilike.dispatched,dispatched_at.not.is.null')
+          .not('status', 'ilike', 'accepted')
+          .is('accepted_by', null)
           .order('dispatched_at', { ascending: false })
           .limit(1000); // Limit to 1000 entries for performance
 
@@ -878,6 +910,77 @@ const MMP = () => {
     };
 
     loadDispatchedEntries();
+  }, [verifiedSubTab]);
+
+  // Load accepted site entries only when the tab is active
+  useEffect(() => {
+    const loadAcceptedEntries = async () => {
+      if (verifiedSubTab !== 'accepted') {
+        setAcceptedSiteEntries([]);
+        return;
+      }
+
+      setLoadingAccepted(true);
+      try {
+        // Use database-level filtering: entries with status = 'accepted' OR accepted_by is not null
+        const { data: acceptedEntries, error: allError } = await supabase
+          .from('mmp_site_entries')
+          .select('*')
+          .or('status.ilike.accepted,accepted_by.not.is.null')
+          .order('accepted_at', { ascending: false })
+          .limit(1000); // Limit to 1000 entries for performance
+
+        if (allError) throw allError;
+
+        // Format entries for MMPSiteEntriesTable
+        const formattedEntries = acceptedEntries.map(entry => {
+          const additionalData = entry.additional_data || {};
+          // Read fees from columns first, fallback to additional_data
+          const enumeratorFee = entry.enumerator_fee ?? additionalData.enumerator_fee;
+          const transportFee = entry.transport_fee ?? additionalData.transport_fee;
+          return {
+            ...entry,
+            siteName: entry.site_name,
+            siteCode: entry.site_code,
+            hubOffice: entry.hub_office,
+            cpName: entry.cp_name,
+            siteActivity: entry.activity_at_site,
+            monitoringBy: entry.monitoring_by,
+            surveyTool: entry.survey_tool,
+            useMarketDiversion: entry.use_market_diversion,
+            useWarehouseMonitoring: entry.use_warehouse_monitoring,
+            visitDate: entry.visit_date,
+            comments: entry.comments,
+            enumerator_fee: enumeratorFee,
+            enumeratorFee: enumeratorFee,
+            transport_fee: transportFee,
+            transportFee: transportFee,
+            cost: entry.cost,
+            status: entry.status,
+            verified_by: entry.verified_by,
+            verified_at: entry.verified_at,
+            dispatched_by: entry.dispatched_by,
+            dispatched_at: entry.dispatched_at,
+            accepted_by: entry.accepted_by,
+            accepted_at: entry.accepted_at,
+            updated_at: entry.updated_at,
+            additionalData: additionalData
+          };
+        });
+
+        setAcceptedSiteEntries(formattedEntries);
+        // Update count when entries are loaded (count is also loaded separately for badge)
+        setAcceptedCount(formattedEntries.length);
+      } catch (error) {
+        console.error('Failed to load accepted site entries:', error);
+        setAcceptedSiteEntries([]);
+        setAcceptedCount(0);
+      } finally {
+        setLoadingAccepted(false);
+      }
+    };
+
+    loadAcceptedEntries();
   }, [verifiedSubTab]);
 
   // Verified subcategories for Admin/ICT
@@ -1380,11 +1483,11 @@ const MMP = () => {
                     Dispatched
                     <Badge variant="secondary" className="ml-2">{dispatchedCount}</Badge>
                   </Button>
-                  {(isAdmin || isICT) && (
+                  {(isAdmin || isICT || isFOM) && (
                     <>
                       <Button variant={verifiedSubTab === 'accepted' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('accepted')} className={verifiedSubTab === 'accepted' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''}>
                         Accepted
-                        <Badge variant="secondary" className="ml-2">{verifiedSubcategories.accepted?.length || 0}</Badge>
+                        <Badge variant="secondary" className="ml-2">{acceptedCount}</Badge>
                       </Button>
                       <Button variant={verifiedSubTab === 'ongoing' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('ongoing')} className={verifiedSubTab === 'ongoing' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''}>
                         Ongoing
@@ -1608,7 +1711,35 @@ const MMP = () => {
                   )}
                 </div>
               )}
-              {(isAdmin || isICT || isFOM || isCoordinator) && verifiedSubTab !== 'newSites' && verifiedSubTab !== 'approvedCosted' && verifiedSubTab !== 'dispatched' && (
+              {(isAdmin || isICT || isFOM || isCoordinator) && verifiedSubTab === 'accepted' && (
+                <div className="mt-6">
+                  {loadingAccepted ? (
+                    <Card>
+                      <CardContent className="py-8">
+                        <div className="text-center text-muted-foreground">Loading accepted site entries...</div>
+                      </CardContent>
+                    </Card>
+                  ) : acceptedSiteEntries.length === 0 ? (
+                    <Card>
+                      <CardContent className="py-8">
+                        <div className="text-center text-muted-foreground">No accepted site entries found.</div>
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    <div>
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-semibold">Accepted Site Entries</h3>
+                        <Badge variant="secondary">{acceptedSiteEntries.length} entries</Badge>
+                      </div>
+                      <MMPSiteEntriesTable 
+                        siteEntries={acceptedSiteEntries} 
+                        editable={false}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+              {(isAdmin || isICT || isFOM || isCoordinator) && verifiedSubTab !== 'newSites' && verifiedSubTab !== 'approvedCosted' && verifiedSubTab !== 'dispatched' && verifiedSubTab !== 'accepted' && (
                 <div className="mt-6">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-lg font-semibold">Sites by MMP</h3>
@@ -1655,6 +1786,8 @@ const MMP = () => {
                   .from('mmp_site_entries')
                   .select('*')
                   .or('status.ilike.dispatched,dispatched_at.not.is.null')
+                  .not('status', 'ilike', 'accepted')
+                  .is('accepted_by', null)
                   .order('dispatched_at', { ascending: false })
                   .limit(1000);
 

@@ -115,6 +115,10 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
     const dispatchedAt = site.dispatched_at || (ad['dispatched_at'] ? new Date(ad['dispatched_at']).toISOString() : undefined) || (ad['Dispatched At'] ? new Date(ad['Dispatched At']).toISOString() : undefined) || undefined;
     const dispatchedBy = site.dispatched_by || ad['dispatched_by'] || ad['Dispatched By'] || undefined;
     
+    // Acceptance information - read from new columns first
+    const acceptedAt = site.accepted_at || (ad['accepted_at'] ? new Date(ad['accepted_at']).toISOString() : undefined) || (ad['Accepted At'] ? new Date(ad['Accepted At']).toISOString() : undefined) || undefined;
+    const acceptedBy = site.accepted_by || ad['accepted_by'] || ad['Accepted By'] || undefined;
+    
     // Timestamps
     const createdAt = site.created_at || undefined;
     const updatedAt = site.updated_at || site.last_modified || undefined;
@@ -125,7 +129,7 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
       mainActivity, visitType, visitDate, comments, 
       enumeratorFee: finalEnumeratorFee, transportFee: finalTransportFee, cost: totalCost,
       verifiedBy, verifiedAt, verificationNotes, status,
-      dispatchedAt, dispatchedBy, createdAt, updatedAt
+      dispatchedAt, dispatchedBy, acceptedAt, acceptedBy, createdAt, updatedAt
     };
   };
 
@@ -210,6 +214,8 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
       'Verified At': 'verified_at', 'verified_at': 'verified_at',
       'Dispatched By': 'dispatched_by', 'dispatched_by': 'dispatched_by',
       'Dispatched At': 'dispatched_at', 'dispatched_at': 'dispatched_at',
+      'Accepted By': 'accepted_by', 'accepted_by': 'accepted_by',
+      'Accepted At': 'accepted_at', 'accepted_at': 'accepted_at',
       'Status': 'status', 'Status:': 'status', 'status': 'status',
     };
 
@@ -467,6 +473,8 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
                 <TableHead>Verification Notes</TableHead>
                 <TableHead>Dispatched At</TableHead>
                 <TableHead>Dispatched By</TableHead>
+                <TableHead>Accepted At</TableHead>
+                <TableHead>Accepted By</TableHead>
                 <TableHead>Created At</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
@@ -513,6 +521,7 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
                               row.status?.toLowerCase() === 'rejected' ? 'bg-red-100 text-red-700' :
                               row.status?.toLowerCase() === 'pending' ? 'bg-yellow-100 text-yellow-700' :
                               row.status?.toLowerCase() === 'approved' ? 'bg-blue-100 text-blue-700' :
+                              row.status?.toLowerCase() === 'accepted' ? 'bg-purple-100 text-purple-700' :
                               'bg-gray-100 text-gray-700'
                             }
                           >
@@ -720,6 +729,25 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
                       <TableCell>
                         {row.dispatchedBy ? (
                           <div className="font-medium text-sm">{row.dispatchedBy}</div>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {row.acceptedAt ? (
+                          <div className="text-sm">
+                            {new Date(row.acceptedAt).toLocaleDateString()}
+                            <div className="text-xs text-muted-foreground">
+                              {new Date(row.acceptedAt).toLocaleTimeString()}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {row.acceptedBy ? (
+                          <div className="font-medium text-sm">{row.acceptedBy}</div>
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}
