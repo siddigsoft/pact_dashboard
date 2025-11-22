@@ -61,6 +61,7 @@ import AdminWallets from './pages/AdminWallets';
 import AdminWalletDetail from './pages/AdminWalletDetail';
 import WithdrawalApproval from './pages/WithdrawalApproval';
 import WalletReports from './pages/WalletReports';
+import BudgetPage from './pages/Budget';
 
 // Components
 import MainLayout from './components/MainLayout';
@@ -155,6 +156,7 @@ const AppRoutes = () => {
         <Route path="/admin/wallets/:userId" element={<AdminWalletDetail />} />
         <Route path="/withdrawal-approval" element={<WithdrawalApproval />} />
         <Route path="/wallet-reports" element={<WalletReports />} />
+        <Route path="/budget" element={<BudgetPage />} />
         <Route path="/site-visits" element={<SiteVisits />} />
         <Route path="/site-visits/create" element={<CreateSiteVisit />} />
         <Route path="/site-visits/create/mmp" element={<CreateSiteVisitMMP />} />

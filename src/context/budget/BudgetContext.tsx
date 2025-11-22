@@ -597,11 +597,20 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
 
     const channel = supabase
       .channel('budget_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'project_budgets' }, refreshProjectBudgets)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'mmp_budgets' }, refreshMMPBudgets)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'budget_transactions' }, refreshBudgetTransactions)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'budget_alerts' }, refreshBudgetAlerts)
-      .subscribe();
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'project_budgets' }, () => {
+        refreshProjectBudgets();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'mmp_budgets' }, () => {
+        refreshMMPBudgets();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'budget_transactions' }, () => {
+        refreshBudgetTransactions();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'budget_alerts' }, () => {
+        refreshBudgetAlerts();
+      });
+
+    channel.subscribe();
 
     return () => {
       supabase.removeChannel(channel);
