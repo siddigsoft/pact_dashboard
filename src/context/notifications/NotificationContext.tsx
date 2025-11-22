@@ -11,7 +11,7 @@ interface NotificationContextType {
   addNotification: (notification: Omit<Notification, 'id' | 'isRead' | 'createdAt'>) => void;
   markNotificationAsRead: (notificationId: string) => void;
   getUnreadNotificationsCount: () => number;
-  clearAllNotifications: () => void;
+  clearAllNotifications: () => Promise<void>;
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
@@ -136,6 +136,26 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
             const n = mapDbToNotification((payload as any).new);
             setAppNotifications(prev => [n, ...prev].slice(0, 50));
           })
+          .on('postgres_changes', {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'notifications',
+            filter: `user_id=eq.${currentUserId}`,
+          }, (payload) => {
+            const updated = mapDbToNotification((payload as any).new);
+            setAppNotifications(prev => 
+              prev.map(n => n.id === updated.id ? updated : n)
+            );
+          })
+          .on('postgres_changes', {
+            event: 'DELETE',
+            schema: 'public',
+            table: 'notifications',
+            filter: `user_id=eq.${currentUserId}`,
+          }, (payload) => {
+            const deletedId = (payload as any).old.id;
+            setAppNotifications(prev => prev.filter(n => n.id !== deletedId));
+          })
           .subscribe();
       } catch (err) {
         console.warn('Realtime subscription failed:', err);
@@ -214,9 +234,57 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
   }, []);
 
-  const clearAllNotifications = useCallback(() => {
-    setAppNotifications([]);
-  }, []);
+  const clearAllNotifications = useCallback(async () => {
+    if (!currentUserId) {
+      console.warn('Cannot clear notifications: no current user ID');
+      return;
+    }
+    
+    console.log(`Attempting to delete all notifications for user: ${currentUserId}`);
+    
+    // Delete all notifications for the current user from the database
+    try {
+      // Delete all notifications for the current user
+      // Note: Supabase DELETE returns the deleted rows if .select() is used
+      const { data: deletedData, error } = await supabase
+        .from('notifications')
+        .delete()
+        .eq('user_id', currentUserId)
+        .select('id');
+      
+      if (error) {
+        console.error('Failed to delete notifications:', error);
+        console.error('Error details:', JSON.stringify(error, null, 2));
+        console.error('Error code:', error.code);
+        console.error('Error message:', error.message);
+        throw error;
+      }
+      
+      console.log(`Successfully deleted ${deletedData?.length || 0} notifications`);
+      
+      // Clear local state immediately
+      setAppNotifications([]);
+      
+      // Verify deletion by checking if any notifications remain
+      const { data: remaining, error: verifyError } = await supabase
+        .from('notifications')
+        .select('id')
+        .eq('user_id', currentUserId)
+        .limit(1);
+      
+      if (verifyError) {
+        console.warn('Error verifying deletion:', verifyError);
+      } else if (remaining && remaining.length > 0) {
+        console.warn(`Warning: ${remaining.length} notification(s) still exist after delete. This might be due to RLS policies or concurrent inserts.`);
+      } else {
+        console.log('Verification: All notifications successfully deleted');
+      }
+    } catch (err) {
+      console.error('Failed to clear all notifications:', err);
+      // Don't clear local state if delete failed
+      throw err;
+    }
+  }, [currentUserId]);
 
   const getUnreadNotificationsCount = useCallback((): number => {
     // If we don't have a current user ID, return 0
