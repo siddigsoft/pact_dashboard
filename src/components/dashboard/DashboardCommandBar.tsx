@@ -9,7 +9,6 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { ConnectionStatus } from './ConnectionStatus';
-import { EnhancedMoDaCountdown } from './EnhancedMoDaCountdown';
 import { useLiveDashboard } from '@/hooks/useLiveDashboard';
 
 interface DashboardCommandBarProps {
@@ -77,9 +76,6 @@ export const DashboardCommandBar: React.FC<DashboardCommandBarProps> = ({ onQuic
               <span className="hidden md:inline">Refresh</span>
             </Button>
             <ConnectionStatus isConnected={isConnected} />
-            <div className="hidden lg:block">
-              <EnhancedMoDaCountdown />
-            </div>
           </div>
         </div>
       </div>
