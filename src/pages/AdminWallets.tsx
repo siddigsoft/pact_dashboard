@@ -10,16 +10,16 @@ import { supabase } from '@/integrations/supabase/client';
 const fmt = (c: number, cur: string) => new Intl.NumberFormat(undefined, { style: 'currency', currency: cur || 'NGN', currencyDisplay: 'narrowSymbol' }).format((c||0)/100);
 
 const AdminWallets: React.FC = () => {
-  const { admin } = useWallet();
+  const { listWallets } = useWallet();
   const [rows, setRows] = useState<any[]>([]);
   const [search, setSearch] = useState('');
-  const [currency, setCurrency] = useState('NGN');
+  const [currency, setCurrency] = useState('SDG');
   const navigate = useNavigate();
 
   const load = async () => {
-    const data = await admin.listWallets();
+    const data = await listWallets();
     setRows(data || []);
-    const c = data && data[0]?.currency ? data[0].currency : 'NGN';
+    const c = data && data[0]?.balances ? Object.keys(data[0].balances)[0] : 'SDG';
     setCurrency(c);
   };
 
@@ -41,23 +41,25 @@ const AdminWallets: React.FC = () => {
   const filtered = useMemo(() => {
     if (!search) return rows;
     const s = search.toLowerCase();
-    return rows.filter(r => (r.owner_name || r.user_id || '').toString().toLowerCase().includes(s));
+    return rows.filter(r => (r.userId || '').toString().toLowerCase().includes(s));
   }, [rows, search]);
+
+  const getBalance = (wallet: any, curr: string) => (wallet.balances?.[curr] || 0) * 100;
 
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
           <CardHeader><CardTitle>Total Platform Earnings</CardTitle></CardHeader>
-          <CardContent className="text-2xl font-bold">{fmt(filtered.reduce((a,b)=>a+(Number(b.total_earned_cents)||0),0), currency)}</CardContent>
+          <CardContent className="text-2xl font-bold">{fmt(filtered.reduce((a,b)=>a+(Number(b.totalEarned)||0)*100,0), currency)}</CardContent>
         </Card>
         <Card>
-          <CardHeader><CardTitle>Total Payouts</CardTitle></CardHeader>
-          <CardContent className="text-2xl font-bold">{fmt(filtered.reduce((a,b)=>a+(Number(b.total_paid_out_cents)||0),0), currency)}</CardContent>
+          <CardHeader><CardTitle>Total Withdrawals</CardTitle></CardHeader>
+          <CardContent className="text-2xl font-bold">{fmt(filtered.reduce((a,b)=>a+(Number(b.totalWithdrawn)||0)*100,0), currency)}</CardContent>
         </Card>
         <Card>
-          <CardHeader><CardTitle>Pending Payouts</CardTitle></CardHeader>
-          <CardContent className="text-2xl font-bold">{fmt(filtered.reduce((a,b)=>a+(Number(b.pending_payout_cents)||0),0), currency)}</CardContent>
+          <CardHeader><CardTitle>Current Balances</CardTitle></CardHeader>
+          <CardContent className="text-2xl font-bold">{fmt(filtered.reduce((a,b)=>a+getBalance(b, currency),0), currency)}</CardContent>
         </Card>
       </div>
 
@@ -83,13 +85,13 @@ const AdminWallets: React.FC = () => {
               </TableHeader>
               <TableBody>
                 {filtered.map(r => (
-                  <TableRow key={r.id} className="cursor-pointer" onClick={() => navigate(`/admin/wallets/${r.user_id}`)}>
-                    <TableCell>{r.owner_name || r.user_id}</TableCell>
-                    <TableCell>{fmt(Number(r.balance_cents)||0, r.currency||currency)}</TableCell>
-                    <TableCell>{fmt(Number(r.total_earned_cents)||0, r.currency||currency)}</TableCell>
-                    <TableCell>{fmt(Number(r.total_paid_out_cents)||0, r.currency||currency)}</TableCell>
-                    <TableCell>{fmt(Number(r.pending_payout_cents)||0, r.currency||currency)}</TableCell>
-                    <TableCell>{r.updated_at ? new Date(r.updated_at).toLocaleString() : '-'}</TableCell>
+                  <TableRow key={r.id} className="cursor-pointer" onClick={() => navigate(`/admin/wallets/${r.userId}`)}>
+                    <TableCell>{r.userId}</TableCell>
+                    <TableCell>{fmt(getBalance(r, currency), currency)}</TableCell>
+                    <TableCell>{fmt((Number(r.totalEarned)||0)*100, currency)}</TableCell>
+                    <TableCell>{fmt((Number(r.totalWithdrawn)||0)*100, currency)}</TableCell>
+                    <TableCell>{fmt((Number(r.totalEarned)||0)*100 - (Number(r.totalWithdrawn)||0)*100 - getBalance(r, currency), currency)}</TableCell>
+                    <TableCell>{r.updatedAt ? new Date(r.updatedAt).toLocaleString() : '-'}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
