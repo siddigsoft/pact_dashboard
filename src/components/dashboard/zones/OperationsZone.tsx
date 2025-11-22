@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -18,6 +18,13 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { 
   ClipboardList, 
   Calendar, 
@@ -32,7 +39,9 @@ import {
   Zap,
   Target,
   BarChart3,
-  ExternalLink
+  ExternalLink,
+  Filter,
+  X
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { Button } from '@/components/ui/button';
@@ -45,10 +54,27 @@ import { isAfter, addDays } from 'date-fns';
 
 type MetricCardType = 'total' | 'completed' | 'assigned' | 'pending' | 'overdue' | 'performance' | null;
 
+interface Filters {
+  hub: string;
+  state: string;
+  locality: string;
+  coordinator: string;
+  enumerator: string;
+  status: string;
+}
+
 export const OperationsZone: React.FC = () => {
   const { siteVisits } = useSiteVisitContext();
   const [activeTab, setActiveTab] = useState('overview');
   const [selectedCard, setSelectedCard] = useState<MetricCardType>(null);
+  const [filters, setFilters] = useState<Filters>({
+    hub: '',
+    state: '',
+    locality: '',
+    coordinator: '',
+    enumerator: '',
+    status: ''
+  });
 
   const upcomingVisits = siteVisits
     .filter(v => {
@@ -108,7 +134,79 @@ export const OperationsZone: React.FC = () => {
     }
   };
 
-  const filteredVisits = getFilteredVisits(selectedCard);
+  const baseFilteredVisits = getFilteredVisits(selectedCard);
+
+  // Extract unique values for filter dropdowns
+  const uniqueHubs = useMemo(() => {
+    const hubs = [...new Set(baseFilteredVisits.map(v => v.hub).filter(Boolean))];
+    return hubs.sort();
+  }, [baseFilteredVisits]);
+
+  const uniqueStates = useMemo(() => {
+    const states = [...new Set(baseFilteredVisits.map(v => v.state).filter(Boolean))];
+    return states.sort();
+  }, [baseFilteredVisits]);
+
+  const uniqueLocalities = useMemo(() => {
+    const localities = [...new Set(baseFilteredVisits.map(v => v.locality).filter(Boolean))];
+    return localities.sort();
+  }, [baseFilteredVisits]);
+
+  const uniqueCoordinators = useMemo(() => {
+    const coordinators = [...new Set(baseFilteredVisits.map(v => v.team?.coordinator).filter(Boolean))];
+    return coordinators.sort();
+  }, [baseFilteredVisits]);
+
+  const uniqueEnumerators = useMemo(() => {
+    const enumerators = [...new Set(baseFilteredVisits.map(v => v.assignedTo).filter(Boolean))];
+    return enumerators.sort();
+  }, [baseFilteredVisits]);
+
+  const uniqueStatuses = useMemo(() => {
+    const statuses = [...new Set(baseFilteredVisits.map(v => v.status).filter(Boolean))];
+    return statuses.sort();
+  }, [baseFilteredVisits]);
+
+  // Apply filters to data
+  const filteredVisits = useMemo(() => {
+    return baseFilteredVisits.filter(visit => {
+      if (filters.hub && visit.hub !== filters.hub) return false;
+      if (filters.state && visit.state !== filters.state) return false;
+      if (filters.locality && visit.locality !== filters.locality) return false;
+      if (filters.coordinator && visit.team?.coordinator !== filters.coordinator) return false;
+      if (filters.enumerator && visit.assignedTo !== filters.enumerator) return false;
+      if (filters.status && visit.status !== filters.status) return false;
+      return true;
+    });
+  }, [baseFilteredVisits, filters]);
+
+  // Reset filters when card changes
+  const handleCardClick = (cardType: MetricCardType) => {
+    setSelectedCard(cardType);
+    setFilters({
+      hub: '',
+      state: '',
+      locality: '',
+      coordinator: '',
+      enumerator: '',
+      status: ''
+    });
+  };
+
+  // Clear all filters
+  const clearAllFilters = () => {
+    setFilters({
+      hub: '',
+      state: '',
+      locality: '',
+      coordinator: '',
+      enumerator: '',
+      status: ''
+    });
+  };
+
+  // Count active filters
+  const activeFilterCount = Object.values(filters).filter(v => v !== '').length;
 
   return (
     <div className="space-y-3">
@@ -117,7 +215,7 @@ export const OperationsZone: React.FC = () => {
         {/* Total Operations Card */}
         <Card 
           className="relative overflow-hidden border-primary/20 bg-gradient-to-br from-primary/10 via-primary/5 to-background hover-elevate cursor-pointer transition-all hover:shadow-md hover:scale-[1.02]"
-          onClick={() => setSelectedCard('total')}
+          onClick={() => handleCardClick('total')}
           data-testid="card-metric-total"
         >
           <CardContent className="p-3">
@@ -143,7 +241,7 @@ export const OperationsZone: React.FC = () => {
         {/* Completed Card */}
         <Card 
           className="relative overflow-hidden border-green-500/20 bg-gradient-to-br from-green-500/10 via-green-500/5 to-background hover-elevate cursor-pointer transition-all hover:shadow-md hover:scale-[1.02]"
-          onClick={() => setSelectedCard('completed')}
+          onClick={() => handleCardClick('completed')}
           data-testid="card-metric-completed"
         >
           <CardContent className="p-3">
@@ -169,7 +267,7 @@ export const OperationsZone: React.FC = () => {
         {/* Assigned Card */}
         <Card 
           className="relative overflow-hidden border-blue-500/20 bg-gradient-to-br from-blue-500/10 via-blue-500/5 to-background hover-elevate cursor-pointer transition-all hover:shadow-md hover:scale-[1.02]"
-          onClick={() => setSelectedCard('assigned')}
+          onClick={() => handleCardClick('assigned')}
           data-testid="card-metric-assigned"
         >
           <CardContent className="p-3">
@@ -194,7 +292,7 @@ export const OperationsZone: React.FC = () => {
         {/* Pending Card */}
         <Card 
           className="relative overflow-hidden border-orange-500/20 bg-gradient-to-br from-orange-500/10 via-orange-500/5 to-background hover-elevate cursor-pointer transition-all hover:shadow-md hover:scale-[1.02]"
-          onClick={() => setSelectedCard('pending')}
+          onClick={() => handleCardClick('pending')}
           data-testid="card-metric-pending"
         >
           <CardContent className="p-3">
@@ -219,7 +317,7 @@ export const OperationsZone: React.FC = () => {
         {/* Overdue Card */}
         <Card 
           className="relative overflow-hidden border-red-500/20 bg-gradient-to-br from-red-500/10 via-red-500/5 to-background hover-elevate cursor-pointer transition-all hover:shadow-md hover:scale-[1.02]"
-          onClick={() => setSelectedCard('overdue')}
+          onClick={() => handleCardClick('overdue')}
           data-testid="card-metric-overdue"
         >
           <CardContent className="p-3">
@@ -246,7 +344,7 @@ export const OperationsZone: React.FC = () => {
         {/* Performance Card */}
         <Card 
           className="relative overflow-hidden border-purple-500/20 bg-gradient-to-br from-purple-500/10 via-purple-500/5 to-background hover-elevate cursor-pointer transition-all hover:shadow-md hover:scale-[1.02]"
-          onClick={() => setSelectedCard('performance')}
+          onClick={() => handleCardClick('performance')}
           data-testid="card-metric-performance"
         >
           <CardContent className="p-3">
@@ -360,6 +458,141 @@ export const OperationsZone: React.FC = () => {
               Detailed breakdown of {getCardTitle(selectedCard).toLowerCase()}
             </DialogDescription>
           </DialogHeader>
+
+          {/* Filter Bar */}
+          <div className="space-y-2 border-b pb-3">
+            <div className="flex items-center gap-2">
+              <Filter className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium">Filters</span>
+              {activeFilterCount > 0 && (
+                <Badge variant="secondary" className="h-5 text-[10px]">
+                  {activeFilterCount} active
+                </Badge>
+              )}
+              {activeFilterCount > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearAllFilters}
+                  className="ml-auto h-7 px-2 text-xs"
+                  data-testid="button-clear-filters"
+                >
+                  <X className="h-3 w-3 mr-1" />
+                  Clear all
+                </Button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
+              {/* Hub Filter */}
+              <Select
+                value={filters.hub}
+                onValueChange={(value) => setFilters(prev => ({ ...prev, hub: value === 'all' ? '' : value }))}
+              >
+                <SelectTrigger className="h-8 text-xs" data-testid="select-filter-hub">
+                  <SelectValue placeholder="Hub" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Hubs</SelectItem>
+                  {uniqueHubs.map((hub) => (
+                    <SelectItem key={hub} value={hub}>
+                      {hub}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {/* State Filter */}
+              <Select
+                value={filters.state}
+                onValueChange={(value) => setFilters(prev => ({ ...prev, state: value === 'all' ? '' : value }))}
+              >
+                <SelectTrigger className="h-8 text-xs" data-testid="select-filter-state">
+                  <SelectValue placeholder="State" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All States</SelectItem>
+                  {uniqueStates.map((state) => (
+                    <SelectItem key={state} value={state}>
+                      {state}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {/* Locality Filter */}
+              <Select
+                value={filters.locality}
+                onValueChange={(value) => setFilters(prev => ({ ...prev, locality: value === 'all' ? '' : value }))}
+              >
+                <SelectTrigger className="h-8 text-xs" data-testid="select-filter-locality">
+                  <SelectValue placeholder="Locality" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Localities</SelectItem>
+                  {uniqueLocalities.map((locality) => (
+                    <SelectItem key={locality} value={locality}>
+                      {locality}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {/* Coordinator Filter */}
+              <Select
+                value={filters.coordinator}
+                onValueChange={(value) => setFilters(prev => ({ ...prev, coordinator: value === 'all' ? '' : value }))}
+              >
+                <SelectTrigger className="h-8 text-xs" data-testid="select-filter-coordinator">
+                  <SelectValue placeholder="Coordinator" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Coordinators</SelectItem>
+                  {uniqueCoordinators.map((coordinator) => (
+                    <SelectItem key={coordinator} value={coordinator}>
+                      {coordinator}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {/* Enumerator Filter */}
+              <Select
+                value={filters.enumerator}
+                onValueChange={(value) => setFilters(prev => ({ ...prev, enumerator: value === 'all' ? '' : value }))}
+              >
+                <SelectTrigger className="h-8 text-xs" data-testid="select-filter-enumerator">
+                  <SelectValue placeholder="Enumerator" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Enumerators</SelectItem>
+                  {uniqueEnumerators.map((enumerator) => (
+                    <SelectItem key={enumerator} value={enumerator}>
+                      {enumerator}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {/* Status Filter */}
+              <Select
+                value={filters.status}
+                onValueChange={(value) => setFilters(prev => ({ ...prev, status: value === 'all' ? '' : value }))}
+              >
+                <SelectTrigger className="h-8 text-xs" data-testid="select-filter-status">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  {uniqueStatuses.map((status) => (
+                    <SelectItem key={status} value={status}>
+                      {status}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
           
           <div className="flex-1 overflow-auto border rounded-md">
             {filteredVisits.length > 0 ? (
