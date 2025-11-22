@@ -1,0 +1,253 @@
+import React, { useEffect, useRef } from 'react';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+import { Card, CardContent } from '@/components/ui/card';
+import { MapPin, Users } from 'lucide-react';
+import { User } from '@/types/user';
+import { SiteVisit } from '@/types/siteVisit';
+import { formatDistanceToNow } from 'date-fns';
+
+interface TeamLocationMapProps {
+  users: User[];
+  siteVisits?: SiteVisit[];
+}
+
+const TeamLocationMap: React.FC<TeamLocationMapProps> = ({ users, siteVisits = [] }) => {
+  const mapRef = useRef<L.Map | null>(null);
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!mapContainerRef.current) return;
+
+    if (!mapRef.current) {
+      mapRef.current = L.map(mapContainerRef.current).setView([15.5527, 32.5599], 6);
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+        maxZoom: 19,
+      }).addTo(mapRef.current);
+    }
+
+    const map = mapRef.current;
+    const bounds = L.latLngBounds([]);
+    let hasValidBounds = false;
+
+    map.eachLayer((layer) => {
+      if (layer instanceof L.Marker) {
+        map.removeLayer(layer);
+      }
+    });
+
+    // Add team member markers (green for online, gray for offline)
+    users.forEach((user) => {
+      if (user.location?.latitude && user.location?.longitude) {
+        const isOnline = user.availability === 'online' || user.location?.isSharing;
+        
+        const markerIcon = L.divIcon({
+          className: 'custom-marker',
+          html: `
+            <div style="position: relative;">
+              <svg width="32" height="40" viewBox="0 0 32 40" xmlns="http://www.w3.org/2000/svg">
+                <path d="M16 0C7.163 0 0 7.163 0 16c0 12 16 24 16 24s16-12 16-24c0-8.837-7.163-16-16-16z" 
+                  fill="${isOnline ? '#22c55e' : '#9ca3af'}" 
+                  stroke="#fff" 
+                  stroke-width="2"/>
+                <circle cx="16" cy="16" r="6" fill="#fff"/>
+              </svg>
+              ${isOnline ? '<div style="position: absolute; top: 2px; right: 2px; width: 8px; height: 8px; background: #10b981; border: 2px solid #fff; border-radius: 50%;"></div>' : ''}
+            </div>
+          `,
+          iconSize: [32, 40],
+          iconAnchor: [16, 40],
+          popupAnchor: [0, -40],
+        });
+
+        const marker = L.marker([user.location.latitude, user.location.longitude], {
+          icon: markerIcon,
+        }).addTo(map);
+
+        const lastSeenTime = user.location?.lastUpdated || user.lastActive;
+        const lastSeenText = lastSeenTime 
+          ? formatDistanceToNow(new Date(lastSeenTime), { addSuffix: true })
+          : 'Never';
+
+        const popupContent = `
+          <div style="min-width: 200px;">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+              <div style="width: 8px; height: 8px; background: ${isOnline ? '#22c55e' : '#9ca3af'}; border-radius: 50%;"></div>
+              <strong style="font-size: 14px;">${user.name}</strong>
+            </div>
+            <div style="font-size: 12px; color: #666; margin-bottom: 4px;">
+              <strong>Role:</strong> ${user.roles?.[0] || user.role || 'N/A'}
+            </div>
+            <div style="font-size: 12px; color: #666; margin-bottom: 4px;">
+              <strong>Status:</strong> ${isOnline ? '🟢 Online' : '⚫ Offline'}
+            </div>
+            <div style="font-size: 12px; color: #666; margin-bottom: 4px;">
+              <strong>Last Seen:</strong> ${lastSeenText}
+            </div>
+            ${user.location?.address ? `
+              <div style="font-size: 12px; color: #666; margin-top: 8px; padding-top: 8px; border-top: 1px solid #e5e7eb;">
+                📍 ${user.location.address}
+              </div>
+            ` : ''}
+          </div>
+        `;
+
+        marker.bindPopup(popupContent);
+        bounds.extend([user.location.latitude, user.location.longitude]);
+        hasValidBounds = true;
+      }
+    });
+
+    // Add site visit markers (different colors for status/priority)
+    siteVisits.forEach((visit) => {
+      if (visit.location?.latitude && visit.location?.longitude) {
+        const getColor = () => {
+          if (visit.status === 'completed') return '#10b981';
+          if (visit.status === 'inProgress') return '#3b82f6';
+          if (visit.priority === 'high') return '#ef4444';
+          if (visit.priority === 'medium') return '#f59e0b';
+          return '#6366f1';
+        };
+
+        const markerIcon = L.divIcon({
+          className: 'custom-marker',
+          html: `
+            <div>
+              <svg width="28" height="36" viewBox="0 0 28 36" xmlns="http://www.w3.org/2000/svg">
+                <path d="M14 0C6.268 0 0 6.268 0 14c0 10.5 14 22 14 22s14-11.5 14-22c0-7.732-6.268-14-14-14z" 
+                  fill="${getColor()}" 
+                  stroke="#fff" 
+                  stroke-width="2"/>
+                <text x="14" y="17" text-anchor="middle" fill="#fff" font-size="12" font-weight="bold">S</text>
+              </svg>
+            </div>
+          `,
+          iconSize: [28, 36],
+          iconAnchor: [14, 36],
+          popupAnchor: [0, -36],
+        });
+
+        const marker = L.marker([visit.location.latitude, visit.location.longitude], {
+          icon: markerIcon,
+        }).addTo(map);
+
+        const popupContent = `
+          <div style="min-width: 200px;">
+            <strong style="font-size: 14px; display: block; margin-bottom: 8px;">
+              🏢 ${visit.siteName || 'Site Visit'}
+            </strong>
+            ${visit.siteCode ? `
+              <div style="font-size: 12px; color: #666; margin-bottom: 4px;">
+                <strong>Code:</strong> ${visit.siteCode}
+              </div>
+            ` : ''}
+            <div style="font-size: 12px; color: #666; margin-bottom: 4px;">
+              <strong>Status:</strong> <span style="text-transform: capitalize;">${visit.status?.replace(/([A-Z])/g, ' $1').trim() || 'N/A'}</span>
+            </div>
+            <div style="font-size: 12px; color: #666; margin-bottom: 4px;">
+              <strong>Priority:</strong> <span style="text-transform: capitalize;">${visit.priority || 'Normal'}</span>
+            </div>
+            ${visit.scheduledDate ? `
+              <div style="font-size: 12px; color: #666; margin-bottom: 4px;">
+                <strong>Scheduled:</strong> ${new Date(visit.scheduledDate).toLocaleDateString()}
+              </div>
+            ` : ''}
+            ${visit.assignedTo ? `
+              <div style="font-size: 12px; color: #666; margin-bottom: 4px;">
+                <strong>Assigned To:</strong> ${typeof visit.assignedTo === 'string' ? visit.assignedTo : 'Assigned'}
+              </div>
+            ` : ''}
+            ${visit.location?.address ? `
+              <div style="font-size: 12px; color: #666; margin-top: 8px; padding-top: 8px; border-top: 1px solid #e5e7eb;">
+                📍 ${visit.location.address}
+              </div>
+            ` : ''}
+          </div>
+        `;
+
+        marker.bindPopup(popupContent);
+        bounds.extend([visit.location.latitude, visit.location.longitude]);
+        hasValidBounds = true;
+      }
+    });
+
+    if (hasValidBounds) {
+      map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+    }
+
+    return () => {
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
+    };
+  }, [users, siteVisits]);
+
+  const teamWithLocation = users.filter(u => u.location?.latitude && u.location?.longitude);
+  const sitesWithLocation = siteVisits.filter(v => v.location?.latitude && v.location?.longitude);
+  
+  // Calculate online/offline counts ONLY from users with location data
+  const onlineWithLocation = teamWithLocation.filter(u => 
+    u.availability === 'online' || u.location?.isSharing
+  );
+  const offlineWithLocation = teamWithLocation.filter(u => 
+    u.availability !== 'online' && !u.location?.isSharing
+  );
+  const onlineCount = onlineWithLocation.length;
+  const offlineCount = offlineWithLocation.length;
+
+  return (
+    <div className="space-y-3">
+      {/* Map Legend */}
+      <Card className="bg-muted/30 border-border/50">
+        <CardContent className="p-3">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-4 text-xs">
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>
+                <span>Online Team ({onlineCount})</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-3 bg-gray-400 rounded-full border-2 border-white"></div>
+                <span>Offline Team ({offlineCount})</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-3 bg-indigo-500 rounded-full border-2 border-white"></div>
+                <span>Site Visits ({sitesWithLocation.length})</span>
+              </div>
+            </div>
+            <div className="text-xs text-muted-foreground">
+              {teamWithLocation.length} team member{teamWithLocation.length !== 1 ? 's' : ''} | {sitesWithLocation.length} site visit{sitesWithLocation.length !== 1 ? 's' : ''}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Map Container */}
+      <Card className="overflow-hidden">
+        <CardContent className="p-0">
+          <div 
+            ref={mapContainerRef} 
+            style={{ height: '500px', width: '100%' }}
+            data-testid="team-location-map"
+          />
+        </CardContent>
+      </Card>
+
+      {/* Map Stats */}
+      {teamWithLocation.length === 0 && sitesWithLocation.length === 0 && (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+            <MapPin className="h-12 w-12 mb-3 opacity-50" />
+            <p className="text-sm">No team members or site visits with location data</p>
+            <p className="text-xs mt-1">Enable location sharing to see team positions on the map</p>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+};
+
+export default TeamLocationMap;

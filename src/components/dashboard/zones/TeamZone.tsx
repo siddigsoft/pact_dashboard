@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Users, MapPin, MessageSquare, UserCircle } from 'lucide-react';
+import { Users, MapPin, MessageSquare, UserCircle, LayoutGrid, Table as TableIcon } from 'lucide-react';
 import { TeamCommunication } from '../TeamCommunication';
-import LiveTeamMapWidget from '../LiveTeamMapWidget';
+import TeamLocationMap from '../TeamLocationMap';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
@@ -10,11 +10,13 @@ import { useUser } from '@/context/user/UserContext';
 import { Badge } from '@/components/ui/badge';
 import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
 import { TeamMemberCard } from '../TeamMemberCard';
+import { TeamMemberTable } from '../TeamMemberTable';
 import { TeamMemberDetailModal } from '../TeamMemberDetailModal';
 import { User } from '@/types/user';
 
 export const TeamZone: React.FC = () => {
   const [activeTab, setActiveTab] = useState('overview');
+  const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
   const [selectedMember, setSelectedMember] = useState<User | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   
@@ -22,15 +24,33 @@ export const TeamZone: React.FC = () => {
   const { users } = useUser();
   const { siteVisits } = useSiteVisitContext();
 
-  // Filter team members who can be assigned to site visits (coordinators and data collectors only)
+  // Filter and sort team members who can be assigned to site visits (coordinators and data collectors only)
+  // Sort: Online first, then by last login (most recent first)
   const assignableTeamMembers = useMemo(() => {
     if (!users) return [];
-    return users.filter(user => 
+    
+    const filtered = users.filter(user => 
       user.roles?.some(role => {
         const normalizedRole = role.toLowerCase();
         return normalizedRole === 'coordinator' || normalizedRole === 'datacollector';
       })
     );
+    
+    // Sort by online status first, then by last login
+    return filtered.sort((a, b) => {
+      const aOnline = a.availability === 'online' || (a.location?.isSharing && a.location?.latitude && a.location?.longitude);
+      const bOnline = b.availability === 'online' || (b.location?.isSharing && b.location?.latitude && b.location?.longitude);
+      
+      // Online users first
+      if (aOnline && !bOnline) return -1;
+      if (!aOnline && bOnline) return 1;
+      
+      // Then sort by last login (most recent first)
+      const aLastLogin = new Date(a.location?.lastUpdated || a.lastActive || 0).getTime();
+      const bLastLogin = new Date(b.location?.lastUpdated || b.lastActive || 0).getTime();
+      
+      return bLastLogin - aLastLogin;
+    });
   }, [users]);
 
   const activeFieldTeam = assignableTeamMembers.length;
@@ -135,18 +155,58 @@ export const TeamZone: React.FC = () => {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview" className="mt-4">
+        <TabsContent value="overview" className="mt-4 space-y-3">
           {assignableTeamMembers && assignableTeamMembers.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-              {assignableTeamMembers.map(user => (
-                <TeamMemberCard
-                  key={user.id}
-                  user={user}
-                  workload={userWorkloads.get(user.id) || { active: 0, completed: 0, pending: 0, overdue: 0 }}
-                  onClick={() => handleMemberClick(user)}
+            <>
+              {/* View Toggle */}
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                  Team Members ({assignableTeamMembers.length})
+                </h3>
+                <div className="flex gap-1 bg-muted/30 p-1 rounded-lg">
+                  <Button
+                    variant={viewMode === 'cards' ? 'default' : 'ghost'}
+                    size="sm"
+                    onClick={() => setViewMode('cards')}
+                    data-testid="button-view-cards"
+                    className="h-7 text-xs gap-1.5"
+                  >
+                    <LayoutGrid className="h-3.5 w-3.5" />
+                    Cards
+                  </Button>
+                  <Button
+                    variant={viewMode === 'table' ? 'default' : 'ghost'}
+                    size="sm"
+                    onClick={() => setViewMode('table')}
+                    data-testid="button-view-table"
+                    className="h-7 text-xs gap-1.5"
+                  >
+                    <TableIcon className="h-3.5 w-3.5" />
+                    Table
+                  </Button>
+                </div>
+              </div>
+
+              {/* Card or Table View */}
+              {viewMode === 'cards' ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                  {assignableTeamMembers.map(user => (
+                    <TeamMemberCard
+                      key={user.id}
+                      user={user}
+                      workload={userWorkloads.get(user.id) || { active: 0, completed: 0, pending: 0, overdue: 0 }}
+                      onClick={() => handleMemberClick(user)}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <TeamMemberTable
+                  users={assignableTeamMembers}
+                  workloads={userWorkloads}
+                  onRowClick={handleMemberClick}
                 />
-              ))}
-            </div>
+              )}
+            </>
           ) : (
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-12 text-muted-foreground">
@@ -159,7 +219,10 @@ export const TeamZone: React.FC = () => {
         </TabsContent>
 
         <TabsContent value="map" className="mt-4">
-          <LiveTeamMapWidget />
+          <TeamLocationMap 
+            users={assignableTeamMembers} 
+            siteVisits={siteVisits || []}
+          />
         </TabsContent>
 
         <TabsContent value="communication" className="mt-4">
