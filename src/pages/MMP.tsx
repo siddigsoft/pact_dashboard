@@ -443,7 +443,7 @@ const MMP = () => {
   // Subcategory state for Forwarded MMPs (Admin/ICT only)
   const [forwardedSubTab, setForwardedSubTab] = useState<'pending' | 'verified'>('pending');
   // Subcategory state for Verified Sites (Admin/ICT only)
-  const [verifiedSubTab, setVerifiedSubTab] = useState<'newSites' | 'approvedCosted' | 'dispatched' | 'completed'>('newSites');
+  const [verifiedSubTab, setVerifiedSubTab] = useState<'newSites' | 'approvedCosted' | 'dispatched' | 'accepted' | 'ongoing' | 'completed'>('newSites');
   // Subcategory state for New MMPs (FOM only)
   const [newFomSubTab, setNewFomSubTab] = useState<'pending' | 'verified'>('pending');
   const [siteVisitStats, setSiteVisitStats] = useState<Record<string, {
@@ -451,6 +451,7 @@ const MMP = () => {
     hasCosted: boolean;
     hasAssigned: boolean;
     hasInProgress: boolean;
+    hasAccepted: boolean;
     hasCompleted: boolean;
     hasRejected: boolean;
     hasDispatched: boolean;
@@ -484,7 +485,10 @@ const MMP = () => {
   const isFOM = hasRole(['Field Operation Manager (FOM)', 'fom', 'field operation manager']);
   const isCoordinator = hasRole(['Coordinator', 'coordinator']);
   const canRead = checkPermission('mmp', 'read') || isAdmin || isFOM || isCoordinator || isICT;
-  const canCreate = (checkPermission('mmp', 'create') || isAdmin || isICT);
+  // Only Admin and ICT accounts should see the Upload button on the MMP management page.
+  // We intentionally DO NOT fallback to checkPermission here to prevent other roles (e.g. FOM)
+  // that may have broad permissions from seeing the upload control.
+  const canCreate = isAdmin || isICT;
 
   // Debug: Log role checks
   useEffect(() => {
@@ -807,8 +811,18 @@ const MMP = () => {
       dispatched: base.filter(mmp => {
         const stats = siteVisitStats[mmp.id];
         // Dispatched: sites that have been dispatched (have site_visits created) or marked as dispatched
-        // Check if any site entries are marked as 'Dispatched' or have site_visits
-        return Boolean(stats?.hasInProgress || stats?.hasAssigned || stats?.hasDispatched);
+        // Check if any site entries are marked as 'Dispatched' or have site_visits assigned
+        return Boolean(stats?.hasAssigned || stats?.hasDispatched);
+      }),
+      accepted: base.filter(mmp => {
+        const stats = siteVisitStats[mmp.id];
+        // Accepted: at least one site visit was accepted
+        return Boolean(stats?.hasAccepted);
+      }),
+      ongoing: base.filter(mmp => {
+        const stats = siteVisitStats[mmp.id];
+        // Ongoing: site visits currently in progress
+        return Boolean(stats?.hasInProgress);
       }),
       // Completed: rely on site visits completed or workflow stage
       completed: base.filter(mmp => {
@@ -993,7 +1007,7 @@ const MMP = () => {
         if (mmpEntriesError) console.warn('Failed to load mmp_site_entries:', mmpEntriesError);
         
         const map: Record<string, {
-          exists: boolean; hasCosted: boolean; hasAssigned: boolean; hasInProgress: boolean; hasCompleted: boolean; hasRejected: boolean; hasDispatched: boolean; allApprovedAndCosted: boolean;
+          exists: boolean; hasCosted: boolean; hasAssigned: boolean; hasInProgress: boolean; hasAccepted: boolean; hasCompleted: boolean; hasRejected: boolean; hasDispatched: boolean; allApprovedAndCosted: boolean;
         }> = {};
         const rows: SiteVisitRow[] = [];
         const siteVisitMap = new Map<string, SiteVisitRow>();
@@ -1001,7 +1015,7 @@ const MMP = () => {
         // Initialize map for all MMPs
         for (const id of ids) {
           if (!map[id]) {
-            map[id] = { exists: false, hasCosted: false, hasAssigned: false, hasInProgress: false, hasCompleted: false, hasRejected: false, hasDispatched: false, allApprovedAndCosted: false };
+            map[id] = { exists: false, hasCosted: false, hasAssigned: false, hasInProgress: false, hasAccepted: false, hasCompleted: false, hasRejected: false, hasDispatched: false, allApprovedAndCosted: false };
           }
         }
         
@@ -1009,12 +1023,13 @@ const MMP = () => {
         for (const row of (siteVisitsData || []) as any[]) {
           const id = row.mmp_id;
           if (!map[id]) {
-            map[id] = { exists: false, hasCosted: false, hasAssigned: false, hasInProgress: false, hasCompleted: false, hasRejected: false, hasDispatched: false, allApprovedAndCosted: false };
+            map[id] = { exists: false, hasCosted: false, hasAssigned: false, hasInProgress: false, hasAccepted: false, hasCompleted: false, hasRejected: false, hasDispatched: false, allApprovedAndCosted: false };
           }
           map[id].exists = true;
           const status = String(row.status || '').toLowerCase();
           if (status === 'assigned') map[id].hasAssigned = true;
-          if (status === 'inprogress' || status === 'accepted') map[id].hasInProgress = true;
+          if (status === 'accepted') map[id].hasAccepted = true;
+          if (status === 'inprogress') map[id].hasInProgress = true;
           if (status === 'completed') map[id].hasCompleted = true;
           if (status === 'rejected' || status === 'declined') map[id].hasRejected = true;
           const fees = row.fees || {};
@@ -1086,7 +1101,7 @@ const MMP = () => {
         // Check if all entries for each MMP are approved and costed, and check for dispatched status
         for (const [mmpId, entries] of entriesByMmp.entries()) {
           if (!map[mmpId]) {
-            map[mmpId] = { exists: false, hasCosted: false, hasAssigned: false, hasInProgress: false, hasCompleted: false, hasRejected: false, hasDispatched: false, allApprovedAndCosted: false };
+            map[mmpId] = { exists: false, hasCosted: false, hasAssigned: false, hasInProgress: false, hasAccepted: false, hasCompleted: false, hasRejected: false, hasDispatched: false, allApprovedAndCosted: false };
           }
           
           // For "Approved & Costed", ALL entries must have cost > 0 AND status = 'verified'
@@ -1142,15 +1157,15 @@ const MMP = () => {
   }
 
   return (
-    <div className="space-y-10 min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-blue-100 dark:from-gray-900 dark:via-gray-950 dark:to-gray-900 py-8 px-2 md:px-8">
+    <div className="space-y-10 min-h-screen bg-slate-50 dark:bg-gray-900 py-8 px-2 md:px-8">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-gradient-to-r from-blue-600/90 to-blue-400/80 dark:from-blue-900 dark:to-blue-700 p-7 rounded-2xl shadow-xl border border-blue-100 dark:border-blue-900">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-blue-600 dark:bg-blue-900 p-7 rounded-2xl shadow-xl border border-blue-100 dark:border-blue-900">
         <div className="flex items-center gap-4">
           <Button variant="ghost" size="icon" onClick={() => navigate('/dashboard')} className="hover:bg-blue-100 dark:hover:bg-blue-900/40">
             <ChevronLeft className="h-5 w-5 text-white dark:text-blue-200" />
           </Button>
           <div>
-            <h1 className="text-3xl font-extrabold bg-gradient-to-r from-white to-blue-200 dark:from-blue-200 dark:to-blue-400 bg-clip-text text-transparent tracking-tight">MMP Management</h1>
+            <h1 className="text-3xl font-extrabold text-white tracking-tight">MMP Management</h1>
             <p className="text-blue-100 dark:text-blue-200/80 font-medium">
               {isAdmin || isICT
                 ? 'Upload, validate, and forward MMPs to Field Operations Managers'
@@ -1163,7 +1178,7 @@ const MMP = () => {
           </div>
         </div>
         {canCreate && (
-          <Button className="bg-gradient-to-r from-blue-700 to-blue-500 hover:from-blue-800 hover:to-blue-600 text-white shadow-lg hover:shadow-xl transition-all duration-300 px-6 py-2 rounded-full font-semibold" onClick={() => navigate('/mmp/upload')}>
+          <Button className="bg-blue-700 hover:bg-blue-800 text-white shadow-lg hover:shadow-xl transition-all duration-300 px-6 py-2 rounded-full font-semibold" onClick={() => navigate('/mmp/upload')}>
             <Upload className="h-5 w-5 mr-2" />
             Upload MMP
           </Button>
@@ -1198,7 +1213,7 @@ const MMP = () => {
             {!isCoordinator && (
               <TabsContent value="new">
                 {isFOM && (
-                  <div className="mb-4 flex flex-wrap gap-2 items-center">
+                  <div className="mb-4 flex flex-nowrap gap-2 items-center overflow-x-auto whitespace-nowrap">
                     <div className="text-sm font-medium text-muted-foreground mr-2">Subcategory:</div>
                     <Button variant={newFomSubTab === 'pending' ? 'default' : 'outline'} size="sm" onClick={() => setNewFomSubTab('pending')} className={newFomSubTab === 'pending' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''}>
                       MMPs Pending Verification
@@ -1217,7 +1232,7 @@ const MMP = () => {
             {!isCoordinator && (
               <TabsContent value="forwarded">
                 {(isAdmin || isICT || isFOM) && (
-                  <div className="mb-4 flex flex-wrap gap-2 items-center">
+                  <div className="mb-4 flex flex-nowrap gap-2 items-center overflow-x-auto whitespace-nowrap">
                     <div className="text-sm font-medium text-muted-foreground mr-2">Subcategory:</div>
                     <Button variant={forwardedSubTab === 'pending' ? 'default' : 'outline'} size="sm" onClick={() => setForwardedSubTab('pending')} className={forwardedSubTab === 'pending' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''}>
                       {isFOM ? 'Sites Pending Verification' : 'MMPs Pending Verification'}
@@ -1242,10 +1257,10 @@ const MMP = () => {
 
             <TabsContent value="verified">
               {(isAdmin || isICT || isFOM || isCoordinator) && (
-                <div className="mb-4 flex flex-wrap gap-2 items-center">
+                <div className="mb-4 flex flex-nowrap gap-2 items-center overflow-x-auto whitespace-nowrap">
                   <div className="text-sm font-medium text-muted-foreground mr-2">Subcategory:</div>
                   <Button variant={verifiedSubTab === 'newSites' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('newSites')} className={verifiedSubTab === 'newSites' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''}>
-                    New Sites Verified by Coordinators
+                    New Sites
                     <Badge variant="secondary" className="ml-2">
                       {newSitesVerifiedCount}
                     </Badge>
@@ -1258,6 +1273,18 @@ const MMP = () => {
                     Dispatched
                     <Badge variant="secondary" className="ml-2">{verifiedSubcategories.dispatched.length}</Badge>
                   </Button>
+                  {(isAdmin || isICT) && (
+                    <>
+                      <Button variant={verifiedSubTab === 'accepted' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('accepted')} className={verifiedSubTab === 'accepted' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''}>
+                        Accepted
+                        <Badge variant="secondary" className="ml-2">{verifiedSubcategories.accepted?.length || 0}</Badge>
+                      </Button>
+                      <Button variant={verifiedSubTab === 'ongoing' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('ongoing')} className={verifiedSubTab === 'ongoing' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''}>
+                        Ongoing
+                        <Badge variant="secondary" className="ml-2">{verifiedSubcategories.ongoing?.length || 0}</Badge>
+                      </Button>
+                    </>
+                  )}
                   <Button variant={verifiedSubTab === 'completed' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('completed')} className={verifiedSubTab === 'completed' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''}>
                     Completed
                     <Badge variant="secondary" className="ml-2">{verifiedSubcategories.completed.length}</Badge>
