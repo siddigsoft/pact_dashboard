@@ -60,13 +60,13 @@ const Auth = () => {
     { 
       icon: Shield, 
       label: "Enterprise Security", 
-      description: "SOC 2 Type II Certified",
+      description: "Enterprise-Grade Protection",
       color: "text-blue-500 dark:text-blue-400"
     },
     { 
       icon: Lock, 
       label: "Encrypted Data", 
-      description: "256-bit AES Encryption",
+      description: "Advanced Encryption",
       color: "text-orange-500 dark:text-orange-400"
     },
     { 
@@ -86,7 +86,7 @@ const Auth = () => {
   const platformStats = [
     { label: "Active Users", value: "10K+", icon: Users },
     { label: "Uptime", value: "99.9%", icon: Activity },
-    { label: "Protected", value: "SOC 2", icon: Shield }
+    { label: "Protected", value: "Secure", icon: Shield }
   ];
 
   return (
@@ -185,21 +185,6 @@ const Auth = () => {
                 </div>
               </div>
 
-              {/* Trust Badges */}
-              <div className="flex flex-wrap gap-2 pt-6 border-t">
-                <Badge variant="secondary" className="gap-1">
-                  <CheckCircle2 className="w-3 h-3" />
-                  ISO 27001
-                </Badge>
-                <Badge variant="secondary" className="gap-1">
-                  <CheckCircle2 className="w-3 h-3" />
-                  GDPR Compliant
-                </Badge>
-                <Badge variant="secondary" className="gap-1">
-                  <CheckCircle2 className="w-3 h-3" />
-                  HIPAA Ready
-                </Badge>
-              </div>
             </div>
 
             {/* Right Auth Form Column */}

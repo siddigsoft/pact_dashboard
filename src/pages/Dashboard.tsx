@@ -379,26 +379,6 @@ const Dashboard = () => {
               </div>
             </div>
 
-            {/* Tech Certifications */}
-            <div className="tech-badge flex items-center gap-1">
-              <CheckCircle2 className="w-3 h-3" />
-              <span>ISO 27001</span>
-            </div>
-
-            <div className="tech-badge flex items-center gap-1">
-              <Shield className="w-3 h-3" />
-              <span>SOC 2</span>
-            </div>
-
-            <div className="tech-badge flex items-center gap-1">
-              <Database className="w-3 h-3" />
-              <span>GDPR</span>
-            </div>
-
-            <div className="tech-badge flex items-center gap-1">
-              <HardDrive className="w-3 h-3" />
-              <span>AES-256</span>
-            </div>
           </section>
 
           {/* Executive KPIs - Compact 4-column */}
