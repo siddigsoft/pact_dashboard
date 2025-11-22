@@ -30,6 +30,7 @@ import {
 import { CreateProjectBudgetDialog } from '@/components/budget/CreateProjectBudgetDialog';
 import { CreateMMPBudgetDialog } from '@/components/budget/CreateMMPBudgetDialog';
 import { TopUpBudgetDialog } from '@/components/budget/TopUpBudgetDialog';
+import { ProjectBudgetCard, MMPBudgetCard } from '@/components/budget/BudgetCard';
 import { format } from 'date-fns';
 import { BUDGET_STATUS_COLORS, BUDGET_ALERT_SEVERITY_COLORS } from '@/types/budget';
 import { exportBudgetToPDF, exportBudgetToExcel, exportBudgetToCSV } from '@/utils/budget-export';
@@ -396,144 +397,72 @@ const BudgetPage = () => {
 
         {/* Project Budgets Tab */}
         <TabsContent value="projects" className="space-y-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Project Budgets</CardTitle>
-              {canManageBudgets && (
-                <CreateProjectBudgetDialog
-                  projectId="placeholder"
-                  projectName="Select Project"
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-bold">Project Budgets</h2>
+              <p className="text-muted-foreground">Manage and track project budget allocations</p>
+            </div>
+            {canManageBudgets && (
+              <CreateProjectBudgetDialog
+                projectId="placeholder"
+                projectName="Select Project"
+              />
+            )}
+          </div>
+          
+          {filteredProjectBudgets.length === 0 ? (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <DollarSign className="w-12 h-12 text-muted-foreground mb-4" />
+                <h3 className="text-lg font-semibold mb-2">No project budgets found</h3>
+                <p className="text-muted-foreground text-center max-w-md">
+                  Create your first project budget to start tracking and managing expenditures
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredProjectBudgets.map((budget) => (
+                <ProjectBudgetCard
+                  key={budget.id}
+                  budget={budget}
+                  projectName={`Project ${budget.fiscalYear}`}
                 />
-              )}
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Fiscal Year</TableHead>
-                    <TableHead>Period</TableHead>
-                    <TableHead className="text-right">Total Budget</TableHead>
-                    <TableHead className="text-right">Allocated</TableHead>
-                    <TableHead className="text-right">Spent</TableHead>
-                    <TableHead className="text-right">Remaining</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Utilization</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredProjectBudgets.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={8} className="text-center text-muted-foreground">
-                        No project budgets found
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    filteredProjectBudgets.map((budget) => {
-                      const utilizationPercent = budget.totalBudgetCents > 0
-                        ? ((budget.spentBudgetCents / budget.totalBudgetCents) * 100)
-                        : 0;
-
-                      return (
-                        <TableRow key={budget.id} data-testid={`row-project-budget-${budget.id}`}>
-                          <TableCell className="font-medium">FY {budget.fiscalYear}</TableCell>
-                          <TableCell className="capitalize">{budget.budgetPeriod.replace('_', ' ')}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(budget.totalBudgetCents)}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(budget.allocatedBudgetCents)}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(budget.spentBudgetCents)}</TableCell>
-                          <TableCell className="text-right font-semibold">{formatCurrency(budget.remainingBudgetCents)}</TableCell>
-                          <TableCell>
-                            <Badge variant={budget.status === 'active' ? 'default' : 'secondary'}>
-                              {budget.status}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              <Progress value={utilizationPercent} className="h-1.5 w-16" />
-                              <span className="text-sm">{utilizationPercent.toFixed(0)}%</span>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+              ))}
+            </div>
+          )}
         </TabsContent>
 
         {/* MMP Budgets Tab */}
         <TabsContent value="mmps" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>MMP Budgets</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>MMP</TableHead>
-                    <TableHead className="text-right">Allocated</TableHead>
-                    <TableHead className="text-right">Spent</TableHead>
-                    <TableHead className="text-right">Remaining</TableHead>
-                    <TableHead className="text-center">Sites</TableHead>
-                    <TableHead className="text-right">Avg/Site</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Utilization</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredMMPBudgets.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={9} className="text-center text-muted-foreground">
-                        No MMP budgets found
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    filteredMMPBudgets.map((budget) => {
-                      const utilizationPercent = budget.allocatedBudgetCents > 0
-                        ? ((budget.spentBudgetCents / budget.allocatedBudgetCents) * 100)
-                        : 0;
-
-                      return (
-                        <TableRow key={budget.id} data-testid={`row-mmp-budget-${budget.id}`}>
-                          <TableCell className="font-medium">MMP-{budget.mmpFileId.slice(0, 8)}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(budget.allocatedBudgetCents)}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(budget.spentBudgetCents)}</TableCell>
-                          <TableCell className="text-right font-semibold">{formatCurrency(budget.remainingBudgetCents)}</TableCell>
-                          <TableCell className="text-center">
-                            {budget.completedSites}/{budget.totalSites}
-                          </TableCell>
-                          <TableCell className="text-right">{formatCurrency(budget.averageCostPerSiteCents)}</TableCell>
-                          <TableCell>
-                            <Badge variant={budget.status === 'active' ? 'default' : 'secondary'}>
-                              {budget.status}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              <Progress value={utilizationPercent} className="h-1.5 w-16" />
-                              <span className="text-sm">{utilizationPercent.toFixed(0)}%</span>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            {canManageBudgets && (
-                              <TopUpBudgetDialog
-                                budgetId={budget.id}
-                                budgetName={`MMP-${budget.mmpFileId.slice(0, 8)}`}
-                                currentBalance={budget.remainingBudgetCents / 100}
-                              />
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-bold">MMP Budgets</h2>
+              <p className="text-muted-foreground">Track budget allocations for Monthly Monitoring Plans</p>
+            </div>
+          </div>
+          
+          {filteredMMPBudgets.length === 0 ? (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <BarChart3 className="w-12 h-12 text-muted-foreground mb-4" />
+                <h3 className="text-lg font-semibold mb-2">No MMP budgets found</h3>
+                <p className="text-muted-foreground text-center max-w-md">
+                  Allocate budgets to MMPs to track site visit costs and manage field operations
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredMMPBudgets.map((budget) => (
+                <MMPBudgetCard
+                  key={budget.id}
+                  budget={budget}
+                  mmpName={`MMP-${budget.mmpFileId.slice(0, 8)}`}
+                />
+              ))}
+            </div>
+          )}
         </TabsContent>
 
         {/* Transactions Tab */}
