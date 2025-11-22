@@ -654,10 +654,13 @@ const MMP = () => {
       try {
         // Use database count instead of loading all entries
         // Count entries with status = 'dispatched' OR dispatched_at is not null
+        // BUT exclude entries that are already accepted (status = 'accepted' or accepted_by is not null)
         const { count, error } = await supabase
           .from('mmp_site_entries')
           .select('*', { count: 'exact', head: true })
-          .or('status.ilike.dispatched,dispatched_at.not.is.null');
+          .or('status.ilike.dispatched,dispatched_at.not.is.null')
+          .not('status', 'ilike', 'accepted')
+          .is('accepted_by', null);
 
         if (error) throw error;
 
@@ -847,11 +850,14 @@ const MMP = () => {
       setLoadingDispatched(true);
       try {
         // Use database-level filtering: entries with status = 'dispatched' OR dispatched_at is not null
+        // BUT exclude entries that are already accepted (status = 'accepted' or accepted_by is not null)
         // Use or() to combine conditions at database level
         const { data: dispatchedEntries, error: allError } = await supabase
           .from('mmp_site_entries')
           .select('*')
           .or('status.ilike.dispatched,dispatched_at.not.is.null')
+          .not('status', 'ilike', 'accepted')
+          .is('accepted_by', null)
           .order('dispatched_at', { ascending: false })
           .limit(1000); // Limit to 1000 entries for performance
 
@@ -1477,7 +1483,7 @@ const MMP = () => {
                     Dispatched
                     <Badge variant="secondary" className="ml-2">{dispatchedCount}</Badge>
                   </Button>
-                  {(isAdmin || isICT) && (
+                  {(isAdmin || isICT || isFOM) && (
                     <>
                       <Button variant={verifiedSubTab === 'accepted' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('accepted')} className={verifiedSubTab === 'accepted' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''}>
                         Accepted
@@ -1780,6 +1786,8 @@ const MMP = () => {
                   .from('mmp_site_entries')
                   .select('*')
                   .or('status.ilike.dispatched,dispatched_at.not.is.null')
+                  .not('status', 'ilike', 'accepted')
+                  .is('accepted_by', null)
                   .order('dispatched_at', { ascending: false })
                   .limit(1000);
 
