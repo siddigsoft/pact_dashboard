@@ -268,7 +268,7 @@ export const OperationsZone: React.FC = () => {
 
         <TabsContent value="upcoming" className="mt-4 space-y-4">
           {upcomingVisits.length > 0 ? (
-            <UpcomingSiteVisitsCard siteVisits={upcomingVisits} />
+            <UpcomingSiteVisitsCard visits={upcomingVisits} />
           ) : (
             <Card>
               <CardContent className="p-8 text-center">
@@ -283,7 +283,7 @@ export const OperationsZone: React.FC = () => {
         </TabsContent>
 
         <TabsContent value="financial" className="mt-4 space-y-4">
-          <SiteVisitCostSummary />
+          <SiteVisitCostSummary visits={siteVisits} />
         </TabsContent>
 
         <TabsContent value="calendar" className="mt-4 space-y-4">
