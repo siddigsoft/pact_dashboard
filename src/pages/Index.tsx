@@ -260,20 +260,10 @@ const Index = () => {
                 Whether in remote areas or underground facilities, your teams stay productive and connected.
               </p>
             </div>
-            <div className="border-t pt-8 flex flex-col md:flex-row justify-center items-center gap-4">
+            <div className="border-t pt-8 text-center">
               <p className="text-sm text-muted-foreground" data-testid="text-copyright">
                 &copy; {new Date().getFullYear()} PACT Consultancy. All rights reserved.
               </p>
-              <div className="flex gap-4 text-sm text-muted-foreground">
-                <Badge variant="secondary" className="gap-2">
-                  <CheckCircle2 className="w-3 h-3" />
-                  SOC 2 Certified
-                </Badge>
-                <Badge variant="secondary" className="gap-2">
-                  <Shield className="w-3 h-3" />
-                  ISO 27001
-                </Badge>
-              </div>
             </div>
           </div>
         </footer>
