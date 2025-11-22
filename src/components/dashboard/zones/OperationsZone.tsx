@@ -618,6 +618,7 @@ export const OperationsZone: React.FC = () => {
                 <TableHeader className="sticky top-0 bg-background z-10">
                   <TableRow>
                     <TableHead className="w-[200px]">Site Name</TableHead>
+                    <TableHead>MMP Name</TableHead>
                     <TableHead>Location</TableHead>
                     <TableHead>Due Date</TableHead>
                     <TableHead>Status</TableHead>
@@ -637,6 +638,18 @@ export const OperationsZone: React.FC = () => {
                             <span className="text-sm">{visit.siteName}</span>
                             {visit.siteCode && (
                               <span className="text-xs text-muted-foreground">{visit.siteCode}</span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col">
+                            <span className="text-xs font-medium text-primary">
+                              {visit.mmpDetails?.mmpId || visit.projectName || 'N/A'}
+                            </span>
+                            {visit.mmpDetails?.projectName && visit.mmpDetails.mmpId && (
+                              <span className="text-[10px] text-muted-foreground truncate max-w-[120px]">
+                                {visit.mmpDetails.projectName}
+                              </span>
                             )}
                           </div>
                         </TableCell>
