@@ -20,6 +20,18 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
+**Comprehensive Budget System (November 22, 2025):**
+- Implemented complete budget tracking system for Projects and MMPs
+- Created database schema with 4 new tables: project_budgets, mmp_budgets, budget_transactions, budget_alerts
+- Built BudgetContext provider with real-time subscriptions and automatic spend tracking
+- Developed budget allocation dialogs for Projects, MMPs, and top-up functionality
+- Created comprehensive Budget Dashboard with analytics, charts, and alerts (80%/100% thresholds)
+- Integrated budget export functionality supporting PDF, Excel, and CSV formats (jspdf, jspdf-autotable, xlsx)
+- Added BudgetStatusBadge component integrated into MMPList for visual budget tracking
+- Enhanced MMP upload flow with optional post-upload budget allocation
+- Implemented multi-currency support (SDG/USD/EUR) with cents-based precision
+- All values stored in cents for financial accuracy and consistency with wallet system
+
 **Dashboard Reorganization (November 22, 2025):**
 - Implemented mission control dashboard layout with 6 categorized zones
 - Created DashboardCommandBar with persistent KPIs, status indicators, and quick actions
@@ -66,7 +78,7 @@ Preferred communication style: Simple, everyday language.
 - PostgreSQL database via Supabase
 - Row Level Security (RLS) policies for data protection
 - Real-time subscriptions for live updates
-- Schema includes 8+ core tables: profiles, user_roles, projects, mmp_files, site_visits, user_settings, data_visibility_settings, dashboard_settings
+- Schema includes 33+ tables including: profiles, user_roles, projects, mmp_files, site_visits, project_budgets, mmp_budgets, budget_transactions, budget_alerts, wallet_balances, wallet_transactions, user_settings, data_visibility_settings, dashboard_settings
 
 **Authentication:**
 - Supabase Auth with email/password
@@ -86,6 +98,12 @@ Preferred communication style: Simple, everyday language.
 - `projects`: Project metadata and team associations
 - `mmp_files`: MMP documents with site entries and verification status
 - `site_visits`: Visit records with assignment and completion tracking
+- `project_budgets`: Project-level budget allocations and tracking
+- `mmp_budgets`: MMP-level budget allocations linked to MMPs
+- `budget_transactions`: Detailed transaction log for budget spend tracking
+- `budget_alerts`: Automated alerts for budget thresholds (80%, 100%)
+- `wallet_balances`: Enumerator wallet balances for site visit compensation
+- `wallet_transactions`: Transaction history for wallet activities
 
 ### Authorization System
 
@@ -197,6 +215,8 @@ Preferred communication style: Simple, everyday language.
 - uuid for unique identifier generation
 - clsx/class-variance-authority for conditional classes
 - Leaflet for map components (site visit locations)
+- jspdf, jspdf-autotable for PDF export
+- xlsx for Excel export
 
 ### Deployment
 
