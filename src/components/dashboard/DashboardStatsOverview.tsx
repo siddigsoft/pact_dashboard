@@ -32,7 +32,7 @@ export const DashboardStatsOverview = () => {
 
   const { activeProjects, approvedMmps, completedVisits, pendingSiteVisits } = useDashboardStats();
   const { currentUser, roles } = useAppContext();
-  const isFinanceOrAdmin = roles?.includes('admin') || roles?.includes('financialAdmin');
+  const isFinanceOrAdmin = roles?.some(r => r.toLowerCase() === 'admin' || r.toLowerCase() === 'financialadmin');
 
   const { mmpFiles } = useMMP();
   const { siteVisits } = useSiteVisitContext();

@@ -93,16 +93,17 @@ export const DashboardZoneLayout: React.FC<DashboardZoneLayoutProps> = ({
         </Button>
       </div>
 
-      {/* Sidebar Navigation */}
+      {/* Sidebar Navigation - Compact Tech Style */}
       <aside 
         className={cn(
-          "fixed lg:sticky top-16 left-0 h-[calc(100vh-4rem)] bg-card border-r z-40 transition-transform duration-300",
-          "flex flex-col w-64 p-4 space-y-2",
+          "fixed lg:sticky top-16 left-0 h-[calc(100vh-4rem)] bg-gradient-to-b from-card via-card to-muted/20 border-r border-border/50 z-40 transition-all duration-300 backdrop-blur-sm",
+          "flex flex-col w-56 lg:w-64 p-3 space-y-1.5 shadow-lg",
           mobileNavOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         )}
       >
-        <div className="mb-4">
-          <h3 className="text-sm font-semibold text-muted-foreground px-3">Dashboard Zones</h3>
+        <div className="mb-2 px-2">
+          <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Command Zones</h3>
+          <div className="h-px bg-gradient-to-r from-primary/50 via-primary to-transparent mt-1" />
         </div>
 
         {availableZones.map((zone) => {
@@ -110,30 +111,59 @@ export const DashboardZoneLayout: React.FC<DashboardZoneLayoutProps> = ({
           const isActive = activeZone === zone.id;
 
           return (
-            <Button
+            <button
               key={zone.id}
-              variant={isActive ? "secondary" : "ghost"}
-              className={cn(
-                "w-full justify-start gap-3 h-auto py-3",
-                isActive && "bg-muted"
-              )}
               onClick={() => {
                 onZoneChange(zone.id);
                 setMobileNavOpen(false);
               }}
               data-testid={`button-zone-${zone.id}`}
+              className={cn(
+                "group relative w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg transition-all duration-200",
+                "border border-transparent hover:border-border/50",
+                isActive 
+                  ? "bg-gradient-to-r from-primary/20 to-primary/10 border-primary/30 shadow-sm" 
+                  : "hover:bg-muted/50 hover-elevate"
+              )}
             >
-              <Icon className={cn("h-5 w-5", zone.color)} />
-              <div className="flex flex-col items-start flex-1">
-                <span className="font-medium">{zone.label}</span>
-                <span className="text-xs text-muted-foreground">
+              {/* Active Indicator */}
+              {isActive && (
+                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-gradient-to-b from-primary via-primary to-primary/50 rounded-r-full" />
+              )}
+              
+              {/* Icon with glow effect when active */}
+              <div className={cn(
+                "flex items-center justify-center w-8 h-8 rounded-md transition-all",
+                isActive 
+                  ? "bg-background shadow-sm ring-1 ring-primary/20" 
+                  : "bg-muted/50 group-hover:bg-background"
+              )}>
+                <Icon className={cn(
+                  "h-4 w-4 transition-colors",
+                  isActive ? zone.color : "text-muted-foreground group-hover:text-foreground"
+                )} />
+              </div>
+              
+              {/* Text Content */}
+              <div className="flex flex-col items-start flex-1 min-w-0">
+                <span className={cn(
+                  "text-sm font-semibold truncate",
+                  isActive ? "text-foreground" : "text-muted-foreground group-hover:text-foreground"
+                )}>
+                  {zone.label}
+                </span>
+                <span className="text-[10px] text-muted-foreground truncate uppercase tracking-wide">
                   {zone.description}
                 </span>
               </div>
+              
+              {/* Arrow indicator for active */}
               {isActive && (
-                <div className="w-1.5 h-8 bg-primary rounded-full" />
+                <div className="flex-shrink-0">
+                  <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                </div>
               )}
-            </Button>
+            </button>
           );
         })}
       </aside>
