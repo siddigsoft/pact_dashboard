@@ -840,9 +840,9 @@ const MMPUpload = () => {
                           </FormControl>
                           <SelectContent>
                             {projectsLoading ? (
-                              <SelectItem value="" disabled>Loading projects...</SelectItem>
+                              <SelectItem value="__LOADING__" disabled>Loading projects...</SelectItem>
                             ) : projects.length === 0 ? (
-                              <SelectItem value="" disabled>No projects available</SelectItem>
+                              <SelectItem value="__NONE__" disabled>No projects available</SelectItem>
                             ) : (
                               projects.map((project) => (
                                 <SelectItem key={project.id} value={project.id}>

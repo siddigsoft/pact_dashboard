@@ -79,19 +79,23 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
   const uniqueStates = useMemo(() => {
     const states = new Set<string>();
     siteEntries.forEach(entry => {
-      if (entry.state) states.add(entry.state);
+      const state = entry.state || entry.state_name;
+      if (state && state.trim() !== '') {
+        states.add(state.trim());
+      }
     });
-    return Array.from(states).sort();
+    return Array.from(states).filter(s => s && s.trim() !== '').sort();
   }, [siteEntries]);
 
   const uniqueLocalities = useMemo(() => {
     const localities = new Set<string>();
     siteEntries.forEach(entry => {
-      if (entry.locality && (!selectedState || entry.state === selectedState)) {
-        localities.add(entry.locality);
+      const locality = entry.locality || entry.locality_name;
+      if (locality && locality.trim() !== '' && (!selectedState || entry.state === selectedState)) {
+        localities.add(locality.trim());
       }
     });
-    return Array.from(localities).sort();
+    return Array.from(localities).filter(loc => loc && loc.trim() !== '').sort();
   }, [siteEntries, selectedState]);
 
   // Filter collectors based on dispatch type
@@ -119,9 +123,15 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
   // Filter site entries based on selection
   const filteredSiteEntries = useMemo(() => {
     if (dispatchType === 'state' && selectedState) {
-      return siteEntries.filter(entry => entry.state === selectedState);
+      return siteEntries.filter(entry => {
+        const state = entry.state || entry.state_name;
+        return state && state.trim() === selectedState;
+      });
     } else if (dispatchType === 'locality' && selectedLocality) {
-      return siteEntries.filter(entry => entry.locality === selectedLocality);
+      return siteEntries.filter(entry => {
+        const locality = entry.locality || entry.locality_name;
+        return locality && locality.trim() === selectedLocality;
+      });
     }
     return siteEntries;
   }, [siteEntries, dispatchType, selectedState, selectedLocality]);
@@ -459,9 +469,13 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
                   <SelectValue placeholder="Select a state" />
                 </SelectTrigger>
                 <SelectContent>
-                  {uniqueStates.map(state => (
-                    <SelectItem key={state} value={state}>{state}</SelectItem>
-                  ))}
+                  {uniqueStates.length > 0 ? (
+                    uniqueStates.map(state => (
+                      <SelectItem key={state} value={state}>{state}</SelectItem>
+                    ))
+                  ) : (
+                    <SelectItem value="no-states" disabled>No states found</SelectItem>
+                  )}
                 </SelectContent>
               </Select>
               {selectedState && (
@@ -476,12 +490,12 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
             <>
               <div className="space-y-2">
                 <Label>Select State (optional)</Label>
-                <Select value={selectedState} onValueChange={setSelectedState}>
+                <Select value={selectedState || '__ALL__'} onValueChange={(v) => setSelectedState(v === '__ALL__' ? '' : v)}>
                   <SelectTrigger>
                     <SelectValue placeholder="All states" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All states</SelectItem>
+                    <SelectItem value="__ALL__">All states</SelectItem>
                     {uniqueStates.map(state => (
                       <SelectItem key={state} value={state}>{state}</SelectItem>
                     ))}
@@ -494,11 +508,15 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
                   <SelectTrigger>
                     <SelectValue placeholder="Select a locality" />
                   </SelectTrigger>
-                  <SelectContent>
-                    {uniqueLocalities.map(locality => (
+                <SelectContent>
+                  {uniqueLocalities.length > 0 ? (
+                    uniqueLocalities.map(locality => (
                       <SelectItem key={locality} value={locality}>{locality}</SelectItem>
-                    ))}
-                  </SelectContent>
+                    ))
+                  ) : (
+                    <SelectItem value="no-localities" disabled>No localities found</SelectItem>
+                  )}
+                </SelectContent>
                 </Select>
                 {selectedLocality && (
                   <p className="text-sm text-muted-foreground">

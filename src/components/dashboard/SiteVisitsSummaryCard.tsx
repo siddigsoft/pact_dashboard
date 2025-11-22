@@ -61,29 +61,29 @@ export const SiteVisitsSummaryCard: React.FC<{ showOngoingBreakdown?: boolean }>
 
       <CardContent>
         <div className="flex gap-2 mb-2">
-          <Select value={hub} onValueChange={setHub}>
+          <Select value={hub || 'all'} onValueChange={(v) => setHub(v === 'all' ? '' : v)}>
             <SelectTrigger className="w-32">Hub</SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All</SelectItem>
+              <SelectItem value="all">All</SelectItem>
               <SelectItem value="KRT">KRT</SelectItem>
               <SelectItem value="ELF">ELF</SelectItem>
             </SelectContent>
           </Select>
 
-          <Select value={region} onValueChange={setRegion}>
+          <Select value={region || 'all'} onValueChange={(v) => setRegion(v === 'all' ? '' : v)}>
             <SelectTrigger className="w-40">Region</SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All</SelectItem>
+              <SelectItem value="all">All</SelectItem>
               <SelectItem value="Central">Central</SelectItem>
               <SelectItem value="East">East</SelectItem>
               <SelectItem value="Khartoum">Khartoum</SelectItem>
             </SelectContent>
           </Select>
 
-          <Select value={date} onValueChange={setDate}>
+          <Select value={date || 'all'} onValueChange={(v) => setDate(v === 'all' ? '' : v)}>
             <SelectTrigger className="w-40">Month</SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All</SelectItem>
+              <SelectItem value="all">All</SelectItem>
               {[0,1,2].map(i => {
                 const d = new Date(); d.setMonth(d.getMonth() - i);
                 return <SelectItem key={i} value={format(d, 'yyyy-MM')}>{format(d, 'MMMM yyyy')}</SelectItem>;
