@@ -556,14 +556,84 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         });
       });
 
-      addNotification({
-        userId: currentUser.id,
-        title: "Payment Received",
-        message: `You have completed the site visit at ${siteVisit.siteName}.`,
-        type: "success",
-        relatedEntityId: siteVisitId,
-        relatedEntityType: "siteVisit",
-      });
+      try {
+        const { data: costData, error: costError } = await supabase
+          .from('site_visit_costs')
+          .select('*')
+          .eq('site_visit_id', siteVisitId)
+          .single();
+
+        if (costData && !costError) {
+          const totalCost = (
+            parseFloat(costData.transportation_cost || 0) +
+            parseFloat(costData.accommodation_cost || 0) +
+            parseFloat(costData.meal_allowance || 0) +
+            parseFloat(costData.other_costs || 0)
+          );
+
+          if (totalCost > 0) {
+            const { data: walletData, error: walletError } = await supabase
+              .from('wallets')
+              .select('*')
+              .eq('user_id', assignedUserId)
+              .single();
+
+            let walletId = walletData?.id;
+            let currentBalance = 0;
+
+            if (!walletData || walletError) {
+              const { data: newWallet, error: createError } = await supabase
+                .from('wallets')
+                .insert({
+                  user_id: assignedUserId,
+                  balances: { SDG: totalCost },
+                  total_earned: totalCost,
+                })
+                .select()
+                .single();
+
+              if (createError) throw createError;
+              walletId = newWallet.id;
+            } else {
+              currentBalance = parseFloat(walletData.balances?.SDG || 0);
+              const newBalance = currentBalance + totalCost;
+              
+              await supabase
+                .from('wallets')
+                .update({
+                  balances: { ...walletData.balances, SDG: newBalance },
+                  total_earned: parseFloat(walletData.total_earned || 0) + totalCost,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('id', walletId);
+            }
+
+            await supabase.from('wallet_transactions').insert({
+              wallet_id: walletId,
+              user_id: assignedUserId,
+              type: 'site_visit_completion',
+              amount: totalCost,
+              currency: 'SDG',
+              site_visit_id: siteVisitId,
+              description: `Site visit completed: ${siteVisit.siteName}`,
+              balance_before: currentBalance,
+              balance_after: currentBalance + totalCost,
+              created_by: currentUser.id,
+            });
+
+            addNotification({
+              userId: assignedUserId,
+              title: "Payment Received",
+              message: `${totalCost.toFixed(2)} SDG added to your wallet for completing ${siteVisit.siteName}`,
+              type: "success",
+              relatedEntityId: siteVisitId,
+              relatedEntityType: "siteVisit",
+            });
+          }
+        }
+      } catch (walletErr) {
+        console.error('Failed to add wallet payment:', walletErr);
+      }
 
       toast({
         title: "Site visit completed",

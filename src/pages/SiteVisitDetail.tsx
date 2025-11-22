@@ -10,7 +10,7 @@ import AssignCollectorButton from "@/components/site-visit/AssignCollectorButton
 import { useSiteVisitContext } from "@/context/siteVisit/SiteVisitContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { MapPin, Users, Navigation, ArrowRight, BarChart3, Trash2 } from "lucide-react";
+import { MapPin, Users, Navigation, ArrowRight, BarChart3, Trash2, DollarSign } from "lucide-react";
 import { useUser } from "@/context/user/UserContext";
 import { Badge } from "@/components/ui/badge";
 import { calculateDistance } from "@/utils/collectorUtils";
@@ -26,6 +26,8 @@ import {
   AlertDialogDescription, 
   AlertDialogTrigger 
 } from "@/components/ui/alert-dialog";
+import { SiteVisitCostDialog } from "@/components/wallet/SiteVisitCostDialog";
+import { useAuthorization } from "@/hooks/use-authorization";
 
 const SiteVisitDetail = () => {
   const navigate = useNavigate();
@@ -37,6 +39,8 @@ const SiteVisitDetail = () => {
   const { users } = useUser();
   const [showMap, setShowMap] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [costDialogOpen, setCostDialogOpen] = useState(false);
+  const { hasAnyRole } = useAuthorization();
   
   useEffect(() => {
     const fetchSiteVisit = () => {
@@ -183,6 +187,19 @@ const SiteVisitDetail = () => {
         <div className="space-y-6">
           {/* Action Buttons */}
           <div className="flex flex-wrap gap-3 justify-end">
+            {hasAnyRole(['admin', 'ict']) && (
+              <Button 
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={() => setCostDialogOpen(true)}
+                data-testid="button-assign-cost"
+              >
+                <DollarSign className="h-4 w-4" />
+                Assign Cost
+              </Button>
+            )}
+
             {siteVisit.status === "pending" || siteVisit.status === "permitVerified" ? (
               <AssignCollectorButton 
                 siteVisit={siteVisit} 
@@ -217,6 +234,16 @@ const SiteVisitDetail = () => {
               </AlertDialogContent>
             </AlertDialog>
           </div>
+
+          {/* Cost Assignment Dialog */}
+          {id && (
+            <SiteVisitCostDialog
+              open={costDialogOpen}
+              onOpenChange={setCostDialogOpen}
+              siteVisitId={id}
+              siteName={siteVisit.siteName}
+            />
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="md:col-span-2 space-y-6">

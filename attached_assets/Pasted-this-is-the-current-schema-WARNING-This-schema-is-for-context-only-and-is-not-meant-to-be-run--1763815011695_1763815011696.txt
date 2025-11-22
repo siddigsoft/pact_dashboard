@@ -1,0 +1,505 @@
+this is the current schema -- WARNING: This schema is for context only and is not meant to be run.
+-- Table order and constraints may not be valid for execution.
+
+CREATE TABLE public.chat_message_reads (
+  message_id uuid NOT NULL,
+  user_id uuid NOT NULL,
+  read_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT chat_message_reads_pkey PRIMARY KEY (message_id, user_id),
+  CONSTRAINT chat_message_reads_message_id_fkey FOREIGN KEY (message_id) REFERENCES public.chat_messages(id),
+  CONSTRAINT chat_message_reads_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id)
+);
+CREATE TABLE public.chat_messages (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  chat_id uuid NOT NULL,
+  sender_id uuid NOT NULL,
+  content text,
+  content_type text NOT NULL DEFAULT 'text'::text CHECK (content_type = ANY (ARRAY['text'::text, 'image'::text, 'file'::text, 'location'::text, 'audio'::text])),
+  attachments jsonb,
+  metadata jsonb,
+  status text NOT NULL DEFAULT 'sent'::text CHECK (status = ANY (ARRAY['sent'::text, 'delivered'::text, 'read'::text, 'failed'::text])),
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT chat_messages_pkey PRIMARY KEY (id),
+  CONSTRAINT chat_messages_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES public.chats(id),
+  CONSTRAINT chat_messages_sender_id_fkey FOREIGN KEY (sender_id) REFERENCES public.profiles(id)
+);
+CREATE TABLE public.chat_participants (
+  chat_id uuid NOT NULL,
+  user_id uuid NOT NULL,
+  joined_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT chat_participants_pkey PRIMARY KEY (chat_id, user_id),
+  CONSTRAINT chat_participants_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES public.chats(id),
+  CONSTRAINT chat_participants_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id)
+);
+CREATE TABLE public.chats (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  name text NOT NULL DEFAULT 'Chat'::text,
+  type text NOT NULL CHECK (type = ANY (ARRAY['private'::text, 'group'::text, 'state-group'::text])),
+  is_group boolean NOT NULL DEFAULT false,
+  created_by uuid,
+  state_id text,
+  related_entity_id text,
+  related_entity_type text CHECK (related_entity_type = ANY (ARRAY['mmpFile'::text, 'project'::text])),
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  pair_key text,
+  CONSTRAINT chats_pkey PRIMARY KEY (id),
+  CONSTRAINT chats_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id)
+);
+CREATE TABLE public.comprehensive_monitoring_checklists (
+  id text NOT NULL,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  user_id uuid,
+  enumerator_name text NOT NULL,
+  enumerator_contact text NOT NULL,
+  team_leader text NOT NULL,
+  location_hub text NOT NULL,
+  site_name_id text NOT NULL,
+  visit_date timestamp with time zone NOT NULL,
+  visit_time text NOT NULL,
+  activities_monitored ARRAY NOT NULL,
+  activity_monitoring jsonb DEFAULT '{}'::jsonb,
+  activity_priorities jsonb DEFAULT '{}'::jsonb,
+  activity_photos ARRAY DEFAULT '{}'::text[],
+  distribution_monitoring jsonb DEFAULT '{}'::jsonb,
+  distribution_photos ARRAY DEFAULT '{}'::text[],
+  post_distribution_monitoring jsonb DEFAULT '{}'::jsonb,
+  post_distribution_photos ARRAY DEFAULT '{}'::text[],
+  post_harvest_loss jsonb DEFAULT '{}'::jsonb,
+  post_harvest_photos ARRAY DEFAULT '{}'::text[],
+  market_diversion_monitoring jsonb DEFAULT '{}'::jsonb,
+  market_diversion_photos ARRAY DEFAULT '{}'::text[],
+  additional_notes text DEFAULT ''::text,
+  is_synced boolean DEFAULT true,
+  last_modified timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT comprehensive_monitoring_checklists_pkey PRIMARY KEY (id),
+  CONSTRAINT comprehensive_monitoring_checklists_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.dashboard_settings (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid,
+  layout jsonb,
+  widget_order ARRAY,
+  last_updated timestamp with time zone DEFAULT now(),
+  CONSTRAINT dashboard_settings_pkey PRIMARY KEY (id),
+  CONSTRAINT dashboard_settings_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id)
+);
+CREATE TABLE public.data_visibility_settings (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid,
+  options jsonb,
+  last_updated timestamp with time zone DEFAULT now(),
+  CONSTRAINT data_visibility_settings_pkey PRIMARY KEY (id),
+  CONSTRAINT data_visibility_settings_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id)
+);
+CREATE TABLE public.equipment (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  name text NOT NULL,
+  description text,
+  category text,
+  status text,
+  location text,
+  last_inspection timestamp without time zone,
+  next_inspection timestamp without time zone,
+  is_synced boolean DEFAULT false,
+  last_modified timestamp without time zone DEFAULT now(),
+  CONSTRAINT equipment_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.feedback (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid,
+  user_email text,
+  user_name text,
+  page_url text,
+  page_name text,
+  reaction text,
+  feedback_text text,
+  category text DEFAULT 'general'::text,
+  priority text DEFAULT 'medium'::text,
+  status text DEFAULT 'new'::text,
+  assigned_to uuid,
+  internal_notes text,
+  browser_info jsonb,
+  device_info jsonb,
+  session_info jsonb,
+  ip_address inet,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  resolved_at timestamp with time zone,
+  resolved_by uuid,
+  CONSTRAINT feedback_pkey PRIMARY KEY (id),
+  CONSTRAINT feedback_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id),
+  CONSTRAINT feedback_assigned_to_fkey FOREIGN KEY (assigned_to) REFERENCES public.profiles(id),
+  CONSTRAINT feedback_resolved_by_fkey FOREIGN KEY (resolved_by) REFERENCES public.profiles(id)
+);
+CREATE TABLE public.incident_reports (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  title text NOT NULL,
+  description text,
+  location text,
+  latitude double precision,
+  longitude double precision,
+  reported_by uuid,
+  status text,
+  severity text,
+  date_reported timestamp without time zone DEFAULT now(),
+  is_synced boolean DEFAULT false,
+  last_modified timestamp without time zone DEFAULT now(),
+  user_id uuid,
+  CONSTRAINT incident_reports_pkey PRIMARY KEY (id),
+  CONSTRAINT incident_reports_reported_by_fkey FOREIGN KEY (reported_by) REFERENCES public.profiles(id),
+  CONSTRAINT incident_reports_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.location_logs (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  site_visit_id uuid,
+  latitude double precision NOT NULL,
+  longitude double precision NOT NULL,
+  timestamp timestamp without time zone DEFAULT now(),
+  accuracy double precision,
+  is_synced boolean DEFAULT false,
+  last_modified timestamp without time zone DEFAULT now(),
+  altitude double precision,
+  speed double precision,
+  heading double precision,
+  user_id uuid,
+  visit_id uuid,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT location_logs_pkey PRIMARY KEY (id),
+  CONSTRAINT location_logs_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id),
+  CONSTRAINT location_logs_site_visit_id_fkey FOREIGN KEY (site_visit_id) REFERENCES public.mmp_site_entries(id),
+  CONSTRAINT location_logs_visit_id_fkey FOREIGN KEY (visit_id) REFERENCES public.mmp_site_entries(id)
+);
+CREATE TABLE public.mmp_files (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  name text,
+  uploaded_at timestamp with time zone,
+  status text,
+  entries integer,
+  processed_entries integer,
+  mmp_id text,
+  version jsonb,
+  site_entries jsonb,
+  workflow jsonb,
+  project_id uuid,
+  file_path text,
+  original_filename text,
+  file_url text,
+  created_at timestamp with time zone DEFAULT now(),
+  approved_by text,
+  approved_at timestamp with time zone,
+  verified_by text,
+  verified_at timestamp with time zone,
+  activities jsonb,
+  permits jsonb,
+  updated_at timestamp with time zone DEFAULT now(),
+  cp_verification jsonb,
+  archivedby text,
+  archivedat timestamp with time zone,
+  approvedby text,
+  approvedat timestamp with time zone,
+  rejectionreason text,
+  uploaded_by text,
+  hub text,
+  month text,
+  CONSTRAINT mmp_files_pkey PRIMARY KEY (id),
+  CONSTRAINT mmp_files_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id)
+);
+CREATE TABLE public.mmp_site_entries (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  mmp_file_id uuid NOT NULL,
+  site_code text,
+  hub_office text,
+  state text,
+  locality text,
+  site_name text,
+  cp_name text,
+  visit_type text,
+  visit_date text,
+  main_activity text,
+  activity_at_site text,
+  monitoring_by text,
+  survey_tool text,
+  use_market_diversion boolean,
+  use_warehouse_monitoring boolean,
+  comments text,
+  additional_data jsonb DEFAULT '{}'::jsonb,
+  status text DEFAULT 'Pending'::text,
+  created_at timestamp with time zone DEFAULT now(),
+  cost numeric,
+  verification_notes text,
+  verified_by text,
+  verified_at timestamp with time zone,
+  dispatched_by text,
+  dispatched_at timestamp with time zone,
+  updated_at timestamp with time zone DEFAULT now(),
+  enumerator_fee numeric,
+  transport_fee numeric,
+  accepted_by text,
+  accepted_at timestamp with time zone,
+  CONSTRAINT mmp_site_entries_pkey PRIMARY KEY (id),
+  CONSTRAINT mmp_site_entries_mmp_file_id_fkey FOREIGN KEY (mmp_file_id) REFERENCES public.mmp_files(id)
+);
+CREATE TABLE public.mmp_site_rejections (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  mmp_site_entry_id uuid NOT NULL,
+  site_code text,
+  site_name text,
+  rejected_by uuid,
+  rejection_reason text NOT NULL,
+  rejected_at timestamp with time zone DEFAULT now(),
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT mmp_site_rejections_pkey PRIMARY KEY (id),
+  CONSTRAINT mmp_site_rejections_mmp_site_entry_id_fkey FOREIGN KEY (mmp_site_entry_id) REFERENCES public.mmp_site_entries(id),
+  CONSTRAINT mmp_site_rejections_rejected_by_fkey FOREIGN KEY (rejected_by) REFERENCES auth.users(id)
+);
+CREATE TABLE public.notifications (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  title text NOT NULL,
+  message text NOT NULL,
+  type text NOT NULL CHECK (type = ANY (ARRAY['info'::text, 'success'::text, 'warning'::text, 'error'::text])),
+  is_read boolean NOT NULL DEFAULT false,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  link text,
+  related_entity_id text,
+  related_entity_type text CHECK (related_entity_type = ANY (ARRAY['mmpFile'::text, 'transaction'::text, 'chat'::text, 'user'::text])),
+  CONSTRAINT notifications_pkey PRIMARY KEY (id),
+  CONSTRAINT notifications_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id)
+);
+CREATE TABLE public.payout_requests (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  amount_cents bigint NOT NULL CHECK (amount_cents > 0),
+  method USER-DEFINED NOT NULL,
+  destination jsonb NOT NULL DEFAULT '{}'::jsonb,
+  status USER-DEFINED NOT NULL DEFAULT 'requested'::payout_status,
+  requested_at timestamp with time zone NOT NULL DEFAULT now(),
+  decided_at timestamp with time zone,
+  decided_by uuid,
+  paid_at timestamp with time zone,
+  CONSTRAINT payout_requests_pkey PRIMARY KEY (id),
+  CONSTRAINT payout_requests_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id),
+  CONSTRAINT payout_requests_decided_by_fkey FOREIGN KEY (decided_by) REFERENCES public.profiles(id)
+);
+CREATE TABLE public.permissions (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  role_id uuid,
+  resource character varying NOT NULL CHECK (resource::text = ANY (ARRAY['users'::text, 'roles'::text, 'permissions'::text, 'projects'::text, 'mmp'::text, 'site_visits'::text, 'finances'::text, 'reports'::text, 'settings'::text])),
+  action character varying NOT NULL CHECK (action::text = ANY (ARRAY['create'::text, 'read'::text, 'update'::text, 'delete'::text, 'approve'::text, 'assign'::text])),
+  conditions jsonb,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT permissions_pkey PRIMARY KEY (id),
+  CONSTRAINT permissions_role_id_fkey FOREIGN KEY (role_id) REFERENCES public.roles(id)
+);
+CREATE TABLE public.profiles (
+  id uuid NOT NULL,
+  email text,
+  username text,
+  full_name text,
+  role text,
+  avatar_url text,
+  hub_id text,
+  state_id text,
+  locality_id text,
+  employee_id text,
+  phone text,
+  status text DEFAULT 'pending'::text,
+  availability text,
+  location jsonb,
+  location_sharing boolean DEFAULT false,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  bank_account jsonb,
+  CONSTRAINT profiles_pkey PRIMARY KEY (id),
+  CONSTRAINT profiles_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id)
+);
+CREATE TABLE public.project_activities (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  project_id uuid,
+  name text,
+  description text,
+  start_date date,
+  end_date date,
+  status text,
+  is_active boolean DEFAULT true,
+  assigned_to uuid,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT project_activities_pkey PRIMARY KEY (id),
+  CONSTRAINT project_activities_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id)
+);
+CREATE TABLE public.projects (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  name text NOT NULL,
+  project_code text,
+  description text,
+  project_type text,
+  status text,
+  start_date date,
+  end_date date,
+  budget jsonb,
+  location jsonb,
+  team jsonb,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT projects_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.report_photos (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  report_id uuid,
+  photo_url text NOT NULL,
+  created_at timestamp without time zone DEFAULT now(),
+  deleted_at timestamp without time zone,
+  storage_path text,
+  is_synced boolean DEFAULT false,
+  last_modified timestamp without time zone DEFAULT now(),
+  CONSTRAINT report_photos_pkey PRIMARY KEY (id),
+  CONSTRAINT report_photos_report_id_fkey FOREIGN KEY (report_id) REFERENCES public.reports(id)
+);
+CREATE TABLE public.reports (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  site_visit_id uuid,
+  notes text NOT NULL,
+  submitted_at timestamp without time zone DEFAULT now(),
+  is_synced boolean DEFAULT false,
+  last_modified timestamp without time zone DEFAULT now(),
+  CONSTRAINT reports_pkey PRIMARY KEY (id),
+  CONSTRAINT reports_site_visit_id_fkey FOREIGN KEY (site_visit_id) REFERENCES public.mmp_site_entries(id)
+);
+CREATE TABLE public.roles (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  name character varying NOT NULL UNIQUE,
+  display_name character varying NOT NULL,
+  description text,
+  is_system_role boolean DEFAULT false,
+  is_active boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  created_by uuid,
+  CONSTRAINT roles_pkey PRIMARY KEY (id),
+  CONSTRAINT roles_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id)
+);
+CREATE TABLE public.safety_checklists (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  title text NOT NULL,
+  items jsonb,
+  completed_by uuid,
+  site_visit_id uuid,
+  completed_at timestamp without time zone,
+  is_synced boolean DEFAULT false,
+  last_modified timestamp without time zone DEFAULT now(),
+  CONSTRAINT safety_checklists_pkey PRIMARY KEY (id),
+  CONSTRAINT safety_checklists_completed_by_fkey FOREIGN KEY (completed_by) REFERENCES public.profiles(id),
+  CONSTRAINT safety_checklists_site_visit_id_fkey FOREIGN KEY (site_visit_id) REFERENCES public.mmp_site_entries(id)
+);
+CREATE TABLE public.site_locations (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  site_id uuid NOT NULL UNIQUE,
+  user_id uuid,
+  latitude double precision NOT NULL,
+  longitude double precision NOT NULL,
+  accuracy double precision,
+  recorded_at timestamp with time zone NOT NULL DEFAULT now(),
+  notes text,
+  geom USER-DEFINED DEFAULT 
+CASE
+    WHEN ((latitude IS NOT NULL) AND (longitude IS NOT NULL)) THEN (st_setsrid(st_makepoint(longitude, latitude), 4326))::geography
+    ELSE NULL::geography
+END,
+  CONSTRAINT site_locations_pkey PRIMARY KEY (id),
+  CONSTRAINT site_locations_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id),
+  CONSTRAINT site_locations_site_id_fkey FOREIGN KEY (site_id) REFERENCES public.mmp_site_entries(id)
+);
+CREATE TABLE public.spatial_ref_sys (
+  srid integer NOT NULL CHECK (srid > 0 AND srid <= 998999),
+  auth_name character varying,
+  auth_srid integer,
+  srtext character varying,
+  proj4text character varying,
+  CONSTRAINT spatial_ref_sys_pkey PRIMARY KEY (srid)
+);
+CREATE TABLE public.sub_activities (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  activity_id uuid,
+  name text,
+  description text,
+  status text,
+  is_active boolean DEFAULT true,
+  due_date date,
+  assigned_to uuid,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT sub_activities_pkey PRIMARY KEY (id),
+  CONSTRAINT sub_activities_activity_id_fkey FOREIGN KEY (activity_id) REFERENCES public.project_activities(id)
+);
+CREATE TABLE public.user_roles (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid,
+  role text CHECK (role IS NULL OR (role = ANY (ARRAY['admin'::text, 'ict'::text, 'fom'::text, 'financialAdmin'::text, 'supervisor'::text, 'coordinator'::text, 'dataCollector'::text, 'reviewer'::text]))),
+  created_at timestamp with time zone DEFAULT now(),
+  role_id uuid,
+  assigned_by uuid,
+  assigned_at timestamp with time zone DEFAULT now(),
+  status text DEFAULT 'offline'::text CHECK (status = ANY (ARRAY['online'::text, 'offline'::text])),
+  CONSTRAINT user_roles_pkey PRIMARY KEY (id),
+  CONSTRAINT user_roles_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id),
+  CONSTRAINT user_roles_role_id_fkey FOREIGN KEY (role_id) REFERENCES public.roles(id),
+  CONSTRAINT user_roles_assigned_by_fkey FOREIGN KEY (assigned_by) REFERENCES public.profiles(id)
+);
+CREATE TABLE public.user_settings (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid,
+  settings jsonb,
+  last_updated timestamp with time zone DEFAULT now(),
+  CONSTRAINT user_settings_pkey PRIMARY KEY (id),
+  CONSTRAINT user_settings_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id)
+);
+CREATE TABLE public.visit_status (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  site_visit_id uuid,
+  status text NOT NULL,
+  updated_at timestamp without time zone DEFAULT now(),
+  updated_by uuid,
+  is_synced boolean DEFAULT false,
+  last_modified timestamp without time zone DEFAULT now(),
+  CONSTRAINT visit_status_pkey PRIMARY KEY (id),
+  CONSTRAINT visit_status_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.profiles(id),
+  CONSTRAINT visit_status_site_visit_id_fkey FOREIGN KEY (site_visit_id) REFERENCES public.mmp_site_entries(id)
+);
+CREATE TABLE public.wallet_settings (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid,
+  notification_prefs jsonb,
+  auto_withdraw boolean DEFAULT false,
+  last_updated timestamp with time zone DEFAULT now(),
+  CONSTRAINT wallet_settings_pkey PRIMARY KEY (id),
+  CONSTRAINT wallet_settings_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id)
+);
+CREATE TABLE public.wallet_transactions (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  amount_cents bigint NOT NULL CHECK (amount_cents >= 0),
+  currency text NOT NULL DEFAULT 'SDG'::text,
+  type USER-DEFINED NOT NULL,
+  status USER-DEFINED NOT NULL DEFAULT 'pending'::wallet_tx_status,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  posted_at timestamp with time zone,
+  memo text,
+  related_site_visit_id uuid,
+  visit_code text,
+  CONSTRAINT wallet_transactions_pkey PRIMARY KEY (id),
+  CONSTRAINT wallet_transactions_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id),
+  CONSTRAINT wallet_transactions_related_site_visit_id_fkey FOREIGN KEY (related_site_visit_id) REFERENCES public.mmp_site_entries(id)
+);
+CREATE TABLE public.wallets (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL UNIQUE,
+  currency text NOT NULL DEFAULT 'SDG'::text,
+  balance_cents bigint NOT NULL DEFAULT 0,
+  total_earned_cents bigint NOT NULL DEFAULT 0,
+  total_paid_out_cents bigint NOT NULL DEFAULT 0,
+  pending_payout_cents bigint NOT NULL DEFAULT 0,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT wallets_pkey PRIMARY KEY (id),
+  CONSTRAINT wallets_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id)
+);
