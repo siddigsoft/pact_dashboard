@@ -16,7 +16,7 @@ const LoginBanner = ({ isMobile = false }) => {
       </div>
     </div>
   ) : (
-    <div className="md:w-1/2 hidden md:block p-8 bg-gradient-to-br from-[#7E69AB]/40 to-[#9b87f5]/20 rounded-l-lg">
+  <div className="md:w-1/2 hidden md:block p-8 bg-indigo-100 rounded-l-lg">
       <div className="space-y-8">
         <div className="flex flex-col items-center mb-8">
           <div className="h-20 w-20 rounded-full bg-[#9b87f5]/50 flex items-center justify-center mb-4 shadow-lg transform hover:scale-105 transition-all duration-300">

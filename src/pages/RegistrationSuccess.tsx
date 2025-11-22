@@ -35,11 +35,11 @@ const RegistrationSuccess = () => {
   ];
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-blue-50 p-4">
      
       <Card className="w-full max-w-lg animate-scale-in">
         <CardHeader className="space-y-2 text-center">
-          <CardTitle className="text-3xl font-bold bg-gradient-to-r from-primary to-blue-600 bg-clip-text text-transparent animate-fade-in">
+          <CardTitle className="text-3xl font-bold text-blue-600 animate-fade-in">
             Registration Successful!
           </CardTitle>
           <CardDescription className="text-lg">

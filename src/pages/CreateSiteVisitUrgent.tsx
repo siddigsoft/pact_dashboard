@@ -291,7 +291,7 @@ const CreateSiteVisitUrgent = () => {
 
   const renderStepIndicator = () => (
     <div className="mb-8">
-      <div className="flex items-center justify-between p-6 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 rounded-xl border">
+      <div className="flex items-center justify-between p-6 bg-blue-50 rounded-xl border">
         {[1, 2, 3].map((step, index) => {
           const isActive = currentStep === step;
           const isCompleted = currentStep > step;
@@ -333,7 +333,7 @@ const CreateSiteVisitUrgent = () => {
   );
 
   const renderSiteSelection = () => (
-    <Card className="shadow-lg border-0 bg-gradient-to-br from-white to-gray-50/50 dark:from-gray-900 dark:to-gray-800/50">
+    <Card className="shadow-lg border-0 bg-white">
       <CardHeader className="pb-6">
         <CardTitle className="flex items-center text-xl">
           <MapPin className="h-6 w-6 mr-3 text-blue-600" />
@@ -734,7 +734,7 @@ const CreateSiteVisitUrgent = () => {
   );
 
   const renderDetailsAndTeam = () => (
-    <Card className="shadow-lg border-0 bg-gradient-to-br from-white to-gray-50/50 dark:from-gray-900 dark:to-gray-800/50">
+    <Card className="shadow-lg border-0 bg-white">
       <CardHeader className="pb-6">
         <CardTitle className="flex items-center text-xl">
           <Users className="h-6 w-6 mr-3 text-blue-600" />
@@ -877,7 +877,7 @@ const CreateSiteVisitUrgent = () => {
   );
 
   const renderFeesAndSubmit = () => (
-    <Card className="shadow-lg border-0 bg-gradient-to-br from-white to-gray-50/50 dark:from-gray-900 dark:to-gray-800/50">
+    <Card className="shadow-lg border-0 bg-white">
       <CardHeader className="pb-6">
         <CardTitle className="flex items-center text-xl">
           <DollarSign className="h-6 w-6 mr-3 text-blue-600" />
@@ -947,7 +947,7 @@ const CreateSiteVisitUrgent = () => {
             />
           </div>
           
-          <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 border-blue-200 dark:border-blue-800">
+          <Card className="bg-blue-50 border-blue-200">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
@@ -981,7 +981,7 @@ const CreateSiteVisitUrgent = () => {
             variant="default"
             onClick={form.handleSubmit(onSubmit)}
             disabled={isSubmitting}
-            className="min-w-[160px] bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+            className="min-w-[160px] bg-blue-600 hover:bg-blue-700 text-white"
           >
             {isSubmitting ? (
               <>
@@ -1001,7 +1001,7 @@ const CreateSiteVisitUrgent = () => {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50/30 dark:from-gray-900 dark:to-blue-950/10">
+  <div className="min-h-screen bg-gray-50">
       <div className="container mx-auto max-w-5xl py-8 px-4">
         <div className="flex items-center gap-6 mb-8">
           <Button
@@ -1014,7 +1014,7 @@ const CreateSiteVisitUrgent = () => {
             Back
           </Button>
           <div>
-            <h1 className="text-3xl font-bold flex items-center bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+            <h1 className="text-3xl font-bold flex items-center text-blue-600">
               <AlertTriangle className="h-8 w-8 mr-3 text-amber-500" />
               Create Urgent Site Visit
             </h1>
