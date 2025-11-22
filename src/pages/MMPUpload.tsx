@@ -27,8 +27,8 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/components/ui/use-toast";
 import { useAppContext } from "@/context/AppContext";
-import { ArrowUpCircle, CheckCircle, Info, Upload, HelpCircle, AlertTriangle, 
-         Eye, Save, X, RefreshCw, FileCheck, MessageSquare, ArrowRight, ListChecks, Download, Pencil, Check } from "lucide-react";
+import { ArrowUpCircle, CheckCircle, Info, Upload, AlertTriangle, 
+         Eye, Save, X, RefreshCw, MessageSquare, ArrowRight, ListChecks, Download, Pencil, Check } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
@@ -40,7 +40,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { downloadMMPTemplate } from '@/utils/templateDownload';
 import { toast } from "@/components/ui/use-toast";
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useProjectContext } from '@/context/project/ProjectContext';
@@ -673,22 +672,32 @@ const MMPUpload = () => {
   };
 
 
-  const handleDownloadTemplate = () => {
-    const success = downloadMMPTemplate();
-    
-    if (success) {
-      toast({
-        title: "Template Downloaded",
-        description: "MMP template has been successfully downloaded.",
-        variant: "default"
-      });
-    } else {
-      toast({
-        title: "Download Failed",
-        description: "There was an issue downloading the MMP template.",
-        variant: "destructive"
-      });
+  
+
+  const handleClearForm = () => {
+    // Reset form fields to defaults
+    form.reset();
+    // Clear any parsed preview state
+    setPreviewData([]);
+    setPreviewHeaders([]);
+    setPreviewErrors([]);
+    setPreviewWarnings([]);
+    setIsParsing(false);
+    // Clear validation report if present
+    if (validationReportUrl) {
+      try { URL.revokeObjectURL(validationReportUrl); } catch {}
+      setValidationReportUrl(null);
     }
+    setValidationErrors(null);
+    setValidationWarnings(null);
+    // Clear hidden file input value
+    if (fileInputRef.current) {
+      try { fileInputRef.current.value = ''; } catch {}
+    }
+    // Reset upload progress state
+    setUploadProgress(0);
+    setUploadStage('');
+    setIsUploading(false);
   };
 
 
@@ -1044,13 +1053,13 @@ const MMPUpload = () => {
                         )}
                         {previewData.length > 0 && (
                           <div className="rounded-md border w-full">
-                            <Table className="min-w-[1200px]">
+                            <Table wrapperClassName="max-h-[640px] overflow-auto" className="min-w-[1200px]">
                               <TableHeader>
                                 <TableRow className="bg-muted/50">
                                   {previewHeaders.map((h) => (
-                                    <TableHead key={h}>{h}</TableHead>
+                                    <TableHead key={h} className="sticky top-0 bg-blue-50 z-10">{h}</TableHead>
                                   ))}
-                                  <TableHead className="w-[160px]">Actions</TableHead>
+                                  <TableHead className="w-[160px] sticky top-0 bg-blue-50 z-10">Actions</TableHead>
                                 </TableRow>
                               </TableHeader>
                               <TableBody>
@@ -1097,7 +1106,8 @@ const MMPUpload = () => {
                                   </TableRow>
                                 ))}
                               </TableBody>
-                            </Table>
+                              </Table>
+                            <div className="text-sm text-muted-foreground mt-2">Scroll down to view more ({previewData.length} total entries.)</div>
                           </div>
                         )}
                       </div>
@@ -1105,29 +1115,13 @@ const MMPUpload = () => {
                 
                
 
-                <div className="bg-amber-50 border border-amber-200 rounded p-3 flex items-start gap-2">
-                  <HelpCircle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
-                  <div className="text-sm text-amber-800">
-                    <p className="font-medium">Template Help</p>
-                    <p className="mt-1">
-                      Need a template to get started? Download our standard MMP template with field headers already set up.
-                    </p>
-                    <Button 
-                      variant="link" 
-                      className="h-auto p-0 text-amber-600 font-medium" 
-                      onClick={handleDownloadTemplate}
-                    >
-                      <FileCheck className="h-4 w-4 mr-1" />
-                      Download Template
-                    </Button>
-                  </div>
-                </div>
+                
                 </div>
               </CardContent>
               <CardFooter className="flex justify-between">
                 <div className="flex gap-2">
-                  <Button asChild variant="outline">
-                    <Link to="/mmp">Cancel</Link>
+                  <Button variant="outline" onClick={handleClearForm}>
+                    Cancel
                   </Button>
                   
                   <Button 

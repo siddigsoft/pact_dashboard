@@ -12,7 +12,7 @@ import MMPCooperatingPartnerVerification from '@/components/MMPCPVerification';
 import MMPVerificationHeader from '@/components/verification/MMPVerificationHeader';
 import { MMPFile, MMPPermitsData, MMPDocument } from '@/types';
 import { getActualSiteCount } from '@/utils/mmpUtils';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react'; 
 
 const MMPDetailedVerification: React.FC = () => {
   const { id } = useParams<{ id: string }>();
