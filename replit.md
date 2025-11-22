@@ -20,6 +20,15 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
+**Project-Budget Integration (November 22, 2025):**
+- Integrated budget creation directly into project creation workflow
+- After creating a project, users are immediately offered to create an associated budget via dialog
+- Budget creation dialog includes all budget fields: total budget, period, fiscal year, category allocations
+- Users can skip budget creation and add it later from the Budget page
+- Seamless linking of project and budget with automatic navigation to project details after completion
+- Category allocations streamlined to 3 categories: Transportation and Visit Fees, Permit Fee, Internet & Communication Fees
+- Real-time validation showing category total vs budget total with warning for over-allocation
+
 **Comprehensive Budget System (November 22, 2025):**
 - Implemented complete budget tracking system for Projects and MMPs
 - Created database schema with 4 new tables: project_budgets, mmp_budgets, budget_transactions, budget_alerts
