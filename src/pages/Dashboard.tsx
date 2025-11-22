@@ -23,29 +23,7 @@ const Dashboard = () => {
 
   // Determine default zone based on user role
   const defaultZone = useMemo((): DashboardZone => {
-    if (!roles || roles.length === 0) return 'operations';
-
-    const normalizedRoles = roles.map(normalizeRole);
-
-    // Admin sees performance/analytics by default
-    if (normalizedRoles.includes('admin')) return 'performance';
-    
-    // Finance sees performance (cost tracking)
-    if (normalizedRoles.includes('financialadmin')) return 'performance';
-    
-    // ICT sees compliance/fraud detection
-    if (normalizedRoles.includes('ict')) return 'compliance';
-    
-    // Field managers see operations (match both "fom" and "fieldoperationmanagerfom")
-    if (normalizedRoles.some(r => r.includes('fom') || r === 'supervisor')) return 'operations';
-    
-    // Coordinators see team coordination
-    if (normalizedRoles.includes('coordinator')) return 'team';
-    
-    // Reviewers see compliance
-    if (normalizedRoles.includes('reviewer')) return 'compliance';
-
-    // Default to operations for everyone else
+    // All users default to Operations zone as the primary command center
     return 'operations';
   }, [roles]);
 
