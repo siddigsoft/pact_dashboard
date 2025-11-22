@@ -19,7 +19,7 @@ interface NotificationDropdownProps {
 }
 
 const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
-  const { notifications, markNotificationAsRead } = useNotifications();
+  const { notifications, markNotificationAsRead, clearAllNotifications } = useNotifications();
   const navigate = useNavigate();
   const [activeFilter, setActiveFilter] = useState('all');
   const { users } = useUser();
@@ -87,6 +87,10 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
         markNotificationAsRead(notification.id);
       }
     });
+  };
+
+  const handleClearAll = async () => {
+    await clearAllNotifications();
   };
 
   // Filter and group notifications
@@ -176,15 +180,25 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
             </span>
           )}
         </DropdownMenuLabel>
-        <Button 
-          variant="ghost" 
-          size="sm" 
-          onClick={handleMarkAllRead} 
-          className="h-8 px-2 text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-100/50"
-        >
-          <CheckCheck className="h-3 w-3 mr-1" />
-          Mark all read
-        </Button>
+        <div className="flex gap-1">
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={handleMarkAllRead} 
+            className="h-8 px-2 text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-100/50"
+          >
+            <CheckCheck className="h-3 w-3 mr-1" />
+            Mark all read
+          </Button>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={handleClearAll} 
+            className="h-8 px-2 text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-100/50"
+          >
+            Clear all
+          </Button>
+        </div>
       </div>
       
       <NotificationFilter
