@@ -86,6 +86,23 @@ The application workflow has been restarted to use the new database connection.
 
 The application has been modified to work with **both** `site_visits` and `mmp_site_entries` tables:
 
+### Automatic Fallback for Standalone Visits
+
+**NEW**: If the `site_visits` table doesn't exist and you create a standalone visit (without MMP context), the application will:
+
+1. **Auto-create a default MMP file** named `"Standalone Site Visits (Auto-generated)"`
+2. **Link the visit** to this default MMP file
+3. **Store the visit** in `mmp_site_entries` table
+4. **Reuse** the same default MMP file for all future standalone visits
+
+This ensures that:
+- ✅ You can create site visits **without running the migration**
+- ✅ All visits satisfy the `mmp_site_entries` foreign key requirement
+- ✅ Standalone visits are grouped under a recognizable default MMP
+- ✅ No functionality is lost when `site_visits` table is missing
+
+**Important**: Monitor the logs for any unique-key conflicts during concurrent writes. If multiple users create standalone visits simultaneously, the system will automatically reuse the existing default MMP file.
+
 #### Data Fetching Priority:
 1. **Primary**: Query `site_visits` table first
 2. **Fallback**: If `site_visits` is empty or doesn't exist, query `mmp_site_entries`

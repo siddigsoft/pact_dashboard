@@ -304,6 +304,10 @@ export const createSiteVisitInDb = async (siteVisit: Partial<SiteVisit>) => {
     projectActivities: data.visit_data?.projectActivities || [],
     createdAt: data.created_at
   } as SiteVisit;
+  } catch (error) {
+    console.error('Error in createSiteVisitInDb:', error);
+    throw error;
+  }
 };
 
 export const deleteSiteVisitInDb = async (id: string) => {
