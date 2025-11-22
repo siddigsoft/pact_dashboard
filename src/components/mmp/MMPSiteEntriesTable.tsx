@@ -64,6 +64,7 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
     // Additional fields
     const mainActivity = site.main_activity || site.mainActivity || vd?.mainActivity || '—';
     const visitType = site.visitType || vd?.visitType || '—';
+    const mmpName = site.mmpName || site.mmp_name || vd?.mmpName || ad['MMP Name'] || ad['mmp_name'] || (site.mmpFiles ? site.mmpFiles.name : undefined) || '—';
 
     const rawDate = site.due_date || site.visitDate || '';
     let visitDate = '—';
@@ -124,7 +125,7 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
     const updatedAt = site.updated_at || site.last_modified || undefined;
 
     return { 
-      hubOffice, state, locality, siteName, cpName, siteActivity, 
+      hubOffice, state, locality, mmpName, siteName, cpName, siteActivity, 
       monitoringBy, surveyTool, useMarketDiversion, useWarehouseMonitoring,
       mainActivity, visitType, visitDate, comments, 
       enumeratorFee: finalEnumeratorFee, transportFee: finalTransportFee, cost: totalCost,
@@ -150,7 +151,7 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
     const q = debouncedSearchQuery.toLowerCase();
     return siteEntries.filter(site => {
       const s = normalizeSite(site);
-      return [s.hubOffice, s.state, s.locality, s.siteName, s.cpName, s.siteActivity, s.monitoringBy, s.surveyTool, s.visitDate, s.comments]
+      return [s.hubOffice, s.state, s.locality, s.mmpName, s.siteName, s.cpName, s.siteActivity, s.monitoringBy, s.surveyTool, s.visitDate, s.comments]
         .filter(Boolean)
         .some((v) => String(v).toLowerCase().includes(q));
     });
@@ -454,6 +455,7 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
                 <TableHead>Hub Office</TableHead>
                 <TableHead>State</TableHead>
                 <TableHead>Locality</TableHead>
+                <TableHead>MMP Name</TableHead>
                 <TableHead>Site Name</TableHead>
                 <TableHead>CP Name</TableHead>
                 <TableHead>Status</TableHead>
@@ -500,6 +502,9 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
                         {isEditing ? (
                           <Input value={draft?.locality ?? row.locality ?? ''} onChange={(e) => setDraft((d:any)=> ({...(d||{}), locality: e.target.value}))} className="h-8" />
                         ) : row.locality}
+                      </TableCell>
+                      <TableCell>
+                        {row.mmpName}
                       </TableCell>
                       <TableCell>
                         {isEditing ? (

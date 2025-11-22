@@ -14,6 +14,8 @@ export interface MMPSiteEntry {
   hubOffice?: string; // e.g., "Farchana Hub"
   state?: string; // e.g., "West Darfur"
   locality?: string; // e.g., "Kulbus", "Geneina"
+  mmpName?: string; // MMP name for this site entry
+  mmp_name?: string; // MMP name (snake_case variant)
   siteName?: string; // e.g., "ADAREEB", "AL-FAROUQ", "AL-QADISIYA", etc.
   cpName?: string; // e.g., "World Relief (WR)"
   siteActivity?: string; // e.g., "GFA"
@@ -25,6 +27,7 @@ export interface MMPSiteEntry {
   visitType?: string;
   comments?: string;
   additionalData?: Record<string, string>;
+  mmpFiles?: { name?: string }; // For joined MMP file data
 }
 
 export interface MMPSiteVisit {
