@@ -29,7 +29,8 @@ import {
   RefreshCw,
   AlertCircle,
   CheckCircle2,
-  Activity
+  Activity,
+  Zap
 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, subMonths, isWithinInterval } from 'date-fns';
 import { DEFAULT_CURRENCY } from '@/types/wallet';
@@ -189,37 +190,56 @@ const WalletPage = () => {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="flex items-center gap-3">
-          <RefreshCw className="w-5 h-5 animate-spin text-primary" />
-          <p className="text-muted-foreground">Loading wallet...</p>
+          <RefreshCw className="w-5 h-5 animate-spin text-blue-400" />
+          <p className="text-blue-300/70">Synchronizing wallet data...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 p-6">
-      {/* Header Command Bar */}
-      <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <div>
-            <h1 className="text-3xl font-bold flex items-center gap-2">
-              <div className="p-2 rounded-md bg-gradient-to-br from-blue-500 to-indigo-600">
-                <WalletIcon className="w-6 h-6 text-white" />
+    <div className="relative min-h-screen">
+      {/* Cyber Background with Animated Grid */}
+      <div className="fixed inset-0 bg-gradient-to-br from-slate-950 via-blue-950 to-purple-950 -z-10">
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(59,130,246,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(59,130,246,0.05)_1px,transparent_1px)] bg-[size:50px_50px] [mask-image:radial-gradient(ellipse_80%_50%_at_50%_0%,#000,transparent)]"></div>
+        <div className="absolute top-20 left-20 w-96 h-96 bg-blue-500/20 rounded-full blur-[120px] animate-pulse"></div>
+        <div className="absolute bottom-20 right-20 w-96 h-96 bg-purple-500/20 rounded-full blur-[120px] animate-pulse" style={{ animationDelay: '1s' }}></div>
+      </div>
+
+      <div className="relative space-y-6 p-6">
+        {/* Cyber Header */}
+        <div className="relative">
+          <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 via-purple-500/10 to-cyan-500/10 rounded-2xl blur-xl"></div>
+          <div className="relative bg-gradient-to-r from-slate-900/90 via-blue-900/90 to-purple-900/90 backdrop-blur-xl border border-blue-500/30 rounded-2xl p-6 shadow-[0_0_30px_rgba(59,130,246,0.3)]">
+            <div className="flex items-center justify-between flex-wrap gap-4">
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl shadow-lg shadow-blue-500/50">
+                  <WalletIcon className="w-8 h-8 text-white" />
+                </div>
+                <div>
+                  <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent flex items-center gap-3">
+                    My Wallet
+                    <Badge className="bg-gradient-to-r from-green-500 to-emerald-600 text-white border-0 animate-pulse">
+                      <Zap className="w-3 h-3 mr-1" />
+                      ACTIVE
+                    </Badge>
+                  </h1>
+                  <p className="text-blue-300/80 mt-1 text-lg">
+                    Cyber-Financial Command Center
+                  </p>
+                </div>
               </div>
-              My Wallet
-            </h1>
-            <p className="text-muted-foreground mt-1">Track earnings, manage withdrawals, and monitor your financial activity</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button 
-              variant="outline" 
-              size="sm" 
-              onClick={handleRefresh}
-              data-testid="button-refresh-wallet"
-            >
-              <RefreshCw className="w-4 h-4 mr-2" />
-              Refresh
-            </Button>
+              <div className="flex items-center gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={handleRefresh}
+                  data-testid="button-refresh-wallet"
+                  className="bg-gradient-to-r from-slate-900/50 to-blue-900/50 border-blue-500/30 text-blue-300 hover:border-blue-400 hover:shadow-[0_0_15px_rgba(59,130,246,0.3)] transition-all backdrop-blur-xl"
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  REFRESH
+                </Button>
             <Dialog open={withdrawalDialogOpen} onOpenChange={setWithdrawalDialogOpen}>
               <DialogTrigger asChild>
                 <Button size="default" data-testid="button-request-withdrawal">
@@ -288,6 +308,8 @@ const WalletPage = () => {
                 </DialogFooter>
               </DialogContent>
             </Dialog>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -886,6 +908,7 @@ const WalletPage = () => {
           </div>
         </TabsContent>
       </Tabs>
+      </div>
     </div>
   );
 };
