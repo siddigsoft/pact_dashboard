@@ -23,7 +23,7 @@ const formatCurrency = (amount: number, currency: string = 'SDG') => {
 const Classifications = () => {
   const { toast } = useToast();
   const { currentUser } = useAppContext();
-  const { canManage } = useAuthorization();
+  const { canManageFinances } = useAuthorization();
   const { feeStructures, userClassifications, loading } = useClassification();
   const [activeTab, setActiveTab] = useState('fee-structures');
   const [enrichedClassifications, setEnrichedClassifications] = useState<CurrentUserClassification[]>([]);
@@ -31,7 +31,7 @@ const Classifications = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Check authorization
-  const canAccessClassifications = canManage('finances');
+  const canAccessClassifications = canManageFinances();
 
   // Fetch user profiles and enrich classifications
   useEffect(() => {

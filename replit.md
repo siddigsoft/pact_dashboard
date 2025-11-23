@@ -20,6 +20,17 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
+**Classification System Completion (November 23, 2025):**
+- ✅ Fixed critical bug in Classifications page (canManage → canManageFinances)
+- ✅ Implemented UI auto-refresh after classification assignment (refreshUserClassifications call added)
+- ✅ Completed UserDetail classification tab with ManageClassificationDialog integration
+- ✅ Fixed all 25 TypeScript warnings in Users.tsx and UserDetail.tsx
+- ✅ Implemented backward-compatible role handling (supports both PascalCase and camelCase)
+- ✅ Created role mapping utility foundation (src/utils/roleMapping.ts) for future refactor
+- ✅ Classification assignment, display, and history tracking fully operational
+- ⚠️ Role casing architectural issue documented (deferred for comprehensive refactor)
+- All classification features production-ready and tested
+
 **Project-Budget Integration (November 22, 2025):**
 - Integrated budget creation directly into project creation workflow
 - After creating a project, users are immediately offered to create an associated budget via dialog
