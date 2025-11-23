@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/context/user/UserContext';
+import { useClassification } from '@/context/classification/ClassificationContext';
 import type {
   Wallet,
   WalletTransaction,
@@ -27,7 +28,8 @@ interface WalletContextType {
   getSiteVisitCost: (siteVisitId: string) => Promise<SiteVisitCost | null>;
   assignSiteVisitCost: (siteVisitId: string, costs: Partial<SiteVisitCost>) => Promise<void>;
   updateSiteVisitCost: (costId: string, costs: Partial<SiteVisitCost>) => Promise<void>;
-  addSiteVisitFeeToWallet: (userId: string, siteVisitId: string, amount: number) => Promise<void>;
+  addSiteVisitFeeToWallet: (userId: string, siteVisitId: string, complexityMultiplier?: number) => Promise<void>;
+  calculateClassificationFee: (userId: string, complexityMultiplier?: number) => Promise<number>;
   listWallets: () => Promise<Wallet[]>;
 }
 
@@ -106,6 +108,7 @@ function transformSiteVisitCostFromDB(data: any): SiteVisitCost {
 export function WalletProvider({ children }: { children: ReactNode }) {
   const { currentUser } = useUser();
   const { toast } = useToast();
+  const { getUserClassification, getActiveFeeStructure } = useClassification();
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
   const [withdrawalRequests, setWithdrawalRequests] = useState<WithdrawalRequest[]>([]);
@@ -475,8 +478,43 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const addSiteVisitFeeToWallet = async (userId: string, siteVisitId: string, amount: number) => {
+  const calculateClassificationFee = async (userId: string, complexityMultiplier: number = 1.0): Promise<number> => {
     try {
+      const classification = getUserClassification(userId);
+      
+      if (!classification) {
+        console.warn(`No classification found for user ${userId}, using default fee`);
+        return 5000;
+      }
+
+      const feeStructure = getActiveFeeStructure(
+        classification.classificationLevel,
+        classification.roleScope
+      );
+
+      if (!feeStructure) {
+        console.warn(`No fee structure found for ${classification.classificationLevel}/${classification.roleScope}, using default fee`);
+        return 5000;
+      }
+
+      const baseFeeCents = feeStructure.siteVisitBaseFeeCents;
+      const transportFeeCents = feeStructure.siteVisitTransportFeeCents;
+      const multiplier = complexityMultiplier * feeStructure.complexityMultiplier;
+      
+      const totalCents = Math.round((baseFeeCents + transportFeeCents) * multiplier);
+      const totalSDG = totalCents / 100;
+
+      return totalSDG;
+    } catch (error: any) {
+      console.error('Failed to calculate classification fee:', error);
+      return 5000;
+    }
+  };
+
+  const addSiteVisitFeeToWallet = async (userId: string, siteVisitId: string, complexityMultiplier: number = 1.0) => {
+    try {
+      const amount = await calculateClassificationFee(userId, complexityMultiplier);
+
       const { data: targetWallet, error: walletError } = await supabase
         .from('wallets')
         .select('*')
@@ -500,7 +538,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             amount,
             currency: 'SDG',
             site_visit_id: siteVisitId,
-            description: 'Site visit fee',
+            description: `Site visit fee (${complexityMultiplier}x complexity)`,
             balance_before: 0,
             balance_after: amount,
             created_by: currentUser?.id,
@@ -533,7 +571,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         amount,
         currency: 'SDG',
         site_visit_id: siteVisitId,
-        description: 'Site visit fee',
+        description: `Site visit fee (${complexityMultiplier}x complexity)`,
         balance_before: currentBalance,
         balance_after: newBalance,
         created_by: currentUser?.id,
@@ -654,6 +692,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         assignSiteVisitCost,
         updateSiteVisitCost,
         addSiteVisitFeeToWallet,
+        calculateClassificationFee,
         listWallets,
       }}
     >
