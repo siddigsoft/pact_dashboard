@@ -17,6 +17,7 @@ import {
   CreditCard,
   DollarSign,
   Award,
+  Receipt,
 } from "lucide-react";
 import { useSiteVisitReminders } from "@/hooks/use-site-visit-reminders";
 import Logo from "../assets/logo.png";
@@ -68,8 +69,11 @@ const getMenuGroups = (
   // Build items per permission, allowing admin bypass
   const mainItems = [] as MenuGroup['items'];
   if (isAdmin || isICT || perms.dashboard) mainItems.push({ title: "Dashboard", url: "/dashboard", icon: LayoutDashboard });
-  // Only data collectors see My Wallet
-  if (isDataCollector) mainItems.push({ title: "My Wallet", url: "/wallet", icon: CreditCard });
+  // Only data collectors see My Wallet and Cost Submission
+  if (isDataCollector) {
+    mainItems.push({ title: "My Wallet", url: "/wallet", icon: CreditCard });
+    mainItems.push({ title: "Cost Submission", url: "/cost-submission", icon: Receipt });
+  }
   // Coordinators see Sites for Verification under Projects
   const showSitesForVerification = roles.includes('coordinator' as AppRole) || defaultRole === 'coordinator';
 

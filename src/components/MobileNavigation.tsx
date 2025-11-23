@@ -1,19 +1,26 @@
 
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Home, Map, FileText, Users, MessageSquare } from 'lucide-react';
+import { Home, Map, FileText, Users, MessageSquare, Receipt } from 'lucide-react';
 import { useChat } from '@/context/chat/ChatContextSupabase';
+import { useAppContext } from '@/context/AppContext';
+import { AppRole } from '@/types';
 
 const MobileNavigation = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { getUnreadMessagesCount } = useChat();
+  const { currentUser, roles } = useAppContext();
   const unreadChatCount = getUnreadMessagesCount();
+  
+  // Check if user is a data collector
+  const isDataCollector = roles?.includes('dataCollector' as AppRole) || currentUser?.role === 'dataCollector';
   
   const navItems = [
     { icon: Home, label: 'Home', path: '/dashboard' },
     { icon: Map, label: 'Field', path: '/field-team' },
     { icon: FileText, label: 'MMP', path: '/mmp' },
     { icon: MessageSquare, label: 'Chat', path: '/chat', badge: unreadChatCount },
+    ...(isDataCollector ? [{ icon: Receipt, label: 'Costs', path: '/cost-submission' }] : []),
     { icon: Users, label: 'Team', path: '/users' },
   ];
 
