@@ -63,6 +63,7 @@ import WithdrawalApproval from './pages/WithdrawalApproval';
 import WalletReports from './pages/WalletReports';
 import BudgetPage from './pages/Budget';
 import Classifications from './pages/Classifications';
+import CostSubmission from './pages/CostSubmission';
 
 // Components
 import MainLayout from './components/MainLayout';
@@ -158,6 +159,7 @@ const AppRoutes = () => {
         <Route path="/withdrawal-approval" element={<WithdrawalApproval />} />
         <Route path="/wallet-reports" element={<WalletReports />} />
         <Route path="/budget" element={<BudgetPage />} />
+        <Route path="/cost-submission" element={<CostSubmission />} />
         <Route path="/site-visits" element={<SiteVisits />} />
         <Route path="/site-visits/create" element={<CreateSiteVisit />} />
         <Route path="/site-visits/create/mmp" element={<CreateSiteVisitMMP />} />
