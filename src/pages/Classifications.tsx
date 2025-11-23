@@ -23,7 +23,10 @@ import {
   Calendar,
   PieChart,
   BarChart3,
-  Sparkles
+  Sparkles,
+  Zap,
+  Star,
+  Crown
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -170,13 +173,53 @@ const Classifications = () => {
     });
   }, [feeStructures, searchQuery, levelFilter, roleFilter]);
 
-  const getLevelColor = (level: 'A' | 'B' | 'C') => {
+  const getLevelConfig = (level: 'A' | 'B' | 'C') => {
     switch (level) {
-      case 'A': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
-      case 'B': return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200';
-      case 'C': return 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200';
-      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200';
+      case 'A': 
+        return {
+          gradient: 'bg-gradient-to-r from-emerald-500 to-teal-500',
+          border: 'border-emerald-400/50',
+          glow: 'shadow-lg shadow-emerald-500/20',
+          icon: Crown,
+          iconColor: 'text-emerald-100'
+        };
+      case 'B': 
+        return {
+          gradient: 'bg-gradient-to-r from-blue-500 to-cyan-500',
+          border: 'border-blue-400/50',
+          glow: 'shadow-lg shadow-blue-500/20',
+          icon: Star,
+          iconColor: 'text-blue-100'
+        };
+      case 'C': 
+        return {
+          gradient: 'bg-gradient-to-r from-orange-500 to-amber-500',
+          border: 'border-orange-400/50',
+          glow: 'shadow-lg shadow-orange-500/20',
+          icon: Zap,
+          iconColor: 'text-orange-100'
+        };
+      default: 
+        return {
+          gradient: 'bg-gradient-to-r from-gray-500 to-slate-500',
+          border: 'border-gray-400/50',
+          glow: 'shadow-lg shadow-gray-500/20',
+          icon: Award,
+          iconColor: 'text-gray-100'
+        };
     }
+  };
+
+  const LevelBadge = ({ level }: { level: 'A' | 'B' | 'C' }) => {
+    const config = getLevelConfig(level);
+    const Icon = config.icon;
+    
+    return (
+      <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border ${config.gradient} ${config.border} ${config.glow} text-white font-semibold text-xs transition-all hover:scale-105`}>
+        <Icon className={`h-3.5 w-3.5 ${config.iconColor}`} />
+        <span>{getLevelLabel(level)}</span>
+      </div>
+    );
   };
 
   const getRoleLabel = (role: string) => {
@@ -473,18 +516,24 @@ const Classifications = () => {
                           ? Math.round((count / stats.totalClassified) * 100) 
                           : 0;
                         
+                        const config = getLevelConfig(level as 'A' | 'B' | 'C');
+                        const Icon = config.icon;
+                        
                         return (
                           <div key={level} className="space-y-1">
                             <div className="flex items-center justify-between text-sm">
-                              <span className="font-medium">{getLevelLabel(level as 'A' | 'B' | 'C')}</span>
+                              <div className="flex items-center gap-2">
+                                <Icon className={`h-4 w-4 ${
+                                  level === 'A' ? 'text-emerald-500' : 
+                                  level === 'B' ? 'text-blue-500' : 'text-orange-500'
+                                }`} />
+                                <span className="font-medium">{getLevelLabel(level as 'A' | 'B' | 'C')}</span>
+                              </div>
                               <span className="text-muted-foreground">{count} ({percentage}%)</span>
                             </div>
-                            <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                            <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden shadow-inner">
                               <div 
-                                className={`h-full ${
-                                  level === 'A' ? 'bg-green-500' : 
-                                  level === 'B' ? 'bg-blue-500' : 'bg-orange-500'
-                                }`}
+                                className={`h-full ${config.gradient} shadow-lg transition-all duration-500 ease-out`}
                                 style={{ width: `${percentage}%` }}
                               />
                             </div>
@@ -649,9 +698,7 @@ const Classifications = () => {
                                 data-testid={`row-fee-structure-${fee.id}`}
                               >
                                 <td className="py-3 px-4">
-                                  <Badge variant="outline" className={getLevelColor(fee.classificationLevel as 'A' | 'B' | 'C')}>
-                                    {getLevelLabel(fee.classificationLevel as 'A' | 'B' | 'C')}
-                                  </Badge>
+                                  <LevelBadge level={fee.classificationLevel as 'A' | 'B' | 'C'} />
                                 </td>
                                 <td className="py-3 px-4 text-sm">
                                   {getRoleLabel(fee.roleScope || '')}
@@ -768,9 +815,7 @@ const Classifications = () => {
                                 </div>
                               </td>
                               <td className="py-3 px-4">
-                                <Badge variant="outline" className={getLevelColor(uc.classificationLevel as 'A' | 'B' | 'C')}>
-                                  {getLevelLabel(uc.classificationLevel as 'A' | 'B' | 'C')}
-                                </Badge>
+                                <LevelBadge level={uc.classificationLevel as 'A' | 'B' | 'C'} />
                               </td>
                               <td className="py-3 px-4 text-sm">
                                 {getRoleLabel(uc.roleScope || '')}
