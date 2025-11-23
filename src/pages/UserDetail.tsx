@@ -16,6 +16,9 @@ import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { useSettings } from "@/context/settings/SettingsContext";
 import UserClassificationBadge from "@/components/user/UserClassificationBadge";
+import ManageClassificationDialog, { ClassificationFormData } from "@/components/admin/ManageClassificationDialog";
+import { useClassification } from "@/context/classification/ClassificationContext";
+import { useAuthorization } from "@/hooks/use-authorization";
 
 const availableRoles = [
   "admin",
@@ -48,6 +51,15 @@ const UserDetail: React.FC = () => {
 
   // Add loading state for save
   const [isLoadingUser, setIsLoadingUser] = useState(false);
+
+  // Classification management
+  const { canManage } = useAuthorization();
+  const { getUserClassification, getClassificationHistory, createClassification, updateClassification } = useClassification();
+  const [classificationDialogOpen, setClassificationDialogOpen] = useState(false);
+  
+  const canManageClassifications = canManage('finances');
+  const userClassification = user ? getUserClassification(user.id) : undefined;
+  const classificationHistory = user ? getClassificationHistory(user.id) : [];
 
   useEffect(() => {
     if (id) {
