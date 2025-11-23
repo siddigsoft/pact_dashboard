@@ -3,6 +3,7 @@ import { useBudget } from '@/context/budget/BudgetContext';
 import { useAppContext } from '@/context/AppContext';
 import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { GradientStatCard } from '@/components/ui/gradient-stat-card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -26,7 +27,8 @@ import {
   RefreshCw,
   PieChart,
   BarChart3,
-  Zap
+  Zap,
+  Wallet
 } from 'lucide-react';
 import { CreateProjectBudgetDialog } from '@/components/budget/CreateProjectBudgetDialog';
 import { CreateMMPBudgetDialog } from '@/components/budget/CreateMMPBudgetDialog';
@@ -171,88 +173,64 @@ const BudgetPage = () => {
   }
 
   return (
-    <div className="relative min-h-screen">
-      {/* Cyber Background with Animated Grid */}
-      <div className="fixed inset-0 bg-gradient-to-br from-slate-950 via-blue-950 to-purple-950 -z-10">
-        <div className="absolute inset-0 bg-[linear-gradient(rgba(59,130,246,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(59,130,246,0.05)_1px,transparent_1px)] bg-[size:50px_50px] [mask-image:radial-gradient(ellipse_80%_50%_at_50%_0%,#000,transparent)]"></div>
-        <div className="absolute top-20 left-20 w-96 h-96 bg-blue-500/20 rounded-full blur-[120px] animate-pulse"></div>
-        <div className="absolute bottom-20 right-20 w-96 h-96 bg-purple-500/20 rounded-full blur-[120px] animate-pulse" style={{ animationDelay: '1s' }}></div>
-      </div>
-
-      <div className="relative space-y-6 p-6" data-testid="page-budget">
-        {/* Cyber Header */}
-        <div className="relative">
-          <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 via-purple-500/10 to-cyan-500/10 rounded-2xl blur-xl"></div>
-          <div className="relative bg-gradient-to-r from-slate-900/90 via-blue-900/90 to-purple-900/90 backdrop-blur-xl border border-blue-500/30 rounded-2xl p-6 shadow-[0_0_30px_rgba(59,130,246,0.3)]">
-            <div className="flex items-center justify-between flex-wrap gap-4">
-              <div className="flex items-center gap-4">
-                <div className="p-3 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl shadow-lg shadow-blue-500/50">
-                  <DollarSign className="w-8 h-8 text-white" />
-                </div>
-                <div>
-                  <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-400 via-purple-400 to-cyan-400 bg-clip-text text-transparent flex items-center gap-3">
-                    Budget Management
-                    <Badge className="bg-gradient-to-r from-green-500 to-emerald-600 text-white border-0 animate-pulse">
-                      <Zap className="w-3 h-3 mr-1" />
-                      ACTIVE
-                    </Badge>
-                  </h1>
-                  <p className="text-blue-300/80 mt-1 text-lg">
-                    Advanced Financial Control Center
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={handleRefresh} 
-                  data-testid="button-refresh"
-                  className="bg-gradient-to-r from-slate-900/50 to-blue-900/50 border-blue-500/30 text-blue-300 hover:border-blue-400 hover:shadow-[0_0_15px_rgba(59,130,246,0.3)] transition-all backdrop-blur-xl"
-                >
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  REFRESH
-                </Button>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      data-testid="button-export"
-                      className="bg-gradient-to-r from-slate-900/50 to-purple-900/50 border-purple-500/30 text-purple-300 hover:border-purple-400 hover:shadow-[0_0_15px_rgba(168,85,247,0.3)] transition-all backdrop-blur-xl"
-                    >
-                      <Download className="w-4 h-4 mr-2" />
-                      EXPORT
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent className="bg-slate-900/95 border-purple-500/30 backdrop-blur-xl">
-                    <DropdownMenuItem 
-                      onClick={() => handleExport('pdf')} 
-                      data-testid="menu-export-pdf"
-                      className="text-purple-300 focus:bg-purple-500/20 focus:text-purple-200"
-                    >
-                      Export as PDF
-                    </DropdownMenuItem>
-                    <DropdownMenuItem 
-                      onClick={() => handleExport('excel')} 
-                      data-testid="menu-export-excel"
-                      className="text-purple-300 focus:bg-purple-500/20 focus:text-purple-200"
-                    >
-                      Export as Excel
-                    </DropdownMenuItem>
-                    <DropdownMenuItem 
-                      onClick={() => handleExport('csv')} 
-                      data-testid="menu-export-csv"
-                      className="text-purple-300 focus:bg-purple-500/20 focus:text-purple-200"
-                    >
-                      Export as CSV
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </div>
+    <div className="min-h-screen bg-background p-4 md:p-8 space-y-6" data-testid="page-budget">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-green-500 to-emerald-700 flex items-center justify-center">
+            <DollarSign className="h-6 w-6 text-white" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-bold">Budget Management</h1>
+            <p className="text-sm text-muted-foreground">
+              Advanced Financial Control Center
+            </p>
           </div>
         </div>
+        <div className="flex items-center gap-2">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={handleRefresh} 
+            data-testid="button-refresh"
+          >
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Refresh
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                data-testid="button-export"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Export
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+              <DropdownMenuItem 
+                onClick={() => handleExport('pdf')} 
+                data-testid="menu-export-pdf"
+              >
+                Export as PDF
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                onClick={() => handleExport('excel')} 
+                data-testid="menu-export-excel"
+              >
+                Export as Excel
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                onClick={() => handleExport('csv')} 
+                data-testid="menu-export-csv"
+              >
+                Export as CSV
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
 
         {/* Alerts Section */}
         {activeAlerts.length > 0 && (
@@ -293,60 +271,44 @@ const BudgetPage = () => {
           </div>
         )}
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card className="bg-gradient-to-br from-slate-900/80 to-blue-900/80 border-blue-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(59,130,246,0.2)]">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium uppercase tracking-wider text-blue-300">Total Budget</CardTitle>
-              <DollarSign className="w-5 h-5 text-blue-400" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">{formatCurrency(stats?.totalBudget ? stats.totalBudget * 100 : 0)}</div>
-              <p className="text-xs text-blue-300/70 mt-1">
-                Across {projectBudgets.length} projects
-              </p>
-            </CardContent>
-          </Card>
+      {/* Stats Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <GradientStatCard
+          title="Total Budget"
+          value={formatCurrency(stats?.totalBudget ? stats.totalBudget * 100 : 0)}
+          subtitle={`Across ${projectBudgets.length} projects`}
+          icon={Wallet}
+          color="blue"
+          data-testid="card-stat-total-budget"
+        />
 
-          <Card className="bg-gradient-to-br from-slate-900/80 to-purple-900/80 border-purple-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(168,85,247,0.2)]">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium uppercase tracking-wider text-purple-300">Total Spent</CardTitle>
-              <TrendingDown className="w-5 h-5 text-purple-400" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">{formatCurrency(stats?.totalSpent ? stats.totalSpent * 100 : 0)}</div>
-              <p className="text-xs text-purple-300/70 mt-1">
-                {stats?.utilizationRate?.toFixed(1)}% utilization
-              </p>
-            </CardContent>
-          </Card>
+        <GradientStatCard
+          title="Total Spent"
+          value={formatCurrency(stats?.totalSpent ? stats.totalSpent * 100 : 0)}
+          subtitle={`${stats?.utilizationRate?.toFixed(1)}% utilization`}
+          icon={TrendingDown}
+          color="purple"
+          data-testid="card-stat-total-spent"
+        />
 
-          <Card className="bg-gradient-to-br from-slate-900/80 to-green-900/80 border-green-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(34,197,94,0.2)]">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium uppercase tracking-wider text-green-300">Remaining</CardTitle>
-              <TrendingUp className="w-5 h-5 text-green-400" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">{formatCurrency(stats?.totalRemaining ? stats.totalRemaining * 100 : 0)}</div>
-              <p className="text-xs text-green-300/70 mt-1">
-                Available for allocation
-              </p>
-            </CardContent>
-          </Card>
+        <GradientStatCard
+          title="Remaining Budget"
+          value={formatCurrency(stats?.totalRemaining ? stats.totalRemaining * 100 : 0)}
+          subtitle="Available for allocation"
+          icon={TrendingUp}
+          color="green"
+          data-testid="card-stat-remaining-budget"
+        />
 
-          <Card className="bg-gradient-to-br from-slate-900/80 to-cyan-900/80 border-cyan-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(34,211,238,0.2)]">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium uppercase tracking-wider text-cyan-300">Active MMPs</CardTitle>
-              <BarChart3 className="w-5 h-5 text-cyan-400 animate-pulse" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">{mmpBudgets.filter(mb => mb.status === 'active').length}</div>
-              <p className="text-xs text-cyan-300/70 mt-1">
-                {mmpBudgets.length} total MMP budgets
-              </p>
-            </CardContent>
-          </Card>
-        </div>
+        <GradientStatCard
+          title="Active MMPs"
+          value={mmpBudgets.filter(mb => mb.status === 'active').length}
+          subtitle={`${mmpBudgets.length} total MMP budgets`}
+          icon={BarChart3}
+          color="cyan"
+          data-testid="card-stat-active-mmps"
+        />
+      </div>
 
         {/* Main Content Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -629,7 +591,6 @@ const BudgetPage = () => {
           </div>
         </TabsContent>
       </Tabs>
-      </div>
     </div>
   );
 };

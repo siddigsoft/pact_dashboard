@@ -228,7 +228,22 @@ export const OperationsZone: React.FC = () => {
   const activeFilterCount = Object.values(filters).filter(v => v !== '').length;
 
   return (
-    <div className="space-y-3">
+    <div className="p-4 md:p-8 space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center">
+            <ClipboardList className="h-6 w-6 text-white" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-bold">Operations Center</h1>
+            <p className="text-sm text-muted-foreground">
+              Field operations command and control
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Users Management Style Gradient Metrics Grid */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <GradientStatCard
