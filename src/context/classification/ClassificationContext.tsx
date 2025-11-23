@@ -77,8 +77,8 @@ function transformFeeStructureFromDB(data: any): ClassificationFeeStructure {
     siteVisitTransportFeeCents: parseInt(data.site_visit_transport_fee_cents || 0),
     complexityMultiplier: parseFloat(data.complexity_multiplier || 1.0),
     currency: data.currency,
-    validFrom: data.valid_from,
-    validUntil: data.valid_until,
+    validFrom: data.effective_from,
+    validUntil: data.effective_until,
     metadata: data.metadata,
     isActive: data.is_active,
     createdBy: data.created_by,
@@ -130,7 +130,7 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
       const { data, error } = await supabase
         .from('classification_fee_structures')
         .select('*')
-        .order('valid_from', { ascending: false });
+        .order('effective_from', { ascending: false });
 
       if (error) throw error;
 
