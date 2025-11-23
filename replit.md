@@ -25,12 +25,14 @@ Preferred communication style: Simple, everyday language.
 - ✅ Desktop sidebar shows "Cost Submission" link in Overview section for admins and data collectors
 - ✅ Mobile navigation shows "Costs" button for admins and data collectors
 - ✅ Implemented role-based data access: admins see ALL submissions, data collectors see only their own
-- ✅ Added "Admin View" badge to page header when viewed by admins
-- ✅ Fixed security issue: Conditional query execution prevents data leakage (admins fetch all, data collectors fetch user-specific)
+- ✅ Page title changes to "Cost Approval & Tracking" for admins
+- ✅ Submit tab hidden from admins - they only see "All Submissions" tracking tab
+- ✅ Admins can ONLY view, track, and approve submissions - NOT submit costs themselves
+- ✅ Data collectors see both "Submit Costs" and "My Submissions" tabs
+- ✅ Fixed security issue: Conditional query execution prevents data leakage
 - ✅ Added `enabled` parameter to `useCostSubmissions` hook for efficient query control
 - ✅ RLS policies provide defense-in-depth security at database level
-- ✅ Admins can submit costs for any completed site visit, data collectors for their own only
-- ✅ Architect approved: No security issues, proper separation of admin/user data access
+- ✅ Architect approved: No security issues, proper role-based access control
 
 **Cost Submission System Implementation (November 23, 2025):**
 - ✅ Completed end-to-end cost submission workflow for enumerators
