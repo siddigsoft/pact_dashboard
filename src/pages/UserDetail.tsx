@@ -17,6 +17,8 @@ import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { useSettings } from "@/context/settings/SettingsContext";
 import UserClassificationBadge from "@/components/user/UserClassificationBadge";
+import ClassificationBadge from "@/components/user/ClassificationBadge";
+import RoleBadge from "@/components/user/RoleBadge";
 import ManageClassificationDialog, { ClassificationFormData } from "@/components/admin/ManageClassificationDialog";
 import { useClassification } from "@/context/classification/ClassificationContext";
 import { useAuthorization } from "@/hooks/use-authorization";
@@ -351,7 +353,7 @@ const UserDetail: React.FC = () => {
                     ))}
                   </select>
                 ) : (
-                  <Badge className="capitalize">{user.role}</Badge>
+                  <RoleBadge role={user.role} size="sm" />
                 )}
                 <UserClassificationBadge userId={user.id} />
                 <Badge className="ml-2" variant={user.isApproved ? "default" : "destructive"}>
@@ -493,7 +495,7 @@ const UserDetail: React.FC = () => {
                       </select>
                     ) : (
                       <div className="flex gap-2">
-                        <Badge className="capitalize">{user.role}</Badge>
+                        <RoleBadge role={user.role} size="sm" />
                         <UserClassificationBadge userId={user.id} />
                       </div>
                     )}
@@ -657,8 +659,12 @@ const UserDetail: React.FC = () => {
                         <CardContent className="space-y-4">
                           <div className="grid grid-cols-2 gap-4">
                             <div>
-                              <p className="text-sm text-muted-foreground">Level</p>
-                              <p className="font-medium">{userClassification.classificationLevel}</p>
+                              <p className="text-sm text-muted-foreground mb-2">Level</p>
+                              <ClassificationBadge 
+                                level={userClassification.classificationLevel} 
+                                size="md"
+                                showTooltip={false}
+                              />
                             </div>
                             <div>
                               <p className="text-sm text-muted-foreground">Role Scope</p>
@@ -713,9 +719,16 @@ const UserDetail: React.FC = () => {
                         <CardContent>
                           <div className="space-y-2">
                             {classificationHistory.map((history) => (
-                              <div key={history.id} className="flex justify-between items-center p-2 bg-muted rounded">
-                                <div>
-                                  <p className="font-medium">{history.classificationLevel} - {history.roleScope}</p>
+                              <div key={history.id} className="flex justify-between items-center p-3 bg-muted rounded">
+                                <div className="space-y-2">
+                                  <div className="flex items-center gap-2">
+                                    <ClassificationBadge 
+                                      level={history.classificationLevel} 
+                                      size="sm"
+                                      showTooltip={false}
+                                    />
+                                    <span className="text-sm font-medium">{history.roleScope}</span>
+                                  </div>
                                   <p className="text-sm text-muted-foreground">
                                     {new Date(history.effectiveFrom).toLocaleDateString()} - 
                                     {history.effectiveUntil ? new Date(history.effectiveUntil).toLocaleDateString() : 'Present'}

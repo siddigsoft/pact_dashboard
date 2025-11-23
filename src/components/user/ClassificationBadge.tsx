@@ -4,11 +4,11 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { 
   ClassificationLevel, 
   ClassificationRoleScope, 
-  CLASSIFICATION_COLORS,
   CLASSIFICATION_LABELS,
   ROLE_SCOPE_LABELS
 } from '@/types/classification';
 import { cn } from '@/lib/utils';
+import { Crown, Star, Zap } from 'lucide-react';
 
 interface ClassificationBadgeProps {
   level: ClassificationLevel;
@@ -19,9 +19,52 @@ interface ClassificationBadgeProps {
 }
 
 const sizeClasses = {
-  sm: 'text-xs px-1.5 py-0.5',
-  md: 'text-sm px-2 py-1',
-  lg: 'text-base px-3 py-1.5',
+  sm: 'text-xs px-2 py-1 gap-1',
+  md: 'text-sm px-2.5 py-1.5 gap-1.5',
+  lg: 'text-base px-3 py-2 gap-2',
+};
+
+const iconSizeClasses = {
+  sm: 'h-3 w-3',
+  md: 'h-3.5 w-3.5',
+  lg: 'h-4 w-4',
+};
+
+const getLevelConfig = (level: ClassificationLevel) => {
+  switch (level) {
+    case 'A': 
+      return {
+        gradient: 'bg-gradient-to-r from-emerald-500 to-teal-500',
+        border: 'border-emerald-400/50',
+        glow: 'shadow-lg shadow-emerald-500/20',
+        icon: Crown,
+        iconColor: 'text-emerald-100'
+      };
+    case 'B': 
+      return {
+        gradient: 'bg-gradient-to-r from-blue-500 to-cyan-500',
+        border: 'border-blue-400/50',
+        glow: 'shadow-lg shadow-blue-500/20',
+        icon: Star,
+        iconColor: 'text-blue-100'
+      };
+    case 'C': 
+      return {
+        gradient: 'bg-gradient-to-r from-orange-500 to-amber-500',
+        border: 'border-orange-400/50',
+        glow: 'shadow-lg shadow-orange-500/20',
+        icon: Zap,
+        iconColor: 'text-orange-100'
+      };
+    default: 
+      return {
+        gradient: 'bg-gradient-to-r from-gray-500 to-slate-500',
+        border: 'border-gray-400/50',
+        glow: 'shadow-lg shadow-gray-500/20',
+        icon: Star,
+        iconColor: 'text-gray-100'
+      };
+  }
 };
 
 const ClassificationBadge: React.FC<ClassificationBadgeProps> = ({ 
@@ -31,19 +74,24 @@ const ClassificationBadge: React.FC<ClassificationBadgeProps> = ({
   size = 'sm',
   className
 }) => {
+  const config = getLevelConfig(level);
+  const Icon = config.icon;
+
   const badgeContent = (
-    <Badge
-      variant="outline"
+    <div
       className={cn(
-        CLASSIFICATION_COLORS[level],
+        'inline-flex items-center rounded-md border text-white font-semibold transition-all hover:scale-105',
+        config.gradient,
+        config.border,
+        config.glow,
         sizeClasses[size],
-        'font-semibold border-2 rounded-md no-default-hover-elevate transition-all',
         className
       )}
       data-testid={`badge-classification-${level.toLowerCase()}`}
     >
-      {level}
-    </Badge>
+      <Icon className={cn(iconSizeClasses[size], config.iconColor)} />
+      <span>{CLASSIFICATION_LABELS[level]}</span>
+    </div>
   );
 
   if (!showTooltip) {
