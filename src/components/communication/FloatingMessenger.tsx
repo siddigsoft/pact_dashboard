@@ -1,8 +1,8 @@
 
 import React, { useState } from 'react';
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
-import { MessageSquare, Phone, Minus, Maximize2, X } from 'lucide-react';
+import { MessageSquare, Phone, Minus, Maximize2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import CommunicationPanel from './CommunicationPanel';
 import { useCommunication } from '@/context/communications/CommunicationContext';
@@ -36,7 +36,13 @@ const FloatingMessenger = () => {
       )}
 
       {/* Communication Sheet */}
-      <Sheet open={isOpen} onOpenChange={setIsOpen}>
+      <Sheet 
+        open={isOpen} 
+        onOpenChange={(open) => {
+          if (!open && isCallActive) endCall();
+          setIsOpen(open);
+        }}
+      >
         <SheetContent 
           side="right" 
           className={`w-[380px] p-0 ${isMinimized ? 'h-[70px]' : 'h-[600px]'}`}
@@ -66,17 +72,6 @@ const FloatingMessenger = () => {
                   ) : (
                     <Minus className="h-4 w-4" />
                   )}
-                </Button>
-                <Button 
-                  variant="ghost" 
-                  size="sm"
-                  className="h-8 w-8 p-0"
-                  onClick={() => {
-                    if (isCallActive) endCall();
-                    setIsOpen(false);
-                  }}
-                >
-                  <X className="h-4 w-4" />
                 </Button>
               </div>
             </div>
