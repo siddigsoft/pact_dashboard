@@ -1,9 +1,15 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useClassification } from '@/context/classification/ClassificationContext';
-import { Award, DollarSign, TrendingUp, Users } from 'lucide-react';
+import { Award, DollarSign, TrendingUp, Users, ShieldAlert } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
+import { useAppContext } from '@/context/AppContext';
+import { useAuthorization } from '@/hooks/useAuthorization';
+import type { CurrentUserClassification } from '@/types/classification';
 
 const formatCurrency = (amount: number, currency: string = 'SDG') => {
   return new Intl.NumberFormat('en-US', {
@@ -15,8 +21,102 @@ const formatCurrency = (amount: number, currency: string = 'SDG') => {
 };
 
 const Classifications = () => {
+  const { toast } = useToast();
+  const { currentUser } = useAppContext();
+  const { canManage } = useAuthorization();
   const { feeStructures, userClassifications, loading } = useClassification();
   const [activeTab, setActiveTab] = useState('fee-structures');
+  const [enrichedClassifications, setEnrichedClassifications] = useState<CurrentUserClassification[]>([]);
+  const [profilesLoading, setProfilesLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Check authorization
+  const canAccessClassifications = canManage('finances');
+
+  // Fetch user profiles and enrich classifications
+  useEffect(() => {
+    const fetchUserProfiles = async () => {
+      // Early return if unauthorized - no data fetching
+      if (!canAccessClassifications) {
+        setEnrichedClassifications([]);
+        setProfilesLoading(false);
+        return;
+      }
+
+      // Early return if no classifications to enrich
+      if (userClassifications.length === 0) {
+        setEnrichedClassifications([]);
+        setProfilesLoading(false);
+        return;
+      }
+
+      try {
+        setErrorMessage(null);
+        const userIds = userClassifications.map(uc => uc.userId);
+        
+        // Fetch profiles with roles
+        const { data: profiles, error: profileError } = await supabase
+          .from('profiles')
+          .select('id, full_name, email')
+          .in('id', userIds);
+
+        if (profileError) throw new Error(`Failed to fetch profiles: ${profileError.message}`);
+
+        // Fetch user roles
+        const { data: userRoles, error: rolesError } = await supabase
+          .from('user_roles')
+          .select('user_id, role')
+          .in('user_id', userIds);
+
+        if (rolesError) throw new Error(`Failed to fetch user roles: ${rolesError.message}`);
+
+        // Map profiles and roles to classifications
+        const profileMap = new Map(profiles?.map(p => [p.id, p]) || []);
+        const roleMap = new Map(userRoles?.map(r => [r.user_id, r.role]) || []);
+        
+        // Build enriched classifications with proper null checks
+        const enriched: CurrentUserClassification[] = [];
+        for (const uc of userClassifications) {
+          const profile = profileMap.get(uc.userId);
+          const role = roleMap.get(uc.userId);
+          
+          // Skip users without role data - this indicates data integrity issue
+          if (!role) {
+            console.warn(`User ${uc.userId} has classification but no role assigned`);
+            continue;
+          }
+          
+          enriched.push({
+            ...uc,
+            fullName: profile?.full_name || 'Unknown User',
+            email: profile?.email || 'no-email@unknown.com',
+            userRole: role,
+          });
+        }
+
+        setEnrichedClassifications(enriched);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : 'Failed to load user data';
+        console.error('Error fetching user profiles:', error);
+        setErrorMessage(errMsg);
+        setEnrichedClassifications([]);
+        toast({
+          title: 'Error Loading Data',
+          description: errMsg,
+          variant: 'destructive',
+        });
+      } finally {
+        setProfilesLoading(false);
+      }
+    };
+
+    // Only execute if authorized
+    if (canAccessClassifications) {
+      fetchUserProfiles();
+    } else {
+      setProfilesLoading(false);
+    }
+  }, [userClassifications, toast, canAccessClassifications]);
 
   const getLevelColor = (level: 'A' | 'B' | 'C') => {
     switch (level) {
@@ -47,13 +147,29 @@ const Classifications = () => {
 
   const stats = {
     totalStructures: feeStructures.length,
-    totalClassified: userClassifications.length,
-    levelACount: userClassifications.filter(uc => uc.classificationLevel === 'A').length,
-    levelBCount: userClassifications.filter(uc => uc.classificationLevel === 'B').length,
-    levelCCount: userClassifications.filter(uc => uc.classificationLevel === 'C').length,
+    totalClassified: enrichedClassifications.length,
+    levelACount: enrichedClassifications.filter(uc => uc.classificationLevel === 'A').length,
+    levelBCount: enrichedClassifications.filter(uc => uc.classificationLevel === 'B').length,
+    levelCCount: enrichedClassifications.filter(uc => uc.classificationLevel === 'C').length,
   };
 
-  if (loading) {
+  const isLoading = loading || profilesLoading;
+
+  // Authorization guard - only admin and financial admin can access
+  if (!canAccessClassifications) {
+    return (
+      <div className="container mx-auto p-6">
+        <Alert variant="destructive">
+          <ShieldAlert className="h-5 w-5" />
+          <AlertDescription>
+            Access Denied: You do not have permission to view classifications. This page is restricted to administrators and financial admins.
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
@@ -78,7 +194,25 @@ const Classifications = () => {
         </div>
       </div>
 
-      {/* Stats Cards */}
+      {/* Error State - show dedicated error UI instead of empty tables */}
+      {errorMessage ? (
+        <div className="space-y-4">
+          <Alert variant="destructive">
+            <ShieldAlert className="h-5 w-5" />
+            <AlertDescription className="flex flex-col gap-2">
+              <span>{errorMessage}</span>
+              <button
+                onClick={() => window.location.reload()}
+                className="text-sm underline hover:no-underline"
+              >
+                Retry loading classifications
+              </button>
+            </AlertDescription>
+          </Alert>
+        </div>
+      ) : (
+        <>
+          {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="pb-2">
@@ -286,7 +420,7 @@ const Classifications = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {userClassifications.map((uc) => (
+                      {enrichedClassifications.map((uc) => (
                         <tr
                           key={uc.id}
                           className="border-b hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
@@ -335,6 +469,8 @@ const Classifications = () => {
           </Card>
         </TabsContent>
       </Tabs>
+        </>
+      )}
     </div>
   );
 };
