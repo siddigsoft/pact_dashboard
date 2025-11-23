@@ -18,6 +18,44 @@ This migration implements **actual cost-based transport fees with admin/finance 
 - ✅ Comprehensive audit trail of all approvals
 - ✅ Supporting documents (receipts, photos) upload
 
+## 🚨 Deployment Responsibilities
+
+**⚠️ DATABASE ADMINISTRATOR ACTION REQUIRED**
+
+This migration **cannot be deployed by the frontend development team** because it requires direct database access to Supabase. The SQL migration file is complete and ready for deployment, but must be executed by someone with database administrator privileges.
+
+### DBA Checklist
+
+After deploying the migration (see steps below), verify:
+
+1. **Tables Created:** `site_visit_cost_submissions`, `cost_approval_history`
+2. **RLS Policies Active:** Check `pg_policies` for both tables
+3. **Trigger Installed:** `trigger_record_cost_approval_history` on submissions table
+4. **Views Working:** `pending_cost_approvals`, `user_cost_submission_summary`, `mmp_cost_submission_summary`
+
+**Verification Queries:**
+
+```sql
+-- Verify tables
+SELECT table_name 
+FROM information_schema.tables 
+WHERE table_schema = 'public' 
+  AND table_name LIKE '%cost%';
+
+-- Verify RLS policies
+SELECT tablename, policyname 
+FROM pg_policies 
+WHERE tablename IN ('site_visit_cost_submissions', 'cost_approval_history');
+
+-- Verify trigger
+SELECT tgname FROM pg_trigger 
+WHERE tgname = 'trigger_record_cost_approval_history';
+
+-- Test workflow (see examples below)
+```
+
+---
+
 ## Migration Steps
 
 ### Step 1: Apply SQL Migration
