@@ -13,6 +13,7 @@ import { SettingsProvider } from './settings/SettingsContext';
 import { RoleManagementProvider, useRoleManagement } from './role-management/RoleManagementContext';
 import { WalletProvider } from './wallet/WalletContext';
 import { BudgetProvider } from './budget/BudgetContext';
+import { ClassificationProvider } from './classification/ClassificationContext';
 
 
 
@@ -125,7 +126,8 @@ export const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children
     <ViewModeProvider>
       <NotificationProvider>
         <UserProvider>
-          <SiteVisitProvider>
+          <ClassificationProvider>
+            <SiteVisitProvider>
               <MMPProvider>
                 <ProjectProvider>
                   <SettingsProvider>
@@ -148,6 +150,7 @@ export const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children
                 </ProjectProvider>
               </MMPProvider>
             </SiteVisitProvider>
+          </ClassificationProvider>
         </UserProvider>
       </NotificationProvider>
     </ViewModeProvider>
