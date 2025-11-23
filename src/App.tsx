@@ -62,6 +62,7 @@ import AdminWalletDetail from './pages/AdminWalletDetail';
 import WithdrawalApproval from './pages/WithdrawalApproval';
 import WalletReports from './pages/WalletReports';
 import BudgetPage from './pages/Budget';
+import Classifications from './pages/Classifications';
 
 // Components
 import MainLayout from './components/MainLayout';
@@ -166,6 +167,7 @@ const AppRoutes = () => {
         <Route path="/site-visits/:id/edit" element={<EditSiteVisit />} />
         <Route path="/users" element={<Users />} />
         <Route path="/users/:id" element={<UserDetail />} />
+        <Route path="/classifications" element={<Classifications />} />
         <Route path="/map" element={<AdvancedMap />} />
         <Route path="/advanced-map" element={<Navigate to="/map" replace />} />
         <Route path="/audit-compliance" element={<AuditCompliance />} />

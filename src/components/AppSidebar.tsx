@@ -16,6 +16,7 @@ import {
   Archive,
   CreditCard,
   DollarSign,
+  Award,
 } from "lucide-react";
 import { useSiteVisitReminders } from "@/hooks/use-site-visit-reminders";
 import Logo from "../assets/logo.png";
@@ -91,6 +92,7 @@ const getMenuGroups = (
   const adminItems = [] as MenuGroup['items'];
   if (isAdmin || isICT || perms.users) adminItems.push({ title: "User Management", url: "/users", icon: Users });
   if (isAdmin || perms.roleManagement) adminItems.push({ title: "Role Management", url: "/role-management", icon: Shield });
+  if (isAdmin || isFinancialAdmin) adminItems.push({ title: "Classifications", url: "/classifications", icon: Award });
   if (isAdmin || perms.settings) adminItems.push({ title: "Settings", url: "/settings", icon: Settings });
   if (isAdmin || isFinancialAdmin) adminItems.push({ title: "Budget", url: "/budget", icon: DollarSign });
   if (isAdmin || isFinancialAdmin) adminItems.push({ title: "Wallets", url: "/admin/wallets", icon: CreditCard });
