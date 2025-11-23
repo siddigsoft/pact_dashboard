@@ -17,10 +17,12 @@ const CostSubmission = () => {
   const navigate = useNavigate();
   const { currentUser, roles } = useAppContext();
   const { siteVisits } = useSiteVisitContext();
-  const [activeTab, setActiveTab] = useState<"submit" | "history">("submit");
-
+  
   // Check if user is admin
   const isAdmin = roles?.includes('admin' as AppRole) || currentUser?.role === 'admin';
+  
+  // Admins default to history tab (they can't submit), data collectors default to submit tab
+  const [activeTab, setActiveTab] = useState<"submit" | "history">(isAdmin ? "history" : "submit");
 
   // Conditionally fetch based on role to prevent unnecessary API calls and data exposure
   // - Admins: Fetch all submissions (enabled), skip user-specific query (empty userId)
@@ -64,11 +66,12 @@ const CostSubmission = () => {
 
         <div className="flex flex-col gap-2">
           <h1 className="text-3xl font-bold tracking-tight">
-            Cost Submission {isAdmin && <Badge variant="outline" className="ml-2">Admin View</Badge>}
+            {isAdmin ? "Cost Approval & Tracking" : "Cost Submission"}
+            {isAdmin && <Badge variant="outline" className="ml-2">Admin View</Badge>}
           </h1>
           <p className="text-muted-foreground">
             {isAdmin 
-              ? "View and manage all cost submissions across the platform"
+              ? "Review, approve, and track cost submissions from all team members"
               : "Submit actual costs for completed site visits and track approval status"
             }
           </p>
@@ -153,42 +156,43 @@ const CostSubmission = () => {
       {/* Main Content */}
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)} className="space-y-4">
         <TabsList>
-          <TabsTrigger value="submit" data-testid="tab-submit">
-            <Plus className="h-4 w-4 mr-2" />
-            Submit Costs
-          </TabsTrigger>
+          {!isAdmin && (
+            <TabsTrigger value="submit" data-testid="tab-submit">
+              <Plus className="h-4 w-4 mr-2" />
+              Submit Costs
+            </TabsTrigger>
+          )}
           <TabsTrigger value="history" data-testid="tab-history">
             <Clock className="h-4 w-4 mr-2" />
-            Submission History
+            {isAdmin ? "All Submissions" : "My Submissions"}
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="submit" className="space-y-4">
-          {isLoading ? (
-            <Card>
-              <CardContent className="pt-6">
-                <Skeleton className="h-96 w-full" />
-              </CardContent>
-            </Card>
-          ) : availableSiteVisits.length === 0 ? (
-            <Card>
-              <CardContent className="pt-6">
-                <div className="text-center py-12">
-                  <AlertCircle className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                  <h3 className="text-lg font-semibold mb-2">No Completed Site Visits</h3>
-                  <p className="text-muted-foreground">
-                    {isAdmin 
-                      ? "There are no completed site visits in the system yet."
-                      : "You don't have any completed site visits yet. Complete a site visit to submit costs."
-                    }
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          ) : (
-            <CostSubmissionForm siteVisits={availableSiteVisits} />
-          )}
-        </TabsContent>
+        {!isAdmin && (
+          <TabsContent value="submit" className="space-y-4">
+            {isLoading ? (
+              <Card>
+                <CardContent className="pt-6">
+                  <Skeleton className="h-96 w-full" />
+                </CardContent>
+              </Card>
+            ) : availableSiteVisits.length === 0 ? (
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="text-center py-12">
+                    <AlertCircle className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                    <h3 className="text-lg font-semibold mb-2">No Completed Site Visits</h3>
+                    <p className="text-muted-foreground">
+                      You don't have any completed site visits yet. Complete a site visit to submit costs.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
+              <CostSubmissionForm siteVisits={availableSiteVisits} />
+            )}
+          </TabsContent>
+        )}
 
         <TabsContent value="history" className="space-y-4">
           {isLoading ? (
