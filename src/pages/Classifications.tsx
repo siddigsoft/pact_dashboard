@@ -1,15 +1,19 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useClassification } from '@/context/classification/ClassificationContext';
-import { Award, DollarSign, TrendingUp, Users, ShieldAlert } from 'lucide-react';
+import { Award, DollarSign, TrendingUp, Users, ShieldAlert, Edit, ExternalLink } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAppContext } from '@/context/AppContext';
 import { useAuthorization } from '@/hooks/use-authorization';
 import type { CurrentUserClassification } from '@/types/classification';
+import type { ClassificationFeeStructure } from '@/types/classification';
+import FeeStructureEditDialog from '@/components/admin/FeeStructureEditDialog';
 
 const formatCurrency = (amount: number, currency: string = 'SDG') => {
   return new Intl.NumberFormat('en-US', {
@@ -21,6 +25,7 @@ const formatCurrency = (amount: number, currency: string = 'SDG') => {
 };
 
 const Classifications = () => {
+  const navigate = useNavigate();
   const { toast } = useToast();
   const { currentUser } = useAppContext();
   const { canManageFinances } = useAuthorization();
@@ -29,9 +34,12 @@ const Classifications = () => {
   const [enrichedClassifications, setEnrichedClassifications] = useState<CurrentUserClassification[]>([]);
   const [profilesLoading, setProfilesLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [selectedFeeStructure, setSelectedFeeStructure] = useState<ClassificationFeeStructure | null>(null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
 
   // Check authorization
   const canAccessClassifications = canManageFinances();
+  const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'Admin' || (currentUser?.roles && (currentUser.roles.includes('admin' as any) || currentUser.roles.includes('Admin')));
 
   // Fetch user profiles and enrich classifications
   useEffect(() => {
@@ -324,6 +332,11 @@ const Classifications = () => {
                       <th className="text-center py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">
                         Multiplier
                       </th>
+                      {isAdmin && (
+                        <th className="text-center py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">
+                          Actions
+                        </th>
+                      )}
                     </tr>
                   </thead>
                   <tbody>
@@ -362,6 +375,21 @@ const Classifications = () => {
                           <td className="py-3 px-4 text-center">
                             <Badge variant="outline">{fee.complexityMultiplier}x</Badge>
                           </td>
+                          {isAdmin && (
+                            <td className="py-3 px-4 text-center">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setSelectedFeeStructure(fee);
+                                  setEditDialogOpen(true);
+                                }}
+                                data-testid={`button-edit-fee-${fee.id}`}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                            </td>
+                          )}
                         </tr>
                       ))}
                   </tbody>
@@ -423,12 +451,15 @@ const Classifications = () => {
                       {enrichedClassifications.map((uc) => (
                         <tr
                           key={uc.id}
-                          className="border-b hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                          className="border-b hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer"
+                          onClick={() => navigate(`/users/${uc.userId}?tab=classification`)}
+                          data-testid={`row-user-classification-${uc.userId}`}
                         >
                           <td className="py-3 px-4">
                             <div>
-                              <div className="font-medium text-gray-900 dark:text-white">
+                              <div className="font-medium text-gray-900 dark:text-white flex items-center gap-2">
                                 {uc.fullName || 'Unknown'}
+                                <ExternalLink className="h-3 w-3 text-gray-400" />
                               </div>
                               <div className="text-sm text-gray-500">{uc.email || 'No email'}</div>
                             </div>
@@ -448,7 +479,7 @@ const Classifications = () => {
                           </td>
                           <td className="py-3 px-4 text-center">
                             {uc.hasRetainer ? (
-                              <Badge variant="outline" className="bg-green-50 text-green-700">
+                              <Badge variant="outline" className="bg-green-50 text-green-700 dark:bg-green-900 dark:text-green-200">
                                 {formatCurrency(
                                   (uc.retainerAmountCents || 0) / 100,
                                   uc.retainerCurrency || 'SDG'
@@ -470,6 +501,15 @@ const Classifications = () => {
         </TabsContent>
       </Tabs>
         </>
+      )}
+
+      {/* Fee Structure Edit Dialog */}
+      {selectedFeeStructure && (
+        <FeeStructureEditDialog
+          open={editDialogOpen}
+          onOpenChange={setEditDialogOpen}
+          feeStructure={selectedFeeStructure}
+        />
       )}
     </div>
   );
