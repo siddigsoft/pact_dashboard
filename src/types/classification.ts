@@ -76,6 +76,7 @@ export interface CreateClassificationRequest {
 
 export interface UpdateClassificationRequest {
   classificationLevel?: ClassificationLevel;
+  roleScope?: ClassificationRoleScope;
   effectiveFrom?: string;
   effectiveUntil?: string;
   hasRetainer?: boolean;
