@@ -20,6 +20,18 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
+**Admin Access to Cost Submission Page (November 23, 2025):**
+- ✅ Added Cost Submission navigation link for both admin and data collector roles
+- ✅ Desktop sidebar shows "Cost Submission" link in Overview section for admins and data collectors
+- ✅ Mobile navigation shows "Costs" button for admins and data collectors
+- ✅ Implemented role-based data access: admins see ALL submissions, data collectors see only their own
+- ✅ Added "Admin View" badge to page header when viewed by admins
+- ✅ Fixed security issue: Conditional query execution prevents data leakage (admins fetch all, data collectors fetch user-specific)
+- ✅ Added `enabled` parameter to `useCostSubmissions` hook for efficient query control
+- ✅ RLS policies provide defense-in-depth security at database level
+- ✅ Admins can submit costs for any completed site visit, data collectors for their own only
+- ✅ Architect approved: No security issues, proper separation of admin/user data access
+
 **Cost Submission System Implementation (November 23, 2025):**
 - ✅ Completed end-to-end cost submission workflow for enumerators
 - ✅ Built CostSubmissionForm with 4 cost categories (transport, accommodation, meals, other)
