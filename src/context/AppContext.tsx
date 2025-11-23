@@ -14,6 +14,7 @@ import { RoleManagementProvider, useRoleManagement } from './role-management/Rol
 import { WalletProvider } from './wallet/WalletContext';
 import { BudgetProvider } from './budget/BudgetContext';
 import { ClassificationProvider } from './classification/ClassificationContext';
+import { CostSubmissionProvider } from './costApproval/CostSubmissionContext';
 
 
 
@@ -136,11 +137,13 @@ export const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children
                         <CompositeContextProvider>
                           <WalletProvider>
                             <BudgetProvider>
-                              <ChatProvider>
-                                <CommunicationProvider>
-                                  {children}
-                                </CommunicationProvider>
-                              </ChatProvider>
+                              <CostSubmissionProvider>
+                                <ChatProvider>
+                                  <CommunicationProvider>
+                                    {children}
+                                  </CommunicationProvider>
+                                </ChatProvider>
+                              </CostSubmissionProvider>
                             </BudgetProvider>
                           </WalletProvider>
                         </CompositeContextProvider>
