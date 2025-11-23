@@ -153,7 +153,8 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
   useEffect(() => {
     refreshUserClassifications();
     refreshFeeStructures();
-  }, [refreshUserClassifications, refreshFeeStructures]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Realtime subscriptions for classification changes
   useEffect(() => {
@@ -195,7 +196,8 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
       supabase.removeChannel(classificationsChannel);
       supabase.removeChannel(feesChannel);
     };
-  }, [refreshUserClassifications, refreshFeeStructures, toast]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Get user classification
   const getUserClassification = useCallback((userId: string): UserClassification | null => {
