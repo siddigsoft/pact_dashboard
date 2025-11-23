@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/table";
 import { useAppContext } from '@/context/AppContext';
 import { useRoleManagement } from '@/context/role-management/RoleManagementContext';
+import UserClassificationBadge from '@/components/user/UserClassificationBadge';
 
 interface AdminUsersTableProps {
   users?: User[];
@@ -66,6 +67,7 @@ const AdminUsersTable: React.FC<AdminUsersTableProps> = ({ users }) => {
             <TableHead>Name</TableHead>
             <TableHead>Email</TableHead>
             <TableHead>Status</TableHead>
+            <TableHead>Classification</TableHead>
             <TableHead>Roles</TableHead>
           </TableRow>
         </TableHeader>
@@ -101,6 +103,9 @@ const AdminUsersTable: React.FC<AdminUsersTableProps> = ({ users }) => {
                     </Badge>
                   </div>
                 )}
+              </TableCell>
+              <TableCell>
+                <UserClassificationBadge userId={user.id} />
               </TableCell>
               <TableCell>
                 <div className="flex flex-wrap gap-1">

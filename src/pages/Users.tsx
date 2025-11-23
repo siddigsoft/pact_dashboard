@@ -50,6 +50,7 @@ import { Card } from '@/components/ui/card';
 import PendingApprovalsList from '@/components/PendingApprovalsList';
 import { useRoleManagement } from '@/context/role-management/RoleManagementContext';
 import { useAppContext } from '@/context/AppContext';
+import UserClassificationBadge from '@/components/user/UserClassificationBadge';
 
 const ALL_POSSIBLE_ROLES: AppRole[] = [
   'admin',
@@ -559,6 +560,7 @@ const Users = () => {
                   <TableHead>Name</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Role</TableHead>
+                  <TableHead>Classification</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Last Active</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -613,6 +615,9 @@ const Users = () => {
                               {primaryRole}
                             </Badge>
                           </div>
+                        </TableCell>
+                        <TableCell>
+                          <UserClassificationBadge userId={user.id} />
                         </TableCell>
                         <TableCell>
                           {user.isApproved ? (
@@ -733,6 +738,7 @@ const Users = () => {
                   <TableHead>Name</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Role</TableHead>
+                  <TableHead>Classification</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -777,6 +783,9 @@ const Users = () => {
                           </div>
                         </TableCell>
                         <TableCell>
+                          <UserClassificationBadge userId={user.id} />
+                        </TableCell>
+                        <TableCell>
                           <Badge variant="success" className="bg-green-100 text-green-800 hover:bg-green-200">
                             <Check size={12} className="mr-1" /> Active
                           </Badge>
@@ -805,7 +814,7 @@ const Users = () => {
                   })
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-6 text-muted-foreground">
+                    <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
                       No approved users found
                     </TableCell>
                   </TableRow>

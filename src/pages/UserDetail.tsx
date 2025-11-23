@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { useSettings } from "@/context/settings/SettingsContext";
+import UserClassificationBadge from "@/components/user/UserClassificationBadge";
 
 const availableRoles = [
   "admin",
@@ -307,6 +308,7 @@ const UserDetail: React.FC = () => {
                 ) : (
                   <Badge className="capitalize">{user.role}</Badge>
                 )}
+                <UserClassificationBadge userId={user.id} />
                 <Badge className="ml-2" variant={user.isApproved ? "default" : "destructive"}>
                   {user.isApproved ? "Active" : "Pending Approval"}
                 </Badge>
@@ -442,7 +444,10 @@ const UserDetail: React.FC = () => {
                         ))}
                       </select>
                     ) : (
-                      <Badge className="capitalize">{user.role}</Badge>
+                      <div className="flex gap-2">
+                        <Badge className="capitalize">{user.role}</Badge>
+                        <UserClassificationBadge userId={user.id} />
+                      </div>
                     )}
                   </div>
                   <div>
