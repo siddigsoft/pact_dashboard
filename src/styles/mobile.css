@@ -92,11 +92,14 @@ html {
 
 /* Cyber-tech mobile styling */
 .mobile-app-card {
-  @apply rounded-xl shadow-md bg-card p-4 border border-border;
+  @apply rounded-xl shadow-md p-4 border;
+  background-color: hsl(var(--card));
+  border-color: hsl(var(--border));
 }
 
 .mobile-section-title {
-  @apply text-lg font-semibold text-foreground mb-3;
+  @apply text-lg font-semibold mb-3;
+  color: hsl(var(--foreground));
 }
 
 .mobile-button-primary {
@@ -104,7 +107,10 @@ html {
 }
 
 .mobile-button-secondary {
-  @apply bg-background border border-primary text-primary rounded-full py-3 px-6;
+  @apply border rounded-full py-3 px-6;
+  background-color: hsl(var(--background));
+  border-color: hsl(var(--primary));
+  color: hsl(var(--primary));
 }
 
 .mobile-gradient-header {
@@ -136,7 +142,9 @@ html {
 
 /* Cyber-tech cards */
 .uber-card {
-  @apply rounded-xl shadow-md bg-card p-4 border border-border mb-3;
+  @apply rounded-xl shadow-md p-4 border mb-3;
+  background-color: hsl(var(--card));
+  border-color: hsl(var(--border));
 }
 
 .uber-card-header {
@@ -144,20 +152,24 @@ html {
 }
 
 .uber-card-title {
-  @apply font-bold text-foreground;
+  @apply font-bold;
+  color: hsl(var(--foreground));
 }
 
 .uber-card-content {
-  @apply text-sm text-muted-foreground;
+  @apply text-sm;
+  color: hsl(var(--muted-foreground));
 }
 
 /* Mobile-specific list items */
 .mobile-list-item {
-  @apply flex items-center p-3 border-b border-border;
+  @apply flex items-center p-3 border-b;
+  border-color: hsl(var(--border));
 }
 
 .mobile-list-item-icon {
-  @apply mr-3 text-muted-foreground;
+  @apply mr-3;
+  color: hsl(var(--muted-foreground));
 }
 
 .mobile-list-item-content {
@@ -165,11 +177,13 @@ html {
 }
 
 .mobile-list-item-title {
-  @apply font-medium text-foreground;
+  @apply font-medium;
+  color: hsl(var(--foreground));
 }
 
 .mobile-list-item-subtitle {
-  @apply text-xs text-muted-foreground;
+  @apply text-xs;
+  color: hsl(var(--muted-foreground));
 }
 
 /* Floating action button - cyber-tech gradient */
@@ -193,7 +207,9 @@ html {
 .glass-card {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  @apply bg-card/70 border border-border/20 shadow-2xl;
+  @apply border shadow-2xl;
+  background-color: hsl(var(--card) / 0.7);
+  border-color: hsl(var(--border) / 0.2);
 }
 
 /* Input field focus effects - theme-aware */
@@ -202,7 +218,8 @@ html {
 }
 
 .focus-ring:focus {
-  @apply ring-2 ring-primary/20;
+  @apply ring-2;
+  --tw-ring-color: hsl(var(--primary) / 0.2);
 }
 
 /* Enhanced touch feedback */
@@ -249,7 +266,8 @@ html {
 
 /* Enhanced Loading States */
 .loading-skeleton {
-  @apply animate-pulse bg-gray-200 rounded;
+  @apply animate-pulse rounded;
+  background-color: hsl(var(--muted));
   background-image: linear-gradient(
     90deg,
     rgba(255, 255, 255, 0) 0,
