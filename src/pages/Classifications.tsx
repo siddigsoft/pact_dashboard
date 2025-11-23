@@ -28,7 +28,7 @@ const Classifications = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { currentUser } = useAppContext();
-  const { canManageFinances } = useAuthorization();
+  const { canManageFinances, canEditFeeStructures } = useAuthorization();
   const { feeStructures, userClassifications, loading } = useClassification();
   const [activeTab, setActiveTab] = useState('fee-structures');
   const [enrichedClassifications, setEnrichedClassifications] = useState<CurrentUserClassification[]>([]);
@@ -37,9 +37,9 @@ const Classifications = () => {
   const [selectedFeeStructure, setSelectedFeeStructure] = useState<ClassificationFeeStructure | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
 
-  // Check authorization
+  // Check authorization - view vs edit permissions
   const canAccessClassifications = canManageFinances();
-  const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'Admin' || (currentUser?.roles && (currentUser.roles.includes('admin' as any) || currentUser.roles.includes('Admin')));
+  const canEditFees = canEditFeeStructures();
 
   // Fetch user profiles and enrich classifications
   useEffect(() => {
@@ -332,7 +332,7 @@ const Classifications = () => {
                       <th className="text-center py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">
                         Multiplier
                       </th>
-                      {isAdmin && (
+                      {canEditFees && (
                         <th className="text-center py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">
                           Actions
                         </th>
@@ -375,7 +375,7 @@ const Classifications = () => {
                           <td className="py-3 px-4 text-center">
                             <Badge variant="outline">{fee.complexityMultiplier}x</Badge>
                           </td>
-                          {isAdmin && (
+                          {canEditFees && (
                             <td className="py-3 px-4 text-center">
                               <Button
                                 variant="ghost"

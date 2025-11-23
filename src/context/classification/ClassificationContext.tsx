@@ -380,6 +380,25 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
   // Update fee structure
   const updateFeeStructure = useCallback(async (id: string, data: UpdateFeeStructureRequest): Promise<void> => {
     try {
+      // AUTHORIZATION CHECK: Only admin and ICT roles can edit fee structures
+      const userRole = currentUser?.role?.toLowerCase();
+      const userRoles = currentUser?.roles?.map((r: string) => r.toLowerCase()) || [];
+      const hasEditPermission = 
+        userRole === 'admin' || 
+        userRole === 'ict' ||
+        userRoles.includes('admin') ||
+        userRoles.includes('ict');
+
+      if (!hasEditPermission) {
+        const errorMsg = 'Access Denied: Only administrators and ICT staff can edit fee structures';
+        toast({
+          title: 'Authorization Error',
+          description: errorMsg,
+          variant: 'destructive',
+        });
+        throw new Error(errorMsg);
+      }
+
       const updateData: any = { updated_by: currentUser?.id };
       
       if (data.siteVisitBaseFeeCents !== undefined) updateData.site_visit_base_fee_cents = data.siteVisitBaseFeeCents;
