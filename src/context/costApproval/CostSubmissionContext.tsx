@@ -22,7 +22,7 @@ import * as supabaseApi from './supabase';
 
 interface CostSubmissionContextValue {
   // Query hooks
-  useAllSubmissions: () => {
+  useAllSubmissions: (enabled?: boolean) => {
     submissions: SiteVisitCostSubmission[];
     isLoading: boolean;
     error: Error | null;
@@ -117,10 +117,11 @@ export const CostSubmissionProvider: React.FC<CostSubmissionProviderProps> = ({ 
   const queryClient = useQueryClient();
 
   // Query hook: All submissions
-  const useAllSubmissions = () => {
+  const useAllSubmissions = (enabled: boolean = true) => {
     const { data, isLoading, error, refetch } = useQuery({
       queryKey: ['cost-submissions'],
       queryFn: supabaseApi.fetchCostSubmissions,
+      enabled,
       staleTime: 1000 * 60 * 5 // 5 minutes
     });
 
@@ -499,9 +500,9 @@ export const CostSubmissionProvider: React.FC<CostSubmissionProviderProps> = ({ 
 };
 
 // Export convenience hooks for direct use
-export const useCostSubmissions = () => {
+export const useCostSubmissions = (enabled?: boolean) => {
   const context = useCostSubmissionContext();
-  return context.useAllSubmissions();
+  return context.useAllSubmissions(enabled);
 };
 
 export const useCostSubmission = (id: string) => {
