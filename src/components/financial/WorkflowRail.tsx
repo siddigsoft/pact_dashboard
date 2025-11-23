@@ -32,12 +32,13 @@ import { format } from 'date-fns';
 
 const formatCurrency = (amountCents: number, currency: string = 'SDG') => {
   const amount = amountCents / 100;
+  if (currency === 'SDG') {
+    return `SDG ${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
-    currency: currency === 'SDG' ? 'USD' : currency,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount).replace('$', currency === 'SDG' ? 'SDG ' : '$');
+    currency: currency,
+  }).format(amount);
 };
 
 interface WorkflowRailProps {
@@ -52,20 +53,21 @@ export const WorkflowRail = ({ onNavigateToSubmission }: WorkflowRailProps) => {
   const context = useCostSubmissionContext();
   const { mutate: reviewSubmission, isPending: isReviewing } = context.useReviewSubmission();
 
-  const [selectedSubmission, setSelectedSubmission] = useState<SiteVisitCostSubmission | null>(null);
+  const [selectedSubmission, setSelectedSubmission] = useState<PendingCostApproval | SiteVisitCostSubmission | null>(null);
   const [showApproveDialog, setShowApproveDialog] = useState(false);
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [approvalNotes, setApprovalNotes] = useState('');
   const [rejectionNotes, setRejectionNotes] = useState('');
 
   // Calculate workflow funnel metrics
-  const pendingSubmissions = submissions?.filter(s => s.status === 'pending') || [];
+  // Use approvals for pending (includes extended metadata), filter submissions for other statuses
+  const pendingSubmissions = approvals || [];
   const approvedSubmissions = submissions?.filter(s => s.status === 'approved') || [];
   const paidSubmissions = submissions?.filter(s => s.status === 'paid') || [];
   const rejectedSubmissions = submissions?.filter(s => s.status === 'rejected') || [];
 
   const handleApprove = async () => {
-    if (!selectedSubmission) return;
+    if (!selectedSubmission || isReviewing) return;
 
     try {
       await reviewSubmission({
@@ -73,24 +75,16 @@ export const WorkflowRail = ({ onNavigateToSubmission }: WorkflowRailProps) => {
         action: 'approve',
         approvalNotes,
       });
-      toast({
-        title: 'Submission Approved',
-        description: `Cost submission has been approved successfully.`,
-      });
       setShowApproveDialog(false);
       setApprovalNotes('');
       setSelectedSubmission(null);
     } catch (error) {
-      toast({
-        title: 'Approval Failed',
-        description: error instanceof Error ? error.message : 'Failed to approve submission',
-        variant: 'destructive',
-      });
+      // Error is already handled by context onError
     }
   };
 
   const handleReject = async () => {
-    if (!selectedSubmission) return;
+    if (!selectedSubmission || !rejectionNotes.trim() || isReviewing) return;
 
     try {
       await reviewSubmission({
@@ -98,19 +92,11 @@ export const WorkflowRail = ({ onNavigateToSubmission }: WorkflowRailProps) => {
         action: 'reject',
         reviewerNotes: rejectionNotes,
       });
-      toast({
-        title: 'Submission Rejected',
-        description: 'Cost submission has been rejected.',
-      });
       setShowRejectDialog(false);
       setRejectionNotes('');
       setSelectedSubmission(null);
     } catch (error) {
-      toast({
-        title: 'Rejection Failed',
-        description: error instanceof Error ? error.message : 'Failed to reject submission',
-        variant: 'destructive',
-      });
+      // Error is already handled by context onError
     }
   };
 
@@ -152,7 +138,7 @@ export const WorkflowRail = ({ onNavigateToSubmission }: WorkflowRailProps) => {
             </div>
             <div className="text-right">
               <p className="text-lg font-bold">
-                {formatCurrency(submission.totalCostCents || 0, 'SDG')}
+                {formatCurrency(submission.totalCostCents || 0, submission.currency ?? 'SDG')}
               </p>
             </div>
           </div>
@@ -214,11 +200,11 @@ export const WorkflowRail = ({ onNavigateToSubmission }: WorkflowRailProps) => {
               size="sm"
               variant="outline"
               className="w-full mt-3"
-              onClick={() => navigate(`/cost-submission`)}
-              data-testid={`button-mark-paid-${submission.id}`}
+              onClick={() => navigate(`/cost-submission/${submission.id}`)}
+              data-testid={`button-review-payment-${submission.id}`}
             >
               <DollarSign className="h-3 w-3 mr-1" />
-              Mark as Paid
+              Review Payment
             </Button>
           )}
 
@@ -229,6 +215,8 @@ export const WorkflowRail = ({ onNavigateToSubmission }: WorkflowRailProps) => {
             onClick={() => {
               if (onNavigateToSubmission) {
                 onNavigateToSubmission(submission.id);
+              } else {
+                navigate(`/cost-submission/${submission.id}`);
               }
             }}
             data-testid={`button-view-details-${submission.id}`}
@@ -403,7 +391,7 @@ export const WorkflowRail = ({ onNavigateToSubmission }: WorkflowRailProps) => {
             <DialogTitle>Approve Cost Submission</DialogTitle>
             <DialogDescription>
               Approve submission #{selectedSubmission?.id.slice(0, 8)} for{' '}
-              {selectedSubmission && formatCurrency(selectedSubmission.totalCostCents || 0, 'SDG')}
+              {selectedSubmission && formatCurrency(selectedSubmission.totalCostCents || 0, selectedSubmission.currency ?? 'SDG')}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
