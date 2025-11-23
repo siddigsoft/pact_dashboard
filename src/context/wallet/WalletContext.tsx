@@ -483,8 +483,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const classification = getUserClassification(userId);
       
       if (!classification) {
-        console.warn(`No classification found for user ${userId}, using default fee`);
-        return 5000;
+        console.warn(`No classification found for user ${userId}, using default fee of 50 SDG`);
+        return 50;
       }
 
       const feeStructure = getActiveFeeStructure(
@@ -493,21 +493,21 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       );
 
       if (!feeStructure) {
-        console.warn(`No fee structure found for ${classification.classificationLevel}/${classification.roleScope}, using default fee`);
-        return 5000;
+        console.warn(`No fee structure found for ${classification.classificationLevel}/${classification.roleScope}, using default fee of 50 SDG`);
+        return 50;
       }
 
       const baseFeeCents = feeStructure.siteVisitBaseFeeCents;
       const transportFeeCents = feeStructure.siteVisitTransportFeeCents;
-      const multiplier = complexityMultiplier * feeStructure.complexityMultiplier;
       
-      const totalCents = Math.round((baseFeeCents + transportFeeCents) * multiplier);
-      const totalSDG = totalCents / 100;
+      const totalCents = baseFeeCents + transportFeeCents;
+      const adjustedCents = Math.round(totalCents * complexityMultiplier);
+      const totalSDG = adjustedCents / 100;
 
       return totalSDG;
     } catch (error: any) {
       console.error('Failed to calculate classification fee:', error);
-      return 5000;
+      return 50;
     }
   };
 
