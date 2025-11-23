@@ -49,6 +49,7 @@ export interface SiteVisit {
   };
   mmpDetails: {
     mmpId: string;
+    projectId?: string;
     projectName: string;
     uploadedBy: string;
     uploadedAt: string;
