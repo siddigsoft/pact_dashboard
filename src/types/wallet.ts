@@ -71,7 +71,6 @@ export interface SiteVisitCost {
   classificationLevel?: string;
   roleScope?: string;
   baseFeeCents?: number;
-  transportFeeCents?: number;
   complexityMultiplier?: number;
   
   createdAt: string;

@@ -40,7 +40,6 @@ export interface ClassificationFeeStructure {
   classificationLevel: ClassificationLevel;
   roleScope: ClassificationRoleScope;
   siteVisitBaseFeeCents: number;
-  siteVisitTransportFeeCents: number;
   complexityMultiplier: number;
   currency: string;
   validFrom: string;
@@ -56,7 +55,6 @@ export interface ClassificationFeeStructure {
 
 export interface ClassificationFeeResult {
   baseFeeCents: number;
-  transportFeeCents: number;
   complexityMultiplier: number;
 }
 
@@ -92,7 +90,6 @@ export interface CreateFeeStructureRequest {
   classificationLevel: ClassificationLevel;
   roleScope: ClassificationRoleScope;
   siteVisitBaseFeeCents: number;
-  siteVisitTransportFeeCents: number;
   complexityMultiplier?: number;
   currency?: string;
   validFrom?: string;
@@ -103,7 +100,6 @@ export interface CreateFeeStructureRequest {
 
 export interface UpdateFeeStructureRequest {
   siteVisitBaseFeeCents?: number;
-  siteVisitTransportFeeCents?: number;
   complexityMultiplier?: number;
   validFrom?: string;
   validUntil?: string;

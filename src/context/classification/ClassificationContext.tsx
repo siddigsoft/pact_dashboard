@@ -74,7 +74,6 @@ function transformFeeStructureFromDB(data: any): ClassificationFeeStructure {
     classificationLevel: data.classification_level,
     roleScope: data.role_scope,
     siteVisitBaseFeeCents: parseInt(data.site_visit_base_fee_cents || 0),
-    siteVisitTransportFeeCents: parseInt(data.site_visit_transport_fee_cents || 0),
     complexityMultiplier: parseFloat(data.complexity_multiplier || 1.0),
     currency: data.currency,
     validFrom: data.effective_from,
@@ -338,7 +337,6 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
         classification_level: data.classificationLevel,
         role_scope: data.roleScope,
         site_visit_base_fee_cents: data.siteVisitBaseFeeCents,
-        site_visit_transport_fee_cents: data.siteVisitTransportFeeCents,
         complexity_multiplier: data.complexityMultiplier || 1.0,
         currency: data.currency || 'SDG',
         valid_from: data.validFrom || new Date().toISOString(),
@@ -402,7 +400,6 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
       const updateData: any = { updated_by: currentUser?.id };
       
       if (data.siteVisitBaseFeeCents !== undefined) updateData.site_visit_base_fee_cents = data.siteVisitBaseFeeCents;
-      if (data.siteVisitTransportFeeCents !== undefined) updateData.site_visit_transport_fee_cents = data.siteVisitTransportFeeCents;
       if (data.complexityMultiplier !== undefined) updateData.complexity_multiplier = data.complexityMultiplier;
       if (data.validFrom !== undefined) updateData.valid_from = data.validFrom;
       if (data.validUntil !== undefined) updateData.valid_until = data.validUntil;
@@ -533,7 +530,6 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
 
     return {
       baseFeeCents: feeStructure.siteVisitBaseFeeCents,
-      transportFeeCents: feeStructure.siteVisitTransportFeeCents,
       complexityMultiplier: feeStructure.complexityMultiplier,
     };
   }, [getUserClassification, getActiveFeeStructure]);

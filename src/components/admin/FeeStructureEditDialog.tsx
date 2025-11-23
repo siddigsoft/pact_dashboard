@@ -32,10 +32,6 @@ const feeStructureEditSchema = z.object({
     .number()
     .min(0, 'Base fee must be positive')
     .max(100000000, 'Base fee too large'),
-  siteVisitTransportFeeCents: z.coerce
-    .number()
-    .min(0, 'Transport fee must be positive')
-    .max(100000000, 'Transport fee too large'),
   complexityMultiplier: z.coerce
     .number()
     .min(1, 'Multiplier must be at least 1.0')
@@ -63,7 +59,6 @@ export default function FeeStructureEditDialog({
     resolver: zodResolver(feeStructureEditSchema),
     defaultValues: {
       siteVisitBaseFeeCents: feeStructure.siteVisitBaseFeeCents / 100, // Convert cents to SDG
-      siteVisitTransportFeeCents: feeStructure.siteVisitTransportFeeCents / 100,
       complexityMultiplier: feeStructure.complexityMultiplier,
       changeNotes: '',
     },
@@ -75,7 +70,6 @@ export default function FeeStructureEditDialog({
 
       await updateFeeStructure(feeStructure.id, {
         siteVisitBaseFeeCents: Math.round(data.siteVisitBaseFeeCents * 100), // Convert SDG to cents
-        siteVisitTransportFeeCents: Math.round(data.siteVisitTransportFeeCents * 100),
         complexityMultiplier: data.complexityMultiplier,
         changeNotes: data.changeNotes,
       });
@@ -109,10 +103,8 @@ export default function FeeStructureEditDialog({
     return labels[role] || role;
   };
 
-  // Calculate total
+  // Get base fee for display
   const baseFee = form.watch('siteVisitBaseFeeCents') || 0;
-  const transportFee = form.watch('siteVisitTransportFeeCents') || 0;
-  const total = baseFee + transportFee;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -123,69 +115,51 @@ export default function FeeStructureEditDialog({
             Edit Fee Structure
           </DialogTitle>
           <DialogDescription>
-            Update site visit fees for{' '}
+            Update base fee for{' '}
             <Badge className={getLevelColor(feeStructure.classificationLevel as 'A' | 'B' | 'C')}>
               Level {feeStructure.classificationLevel}
             </Badge>{' '}
-            <Badge variant="outline">{getRoleLabel(feeStructure.roleScope || '')}</Badge>
+            <Badge variant="outline">{getRoleLabel(feeStructure.roleScope || '')}</Badge>.
+            Transport fees come from approved site visits only.
           </DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="siteVisitBaseFeeCents"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Base Fee (SDG)</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        placeholder="1500.00"
-                        {...field}
-                        data-testid="input-base-fee"
-                      />
-                    </FormControl>
-                    <FormDescription>Site visit base compensation</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="siteVisitTransportFeeCents"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Transport Fee (SDG)</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        placeholder="500.00"
-                        {...field}
-                        data-testid="input-transport-fee"
-                      />
-                    </FormControl>
-                    <FormDescription>Travel & transport allowance</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
+            <FormField
+              control={form.control}
+              name="siteVisitBaseFeeCents"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Base Fee (SDG)</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="1500.00"
+                      {...field}
+                      data-testid="input-base-fee"
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    Site visit base compensation per classification level. Transport fees are paid separately from approved site visits.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
             <div className="bg-muted/50 p-4 rounded-md">
               <div className="flex justify-between items-center">
-                <span className="text-sm font-medium">Total Fee per Visit:</span>
+                <span className="text-sm font-medium">Base Fee:</span>
                 <span className="text-lg font-bold text-primary">
-                  SDG {total.toFixed(2)}
+                  SDG {baseFee.toFixed(2)}
                 </span>
               </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                Note: Transport fees are not part of fee structures and come only from approved site visits
+              </p>
             </div>
 
             <FormField

@@ -500,10 +500,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       }
 
       const baseFeeCents = feeStructure.siteVisitBaseFeeCents;
-      const transportFeeCents = feeStructure.siteVisitTransportFeeCents;
       
-      const totalCents = baseFeeCents + transportFeeCents;
-      const adjustedCents = Math.round(totalCents * complexityMultiplier);
+      // Transport fees are now paid separately from approved site visits
+      // Fee structures only contain base fees per classification level
+      const adjustedCents = Math.round(baseFeeCents * complexityMultiplier);
       const totalSDG = adjustedCents / 100;
 
       return totalSDG;
