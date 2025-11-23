@@ -322,11 +322,7 @@ const Finance: React.FC = () => {
               Payment Processing
             </h2>
           
-              <FraudPreventionDashboard 
-                suspiciousTransactionsCount={transactions.length > 0 ? transactions.filter(t => t.status === 'suspicious').length : mockRecentTransactions.filter(t => t.status === 'suspicious').length}
-                blockedTransactionsCount={transactions.length > 0 ? transactions.filter(t => t.status === 'blocked').length : mockRecentTransactions.filter(t => t.status === 'blocked').length}
-                highRiskAccountsCount={transactions.length > 0 ? transactions.filter(t => (t.amount || 0) > 2000).length : mockRecentTransactions.filter(t => (t.amount || 0) > 2000).length}
-              />
+              <FraudPreventionDashboard />
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <Card className="border-t-4 border-t-green-500 overflow-hidden transition-all hover:shadow-md">

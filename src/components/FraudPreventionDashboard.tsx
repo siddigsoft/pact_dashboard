@@ -1,5 +1,5 @@
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -9,25 +9,97 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/lib/supabase";
 
 interface FraudPreventionDashboardProps {
-  suspiciousTransactionsCount: number;
-  blockedTransactionsCount: number;
-  highRiskAccountsCount: number;
+  suspiciousTransactionsCount?: number;
+  blockedTransactionsCount?: number;
+  highRiskAccountsCount?: number;
 }
 
 export const FraudPreventionDashboard: React.FC<FraudPreventionDashboardProps> = ({
-  suspiciousTransactionsCount = 8,
-  blockedTransactionsCount = 3,
-  highRiskAccountsCount = 2,
+  suspiciousTransactionsCount = 0,
+  blockedTransactionsCount = 0,
+  highRiskAccountsCount = 0,
 }) => {
-  // Mock data for recent suspicious activities
-  const suspiciousActivities = [
-    { id: 1, user: "Mohammed Ali", type: "Excessive withdrawal attempts", severity: "high", time: "2 mins ago", status: "blocked" },
-    { id: 2, user: "Sara Ahmed", type: "Unusual location login", severity: "medium", time: "25 mins ago", status: "flagged" },
-    { id: 3, user: "Ibrahim Hassan", type: "Multiple rapid transactions", severity: "high", time: "1 hour ago", status: "under review" },
-    { id: 4, user: "Fatima Osman", type: "Unusual payment pattern", severity: "medium", time: "3 hours ago", status: "flagged" },
-  ];
+  const [counts, setCounts] = useState({
+    suspicious: suspiciousTransactionsCount,
+    blocked: blockedTransactionsCount,
+    highRisk: highRiskAccountsCount,
+  });
+
+  const [activities, setActivities] = useState<Array<{
+    id: string;
+    title: string;
+    message?: string | null;
+    severity?: string | null;
+    status?: string | null;
+    created_at?: string | null;
+  }>>([]);
+
+  const timeAgo = (iso?: string | null) => {
+    if (!iso) return '';
+    const d = new Date(iso).getTime();
+    const diff = Math.max(0, Date.now() - d);
+    const m = Math.floor(diff / 60000);
+    if (m < 1) return 'just now';
+    if (m < 60) return `${m} mins ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h} hour${h > 1 ? 's' : ''} ago`;
+    const days = Math.floor(h / 24);
+    return `${days} day${days > 1 ? 's' : ''} ago`;
+  };
+
+  useEffect(() => {
+    const fetchData = async () => {
+      // 1) Recent alerts for activities
+      const { data: alerts } = await supabase
+        .from('budget_alerts')
+        .select('id, title, message, severity, status, created_at, project_budget_id, mmp_budget_id')
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      setActivities((alerts || []).map((a: any) => ({
+        id: a.id,
+        title: a.title,
+        message: a.message,
+        severity: a.severity,
+        status: a.status,
+        created_at: a.created_at,
+      })));
+
+      // 2) Suspicious count = active alerts
+      const { count: activeAlertsCount } = await supabase
+        .from('budget_alerts')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'active');
+
+      // 3) Blocked = transactions awaiting approval
+      const { count: blockedCount } = await supabase
+        .from('budget_transactions')
+        .select('id', { count: 'exact', head: true })
+        .eq('requires_approval', true)
+        .is('approved_at', null);
+
+      // 4) High risk = distinct budgets with high/critical active alerts
+      const { data: highAlerts } = await supabase
+        .from('budget_alerts')
+        .select('project_budget_id, mmp_budget_id, severity, status')
+        .in('severity', ['high', 'critical'])
+        .eq('status', 'active');
+
+      const proj = new Set((highAlerts || []).map((r: any) => r.project_budget_id).filter(Boolean));
+      const mmp = new Set((highAlerts || []).map((r: any) => r.mmp_budget_id).filter(Boolean));
+
+      setCounts({
+        suspicious: activeAlertsCount || 0,
+        blocked: blockedCount || 0,
+        highRisk: proj.size + mmp.size,
+      });
+    };
+
+    fetchData();
+  }, []);
 
   return (
     <Card className="border-t-4 border-t-red-600 overflow-hidden transition-all hover:shadow-md">
@@ -43,23 +115,23 @@ export const FraudPreventionDashboard: React.FC<FraudPreventionDashboardProps> =
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <Card className={cn(
             "p-3", 
-            suspiciousTransactionsCount > 5 ? "bg-amber-50 border-amber-200" : "bg-slate-50"
+            counts.suspicious > 5 ? "bg-amber-50 border-amber-200" : "bg-slate-50"
           )}>
             <div className="flex items-center justify-between">
               <div>
                 <div className="flex items-center gap-2">
                   <AlertTriangle className={cn(
                     "h-4 w-4", 
-                    suspiciousTransactionsCount > 5 ? "text-amber-600" : "text-slate-400"
+                    counts.suspicious > 5 ? "text-amber-600" : "text-slate-400"
                   )} />
                   <span className="text-sm font-medium">Suspicious Transactions</span>
                 </div>
                 <p className={cn(
                   "text-lg font-bold", 
-                  suspiciousTransactionsCount > 5 ? "text-amber-800" : "text-slate-700"
-                )}>{suspiciousTransactionsCount}</p>
+                  counts.suspicious > 5 ? "text-amber-800" : "text-slate-700"
+                )}>{counts.suspicious}</p>
               </div>
-              {suspiciousTransactionsCount > 5 && (
+              {counts.suspicious > 5 && (
                 <Badge className="bg-amber-200 text-amber-800">Alert</Badge>
               )}
             </div>
@@ -67,23 +139,23 @@ export const FraudPreventionDashboard: React.FC<FraudPreventionDashboardProps> =
 
           <Card className={cn(
             "p-3",
-            blockedTransactionsCount > 0 ? "bg-red-50 border-red-200" : "bg-slate-50"
+            counts.blocked > 0 ? "bg-red-50 border-red-200" : "bg-slate-50"
           )}>
             <div className="flex items-center justify-between">
               <div>
                 <div className="flex items-center gap-2">
                   <Lock className={cn(
                     "h-4 w-4",
-                    blockedTransactionsCount > 0 ? "text-red-600" : "text-slate-400"
+                    counts.blocked > 0 ? "text-red-600" : "text-slate-400"
                   )} />
                   <span className="text-sm font-medium">Blocked Transactions</span>
                 </div>
                 <p className={cn(
                   "text-lg font-bold",
-                  blockedTransactionsCount > 0 ? "text-red-800" : "text-slate-700"
-                )}>{blockedTransactionsCount}</p>
+                  counts.blocked > 0 ? "text-red-800" : "text-slate-700"
+                )}>{counts.blocked}</p>
               </div>
-              {blockedTransactionsCount > 0 && (
+              {counts.blocked > 0 && (
                 <Badge className="bg-red-200 text-red-800">Critical</Badge>
               )}
             </div>
@@ -91,23 +163,23 @@ export const FraudPreventionDashboard: React.FC<FraudPreventionDashboardProps> =
 
           <Card className={cn(
             "p-3",
-            highRiskAccountsCount > 0 ? "bg-red-50 border-red-200" : "bg-slate-50"
+            counts.highRisk > 0 ? "bg-red-50 border-red-200" : "bg-slate-50"
           )}>
             <div className="flex items-center justify-between">
               <div>
                 <div className="flex items-center gap-2">
                   <UserX className={cn(
                     "h-4 w-4",
-                    highRiskAccountsCount > 0 ? "text-red-600" : "text-slate-400"
+                    counts.highRisk > 0 ? "text-red-600" : "text-slate-400"
                   )} />
                   <span className="text-sm font-medium">High-Risk Accounts</span>
                 </div>
                 <p className={cn(
                   "text-lg font-bold",
-                  highRiskAccountsCount > 0 ? "text-red-800" : "text-slate-700"
-                )}>{highRiskAccountsCount}</p>
+                  counts.highRisk > 0 ? "text-red-800" : "text-slate-700"
+                )}>{counts.highRisk}</p>
               </div>
-              {highRiskAccountsCount > 0 && (
+              {counts.highRisk > 0 && (
                 <Badge className="bg-red-200 text-red-800">Critical</Badge>
               )}
             </div>
@@ -162,31 +234,33 @@ export const FraudPreventionDashboard: React.FC<FraudPreventionDashboardProps> =
           </h3>
 
           <div className="space-y-2">
-            {suspiciousActivities.map((activity) => (
+            {activities.map((activity) => (
               <Card 
                 key={activity.id} 
                 className={cn(
                   "p-3 transition-all hover:shadow-sm",
-                  activity.severity === "high" ? "bg-red-50 border-red-200" : "bg-amber-50 border-amber-200"
+                  activity.severity === "high" || activity.severity === "critical" ? "bg-red-50 border-red-200" : "bg-amber-50 border-amber-200"
                 )}
               >
                 <div className="flex items-center justify-between">
                   <div className="space-y-1">
-                    <p className="font-medium text-sm">{activity.user}</p>
-                    <p className="text-xs text-muted-foreground">{activity.type}</p>
+                    <p className="font-medium text-sm">{activity.title}</p>
+                    {activity.message && (
+                      <p className="text-xs text-muted-foreground">{activity.message}</p>
+                    )}
                   </div>
                   <div className="flex flex-col items-end gap-1">
                     <Badge 
                       className={cn(
                         activity.status === "blocked" ? "bg-red-200 text-red-800" :
-                        activity.status === "flagged" ? "bg-amber-200 text-amber-800" :
+                        activity.status === "flagged" || activity.status === "active" ? "bg-amber-200 text-amber-800" :
                         "bg-blue-200 text-blue-800"
                       )}
                     >
-                      {activity.status}
+                      {activity.status || 'active'}
                     </Badge>
                     <p className="text-xs flex items-center gap-1">
-                      <Clock className="h-3 w-3" /> {activity.time}
+                      <Clock className="h-3 w-3" /> {timeAgo(activity.created_at)}
                     </p>
                   </div>
                 </div>
