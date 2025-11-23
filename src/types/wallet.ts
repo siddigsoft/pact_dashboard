@@ -13,7 +13,8 @@ export type WalletTransactionType =
   | 'withdrawal' 
   | 'adjustment' 
   | 'bonus' 
-  | 'penalty';
+  | 'penalty'
+  | 'retainer';
 
 export interface WalletTransaction {
   id: string;
@@ -65,6 +66,14 @@ export interface SiteVisitCost {
   adjustedBy?: string;
   adjustmentReason?: string;
   costNotes?: string;
+  
+  // Classification-based fee information
+  classificationLevel?: string;
+  roleScope?: string;
+  baseFeeCents?: number;
+  transportFeeCents?: number;
+  complexityMultiplier?: number;
+  
   createdAt: string;
   updatedAt: string;
 }
