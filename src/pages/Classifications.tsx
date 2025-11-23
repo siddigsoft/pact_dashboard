@@ -256,14 +256,13 @@ const Classifications = () => {
 
   const exportToCSV = () => {
     if (activeTab === 'fee-structures') {
-      const headers = ['Level', 'Role', 'Base Fee', 'Transport Fee', 'Multiplier', 'Total', 'Currency'];
+      const headers = ['Level', 'Role', 'Base Fee', 'Multiplier', 'Total', 'Currency'];
       const rows = filteredFeeStructures.map(fee => [
         fee.classificationLevel,
         fee.roleScope || '',
         ((fee.siteVisitBaseFeeCents || 0) / 100).toString(),
-        ((fee.siteVisitTransportFeeCents || 0) / 100).toString(),
         fee.complexityMultiplier?.toString() || '1',
-        (((fee.siteVisitBaseFeeCents || 0) + (fee.siteVisitTransportFeeCents || 0)) / 100).toString(),
+        ((fee.siteVisitBaseFeeCents || 0) / 100).toString(),
         fee.currency || 'SDG',
       ]);
       
@@ -667,12 +666,6 @@ const Classifications = () => {
                             <th className="text-right py-3 px-4 font-semibold text-sm">
                               Base Fee
                             </th>
-                            <th className="text-right py-3 px-4 font-semibold text-sm">
-                              Transport Fee
-                            </th>
-                            <th className="text-right py-3 px-4 font-semibold text-sm">
-                              Total
-                            </th>
                             <th className="text-center py-3 px-4 font-semibold text-sm">
                               Multiplier
                             </th>
@@ -705,15 +698,6 @@ const Classifications = () => {
                                 </td>
                                 <td className="py-3 px-4 text-right font-medium text-sm">
                                   {formatCurrency((fee.siteVisitBaseFeeCents || 0) / 100, fee.currency || 'SDG')}
-                                </td>
-                                <td className="py-3 px-4 text-right font-medium text-sm">
-                                  {formatCurrency((fee.siteVisitTransportFeeCents || 0) / 100, fee.currency || 'SDG')}
-                                </td>
-                                <td className="py-3 px-4 text-right font-bold text-blue-600 text-sm">
-                                  {formatCurrency(
-                                    ((fee.siteVisitBaseFeeCents || 0) + (fee.siteVisitTransportFeeCents || 0)) / 100,
-                                    fee.currency || 'SDG'
-                                  )}
                                 </td>
                                 <td className="py-3 px-4 text-center">
                                   <Badge variant="outline">{fee.complexityMultiplier}x</Badge>

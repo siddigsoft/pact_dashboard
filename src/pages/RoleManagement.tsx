@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Plus, Users, Shield, Settings } from 'lucide-react';
+import { Plus, Users, Shield, Settings, Sparkles, Award } from 'lucide-react';
 import { useAppContext } from '@/context/AppContext';
 import { useRoleManagement } from '@/context/role-management/RoleManagementContext';
 import { RoleCard } from '@/components/role-management/RoleCard';
@@ -146,68 +146,89 @@ const RoleManagement = () => {
   const customRoles = roles.filter(role => !role.is_system_role);
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="container mx-auto p-6 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold">Role Management</h1>
-          <p className="text-gray-500 mt-2">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+            <Shield className="h-8 w-8 text-blue-600" />
+            Role Management
+          </h1>
+          <p className="text-gray-600 dark:text-gray-400 mt-1">
             Manage roles and permissions for your organization
           </p>
         </div>
-        <div className="flex gap-2">
-          {/* <Button onClick={() => setShowPermissionTester(true)} variant="outline">
-            <Shield className="h-4 w-4 mr-2" />
-            Test Permissions
-          </Button> */}
-          <Button onClick={() => setShowCreateDialog(true)}>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            onClick={() => setShowCreateDialog(true)}
+            data-testid="button-create-role"
+          >
             <Plus className="h-4 w-4 mr-2" />
             Create Role
           </Button>
         </div>
       </div>
 
-      {/* Statistics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Roles</CardTitle>
-            <Shield className="h-4 w-4 text-muted-foreground" />
+      {/* Enhanced Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <Card 
+          className="hover-elevate active-elevate-2 cursor-pointer overflow-hidden relative bg-gradient-to-br from-blue-500 to-blue-700 text-white border-0"
+          data-testid="card-total-roles"
+        >
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-white/90">
+              Total Roles
+            </CardTitle>
+            <Shield className="h-5 w-5 text-white/80" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{roles.length}</div>
-            <p className="text-xs text-muted-foreground">
+            <div className="text-3xl font-bold text-white">{roles.length}</div>
+            <p className="text-xs text-white/80 mt-1">
               {systemRoles.length} system + {customRoles.length} custom
             </p>
           </CardContent>
+          <Sparkles className="absolute -right-4 -bottom-4 h-24 w-24 text-white/10" />
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Users</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
+        <Card 
+          className="hover-elevate active-elevate-2 cursor-pointer overflow-hidden relative bg-gradient-to-br from-green-500 to-emerald-700 text-white border-0"
+          data-testid="card-total-users"
+        >
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-white/90">
+              Total Users
+            </CardTitle>
+            <Users className="h-5 w-5 text-white/80" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{users.length}</div>
-            <p className="text-xs text-muted-foreground">
+            <div className="text-3xl font-bold text-white">{users.length}</div>
+            <p className="text-xs text-white/80 mt-1">
               Across all roles
             </p>
           </CardContent>
+          <Sparkles className="absolute -right-4 -bottom-4 h-24 w-24 text-white/10" />
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Roles</CardTitle>
-            <Settings className="h-4 w-4 text-muted-foreground" />
+        <Card 
+          className="hover-elevate active-elevate-2 cursor-pointer overflow-hidden relative bg-gradient-to-br from-purple-500 to-purple-700 text-white border-0"
+          data-testid="card-active-roles"
+        >
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-white/90">
+              Active Roles
+            </CardTitle>
+            <Award className="h-5 w-5 text-white/80" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-3xl font-bold text-white">
               {roles.filter(role => role.is_active).length}
             </div>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-white/80 mt-1">
               Currently active
             </p>
           </CardContent>
+          <Sparkles className="absolute -right-4 -bottom-4 h-24 w-24 text-white/10" />
         </Card>
       </div>
 

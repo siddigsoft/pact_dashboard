@@ -31,7 +31,11 @@ import {
   RefreshCw,
   AlertCircle,
   Bell,
-  Loader2
+  Loader2,
+  Sparkles,
+  Award,
+  Users as UsersIcon,
+  CheckCircle
 } from 'lucide-react';
 import { AppRole } from '@/types/roles';
 import {
@@ -46,7 +50,7 @@ import {
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { Card } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import PendingApprovalsList from '@/components/PendingApprovalsList';
 import { useRoleManagement } from '@/context/role-management/RoleManagementContext';
 import { useAppContext } from '@/context/AppContext';
@@ -416,34 +420,127 @@ const Users = () => {
     setConfirmDialog({ open: false });
   };
 
+  const stats = {
+    totalUsers: users.length,
+    pendingApprovals: pendingUsers.length,
+    approvedUsers: approvedUsers.length,
+    totalRoles: Array.from(new Set(users.map(u => getPrimaryRoleLabel(u)))).length
+  };
+
   return (
-    <div className="container mx-auto p-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between mb-6">
+    <div className="container mx-auto p-6 space-y-6">
+      {/* Header */}
+      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Users Management</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+            <UsersIcon className="h-8 w-8 text-blue-600" />
+            Users Management
+          </h1>
+          <p className="text-gray-600 dark:text-gray-400 mt-1">
             View and manage user accounts and permissions
           </p>
         </div>
-
-        <div className="mt-4 md:mt-0 flex items-center gap-3">
+        <div className="flex flex-wrap gap-2">
           <Button 
             variant="outline" 
             size="sm"
             onClick={handleRefreshUsers}
             disabled={isRefreshing}
+            data-testid="button-refresh-users"
           >
             <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-            {isRefreshing ? 'Refreshing...' : 'Refresh Users'}
+            {isRefreshing ? 'Refreshing...' : 'Refresh'}
           </Button>
           
-          <Button variant="outline" size="sm" asChild>
+          <Button size="sm" asChild data-testid="button-add-user">
             <Link to="/register">
               <UserPlus className="mr-2 h-4 w-4" />
-              Add New User
+              Add User
             </Link>
           </Button>
         </div>
+      </div>
+
+      {/* Enhanced Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card 
+          className="hover-elevate active-elevate-2 cursor-pointer overflow-hidden relative bg-gradient-to-br from-blue-500 to-blue-700 text-white border-0"
+          onClick={() => setActiveTab('all-users')}
+          data-testid="card-total-users"
+        >
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-white/90">
+              Total Users
+            </CardTitle>
+            <UsersIcon className="h-5 w-5 text-white/80" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-white">{stats.totalUsers}</div>
+            <p className="text-xs text-white/80 mt-1">
+              Click to view all users
+            </p>
+          </CardContent>
+          <Sparkles className="absolute -right-4 -bottom-4 h-24 w-24 text-white/10" />
+        </Card>
+
+        <Card 
+          className="hover-elevate active-elevate-2 cursor-pointer overflow-hidden relative bg-gradient-to-br from-green-500 to-emerald-700 text-white border-0"
+          onClick={() => setActiveTab('approved-users')}
+          data-testid="card-approved-users"
+        >
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-white/90">
+              Approved Users
+            </CardTitle>
+            <CheckCircle className="h-5 w-5 text-white/80" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-white">{stats.approvedUsers}</div>
+            <p className="text-xs text-white/80 mt-1">
+              Active in the system
+            </p>
+          </CardContent>
+          <Sparkles className="absolute -right-4 -bottom-4 h-24 w-24 text-white/10" />
+        </Card>
+
+        <Card 
+          className="hover-elevate active-elevate-2 cursor-pointer overflow-hidden relative bg-gradient-to-br from-purple-500 to-purple-700 text-white border-0"
+          onClick={() => setActiveTab('pending-approvals')}
+          data-testid="card-pending-approvals"
+        >
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-white/90">
+              Pending Approvals
+            </CardTitle>
+            <Clock className="h-5 w-5 text-white/80" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-white">{stats.pendingApprovals}</div>
+            <p className="text-xs text-white/80 mt-1">
+              {stats.pendingApprovals > 0 ? 'Click to review' : 'No pending approvals'}
+            </p>
+          </CardContent>
+          <Sparkles className="absolute -right-4 -bottom-4 h-24 w-24 text-white/10" />
+        </Card>
+
+        <Card 
+          className="hover-elevate active-elevate-2 cursor-pointer overflow-hidden relative bg-gradient-to-br from-orange-500 to-red-600 text-white border-0"
+          data-testid="card-unique-roles"
+        >
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-white/90">
+              Unique Roles
+            </CardTitle>
+            <Award className="h-5 w-5 text-white/80" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-white">{stats.totalRoles}</div>
+            <p className="text-xs text-white/80 mt-1">
+              Active role types
+            </p>
+          </CardContent>
+          <Sparkles className="absolute -right-4 -bottom-4 h-24 w-24 text-white/10" />
+        </Card>
       </div>
 
       {users.length === 0 && (
