@@ -351,67 +351,103 @@ const Classifications = () => {
         <>
           {/* Enhanced Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card className="hover-elevate">
+            <Card 
+              className="hover-elevate active-elevate-2 cursor-pointer overflow-hidden relative bg-gradient-to-br from-blue-500 to-blue-700 text-white border-0"
+              onClick={() => {
+                setActiveTab('fee-structures');
+                setLevelFilter('all');
+                setRoleFilter('all');
+                setSearchQuery('');
+              }}
+              data-testid="card-fee-structures"
+            >
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
+                <CardTitle className="text-sm font-medium text-white/90">
                   Fee Structures
                 </CardTitle>
-                <DollarSign className="h-4 w-4 text-blue-600" />
+                <DollarSign className="h-5 w-5 text-white/80" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{stats.totalStructures}</div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Active fee combinations
+                <div className="text-3xl font-bold text-white">{stats.totalStructures}</div>
+                <p className="text-xs text-white/80 mt-1">
+                  Click to view all structures
                 </p>
               </CardContent>
+              <Sparkles className="absolute -right-4 -bottom-4 h-24 w-24 text-white/10" />
             </Card>
 
-            <Card className="hover-elevate">
+            <Card 
+              className="hover-elevate active-elevate-2 cursor-pointer overflow-hidden relative bg-gradient-to-br from-green-500 to-emerald-700 text-white border-0"
+              onClick={() => {
+                setActiveTab('user-classifications');
+                setLevelFilter('all');
+                setRoleFilter('all');
+                setSearchQuery('');
+              }}
+              data-testid="card-classified-users"
+            >
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
+                <CardTitle className="text-sm font-medium text-white/90">
                   Classified Users
                 </CardTitle>
-                <Users className="h-4 w-4 text-green-600" />
+                <Users className="h-5 w-5 text-white/80" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{stats.totalClassified}</div>
-                <p className="text-xs text-muted-foreground mt-1">
+                <div className="text-3xl font-bold text-white">{stats.totalClassified}</div>
+                <p className="text-xs text-white/80 mt-1">
                   {stats.withRetainer} with retainer
                 </p>
               </CardContent>
+              <Sparkles className="absolute -right-4 -bottom-4 h-24 w-24 text-white/10" />
             </Card>
 
-            <Card className="hover-elevate">
+            <Card 
+              className="hover-elevate active-elevate-2 cursor-pointer overflow-hidden relative bg-gradient-to-br from-purple-500 to-purple-700 text-white border-0"
+              onClick={() => setShowVisualization(!showVisualization)}
+              data-testid="card-level-distribution"
+            >
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
+                <CardTitle className="text-sm font-medium text-white/90">
                   Level Distribution
                 </CardTitle>
-                <Award className="h-4 w-4 text-purple-600" />
+                <Award className="h-5 w-5 text-white/80" />
               </CardHeader>
               <CardContent>
                 <div className="flex flex-wrap gap-1 mt-1">
-                  <Badge variant="outline" className={getLevelColor('A')}>A: {stats.levelACount}</Badge>
-                  <Badge variant="outline" className={getLevelColor('B')}>B: {stats.levelBCount}</Badge>
-                  <Badge variant="outline" className={getLevelColor('C')}>C: {stats.levelCCount}</Badge>
+                  <Badge className="bg-white/20 text-white border-white/30">A: {stats.levelACount}</Badge>
+                  <Badge className="bg-white/20 text-white border-white/30">B: {stats.levelBCount}</Badge>
+                  <Badge className="bg-white/20 text-white border-white/30">C: {stats.levelCCount}</Badge>
                 </div>
-              </CardContent>
-            </Card>
-
-            <Card className="hover-elevate">
-              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Avg Base Fee
-                </CardTitle>
-                <TrendingUp className="h-4 w-4 text-orange-600" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {formatCurrency(stats.avgBaseFee, 'SDG')}
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Across all levels
+                <p className="text-xs text-white/80 mt-2">
+                  Click to {showVisualization ? 'hide' : 'show'} charts
                 </p>
               </CardContent>
+              <Sparkles className="absolute -right-4 -bottom-4 h-24 w-24 text-white/10" />
+            </Card>
+
+            <Card 
+              className="hover-elevate active-elevate-2 cursor-pointer overflow-hidden relative bg-gradient-to-br from-orange-500 to-red-600 text-white border-0"
+              onClick={() => {
+                setActiveTab('fee-structures');
+                setShowVisualization(true);
+              }}
+              data-testid="card-avg-fee"
+            >
+              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium text-white/90">
+                  Avg Base Fee
+                </CardTitle>
+                <TrendingUp className="h-5 w-5 text-white/80" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold text-white">
+                  {formatCurrency(stats.avgBaseFee, 'SDG')}
+                </div>
+                <p className="text-xs text-white/80 mt-1">
+                  Click to view analytics
+                </p>
+              </CardContent>
+              <Sparkles className="absolute -right-4 -bottom-4 h-24 w-24 text-white/10" />
             </Card>
           </div>
 
