@@ -1,12 +1,30 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useClassification } from '@/context/classification/ClassificationContext';
-import { Award, DollarSign, TrendingUp, Users, ShieldAlert, Edit, ExternalLink } from 'lucide-react';
+import { 
+  Award, 
+  DollarSign, 
+  TrendingUp, 
+  Users, 
+  ShieldAlert, 
+  Edit, 
+  ExternalLink,
+  Search,
+  Filter,
+  Download,
+  Plus,
+  Calendar,
+  PieChart,
+  BarChart3,
+  Sparkles
+} from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAppContext } from '@/context/AppContext';
@@ -36,6 +54,12 @@ const Classifications = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [selectedFeeStructure, setSelectedFeeStructure] = useState<ClassificationFeeStructure | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  
+  // Search and filter states
+  const [searchQuery, setSearchQuery] = useState('');
+  const [levelFilter, setLevelFilter] = useState<string>('all');
+  const [roleFilter, setRoleFilter] = useState<string>('all');
+  const [showVisualization, setShowVisualization] = useState(false);
 
   // Check authorization - view vs edit permissions
   const canAccessClassifications = canManageFinances();
@@ -44,14 +68,12 @@ const Classifications = () => {
   // Fetch user profiles and enrich classifications
   useEffect(() => {
     const fetchUserProfiles = async () => {
-      // Early return if unauthorized - no data fetching
       if (!canAccessClassifications) {
         setEnrichedClassifications([]);
         setProfilesLoading(false);
         return;
       }
 
-      // Early return if no classifications to enrich
       if (userClassifications.length === 0) {
         setEnrichedClassifications([]);
         setProfilesLoading(false);
@@ -62,7 +84,6 @@ const Classifications = () => {
         setErrorMessage(null);
         const userIds = userClassifications.map(uc => uc.userId);
         
-        // Fetch profiles with roles
         const { data: profiles, error: profileError } = await supabase
           .from('profiles')
           .select('id, full_name, email')
@@ -70,7 +91,6 @@ const Classifications = () => {
 
         if (profileError) throw new Error(`Failed to fetch profiles: ${profileError.message}`);
 
-        // Fetch user roles
         const { data: userRoles, error: rolesError } = await supabase
           .from('user_roles')
           .select('user_id, role')
@@ -78,17 +98,14 @@ const Classifications = () => {
 
         if (rolesError) throw new Error(`Failed to fetch user roles: ${rolesError.message}`);
 
-        // Map profiles and roles to classifications
         const profileMap = new Map(profiles?.map(p => [p.id, p]) || []);
         const roleMap = new Map(userRoles?.map(r => [r.user_id, r.role]) || []);
         
-        // Build enriched classifications with proper null checks
         const enriched: CurrentUserClassification[] = [];
         for (const uc of userClassifications) {
           const profile = profileMap.get(uc.userId);
           const role = roleMap.get(uc.userId);
           
-          // Skip users without role data - this indicates data integrity issue
           if (!role) {
             console.warn(`User ${uc.userId} has classification but no role assigned`);
             continue;
@@ -118,13 +135,40 @@ const Classifications = () => {
       }
     };
 
-    // Only execute if authorized
     if (canAccessClassifications) {
       fetchUserProfiles();
     } else {
       setProfilesLoading(false);
     }
   }, [userClassifications, toast, canAccessClassifications]);
+
+  // Filtered classifications based on search and filters
+  const filteredClassifications = useMemo(() => {
+    return enrichedClassifications.filter(uc => {
+      const matchesSearch = searchQuery === '' || 
+        uc.fullName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        uc.email?.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      const matchesLevel = levelFilter === 'all' || uc.classificationLevel === levelFilter;
+      const matchesRole = roleFilter === 'all' || uc.userRole === roleFilter;
+      
+      return matchesSearch && matchesLevel && matchesRole;
+    });
+  }, [enrichedClassifications, searchQuery, levelFilter, roleFilter]);
+
+  // Filtered fee structures
+  const filteredFeeStructures = useMemo(() => {
+    return feeStructures.filter(fee => {
+      const matchesSearch = searchQuery === '' || 
+        fee.classificationLevel?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        fee.roleScope?.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      const matchesLevel = levelFilter === 'all' || fee.classificationLevel === levelFilter;
+      const matchesRole = roleFilter === 'all' || fee.roleScope === roleFilter;
+      
+      return matchesSearch && matchesLevel && matchesRole;
+    });
+  }, [feeStructures, searchQuery, levelFilter, roleFilter]);
 
   const getLevelColor = (level: 'A' | 'B' | 'C') => {
     switch (level) {
@@ -159,11 +203,63 @@ const Classifications = () => {
     levelACount: enrichedClassifications.filter(uc => uc.classificationLevel === 'A').length,
     levelBCount: enrichedClassifications.filter(uc => uc.classificationLevel === 'B').length,
     levelCCount: enrichedClassifications.filter(uc => uc.classificationLevel === 'C').length,
+    withRetainer: enrichedClassifications.filter(uc => uc.hasRetainer).length,
+    avgBaseFee: feeStructures.length > 0
+      ? feeStructures.reduce((sum, fs) => sum + (fs.siteVisitBaseFeeCents || 0), 0) / feeStructures.length / 100
+      : 0,
+    totalBudget: enrichedClassifications.reduce((sum, uc) => 
+      sum + (uc.hasRetainer ? (uc.retainerAmountCents || 0) : 0), 0) / 100,
+  };
+
+  const exportToCSV = () => {
+    if (activeTab === 'fee-structures') {
+      const headers = ['Level', 'Role', 'Base Fee', 'Transport Fee', 'Multiplier', 'Total', 'Currency'];
+      const rows = filteredFeeStructures.map(fee => [
+        fee.classificationLevel,
+        fee.roleScope || '',
+        ((fee.siteVisitBaseFeeCents || 0) / 100).toString(),
+        ((fee.siteVisitTransportFeeCents || 0) / 100).toString(),
+        fee.complexityMultiplier?.toString() || '1',
+        (((fee.siteVisitBaseFeeCents || 0) + (fee.siteVisitTransportFeeCents || 0)) / 100).toString(),
+        fee.currency || 'SDG',
+      ]);
+      
+      const csv = [headers, ...rows].map(row => row.join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `fee-structures-${new Date().toISOString().split('T')[0]}.csv`;
+      a.click();
+    } else {
+      const headers = ['Name', 'Email', 'Level', 'Role', 'Effective From', 'Retainer', 'Amount'];
+      const rows = filteredClassifications.map(uc => [
+        uc.fullName || '',
+        uc.email || '',
+        uc.classificationLevel,
+        uc.roleScope || '',
+        uc.effectiveFrom ? new Date(uc.effectiveFrom).toLocaleDateString() : '',
+        uc.hasRetainer ? 'Yes' : 'No',
+        uc.hasRetainer ? ((uc.retainerAmountCents || 0) / 100).toString() : '0',
+      ]);
+      
+      const csv = [headers, ...rows].map(row => row.join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `user-classifications-${new Date().toISOString().split('T')[0]}.csv`;
+      a.click();
+    }
+    
+    toast({
+      title: 'Export Successful',
+      description: 'Data has been exported to CSV file',
+    });
   };
 
   const isLoading = loading || profilesLoading;
 
-  // Authorization guard - only admin and financial admin can access
   if (!canAccessClassifications) {
     return (
       <div className="container mx-auto p-6">
@@ -190,7 +286,8 @@ const Classifications = () => {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-between">
+      {/* Header */}
+      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
             <Award className="h-8 w-8 text-blue-600" />
@@ -200,9 +297,41 @@ const Classifications = () => {
             Manage user classifications and fee structures
           </p>
         </div>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowVisualization(!showVisualization)}
+            data-testid="button-toggle-visualization"
+          >
+            {showVisualization ? <BarChart3 className="h-4 w-4 mr-2" /> : <PieChart className="h-4 w-4 mr-2" />}
+            {showVisualization ? 'Hide' : 'Show'} Charts
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={exportToCSV}
+            data-testid="button-export-csv"
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Export
+          </Button>
+          {canEditFees && (
+            <Button
+              size="sm"
+              onClick={() => {
+                setSelectedFeeStructure(null);
+                setEditDialogOpen(true);
+              }}
+              data-testid="button-create-fee-structure"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              New Fee Structure
+            </Button>
+          )}
+        </div>
       </div>
 
-      {/* Error State - show dedicated error UI instead of empty tables */}
       {errorMessage ? (
         <div className="space-y-4">
           <Alert variant="destructive">
@@ -220,291 +349,429 @@ const Classifications = () => {
         </div>
       ) : (
         <>
-          {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-400">
-              Fee Structures
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-2">
-              <DollarSign className="h-5 w-5 text-blue-600" />
-              <span className="text-2xl font-bold">{stats.totalStructures}</span>
-            </div>
-            <p className="text-xs text-gray-500 mt-1">Active fee combinations</p>
-          </CardContent>
-        </Card>
+          {/* Enhanced Stats Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card className="hover-elevate">
+              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  Fee Structures
+                </CardTitle>
+                <DollarSign className="h-4 w-4 text-blue-600" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{stats.totalStructures}</div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Active fee combinations
+                </p>
+              </CardContent>
+            </Card>
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-400">
-              Classified Users
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-2">
-              <Users className="h-5 w-5 text-green-600" />
-              <span className="text-2xl font-bold">{stats.totalClassified}</span>
-            </div>
-            <p className="text-xs text-gray-500 mt-1">Team members with levels</p>
-          </CardContent>
-        </Card>
+            <Card className="hover-elevate">
+              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  Classified Users
+                </CardTitle>
+                <Users className="h-4 w-4 text-green-600" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{stats.totalClassified}</div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {stats.withRetainer} with retainer
+                </p>
+              </CardContent>
+            </Card>
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-400">
-              Level Distribution
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex gap-2">
-              <Badge className={getLevelColor('A')}>A: {stats.levelACount}</Badge>
-              <Badge className={getLevelColor('B')}>B: {stats.levelBCount}</Badge>
-              <Badge className={getLevelColor('C')}>C: {stats.levelCCount}</Badge>
-            </div>
-            <p className="text-xs text-gray-500 mt-1">By experience level</p>
-          </CardContent>
-        </Card>
+            <Card className="hover-elevate">
+              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  Level Distribution
+                </CardTitle>
+                <Award className="h-4 w-4 text-purple-600" />
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  <Badge variant="outline" className={getLevelColor('A')}>A: {stats.levelACount}</Badge>
+                  <Badge variant="outline" className={getLevelColor('B')}>B: {stats.levelBCount}</Badge>
+                  <Badge variant="outline" className={getLevelColor('C')}>C: {stats.levelCCount}</Badge>
+                </div>
+              </CardContent>
+            </Card>
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-400">
-              Avg Base Fee
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-2">
-              <TrendingUp className="h-5 w-5 text-orange-600" />
-              <span className="text-2xl font-bold">
-                {feeStructures.length > 0
-                  ? formatCurrency(
-                      feeStructures.reduce((sum, fs) => sum + (fs.siteVisitBaseFeeCents || 0), 0) /
-                        feeStructures.length /
-                        100,
-                      'SDG'
-                    )
-                  : 'SDG 0'}
-              </span>
-            </div>
-            <p className="text-xs text-gray-500 mt-1">Across all levels</p>
-          </CardContent>
-        </Card>
-      </div>
+            <Card className="hover-elevate">
+              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  Avg Base Fee
+                </CardTitle>
+                <TrendingUp className="h-4 w-4 text-orange-600" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {formatCurrency(stats.avgBaseFee, 'SDG')}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Across all levels
+                </p>
+              </CardContent>
+            </Card>
+          </div>
 
-      {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
-          <TabsTrigger value="fee-structures">Fee Structures</TabsTrigger>
-          <TabsTrigger value="user-classifications">User Classifications</TabsTrigger>
-        </TabsList>
+          {/* Visualization Section */}
+          {showVisualization && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <PieChart className="h-5 w-5" />
+                  Distribution Analytics
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Level Distribution */}
+                  <div>
+                    <h3 className="text-sm font-semibold mb-4">Level Distribution</h3>
+                    <div className="space-y-3">
+                      {['A', 'B', 'C'].map((level) => {
+                        const count = level === 'A' ? stats.levelACount : 
+                                     level === 'B' ? stats.levelBCount : stats.levelCCount;
+                        const percentage = stats.totalClassified > 0 
+                          ? Math.round((count / stats.totalClassified) * 100) 
+                          : 0;
+                        
+                        return (
+                          <div key={level} className="space-y-1">
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="font-medium">{getLevelLabel(level as 'A' | 'B' | 'C')}</span>
+                              <span className="text-muted-foreground">{count} ({percentage}%)</span>
+                            </div>
+                            <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                              <div 
+                                className={`h-full ${
+                                  level === 'A' ? 'bg-green-500' : 
+                                  level === 'B' ? 'bg-blue-500' : 'bg-orange-500'
+                                }`}
+                                style={{ width: `${percentage}%` }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
 
-        {/* Fee Structures Tab */}
-        <TabsContent value="fee-structures" className="space-y-4">
+                  {/* Fee Structure Summary */}
+                  <div>
+                    <h3 className="text-sm font-semibold mb-4">Fee Structure Overview</h3>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                        <span className="text-sm">Total Budget (Retainers)</span>
+                        <span className="font-bold">{formatCurrency(stats.totalBudget, 'SDG')}</span>
+                      </div>
+                      <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                        <span className="text-sm">Fee Structures</span>
+                        <span className="font-bold">{stats.totalStructures}</span>
+                      </div>
+                      <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                        <span className="text-sm">Users with Retainer</span>
+                        <span className="font-bold">{stats.withRetainer}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Search and Filters */}
           <Card>
-            <CardHeader>
-              <CardTitle>Fee Structures</CardTitle>
-              <CardDescription>
-                Site visit fee rates for each classification level and role combination
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b">
-                      <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">
-                        Level
-                      </th>
-                      <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">
-                        Role
-                      </th>
-                      <th className="text-right py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">
-                        Base Fee
-                      </th>
-                      <th className="text-right py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">
-                        Transport Fee
-                      </th>
-                      <th className="text-right py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">
-                        Total
-                      </th>
-                      <th className="text-center py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">
-                        Multiplier
-                      </th>
-                      {canEditFees && (
-                        <th className="text-center py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">
-                          Actions
-                        </th>
-                      )}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {feeStructures
-                      .sort((a, b) => {
-                        if (a.classificationLevel !== b.classificationLevel) {
-                          return a.classificationLevel.localeCompare(b.classificationLevel);
-                        }
-                        return (a.roleScope || '').localeCompare(b.roleScope || '');
-                      })
-                      .map((fee) => (
-                        <tr
-                          key={fee.id}
-                          className="border-b hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                        >
-                          <td className="py-3 px-4">
-                            <Badge className={getLevelColor(fee.classificationLevel as 'A' | 'B' | 'C')}>
-                              {getLevelLabel(fee.classificationLevel as 'A' | 'B' | 'C')}
-                            </Badge>
-                          </td>
-                          <td className="py-3 px-4 text-gray-700 dark:text-gray-300">
-                            {getRoleLabel(fee.roleScope || '')}
-                          </td>
-                          <td className="py-3 px-4 text-right font-medium">
-                            {formatCurrency((fee.siteVisitBaseFeeCents || 0) / 100, fee.currency || 'SDG')}
-                          </td>
-                          <td className="py-3 px-4 text-right font-medium">
-                            {formatCurrency((fee.siteVisitTransportFeeCents || 0) / 100, fee.currency || 'SDG')}
-                          </td>
-                          <td className="py-3 px-4 text-right font-bold text-blue-600">
-                            {formatCurrency(
-                              ((fee.siteVisitBaseFeeCents || 0) + (fee.siteVisitTransportFeeCents || 0)) / 100,
-                              fee.currency || 'SDG'
-                            )}
-                          </td>
-                          <td className="py-3 px-4 text-center">
-                            <Badge variant="outline">{fee.complexityMultiplier}x</Badge>
-                          </td>
-                          {canEditFees && (
-                            <td className="py-3 px-4 text-center">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  setSelectedFeeStructure(fee);
-                                  setEditDialogOpen(true);
-                                }}
-                                data-testid={`button-edit-fee-${fee.id}`}
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                            </td>
-                          )}
-                        </tr>
-                      ))}
-                  </tbody>
-                </table>
+            <CardContent className="pt-6">
+              <div className="flex flex-col md:flex-row gap-4">
+                <div className="flex-1 relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search by name or email..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10"
+                    data-testid="input-search-users"
+                  />
+                </div>
+                <Select value={levelFilter} onValueChange={setLevelFilter}>
+                  <SelectTrigger className="w-full md:w-[180px]" data-testid="select-filter-level">
+                    <SelectValue placeholder="Filter by Level" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Levels</SelectItem>
+                    <SelectItem value="A">Level A (Senior)</SelectItem>
+                    <SelectItem value="B">Level B (Regular)</SelectItem>
+                    <SelectItem value="C">Level C (Junior)</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={roleFilter} onValueChange={setRoleFilter}>
+                  <SelectTrigger className="w-full md:w-[180px]" data-testid="select-filter-role">
+                    <SelectValue placeholder="Filter by Role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Roles</SelectItem>
+                    <SelectItem value="coordinator">Coordinator</SelectItem>
+                    <SelectItem value="dataCollector">Data Collector</SelectItem>
+                    <SelectItem value="supervisor">Supervisor</SelectItem>
+                  </SelectContent>
+                </Select>
+                {(searchQuery || levelFilter !== 'all' || roleFilter !== 'all') && (
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => {
+                      setSearchQuery('');
+                      setLevelFilter('all');
+                      setRoleFilter('all');
+                    }}
+                    data-testid="button-clear-filters"
+                  >
+                    <Filter className="h-4 w-4" />
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
 
-        {/* User Classifications Tab */}
-        <TabsContent value="user-classifications" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>User Classifications</CardTitle>
-              <CardDescription>
-                Team members with assigned classification levels
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {userClassifications.length === 0 ? (
-                <div className="text-center py-12">
-                  <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                    No Classifications Yet
-                  </h3>
-                  <p className="text-gray-600 dark:text-gray-400 mb-4">
-                    Go to User Management to assign classifications to team members
-                  </p>
-                  <a
-                    href="/users"
-                    className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                  >
-                    Go to User Management
-                  </a>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b">
-                        <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">
-                          User
-                        </th>
-                        <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">
-                          Level
-                        </th>
-                        <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">
-                          Role Scope
-                        </th>
-                        <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">
-                          Effective From
-                        </th>
-                        <th className="text-center py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">
-                          Retainer
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {enrichedClassifications.map((uc) => (
-                        <tr
-                          key={uc.id}
-                          className="border-b hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer"
-                          onClick={() => navigate(`/users/${uc.userId}?tab=classification`)}
-                          data-testid={`row-user-classification-${uc.userId}`}
-                        >
-                          <td className="py-3 px-4">
-                            <div>
-                              <div className="font-medium text-gray-900 dark:text-white flex items-center gap-2">
-                                {uc.fullName || 'Unknown'}
-                                <ExternalLink className="h-3 w-3 text-gray-400" />
-                              </div>
-                              <div className="text-sm text-gray-500">{uc.email || 'No email'}</div>
-                            </div>
-                          </td>
-                          <td className="py-3 px-4">
-                            <Badge className={getLevelColor(uc.classificationLevel as 'A' | 'B' | 'C')}>
-                              {getLevelLabel(uc.classificationLevel as 'A' | 'B' | 'C')}
-                            </Badge>
-                          </td>
-                          <td className="py-3 px-4 text-gray-700 dark:text-gray-300">
-                            {getRoleLabel(uc.roleScope || '')}
-                          </td>
-                          <td className="py-3 px-4 text-gray-700 dark:text-gray-300">
-                            {uc.effectiveFrom
-                              ? new Date(uc.effectiveFrom).toLocaleDateString()
-                              : 'Not set'}
-                          </td>
-                          <td className="py-3 px-4 text-center">
-                            {uc.hasRetainer ? (
-                              <Badge variant="outline" className="bg-green-50 text-green-700 dark:bg-green-900 dark:text-green-200">
-                                {formatCurrency(
-                                  (uc.retainerAmountCents || 0) / 100,
-                                  uc.retainerCurrency || 'SDG'
-                                )}
-                                /{uc.retainerFrequency || 'month'}
-                              </Badge>
-                            ) : (
-                              <span className="text-gray-400">No retainer</span>
+          {/* Tabs */}
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="fee-structures" data-testid="tab-fee-structures">
+                Fee Structures ({filteredFeeStructures.length})
+              </TabsTrigger>
+              <TabsTrigger value="user-classifications" data-testid="tab-user-classifications">
+                User Classifications ({filteredClassifications.length})
+              </TabsTrigger>
+            </TabsList>
+
+            {/* Fee Structures Tab */}
+            <TabsContent value="fee-structures" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Fee Structures</CardTitle>
+                  <CardDescription>
+                    Site visit fee rates for each classification level and role combination
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {filteredFeeStructures.length === 0 ? (
+                    <div className="text-center py-12">
+                      <DollarSign className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                      <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                        No Fee Structures Found
+                      </h3>
+                      <p className="text-gray-600 dark:text-gray-400 mb-4">
+                        {(levelFilter !== 'all' || roleFilter !== 'all') 
+                          ? 'Try adjusting your filters'
+                          : 'Create your first fee structure to get started'}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="border-b">
+                            <th className="text-left py-3 px-4 font-semibold text-sm">
+                              Level
+                            </th>
+                            <th className="text-left py-3 px-4 font-semibold text-sm">
+                              Role
+                            </th>
+                            <th className="text-right py-3 px-4 font-semibold text-sm">
+                              Base Fee
+                            </th>
+                            <th className="text-right py-3 px-4 font-semibold text-sm">
+                              Transport Fee
+                            </th>
+                            <th className="text-right py-3 px-4 font-semibold text-sm">
+                              Total
+                            </th>
+                            <th className="text-center py-3 px-4 font-semibold text-sm">
+                              Multiplier
+                            </th>
+                            {canEditFees && (
+                              <th className="text-center py-3 px-4 font-semibold text-sm">
+                                Actions
+                              </th>
                             )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredFeeStructures
+                            .sort((a, b) => {
+                              if (a.classificationLevel !== b.classificationLevel) {
+                                return a.classificationLevel.localeCompare(b.classificationLevel);
+                              }
+                              return (a.roleScope || '').localeCompare(b.roleScope || '');
+                            })
+                            .map((fee) => (
+                              <tr
+                                key={fee.id}
+                                className="border-b hover-elevate transition-colors"
+                                data-testid={`row-fee-structure-${fee.id}`}
+                              >
+                                <td className="py-3 px-4">
+                                  <Badge variant="outline" className={getLevelColor(fee.classificationLevel as 'A' | 'B' | 'C')}>
+                                    {getLevelLabel(fee.classificationLevel as 'A' | 'B' | 'C')}
+                                  </Badge>
+                                </td>
+                                <td className="py-3 px-4 text-sm">
+                                  {getRoleLabel(fee.roleScope || '')}
+                                </td>
+                                <td className="py-3 px-4 text-right font-medium text-sm">
+                                  {formatCurrency((fee.siteVisitBaseFeeCents || 0) / 100, fee.currency || 'SDG')}
+                                </td>
+                                <td className="py-3 px-4 text-right font-medium text-sm">
+                                  {formatCurrency((fee.siteVisitTransportFeeCents || 0) / 100, fee.currency || 'SDG')}
+                                </td>
+                                <td className="py-3 px-4 text-right font-bold text-blue-600 text-sm">
+                                  {formatCurrency(
+                                    ((fee.siteVisitBaseFeeCents || 0) + (fee.siteVisitTransportFeeCents || 0)) / 100,
+                                    fee.currency || 'SDG'
+                                  )}
+                                </td>
+                                <td className="py-3 px-4 text-center">
+                                  <Badge variant="outline">{fee.complexityMultiplier}x</Badge>
+                                </td>
+                                {canEditFees && (
+                                  <td className="py-3 px-4 text-center">
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => {
+                                        setSelectedFeeStructure(fee);
+                                        setEditDialogOpen(true);
+                                      }}
+                                      data-testid={`button-edit-fee-${fee.id}`}
+                                    >
+                                      <Edit className="h-4 w-4" />
+                                    </Button>
+                                  </td>
+                                )}
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* User Classifications Tab */}
+            <TabsContent value="user-classifications" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>User Classifications</CardTitle>
+                  <CardDescription>
+                    Team members with assigned classification levels
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {filteredClassifications.length === 0 ? (
+                    <div className="text-center py-12">
+                      <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                      <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                        {searchQuery || levelFilter !== 'all' || roleFilter !== 'all'
+                          ? 'No Users Found'
+                          : 'No Classifications Yet'}
+                      </h3>
+                      <p className="text-gray-600 dark:text-gray-400 mb-4">
+                        {searchQuery || levelFilter !== 'all' || roleFilter !== 'all'
+                          ? 'Try adjusting your search or filters'
+                          : 'Go to User Management to assign classifications to team members'}
+                      </p>
+                      {!searchQuery && levelFilter === 'all' && roleFilter === 'all' && (
+                        <Button
+                          onClick={() => navigate('/users')}
+                          data-testid="button-go-to-users"
+                        >
+                          Go to User Management
+                        </Button>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="border-b">
+                            <th className="text-left py-3 px-4 font-semibold text-sm">
+                              User
+                            </th>
+                            <th className="text-left py-3 px-4 font-semibold text-sm">
+                              Level
+                            </th>
+                            <th className="text-left py-3 px-4 font-semibold text-sm">
+                              Role Scope
+                            </th>
+                            <th className="text-left py-3 px-4 font-semibold text-sm">
+                              Effective From
+                            </th>
+                            <th className="text-center py-3 px-4 font-semibold text-sm">
+                              Retainer
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredClassifications.map((uc) => (
+                            <tr
+                              key={uc.id}
+                              className="border-b hover-elevate transition-colors cursor-pointer"
+                              onClick={() => navigate(`/users/${uc.userId}?tab=classification`)}
+                              data-testid={`row-user-classification-${uc.userId}`}
+                            >
+                              <td className="py-3 px-4">
+                                <div>
+                                  <div className="font-medium flex items-center gap-2">
+                                    {uc.fullName || 'Unknown'}
+                                    <ExternalLink className="h-3 w-3 text-muted-foreground" />
+                                  </div>
+                                  <div className="text-sm text-muted-foreground">{uc.email || 'No email'}</div>
+                                </div>
+                              </td>
+                              <td className="py-3 px-4">
+                                <Badge variant="outline" className={getLevelColor(uc.classificationLevel as 'A' | 'B' | 'C')}>
+                                  {getLevelLabel(uc.classificationLevel as 'A' | 'B' | 'C')}
+                                </Badge>
+                              </td>
+                              <td className="py-3 px-4 text-sm">
+                                {getRoleLabel(uc.roleScope || '')}
+                              </td>
+                              <td className="py-3 px-4 text-sm text-muted-foreground">
+                                {uc.effectiveFrom
+                                  ? new Date(uc.effectiveFrom).toLocaleDateString()
+                                  : 'Not set'}
+                              </td>
+                              <td className="py-3 px-4 text-center">
+                                {uc.hasRetainer ? (
+                                  <Badge variant="outline" className="bg-green-50 text-green-700 dark:bg-green-900 dark:text-green-200">
+                                    {formatCurrency(
+                                      (uc.retainerAmountCents || 0) / 100,
+                                      uc.retainerCurrency || 'SDG'
+                                    )}
+                                    /{uc.retainerFrequency || 'month'}
+                                  </Badge>
+                                ) : (
+                                  <span className="text-sm text-muted-foreground">No retainer</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
         </>
       )}
 
       {/* Fee Structure Edit Dialog */}
-      {selectedFeeStructure && (
+      {editDialogOpen && (
         <FeeStructureEditDialog
           open={editDialogOpen}
           onOpenChange={setEditDialogOpen}
