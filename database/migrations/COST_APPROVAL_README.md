@@ -58,15 +58,36 @@ WHERE tgname = 'trigger_record_cost_approval_history';
 
 ## Migration Steps
 
-### Step 1: Apply SQL Migration
+### Step 0: Clean Up Old Objects (IMPORTANT!)
+
+**⚠️ If you're getting "column site_visit_id does not exist" error, run this first!**
+
+This removes any old versions of the cost approval tables/views that may have outdated column names.
 
 1. Open [Supabase Dashboard](https://supabase.com/dashboard/project/abznugnirnlrqnnfkein)
 2. Navigate to **SQL Editor**
 3. Click **New Query**
-4. Copy entire contents of `COST_APPROVAL_SYSTEM.sql`
+4. Copy entire contents of `COST_APPROVAL_CLEANUP.sql`
 5. Paste into SQL Editor
 6. Click **Run** (or press Ctrl/Cmd + Enter)
-7. Wait for success message
+7. Wait for "CLEANUP COMPLETE!" message
+
+**Expected Output:**
+```
+========================================
+CLEANUP COMPLETE!
+========================================
+All old cost approval objects have been dropped.
+You can now run COST_APPROVAL_SYSTEM.sql
+```
+
+### Step 1: Apply SQL Migration
+
+1. In the same SQL Editor (or a new query)
+2. Copy entire contents of `COST_APPROVAL_SYSTEM.sql`
+3. Paste into SQL Editor
+4. Click **Run** (or press Ctrl/Cmd + Enter)
+5. Wait for success message
 
 **Expected Output:**
 ```
