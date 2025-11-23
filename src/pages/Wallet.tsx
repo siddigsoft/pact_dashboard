@@ -2,16 +2,18 @@ import { useState, useMemo } from 'react';
 import { useWallet } from '@/context/wallet/WalletContext';
 import { useAppContext } from '@/context/AppContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Progress } from '@/components/ui/progress';
+import TransactionSearch, { type SearchFilters } from '@/components/wallet/TransactionSearch';
+import PaymentMethodsCard from '@/components/wallet/PaymentMethodsCard';
+import { exportTransactionsToCSV, exportTransactionsToPDF, exportWithdrawalsToCSV, exportWithdrawalsToPDF } from '@/lib/wallet/export';
 import { 
   Wallet as WalletIcon, 
   TrendingUp, 
@@ -67,6 +69,8 @@ const WalletPage = () => {
   
   const [transactionTypeFilter, setTransactionTypeFilter] = useState<string>('all');
   const [dateRangeFilter, setDateRangeFilter] = useState<string>('all');
+  const [withdrawalStatusFilter, setWithdrawalStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+  const [searchFilters, setSearchFilters] = useState<SearchFilters>({});
 
   const currentBalance = getBalance(DEFAULT_CURRENCY);
 
@@ -89,6 +93,13 @@ const WalletPage = () => {
       refreshTransactions(),
       refreshWithdrawalRequests()
     ]);
+  };
+
+  const handleClearAllFilters = () => {
+    setSearchFilters({});
+    setTransactionTypeFilter('all');
+    setDateRangeFilter('all');
+    setWithdrawalStatusFilter('all');
   };
 
   const getTransactionIcon = (type: string) => {
@@ -124,11 +135,45 @@ const WalletPage = () => {
   const filteredTransactions = useMemo(() => {
     let filtered = [...transactions];
 
-    if (transactionTypeFilter !== 'all') {
+    // Apply advanced search filters
+    if (searchFilters.searchTerm) {
+      const term = searchFilters.searchTerm.toLowerCase();
+      filtered = filtered.filter(t => 
+        t.description?.toLowerCase().includes(term) ||
+        t.id.toLowerCase().includes(term) ||
+        t.siteVisitId?.toLowerCase().includes(term)
+      );
+    }
+    
+    if (searchFilters.type) {
+      filtered = filtered.filter(t => t.type === searchFilters.type);
+    }
+    
+    if (searchFilters.minAmount !== undefined) {
+      filtered = filtered.filter(t => Math.abs(t.amount) >= searchFilters.minAmount!);
+    }
+    
+    if (searchFilters.maxAmount !== undefined) {
+      filtered = filtered.filter(t => Math.abs(t.amount) <= searchFilters.maxAmount!);
+    }
+    
+    if (searchFilters.startDate) {
+      const startDate = new Date(searchFilters.startDate);
+      filtered = filtered.filter(t => new Date(t.createdAt) >= startDate);
+    }
+    
+    if (searchFilters.endDate) {
+      const endDate = new Date(searchFilters.endDate);
+      endDate.setHours(23, 59, 59, 999);
+      filtered = filtered.filter(t => new Date(t.createdAt) <= endDate);
+    }
+
+    // Legacy quick filters
+    if (transactionTypeFilter !== 'all' && !searchFilters.type) {
       filtered = filtered.filter(t => t.type === transactionTypeFilter);
     }
 
-    if (dateRangeFilter !== 'all') {
+    if (dateRangeFilter !== 'all' && !searchFilters.startDate && !searchFilters.endDate) {
       const now = new Date();
       let startDate: Date;
       let endDate: Date = now;
@@ -155,7 +200,7 @@ const WalletPage = () => {
     }
 
     return filtered;
-  }, [transactions, transactionTypeFilter, dateRangeFilter]);
+  }, [transactions, transactionTypeFilter, dateRangeFilter, searchFilters]);
 
   const earningsByMonth = useMemo(() => {
     const monthlyData: Record<string, number> = {};
@@ -185,6 +230,19 @@ const WalletPage = () => {
   const withdrawalSuccessRate = withdrawalRequests.length > 0
     ? (completedWithdrawals.length / withdrawalRequests.length) * 100
     : 0;
+
+  const displayWithdrawals = useMemo(() => {
+    switch (withdrawalStatusFilter) {
+      case 'pending':
+        return pendingWithdrawals;
+      case 'approved':
+        return completedWithdrawals;
+      case 'rejected':
+        return rejectedWithdrawals;
+      default:
+        return withdrawalRequests;
+    }
+  }, [withdrawalStatusFilter, withdrawalRequests, pendingWithdrawals, completedWithdrawals, rejectedWithdrawals]);
 
   if (loading) {
     return (
@@ -229,27 +287,53 @@ const WalletPage = () => {
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Button 
-                  variant="outline" 
-                  size="sm" 
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
                   onClick={handleRefresh}
+                  className="px-3 py-1.5 text-sm rounded-md bg-gradient-to-r from-slate-900/50 to-blue-900/50 border border-blue-500/30 text-blue-300 hover:border-blue-400 hover:shadow-[0_0_15px_rgba(59,130,246,0.3)] transition-all backdrop-blur-xl inline-flex items-center focus:outline-none focus:ring-2 focus:ring-blue-400/70 focus:ring-offset-2 focus:ring-offset-slate-950"
                   data-testid="button-refresh-wallet"
-                  className="bg-gradient-to-r from-slate-900/50 to-blue-900/50 border-blue-500/30 text-blue-300 hover:border-blue-400 hover:shadow-[0_0_15px_rgba(59,130,246,0.3)] transition-all backdrop-blur-xl"
                 >
                   <RefreshCw className="w-4 h-4 mr-2" />
                   REFRESH
-                </Button>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => exportTransactionsToCSV(filteredTransactions, wallet)}
+                  className="px-3 py-1.5 text-sm rounded-md bg-gradient-to-r from-green-900/50 to-emerald-900/50 border border-green-500/30 text-green-300 hover:border-green-400 hover:shadow-[0_0_15px_rgba(34,197,94,0.3)] transition-all backdrop-blur-xl inline-flex items-center focus:outline-none focus:ring-2 focus:ring-green-400/70 focus:ring-offset-2 focus:ring-offset-slate-950"
+                  data-testid="button-export-csv"
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  CSV
+                </button>
+                <button
+                  type="button"
+                  onClick={() => exportTransactionsToPDF(filteredTransactions, wallet, DEFAULT_CURRENCY)}
+                  className="px-3 py-1.5 text-sm rounded-md bg-gradient-to-r from-red-900/50 to-pink-900/50 border border-red-500/30 text-red-300 hover:border-red-400 hover:shadow-[0_0_15px_rgba(239,68,68,0.3)] transition-all backdrop-blur-xl inline-flex items-center focus:outline-none focus:ring-2 focus:ring-red-400/70 focus:ring-offset-2 focus:ring-offset-slate-950"
+                  data-testid="button-export-pdf"
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  PDF
+                </button>
+                <button
+                  type="button"
+                  onClick={handleClearAllFilters}
+                  className="px-3 py-1.5 text-sm rounded-md bg-gradient-to-r from-orange-900/50 to-amber-900/50 border border-orange-500/30 text-orange-300 hover:border-orange-400 hover:shadow-[0_0_15px_rgba(249,115,22,0.3)] transition-all backdrop-blur-xl inline-flex items-center focus:outline-none focus:ring-2 focus:ring-orange-400/70 focus:ring-offset-2 focus:ring-offset-slate-950"
+                  data-testid="button-clear-filters"
+                >
+                  <X className="w-4 h-4 mr-2" />
+                  CLEAR FILTERS
+                </button>
             <Dialog open={withdrawalDialogOpen} onOpenChange={setWithdrawalDialogOpen}>
               <DialogTrigger asChild>
-                <Button 
-                  size="default" 
+                <button
+                  type="button"
+                  className="px-4 py-2 rounded-md bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white border-0 shadow-[0_0_20px_rgba(168,85,247,0.5)] transition-all inline-flex items-center focus:outline-none focus:ring-2 focus:ring-purple-400/70 focus:ring-offset-2 focus:ring-offset-slate-950"
                   data-testid="button-request-withdrawal"
-                  className="bg-gradient-to-r from-purple-600 to-pink-600 text-white border-0 hover:shadow-[0_0_20px_rgba(168,85,247,0.5)] transition-all"
                 >
                   <TrendingDown className="w-4 h-4 mr-2" />
                   REQUEST WITHDRAWAL
-                </Button>
+                </button>
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
@@ -294,22 +378,25 @@ const WalletPage = () => {
                     />
                   </div>
                 </div>
-                <DialogFooter>
-                  <Button
-                    variant="outline"
+                <div className="flex gap-3 justify-end pt-4 border-t border-purple-500/20">
+                  <button
+                    type="button"
                     onClick={() => setWithdrawalDialogOpen(false)}
+                    className="px-4 py-2 rounded-md bg-slate-800/50 hover:bg-slate-800/70 text-purple-200 border border-purple-500/20 transition focus:outline-none focus:ring-2 focus:ring-purple-400/70 focus:ring-offset-2 focus:ring-offset-slate-950"
                     data-testid="button-cancel-withdrawal"
                   >
                     Cancel
-                  </Button>
-                  <Button
+                  </button>
+                  <button
+                    type="button"
                     onClick={handleWithdrawalRequest}
                     disabled={!withdrawalAmount || parseFloat(withdrawalAmount) <= 0}
+                    className="px-4 py-2 rounded-md bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white border border-purple-400/50 shadow-[0_0_15px_rgba(168,85,247,0.3)] disabled:opacity-50 disabled:cursor-not-allowed transition focus:outline-none focus:ring-2 focus:ring-purple-400/70 focus:ring-offset-2 focus:ring-offset-slate-950"
                     data-testid="button-submit-withdrawal"
                   >
                     Submit Request
-                  </Button>
-                </DialogFooter>
+                  </button>
+                </div>
               </DialogContent>
             </Dialog>
               </div>
@@ -461,6 +548,13 @@ const WalletPage = () => {
         </Card>
       </div>
 
+      {/* Advanced Transaction Search */}
+      <TransactionSearch
+        onSearch={(filters) => setSearchFilters(filters)}
+        onClear={() => setSearchFilters({})}
+        filters={searchFilters}
+      />
+
       {/* Main Content Tabs */}
       <Tabs defaultValue="overview" className="w-full">
         <TabsList className="grid w-full grid-cols-5 bg-gradient-to-r from-slate-900/80 to-blue-900/80 border border-blue-500/30 backdrop-blur-xl p-1">
@@ -577,6 +671,9 @@ const WalletPage = () => {
                 )}
               </CardContent>
             </Card>
+
+            {/* Payment Methods Card */}
+            <PaymentMethodsCard />
           </div>
 
           {/* Site Visit Earnings */}
@@ -724,13 +821,55 @@ const WalletPage = () => {
         <TabsContent value="withdrawals" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Withdrawal Requests</CardTitle>
-              <CardDescription>Manage and track your withdrawal requests</CardDescription>
+              <div className="flex items-center justify-between flex-wrap gap-4">
+                <div>
+                  <CardTitle>Withdrawal Requests</CardTitle>
+                  <CardDescription>Manage and track your withdrawal requests</CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => exportWithdrawalsToCSV(displayWithdrawals, withdrawalStatusFilter)}
+                    className="px-3 py-1.5 text-sm rounded-md bg-gradient-to-r from-green-900/50 to-emerald-900/50 border border-green-500/30 text-green-300 hover:border-green-400 hover:shadow-[0_0_15px_rgba(34,197,94,0.3)] transition-all backdrop-blur-xl inline-flex items-center focus:outline-none focus:ring-2 focus:ring-green-400/70 focus:ring-offset-2 focus:ring-offset-slate-950"
+                    data-testid="button-export-withdrawals-csv"
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    CSV
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => exportWithdrawalsToPDF(displayWithdrawals, withdrawalStatusFilter)}
+                    className="px-3 py-1.5 text-sm rounded-md bg-gradient-to-r from-red-900/50 to-pink-900/50 border border-red-500/30 text-red-300 hover:border-red-400 hover:shadow-[0_0_15px_rgba(239,68,68,0.3)] transition-all backdrop-blur-xl inline-flex items-center focus:outline-none focus:ring-2 focus:ring-red-400/70 focus:ring-offset-2 focus:ring-offset-slate-950"
+                    data-testid="button-export-withdrawals-pdf"
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    PDF
+                  </button>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
-              {withdrawalRequests.length === 0 ? (
+              {/* Withdrawal Status Filter Tabs */}
+              <Tabs value={withdrawalStatusFilter} onValueChange={(value: any) => setWithdrawalStatusFilter(value)} className="mb-4">
+                <TabsList className="grid w-full max-w-md grid-cols-4">
+                  <TabsTrigger value="all" data-testid="tab-withdrawals-all">
+                    All ({withdrawalRequests.length})
+                  </TabsTrigger>
+                  <TabsTrigger value="pending" data-testid="tab-withdrawals-pending">
+                    Pending ({pendingWithdrawals.length})
+                  </TabsTrigger>
+                  <TabsTrigger value="approved" data-testid="tab-withdrawals-approved">
+                    Approved ({completedWithdrawals.length})
+                  </TabsTrigger>
+                  <TabsTrigger value="rejected" data-testid="tab-withdrawals-rejected">
+                    Rejected ({rejectedWithdrawals.length})
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+              
+              {displayWithdrawals.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
-                  <p>No withdrawal requests yet</p>
+                  <p>No {withdrawalStatusFilter !== 'all' ? withdrawalStatusFilter : ''} withdrawal requests found</p>
                 </div>
               ) : (
                 <div className="rounded-md border">
@@ -747,7 +886,7 @@ const WalletPage = () => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {withdrawalRequests.map((request) => (
+                      {displayWithdrawals.map((request) => (
                         <TableRow key={request.id} data-testid={`row-withdrawal-${request.id}`}>
                           <TableCell>{getWithdrawalStatusBadge(request.status)}</TableCell>
                           <TableCell className="font-semibold tabular-nums">
@@ -767,15 +906,15 @@ const WalletPage = () => {
                           </TableCell>
                           <TableCell>
                             {request.status === 'pending' && (
-                              <Button
-                                variant="outline"
-                                size="sm"
+                              <button
+                                type="button"
                                 onClick={() => cancelWithdrawalRequest(request.id)}
+                                className="px-3 py-1.5 text-sm rounded-md bg-red-900/20 hover:bg-red-900/30 text-red-300 border border-red-500/30 transition inline-flex items-center focus:outline-none focus:ring-2 focus:ring-red-400/70 focus:ring-offset-2 focus:ring-offset-slate-950"
                                 data-testid={`button-cancel-${request.id}`}
                               >
                                 <X className="w-3 h-3 mr-1" />
                                 Cancel
-                              </Button>
+                              </button>
                             )}
                           </TableCell>
                         </TableRow>
