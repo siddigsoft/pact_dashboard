@@ -28,6 +28,8 @@ import { useWallet } from '@/context/wallet/WalletContext';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
 import { WorkflowRail } from '@/components/financial/WorkflowRail';
+import { GradientStatCard, GRADIENT_PRESETS } from '@/components/dashboard/GradientStatCard';
+import { PageLoader } from '@/components/ui/loading-badge';
 
 const formatCurrency = (amount: number, currency: string = 'SDG') => {
   return new Intl.NumberFormat('en-US', {
@@ -47,9 +49,9 @@ const FinancialOperations = () => {
 
   // Data hooks
   const { submissions: costSubmissions, isLoading: submissionsLoading } = useCostSubmissions();
-  const { pendingApprovals, isLoading: approvalsLoading } = usePendingCostApprovals();
+  const { approvals: pendingApprovals, isLoading: approvalsLoading } = usePendingCostApprovals();
   const { userClassifications, feeStructures, loading: classificationsLoading } = useClassification();
-  const { wallets, loading: walletLoading } = useWallet();
+  const { loading: walletLoading } = useWallet();
 
   // Authorization check
   const canAccess = canManageFinances();
@@ -96,14 +98,7 @@ const FinancialOperations = () => {
   const levelCSubmissions = costSubmissions?.filter(s => s.classificationLevel === 'C').length || 0;
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600 dark:text-gray-400">Loading Financial Operations...</p>
-        </div>
-      </div>
-    );
+    return <PageLoader message="Loading Financial Operations..." />;
   }
 
   return (
@@ -147,81 +142,45 @@ const FinancialOperations = () => {
 
       {/* Key Metrics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card
-          className="hover-elevate active-elevate-2 cursor-pointer overflow-hidden relative bg-gradient-to-br from-blue-500 to-blue-700 text-white border-0"
+        <GradientStatCard
+          title="Pending Approvals"
+          value={pendingCount}
+          subtitle={`${formatCurrency(totalPendingAmount / 100, 'SDG')} total`}
+          icon={Clock}
+          gradient={GRADIENT_PRESETS.blue}
           onClick={() => setActiveTab('workflow')}
-          data-testid="card-pending-approvals"
-        >
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-white/90">
-              Pending Approvals
-            </CardTitle>
-            <Clock className="h-5 w-5 text-white/80" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-white">{pendingCount}</div>
-            <p className="text-xs text-white/80 mt-1">
-              {formatCurrency(totalPendingAmount / 100, 'SDG')} total
-            </p>
-          </CardContent>
-        </Card>
+          testId="card-pending-approvals"
+        />
 
-        <Card
-          className="hover-elevate active-elevate-2 cursor-pointer overflow-hidden relative bg-gradient-to-br from-green-500 to-emerald-700 text-white border-0"
+        <GradientStatCard
+          title="Approved & Paid"
+          value={approvedCount + paidCount}
+          subtitle={`${approvalRate}% approval rate`}
+          icon={CheckCircle}
+          gradient={GRADIENT_PRESETS.green}
           onClick={() => setActiveTab('workflow')}
-          data-testid="card-approved"
-        >
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-white/90">
-              Approved & Paid
-            </CardTitle>
-            <CheckCircle className="h-5 w-5 text-white/80" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-white">{approvedCount + paidCount}</div>
-            <p className="text-xs text-white/80 mt-1">
-              {approvalRate}% approval rate
-            </p>
-          </CardContent>
-        </Card>
+          testId="card-approved"
+        />
 
-        <Card
-          className="hover-elevate active-elevate-2 cursor-pointer overflow-hidden relative bg-gradient-to-br from-purple-500 to-purple-700 text-white border-0"
+        <GradientStatCard
+          title="Classified Users"
+          value={userClassifications?.length || 0}
+          subtitle={`${feeStructures?.length || 0} fee structures`}
+          icon={Users}
+          gradient={GRADIENT_PRESETS.purple}
           onClick={() => setActiveTab('classifications')}
-          data-testid="card-classifications"
-        >
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-white/90">
-              Classified Users
-            </CardTitle>
-            <Users className="h-5 w-5 text-white/80" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-white">{userClassifications?.length || 0}</div>
-            <p className="text-xs text-white/80 mt-1">
-              {feeStructures?.length || 0} fee structures
-            </p>
-          </CardContent>
-        </Card>
+          testId="card-classifications"
+        />
 
-        <Card
-          className="hover-elevate active-elevate-2 cursor-pointer overflow-hidden relative bg-gradient-to-br from-orange-500 to-red-600 text-white border-0"
+        <GradientStatCard
+          title="Total Paid Out"
+          value={paidCount}
+          subtitle={`${formatCurrency(totalPaidAmount / 100, 'SDG')} paid`}
+          icon={Wallet}
+          gradient={GRADIENT_PRESETS.red}
           onClick={() => setActiveTab('payments')}
-          data-testid="card-payments"
-        >
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-white/90">
-              Total Paid Out
-            </CardTitle>
-            <Wallet className="h-5 w-5 text-white/80" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-white">{paidCount}</div>
-            <p className="text-xs text-white/80 mt-1">
-              {formatCurrency(totalPaidAmount / 100, 'SDG')} paid
-            </p>
-          </CardContent>
-        </Card>
+          testId="card-payments"
+        />
       </div>
 
       {/* Main Content Tabs */}
