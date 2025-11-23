@@ -18,6 +18,7 @@ import {
   DollarSign,
   Award,
   Receipt,
+  TrendingUp,
 } from "lucide-react";
 import { useSiteVisitReminders } from "@/hooks/use-site-visit-reminders";
 import Logo from "../assets/logo.png";
@@ -100,6 +101,7 @@ const getMenuGroups = (
   if (isAdmin || isICT || perms.users) adminItems.push({ title: "User Management", url: "/users", icon: Users });
   if (isAdmin || perms.roleManagement) adminItems.push({ title: "Role Management", url: "/role-management", icon: Shield });
   if (isAdmin || isFinancialAdmin) adminItems.push({ title: "Classifications", url: "/classifications", icon: Award });
+  if (perms.financialOperations) adminItems.push({ title: "Financial Operations", url: "/financial-operations", icon: TrendingUp });
   if (isAdmin || perms.settings) adminItems.push({ title: "Settings", url: "/settings", icon: Settings });
   if (isAdmin || isFinancialAdmin) adminItems.push({ title: "Budget", url: "/budget", icon: DollarSign });
   if (isAdmin || isFinancialAdmin) adminItems.push({ title: "Wallets", url: "/admin/wallets", icon: CreditCard });
@@ -136,6 +138,7 @@ const AppSidebar = () => {
     users: checkPermission('users', 'read') || isAdmin || hasAnyRole(['ict']),
     roleManagement: canManageRoles() || isAdmin,
     settings: checkPermission('settings', 'read') || isAdmin,
+    financialOperations: checkPermission('finances', 'update') || checkPermission('finances', 'approve') || isAdmin || hasAnyRole(['financialAdmin']),
   };
   const menuGroups = currentUser ? getMenuGroups(roles || [], currentUser.role, perms) : [];
 
