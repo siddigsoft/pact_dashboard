@@ -82,85 +82,105 @@ export function WalletCard({ wallet, currency = 'SDG', onClick }: WalletCardProp
 
   return (
     <>
-      <Card
-        className="hover-elevate active-elevate-2 cursor-pointer transition-all group"
-        onClick={handleCardClick}
-        data-testid={`wallet-card-${wallet.userId}`}
-      >
-        <CardHeader className="pb-3">
-          <div className="flex items-start justify-between gap-2">
-            <div className="flex items-center gap-3 flex-1 min-w-0">
-              <div className="p-2 bg-primary/10 rounded-lg">
-                <Wallet className="w-5 h-5 text-primary" />
+      {/* Holographic Cyber Wallet Card */}
+      <div className="relative group">
+        <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 via-purple-500/20 to-cyan-500/20 rounded-xl blur-lg group-hover:blur-xl transition-all"></div>
+        <Card
+          className="relative cursor-pointer transition-all bg-gradient-to-br from-slate-900/90 via-blue-900/40 to-slate-900/90 backdrop-blur-xl border border-blue-500/30 hover:border-purple-500/50 shadow-[0_0_15px_rgba(59,130,246,0.15)] hover:shadow-[0_0_25px_rgba(168,85,247,0.3)]"
+          onClick={handleCardClick}
+          data-testid={`wallet-card-${wallet.userId}`}
+        >
+          <CardHeader className="pb-3">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <div className="p-2.5 bg-gradient-to-br from-blue-500/30 to-purple-500/30 rounded-lg border border-blue-400/30 shadow-[0_0_10px_rgba(59,130,246,0.2)]">
+                  <Wallet className="w-5 h-5 text-blue-300" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <CardTitle className="text-base line-clamp-1 bg-gradient-to-r from-blue-300 to-purple-300 bg-clip-text text-transparent font-bold">
+                    {wallet.userName || wallet.userId}
+                  </CardTitle>
+                  <p className="text-sm text-blue-300/60 truncate">
+                    {wallet.userEmail || 'User Wallet'}
+                  </p>
+                </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <CardTitle className="text-base line-clamp-1">
-                  {wallet.userName || wallet.userId}
-                </CardTitle>
-                <p className="text-sm text-muted-foreground truncate">
-                  {wallet.userEmail || 'User Wallet'}
-                </p>
+              <Badge 
+                className={isActive 
+                  ? 'bg-gradient-to-r from-green-500/90 to-emerald-500/90 text-white border-green-400/30 shadow-[0_0_10px_rgba(34,197,94,0.3)]' 
+                  : 'bg-gradient-to-r from-slate-700/90 to-slate-600/90 text-slate-300 border-slate-500/30'
+                }
+              >
+                {isActive ? 'ACTIVE' : 'INACTIVE'}
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Current Balance - Neon Holographic */}
+            <div className="space-y-2 p-4 bg-gradient-to-br from-blue-500/10 to-purple-500/10 rounded-lg border border-blue-400/20">
+              <div className="flex items-baseline justify-between">
+                <div>
+                  <p className="text-xs text-blue-300/70 uppercase tracking-wider">Current Balance</p>
+                  <p className="text-3xl font-bold bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400 bg-clip-text text-transparent">
+                    {formatCurrency(balance, currency)}
+                  </p>
+                </div>
+                {balance > 0 ? (
+                  <div className="p-2 bg-green-500/20 rounded-lg border border-green-400/30">
+                    <TrendingUp className="w-5 h-5 text-green-400" />
+                  </div>
+                ) : (
+                  <div className="p-2 bg-blue-500/20 rounded-lg border border-blue-400/30">
+                    <DollarSign className="w-5 h-5 text-blue-400" />
+                  </div>
+                )}
               </div>
             </div>
-            <Badge variant={isActive ? 'default' : 'secondary'}>
-              {isActive ? 'Active' : 'Inactive'}
-            </Badge>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Current Balance */}
-          <div className="space-y-2">
-            <div className="flex items-baseline justify-between">
-              <div>
-                <p className="text-xs text-muted-foreground">Current Balance</p>
-                <p className="text-2xl font-bold">{formatCurrency(balance, currency)}</p>
-              </div>
-              {balance > 0 ? (
-                <TrendingUp className="w-5 h-5 text-green-600" />
-              ) : (
-                <DollarSign className="w-5 h-5 text-muted-foreground" />
-              )}
-            </div>
-          </div>
 
-          {/* Quick Stats */}
-          <div className="grid grid-cols-2 gap-3 pt-3 border-t">
-            <div className="space-y-1">
-              <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                <ArrowUpRight className="w-3 h-3" />
-                <span>Total Earned</span>
+            {/* Quick Stats - Cyber Grid */}
+            <div className="grid grid-cols-2 gap-3 pt-3 border-t border-blue-500/20">
+              <div className="space-y-1 p-3 bg-gradient-to-br from-blue-500/5 to-transparent rounded-lg">
+                <div className="flex items-center gap-1 text-xs text-blue-300/60 uppercase">
+                  <ArrowUpRight className="w-3 h-3 text-green-400" />
+                  <span>Earned</span>
+                </div>
+                <p className="font-bold text-blue-200">{formatCurrency(totalEarned, currency)}</p>
               </div>
-              <p className="font-semibold">{formatCurrency(totalEarned, currency)}</p>
-            </div>
-            <div className="space-y-1">
-              <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                <ArrowDownRight className="w-3 h-3" />
-                <span>Withdrawn</span>
+              <div className="space-y-1 p-3 bg-gradient-to-br from-purple-500/5 to-transparent rounded-lg">
+                <div className="flex items-center gap-1 text-xs text-purple-300/60 uppercase">
+                  <ArrowDownRight className="w-3 h-3 text-purple-400" />
+                  <span>Withdrawn</span>
+                </div>
+                <p className="font-bold text-purple-200">{formatCurrency(totalWithdrawn, currency)}</p>
               </div>
-              <p className="font-semibold">{formatCurrency(totalWithdrawn, currency)}</p>
             </div>
-          </div>
 
-          {/* Progress Bar */}
-          {totalEarned > 0 && (
-            <div>
-              <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
-                <span>Payout Progress</span>
-                <span>{utilizationRate.toFixed(0)}%</span>
+            {/* Neon Progress Bar */}
+            {totalEarned > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs text-cyan-300/70 uppercase tracking-wider">
+                  <span>Payout Progress</span>
+                  <span className="text-cyan-400 font-bold">{utilizationRate.toFixed(0)}%</span>
+                </div>
+                <div className="relative h-2 bg-slate-800/50 rounded-full overflow-hidden border border-blue-500/20">
+                  <div 
+                    className="absolute inset-y-0 left-0 bg-gradient-to-r from-blue-500 via-purple-500 to-cyan-500 rounded-full shadow-[0_0_10px_rgba(59,130,246,0.5)]"
+                    style={{ width: `${utilizationRate}%` }}
+                  ></div>
+                </div>
               </div>
-              <Progress value={utilizationRate} className="h-1.5" />
-            </div>
-          )}
+            )}
 
-          {/* Last Updated */}
-          {wallet.updatedAt && (
-            <div className="flex items-center gap-1 text-xs text-muted-foreground pt-2 border-t">
-              <Clock className="w-3 h-3" />
-              <span>Updated {format(new Date(wallet.updatedAt), 'MMM dd, yyyy')}</span>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            {/* Last Updated - Cyber Timestamp */}
+            {wallet.updatedAt && (
+              <div className="flex items-center gap-2 text-xs text-blue-300/50 pt-2 border-t border-blue-500/10">
+                <Clock className="w-3 h-3" />
+                <span className="uppercase tracking-wide">Updated {format(new Date(wallet.updatedAt), 'MMM dd, yyyy')}</span>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Details Dialog */}
       <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
