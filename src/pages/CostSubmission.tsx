@@ -6,30 +6,45 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ChevronLeft, Plus, Clock, CheckCircle, XCircle, AlertCircle } from "lucide-react";
 import { useSiteVisitContext } from "@/context/siteVisit/SiteVisitContext";
-import { useUserCostSubmissions } from "@/context/costApproval/CostSubmissionContext";
+import { useUserCostSubmissions, useCostSubmissions } from "@/context/costApproval/CostSubmissionContext";
 import { useAppContext } from "@/context/AppContext";
+import { AppRole } from "@/types";
 import CostSubmissionForm from "@/components/cost-submission/CostSubmissionForm";
 import CostSubmissionHistory from "@/components/cost-submission/CostSubmissionHistory";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const CostSubmission = () => {
   const navigate = useNavigate();
-  const { currentUser } = useAppContext();
+  const { currentUser, roles } = useAppContext();
   const { siteVisits } = useSiteVisitContext();
-  const { submissions: mySubmissions = [], isLoading } = useUserCostSubmissions(currentUser?.id || '');
   const [activeTab, setActiveTab] = useState<"submit" | "history">("submit");
 
-  const mySiteVisits = siteVisits.filter(
-    visit => visit.assignedTo === currentUser?.id && visit.status === 'completed'
-  );
+  // Check if user is admin
+  const isAdmin = roles?.includes('admin' as AppRole) || currentUser?.role === 'admin';
+
+  // Conditionally fetch based on role to prevent unnecessary API calls and data exposure
+  // - Admins: Fetch all submissions (enabled), skip user-specific query (empty userId)
+  // - Data collectors: Skip all submissions query (disabled), fetch only their submissions
+  // Note: RLS policies at database level provide additional security layer
+  const allSubmissionsQuery = useCostSubmissions(isAdmin);
+  const userSubmissionsQuery = useUserCostSubmissions(isAdmin ? '' : (currentUser?.id || ''));
+  
+  const { submissions, isLoading } = isAdmin ? 
+    { submissions: allSubmissionsQuery.submissions || [], isLoading: allSubmissionsQuery.isLoading } :
+    { submissions: userSubmissionsQuery.submissions || [], isLoading: userSubmissionsQuery.isLoading };
+
+  // Admins see all completed site visits, data collectors see only their own
+  const availableSiteVisits = isAdmin 
+    ? siteVisits.filter(visit => visit.status === 'completed')
+    : siteVisits.filter(visit => visit.assignedTo === currentUser?.id && visit.status === 'completed');
 
   const submissionStats = {
-    total: mySubmissions.length,
-    pending: mySubmissions.filter(s => s.status === 'pending').length,
-    underReview: mySubmissions.filter(s => s.status === 'under_review').length,
-    approved: mySubmissions.filter(s => s.status === 'approved').length,
-    rejected: mySubmissions.filter(s => s.status === 'rejected').length,
-    paid: mySubmissions.filter(s => s.status === 'paid').length
+    total: submissions.length,
+    pending: submissions.filter(s => s.status === 'pending').length,
+    underReview: submissions.filter(s => s.status === 'under_review').length,
+    approved: submissions.filter(s => s.status === 'approved').length,
+    rejected: submissions.filter(s => s.status === 'rejected').length,
+    paid: submissions.filter(s => s.status === 'paid').length
   };
 
   return (
@@ -48,9 +63,14 @@ const CostSubmission = () => {
         </Button>
 
         <div className="flex flex-col gap-2">
-          <h1 className="text-3xl font-bold tracking-tight">Cost Submission</h1>
+          <h1 className="text-3xl font-bold tracking-tight">
+            Cost Submission {isAdmin && <Badge variant="outline" className="ml-2">Admin View</Badge>}
+          </h1>
           <p className="text-muted-foreground">
-            Submit actual costs for completed site visits and track approval status
+            {isAdmin 
+              ? "View and manage all cost submissions across the platform"
+              : "Submit actual costs for completed site visits and track approval status"
+            }
           </p>
         </div>
       </div>
@@ -150,20 +170,23 @@ const CostSubmission = () => {
                 <Skeleton className="h-96 w-full" />
               </CardContent>
             </Card>
-          ) : mySiteVisits.length === 0 ? (
+          ) : availableSiteVisits.length === 0 ? (
             <Card>
               <CardContent className="pt-6">
                 <div className="text-center py-12">
                   <AlertCircle className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                   <h3 className="text-lg font-semibold mb-2">No Completed Site Visits</h3>
                   <p className="text-muted-foreground">
-                    You don't have any completed site visits yet. Complete a site visit to submit costs.
+                    {isAdmin 
+                      ? "There are no completed site visits in the system yet."
+                      : "You don't have any completed site visits yet. Complete a site visit to submit costs."
+                    }
                   </p>
                 </div>
               </CardContent>
             </Card>
           ) : (
-            <CostSubmissionForm siteVisits={mySiteVisits} />
+            <CostSubmissionForm siteVisits={availableSiteVisits} />
           )}
         </TabsContent>
 
@@ -175,7 +198,7 @@ const CostSubmission = () => {
               </CardContent>
             </Card>
           ) : (
-            <CostSubmissionHistory submissions={mySubmissions} />
+            <CostSubmissionHistory submissions={submissions} />
           )}
         </TabsContent>
       </Tabs>
