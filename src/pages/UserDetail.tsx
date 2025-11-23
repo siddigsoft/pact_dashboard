@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowLeft, MapPin, Mail, Phone, Award, Calendar, Edit, UserCheck, UserX } from "lucide-react";
 import { BankakAccountForm, BankakAccountFormValues } from "@/components/BankakAccountForm";
 import { User } from "@/types";
+import { AppRole } from "@/types/roles";
 import { sudanStates, getLocalitiesByState } from "@/data/sudanStates";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -19,28 +20,31 @@ import UserClassificationBadge from "@/components/user/UserClassificationBadge";
 import ManageClassificationDialog, { ClassificationFormData } from "@/components/admin/ManageClassificationDialog";
 import { useClassification } from "@/context/classification/ClassificationContext";
 import { useAuthorization } from "@/hooks/use-authorization";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertCircle, Plus } from "lucide-react";
 
+// Database role codes (camelCase) - matches Supabase app_role enum
 const availableRoles = [
   "admin",
   "ict",
-  "manager",
-  "field_agent",
-  "finance",
-  "hr",
-  "guest"
-  // Add/remove roles as needed
-];
+  "fom",
+  "financialAdmin",
+  "supervisor",
+  "coordinator",
+  "dataCollector",
+  "reviewer"
+] as const;
 
 const UserDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const { users, currentUser, updateUser, approveUser, rejectUser } = useUser();
+  const { users, currentUser, updateUser, approveUser, rejectUser, refreshUsers } = useUser();
   const [user, setUser] = useState<User | null>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
   const [bankAccountFormOpen, setBankAccountFormOpen] = useState(false);
 
-  const canEditBankAccount = currentUser?.role === "admin" || currentUser?.role === "ict";
-  const isAdmin = currentUser?.role === "admin" || (currentUser?.roles && currentUser.roles.includes("admin"));
+  const canEditBankAccount = currentUser?.role === "admin" || currentUser?.role === "Admin" || currentUser?.role === "ict" || currentUser?.role === "ICT";
+  const isAdmin = currentUser?.role === "admin" || currentUser?.role === "Admin" || (currentUser?.roles && (currentUser.roles.includes("admin" as any) || currentUser.roles.includes("Admin")));
 
   const [editMode, setEditMode] = useState(false);
   const [editForm, setEditForm] = useState<Partial<User>>({});
@@ -53,11 +57,11 @@ const UserDetail: React.FC = () => {
   const [isLoadingUser, setIsLoadingUser] = useState(false);
 
   // Classification management
-  const { canManage } = useAuthorization();
-  const { getUserClassification, getClassificationHistory, createClassification, updateClassification } = useClassification();
+  const { canManageFinances } = useAuthorization();
+  const { getUserClassification, getClassificationHistory, assignClassification, refreshUserClassifications } = useClassification();
   const [classificationDialogOpen, setClassificationDialogOpen] = useState(false);
   
-  const canManageClassifications = canManage('finances');
+  const canManageClassifications = canManageFinances();
   const userClassification = user ? getUserClassification(user.id) : undefined;
   const classificationHistory = user ? getClassificationHistory(user.id) : [];
 
@@ -90,7 +94,7 @@ const UserDetail: React.FC = () => {
         accountNumber: values.accountNumber,
         branch: values.branch
       }
-    };
+    } as any; // Type assertion for bankAccount
 
     if (updateUser) {
       updateUser(updatedUser)
@@ -112,6 +116,35 @@ const UserDetail: React.FC = () => {
             variant: "destructive"
           });
         });
+    }
+  };
+
+  const handleClassificationSave = async (data: ClassificationFormData) => {
+    if (!user) return;
+
+    try {
+      await assignClassification(user.id, data);
+      
+      // Refresh classification context to update UI immediately
+      await refreshUserClassifications();
+      
+      // Also refresh user data
+      if (refreshUsers) {
+        await refreshUsers();
+      }
+      
+      toast({
+        title: "Classification Updated",
+        description: `Classification updated for ${user.name}`,
+      });
+      setClassificationDialogOpen(false);
+    } catch (error) {
+      console.error("Error updating classification:", error);
+      toast({
+        title: "Update failed",
+        description: "There was a problem updating the classification.",
+        variant: "destructive"
+      });
     }
   };
 
@@ -415,6 +448,9 @@ const UserDetail: React.FC = () => {
                 <TabsTrigger value="performance" className="flex-1">Performance</TabsTrigger>
                 <TabsTrigger value="bankak" className="flex-1">Bank Account</TabsTrigger>
                 <TabsTrigger value="location" className="flex-1">Location</TabsTrigger>
+                {canManageClassifications && (
+                  <TabsTrigger value="classification" className="flex-1">Classification</TabsTrigger>
+                )}
               </TabsList>
               
               <TabsContent value="details" className="space-y-4">
@@ -595,6 +631,110 @@ const UserDetail: React.FC = () => {
                   <p className="text-muted-foreground">No location data available.</p>
                 )}
               </TabsContent>
+
+              {canManageClassifications && (
+                <TabsContent value="classification">
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <h3 className="text-lg font-semibold">Current Classification</h3>
+                        <p className="text-sm text-muted-foreground">Manage user classification and retainer</p>
+                      </div>
+                      <Button
+                        onClick={() => setClassificationDialogOpen(true)}
+                        data-testid="button-manage-classification"
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        {userClassification ? 'Update Classification' : 'Assign Classification'}
+                      </Button>
+                    </div>
+
+                    {userClassification ? (
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-base">Active Classification</CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <p className="text-sm text-muted-foreground">Level</p>
+                              <p className="font-medium">{userClassification.classificationLevel}</p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-muted-foreground">Role Scope</p>
+                              <p className="font-medium">{userClassification.roleScope}</p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-muted-foreground">Effective From</p>
+                              <p className="font-medium">
+                                {new Date(userClassification.effectiveFrom).toLocaleDateString()}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-sm text-muted-foreground">Status</p>
+                              <p className="font-medium">
+                                {userClassification.effectiveUntil && new Date(userClassification.effectiveUntil) < new Date()
+                                  ? 'Expired'
+                                  : 'Active'}
+                              </p>
+                            </div>
+                            {userClassification.retainerAmount && (
+                              <>
+                                <div>
+                                  <p className="text-sm text-muted-foreground">Retainer Amount</p>
+                                  <p className="font-medium">
+                                    {(userClassification.retainerAmount / 100).toFixed(2)} {userClassification.retainerCurrency}
+                                  </p>
+                                </div>
+                                <div>
+                                  <p className="text-sm text-muted-foreground">Retainer Period</p>
+                                  <p className="font-medium capitalize">{userClassification.retainerPeriod}</p>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ) : (
+                      <Alert>
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertTitle>No Classification Assigned</AlertTitle>
+                        <AlertDescription>
+                          This user doesn't have a classification assigned yet. Click the button above to assign one.
+                        </AlertDescription>
+                      </Alert>
+                    )}
+
+                    {classificationHistory.length > 0 && (
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-base">Classification History</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="space-y-2">
+                            {classificationHistory.map((history) => (
+                              <div key={history.id} className="flex justify-between items-center p-2 bg-muted rounded">
+                                <div>
+                                  <p className="font-medium">{history.classificationLevel} - {history.roleScope}</p>
+                                  <p className="text-sm text-muted-foreground">
+                                    {new Date(history.effectiveFrom).toLocaleDateString()} - 
+                                    {history.effectiveUntil ? new Date(history.effectiveUntil).toLocaleDateString() : 'Present'}
+                                  </p>
+                                </div>
+                                {history.retainerAmount && (
+                                  <p className="text-sm font-medium">
+                                    {(history.retainerAmount / 100).toFixed(2)} {history.retainerCurrency}/{history.retainerPeriod}
+                                  </p>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
+                  </div>
+                </TabsContent>
+              )}
             </Tabs>
           </CardContent>
         </Card>
@@ -604,17 +744,28 @@ const UserDetail: React.FC = () => {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {user.bankAccount ? "Edit Bankak Account" : "Add Bankak Account"}
+              {user?.bankAccount ? "Edit Bankak Account" : "Add Bankak Account"}
             </DialogTitle>
           </DialogHeader>
           <BankakAccountForm 
             onSubmit={handleBankAccountSubmit}
             isSubmitting={false}
-            existingDetails={user.bankAccount}
+            existingDetails={user?.bankAccount as any}
             currentUserRole={currentUser?.role}
           />
         </DialogContent>
       </Dialog>
+
+      {user && (
+        <ManageClassificationDialog
+          open={classificationDialogOpen}
+          onOpenChange={setClassificationDialogOpen}
+          onSave={handleClassificationSave}
+          userId={user.id}
+          userName={user.name}
+          currentClassification={userClassification}
+        />
+      )}
     </div>
   );
 };

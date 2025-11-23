@@ -52,7 +52,8 @@ import { useRoleManagement } from '@/context/role-management/RoleManagementConte
 import { useAppContext } from '@/context/AppContext';
 import UserClassificationBadge from '@/components/user/UserClassificationBadge';
 
-const ALL_POSSIBLE_ROLES: AppRole[] = [
+// Database role codes (camelCase) - matches Supabase app_role enum
+const ALL_POSSIBLE_ROLES = [
   'admin',
   'ict',
   'fom',
@@ -61,7 +62,7 @@ const ALL_POSSIBLE_ROLES: AppRole[] = [
   'coordinator',
   'dataCollector',
   'reviewer'
-];
+] as const;
 
 const Users = () => {
   const { currentUser, users, approveUser, rejectUser, refreshUsers, hasRole, addRole, removeRole } = useUser();
@@ -90,7 +91,7 @@ const Users = () => {
   const pendingUsers = useMemo(() => users.filter(user => !user.isApproved), [users]);
   const approvedUsers = useMemo(() => users.filter(user => user.isApproved), [users]);
 
-  const isAdminOrICT = (roles || []).includes('admin') || (roles || []).includes('ict');
+  const isAdminOrICT = (roles || []).includes('admin' as any) || (roles || []).includes('ict' as any);
 
   const getUserRoleLabels = (uid: string): string[] => {
     // Combine system roles (text) and custom roles (via role_id -> roles table)
@@ -588,8 +589,8 @@ const Users = () => {
 
                     const primaryRole = getPrimaryRoleLabel(user);
 
-                    const isAdmin = currentUser && (currentUser.role === 'admin' ||
-                      (currentUser.roles && Array.isArray(currentUser.roles) && currentUser.roles.includes('admin')));
+                    const isAdmin = currentUser && (currentUser.role === 'admin' || currentUser.role === 'Admin' ||
+                      (currentUser.roles && Array.isArray(currentUser.roles) && (currentUser.roles.includes('admin' as any) || currentUser.roles.includes('Admin'))));
                     const canManageRolesUI = canManageRoles();
 
                     return (
@@ -749,8 +750,8 @@ const Users = () => {
                     if (currentUser && user.id === currentUser.id) return null;
                     const roleLabels = getUserRoleLabels(user.id);
 
-                    const isAdmin = currentUser && (currentUser.role === 'admin' ||
-                      (currentUser.roles && Array.isArray(currentUser.roles) && currentUser.roles.includes('admin')));
+                    const isAdmin = currentUser && (currentUser.role === 'admin' || currentUser.role === 'Admin' ||
+                      (currentUser.roles && Array.isArray(currentUser.roles) && (currentUser.roles.includes('admin' as any) || currentUser.roles.includes('Admin'))));
 
                     return (
                       <TableRow key={user.id}>
