@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -94,17 +93,21 @@ export function CreateProjectBudgetDialog({ projectId, projectName, onSuccess }:
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button data-testid="button-create-project-budget">
+        <button
+          type="button"
+          className="px-4 py-2 rounded-md bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white border border-blue-400/50 shadow-[0_0_15px_rgba(59,130,246,0.3)] focus:outline-none focus:ring-2 focus:ring-blue-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 transition inline-flex items-center"
+          data-testid="button-create-project-budget"
+        >
           <Plus className="w-4 h-4 mr-2" />
           Create Budget
-        </Button>
+        </button>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-gradient-to-br from-slate-900 via-blue-950 to-purple-950 border-blue-500/30 shadow-[0_0_50px_rgba(59,130,246,0.3)]">
         <DialogHeader>
-          <DialogTitle>Create Project Budget: {projectName}</DialogTitle>
+          <DialogTitle className="text-cyan-100">Create Project Budget: {projectName}</DialogTitle>
         </DialogHeader>
 
-        <div className="grid gap-4">
+        <div className="grid gap-4 cyber-dialog-form">
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
               <Label htmlFor="total-budget">Total Budget (SDG)</Label>
@@ -151,8 +154,8 @@ export function CreateProjectBudgetDialog({ projectId, projectName, onSuccess }:
             </div>
           )}
 
-          <div className="border-t pt-4">
-            <h4 className="font-medium mb-3">Category Allocations (Optional)</h4>
+          <div className="border-t border-cyan-500/20 pt-4">
+            <h4 className="font-medium mb-3 text-cyan-100">Category Allocations (Optional)</h4>
             <div className="grid gap-3">
               <div className="grid gap-2">
                 <Label htmlFor="cat-transport-visit">Transportation and Visit Fees (SDG)</Label>
@@ -198,15 +201,15 @@ export function CreateProjectBudgetDialog({ projectId, projectName, onSuccess }:
             </div>
 
             {categoryTotal > 0 && (
-              <div className="mt-3 p-3 bg-muted rounded-md">
+              <div className="mt-3 p-3 bg-gradient-to-r from-cyan-900/20 to-blue-900/20 backdrop-blur-sm border border-cyan-500/30 rounded-md shadow-[0_0_15px_rgba(6,182,212,0.2)]">
                 <div className="flex justify-between items-center">
-                  <span className="text-sm font-medium">Total Allocated:</span>
-                  <span className="text-sm font-bold">
+                  <span className="text-sm font-medium text-cyan-200">Total Allocated:</span>
+                  <span className="text-sm font-bold text-cyan-100">
                     SDG {categoryTotal.toLocaleString('en-SD', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
                 {totalBudget && categoryTotal > parseFloat(totalBudget) && (
-                  <p className="text-sm text-destructive mt-1">
+                  <p className="text-sm text-red-300 mt-1">
                     Category total exceeds budget by SDG {(categoryTotal - parseFloat(totalBudget)).toFixed(2)}
                   </p>
                 )}
@@ -227,23 +230,26 @@ export function CreateProjectBudgetDialog({ projectId, projectName, onSuccess }:
           </div>
         </div>
 
-        <DialogFooter>
-          <Button
-            variant="outline"
+        <div className="flex gap-3 justify-end pt-4 border-t border-cyan-500/20">
+          <button
+            type="button"
             onClick={() => setOpen(false)}
             disabled={loading}
+            className="px-4 py-2 rounded-md bg-transparent border border-cyan-500/30 text-cyan-200 hover:bg-cyan-900/20 shadow-[0_0_12px_rgba(6,182,212,0.25)] focus:outline-none focus:ring-2 focus:ring-cyan-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 transition disabled:opacity-50 disabled:cursor-not-allowed"
             data-testid="button-cancel"
           >
             Cancel
-          </Button>
-          <Button
+          </button>
+          <button
+            type="button"
             onClick={handleSubmit}
             disabled={!totalBudget || parseFloat(totalBudget) <= 0 || loading}
+            className="px-4 py-2 rounded-md bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white border border-cyan-400/50 shadow-[0_0_18px_rgba(6,182,212,0.35)] focus:outline-none focus:ring-2 focus:ring-cyan-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 transition disabled:opacity-60 disabled:cursor-not-allowed"
             data-testid="button-submit"
           >
             {loading ? 'Creating...' : 'Create Budget'}
-          </Button>
-        </DialogFooter>
+          </button>
+        </div>
       </DialogContent>
     </Dialog>
   );
