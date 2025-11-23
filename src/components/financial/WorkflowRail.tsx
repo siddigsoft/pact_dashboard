@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import ClassificationBadge from '@/components/user/ClassificationBadge';
 import {
   Dialog,
   DialogContent,
@@ -127,9 +128,11 @@ export const WorkflowRail = ({ onNavigateToSubmission }: WorkflowRailProps) => {
                   {config.label}
                 </Badge>
                 {submission.classificationLevel && (
-                  <Badge variant="outline" className="text-xs">
-                    Level {submission.classificationLevel}
-                  </Badge>
+                  <ClassificationBadge 
+                    level={submission.classificationLevel as 'A' | 'B' | 'C'} 
+                    size="sm"
+                    showTooltip={false}
+                  />
                 )}
               </div>
               <p className="text-sm font-medium truncate">

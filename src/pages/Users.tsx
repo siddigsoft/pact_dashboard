@@ -51,6 +51,7 @@ import PendingApprovalsList from '@/components/PendingApprovalsList';
 import { useRoleManagement } from '@/context/role-management/RoleManagementContext';
 import { useAppContext } from '@/context/AppContext';
 import UserClassificationBadge from '@/components/user/UserClassificationBadge';
+import RoleBadge from '@/components/user/RoleBadge';
 
 // Database role codes (camelCase) - matches Supabase app_role enum
 const ALL_POSSIBLE_ROLES = [
@@ -612,9 +613,7 @@ const Users = () => {
                         <TableCell>{user.email}</TableCell>
                         <TableCell>
                           <div className="flex flex-wrap gap-1">
-                            <Badge variant={primaryRole === 'admin' ? 'default' : 'outline'}>
-                              {primaryRole}
-                            </Badge>
+                            <RoleBadge role={user.role} size="sm" />
                           </div>
                         </TableCell>
                         <TableCell>
@@ -774,12 +773,10 @@ const Users = () => {
                           <div className="flex flex-wrap gap-1">
                             {roleLabels.length > 0 ? (
                               roleLabels.map((label, index) => (
-                                <Badge key={index} variant={label === 'admin' ? 'default' : 'outline'}>
-                                  {label}
-                                </Badge>
+                                <RoleBadge key={index} role={label} size="sm" />
                               ))
                             ) : (
-                              <Badge variant="outline">{user.role}</Badge>
+                              <RoleBadge role={user.role} size="sm" />
                             )}
                           </div>
                         </TableCell>
