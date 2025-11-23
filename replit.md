@@ -20,6 +20,7 @@ Preferred communication style: Simple, everyday language.
 ### Backend Architecture
 
 **Database:** PostgreSQL via Supabase with Row Level Security (RLS) and real-time subscriptions. Schema includes tables for profiles, roles, projects, MMPs, site visits, budgets, wallets, and cost submissions.
+**RLS Security (Nov 23, 2025):** Cost submission tables protected with 7 security policies - data collectors see only their own submissions, admins see all submissions, database-level security prevents unauthorized access.
 **Authentication:** Supabase Auth (email/password) with session management and role-based access control.
 **Data Flow:** Context providers for CRUD, snake_case to camelCase transformation, optimistic updates, Supabase Storage for files.
 
