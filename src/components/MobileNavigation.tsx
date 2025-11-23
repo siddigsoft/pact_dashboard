@@ -35,20 +35,21 @@ const MobileNavigation = () => {
   };
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-white border-t z-50">
+    <nav className="fixed bottom-0 left-0 right-0 bg-card dark:bg-card border-t border-border z-50 shadow-lg">
       <div className="grid grid-cols-6 h-16">
         {navItems.map((item) => (
           <button
             key={item.path}
-            className={`flex flex-col items-center justify-center space-y-1 ${
-              isActive(item.path) ? 'text-primary' : 'text-gray-500'
+            data-testid={`button-nav-${item.label.toLowerCase()}`}
+            className={`flex flex-col items-center justify-center space-y-1 transition-colors hover-elevate ${
+              isActive(item.path) ? 'text-primary' : 'text-muted-foreground'
             }`}
             onClick={() => navigate(item.path)}
           >
             <div className="relative">
               <item.icon className="h-5 w-5" />
               {item.badge && item.badge > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">
+                <span className="absolute -top-1.5 -right-1.5 bg-gradient-to-br from-red-500 to-red-700 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center shadow-md">
                   {item.badge > 9 ? '9+' : item.badge}
                 </span>
               )}

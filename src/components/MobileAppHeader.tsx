@@ -36,7 +36,7 @@ const MobileAppHeader = ({
   const hasNotifications = true; // This would be from a notification context in a real app
 
   return (
-    <header className="px-4 h-16 flex items-center justify-between bg-gradient-to-r from-[#1A1F2C] to-[#2D3748] shadow-md">
+    <header className="px-4 h-16 flex items-center justify-between bg-gradient-to-r from-blue-600 to-purple-600 shadow-md">
       <div className="flex items-center gap-2">
         {!isRoot ? (
           <Button 
@@ -87,7 +87,7 @@ const MobileAppHeader = ({
         >
           <Avatar className="h-full w-full">
             <AvatarImage src={currentUser?.avatar} alt={currentUser?.name || ''} />
-            <AvatarFallback className="bg-[#9b87f5] text-white">{currentUser?.name ? getInitials(currentUser.name) : "FO"}</AvatarFallback>
+            <AvatarFallback className="bg-gradient-to-br from-blue-500 to-blue-700 text-white">{currentUser?.name ? getInitials(currentUser.name) : "FO"}</AvatarFallback>
           </Avatar>
         </Button>
       </div>

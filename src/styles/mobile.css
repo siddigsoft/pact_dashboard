@@ -90,25 +90,25 @@ html {
   padding-top: env(safe-area-inset-top);
 }
 
-/* Uber-like styling */
+/* Cyber-tech mobile styling */
 .mobile-app-card {
-  @apply rounded-xl shadow-md bg-white p-4 border border-gray-100;
+  @apply rounded-xl shadow-md bg-card p-4 border border-border;
 }
 
 .mobile-section-title {
-  @apply text-lg font-semibold text-gray-800 mb-3;
+  @apply text-lg font-semibold text-foreground mb-3;
 }
 
 .mobile-button-primary {
-  @apply bg-[#9b87f5] text-white rounded-full py-3 px-6 shadow-md;
+  @apply bg-gradient-to-br from-blue-500 to-blue-700 text-white rounded-full py-3 px-6 shadow-md;
 }
 
 .mobile-button-secondary {
-  @apply bg-white border border-[#9b87f5] text-[#9b87f5] rounded-full py-3 px-6;
+  @apply bg-background border border-primary text-primary rounded-full py-3 px-6;
 }
 
 .mobile-gradient-header {
-  @apply bg-gradient-to-r from-[#1A1F2C] to-[#2D3748] text-white;
+  @apply bg-gradient-to-r from-blue-600 to-purple-600 text-white;
 }
 
 .mobile-status-badge {
@@ -134,9 +134,9 @@ html {
   transition: transform 300ms ease-in;
 }
 
-/* Uber-like cards */
+/* Cyber-tech cards */
 .uber-card {
-  @apply rounded-xl shadow-md bg-white p-4 border border-gray-100 mb-3;
+  @apply rounded-xl shadow-md bg-card p-4 border border-border mb-3;
 }
 
 .uber-card-header {
@@ -144,20 +144,20 @@ html {
 }
 
 .uber-card-title {
-  @apply font-bold text-gray-800;
+  @apply font-bold text-foreground;
 }
 
 .uber-card-content {
-  @apply text-sm text-gray-600;
+  @apply text-sm text-muted-foreground;
 }
 
 /* Mobile-specific list items */
 .mobile-list-item {
-  @apply flex items-center p-3 border-b border-gray-100;
+  @apply flex items-center p-3 border-b border-border;
 }
 
 .mobile-list-item-icon {
-  @apply mr-3 text-gray-400;
+  @apply mr-3 text-muted-foreground;
 }
 
 .mobile-list-item-content {
@@ -165,16 +165,16 @@ html {
 }
 
 .mobile-list-item-title {
-  @apply font-medium text-gray-800;
+  @apply font-medium text-foreground;
 }
 
 .mobile-list-item-subtitle {
-  @apply text-xs text-gray-500;
+  @apply text-xs text-muted-foreground;
 }
 
-/* Floating action button like Uber */
+/* Floating action button - cyber-tech gradient */
 .floating-action-button {
-  @apply fixed bottom-20 right-4 h-14 w-14 rounded-full bg-[#9b87f5] text-white flex items-center justify-center shadow-lg z-50;
+  @apply fixed bottom-20 right-4 h-14 w-14 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 text-white flex items-center justify-center shadow-lg z-50;
 }
 
 /* Enhanced login page animations */
@@ -189,22 +189,20 @@ html {
   transition: opacity 300ms, transform 300ms;
 }
 
-/* Glass effect for login card */
+/* Glass effect for login card - theme-aware */
 .glass-card {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  background: rgba(255, 255, 255, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+  @apply bg-card/70 border border-border/20 shadow-2xl;
 }
 
-/* Input field focus effects */
+/* Input field focus effects - theme-aware */
 .focus-ring {
   transition: all 0.2s ease;
 }
 
 .focus-ring:focus {
-  box-shadow: 0 0 0 2px rgba(155, 135, 245, 0.2);
+  @apply ring-2 ring-primary/20;
 }
 
 /* Enhanced touch feedback */
