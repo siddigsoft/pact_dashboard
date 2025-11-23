@@ -517,12 +517,19 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
     };
   }, [getUserClassification, getActiveFeeStructure]);
 
-  // Get current user classifications
+  // Get current user classifications with profile details
   const getCurrentUserClassifications = useCallback(async (): Promise<CurrentUserClassification[]> => {
     try {
       const { data, error } = await supabase
-        .from('current_user_classifications')
-        .select('*');
+        .from('user_classifications')
+        .select(`
+          *,
+          profiles!user_classifications_user_id_fkey (
+            full_name,
+            email,
+            role
+          )
+        `);
 
       if (error) throw error;
 
@@ -543,9 +550,9 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
         isActive: item.is_active,
         createdAt: item.created_at,
         updatedAt: item.updated_at,
-        fullName: item.full_name,
-        email: item.email,
-        userRole: item.user_role,
+        fullName: item.profiles?.full_name || '',
+        email: item.profiles?.email || '',
+        userRole: item.profiles?.role || '',
       }));
     } catch (error: any) {
       console.error('Error fetching current user classifications:', error);

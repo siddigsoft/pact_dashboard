@@ -17,6 +17,7 @@ import { FraudDetection } from "@/components/FraudDetection";
 import { ApprovalTierAnalytics } from "@/components/ApprovalTierAnalytics";
 import { BudgetForecast } from "@/components/BudgetForecast";
 import { FraudPreventionDashboard } from "@/components/FraudPreventionDashboard";
+import { RetainerProcessingCard } from "@/components/admin/RetainerProcessingCard";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -321,6 +322,8 @@ const Finance: React.FC = () => {
               <CreditCard className="h-5 w-5 text-blue-600" />
               Payment Processing
             </h2>
+
+            <RetainerProcessingCard />
           
               <FraudPreventionDashboard 
                 suspiciousTransactionsCount={transactions.length > 0 ? transactions.filter(t => t.status === 'suspicious').length : mockRecentTransactions.filter(t => t.status === 'suspicious').length}
