@@ -8,7 +8,7 @@ import { Award, DollarSign, TrendingUp, Users, ShieldAlert } from 'lucide-react'
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAppContext } from '@/context/AppContext';
-import { useAuthorization } from '@/hooks/useAuthorization';
+import { useAuthorization } from '@/hooks/use-authorization';
 import type { CurrentUserClassification } from '@/types/classification';
 
 const formatCurrency = (amount: number, currency: string = 'SDG') => {
