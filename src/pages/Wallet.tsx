@@ -242,9 +242,13 @@ const WalletPage = () => {
                 </Button>
             <Dialog open={withdrawalDialogOpen} onOpenChange={setWithdrawalDialogOpen}>
               <DialogTrigger asChild>
-                <Button size="default" data-testid="button-request-withdrawal">
+                <Button 
+                  size="default" 
+                  data-testid="button-request-withdrawal"
+                  className="bg-gradient-to-r from-purple-600 to-pink-600 text-white border-0 hover:shadow-[0_0_20px_rgba(168,85,247,0.5)] transition-all"
+                >
                   <TrendingDown className="w-4 h-4 mr-2" />
-                  Request Withdrawal
+                  REQUEST WITHDRAWAL
                 </Button>
               </DialogTrigger>
               <DialogContent>
@@ -315,14 +319,14 @@ const WalletPage = () => {
 
         {/* Status Alerts */}
         {pendingWithdrawals.length > 0 && (
-          <Card className="border-orange-200 bg-orange-50 dark:bg-orange-950/20">
+          <Card className="bg-gradient-to-r from-orange-900/50 to-red-900/50 border-orange-500/40 backdrop-blur-xl shadow-[0_0_20px_rgba(251,146,60,0.2)]">
             <CardContent className="flex items-center gap-3 p-4">
-              <AlertCircle className="w-5 h-5 text-orange-600" />
+              <AlertCircle className="w-5 h-5 text-orange-400 animate-pulse" />
               <div className="flex-1">
-                <p className="text-sm font-medium">
+                <p className="text-sm font-medium text-orange-200">
                   You have {pendingWithdrawals.length} pending withdrawal request{pendingWithdrawals.length !== 1 ? 's' : ''}
                 </p>
-                <p className="text-xs text-muted-foreground mt-0.5">
+                <p className="text-xs text-orange-300/70 mt-0.5">
                   Total amount: {formatCurrency(pendingWithdrawals.reduce((sum, r) => sum + r.amount, 0))}
                 </p>
               </div>
@@ -333,70 +337,70 @@ const WalletPage = () => {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
+        <Card className="bg-gradient-to-br from-slate-900/80 to-blue-900/80 border-blue-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(59,130,246,0.2)]">
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium uppercase tracking-wide">
+            <CardTitle className="text-sm font-medium uppercase tracking-wide text-blue-300">
               Current Balance
             </CardTitle>
-            <WalletIcon className="w-4 h-4 text-muted-foreground" />
+            <WalletIcon className="w-5 h-5 text-blue-400" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold tabular-nums bg-gradient-to-br from-green-600 to-emerald-600 bg-clip-text text-transparent">
+            <div className="text-3xl font-bold tabular-nums bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">
               {formatCurrency(currentBalance)}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
+            <p className="text-xs text-blue-300/70 mt-1">
               Available for withdrawal
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="bg-gradient-to-br from-slate-900/80 to-purple-900/80 border-purple-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(168,85,247,0.2)]">
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium uppercase tracking-wide">
+            <CardTitle className="text-sm font-medium uppercase tracking-wide text-purple-300">
               Total Earned
             </CardTitle>
-            <TrendingUp className="w-4 h-4 text-green-600" />
+            <TrendingUp className="w-5 h-5 text-green-400" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold tabular-nums">
+            <div className="text-3xl font-bold tabular-nums bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
               {formatCurrency(stats?.totalEarned || 0)}
             </div>
-            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+            <p className="text-xs text-purple-300/70 mt-1 flex items-center gap-1">
               <Receipt className="w-3 h-3" />
               {stats?.completedSiteVisits || 0} site visits completed
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="bg-gradient-to-br from-slate-900/80 to-orange-900/80 border-orange-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(251,146,60,0.2)]">
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium uppercase tracking-wide">
+            <CardTitle className="text-sm font-medium uppercase tracking-wide text-orange-300">
               Pending Withdrawals
             </CardTitle>
-            <Clock className="w-4 h-4 text-orange-600" />
+            <Clock className="w-5 h-5 text-orange-400 animate-pulse" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold tabular-nums text-orange-600">
+            <div className="text-3xl font-bold tabular-nums bg-gradient-to-r from-orange-400 to-red-400 bg-clip-text text-transparent">
               {formatCurrency(stats?.pendingWithdrawals || 0)}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
+            <p className="text-xs text-orange-300/70 mt-1">
               {pendingWithdrawals.length} request{pendingWithdrawals.length !== 1 ? 's' : ''} awaiting approval
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="bg-gradient-to-br from-slate-900/80 to-cyan-900/80 border-cyan-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(34,211,238,0.2)]">
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium uppercase tracking-wide">
+            <CardTitle className="text-sm font-medium uppercase tracking-wide text-cyan-300">
               Total Withdrawn
             </CardTitle>
-            <TrendingDown className="w-4 h-4 text-blue-600" />
+            <TrendingDown className="w-5 h-5 text-cyan-400" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold tabular-nums">
+            <div className="text-3xl font-bold tabular-nums bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
               {formatCurrency(stats?.totalWithdrawn || 0)}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
+            <p className="text-xs text-cyan-300/70 mt-1">
               {completedWithdrawals.length} approved withdrawal{completedWithdrawals.length !== 1 ? 's' : ''}
             </p>
           </CardContent>
@@ -405,51 +409,51 @@ const WalletPage = () => {
 
       {/* Additional Metrics */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <Card>
+        <Card className="bg-gradient-to-br from-slate-900/80 to-green-900/80 border-green-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(34,197,94,0.2)]">
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium uppercase tracking-wide">Withdrawal Success Rate</CardTitle>
+            <CardTitle className="text-sm font-medium uppercase tracking-wide text-green-300">Withdrawal Success Rate</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-2xl font-bold tabular-nums">{withdrawalSuccessRate.toFixed(0)}%</span>
+              <span className="text-3xl font-bold tabular-nums bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">{withdrawalSuccessRate.toFixed(0)}%</span>
               {withdrawalSuccessRate >= 80 ? (
-                <CheckCircle2 className="w-5 h-5 text-green-600" />
+                <CheckCircle2 className="w-6 h-6 text-green-400 animate-pulse" />
               ) : (
-                <AlertCircle className="w-5 h-5 text-orange-600" />
+                <AlertCircle className="w-6 h-6 text-orange-400 animate-pulse" />
               )}
             </div>
             <Progress value={withdrawalSuccessRate} className="h-2" />
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-green-300/70">
               {completedWithdrawals.length} approved, {rejectedWithdrawals.length} rejected
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="bg-gradient-to-br from-slate-900/80 to-indigo-900/80 border-indigo-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(99,102,241,0.2)]">
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium uppercase tracking-wide">Average Transaction</CardTitle>
+            <CardTitle className="text-sm font-medium uppercase tracking-wide text-indigo-300">Average Transaction</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold tabular-nums">
+            <div className="text-3xl font-bold tabular-nums bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
               {transactions.length > 0
                 ? formatCurrency(transactions.reduce((sum, t) => sum + t.amount, 0) / transactions.length)
                 : formatCurrency(0)}
             </div>
-            <p className="text-xs text-muted-foreground mt-1">
+            <p className="text-xs text-indigo-300/70 mt-1">
               Across {stats?.totalTransactions || 0} transactions
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="bg-gradient-to-br from-slate-900/80 to-emerald-900/80 border-emerald-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(16,185,129,0.2)]">
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium uppercase tracking-wide">Activity Status</CardTitle>
+            <CardTitle className="text-sm font-medium uppercase tracking-wide text-emerald-300">Activity Status</CardTitle>
           </CardHeader>
           <CardContent className="flex items-center gap-3">
-            <Activity className="w-8 h-8 text-green-600" />
+            <Activity className="w-8 h-8 text-emerald-400 animate-pulse" />
             <div>
-              <p className="text-lg font-semibold">Active</p>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-lg font-semibold text-emerald-300">ACTIVE</p>
+              <p className="text-xs text-emerald-300/70">
                 Last transaction: {transactions.length > 0 ? format(new Date(transactions[0].createdAt), 'MMM dd, yyyy') : 'Never'}
               </p>
             </div>
@@ -459,21 +463,41 @@ const WalletPage = () => {
 
       {/* Main Content Tabs */}
       <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="overview" data-testid="tab-overview">
-            Overview
+        <TabsList className="grid w-full grid-cols-5 bg-gradient-to-r from-slate-900/80 to-blue-900/80 border border-blue-500/30 backdrop-blur-xl p-1">
+          <TabsTrigger 
+            value="overview" 
+            data-testid="tab-overview"
+            className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-[0_0_15px_rgba(59,130,246,0.5)] text-blue-300"
+          >
+            OVERVIEW
           </TabsTrigger>
-          <TabsTrigger value="transactions" data-testid="tab-transactions">
-            Transactions
+          <TabsTrigger 
+            value="transactions" 
+            data-testid="tab-transactions"
+            className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-[0_0_15px_rgba(59,130,246,0.5)] text-blue-300"
+          >
+            TRANSACTIONS
           </TabsTrigger>
-          <TabsTrigger value="withdrawals" data-testid="tab-withdrawals">
-            Withdrawals
+          <TabsTrigger 
+            value="withdrawals" 
+            data-testid="tab-withdrawals"
+            className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-[0_0_15px_rgba(59,130,246,0.5)] text-blue-300"
+          >
+            WITHDRAWALS
           </TabsTrigger>
-          <TabsTrigger value="earnings" data-testid="tab-earnings">
-            Earnings
+          <TabsTrigger 
+            value="earnings" 
+            data-testid="tab-earnings"
+            className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-[0_0_15px_rgba(59,130,246,0.5)] text-blue-300"
+          >
+            EARNINGS
           </TabsTrigger>
-          <TabsTrigger value="activity" data-testid="tab-activity">
-            Activity
+          <TabsTrigger 
+            value="activity" 
+            data-testid="tab-activity"
+            className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-[0_0_15px_rgba(59,130,246,0.5)] text-blue-300"
+          >
+            ACTIVITY
           </TabsTrigger>
         </TabsList>
 
