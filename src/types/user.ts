@@ -3,6 +3,7 @@
 // You would replace these with your actual types.
 
 import { AppRole } from './roles';
+import type { ClassificationLevel, ClassificationRoleScope } from './classification';
 
 export interface User {
   id: string;
@@ -51,6 +52,17 @@ export interface User {
   };
   availability: string;  // Changed from optional to required
   roles?: AppRole[];
+  
+  // Classification information (for coordinators, data collectors, supervisors)
+  classification?: {
+    level: ClassificationLevel;
+    roleScope: ClassificationRoleScope;
+    hasRetainer: boolean;
+    retainerAmountCents: number;
+    retainerCurrency: string;
+    effectiveFrom: string;
+    effectiveUntil?: string;
+  };
 }
 
 export interface UserLogin {
