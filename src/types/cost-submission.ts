@@ -39,7 +39,7 @@ export interface SupportingDocument {
  */
 export interface SiteVisitCostSubmission {
   id: string;
-  mmpSiteEntryId: string;
+  siteVisitId: string;
   mmpFileId?: string;
   projectId?: string;
 
@@ -175,7 +175,7 @@ export interface MmpCostSubmissionSummary {
  * Data required to create a new cost submission.
  */
 export interface CreateCostSubmissionRequest {
-  mmpSiteEntryId: string;
+  siteVisitId: string;
   mmpFileId?: string;
   projectId?: string;
   transportationCostCents: number;

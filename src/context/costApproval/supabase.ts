@@ -76,7 +76,7 @@ export const fetchUserCostSubmissions = async (userId: string): Promise<SiteVisi
 };
 
 /**
- * Fetch cost submissions for a specific MMP site entry
+ * Fetch cost submissions for a specific site visit
  */
 export const fetchSiteEntryCostSubmission = async (
   siteEntryId: string
@@ -84,13 +84,13 @@ export const fetchSiteEntryCostSubmission = async (
   const { data, error } = await supabase
     .from('site_visit_cost_submissions')
     .select('*')
-    .eq('mmp_site_entry_id', siteEntryId)
+    .eq('site_visit_id', siteEntryId)
     .order('submitted_at', { ascending: false })
     .limit(1)
     .maybeSingle();
 
   if (error) {
-    console.error('Error fetching site entry cost submission:', error);
+    console.error('Error fetching site visit cost submission:', error);
     throw error;
   }
 
@@ -206,7 +206,7 @@ export const createCostSubmission = async (
     request.otherCostsCents;
 
   const dbData = {
-    mmp_site_entry_id: request.mmpSiteEntryId,
+    site_visit_id: request.siteVisitId,
     mmp_file_id: request.mmpFileId,
     project_id: request.projectId,
     submitted_by: userId,

@@ -19,7 +19,7 @@ import {
  */
 interface DBCostSubmission {
   id: string;
-  mmp_site_entry_id: string;
+  site_visit_id: string;
   mmp_file_id?: string;
   project_id?: string;
   submitted_by: string;
@@ -160,7 +160,7 @@ export const mapDBCostSubmissionToFrontend = (
 ): SiteVisitCostSubmission => {
   return {
     id: db.id,
-    mmpSiteEntryId: db.mmp_site_entry_id,
+    siteVisitId: db.site_visit_id,
     mmpFileId: db.mmp_file_id,
     projectId: db.project_id,
     submittedBy: db.submitted_by,
