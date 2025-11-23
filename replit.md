@@ -20,6 +20,17 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes
 
+**Cost Submission System Implementation (November 23, 2025):**
+- ✅ Completed end-to-end cost submission workflow for enumerators
+- ✅ Built CostSubmissionForm with 4 cost categories (transport, accommodation, meals, other)
+- ✅ Implemented file upload for supporting documents (receipts, photos) to Supabase Storage
+- ✅ Created CostSubmissionHistory with status tracking and detail dialogs
+- ✅ Fixed critical projectId mapping: now sources from mmp_files.project_id via adapter
+- ✅ Resolved numeric field coercion with custom onChange handlers
+- ✅ Added /cost-submission route and integrated with CostSubmissionContext
+- ✅ All numeric values properly converted to cents for financial precision
+- ✅ Production-ready with architect approval
+
 **Classification System Completion (November 23, 2025):**
 - ✅ Fixed critical bug in Classifications page (canManage → canManageFinances)
 - ✅ Implemented UI auto-refresh after classification assignment (refreshUserClassifications call added)
@@ -116,14 +127,16 @@ Preferred communication style: Simple, everyday language.
 - `profiles`: User information, roles, location data
 - `user_roles`: Role assignments with timestamps
 - `projects`: Project metadata and team associations
-- `mmp_files`: MMP documents with site entries and verification status
-- `site_visits`: Visit records with assignment and completion tracking
+- `mmp_files`: MMP documents with site entries and verification status (includes project_id FK)
+- `mmp_site_entries`: Site visit tracking table (primary source for site visits)
 - `project_budgets`: Project-level budget allocations and tracking
 - `mmp_budgets`: MMP-level budget allocations linked to MMPs
 - `budget_transactions`: Detailed transaction log for budget spend tracking
 - `budget_alerts`: Automated alerts for budget thresholds (80%, 100%)
 - `wallet_balances`: Enumerator wallet balances for site visit compensation
 - `wallet_transactions`: Transaction history for wallet activities
+- `site_visit_cost_submissions`: Actual cost submissions by enumerators with approval workflow
+- `cost_approval_history`: Complete audit trail of cost approval actions
 
 ### Authorization System
 
