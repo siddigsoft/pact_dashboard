@@ -12,15 +12,16 @@ const MobileNavigation = () => {
   const { currentUser, roles } = useAppContext();
   const unreadChatCount = getUnreadMessagesCount();
   
-  // Check if user is a data collector
+  // Check if user is a data collector or admin
   const isDataCollector = roles?.includes('dataCollector' as AppRole) || currentUser?.role === 'dataCollector';
+  const isAdmin = roles?.includes('admin' as AppRole) || currentUser?.role === 'admin';
   
   const navItems = [
     { icon: Home, label: 'Home', path: '/dashboard' },
     { icon: Map, label: 'Field', path: '/field-team' },
     { icon: FileText, label: 'MMP', path: '/mmp' },
     { icon: MessageSquare, label: 'Chat', path: '/chat', badge: unreadChatCount },
-    ...(isDataCollector ? [{ icon: Receipt, label: 'Costs', path: '/cost-submission' }] : []),
+    ...(isDataCollector || isAdmin ? [{ icon: Receipt, label: 'Costs', path: '/cost-submission' }] : []),
     { icon: Users, label: 'Team', path: '/users' },
   ];
 

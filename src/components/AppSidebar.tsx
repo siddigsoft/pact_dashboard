@@ -69,9 +69,12 @@ const getMenuGroups = (
   // Build items per permission, allowing admin bypass
   const mainItems = [] as MenuGroup['items'];
   if (isAdmin || isICT || perms.dashboard) mainItems.push({ title: "Dashboard", url: "/dashboard", icon: LayoutDashboard });
-  // Only data collectors see My Wallet and Cost Submission
+  // Only data collectors see My Wallet
   if (isDataCollector) {
     mainItems.push({ title: "My Wallet", url: "/wallet", icon: CreditCard });
+  }
+  // Data collectors and admins see Cost Submission
+  if (isDataCollector || isAdmin) {
     mainItems.push({ title: "Cost Submission", url: "/cost-submission", icon: Receipt });
   }
   // Coordinators see Sites for Verification under Projects
