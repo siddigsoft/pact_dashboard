@@ -66,6 +66,7 @@ import WalletReports from './pages/WalletReports';
 import BudgetPage from './pages/Budget';
 import Classifications from './pages/Classifications';
 import CostSubmission from './pages/CostSubmission';
+import FinancialOperations from './pages/FinancialOperations';
 
 // Components
 import MainLayout from './components/MainLayout';
@@ -144,6 +145,7 @@ const AppRoutes = () => {
         <Route path="/calls" element={<Calls />} />
         <Route path="/field-team" element={<FieldTeam />} />
         <Route path="/finance" element={<Finance />} />
+        <Route path="/financial-operations" element={<FinancialOperations />} />
         <Route path="/data-visibility" element={<DataVisibility />} />
         <Route path="/chat" element={<Chat />} />
         <Route path="/projects" element={<Projects />} />

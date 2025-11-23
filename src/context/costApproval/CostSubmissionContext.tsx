@@ -534,3 +534,8 @@ export const useMMPCostSummary = (mmpFileId: string) => {
   const context = useCostSubmissionContext();
   return context.useMMPSummary(mmpFileId);
 };
+
+export const useReviewSubmission = () => {
+  const context = useCostSubmissionContext();
+  return context.useReviewSubmission();
+};
