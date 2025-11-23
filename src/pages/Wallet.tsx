@@ -932,7 +932,6 @@ const WalletPage = () => {
           </div>
         </TabsContent>
       </Tabs>
-      </div>
     </div>
   );
 };

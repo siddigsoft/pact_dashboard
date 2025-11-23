@@ -390,16 +390,16 @@ const BudgetPage = () => {
 
         {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-4">
-          <Card>
+          <Card className="bg-gradient-to-br from-slate-900/80 to-blue-900/80 border-blue-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(59,130,246,0.2)]">
             <CardHeader>
-              <CardTitle>Budget Overview</CardTitle>
+              <CardTitle className="text-xl font-bold text-blue-300">Budget Overview</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               {projectBudgets.length === 0 ? (
                 <div className="text-center py-12">
-                  <PieChart className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-                  <h3 className="text-lg font-semibold mb-2">No budgets yet</h3>
-                  <p className="text-muted-foreground mb-4">
+                  <PieChart className="w-12 h-12 mx-auto text-blue-400 mb-4" />
+                  <h3 className="text-lg font-semibold mb-2 text-blue-200">No budgets yet</h3>
+                  <p className="text-blue-300/70 mb-4">
                     Create your first project budget to start tracking expenditures
                   </p>
                   {canManageBudgets && (
@@ -417,25 +417,28 @@ const BudgetPage = () => {
                       : 0;
 
                     return (
-                      <div key={budget.id} className="space-y-2">
+                      <div key={budget.id} className="space-y-2 p-4 rounded-lg bg-gradient-to-r from-slate-800/50 to-blue-800/50 border border-blue-500/20">
                         <div className="flex items-center justify-between">
                           <div>
-                            <p className="font-medium">Project Budget - FY {budget.fiscalYear}</p>
-                            <p className="text-sm text-muted-foreground">
+                            <p className="font-medium text-blue-200">Project Budget - FY {budget.fiscalYear}</p>
+                            <p className="text-sm text-blue-300/70">
                               {budget.budgetPeriod.replace('_', ' ').toUpperCase()}
                             </p>
                           </div>
                           <div className="text-right">
-                            <p className="font-semibold">{formatCurrency(budget.remainingBudgetCents)}</p>
-                            <p className="text-sm text-muted-foreground">
+                            <p className="font-semibold bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">{formatCurrency(budget.remainingBudgetCents)}</p>
+                            <p className="text-sm text-blue-300/70">
                               of {formatCurrency(budget.totalBudgetCents)} remaining
                             </p>
                           </div>
                         </div>
-                        <Progress value={utilizationPercent} className="h-2" />
-                        <div className="flex items-center justify-between text-xs text-muted-foreground">
-                          <span>{utilizationPercent.toFixed(1)}% utilized</span>
-                          <Badge variant={budget.status === 'active' ? 'default' : 'secondary'}>
+                        <Progress value={utilizationPercent} className="h-2 bg-slate-700/50 [&>div]:bg-gradient-to-r [&>div]:from-blue-500 [&>div]:to-purple-500" />
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-blue-300/70">{utilizationPercent.toFixed(1)}% utilized</span>
+                          <Badge 
+                            variant={budget.status === 'active' ? 'default' : 'secondary'}
+                            className={budget.status === 'active' ? 'bg-gradient-to-r from-green-500 to-emerald-600 border-0' : 'bg-slate-700 text-slate-300'}
+                          >
                             {budget.status}
                           </Badge>
                         </div>
@@ -448,9 +451,9 @@ const BudgetPage = () => {
           </Card>
 
           {/* Category Breakdown */}
-          <Card>
+          <Card className="bg-gradient-to-br from-slate-900/80 to-purple-900/80 border-purple-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(168,85,247,0.2)]">
             <CardHeader>
-              <CardTitle>Spending by Category</CardTitle>
+              <CardTitle className="text-xl font-bold text-purple-300">Spending by Category</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
@@ -460,16 +463,16 @@ const BudgetPage = () => {
                     : 0;
 
                   return (
-                    <div key={category} className="space-y-2">
+                    <div key={category} className="space-y-2 p-3 rounded-lg bg-gradient-to-r from-slate-800/50 to-purple-800/50 border border-purple-500/20">
                       <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium capitalize">
+                        <span className="text-sm font-medium capitalize text-purple-200">
                           {category.replace('_', ' ')}
                         </span>
-                        <span className="text-sm text-muted-foreground">
+                        <span className="text-sm text-purple-300/70">
                           {formatCurrency(data.spent)} / {formatCurrency(data.allocated)}
                         </span>
                       </div>
-                      <Progress value={utilizationPercent} className="h-1.5" />
+                      <Progress value={utilizationPercent} className="h-1.5 bg-slate-700/50 [&>div]:bg-gradient-to-r [&>div]:from-purple-500 [&>div]:to-pink-500" />
                     </div>
                   );
                 })}
@@ -480,10 +483,10 @@ const BudgetPage = () => {
 
         {/* Project Budgets Tab */}
         <TabsContent value="projects" className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-4">
             <div>
-              <h2 className="text-2xl font-bold">Project Budgets</h2>
-              <p className="text-muted-foreground">Manage and track project budget allocations</p>
+              <h2 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">Project Budgets</h2>
+              <p className="text-blue-300/70">Manage and track project budget allocations</p>
             </div>
             {canManageBudgets && (
               <CreateProjectBudgetDialog
@@ -494,11 +497,11 @@ const BudgetPage = () => {
           </div>
           
           {filteredProjectBudgets.length === 0 ? (
-            <Card>
+            <Card className="bg-gradient-to-br from-slate-900/80 to-blue-900/80 border-blue-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(59,130,246,0.2)]">
               <CardContent className="flex flex-col items-center justify-center py-12">
-                <DollarSign className="w-12 h-12 text-muted-foreground mb-4" />
-                <h3 className="text-lg font-semibold mb-2">No project budgets found</h3>
-                <p className="text-muted-foreground text-center max-w-md">
+                <DollarSign className="w-12 h-12 text-blue-400 mb-4" />
+                <h3 className="text-lg font-semibold mb-2 text-blue-200">No project budgets found</h3>
+                <p className="text-blue-300/70 text-center max-w-md">
                   Create your first project budget to start tracking and managing expenditures
                 </p>
               </CardContent>
@@ -518,19 +521,19 @@ const BudgetPage = () => {
 
         {/* MMP Budgets Tab */}
         <TabsContent value="mmps" className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-4">
             <div>
-              <h2 className="text-2xl font-bold">MMP Budgets</h2>
-              <p className="text-muted-foreground">Track budget allocations for Monthly Monitoring Plans</p>
+              <h2 className="text-2xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">MMP Budgets</h2>
+              <p className="text-purple-300/70">Track budget allocations for Monthly Monitoring Plans</p>
             </div>
           </div>
           
           {filteredMMPBudgets.length === 0 ? (
-            <Card>
+            <Card className="bg-gradient-to-br from-slate-900/80 to-purple-900/80 border-purple-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(168,85,247,0.2)]">
               <CardContent className="flex flex-col items-center justify-center py-12">
-                <BarChart3 className="w-12 h-12 text-muted-foreground mb-4" />
-                <h3 className="text-lg font-semibold mb-2">No MMP budgets found</h3>
-                <p className="text-muted-foreground text-center max-w-md">
+                <BarChart3 className="w-12 h-12 text-purple-400 mb-4" />
+                <h3 className="text-lg font-semibold mb-2 text-purple-200">No MMP budgets found</h3>
+                <p className="text-purple-300/70 text-center max-w-md">
                   Allocate budgets to MMPs to track site visit costs and manage field operations
                 </p>
               </CardContent>
@@ -550,37 +553,37 @@ const BudgetPage = () => {
 
         {/* Transactions Tab */}
         <TabsContent value="transactions" className="space-y-4">
-          <Card>
+          <Card className="bg-gradient-to-br from-slate-900/80 to-cyan-900/80 border-cyan-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(34,211,238,0.2)]">
             <CardHeader>
-              <CardTitle>Budget Transactions</CardTitle>
+              <CardTitle className="text-xl font-bold text-cyan-300">Budget Transactions</CardTitle>
             </CardHeader>
             <CardContent>
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead className="text-right">Amount</TableHead>
+                  <TableRow className="border-cyan-500/20 hover:bg-cyan-500/5">
+                    <TableHead className="text-cyan-300">Date</TableHead>
+                    <TableHead className="text-cyan-300">Type</TableHead>
+                    <TableHead className="text-cyan-300">Category</TableHead>
+                    <TableHead className="text-cyan-300">Description</TableHead>
+                    <TableHead className="text-right text-cyan-300">Amount</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {budgetTransactions.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={5} className="text-center text-muted-foreground">
+                    <TableRow className="border-cyan-500/20">
+                      <TableCell colSpan={5} className="text-center text-cyan-300/70 py-12">
                         No transactions yet
                       </TableCell>
                     </TableRow>
                   ) : (
                     budgetTransactions.slice(0, 50).map((txn) => (
-                      <TableRow key={txn.id} data-testid={`row-transaction-${txn.id}`}>
-                        <TableCell>{format(new Date(txn.createdAt), 'MMM d, yyyy')}</TableCell>
-                        <TableCell className="capitalize">{txn.transactionType.replace('_', ' ')}</TableCell>
-                        <TableCell className="capitalize">{txn.category?.replace('_', ' ') || '-'}</TableCell>
-                        <TableCell className="max-w-xs truncate">{txn.description || '-'}</TableCell>
+                      <TableRow key={txn.id} data-testid={`row-transaction-${txn.id}`} className="border-cyan-500/20 hover:bg-cyan-500/5">
+                        <TableCell className="text-cyan-100">{format(new Date(txn.createdAt), 'MMM d, yyyy')}</TableCell>
+                        <TableCell className="capitalize text-cyan-100">{txn.transactionType.replace('_', ' ')}</TableCell>
+                        <TableCell className="capitalize text-cyan-100">{txn.category?.replace('_', ' ') || '-'}</TableCell>
+                        <TableCell className="max-w-xs truncate text-cyan-100">{txn.description || '-'}</TableCell>
                         <TableCell className="text-right">
-                          <span className={txn.transactionType === 'spend' ? 'text-red-600' : 'text-green-600'}>
+                          <span className={txn.transactionType === 'spend' ? 'text-red-400 font-semibold' : 'text-green-400 font-semibold'}>
                             {txn.transactionType === 'spend' ? '-' : '+'}{formatCurrency(txn.amountCents)}
                           </span>
                         </TableCell>
@@ -596,28 +599,28 @@ const BudgetPage = () => {
         {/* Analytics Tab */}
         <TabsContent value="analytics" className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
-            <Card>
+            <Card className="bg-gradient-to-br from-slate-900/80 to-blue-900/80 border-blue-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(59,130,246,0.2)]">
               <CardHeader>
-                <CardTitle>Budget Utilization</CardTitle>
+                <CardTitle className="text-xl font-bold text-blue-300">Budget Utilization</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-center py-12">
-                  <PieChart className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground">
+                  <PieChart className="w-16 h-16 mx-auto text-blue-400 mb-4" />
+                  <p className="text-blue-300/70">
                     Chart visualization coming soon
                   </p>
                 </div>
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="bg-gradient-to-br from-slate-900/80 to-purple-900/80 border-purple-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(168,85,247,0.2)]">
               <CardHeader>
-                <CardTitle>Spending Trends</CardTitle>
+                <CardTitle className="text-xl font-bold text-purple-300">Spending Trends</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-center py-12">
-                  <BarChart3 className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground">
+                  <BarChart3 className="w-16 h-16 mx-auto text-purple-400 mb-4" />
+                  <p className="text-purple-300/70">
                     Trend analysis coming soon
                   </p>
                 </div>
