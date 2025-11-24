@@ -23,18 +23,16 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
       "@assets": path.resolve(__dirname, "./attached_assets"),
     },
+    dedupe: ['react', 'react-dom'],
   },
   build: {
     chunkSizeWarningLimit: 1000,
     rollupOptions: {
       output: {
         manualChunks(id) {
-          // Core React libraries
-          if (id.includes('react') && !id.includes('react-')) {
-            return 'react-core';
-          }
-          if (id.includes('react-dom')) {
-            return 'react-dom';
+          // Core React libraries - MUST be in the same chunk to avoid multiple React instances
+          if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/')) {
+            return 'react-vendor';
           }
           
           // React Router
