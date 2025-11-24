@@ -383,6 +383,8 @@ const MMP = () => {
   const [forwardedSubTab, setForwardedSubTab] = useState<'pending' | 'verified'>('pending');
   // Subcategory state for Verified Sites (Admin/ICT only)
   const [verifiedSubTab, setVerifiedSubTab] = useState<'newSites' | 'approvedCosted' | 'dispatched' | 'accepted' | 'ongoing' | 'completed'>('newSites');
+  // Subcategory state for Enumerator dashboard
+  const [enumeratorSubTab, setEnumeratorSubTab] = useState<'availableSites' | 'smartAssigned' | 'mySites'>('availableSites');
   // Subcategory state for New MMPs (FOM only)
   const [newFomSubTab, setNewFomSubTab] = useState<'pending' | 'verified'>('pending');
   const [siteVisitStats, setSiteVisitStats] = useState<Record<string, {
@@ -416,6 +418,14 @@ const MMP = () => {
   const [dispatchDialogOpen, setDispatchDialogOpen] = useState(false);
   const [dispatchType, setDispatchType] = useState<'state' | 'locality' | 'individual'>('state');
 
+  // Enumerator-specific state
+  const [enumeratorSiteEntries, setEnumeratorSiteEntries] = useState<any[]>([]);
+  const [loadingEnumerator, setLoadingEnumerator] = useState(false);
+  const [enumeratorGroupedByStates, setEnumeratorGroupedByStates] = useState<Record<string, any[]>>({});
+  const [enumeratorGroupedByLocality, setEnumeratorGroupedByLocality] = useState<Record<string, any[]>>({});
+  const [enumeratorSmartAssigned, setEnumeratorSmartAssigned] = useState<any[]>([]);
+  const [enumeratorMySites, setEnumeratorMySites] = useState<any[]>([]);
+
   // Helper function to normalize role checking (handles both lowercase and proper case)
   const hasRole = (rolesToCheck: string[]) => {
     if (!currentUser) return false;
@@ -435,6 +445,7 @@ const MMP = () => {
   const isICT = hasRole(['ICT', 'ict']);
   const isFOM = hasRole(['Field Operation Manager (FOM)', 'fom', 'field operation manager']);
   const isCoordinator = hasRole(['Coordinator', 'coordinator']);
+  const isDataCollector = hasRole(['DataCollector', 'datacollector', 'enumerator', 'Enumerator']);
   const canRead = checkPermission('mmp', 'read') || isAdmin || isFOM || isCoordinator || isICT;
   // Only Admin and ICT accounts should see the Upload button on the MMP management page.
   // We intentionally DO NOT fallback to checkPermission here to prevent other roles (e.g. FOM)
@@ -451,6 +462,7 @@ const MMP = () => {
       console.log('🔍 isICT:', isICT);
       console.log('🔍 isFOM:', isFOM);
       console.log('🔍 isCoordinator:', isCoordinator);
+      console.log('🔍 isDataCollector:', isDataCollector);
       console.log('🔍 canCreate:', canCreate);
     }
   }, [currentUser, isAdmin, isICT, isFOM, isCoordinator, canCreate]);
@@ -459,10 +471,12 @@ const MMP = () => {
   useEffect(() => {
     if (isCoordinator) {
       setActiveTab('verified');
+    } else if (isDataCollector) {
+      setActiveTab('enumerator');
     } else {
       setActiveTab('new');
     }
-  }, [isCoordinator]);
+  }, [isCoordinator, isDataCollector]);
 
   // Categorize MMPs
   const categorizedMMPs = useMemo(() => {
@@ -683,6 +697,146 @@ const MMP = () => {
 
     loadCompletedCount();
   }, [mmpFiles]); // Reload when MMP files change
+
+  // Load enumerator site entries only when user is DataCollector
+  useEffect(() => {
+    const loadEnumeratorEntries = async () => {
+      if (!isDataCollector || !currentUser?.id) {
+        setEnumeratorSiteEntries([]);
+        setEnumeratorGroupedByStates({});
+        setEnumeratorGroupedByLocality({});
+        setEnumeratorSmartAssigned([]);
+        return;
+      }
+
+      setLoadingEnumerator(true);
+      try {
+        // Load available sites in the enumerator's state or locality for "Available Sites" tab
+        const availableSitesQuery = supabase
+          .from('mmp_site_entries')
+          .select('*')
+          .or('status.ilike.dispatched,dispatched_at.not.is.null')
+          .or(`state.eq.${currentUser.stateId},locality.eq.${currentUser.localityId}`)
+          .order('created_at', { ascending: false })
+          .limit(1000);
+
+        // Load accepted sites for "Smart Assigned" tab
+        const smartAssignedQuery = supabase
+          .from('mmp_site_entries')
+          .select('*')
+          .eq('accepted_by', currentUser.id)
+          .order('created_at', { ascending: false })
+          .limit(1000);
+
+        // Load accepted sites for "My Sites" tab (accepted + smart assigned)
+        const mySitesQuery = supabase
+          .from('mmp_site_entries')
+          .select('*')
+          .or(`accepted_by.eq.${currentUser.id},and(status.ilike.dispatched,accepted_by.is.null,or(state.eq.${currentUser.stateId},locality.eq.${currentUser.localityId}))`)
+          .order('created_at', { ascending: false })
+          .limit(1000);
+
+        // Execute all queries in parallel
+        const [availableResult, smartAssignedResult, mySitesResult] = await Promise.all([
+          availableSitesQuery,
+          smartAssignedQuery,
+          mySitesQuery
+        ]);
+
+        if (availableResult.error) throw availableResult.error;
+        if (smartAssignedResult.error) throw smartAssignedResult.error;
+        if (mySitesResult.error) throw mySitesResult.error;
+
+        // Format entries for display
+        const formatEntries = (entries: any[]) => entries.map(entry => {
+          const additionalData = entry.additional_data || {};
+          const enumeratorFee = entry.enumerator_fee ?? additionalData.enumerator_fee;
+          const transportFee = entry.transport_fee ?? additionalData.transport_fee;
+          return {
+            ...entry,
+            siteName: entry.site_name,
+            siteCode: entry.site_code,
+            hubOffice: entry.hub_office,
+            cpName: entry.cp_name,
+            siteActivity: entry.activity_at_site,
+            monitoringBy: entry.monitoring_by,
+            surveyTool: entry.survey_tool,
+            useMarketDiversion: entry.use_market_diversion,
+            useWarehouseMonitoring: entry.use_warehouse_monitoring,
+            visitDate: entry.visit_date,
+            comments: entry.comments,
+            enumerator_fee: enumeratorFee,
+            enumeratorFee: enumeratorFee,
+            transport_fee: transportFee,
+            transportFee: transportFee,
+            cost: entry.cost,
+            status: entry.status,
+            verified_by: entry.verified_by,
+            verified_at: entry.verified_at,
+            dispatched_by: entry.dispatched_by,
+            dispatched_at: entry.dispatched_at,
+            accepted_by: entry.accepted_by,
+            accepted_at: entry.accepted_at,
+            updated_at: entry.updated_at,
+            additionalData: additionalData
+          };
+        });
+
+        const availableEntries = formatEntries(availableResult.data || []);
+        const smartAssignedEntries = formatEntries(smartAssignedResult.data || []);
+        const mySitesEntries = formatEntries(mySitesResult.data || []);
+
+        // Store all entries for reference
+        setEnumeratorSiteEntries(availableEntries);
+
+        // Group available sites by state and locality combined (for Available Sites tab)
+        const groupedByStateLocality = availableEntries.reduce((acc, entry) => {
+          const state = entry.state || 'Unknown State';
+          const locality = entry.locality || 'Unknown Locality';
+          const key = `${state} - ${locality}`;
+          if (!acc[key]) acc[key] = [];
+          acc[key].push(entry);
+          return acc;
+        }, {} as Record<string, any[]>);
+        setEnumeratorGroupedByStates(groupedByStateLocality); // Reuse this state for available sites
+        setEnumeratorGroupedByLocality({}); // Clear locality grouping since we're combining
+
+        // Set smart assigned entries (accepted sites)
+        setEnumeratorSmartAssigned(smartAssignedEntries);
+
+        // Build deduplicated union for "My Sites"
+        try {
+          const byId = new Map<string, any>();
+          // prefer smartAssigned entries first
+          (smartAssignedEntries || []).forEach((e: any) => {
+            if (e && e.id) byId.set(String(e.id), e);
+          });
+          // then include mySitesEntries (may overlap)
+          (mySitesEntries || []).forEach((e: any) => {
+            if (!e) return;
+            const key = e.id ? String(e.id) : `${e.mmp_file_id || e.mmpId}-${e.site_code || e.siteCode || ''}`;
+            if (!byId.has(key)) byId.set(key, e);
+          });
+          setEnumeratorMySites(Array.from(byId.values()));
+        } catch (e) {
+          // fallback
+          setEnumeratorMySites(mySitesEntries);
+        }
+
+      } catch (error) {
+        console.error('Failed to load enumerator site entries:', error);
+        setEnumeratorSiteEntries([]);
+        setEnumeratorGroupedByStates({});
+        setEnumeratorGroupedByLocality({});
+        setEnumeratorSmartAssigned([]);
+        setEnumeratorMySites([]);
+      } finally {
+        setLoadingEnumerator(false);
+      }
+    };
+
+    loadEnumeratorEntries();
+  }, [isDataCollector, currentUser?.id, currentUser?.stateId, currentUser?.localityId, mmpFiles]); // Reload when MMP files change or user changes
 
   // Load approved and costed site entries only when the tab is active
   useEffect(() => {
@@ -1436,57 +1590,69 @@ const MMP = () => {
   }
 
   return (
-    <div className="space-y-10 min-h-screen bg-slate-50 dark:bg-gray-900 py-8 px-2 md:px-8">
+    <div className="space-y-6 sm:space-y-10 min-h-screen bg-slate-50 dark:bg-gray-900 py-4 sm:py-8 px-2 sm:px-8">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-blue-600 dark:bg-blue-900 p-7 rounded-2xl shadow-xl border border-blue-100 dark:border-blue-900">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/dashboard')} className="hover:bg-blue-100 dark:hover:bg-blue-900/40">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-blue-600 dark:bg-blue-900 p-4 sm:p-7 rounded-2xl shadow-xl border border-blue-100 dark:border-blue-900">
+        <div className="flex items-center gap-3 sm:gap-4">
+          <Button variant="ghost" size="icon" onClick={() => navigate('/dashboard')} className="hover:bg-blue-100 dark:hover:bg-blue-900/40 flex-shrink-0">
             <ChevronLeft className="h-5 w-5 text-white dark:text-blue-200" />
           </Button>
-          <div>
-            <h1 className="text-3xl font-extrabold text-white tracking-tight">MMP Management</h1>
-            <p className="text-blue-100 dark:text-blue-200/80 font-medium">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight truncate">
+              {isDataCollector ? 'My Sites Management' : 'MMP Management'}
+            </h1>
+            <p className="text-blue-100 dark:text-blue-200/80 font-medium text-sm sm:text-base mt-1">
               {isAdmin || isICT
                 ? 'Upload, validate, and forward MMPs to Field Operations Managers'
                 : isFOM
                   ? 'Process MMPs, attach permits, and assign sites to coordinators'
                   : isCoordinator
                     ? 'Review and verify site assignments'
-                    : 'Manage your MMP files and site visits'}
+                    : isDataCollector
+                      ? 'View and manage your assigned sites.'
+                      : 'Manage your MMP files and site visits'}
             </p>
           </div>
         </div>
         {canCreate && (
-          <Button className="bg-blue-700 hover:bg-blue-800 text-white shadow-lg hover:shadow-xl transition-all duration-300 px-6 py-2 rounded-full font-semibold" onClick={() => navigate('/mmp/upload')}>
-            <Upload className="h-5 w-5 mr-2" />
+          <Button className="bg-blue-700 hover:bg-blue-800 text-white shadow-lg hover:shadow-xl transition-all duration-300 px-4 sm:px-6 py-2 rounded-full font-semibold text-sm sm:text-base flex-shrink-0" onClick={() => navigate('/mmp/upload')}>
+            <Upload className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
             Upload MMP
           </Button>
         )}
       </div>
 
       {/* Body */}
-      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-lg p-6">
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-lg p-4 sm:p-6">
         {loading ? (
           <div className="text-center text-muted-foreground py-8">Loading MMP files...</div>
         ) : (
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className={`grid w-full mb-6 ${isCoordinator ? 'grid-cols-1' : 'grid-cols-3'}`}>
-              {!isCoordinator && (
+            <TabsList className={`grid w-full mb-6 ${isCoordinator ? 'grid-cols-1' : isDataCollector ? 'grid-cols-1' : 'grid-cols-3'}`}>
+              {isDataCollector && (
+                <TabsTrigger value="enumerator" className="flex items-center gap-2 data-[state=active]:bg-blue-200 data-[state=active]:text-blue-900 data-[state=active]:shadow-none">
+                  My Assignments
+                  <Badge variant="secondary">{enumeratorMySites.length}</Badge>
+                </TabsTrigger>
+              )}
+              {!isCoordinator && !isDataCollector && (
                 <TabsTrigger value="new" className="flex items-center gap-2 data-[state=active]:bg-blue-200 data-[state=active]:text-blue-900 data-[state=active]:shadow-none">
                   New MMPs
                   <Badge variant="secondary">{categorizedMMPs.new.length}</Badge>
                 </TabsTrigger>
               )}
-              {!isCoordinator && (
+              {!isCoordinator && !isDataCollector && (
                 <TabsTrigger value="forwarded" className="flex items-center gap-2 data-[state=active]:bg-blue-200 data-[state=active]:text-blue-900 data-[state=active]:shadow-none">
                   {isFOM ? 'Forwarded Sites' : 'Forwarded MMPs'}
                   <Badge variant="secondary">{categorizedMMPs.forwarded.length}</Badge>
                 </TabsTrigger>
               )}
-              <TabsTrigger value="verified" className="flex items-center gap-2 data-[state=active]:bg-blue-200 data-[state=active]:text-blue-900 data-[state=active]:shadow-none">
-                {isCoordinator ? 'MMPs to Review' : 'Verified Sites'}
-                <Badge variant="secondary">{categorizedMMPs.verified.length}</Badge>
-              </TabsTrigger>
+              {!isDataCollector && (
+                <TabsTrigger value="verified" className="flex items-center gap-2 data-[state=active]:bg-blue-200 data-[state=active]:text-blue-900 data-[state=active]:shadow-none">
+                  {isCoordinator ? 'MMPs to Review' : 'Verified Sites'}
+                  <Badge variant="secondary">{categorizedMMPs.verified.length}</Badge>
+                </TabsTrigger>
+              )}
             </TabsList>
 
             {!isCoordinator && (
@@ -1990,6 +2156,326 @@ const MMP = () => {
                 </div>
               )}
             </TabsContent>
+
+            {isDataCollector && (
+              <TabsContent value="enumerator">
+                <div className="mb-4">
+                  <div className="text-sm font-medium text-muted-foreground mb-3">View:</div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <Button 
+                      variant={enumeratorSubTab === 'availableSites' ? 'default' : 'outline'} 
+                      onClick={() => setEnumeratorSubTab('availableSites')} 
+                      className={`h-12 text-sm font-medium ${enumeratorSubTab === 'availableSites' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : 'hover:bg-gray-50'}`}
+                    >
+                      <div className="flex flex-col items-center gap-1">
+                        <span>Available Sites</span>
+                        <Badge variant="secondary" className="text-xs">{Object.values(enumeratorGroupedByStates).flat().length}</Badge>
+                      </div>
+                    </Button>
+                    <Button 
+                      variant={enumeratorSubTab === 'smartAssigned' ? 'default' : 'outline'} 
+                      onClick={() => setEnumeratorSubTab('smartAssigned')} 
+                      className={`h-12 text-sm font-medium ${enumeratorSubTab === 'smartAssigned' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : 'hover:bg-gray-50'}`}
+                    >
+                      <div className="flex flex-col items-center gap-1">
+                        <span>Smart Assigned</span>
+                        <Badge variant="secondary" className="text-xs">{enumeratorSmartAssigned.length}</Badge>
+                      </div>
+                    </Button>
+                    <Button 
+                      variant={enumeratorSubTab === 'mySites' ? 'default' : 'outline'} 
+                      onClick={() => setEnumeratorSubTab('mySites')} 
+                      className={`h-12 text-sm font-medium ${enumeratorSubTab === 'mySites' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : 'hover:bg-gray-50'}`}
+                    >
+                      <div className="flex flex-col items-center gap-1">
+                        <span>My Sites</span>
+                        <Badge variant="secondary" className="text-xs">{enumeratorMySites.length}</Badge>
+                      </div>
+                    </Button>
+                  </div>
+                </div>
+                {loadingEnumerator ? (
+                  <Card>
+                    <CardContent className="py-8">
+                      <div className="text-center text-muted-foreground">Loading your assignments...</div>
+                    </CardContent>
+                  </Card>
+                ) : enumeratorSubTab === 'availableSites' ? (
+                  <div className="space-y-2">
+                    {Object.keys(enumeratorGroupedByStates).length === 0 ? (
+                      <Card>
+                        <CardContent className="py-8">
+                          <div className="text-center text-muted-foreground">No sites available in your area yet.</div>
+                        </CardContent>
+                      </Card>
+                    ) : (
+                      <Accordion type="single" collapsible className="w-full">
+                        {Object.entries(enumeratorGroupedByStates).map(([stateLocality, sites]) => (
+                          <AccordionItem key={stateLocality} value={stateLocality}>
+                            <AccordionTrigger className="px-4 py-3 hover:bg-gray-50 rounded-lg">
+                              <div className="flex items-center justify-between w-full mr-4">
+                                <span className="font-medium">{stateLocality}</span>
+                                <Badge variant="secondary" className="ml-2">{sites.length} sites</Badge>
+                              </div>
+                            </AccordionTrigger>
+                            <AccordionContent className="px-4 pb-4">
+                              <MMPSiteEntriesTable 
+                                siteEntries={sites} 
+                                editable={true}
+                                onUpdateSites={async (updatedSites) => {
+                                  // Handle updates for enumerator sites
+                                  try {
+                                    for (const site of updatedSites) {
+                                      const enumFee = site.enumerator_fee ?? site.enumeratorFee;
+                                      const transFee = site.transport_fee ?? site.transportFee;
+                                      const calculatedCost = enumFee && transFee ? Number(enumFee) + Number(transFee) : site.cost;
+                                      
+                                      const existingAdditionalData = site.additionalData || site.additional_data || {};
+                                      const updatedAdditionalData = {
+                                        ...existingAdditionalData,
+                                        enumerator_fee: enumFee,
+                                        transport_fee: transFee,
+                                        cost: calculatedCost
+                                      };
+                                      
+                                      const updateData: any = {
+                                        site_name: site.siteName || site.site_name,
+                                        site_code: site.siteCode || site.site_code,
+                                        hub_office: site.hubOffice || site.hub_office,
+                                        state: site.state,
+                                        locality: site.locality,
+                                        cp_name: site.cpName || site.cp_name,
+                                        activity_at_site: site.siteActivity || site.activity_at_site,
+                                        monitoring_by: site.monitoringBy || site.monitoring_by,
+                                        survey_tool: site.surveyTool || site.survey_tool,
+                                        use_market_diversion: site.useMarketDiversion || site.use_market_diversion,
+                                        use_warehouse_monitoring: site.useWarehouseMonitoring || site.use_warehouse_monitoring,
+                                        visit_date: site.visitDate || site.visit_date,
+                                        comments: site.comments,
+                                        cost: calculatedCost,
+                                        enumerator_fee: enumFee !== undefined ? Number(enumFee) : undefined,
+                                        transport_fee: transFee !== undefined ? Number(transFee) : undefined,
+                                        status: site.status,
+                                        verification_notes: site.verification_notes || site.verificationNotes,
+                                        verified_by: site.verified_by || site.verifiedBy,
+                                        verified_at: site.verified_at || site.verifiedAt,
+                                        additional_data: updatedAdditionalData
+                                      };
+
+                                      Object.keys(updateData).forEach(key => {
+                                        if (updateData[key] === undefined) delete updateData[key];
+                                      });
+
+                                      if (site.id) {
+                                        await supabase
+                                          .from('mmp_site_entries')
+                                          .update(updateData)
+                                          .eq('id', site.id);
+                                      }
+                                    }
+                                    // Reload available sites data
+                                    const { data: updatedEntries } = await supabase
+                                      .from('mmp_site_entries')
+                                      .select('*')
+                                      .or('status.ilike.dispatched,dispatched_at.not.is.null')
+                                      .or(`state.eq.${currentUser?.stateId},locality.eq.${currentUser?.localityId}`)
+                                      .order('created_at', { ascending: false })
+                                      .limit(1000);
+                                    
+                                    if (updatedEntries) {
+                                      const formattedEntries = updatedEntries.map(entry => {
+                                        const additionalData = entry.additional_data || {};
+                                        return {
+                                          ...entry,
+                                          siteName: entry.site_name,
+                                          siteCode: entry.site_code,
+                                          enumerator_fee: entry.enumerator_fee ?? additionalData.enumerator_fee,
+                                          enumeratorFee: entry.enumerator_fee ?? additionalData.enumerator_fee,
+                                          transport_fee: entry.transport_fee ?? additionalData.transport_fee,
+                                          transportFee: entry.transport_fee ?? additionalData.transport_fee,
+                                          additionalData: additionalData
+                                        };
+                                      });
+                                      setEnumeratorSiteEntries(formattedEntries);
+                                      // Re-group by state-locality
+                                      const regrouped = formattedEntries.reduce((acc, entry) => {
+                                        const state = entry.state || 'Unknown State';
+                                        const locality = entry.locality || 'Unknown Locality';
+                                        const key = `${state} - ${locality}`;
+                                        if (!acc[key]) acc[key] = [];
+                                        acc[key].push(entry);
+                                        return acc;
+                                      }, {} as Record<string, any[]>);
+                                      setEnumeratorGroupedByStates(regrouped);
+                                    }
+                                    return true;
+                                  } catch (error) {
+                                    console.error('Failed to update sites:', error);
+                                    return false;
+                                  }
+                                }}
+                              />
+                            </AccordionContent>
+                          </AccordionItem>
+                        ))}
+                      </Accordion>
+                    )}
+                  </div>
+                ) : enumeratorSubTab === 'smartAssigned' || enumeratorSubTab === 'mySites' ? (
+                  <div className="mt-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h3 className="text-lg font-semibold">My Sites</h3>
+                        {/* <p className="text-sm text-muted-foreground">Accepted sites + sites assigned to your area</p> */}
+                      </div>
+                      <Badge variant="secondary">{enumeratorMySites.length} sites</Badge>
+                    </div>
+                    {enumeratorSubTab === 'smartAssigned' && (
+                      <div className="mb-4 p-3 sm:p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <p className="text-sm text-yellow-800 leading-relaxed">
+                          <strong>Note:</strong> Sites under this category are mandatory to be visited. If you have any issues, please contact your immediate supervisors.
+                        </p>
+                      </div>
+                    )}
+                    {(enumeratorSubTab === 'smartAssigned' ? enumeratorSmartAssigned : enumeratorMySites).length === 0 ? (
+                      <Card>
+                        <CardContent className="py-8">
+                          <div className="text-center text-muted-foreground">No sites assigned to you yet.</div>
+                        </CardContent>
+                      </Card>
+                    ) : (
+                      <MMPSiteEntriesTable 
+                          siteEntries={enumeratorSubTab === 'smartAssigned' ? enumeratorSmartAssigned : enumeratorMySites} 
+                          editable={true}
+                          onUpdateSites={async (updatedSites) => {
+                            // Same update logic as above
+                            try {
+                              for (const site of updatedSites) {
+                                const enumFee = site.enumerator_fee ?? site.enumeratorFee;
+                                const transFee = site.transport_fee ?? site.transportFee;
+                                const calculatedCost = enumFee && transFee ? Number(enumFee) + Number(transFee) : site.cost;
+                                
+                                const existingAdditionalData = site.additionalData || site.additional_data || {};
+                                const updatedAdditionalData = {
+                                  ...existingAdditionalData,
+                                  enumerator_fee: enumFee,
+                                  transport_fee: transFee,
+                                  cost: calculatedCost
+                                };
+                                
+                                const updateData: any = {
+                                  site_name: site.siteName || site.site_name,
+                                  site_code: site.siteCode || site.site_code,
+                                  hub_office: site.hubOffice || site.hub_office,
+                                  state: site.state,
+                                  locality: site.locality,
+                                  cp_name: site.cpName || site.cp_name,
+                                  activity_at_site: site.siteActivity || site.activity_at_site,
+                                  monitoring_by: site.monitoringBy || site.monitoring_by,
+                                  survey_tool: site.surveyTool || site.survey_tool,
+                                  use_market_diversion: site.useMarketDiversion || site.use_market_diversion,
+                                  use_warehouse_monitoring: site.useWarehouseMonitoring || site.use_warehouse_monitoring,
+                                  visit_date: site.visitDate || site.visit_date,
+                                  comments: site.comments,
+                                  cost: calculatedCost,
+                                  enumerator_fee: enumFee !== undefined ? Number(enumFee) : undefined,
+                                  transport_fee: transFee !== undefined ? Number(transFee) : undefined,
+                                  status: site.status,
+                                  verification_notes: site.verification_notes || site.verificationNotes,
+                                  verified_by: site.verified_by || site.verifiedBy,
+                                  verified_at: site.verified_at || site.verifiedAt,
+                                  additional_data: updatedAdditionalData
+                                };
+
+                                Object.keys(updateData).forEach(key => {
+                                  if (updateData[key] === undefined) delete updateData[key];
+                                });
+
+                                if (site.id) {
+                                  await supabase
+                                    .from('mmp_site_entries')
+                                    .update(updateData)
+                                    .eq('id', site.id);
+                                }
+                              }
+                              // Reload available sites data as well
+                              const smartAssignedQ = supabase
+                                .from('mmp_site_entries')
+                                .select('*')
+                                .eq('accepted_by', currentUser?.id)
+                                .order('created_at', { ascending: false })
+                                .limit(1000);
+
+                              const mySitesQ = supabase
+                                .from('mmp_site_entries')
+                                .select('*')
+                                .or(`accepted_by.eq.${currentUser?.id},and(status.ilike.dispatched,accepted_by.is.null,or(state.eq.${currentUser?.stateId},locality.eq.${currentUser?.localityId}))`)
+                                .order('created_at', { ascending: false })
+                                .limit(1000);
+
+                              const availableQ = supabase
+                                .from('mmp_site_entries')
+                                .select('*')
+                                .or('status.ilike.dispatched,dispatched_at.not.is.null')
+                                .or(`state.eq.${currentUser?.stateId},locality.eq.${currentUser?.localityId}`)
+                                .order('created_at', { ascending: false })
+                                .limit(1000);
+
+                              const [smartRes, myRes, availableRes] = await Promise.all([smartAssignedQ, mySitesQ, availableQ]);
+                              const smartData = smartRes.data || [];
+                              const myData = myRes.data || [];
+                              const availableData = availableRes.data || [];
+
+                              // Format and set
+                              const format = (entries: any[]) => entries.map((entry: any) => {
+                                const additionalData = entry.additional_data || {};
+                                return {
+                                  ...entry,
+                                  siteName: entry.site_name,
+                                  siteCode: entry.site_code,
+                                  enumerator_fee: entry.enumerator_fee ?? additionalData.enumerator_fee,
+                                  enumeratorFee: entry.enumerator_fee ?? additionalData.enumerator_fee,
+                                  transport_fee: entry.transport_fee ?? additionalData.transport_fee,
+                                  transportFee: entry.transport_fee ?? additionalData.transport_fee,
+                                  additionalData: additionalData
+                                };
+                              });
+
+                              const formattedSmart = format(smartData);
+                              const formattedMy = format(myData);
+                              const formattedAvailable = format(availableData);
+
+                              setEnumeratorSmartAssigned(formattedSmart);
+                              // dedupe union
+                              const mapUnion = new Map<string, any>();
+                              formattedSmart.forEach((e: any) => { if (e && e.id) mapUnion.set(String(e.id), e); });
+                              formattedMy.forEach((e: any) => { if (!e) return; const k = e.id ? String(e.id) : `${e.mmp_file_id || e.mmpId}-${e.site_code || e.siteCode || ''}`; if (!mapUnion.has(k)) mapUnion.set(k, e); });
+                              const unionList = Array.from(mapUnion.values());
+                              setEnumeratorMySites(unionList);
+
+                              // Update available sites
+                              setEnumeratorSiteEntries(formattedAvailable);
+                              const regroupedAvailable = formattedAvailable.reduce((acc, entry) => {
+                                const state = entry.state || 'Unknown State';
+                                const locality = entry.locality || 'Unknown Locality';
+                                const key = `${state} - ${locality}`;
+                                if (!acc[key]) acc[key] = [];
+                                acc[key].push(entry);
+                                return acc;
+                              }, {} as Record<string, any[]>);
+                              setEnumeratorGroupedByStates(regroupedAvailable);
+                              return true;
+                            } catch (error) {
+                              console.error('Failed to update sites:', error);
+                              return false;
+                            }
+                          }}
+                        />
+                    )}
+                  </div>
+                ) : null}
+              </TabsContent>
+            )}
           </Tabs>
         )}
       </div>
