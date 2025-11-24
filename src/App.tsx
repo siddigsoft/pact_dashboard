@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { ThemeProvider } from 'next-themes';
 import { QueryClientProvider } from '@tanstack/react-query';
@@ -7,74 +7,81 @@ import { queryClient } from './lib/queryClient';
 // Import AppProviders
 import { AppProviders } from './context/AppContext';
 
-// Pages
-import Index from './pages/Index';
-import Auth from './pages/Auth';
-import Register from './pages/Register';
-import RegistrationSuccess from './pages/RegistrationSuccess';
-import ForgotPassword from './pages/ForgotPassword';
-import Dashboard from './pages/Dashboard';
-import MMP from './pages/MMP';
-import MMPUpload from './pages/MMPUpload';
-import MMPDetail from './pages/MMPDetail';
-import MMPDetailView from './pages/MMPDetailView';
-import MMPVerification from './pages/MMPVerification';
-import MMPDetailedVerification from './pages/MMPDetailedVerification';
-import MMPVerificationPage from './pages/MMPVerificationPage';
-import MMPPermitMessagePage from './pages/mmp/MMPPermitMessagePage';
-import EditMMP from './pages/EditMMP';
-import NotFound from './pages/NotFound';
-import ReviewAssignCoordinators from './pages/ReviewAssignCoordinators';
-import SitesForVerification from './pages/coordinator/SitesForVerification';
-import CoordinatorSites from './pages/coordinator/CoordinatorSites';
-import Calls from './pages/Calls';
-import Chat from './pages/Chat';
-import FieldTeam from './pages/FieldTeam';
-import Finance from './pages/Finance';
-import Reports from './pages/Reports';
-import Projects from './pages/Projects';
-import CreateProject from './pages/CreateProject';
-import CreateProjectActivity from './pages/CreateProjectActivity';
-import ProjectActivityDetail from './pages/ProjectActivityDetail';
-import ProjectDetail from './pages/ProjectDetail';
-import EditProject from './pages/EditProject';
-import ProjectTeamManagement from './pages/ProjectTeamManagement';
-import Settings from './pages/Settings';
-import SiteVisits from './pages/SiteVisits';
-import SiteVisitDetail from './pages/SiteVisitDetail';
-import EditSiteVisit from './pages/EditSiteVisit';
-import CreateSiteVisit from './pages/CreateSiteVisit';
-import CreateSiteVisitMMP from './pages/CreateSiteVisitMMP';
-import CreateSiteVisitMMPDetail from './pages/CreateSiteVisitMMPDetail';
-import CreateSiteVisitUrgent from './pages/CreateSiteVisitUrgent';
-import AdvancedMap from './pages/AdvancedMap';
-import DataVisibility from './pages/DataVisibility';
-import Users from './pages/Users';
-import UserDetail from './pages/UserDetail';
-import AuditCompliance from './pages/AuditCompliance';
-import Archive from './pages/Archive';
-import Calendar from './pages/Calendar';
-import RoleManagement from './pages/RoleManagement';
-import MonitoringPlanPage from './pages/MonitoringPlanPage';
-import FieldOperationManagerPage from './pages/FieldOperationManager';
-import GlobalSearchPage from './pages/GlobalSearchPage';
-import WalletPage from './pages/Wallet';
-import AdminWallets from './pages/AdminWallets';
-import AdminWalletDetail from './pages/AdminWalletDetail';
-import WithdrawalApproval from './pages/WithdrawalApproval';
-import WalletReports from './pages/WalletReports';
-import BudgetPage from './pages/Budget';
-import Classifications from './pages/Classifications';
-import CostSubmission from './pages/CostSubmission';
-import FinancialOperations from './pages/FinancialOperations';
+// Lazy-loaded pages for better code splitting
+const Index = lazy(() => import('./pages/Index'));
+const Auth = lazy(() => import('./pages/Auth'));
+const Register = lazy(() => import('./pages/Register'));
+const RegistrationSuccess = lazy(() => import('./pages/RegistrationSuccess'));
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const MMP = lazy(() => import('./pages/MMP'));
+const MMPUpload = lazy(() => import('./pages/MMPUpload'));
+const MMPDetail = lazy(() => import('./pages/MMPDetail'));
+const MMPDetailView = lazy(() => import('./pages/MMPDetailView'));
+const MMPVerification = lazy(() => import('./pages/MMPVerification'));
+const MMPDetailedVerification = lazy(() => import('./pages/MMPDetailedVerification'));
+const MMPVerificationPage = lazy(() => import('./pages/MMPVerificationPage'));
+const MMPPermitMessagePage = lazy(() => import('./pages/mmp/MMPPermitMessagePage'));
+const EditMMP = lazy(() => import('./pages/EditMMP'));
+const NotFound = lazy(() => import('./pages/NotFound'));
+const ReviewAssignCoordinators = lazy(() => import('./pages/ReviewAssignCoordinators'));
+const SitesForVerification = lazy(() => import('./pages/coordinator/SitesForVerification'));
+const CoordinatorSites = lazy(() => import('./pages/coordinator/CoordinatorSites'));
+const Calls = lazy(() => import('./pages/Calls'));
+const Chat = lazy(() => import('./pages/Chat'));
+const FieldTeam = lazy(() => import('./pages/FieldTeam'));
+const Finance = lazy(() => import('./pages/Finance'));
+const Reports = lazy(() => import('./pages/Reports'));
+const Projects = lazy(() => import('./pages/Projects'));
+const CreateProject = lazy(() => import('./pages/CreateProject'));
+const CreateProjectActivity = lazy(() => import('./pages/CreateProjectActivity'));
+const ProjectActivityDetail = lazy(() => import('./pages/ProjectActivityDetail'));
+const ProjectDetail = lazy(() => import('./pages/ProjectDetail'));
+const EditProject = lazy(() => import('./pages/EditProject'));
+const ProjectTeamManagement = lazy(() => import('./pages/ProjectTeamManagement'));
+const Settings = lazy(() => import('./pages/Settings'));
+const SiteVisits = lazy(() => import('./pages/SiteVisits'));
+const SiteVisitDetail = lazy(() => import('./pages/SiteVisitDetail'));
+const EditSiteVisit = lazy(() => import('./pages/EditSiteVisit'));
+const CreateSiteVisit = lazy(() => import('./pages/CreateSiteVisit'));
+const CreateSiteVisitMMP = lazy(() => import('./pages/CreateSiteVisitMMP'));
+const CreateSiteVisitMMPDetail = lazy(() => import('./pages/CreateSiteVisitMMPDetail'));
+const CreateSiteVisitUrgent = lazy(() => import('./pages/CreateSiteVisitUrgent'));
+const AdvancedMap = lazy(() => import('./pages/AdvancedMap'));
+const DataVisibility = lazy(() => import('./pages/DataVisibility'));
+const Users = lazy(() => import('./pages/Users'));
+const UserDetail = lazy(() => import('./pages/UserDetail'));
+const AuditCompliance = lazy(() => import('./pages/AuditCompliance'));
+const Archive = lazy(() => import('./pages/Archive'));
+const Calendar = lazy(() => import('./pages/Calendar'));
+const RoleManagement = lazy(() => import('./pages/RoleManagement'));
+const MonitoringPlanPage = lazy(() => import('./pages/MonitoringPlanPage'));
+const FieldOperationManagerPage = lazy(() => import('./pages/FieldOperationManager'));
+const GlobalSearchPage = lazy(() => import('./pages/GlobalSearchPage'));
+const WalletPage = lazy(() => import('./pages/Wallet'));
+const AdminWallets = lazy(() => import('./pages/AdminWallets'));
+const AdminWalletDetail = lazy(() => import('./pages/AdminWalletDetail'));
+const WithdrawalApproval = lazy(() => import('./pages/WithdrawalApproval'));
+const WalletReports = lazy(() => import('./pages/WalletReports'));
+const BudgetPage = lazy(() => import('./pages/Budget'));
+const Classifications = lazy(() => import('./pages/Classifications'));
+const CostSubmission = lazy(() => import('./pages/CostSubmission'));
+const FinancialOperations = lazy(() => import('./pages/FinancialOperations'));
 
-// Components
+// Components (keep these eagerly loaded as they're used immediately)
 import MainLayout from './components/MainLayout';
 import { Toaster } from './components/ui/toaster';
 import { Toaster as SonnerToaster } from './components/ui/sonner';
 import { useAppContext } from './context/AppContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import { debugDatabase } from './utils/debug-db';
+
+// Loading component for Suspense fallback
+const PageLoader = () => (
+  <div className="min-h-screen flex items-center justify-center">
+    <div className="text-sm text-muted-foreground animate-pulse">Loading...</div>
+  </div>
+);
 
 // Redirect for old MMP view paths
 const MmpViewRedirect = () => {
@@ -250,9 +257,11 @@ function App() {
           <QueryClientProvider client={queryClient}>
             <Router>
               <AppProviders>
+                <Suspense fallback={<PageLoader />}>
                   <AppRoutes />
-                  <Toaster />
-                  <SonnerToaster />
+                </Suspense>
+                <Toaster />
+                <SonnerToaster />
               </AppProviders>
             </Router>
           </QueryClientProvider>
