@@ -7,11 +7,7 @@ import MobileNavigation from "@/components/MobileNavigation";
 import MobileAppHeader from "@/components/MobileAppHeader";
 import { useAppContext } from "@/context/AppContext";
 import { useViewMode } from "@/context/ViewModeContext";
-import ViewModeToggle from "@/components/ViewModeToggle";
-import { useTheme } from "next-themes";
-import { Button } from "@/components/ui/button";
-import { Moon, Sun } from "lucide-react";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { UpdateDialog } from "@/components/UpdateDialog";
 
 interface MainLayoutContentProps {
@@ -27,7 +23,6 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { viewMode } = useViewMode();
   const isMobile = viewMode === 'mobile';
-  const { theme, setTheme } = useTheme();
   
   const getPageTitle = () => {
     const path = location.pathname;
@@ -48,10 +43,6 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
       setIsAuthorized(true);
     }
   }, [currentUser, navigate]);
-
-  const toggleTheme = () => {
-    setTheme(theme === 'dark' ? 'light' : 'dark');
-  };
 
   if (!isAuthorized) {
     return null;
@@ -84,28 +75,6 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
             </div>
             {isMobile && <MobileNavigation />}
           </SidebarInset>
-          <div className="fixed bottom-4 right-4 flex gap-2">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="rounded-full bg-white dark:bg-gray-800"
-                  onClick={toggleTheme}
-                >
-                  {theme === 'dark' ? (
-                    <Sun className="h-5 w-5" />
-                  ) : (
-                    <Moon className="h-5 w-5" />
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Toggle {theme === 'dark' ? 'light' : 'dark'} mode</p>
-              </TooltipContent>
-            </Tooltip>
-            <ViewModeToggle />
-          </div>
         </div>
       </SidebarProvider>
     </TooltipProvider>
