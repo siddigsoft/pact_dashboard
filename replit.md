@@ -67,6 +67,42 @@ The PACT (Planning, Approval, Coordination, and Tracking) Workflow Platform is a
 - Border variants with glow effects and text utilities with drop-shadow
 - Helper functions: `getCyberCardClasses()`, `getCyberGlassClasses()`
 
+### Web-Mobile Synchronization Architecture (Nov 24, 2025)
+
+**Comprehensive Sync System:**
+- Documented complete architecture ensuring seamless data sync between web app, database, and mobile APK
+- Single source of truth: Shared Supabase database with real-time subscriptions for instant sync
+- Real-time synchronization: Changes propagate in <500ms between web and mobile platforms
+- Offline queue system: Mobile app queues requests when offline, auto-syncs when reconnected
+- Version management system with semantic versioning (MAJOR.MINOR.PATCH)
+
+**Version Compatibility Strategy:**
+- API versioning with backward compatibility (old mobile APKs work with new web deployments)
+- Additive-only database migrations for minor versions (no breaking changes)
+- Grace period strategy for major versions (v1.9.0 adds new fields, v2.0.0 removes old after 3 months)
+- Version checking on app startup with update notifications
+- app_versions table tracks minimum supported version, latest version, and changelogs
+
+**Version Enforcement:**
+- Client-side: UpdateDialog blocks app usage when update required, re-checks hourly
+- API client sends X-App-Version header with all requests
+- Full-screen overlay prevents app usage when force_update is true
+- Production recommendation: Deploy Supabase Edge Function for server-side version validation
+- Cannot be bypassed when server-side enforcement is implemented
+
+**Documentation Created:**
+- WEB_MOBILE_SYNC_ARCHITECTURE.md: Complete sync architecture with real-time flow diagrams
+- DEPLOYMENT_CHECKLIST.md: Pre-deployment checks, testing matrix, rollback procedures
+- VERSION_UPDATE_GUIDE.md: Step-by-step guides for 4 scenarios (web-only, mobile, new feature, breaking change)
+- SERVER_SIDE_VERSION_ENFORCEMENT.md: Production-grade validation using Supabase Edge Functions
+- Database migration: 20251124_add_app_versions_table.sql with RLS policies
+
+**Components & Utilities:**
+- versionChecker.ts: Semantic version comparison, version info fetching from database
+- UpdateDialog.tsx: Cyber-tech themed update notification with forced update enforcement
+- apiClient.ts: Sends version headers, handles 426 Upgrade Required responses
+- Integrated into MainLayout.tsx for global version checking
+
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.
