@@ -1,0 +1,32 @@
+
+[plugin:vite:reporter] [plugin vite:reporter] 
+(!) C:/Users/PC/pact_dashboard/src/integrations/supabase/client.ts is dynamically imported by C:/Users/PC/pact_dashboard/src/pages/Settings.tsx, C:/Users/PC/pact_dashboard/src/pages/Settings.tsx but also statically imported by C:/Users/PC/pact_dashboard/src/components/DashboardLocationSharingCard.tsx, C:/Users/PC/pact_dashboard/src/components/FileUpload.tsx, C:/Users/PC/pact_dashboard/src/components/LocationSharingControl.tsx, C:/Users/PC/pact_dashboard/src/components/MMPPermitVerification.tsx, C:/Users/PC/pact_dashboard/src/components/MMPStageChangeDialog.tsx, C:/Users/PC/pact_dashboard/src/components/auth/AuthForm.tsx, C:/Users/PC/pact_dashboard/src/components/cost-submission/CostDocumentUpload.tsx, C:/Users/PC/pact_dashboard/src/components/dashboard/ForwardedMMPsCard.tsx, C:/Users/PC/pact_dashboard/src/components/mmp/BulkClearForwardedDialog.tsx, C:/Users/PC/pact_dashboard/src/components/mmp/DispatchSitesDialog.tsx, C:/Users/PC/pact_dashboard/src/components/mmp/ForwardToCoordinatorsDialog.tsx, C:/Users/PC/pact_dashboard/src/components/mmp/ForwardToFOMDialog.tsx, C:/Users/PC/pact_dashboard/src/components/site-visit/SmartCollectorSelector.tsx, C:/Users/PC/pact_dashboard/src/context/archive/ArchiveContext.tsx, C:/Users/PC/pact_dashboard/src/context/chat/ChatContextSupabase.tsx, C:/Users/PC/pact_dashboard/src/context/costApproval/supabase.ts, C:/Users/PC/pact_dashboard/src/context/mmp/MMPContext.tsx, C:/Users/PC/pact_dashboard/src/context/mmp/hooks/useMMPOperations.ts, C:/Users/PC/pact_dashboard/src/context/mmp/hooks/useMMPStatusOperations.ts, C:/Users/PC/pact_dashboard/src/context/mmp/hooks/useMMPVersioning.ts, C:/Users/PC/pact_dashboard/src/context/notifications/NotificationContext.tsx, C:/Users/PC/pact_dashboard/src/context/project/ProjectContext.tsx, C:/Users/PC/pact_dashboard/src/context/role-management/RoleManagementContext.tsx, C:/Users/PC/pact_dashboard/src/context/settings/SettingsContext.tsx, C:/Users/PC/pact_dashboard/src/context/siteVisit/SiteVisitContext.tsx, C:/Users/PC/pact_dashboard/src/context/siteVisit/mmpSiteEntriesAdapter.ts, C:/Users/PC/pact_dashboard/src/context/siteVisit/supabase.ts, C:/Users/PC/pact_dashboard/src/context/user/UserContext.tsx, C:/Users/PC/pact_dashboard/src/hooks/use-roles.ts, C:/Users/PC/pact_dashboard/src/pages/AdminWalletDetail.tsx, C:/Users/PC/pact_dashboard/src/pages/AdminWallets.tsx, C:/Users/PC/pact_dashboard/src/pages/Classifications.tsx, C:/Users/PC/pact_dashboard/src/pages/EditMMP.tsx, C:/Users/PC/pact_dashboard/src/pages/EditSiteVisit.tsx, C:/Users/PC/pact_dashboard/src/pages/FieldOperationManager.tsx, C:/Users/PC/pact_dashboard/src/pages/MMP.tsx, C:/Users/PC/pact_dashboard/src/pages/MMPDetailView.tsx, C:/Users/PC/pact_dashboard/src/pages/Reports.tsx, C:/Users/PC/pact_dashboard/src/pages/ReviewAssignCoordinators.tsx, C:/Users/PC/pact_dashboard/src/pages/RoleManagement.tsx, C:/Users/PC/pact_dashboard/src/pages/UserDetail.tsx, C:/Users/PC/pact_dashboard/src/pages/Users.tsx, C:/Users/PC/pact_dashboard/src/pages/coordinator/CoordinatorSites.tsx, C:/Users/PC/pact_dashboard/src/services/ChatService.ts, C:/Users/PC/pact_dashboard/src/utils/debug-db.ts, C:/Users/PC/pact_dashboard/src/utils/mmpFileUpload.ts, dynamic import will not move module into another chunk.    
+
+dist/index.html                          2.19 kB │ gzip:   0.73 kB
+dist/assets/logo-ChdgqeWF.png           14.39 kB
+dist/assets/maps-Dgihpmma.css           15.04 kB │ gzip:   6.38 kB     
+dist/assets/index-DWjksvt5.css         204.76 kB │ gzip:  28.54 kB     
+dist/js/ReactLeafletMap-oCd906e2.js      1.73 kB │ gzip:   0.79 kB     
+dist/js/query-kn01ab8k.js                2.78 kB │ gzip:   1.30 kB     
+dist/js/router-B9aVdquR.js               3.64 kB │ gzip:   1.80 kB     
+dist/js/radix-dialogs-mFKwsxUZ.js        8.07 kB │ gzip:   2.76 kB     
+dist/js/radix-menus-C54EzQXg.js         23.04 kB │ gzip:   7.56 kB     
+dist/js/date-utils-BdNZlB_F.js          50.40 kB │ gzip:  12.03 kB     
+dist/js/animations-Bs0ssOuS.js          75.26 kB │ gzip:  24.15 kB     
+dist/js/react-core-Qq304kBW.js          77.32 kB │ gzip:  15.15 kB     
+dist/js/forms-UgpRT7kp.js               82.07 kB │ gzip:  22.64 kB     
+dist/js/radix-ui-BHY1Km31.js            96.83 kB │ gzip:  28.54 kB     
+dist/js/react-dom-D1D9yhiD.js          133.04 kB │ gzip:  43.00 kB     
+dist/js/maps-DOXbsceQ.js               154.32 kB │ gzip:  44.93 kB     
+dist/js/supabase-2krI2mS3.js           163.15 kB │ gzip:  41.00 kB     
+dist/js/jspdf-yFVNp-X1.js              370.15 kB │ gzip: 120.62 kB     
+dist/js/xlsx-CBxwqXDA.js               423.08 kB │ gzip: 141.39 kB     
+dist/js/charts-D_gewkgX.js             458.37 kB │ gzip: 123.45 kB     
+dist/js/vendor-X6vN8_ig.js             598.62 kB │ gzip: 203.87 kB     
+dist/js/docs-D2Yi4cpO.js               599.56 kB │ gzip: 165.75 kB     
+dist/js/index-DLpOaKkx.js            1,506.57 kB │ gzip: 327.47 kB     
+
+(!) Some chunks are larger than 1000 kB after minification. Consider:  
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.

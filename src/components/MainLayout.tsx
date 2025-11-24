@@ -12,6 +12,7 @@ import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import { Moon, Sun } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { UpdateDialog } from "@/components/UpdateDialog";
 
 interface MainLayoutContentProps {
   children?: React.ReactNode;
@@ -64,6 +65,7 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
 
   return (
     <TooltipProvider>
+      <UpdateDialog />
       <SidebarProvider>
         <div className="min-h-screen flex w-full">
           {!isMobile && <AppSidebar />}
