@@ -18,6 +18,7 @@ import { useToast } from '@/hooks/use-toast';
 // Using relative import fallback in case path alias resolution misses new file
 import BulkClearForwardedDialog from '../components/mmp/BulkClearForwardedDialog';
 import { DispatchSitesDialog } from '@/components/mmp/DispatchSitesDialog';
+import { sudanStates } from '@/data/sudanStates';
 
 // Helper component to convert SiteVisitRow[] to site entries and display using MMPSiteEntriesTable
 const SitesDisplayTable: React.FC<{ 
@@ -713,12 +714,34 @@ const MMP = () => {
       try {
         // Load available sites in the enumerator's state or locality for "Available Sites" tab
         // These are sites with status "Dispatched" (bulk dispatched by state/locality)
-        const availableSitesQuery = supabase
+        // Convert collector's stateId/localityId to names for matching with site entries
+        const collectorStateName = sudanStates.find(s => s.id === currentUser.stateId)?.name;
+        const collectorLocalityName = currentUser.stateId && currentUser.localityId
+          ? sudanStates.find(s => s.id === currentUser.stateId)?.localities.find(l => l.id === currentUser.localityId)?.name
+          : undefined;
+        
+        // Build query - match by state name or locality name
+        let availableSitesQuery = supabase
           .from('mmp_site_entries')
           .select('*')
           .ilike('status', 'Dispatched')
-          .or(`state.eq.${currentUser.stateId},locality.eq.${currentUser.localityId}`)
-          .is('accepted_by', null) // Only show unclaimed dispatched sites
+          .is('accepted_by', null); // Only show unclaimed dispatched sites
+        
+        // Add state/locality filters if we have the names
+        if (collectorStateName || collectorLocalityName) {
+          const conditions: string[] = [];
+          if (collectorStateName) {
+            conditions.push(`state.ilike.${collectorStateName}`);
+          }
+          if (collectorLocalityName) {
+            conditions.push(`locality.ilike.${collectorLocalityName}`);
+          }
+          if (conditions.length > 0) {
+            availableSitesQuery = availableSitesQuery.or(conditions.join(','));
+          }
+        }
+        
+        availableSitesQuery = availableSitesQuery
           .order('created_at', { ascending: false })
           .limit(1000);
 
