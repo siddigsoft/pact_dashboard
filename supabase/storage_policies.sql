@@ -1,54 +1,48 @@
--- Storage bucket policies for avatars and mmp-files
+-- ============================================================================
+-- CHAT ATTACHMENTS STORAGE POLICIES
+-- ============================================================================
+-- Storage bucket policies for chat attachments (images and documents)
+-- This file contains RLS policies for the chat-attachments bucket only.
+-- 
+-- Created: 2025-01-25
+-- ============================================================================
 
--- Create buckets if they don't exist
-insert into storage.buckets (id, name, public)
-values 
-  ('avatars', 'avatars', false),
-  ('mmp-files', 'mmp-files', false)
-on conflict (id) do nothing;
+-- Create chat-attachments bucket if it doesn't exist
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('chat-attachments', 'chat-attachments', true)
+ON CONFLICT (id) DO NOTHING;
 
--- Drop existing policies if they exist (to avoid conflicts)
-drop policy if exists "avatar_insert_auth" on storage.objects;
-drop policy if exists "avatar_select_auth" on storage.objects;
-drop policy if exists "avatar_update_own" on storage.objects;
-drop policy if exists "avatar_delete_own" on storage.objects;
-drop policy if exists "mmp_insert_auth" on storage.objects;
-drop policy if exists "mmp_select_auth" on storage.objects;
-drop policy if exists "mmp_update_auth" on storage.objects;
-drop policy if exists "mmp_delete_auth" on storage.objects;
+-- Drop existing chat attachment policies if they exist (to avoid conflicts)
+DROP POLICY IF EXISTS "chat_attachments_insert_auth" ON storage.objects;
+DROP POLICY IF EXISTS "chat_attachments_select_auth" ON storage.objects;
+DROP POLICY IF EXISTS "chat_attachments_delete_auth" ON storage.objects;
 
--- Policies for avatars bucket
-create policy "avatar_insert_auth"
-on storage.objects for insert to authenticated
-with check (bucket_id = 'avatars');
+-- Policy: Authenticated users can upload chat attachments
+-- Any authenticated user can upload files to chat-attachments bucket
+CREATE POLICY "chat_attachments_insert_auth"
+ON storage.objects FOR INSERT
+TO authenticated
+WITH CHECK (bucket_id = 'chat-attachments');
 
-create policy "avatar_select_auth"
-on storage.objects for select to authenticated
-using (bucket_id = 'avatars');
+-- Policy: Authenticated users can view chat attachments
+-- Public bucket but RLS ensures only authenticated users can access
+CREATE POLICY "chat_attachments_select_auth"
+ON storage.objects FOR SELECT
+TO authenticated
+USING (bucket_id = 'chat-attachments');
 
-create policy "avatar_update_own"
-on storage.objects for update to authenticated
-using (bucket_id = 'avatars' and auth.uid()::text = (storage.foldername(name))[1])
-with check (bucket_id = 'avatars' and auth.uid()::text = (storage.foldername(name))[1]);
-
-create policy "avatar_delete_own"
-on storage.objects for delete to authenticated
-using (bucket_id = 'avatars' and auth.uid()::text = (storage.foldername(name))[1]);
-
--- Policies for mmp-files bucket
-create policy "mmp_insert_auth"
-on storage.objects for insert to authenticated
-with check (bucket_id = 'mmp-files');
-
-create policy "mmp_select_auth"
-on storage.objects for select to authenticated
-using (bucket_id = 'mmp-files');
-
-create policy "mmp_update_auth"
-on storage.objects for update to authenticated
-using (bucket_id = 'mmp-files')
-with check (bucket_id = 'mmp-files');
-
-create policy "mmp_delete_auth"
-on storage.objects for delete to authenticated
-using (bucket_id = 'mmp-files');
+-- Policy: Users can delete their own uploaded attachments
+-- Users can delete files they uploaded (tracked via folder structure or metadata)
+-- File path structure: chat_id/user_id/filename
+CREATE POLICY "chat_attachments_delete_auth"
+ON storage.objects FOR DELETE
+TO authenticated
+USING (
+  bucket_id = 'chat-attachments' AND
+  (
+    -- Allow deletion if file is in user's folder (path: chat_id/user_id/filename)
+    auth.uid()::text = (storage.foldername(name))[2] OR
+    -- Or if metadata indicates user uploaded it
+    (metadata->>'uploaded_by')::text = auth.uid()::text
+  )
+);

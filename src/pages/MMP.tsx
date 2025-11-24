@@ -13,6 +13,7 @@ import type { SiteVisitRow } from '@/components/mmp/MMPCategorySitesTable';
 import MMPSiteEntriesTable from '@/components/mmp/MMPSiteEntriesTable';
 import { supabase } from '@/integrations/supabase/client';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { useToast } from '@/hooks/use-toast';
 
 // Using relative import fallback in case path alias resolution misses new file
 import BulkClearForwardedDialog from '../components/mmp/BulkClearForwardedDialog';
@@ -376,6 +377,7 @@ const MMP = () => {
   const navigate = useNavigate();
   const { mmpFiles, loading, updateMMP } = useMMP();
   const { checkPermission, hasAnyRole, currentUser } = useAuthorization();
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState('new');
   // Subcategory state for Forwarded MMPs (Admin/ICT only)
   const [forwardedSubTab, setForwardedSubTab] = useState<'pending' | 'verified'>('pending');
@@ -584,17 +586,13 @@ const MMP = () => {
   useEffect(() => {
     const loadApprovedCostedCount = async () => {
       try {
-        // Use database count instead of loading all entries
-        // Count entries with status = 'verified' (case-insensitive) using ilike
+        // Count entries with status = 'Approved and Costed'
         const { count, error } = await supabase
           .from('mmp_site_entries')
           .select('*', { count: 'exact', head: true })
-          .ilike('status', 'verified');
+          .or('status.ilike.Approved and Costed,status.ilike.Approved and costed');
 
         if (error) throw error;
-
-        // Count verified entries (including those that will get default cost of 30)
-        // We count all verified entries since they'll either have cost > 0 or get default cost
         setApprovedCostedCount(count || 0);
       } catch (error) {
         console.error('Failed to load approved and costed count:', error);
@@ -610,12 +608,12 @@ const MMP = () => {
     const loadDispatchedCount = async () => {
       try {
         // Use database count instead of loading all entries
-        // Count entries with status = 'dispatched' OR dispatched_at is not null
+        // Count entries with status = 'Dispatched' only
         // BUT exclude entries that are already accepted (status = 'accepted' or accepted_by is not null)
         const { count, error } = await supabase
           .from('mmp_site_entries')
           .select('*', { count: 'exact', head: true })
-          .or('status.ilike.dispatched,dispatched_at.not.is.null')
+          .ilike('status', 'Dispatched')
           .not('status', 'ilike', 'accepted')
           .is('accepted_by', null);
 
@@ -850,19 +848,18 @@ const MMP = () => {
 
       setLoadingApprovedCosted(true);
       try {
-        // Use database-level filtering instead of loading all entries
-        // Filter at database level for status = 'verified' (case-insensitive) using ilike
-        const { data: verifiedEntries, error: allError } = await supabase
+        // Use database-level filtering to get only "Approved and Costed" status entries
+        const { data: approvedCostedEntries, error: allError } = await supabase
           .from('mmp_site_entries')
           .select('*')
-          .ilike('status', 'verified')
+          .or('status.ilike.Approved and Costed,status.ilike.Approved and costed')
           .order('created_at', { ascending: false })
           .limit(1000); // Limit to 1000 entries for performance
 
         if (allError) throw allError;
 
-        // Process verified entries
-        let processedEntries = verifiedEntries || [];
+        // Process approved and costed entries
+        let processedEntries = approvedCostedEntries || [];
 
         // Set default fees for verified entries that don't have a cost
         // Default: Enumerator fees ($20) + Transport fees ($10 minimum) = $30
@@ -934,11 +931,8 @@ const MMP = () => {
           });
         }
 
-        // Filter to only include entries with cost > 0 (after setting defaults)
-        processedEntries = processedEntries.filter(entry => {
-          const cost = Number(entry.cost || 0);
-          return cost > 0;
-        });
+        // All entries should already be "Approved and Costed" status, no need to filter by cost
+        // But we can ensure they have cost set
 
         // Format entries for MMPSiteEntriesTable
         const formattedEntries = processedEntries.map(entry => {
@@ -992,13 +986,12 @@ const MMP = () => {
 
       setLoadingDispatched(true);
       try {
-        // Use database-level filtering: entries with status = 'dispatched' OR dispatched_at is not null
-        // BUT exclude entries that are already accepted (status = 'accepted' or accepted_by is not null)
-        // Use or() to combine conditions at database level
+        // Only show entries with status = 'Dispatched' (case-insensitive)
+        // Exclude entries that are already accepted (status = 'accepted' or accepted_by is not null)
         const { data: dispatchedEntries, error: allError } = await supabase
           .from('mmp_site_entries')
           .select('*')
-          .or('status.ilike.dispatched,dispatched_at.not.is.null')
+          .ilike('status', 'Dispatched')
           .not('status', 'ilike', 'accepted')
           .is('accepted_by', null)
           .order('dispatched_at', { ascending: false })
@@ -1397,8 +1390,8 @@ const MMP = () => {
       // Filter to only show entries with dispatched status
       const dispatchedSites = buildSiteRowsFromMMPs(mmps, (row) => {
         const status = row.status?.toLowerCase() || '';
-        // Show entries with status = 'dispatched' or entries that have dispatched_at set
-        return status === 'dispatched' || (row as any).dispatched_at !== undefined;
+        // Show only entries with status = 'dispatched'
+        return status === 'dispatched';
       });
       
       return dispatchedSites;
@@ -1557,9 +1550,8 @@ const MMP = () => {
           // For "Approved & Costed", ALL entries must have cost > 0 AND status = 'verified'
           if (entries.length > 0) {
             const allApprovedAndCosted = entries.every(entry => {
-              const cost = Number(entry.cost || 0);
               const status = String(entry.status || '').toLowerCase();
-              return cost > 0 && status === 'verified';
+              return status === 'approved and costed';
             });
             map[mmpId].allApprovedAndCosted = allApprovedAndCosted;
           }
@@ -1745,7 +1737,104 @@ const MMP = () => {
                 </div>
               )}
               {verifiedSubTab !== 'approvedCosted' && verifiedSubTab !== 'dispatched' && verifiedSubTab !== 'accepted' && verifiedSubTab !== 'ongoing' && verifiedSubTab !== 'completed' && <MMPList mmpFiles={verifiedVisibleMMPs} />}
-              {(isAdmin || isICT || isFOM || isCoordinator) && verifiedSubTab === 'newSites' && <VerifiedSitesDisplay verifiedSites={verifiedCategorySiteRows} />}
+              {(isAdmin || isICT || isFOM || isCoordinator) && verifiedSubTab === 'newSites' && (
+                <>
+                  {(isAdmin || isICT) && verifiedCategorySiteRows.length > 0 && (
+                    <div className="mb-4">
+                      <Button
+                        variant="default"
+                        size="lg"
+                        onClick={async () => {
+                          try {
+                            // Get all verified site entries
+                            const { data: verifiedEntries, error: fetchError } = await supabase
+                              .from('mmp_site_entries')
+                              .select('*')
+                              .or('status.ilike.verified,status.ilike.Verified')
+                              .limit(10000);
+
+                            if (fetchError) throw fetchError;
+
+                            if (!verifiedEntries || verifiedEntries.length === 0) {
+                              toast({
+                                title: 'No Sites to Process',
+                                description: 'There are no verified sites to approve and cost.',
+                                variant: 'default'
+                              });
+                              return;
+                            }
+
+                            // Update all verified sites to 'Approved and Costed' status
+                            // Also ensure they have cost set (default to 30 if not set)
+                            const updates = verifiedEntries.map(entry => {
+                              const additionalData = entry.additional_data || {};
+                              const currentCost = entry.cost;
+                              const enumFee = entry.enumerator_fee ?? additionalData.enumerator_fee ?? 20;
+                              const transFee = entry.transport_fee ?? additionalData.transport_fee ?? 10;
+                              const finalCost = currentCost && currentCost > 0 ? currentCost : (enumFee + transFee);
+
+                              return {
+                                id: entry.id,
+                                status: 'Approved and Costed',
+                                cost: finalCost,
+                                enumerator_fee: enumFee,
+                                transport_fee: transFee,
+                                additional_data: {
+                                  ...additionalData,
+                                  enumerator_fee: enumFee,
+                                  transport_fee: transFee,
+                                  cost: finalCost,
+                                  approved_and_costed_at: new Date().toISOString(),
+                                  approved_and_costed_by: currentUser?.username || currentUser?.fullName || currentUser?.email || 'System'
+                                }
+                              };
+                            });
+
+                            // Update in batches to avoid timeout
+                            const batchSize = 100;
+                            for (let i = 0; i < updates.length; i += batchSize) {
+                              const batch = updates.slice(i, i + batchSize);
+                              const updatePromises = batch.map(update => 
+                                supabase
+                                  .from('mmp_site_entries')
+                                  .update({
+                                    status: update.status,
+                                    cost: update.cost,
+                                    enumerator_fee: update.enumerator_fee,
+                                    transport_fee: update.transport_fee,
+                                    additional_data: update.additional_data
+                                  })
+                                  .eq('id', update.id)
+                              );
+                              await Promise.all(updatePromises);
+                            }
+
+                            toast({
+                              title: 'Bulk Cost Successful',
+                              description: `Successfully approved and costed ${updates.length} site(s).`,
+                              variant: 'default'
+                            });
+
+                            // Reload the page data
+                            window.location.reload();
+                          } catch (error: any) {
+                            console.error('Error in bulk cost:', error);
+                            toast({
+                              title: 'Bulk Cost Failed',
+                              description: error.message || 'Failed to approve and cost sites. Please try again.',
+                              variant: 'destructive'
+                            });
+                          }
+                        }}
+                        className="bg-green-600 hover:bg-green-700 text-white mb-4"
+                      >
+                        Bulk Cost ({verifiedCategorySiteRows.length} sites)
+                      </Button>
+                    </div>
+                  )}
+                  <VerifiedSitesDisplay verifiedSites={verifiedCategorySiteRows} />
+                </>
+              )}
               {(isAdmin || isICT || isFOM || isCoordinator) && verifiedSubTab === 'approvedCosted' && (
                 <div className="mt-6">
                   {loadingApprovedCosted ? (
@@ -2404,7 +2493,7 @@ const MMP = () => {
                 const { data: dispatchedEntries, error: allError } = await supabase
                   .from('mmp_site_entries')
                   .select('*')
-                  .or('status.ilike.dispatched,dispatched_at.not.is.null')
+                  .ilike('status', 'Dispatched')
                   .not('status', 'ilike', 'accepted')
                   .is('accepted_by', null)
                   .order('dispatched_at', { ascending: false })

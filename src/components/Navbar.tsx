@@ -146,7 +146,7 @@ const Navbar = () => {
 					</Button>
 
 					{/* Chat */}
-					{/* <ChatNotificationIndicator /> */}
+					<ChatNotificationIndicator />
 
 					{/* Notifications */}
 					<DropdownMenu>

@@ -77,10 +77,19 @@ const ChatItem: React.FC<ChatItemProps> = ({ chat, isActive, onClick }) => {
             )}
             
             <p className="text-xs text-muted-foreground mt-1 truncate max-w-[200px]">
-              {chat.lastMessage?.content || 
-                (chat.type === 'private' 
-                  ? 'Start a conversation' 
-                  : `${chat.participants.length} participants`)}
+              {chat.lastMessage?.content 
+                ? (chat.lastMessage.contentType === 'image' 
+                    ? '📷 Image' 
+                    : chat.lastMessage.contentType === 'file' 
+                    ? '📎 File' 
+                    : chat.lastMessage.contentType === 'location'
+                    ? '📍 Location'
+                    : chat.lastMessage.contentType === 'audio'
+                    ? '🎤 Audio'
+                    : chat.lastMessage.content)
+                : (chat.type === 'private' 
+                    ? 'No messages yet' 
+                    : `${chat.participants.length} participants`)}
             </p>
           </div>
         </div>
@@ -108,11 +117,16 @@ const ChatSidebar: React.FC = () => {
     : availableUsers;
 
   const handleStartChatWith = async (userId: string, displayName: string) => {
-    const chat = await createChat([userId], displayName, 'private');
-    if (chat) {
-      setActiveChat(chat);
-      setIsNewChatOpen(false);
-      setUserSearch('');
+    try {
+      const chat = await createChat([userId], displayName, 'private');
+      if (chat) {
+        setActiveChat(chat);
+        setIsNewChatOpen(false);
+        setUserSearch('');
+      }
+    } catch (error) {
+      console.error('Error starting chat:', error);
+      // Error is already handled in createChat with toast
     }
   };
   

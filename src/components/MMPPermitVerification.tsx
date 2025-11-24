@@ -527,15 +527,15 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
       // Get the site entries for the selected sites
       const selectedSiteEntries = groupMap[groupKey]?.filter((site: any) => siteIds.includes(site.id)) || [];
 
-      // Update mmp_site_entries to mark them as dispatched and assign to coordinator
+      // Update mmp_site_entries to assign to coordinator (keep status as Pending)
       const updatePromises = selectedSiteEntries.map(async (siteEntry: any) => {
         const existingAdditionalData = siteEntry.additional_data || {};
         
-        // Update the mmp_site_entry in the database (mark as dispatched)
+        // Update the mmp_site_entry in the database (assign to coordinator, keep status as Pending)
         const { data, error } = await supabase
           .from('mmp_site_entries')
           .update({
-            status: 'Dispatched',
+            status: 'Pending',
             dispatched_by: currentUser?.id || null,
             dispatched_at: new Date().toISOString(),
             additional_data: {

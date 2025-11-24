@@ -13,6 +13,7 @@ import type {
   CurrentUserClassification,
   ClassificationFeeResult,
 } from '@/types/classification';
+import type { ClassificationFormData } from '@/components/admin/ManageClassificationDialog';
 
 interface ClassificationContextType {
   // State
@@ -43,6 +44,9 @@ interface ClassificationContextType {
   
   // Current Classifications View
   getCurrentUserClassifications: () => Promise<CurrentUserClassification[]>;
+  
+  // Assign Classification (creates new or updates existing)
+  assignClassification: (userId: string, data: ClassificationFormData | CreateClassificationRequest) => Promise<UserClassification | null>;
 }
 
 const ClassificationContext = createContext<ClassificationContextType | undefined>(undefined);
@@ -330,6 +334,85 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
     }
   }, [refreshUserClassifications, toast]);
 
+  // Assign Classification - intelligently creates or updates
+  const assignClassification = useCallback(async (userId: string, data: ClassificationFormData | CreateClassificationRequest): Promise<UserClassification | null> => {
+    try {
+      const now = new Date().toISOString();
+      
+      // Check if user has an active classification for the same role scope
+      const existingClassification = userClassifications.find(
+        (c) =>
+          c.userId === userId &&
+          c.roleScope === data.roleScope &&
+          c.isActive &&
+          c.effectiveFrom <= now &&
+          (!c.effectiveUntil || c.effectiveUntil > now)
+      );
+
+      // If there's an existing active classification, deactivate it first
+      if (existingClassification) {
+        const effectiveFrom = data.effectiveFrom || now;
+        await supabase
+          .from('user_classifications')
+          .update({
+            is_active: false,
+            effective_until: effectiveFrom,
+            change_reason: `Replaced by new classification: ${data.changeReason || 'No reason provided'}`,
+          })
+          .eq('id', existingClassification.id);
+      }
+
+      // Create new classification
+      // Handle both ClassificationFormData (has required fields) and CreateClassificationRequest (has optional fields)
+      const effectiveFrom = data.effectiveFrom || now;
+      const insertData = {
+        user_id: userId,
+        classification_level: data.classificationLevel,
+        role_scope: data.roleScope,
+        effective_from: effectiveFrom,
+        effective_until: data.effectiveUntil,
+        has_retainer: data.hasRetainer ?? false,
+        retainer_amount_cents: data.retainerAmountCents ?? 0,
+        retainer_currency: data.retainerCurrency ?? 'SDG',
+        retainer_frequency: data.retainerFrequency ?? 'monthly',
+        assigned_by: currentUser?.id,
+        change_reason: data.changeReason,
+        notes: data.notes,
+        is_active: true,
+      };
+
+      const { data: result, error } = await supabase
+        .from('user_classifications')
+        .insert(insertData)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Refresh classifications to get updated data
+      await refreshUserClassifications();
+
+      const newClassification = transformUserClassificationFromDB(result);
+
+      toast({
+        title: 'Success',
+        description: existingClassification 
+          ? 'Classification updated successfully' 
+          : 'Classification assigned successfully',
+      });
+
+      return newClassification;
+    } catch (error: any) {
+      console.error('Error assigning classification:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to assign classification',
+        variant: 'destructive',
+      });
+      throw error;
+    }
+  }, [userClassifications, currentUser, refreshUserClassifications, toast]);
+
   // Create fee structure
   const createFeeStructure = useCallback(async (data: CreateFeeStructureRequest): Promise<ClassificationFeeStructure | null> => {
     try {
@@ -595,6 +678,7 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
     getClassificationHistory,
     calculateSiteVisitFee,
     getCurrentUserClassifications,
+    assignClassification,
   };
 
   return (
