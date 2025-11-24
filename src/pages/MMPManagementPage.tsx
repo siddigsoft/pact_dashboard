@@ -21,10 +21,10 @@ const FieldOperationManagerPage = () => {
   const navigate = useNavigate();
 
   // Check if user can delete MMPs (only admin and ICT can delete)
-  const canDeleteMMP = checkPermission('mmp', 'delete') || hasAnyRole(['Admin', 'ICT']);
+  const canDeleteMMP = checkPermission('mmp', 'delete') || hasAnyRole(['admin', 'Admin', 'ict', 'ICT']);
 
-  // Use the correct role value
-  const allowed = roles?.includes('Admin') || roles?.includes(FIELD_OP_ROLE);
+  // Check access: Admin or Field Operation Manager
+  const allowed = hasAnyRole(['admin', 'Admin']) || hasAnyRole(['fom', 'Field Operation Manager (FOM)', FIELD_OP_ROLE]);
   if (!allowed) {
     return (
       <div className="max-w-xl mx-auto mt-20 p-8 bg-white rounded-xl shadow text-center">
