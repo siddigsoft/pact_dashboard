@@ -83,11 +83,10 @@ const ReviewAssignCoordinators: React.FC = () => {
   entries.forEach((e: any) => {
     const sName = String(e.state || '').trim().toLowerCase();
     const stateId = stateNameToId.get(sName);
-    if (!stateId) return;
     const locName = String(e.locality || '').trim().toLowerCase();
-    const locMap = localitiesByState.get(stateId);
+    const locMap = stateId ? localitiesByState.get(stateId) : null;
     const localityId = locName && locMap ? (locMap.get(locName) || '') : '';
-    const key = `${stateId}|${localityId}`;
+    const key = stateId ? `${stateId}|${localityId}` : 'unassigned|unassigned';
     if (!groupMap[key]) groupMap[key] = [];
     groupMap[key].push(e);
   });
@@ -203,7 +202,8 @@ const ReviewAssignCoordinators: React.FC = () => {
             ) : (
               Object.entries(groupMap).map(([groupKey, groupSites]) => {
                 const [stateId, localityId] = groupKey.split('|');
-                const recommended = getRecommendedCoordinator(stateId, localityId);
+                const isUnassigned = stateId === 'unassigned';
+                const recommended = isUnassigned ? null : getRecommendedCoordinator(stateId, localityId);
                 const selectedId = assignmentMap[groupKey] || recommended?.id || '';
                 // Initialize selectedSites for this group if not set
                 if (!selectedSites[groupKey]) {
@@ -213,8 +213,10 @@ const ReviewAssignCoordinators: React.FC = () => {
                   <div key={groupKey} className="border rounded-lg p-4 bg-gray-50">
                     <div className="flex items-center mb-3 font-medium cursor-pointer select-none" onClick={() => setExpandedGroups(g => ({ ...g, [groupKey]: !g[groupKey] }))}>
                       {expandedGroups[groupKey] ? <ChevronDown className="w-4 h-4 mr-2" /> : <ChevronRight className="w-4 h-4 mr-2" />}
-                      {groupSites.length} site(s) in <span className="text-blue-700 ml-1">{sudanStates.find(s => s.id === stateId)?.name || stateId}</span>
-                      {localityId && (
+                      {groupSites.length} site(s) in <span className="text-blue-700 ml-1">
+                        {isUnassigned ? 'Unassigned Locations' : `${sudanStates.find(s => s.id === stateId)?.name || stateId}`}
+                      </span>
+                      {!isUnassigned && localityId && (
                         <span> / <span className="text-green-700">{sudanStates.find(s => s.id === stateId)?.localities.find(l => l.id === localityId)?.name || localityId}</span></span>
                       )}
                     </div>
