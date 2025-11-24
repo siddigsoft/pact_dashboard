@@ -59,13 +59,21 @@ export class ChatService {
           if (existing) return existing;
         }
         console.error('Error creating chat:', error);
-        return null;
+        // Throw error with details for better debugging
+        throw new Error(`Failed to create chat: ${error.message || 'Unknown error'} (Code: ${code || 'N/A'})`);
+      }
+
+      if (!data) {
+        throw new Error('Chat created but no data returned');
       }
 
       return data as DatabaseChat;
     } catch (error) {
       console.error('Error creating chat:', error);
-      return null;
+      if (error instanceof Error) {
+        throw error; // Re-throw to preserve error message
+      }
+      throw new Error('Failed to create chat: Unknown error');
     }
   }
 
@@ -218,14 +226,23 @@ export class ChatService {
         });
       
       if (error) {
+        // Check if it's a duplicate key error (participant already exists)
+        const code = (error as any)?.code;
+        if (code === '23505') {
+          console.log(`Participant ${userId} already exists in chat ${chatId}`);
+          return true; // Not really an error, participant already added
+        }
         console.error('Error adding participant:', error);
-        return false;
+        throw new Error(`Failed to add participant: ${error.message || 'Unknown error'} (Code: ${code || 'N/A'})`);
       }
       
       return true;
     } catch (error) {
       console.error('Error adding participant:', error);
-      return false;
+      if (error instanceof Error) {
+        throw error; // Re-throw to preserve error message
+      }
+      throw new Error('Failed to add participant: Unknown error');
     }
   }
 
@@ -289,6 +306,69 @@ export class ChatService {
     } catch (error) {
       console.error('Error fetching chat messages:', error);
       return null;
+    }
+  }
+
+  // Get the last message for a chat
+  static async getLastMessage(chatId: string): Promise<DatabaseChatMessage | null> {
+    try {
+      const { data, error } = await supabase
+        .from('chat_messages')
+        .select('*')
+        .eq('chat_id', chatId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+      
+      if (error) {
+        // No messages yet is not an error
+        if (error.code === 'PGRST116') {
+          return null;
+        }
+        console.error('Error fetching last message:', error);
+        return null;
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('Error fetching last message:', error);
+      return null;
+    }
+  }
+
+  // Get last messages for multiple chats (batch)
+  static async getLastMessagesForChats(chatIds: string[]): Promise<Record<string, DatabaseChatMessage>> {
+    if (chatIds.length === 0) return {};
+    
+    try {
+      // Get the latest message for each chat using a subquery approach
+      // We'll fetch all messages and then group by chat_id to get the latest
+      const { data, error } = await supabase
+        .from('chat_messages')
+        .select('*')
+        .in('chat_id', chatIds)
+        .order('created_at', { ascending: false });
+      
+      if (error) {
+        console.error('Error fetching last messages:', error);
+        return {};
+      }
+      
+      // Group by chat_id and take the first (latest) message for each
+      const lastMessages: Record<string, DatabaseChatMessage> = {};
+      const seenChats = new Set<string>();
+      
+      for (const message of data || []) {
+        if (!seenChats.has(message.chat_id)) {
+          lastMessages[message.chat_id] = message;
+          seenChats.add(message.chat_id);
+        }
+      }
+      
+      return lastMessages;
+    } catch (error) {
+      console.error('Error fetching last messages:', error);
+      return {};
     }
   }
 
