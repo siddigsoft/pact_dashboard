@@ -6,15 +6,11 @@ import ChatWindow from '@/components/chat/ChatWindow';
 //import ChatTestComponent from '@/components/chat/ChatTestComponent';
 import { useAppContext } from '@/context/AppContext';
 import { useViewMode } from '@/context/ViewModeContext';
-import { useToast } from '@/hooks/use-toast';
-import { useNotificationManager } from '@/hooks/use-notification-manager';
 
 const Chat: React.FC = () => {
   const { currentUser } = useAppContext();
   const navigate = useNavigate();
   const { viewMode } = useViewMode();
-  const { toast } = useToast();
-  const { sendNotification } = useNotificationManager();
   const isMobile = viewMode === 'mobile';
 
   // Handle authentication
@@ -23,18 +19,6 @@ const Chat: React.FC = () => {
       navigate('/login');
     }
   }, [currentUser, navigate]);
-
-  // Show welcome toast on first load
-  useEffect(() => {
-    if (currentUser) {
-      sendNotification({
-        title: "Chat System Active",
-        message: "The messaging system is now active. You can communicate with your team in real-time.",
-        type: "info",
-        userId: currentUser.id
-      });
-    }
-  }, []);
 
   return (
     <div className="container mx-auto p-0 h-[calc(100vh-10rem)]">

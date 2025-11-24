@@ -108,13 +108,18 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           .from('notifications')
           .select('*')
           .eq('user_id', currentUserId)
+          .neq('title', 'Chat System Active') // Exclude Chat System Active notifications
           .order('created_at', { ascending: false })
           .limit(50);
         if (!cancelled) {
           if (error) {
             console.warn('Failed to fetch notifications:', error);
           } else if (data) {
-            setAppNotifications(data.map(mapDbToNotification));
+            // Additional client-side filter as backup
+            const filtered = data
+              .map(mapDbToNotification)
+              .filter(n => n.title !== 'Chat System Active');
+            setAppNotifications(filtered);
           }
         }
       } catch (err) {
@@ -134,7 +139,10 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
             filter: `user_id=eq.${currentUserId}`,
           }, (payload) => {
             const n = mapDbToNotification((payload as any).new);
-            setAppNotifications(prev => [n, ...prev].slice(0, 50));
+            // Filter out Chat System Active notifications
+            if (n.title !== 'Chat System Active') {
+              setAppNotifications(prev => [n, ...prev].slice(0, 50));
+            }
           })
           .on('postgres_changes', {
             event: 'UPDATE',
