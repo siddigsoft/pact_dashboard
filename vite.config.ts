@@ -30,12 +30,13 @@ export default defineConfig(({ mode }) => ({
     rollupOptions: {
       output: {
         manualChunks(id) {
-          // Core React libraries - MUST be in the same chunk to avoid multiple React instances
+          // Core React libraries - keep in vendor chunk to ensure proper loading order
+          // React must be available before any other chunks that use it
           if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/')) {
-            return 'react-vendor';
+            return 'vendor';
           }
           
-          // React Router
+          // React Router (depends on React, so should load after vendor)
           if (id.includes('react-router-dom') || id.includes('wouter')) {
             return 'router';
           }
@@ -116,7 +117,7 @@ export default defineConfig(({ mode }) => ({
             return 'date-utils';
           }
           
-          // All other node_modules
+          // All other node_modules (including React which we want here)
           if (id.includes('node_modules')) {
             return 'vendor';
           }
