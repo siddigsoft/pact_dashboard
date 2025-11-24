@@ -20,6 +20,53 @@ The PACT (Planning, Approval, Coordination, and Tracking) Workflow Platform is a
 - Updated mobile.css, MobileNavigation.tsx, and MobileAppHeader.tsx to use consistent cyber-tech gradient theme
 - Maintained theme consistency across web and mobile interfaces
 
+### Mobile App Production-Ready Improvements (Nov 24, 2025)
+
+**Capacitor Configuration - Security & Deployment:**
+- Updated appId from Lovable to `com.pact.workflow` for proper Android/iOS identification
+- Configured server URL to point to Replit production domain
+- Enforced HTTPS-only transport: `cleartext: false` and `androidScheme: 'https'`
+- Added allowNavigation whitelist for Replit and Supabase domains
+- Disabled webContentsDebugging for production security
+- Configured SplashScreen with cyber-tech blue theme (#1e40af)
+- Added PushNotifications and LocalNotifications plugin configurations
+
+**ViewMode Auto-Detection:**
+- Replaced manual toggle with automatic viewport detection using useIsMobile hook (768px breakpoint)
+- Added forceMode override for development testing with visual indicators
+- ViewModeContext now provides `isAutoDetect` flag
+- Updated ViewModeToggle with Sparkles icon when override is active
+
+**Mobile Navigation - Full Feature Parity:**
+- Expanded from 6 features to 14+ features (now matches web app capabilities)
+- Primary navigation: Dashboard, Field Team, MMP, Chat (with badge), More menu
+- Secondary navigation in More drawer: Finance, Wallet, Projects, Reports, Costs, Calendar, Team, Settings, Archive
+- Role-based filtering using AppRole type checking
+- Cyber-tech themed with gradient backgrounds, glassmorphism effects, and neon glow states
+- Active state indicators with bottom gradient bar and Sparkles animations
+- Sheet-based "More" menu for additional features (70vh responsive drawer)
+
+**Offline Support Infrastructure:**
+- Created offline-queue.ts service with localStorage persistence
+- Network status detection with online/offline event listeners
+- Request queuing for failed/offline operations (POST, PUT, PATCH, DELETE)
+- Auto-sync on network reconnection with retry logic (max 3 attempts)
+- Supabase session token injection for authenticated requests
+- useOfflineQueue hook for easy component integration
+
+**Safe-Area Padding & Scroll Optimization:**
+- Added safe-area utility classes: `.pt-safe`, `.pb-safe`, `.pb-safe-nav`, `.mt-safe`, `.mb-safe`
+- MainLayout updated to use `pb-safe-nav` (accounts for 4rem bottom nav + device safe area)
+- Scroll container optimization with smooth scrolling and overscroll containment
+- Touch target enforcement: minimum 44px height/width for all interactive elements
+
+**Cyber-Tech Theme System:**
+- Created mobile-gradients.ts utility library with consistent gradient definitions
+- Gradient variants: primary (blue), success (green), warning (orange), danger (red), purple, cyan
+- Special gradients: header (blue→purple), nav (slate glass), card, glass (backdrop blur)
+- Border variants with glow effects and text utilities with drop-shadow
+- Helper functions: `getCyberCardClasses()`, `getCyberGlassClasses()`
+
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.
