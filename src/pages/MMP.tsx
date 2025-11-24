@@ -405,6 +405,12 @@ const MMP = () => {
   const [acceptedSiteEntries, setAcceptedSiteEntries] = useState<any[]>([]);
   const [loadingAccepted, setLoadingAccepted] = useState(false);
   const [acceptedCount, setAcceptedCount] = useState(0);
+  const [ongoingSiteEntries, setOngoingSiteEntries] = useState<any[]>([]);
+  const [loadingOngoing, setLoadingOngoing] = useState(false);
+  const [ongoingCount, setOngoingCount] = useState(0);
+  const [completedSiteEntries, setCompletedSiteEntries] = useState<any[]>([]);
+  const [loadingCompleted, setLoadingCompleted] = useState(false);
+  const [completedCount, setCompletedCount] = useState(0);
   const [dispatchDialogOpen, setDispatchDialogOpen] = useState(false);
   const [dispatchType, setDispatchType] = useState<'state' | 'locality' | 'individual'>('state');
 
@@ -632,6 +638,52 @@ const MMP = () => {
     };
 
     loadAcceptedCount();
+  }, [mmpFiles]); // Reload when MMP files change
+
+  // Always load the ongoing count for the badge, regardless of active tab
+  useEffect(() => {
+    const loadOngoingCount = async () => {
+      try {
+        // Use database count instead of loading all entries
+        // Count entries with status = 'inprogress' or 'in_progress' (case-insensitive)
+        const { count, error } = await supabase
+          .from('mmp_site_entries')
+          .select('*', { count: 'exact', head: true })
+          .or('status.ilike.inprogress,status.ilike.in_progress');
+
+        if (error) throw error;
+
+        setOngoingCount(count || 0);
+      } catch (error) {
+        console.error('Failed to load ongoing count:', error);
+        setOngoingCount(0);
+      }
+    };
+
+    loadOngoingCount();
+  }, [mmpFiles]); // Reload when MMP files change
+
+  // Always load the completed count for the badge, regardless of active tab
+  useEffect(() => {
+    const loadCompletedCount = async () => {
+      try {
+        // Use database count instead of loading all entries
+        // Count entries with status = 'completed'
+        const { count, error } = await supabase
+          .from('mmp_site_entries')
+          .select('*', { count: 'exact', head: true })
+          .ilike('status', 'completed');
+
+        if (error) throw error;
+
+        setCompletedCount(count || 0);
+      } catch (error) {
+        console.error('Failed to load completed count:', error);
+        setCompletedCount(0);
+      }
+    };
+
+    loadCompletedCount();
   }, [mmpFiles]); // Reload when MMP files change
 
   // Load approved and costed site entries only when the tab is active
@@ -918,6 +970,149 @@ const MMP = () => {
     };
 
     loadAcceptedEntries();
+  }, [verifiedSubTab]);
+
+  // Load ongoing site entries only when the tab is active
+  useEffect(() => {
+    const loadOngoingEntries = async () => {
+      if (verifiedSubTab !== 'ongoing') {
+        setOngoingSiteEntries([]);
+        return;
+      }
+
+      setLoadingOngoing(true);
+      try {
+        // Use database-level filtering: entries with status = 'inprogress' or 'in_progress'
+        // Use .or() to match either status value (case-insensitive)
+        const { data: ongoingEntries, error: allError } = await supabase
+          .from('mmp_site_entries')
+          .select('*')
+          .or('status.ilike.inprogress,status.ilike.in_progress')
+          .order('updated_at', { ascending: false })
+          .limit(1000); // Limit to 1000 entries for performance
+
+        if (allError) throw allError;
+
+        // Format entries for MMPSiteEntriesTable
+        const formattedEntries = ongoingEntries.map(entry => {
+          const additionalData = entry.additional_data || {};
+          // Read fees from columns first, fallback to additional_data
+          const enumeratorFee = entry.enumerator_fee ?? additionalData.enumerator_fee;
+          const transportFee = entry.transport_fee ?? additionalData.transport_fee;
+          return {
+            ...entry,
+            siteName: entry.site_name,
+            siteCode: entry.site_code,
+            hubOffice: entry.hub_office,
+            cpName: entry.cp_name,
+            siteActivity: entry.activity_at_site,
+            monitoringBy: entry.monitoring_by,
+            surveyTool: entry.survey_tool,
+            useMarketDiversion: entry.use_market_diversion,
+            useWarehouseMonitoring: entry.use_warehouse_monitoring,
+            visitDate: entry.visit_date,
+            comments: entry.comments,
+            enumerator_fee: enumeratorFee,
+            enumeratorFee: enumeratorFee,
+            transport_fee: transportFee,
+            transportFee: transportFee,
+            cost: entry.cost,
+            status: entry.status,
+            verified_by: entry.verified_by,
+            verified_at: entry.verified_at,
+            dispatched_by: entry.dispatched_by,
+            dispatched_at: entry.dispatched_at,
+            accepted_by: entry.accepted_by,
+            accepted_at: entry.accepted_at,
+            updated_at: entry.updated_at,
+            additionalData: additionalData
+          };
+        });
+
+        setOngoingSiteEntries(formattedEntries);
+        // Update count when entries are loaded (count is also loaded separately for badge)
+        setOngoingCount(formattedEntries.length);
+      } catch (error) {
+        console.error('Failed to load ongoing site entries:', error);
+        setOngoingSiteEntries([]);
+        setOngoingCount(0);
+      } finally {
+        setLoadingOngoing(false);
+      }
+    };
+
+    loadOngoingEntries();
+  }, [verifiedSubTab]);
+
+  // Load completed site entries only when the tab is active
+  useEffect(() => {
+    const loadCompletedEntries = async () => {
+      if (verifiedSubTab !== 'completed') {
+        setCompletedSiteEntries([]);
+        return;
+      }
+
+      setLoadingCompleted(true);
+      try {
+        // Use database-level filtering: entries with status = 'completed'
+        const { data: completedEntries, error: allError } = await supabase
+          .from('mmp_site_entries')
+          .select('*')
+          .ilike('status', 'completed')
+          .order('updated_at', { ascending: false })
+          .limit(1000); // Limit to 1000 entries for performance
+
+        if (allError) throw allError;
+
+        // Format entries for MMPSiteEntriesTable
+        const formattedEntries = completedEntries.map(entry => {
+          const additionalData = entry.additional_data || {};
+          // Read fees from columns first, fallback to additional_data
+          const enumeratorFee = entry.enumerator_fee ?? additionalData.enumerator_fee;
+          const transportFee = entry.transport_fee ?? additionalData.transport_fee;
+          return {
+            ...entry,
+            siteName: entry.site_name,
+            siteCode: entry.site_code,
+            hubOffice: entry.hub_office,
+            cpName: entry.cp_name,
+            siteActivity: entry.activity_at_site,
+            monitoringBy: entry.monitoring_by,
+            surveyTool: entry.survey_tool,
+            useMarketDiversion: entry.use_market_diversion,
+            useWarehouseMonitoring: entry.use_warehouse_monitoring,
+            visitDate: entry.visit_date,
+            comments: entry.comments,
+            enumerator_fee: enumeratorFee,
+            enumeratorFee: enumeratorFee,
+            transport_fee: transportFee,
+            transportFee: transportFee,
+            cost: entry.cost,
+            status: entry.status,
+            verified_by: entry.verified_by,
+            verified_at: entry.verified_at,
+            dispatched_by: entry.dispatched_by,
+            dispatched_at: entry.dispatched_at,
+            accepted_by: entry.accepted_by,
+            accepted_at: entry.accepted_at,
+            updated_at: entry.updated_at,
+            additionalData: additionalData
+          };
+        });
+
+        setCompletedSiteEntries(formattedEntries);
+        // Update count when entries are loaded (count is also loaded separately for badge)
+        setCompletedCount(formattedEntries.length);
+      } catch (error) {
+        console.error('Failed to load completed site entries:', error);
+        setCompletedSiteEntries([]);
+        setCompletedCount(0);
+      } finally {
+        setLoadingCompleted(false);
+      }
+    };
+
+    loadCompletedEntries();
   }, [verifiedSubTab]);
 
   // Verified subcategories for Admin/ICT
@@ -1373,17 +1568,17 @@ const MMP = () => {
                       </Button>
                       <Button variant={verifiedSubTab === 'ongoing' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('ongoing')} className={verifiedSubTab === 'ongoing' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''}>
                         Ongoing
-                        <Badge variant="secondary" className="ml-2">{verifiedSubcategories.ongoing?.length || 0}</Badge>
+                        <Badge variant="secondary" className="ml-2">{ongoingCount}</Badge>
                       </Button>
                     </>
                   )}
                   <Button variant={verifiedSubTab === 'completed' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('completed')} className={verifiedSubTab === 'completed' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''}>
                     Completed
-                    <Badge variant="secondary" className="ml-2">{verifiedSubcategories.completed.length}</Badge>
+                    <Badge variant="secondary" className="ml-2">{completedCount}</Badge>
                   </Button>
                 </div>
               )}
-              {verifiedSubTab !== 'approvedCosted' && verifiedSubTab !== 'dispatched' && <MMPList mmpFiles={verifiedVisibleMMPs} />}
+              {verifiedSubTab !== 'approvedCosted' && verifiedSubTab !== 'dispatched' && verifiedSubTab !== 'accepted' && verifiedSubTab !== 'ongoing' && verifiedSubTab !== 'completed' && <MMPList mmpFiles={verifiedVisibleMMPs} />}
               {(isAdmin || isICT || isFOM || isCoordinator) && verifiedSubTab === 'newSites' && <VerifiedSitesDisplay verifiedSites={verifiedCategorySiteRows} />}
               {(isAdmin || isICT || isFOM || isCoordinator) && verifiedSubTab === 'approvedCosted' && (
                 <div className="mt-6">
@@ -1621,7 +1816,63 @@ const MMP = () => {
                   )}
                 </div>
               )}
-              {(isAdmin || isICT || isFOM || isCoordinator) && verifiedSubTab !== 'newSites' && verifiedSubTab !== 'approvedCosted' && verifiedSubTab !== 'dispatched' && verifiedSubTab !== 'accepted' && (
+              {(isAdmin || isICT || isFOM || isCoordinator) && verifiedSubTab === 'ongoing' && (
+                <div className="mt-6">
+                  {loadingOngoing ? (
+                    <Card>
+                      <CardContent className="py-8">
+                        <div className="text-center text-muted-foreground">Loading ongoing site entries...</div>
+                      </CardContent>
+                    </Card>
+                  ) : ongoingSiteEntries.length === 0 ? (
+                    <Card>
+                      <CardContent className="py-8">
+                        <div className="text-center text-muted-foreground">No ongoing site entries found.</div>
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    <div>
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-semibold">Ongoing Site Entries</h3>
+                        <Badge variant="secondary">{ongoingSiteEntries.length} entries</Badge>
+                      </div>
+                      <MMPSiteEntriesTable 
+                        siteEntries={ongoingSiteEntries} 
+                        editable={false}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+              {(isAdmin || isICT || isFOM || isCoordinator) && verifiedSubTab === 'completed' && (
+                <div className="mt-6">
+                  {loadingCompleted ? (
+                    <Card>
+                      <CardContent className="py-8">
+                        <div className="text-center text-muted-foreground">Loading completed site entries...</div>
+                      </CardContent>
+                    </Card>
+                  ) : completedSiteEntries.length === 0 ? (
+                    <Card>
+                      <CardContent className="py-8">
+                        <div className="text-center text-muted-foreground">No completed site entries found.</div>
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    <div>
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-semibold">Completed Site Entries</h3>
+                        <Badge variant="secondary">{completedSiteEntries.length} entries</Badge>
+                      </div>
+                      <MMPSiteEntriesTable 
+                        siteEntries={completedSiteEntries} 
+                        editable={false}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+              {(isAdmin || isICT || isFOM || isCoordinator) && verifiedSubTab !== 'newSites' && verifiedSubTab !== 'approvedCosted' && verifiedSubTab !== 'dispatched' && verifiedSubTab !== 'accepted' && verifiedSubTab !== 'ongoing' && verifiedSubTab !== 'completed' && (
                 <div className="mt-6">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-lg font-semibold">Sites by MMP</h3>
