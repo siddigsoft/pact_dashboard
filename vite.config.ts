@@ -15,6 +15,17 @@ export default defineConfig(({ mode }) => ({
     mode === 'development' &&
     componentTagger(),
   ].filter(Boolean),
+  optimizeDeps: {
+    exclude: [
+      'face-api.js',
+      'jspdf',
+      'jspdf-autotable',
+      'xlsx',
+      'docx',
+      'html2canvas',
+      '@octokit/rest'
+    ]
+  },
   esbuild: {
     drop: mode === 'production' ? ['console', 'debugger'] : [],
   },
