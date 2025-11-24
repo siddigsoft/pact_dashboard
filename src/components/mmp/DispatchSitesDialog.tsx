@@ -266,17 +266,25 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
       
       // Update each entry individually to set status and new columns
       for (const entryId of siteEntryIds) {
-        // Get current additional_data to preserve it
+        // Get current entry to check status and preserve additional_data
         const { data: currentEntry } = await supabase
           .from('mmp_site_entries')
-          .select('additional_data')
+          .select('status, additional_data')
           .eq('id', entryId)
           .single();
+        
+        // Only dispatch sites that are in "Approved and Costed" status
+        const currentStatus = currentEntry?.status?.toLowerCase() || '';
+        if (currentStatus !== 'approved and costed') {
+          console.warn(`Skipping entry ${entryId} with status "${currentEntry?.status}" - only "Approved and Costed" sites can be dispatched`);
+          continue;
+        }
         
         const additionalData = currentEntry?.additional_data || {};
         // Also store in additional_data for backward compatibility
         additionalData.dispatched_at = dispatchedAt;
         additionalData.dispatched_by = dispatchedBy;
+        additionalData.dispatched_from_status = currentEntry?.status; // Track previous status
         
         const { error: entryUpdateError } = await supabase
           .from('mmp_site_entries')

@@ -10,6 +10,7 @@ import { Chat, ChatMessage } from '@/types/chat';
 import { ChatService } from '@/services/ChatService';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 
 interface ChatContextType {
   chats: Chat[];
@@ -41,7 +42,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isSendingMessage, setIsSendingMessage] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [channels, setChannels] = useState<RealtimeChannel[]>([]);
-  const { currentUser } = useUser();
+  const { currentUser, users } = useUser();
+  const { toast } = useToast();
 
   // Cleanup realtime channels on unmount
   useEffect(() => {
@@ -66,29 +68,81 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const dbChats = await ChatService.getUserChats(userId);
       if (dbChats) {
-        // Convert database chats to our Chat type
-        const convertedChats: Chat[] = dbChats.map(dbChat => ({
-          id: dbChat.id,
-          name: dbChat.name,
-          type: dbChat.type,
-          isGroup: dbChat.is_group,
-          createdBy: dbChat.created_by,
-          stateId: dbChat.state_id,
-          relatedEntityId: dbChat.related_entity_id,
-          relatedEntityType: dbChat.related_entity_type,
-          createdAt: dbChat.created_at,
-          updatedAt: dbChat.updated_at,
-          participants: [], // Will be populated separately
-          status: 'active',
-        }));
+        // Get chat IDs
+        const chatIds = dbChats.map(chat => chat.id);
+        
+        // Fetch last messages for all chats in batch
+        const lastMessages = await ChatService.getLastMessagesForChats(chatIds);
+        
+        // Load all participants for all chats
+        const participantsMap: Record<string, string[]> = {};
+        for (const chatId of chatIds) {
+          const participants = await ChatService.getChatParticipants(chatId);
+          if (participants) {
+            participantsMap[chatId] = participants.map(p => p.user_id);
+          }
+        }
+        
+        // Convert database chats to our Chat type with last messages
+        const convertedChats: Chat[] = dbChats.map(dbChat => {
+          const lastMessage = lastMessages[dbChat.id];
+          const participants = participantsMap[dbChat.id] || [];
+          
+          // For private chats, resolve the other participant's name
+          let displayName = dbChat.name;
+          if (dbChat.type === 'private' && participants.length > 0) {
+            const otherParticipantId = participants.find(p => p !== userId);
+            if (otherParticipantId) {
+              // Try to get the user's name from the users list
+              const otherUser = users.find(u => u.id === otherParticipantId);
+              if (otherUser) {
+                displayName = otherUser.fullName || otherUser.name || otherUser.username || otherUser.email || 'Unknown User';
+              } else if (dbChat.name === 'Private Chat' || !dbChat.name) {
+                // If we can't find the user, keep the original name or use a placeholder
+                displayName = 'Unknown User';
+              }
+            }
+          }
+          
+          return {
+            id: dbChat.id,
+            name: displayName,
+            type: dbChat.type,
+            isGroup: dbChat.is_group,
+            createdBy: dbChat.created_by,
+            stateId: dbChat.state_id,
+            relatedEntityId: dbChat.related_entity_id,
+            relatedEntityType: dbChat.related_entity_type,
+            createdAt: dbChat.created_at,
+            updatedAt: dbChat.updated_at,
+            participants: participants,
+            status: 'active',
+            lastMessage: lastMessage ? {
+              id: lastMessage.id,
+              chatId: lastMessage.chat_id,
+              senderId: lastMessage.sender_id,
+              content: lastMessage.content || '',
+              contentType: lastMessage.content_type,
+              timestamp: lastMessage.created_at,
+              status: lastMessage.status,
+              attachments: lastMessage.attachments,
+              metadata: lastMessage.metadata,
+              readBy: [],
+              read: false,
+            } : undefined,
+          };
+        });
+        
+        // Sort chats by last message timestamp (most recent first), then by creation date
+        convertedChats.sort((a, b) => {
+          const aTime = a.lastMessage?.timestamp ? new Date(a.lastMessage.timestamp).getTime() : new Date(a.createdAt).getTime();
+          const bTime = b.lastMessage?.timestamp ? new Date(b.lastMessage.timestamp).getTime() : new Date(b.createdAt).getTime();
+          return bTime - aTime; // Descending order (newest first)
+        });
+        
         // Deduplicate by id to avoid transient duplicates
         const uniqueChats = Array.from(new Map(convertedChats.map(c => [c.id, c])).values());
         setChats(uniqueChats);
-        
-        // Load participants for each chat
-        for (const chat of convertedChats) {
-          await loadChatParticipants(chat.id);
-        }
       }
     } catch (err: any) {
       console.error('Error loading chats:', err);
@@ -102,13 +156,30 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const participants = await ChatService.getChatParticipants(chatId);
       if (participants) {
-        setChats(prevChats => 
-          prevChats.map(chat => 
-            chat.id === chatId 
-              ? { ...chat, participants: participants.map(p => p.user_id) }
-              : chat
-          )
-        );
+        const participantIds = participants.map(p => p.user_id);
+        setChats(prevChats => {
+          return prevChats.map(chat => {
+            if (chat.id === chatId) {
+              // For private chats, update the name to show the other participant's name
+              let displayName = chat.name;
+              if (chat.type === 'private' && currentUser?.id && participantIds.length > 0) {
+                const otherParticipantId = participantIds.find(p => p !== currentUser.id);
+                if (otherParticipantId) {
+                  const otherUser = users.find(u => u.id === otherParticipantId);
+                  if (otherUser) {
+                    displayName = otherUser.fullName || otherUser.name || otherUser.username || otherUser.email || 'Unknown User';
+                  }
+                }
+              }
+              return { 
+                ...chat, 
+                participants: participantIds,
+                name: displayName
+              };
+            }
+            return chat;
+          });
+        });
       }
     } catch (err: any) {
       console.error('Error loading chat participants:', err);
@@ -181,25 +252,43 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         (payload) => {
           // Handle new message
           const newMessage = payload.new;
+          const chatMessage: ChatMessage = {
+            id: newMessage.id,
+            chatId: newMessage.chat_id,
+            senderId: newMessage.sender_id,
+            content: newMessage.content,
+            contentType: newMessage.content_type,
+            timestamp: newMessage.created_at,
+            status: newMessage.status,
+            attachments: newMessage.attachments,
+            metadata: newMessage.metadata,
+            readBy: [],
+            read: false,
+          };
+          
           setMessages(prevMessages => {
             const existing = prevMessages[chatId] || [];
             if (existing.some(m => m.id === newMessage.id)) return prevMessages;
             return {
               ...prevMessages,
-              [chatId]: [...existing, {
-                id: newMessage.id,
-                chatId: newMessage.chat_id,
-                senderId: newMessage.sender_id,
-                content: newMessage.content,
-                contentType: newMessage.content_type,
-                timestamp: newMessage.created_at,
-                status: newMessage.status,
-                attachments: newMessage.attachments,
-                metadata: newMessage.metadata,
-                readBy: [],
-                read: false,
-              }]
+              [chatId]: [...existing, chatMessage]
             };
+          });
+          
+          // Update chat's last message and re-sort chats
+          setChats(prevChats => {
+            const updated = prevChats.map(chat => 
+              chat.id === chatId 
+                ? { ...chat, lastMessage: chatMessage, updatedAt: new Date().toISOString() }
+                : chat
+            );
+            
+            // Sort by last message timestamp (most recent first)
+            return updated.sort((a, b) => {
+              const aTime = a.lastMessage?.timestamp ? new Date(a.lastMessage.timestamp).getTime() : new Date(a.createdAt).getTime();
+              const bTime = b.lastMessage?.timestamp ? new Date(b.lastMessage.timestamp).getTime() : new Date(b.createdAt).getTime();
+              return bTime - aTime; // Descending order (newest first)
+            });
           });
         }
       )
@@ -270,14 +359,21 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           };
         });
 
-        // Update chat's last message
-        setChats(prevChats => 
-          prevChats.map(chat => 
+        // Update chat's last message and move to top of list
+        setChats(prevChats => {
+          const updated = prevChats.map(chat => 
             chat.id === chatId 
-              ? { ...chat, lastMessage: newMessage }
+              ? { ...chat, lastMessage: newMessage, updatedAt: new Date().toISOString() }
               : chat
-          )
-        );
+          );
+          
+          // Sort by last message timestamp (most recent first)
+          return updated.sort((a, b) => {
+            const aTime = a.lastMessage?.timestamp ? new Date(a.lastMessage.timestamp).getTime() : new Date(a.createdAt).getTime();
+            const bTime = b.lastMessage?.timestamp ? new Date(b.lastMessage.timestamp).getTime() : new Date(b.createdAt).getTime();
+            return bTime - aTime; // Descending order (newest first)
+          });
+        });
       }
     } catch (err: any) {
       console.error('Error sending message:', err);
@@ -333,7 +429,17 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setError(null);
 
     try {
-      const chatName = name || (participants.length === 1 ? 'Private Chat' : 'Group Chat');
+      // For private chats, try to get the other participant's name
+      let chatName: string;
+      if (type === 'private' && participants.length === 1) {
+        const otherParticipantId = participants[0];
+        const otherUser = users.find(u => u.id === otherParticipantId);
+        chatName = name || (otherUser 
+          ? (otherUser.fullName || otherUser.name || otherUser.username || otherUser.email || 'Unknown User')
+          : 'Private Chat');
+      } else {
+        chatName = name || (participants.length === 1 ? 'Private Chat' : 'Group Chat');
+      }
       const isGroup = type !== 'private';
 
       // Compute deterministic pair key for private chats to enforce uniqueness
@@ -350,9 +456,27 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           existingDb = await ChatService.getPrivateChatByPairKey(pairKey);
         }
         if (existingDb) {
+          // Load participants first to get the correct name
+          const participants = await ChatService.getChatParticipants(existingDb.id);
+          const participantIds = participants ? participants.map(p => p.user_id) : [];
+          
+          // For private chats, resolve the other participant's name
+          let displayName = existingDb.name;
+          if (existingDb.type === 'private' && participantIds.length > 0) {
+            const otherParticipantId = participantIds.find(p => p !== currentUser.id);
+            if (otherParticipantId) {
+              const otherUser = users.find(u => u.id === otherParticipantId);
+              if (otherUser) {
+                displayName = otherUser.fullName || otherUser.name || otherUser.username || otherUser.email || name || 'Unknown User';
+              } else if (name) {
+                displayName = name;
+              }
+            }
+          }
+          
           const existingChat: Chat = {
             id: existingDb.id,
-            name: existingDb.name,
+            name: displayName,
             type: existingDb.type,
             isGroup: existingDb.is_group,
             createdBy: existingDb.created_by,
@@ -361,17 +485,17 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
             relatedEntityType: existingDb.related_entity_type,
             createdAt: existingDb.created_at,
             updatedAt: existingDb.updated_at,
-            participants: [],
+            participants: participantIds,
             status: 'active',
           };
 
-          // Add to state if not present and load participants
+          // Add to state if not present
           setChats(prev => {
             const map = new Map(prev.map(c => [c.id, c]));
             map.set(existingChat.id, existingChat);
             return Array.from(map.values());
           });
-          await loadChatParticipants(existingChat.id);
+          setIsLoading(false);
           return existingChat;
         }
       }
@@ -384,44 +508,66 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ...(pairKey ? { pair_key: pairKey } : {}),
       });
 
-      if (dbChat) {
-        // Add participants to the chat
-        const allParticipants = [...participants, currentUser.id];
-        for (const participantId of allParticipants) {
-          await ChatService.addParticipant(dbChat.id, participantId);
-        }
-
-        // Convert to our Chat type
-        const newChat: Chat = {
-          id: dbChat.id,
-          name: dbChat.name,
-          type: dbChat.type,
-          isGroup: dbChat.is_group,
-          createdBy: dbChat.created_by,
-          stateId: dbChat.state_id,
-          relatedEntityId: dbChat.related_entity_id,
-          relatedEntityType: dbChat.related_entity_type,
-          createdAt: dbChat.created_at,
-          updatedAt: dbChat.updated_at,
-          participants: allParticipants,
-          status: 'active',
-        };
-
-        setChats(prevChats => {
-          const map = new Map(prevChats.map(c => [c.id, c]));
-          map.set(newChat.id, newChat);
-          return Array.from(map.values());
-        });
-        return newChat;
+      if (!dbChat) {
+        throw new Error('Failed to create chat in database');
       }
+
+      // Add participants to the chat
+      // Add current user first (they're the creator, so RLS will allow it)
+      // Then add other participants (RLS allows because current user is the creator)
+      const allParticipants = [currentUser.id, ...participants];
+      for (const participantId of allParticipants) {
+        try {
+          await ChatService.addParticipant(dbChat.id, participantId);
+        } catch (participantError: any) {
+          // If it's a duplicate, that's okay - participant already exists
+          if (participantError?.message?.includes('duplicate') || participantError?.message?.includes('already exists')) {
+            console.log(`Participant ${participantId} already in chat`);
+          } else {
+            console.error(`Failed to add participant ${participantId}:`, participantError);
+            // Continue with other participants even if one fails
+          }
+        }
+      }
+
+      // Convert to our Chat type with resolved name
+      const newChat: Chat = {
+        id: dbChat.id,
+        name: chatName, // Use the resolved name
+        type: dbChat.type,
+        isGroup: dbChat.is_group,
+        createdBy: dbChat.created_by,
+        stateId: dbChat.state_id,
+        relatedEntityId: dbChat.related_entity_id,
+        relatedEntityType: dbChat.related_entity_type,
+        createdAt: dbChat.created_at,
+        updatedAt: dbChat.updated_at,
+        participants: allParticipants,
+        status: 'active',
+      };
+
+      setChats(prevChats => {
+        const map = new Map(prevChats.map(c => [c.id, c]));
+        map.set(newChat.id, newChat);
+        return Array.from(map.values());
+      });
+      
+      setIsLoading(false);
+      return newChat;
     } catch (err: any) {
       console.error('Error creating chat:', err);
-      setError(err.message || 'Failed to create chat');
-    } finally {
+      const errorMessage = err.message || 'Failed to create chat';
+      setError(errorMessage);
       setIsLoading(false);
+      
+      toast({
+        title: 'Error',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+      
+      return undefined;
     }
-    
-    return undefined;
   };
 
   const startGroupChat = async (participants: string[], name: string): Promise<Chat | undefined> => {

@@ -92,7 +92,7 @@ const CoordinatorSites: React.FC = () => {
         });
         
         const newCount = { count: userEntries.filter((e: any) => 
-          e.status === 'Dispatched' || e.status === 'assigned' || e.status === 'inProgress' || e.status === 'in_progress'
+          e.status === 'Pending' || e.status === 'Dispatched' || e.status === 'assigned' || e.status === 'inProgress' || e.status === 'in_progress'
         ).length };
         const verifiedCount = { count: userEntries.filter((e: any) => 
           e.status?.toLowerCase() === 'verified'
@@ -169,7 +169,7 @@ const CoordinatorSites: React.FC = () => {
       switch (activeTab) {
         case 'new':
           filtered = filtered.filter((e: any) => 
-            e.status === 'Dispatched' || e.status === 'assigned' || e.status === 'inProgress' || e.status === 'in_progress'
+            e.status === 'Pending' || e.status === 'Dispatched' || e.status === 'assigned' || e.status === 'inProgress' || e.status === 'in_progress'
           );
           break;
         case 'verified':
@@ -351,7 +351,7 @@ const CoordinatorSites: React.FC = () => {
         });
         
         const newCount = { count: userEntries.filter((e: any) => 
-          e.status === 'Dispatched' || e.status === 'assigned' || e.status === 'inProgress' || e.status === 'in_progress'
+          e.status === 'Pending' || e.status === 'Dispatched' || e.status === 'assigned' || e.status === 'inProgress' || e.status === 'in_progress'
         ).length };
         const verifiedCount = { count: userEntries.filter((e: any) => 
           e.status?.toLowerCase() === 'verified'
@@ -431,7 +431,7 @@ const CoordinatorSites: React.FC = () => {
         });
         
         const newCount = { count: userEntries.filter((e: any) => 
-          e.status === 'Dispatched' || e.status === 'assigned' || e.status === 'inProgress' || e.status === 'in_progress'
+          e.status === 'Pending' || e.status === 'Dispatched' || e.status === 'assigned' || e.status === 'inProgress' || e.status === 'in_progress'
         ).length };
         const rejectedCount = { count: userEntries.filter((e: any) => 
           e.status?.toLowerCase() === 'rejected'
@@ -558,7 +558,7 @@ const CoordinatorSites: React.FC = () => {
               View Details
             </Button>
             
-            {site.status === 'assigned' || site.status === 'inProgress' ? (
+            {(site.status === 'Pending' || site.status === 'pending' || site.status === 'assigned' || site.status === 'inProgress' || site.status === 'Dispatched') ? (
               <>
                 <Button
                   size="sm"
