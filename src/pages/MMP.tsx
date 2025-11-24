@@ -712,27 +712,32 @@ const MMP = () => {
       setLoadingEnumerator(true);
       try {
         // Load available sites in the enumerator's state or locality for "Available Sites" tab
+        // These are sites with status "Dispatched" (bulk dispatched by state/locality)
         const availableSitesQuery = supabase
           .from('mmp_site_entries')
           .select('*')
-          .or('status.ilike.dispatched,dispatched_at.not.is.null')
+          .ilike('status', 'Dispatched')
           .or(`state.eq.${currentUser.stateId},locality.eq.${currentUser.localityId}`)
+          .is('accepted_by', null) // Only show unclaimed dispatched sites
           .order('created_at', { ascending: false })
           .limit(1000);
 
-        // Load accepted sites for "Smart Assigned" tab
+        // Load smart assigned sites for "Smart Assigned" tab
+        // These are sites with status "Assigned" (individually dispatched) assigned to this collector
         const smartAssignedQuery = supabase
           .from('mmp_site_entries')
           .select('*')
+          .ilike('status', 'Assigned')
           .eq('accepted_by', currentUser.id)
           .order('created_at', { ascending: false })
           .limit(1000);
 
-        // Load accepted sites for "My Sites" tab (accepted + smart assigned)
+        // Load accepted sites for "My Sites" tab (all sites accepted/claimed by this collector)
+        // Includes both "Assigned" (smart assigned) and "Dispatched" (claimed available sites)
         const mySitesQuery = supabase
           .from('mmp_site_entries')
           .select('*')
-          .or(`accepted_by.eq.${currentUser.id},and(status.ilike.dispatched,accepted_by.is.null,or(state.eq.${currentUser.stateId},locality.eq.${currentUser.localityId}))`)
+          .eq('accepted_by', currentUser.id)
           .order('created_at', { ascending: false })
           .limit(1000);
 
