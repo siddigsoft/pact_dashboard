@@ -3,9 +3,11 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label';
 import { Search, Eye, Pencil, Check, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 
@@ -14,9 +16,32 @@ interface MMPSiteEntriesTableProps {
   onViewSiteDetail?: (site: any) => void;
   editable?: boolean;
   onUpdateSites?: (sites: any[]) => Promise<boolean> | void;
+  onAcceptSite?: (site: any) => void;
+  onRejectSite?: (site: any, comments: string) => void;
+  currentUserId?: string;
+  showAcceptRejectForAssigned?: boolean;
+  onAcknowledgeCost?: (site: any) => void;
+  onStartVisit?: (site: any) => void;
+  onCompleteVisit?: (site: any) => void;
+  showVisitActions?: boolean;
+  onSendBackToCoordinator?: (site: any, comments: string) => void;
 }
 
-const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, onUpdateSites }: MMPSiteEntriesTableProps) => {
+const MMPSiteEntriesTable = ({ 
+  siteEntries, 
+  onViewSiteDetail, 
+  editable = false, 
+  onUpdateSites,
+  onAcceptSite,
+  onRejectSite,
+  currentUserId,
+  showAcceptRejectForAssigned = false,
+  onAcknowledgeCost,
+  onStartVisit,
+  onCompleteVisit,
+  showVisitActions = false,
+  onSendBackToCoordinator
+}: MMPSiteEntriesTableProps) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -26,6 +51,12 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
   const [editingId, setEditingId] = useState<string | number | null>(null);
   const [draft, setDraft] = useState<any | null>(null);
   const [savingId, setSavingId] = useState<string | number | null>(null);
+  // Accept/Reject dialog state
+  const [acceptRejectOpen, setAcceptRejectOpen] = useState(false);
+  const [rejectComments, setRejectComments] = useState('');
+  // Send back to coordinator dialog state
+  const [sendBackOpen, setSendBackOpen] = useState(false);
+  const [sendBackComments, setSendBackComments] = useState('');
 
   // Debounce search query to reduce filtering operations
   useEffect(() => {
@@ -135,6 +166,50 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
   };
 
   const handleView = (site: any) => {
+    // Check if this is a Smart Assigned site that needs cost acknowledgment
+    const isSmartAssignedNeedingAcknowledgment = showAcceptRejectForAssigned && 
+                                                 site.status?.toLowerCase() === 'assigned' && 
+                                                 site.accepted_by === currentUserId &&
+                                                 (!site.cost_acknowledged && !site.additional_data?.cost_acknowledged);
+    
+    if (isSmartAssignedNeedingAcknowledgment && onAcknowledgeCost) {
+      onAcknowledgeCost(site);
+      return;
+    }
+    
+    // Check if this is a Smart Assigned site that needs Accept/Reject dialog
+    const isSmartAssigned = showAcceptRejectForAssigned && 
+                           site.status?.toLowerCase() === 'assigned' && 
+                           site.accepted_by === currentUserId;
+    
+    if (isSmartAssigned && onAcceptSite && onRejectSite) {
+      setSelectedSite(site);
+      setRejectComments('');
+      setAcceptRejectOpen(true);
+      return;
+    }
+
+    // Check if this is an accepted site that needs Start Visit
+    const isAcceptedSite = showVisitActions && 
+                          site.status?.toLowerCase() === 'accepted' && 
+                          site.accepted_by === currentUserId;
+    
+    if (isAcceptedSite && onStartVisit) {
+      onStartVisit(site);
+      return;
+    }
+
+    // Check if this is an ongoing site that needs Complete Visit
+    const isOngoingSite = showVisitActions && 
+                         site.status?.toLowerCase() === 'ongoing' && 
+                         site.accepted_by === currentUserId;
+    
+    if (isOngoingSite && onCompleteVisit) {
+      onCompleteVisit(site);
+      return;
+    }
+    
+    // Otherwise show regular detail dialog
     if (onViewSiteDetail) {
       onViewSiteDetail(site);
       return;
@@ -800,6 +875,44 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
                               </Button>
                             </div>
                           )
+                        ) : showVisitActions ? (
+                          <div className="flex items-center gap-2">
+                            {site.status?.toLowerCase() === 'accepted' && (
+                              <Button 
+                                variant="default" 
+                                size="sm" 
+                                onClick={() => handleView(site)}
+                                className="bg-blue-600 hover:bg-blue-700 inline-flex items-center gap-1">
+                                <Eye className="h-4 w-4" />
+                                Start Visit
+                              </Button>
+                            )}
+                            {site.status?.toLowerCase() === 'ongoing' && (
+                              <Button 
+                                variant="default" 
+                                size="sm" 
+                                onClick={() => handleView(site)}
+                                className="bg-green-600 hover:bg-green-700 inline-flex items-center gap-1">
+                                <Check className="h-4 w-4" />
+                                Complete Visit
+                              </Button>
+                            )}
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => {
+                                if (onViewSiteDetail) {
+                                  onViewSiteDetail(site);
+                                } else {
+                                  setSelectedSite(site);
+                                  setDetailOpen(true);
+                                }
+                              }}
+                              className="hover:bg-muted inline-flex items-center gap-1">
+                              <Eye className="h-4 w-4" />
+                              View Details
+                            </Button>
+                          </div>
                         ) : (
                           <Button 
                             variant="ghost" 
@@ -866,59 +979,204 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
           </DialogHeader>
           {selectedSite && (() => {
             const row = normalizeSite(selectedSite);
+            const isAvailableSite = row.status?.toLowerCase() === 'dispatched' && !row.acceptedBy;
             return (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">Hub Office</p>
-                  <p className="font-medium">{row.hubOffice || '—'}</p>
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Hub Office</p>
+                    <p className="font-medium">{row.hubOffice || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">State</p>
+                    <p className="font-medium">{row.state || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Locality</p>
+                    <p className="font-medium">{row.locality || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Site Name</p>
+                    <p className="font-medium">{row.siteName || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">CP Name</p>
+                    <p className="font-medium">{row.cpName || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Activity at Site</p>
+                    <p className="font-medium">{row.siteActivity || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Monitoring By</p>
+                    <p className="font-medium">{row.monitoringBy || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Survey Tool</p>
+                    <p className="font-medium">{row.surveyTool || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Market Diversion</p>
+                    <p className="font-medium">{row.useMarketDiversion ? 'Yes' : 'No'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Warehouse Monitoring</p>
+                    <p className="font-medium">{row.useWarehouseMonitoring ? 'Yes' : 'No'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Visit Date</p>
+                    <p className="font-medium">{row.visitDate || '—'}</p>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <p className="text-sm text-muted-foreground">Comments</p>
+                    <p className="font-medium">{row.comments || '—'}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">State</p>
-                  <p className="font-medium">{row.state || '—'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Locality</p>
-                  <p className="font-medium">{row.locality || '—'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Site Name</p>
-                  <p className="font-medium">{row.siteName || '—'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">CP Name</p>
-                  <p className="font-medium">{row.cpName || '—'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Activity at Site</p>
-                  <p className="font-medium">{row.siteActivity || '—'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Monitoring By</p>
-                  <p className="font-medium">{row.monitoringBy || '—'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Survey Tool</p>
-                  <p className="font-medium">{row.surveyTool || '—'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Market Diversion</p>
-                  <p className="font-medium">{row.useMarketDiversion ? 'Yes' : 'No'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Warehouse Monitoring</p>
-                  <p className="font-medium">{row.useWarehouseMonitoring ? 'Yes' : 'No'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Visit Date</p>
-                  <p className="font-medium">{row.visitDate || '—'}</p>
-                </div>
-                <div className="sm:col-span-2">
-                  <p className="text-sm text-muted-foreground">Comments</p>
-                  <p className="font-medium">{row.comments || '—'}</p>
+                {isAvailableSite && onAcceptSite && (
+                  <div className="border-t pt-4 flex gap-2">
+                    <Button 
+                      onClick={() => {
+                        onAcceptSite(selectedSite);
+                        setDetailOpen(false);
+                      }}
+                      className="bg-green-600 hover:bg-green-700"
+                    >
+                      Accept Site
+                    </Button>
+                    {onSendBackToCoordinator && (
+                      <Button 
+                        variant="outline"
+                        onClick={() => {
+                          setSendBackComments('');
+                          setSendBackOpen(true);
+                        }}
+                        className="bg-orange-50 hover:bg-orange-100 text-orange-700 border-orange-300"
+                      >
+                        Send Back to Coordinator
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
+
+      {/* Send Back to Coordinator Dialog */}
+      <Dialog open={sendBackOpen} onOpenChange={setSendBackOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Send Back to Coordinator</DialogTitle>
+            <DialogDescription>
+              Provide comments explaining why this site needs to be sent back to the coordinator for editing.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="sendBackComments">Comments</Label>
+              <Textarea
+                id="sendBackComments"
+                placeholder="Enter your comments here..."
+                value={sendBackComments}
+                onChange={(e) => setSendBackComments(e.target.value)}
+                rows={4}
+              />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setSendBackOpen(false);
+                  setSendBackComments('');
+                }}
+              >
+                Cancel
+              </Button>
+              <Button 
+                onClick={() => {
+                  if (selectedSite && onSendBackToCoordinator) {
+                    onSendBackToCoordinator(selectedSite, sendBackComments);
+                    setSendBackOpen(false);
+                    setSendBackComments('');
+                    setDetailOpen(false);
+                  }
+                }}
+                disabled={!sendBackComments.trim()}
+                className="bg-orange-600 hover:bg-orange-700"
+              >
+                Send Back
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Accept/Reject Dialog for Smart Assigned sites */}
+      <Dialog open={acceptRejectOpen} onOpenChange={setAcceptRejectOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Acknowledge Site Assignment</DialogTitle>
+            <DialogDescription>
+              Please acknowledge this site assignment to move it to your pending visits.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedSite && (() => {
+            const row = normalizeSite(selectedSite);
+            return (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Site Name</p>
+                    <p className="font-medium">{row.siteName || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">State</p>
+                    <p className="font-medium">{row.state || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Locality</p>
+                    <p className="font-medium">{row.locality || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Activity at Site</p>
+                    <p className="font-medium">{row.siteActivity || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Visit Date</p>
+                    <p className="font-medium">{row.visitDate || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Total Cost</p>
+                    <p className="font-medium">{row.cost ? `$${Number(row.cost).toLocaleString()}` : '—'}</p>
+                  </div>
                 </div>
               </div>
             );
           })()}
+          <DialogFooter className="gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setAcceptRejectOpen(false);
+                setSelectedSite(null);
+                setRejectComments('');
+              }}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={() => {
+                onAcceptSite?.(selectedSite);
+                setAcceptRejectOpen(false);
+                setSelectedSite(null);
+                setRejectComments('');
+              }}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              Acknowledge Assignment
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </Card>
