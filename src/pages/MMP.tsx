@@ -21,6 +21,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 // Using relative import fallback in case path alias resolution misses new file
 import BulkClearForwardedDialog from '../components/mmp/BulkClearForwardedDialog';
 import { DispatchSitesDialog } from '@/components/mmp/DispatchSitesDialog';
+import { sudanStates } from '@/data/sudanStates';
 import { VisitReportDialog, VisitReportData } from '@/components/site-visit/VisitReportDialog';
 
 // Helper component to convert SiteVisitRow[] to site entries and display using MMPSiteEntriesTable
@@ -230,11 +231,12 @@ const VerifiedSitesDisplay: React.FC<{ verifiedSites: SiteVisitRow[] }> = ({ ver
         }
 
         // Load from mmp_site_entries
+        // Filter for verified sites (case-insensitive)
         const { data: mmpEntries, error: mmpError } = await supabase
           .from('mmp_site_entries')
           .select('*')
           .in('mmp_file_id', mmpIds)
-          .eq('status', 'Verified');
+          .ilike('status', 'verified');
 
         if (mmpError) throw mmpError;
 
@@ -1269,12 +1271,34 @@ const MMP = () => {
       try {
         // Load available sites in the enumerator's state or locality for "Available Sites" tab
         // These are sites with status "Dispatched" (bulk dispatched by state/locality)
-        const availableSitesQuery = supabase
+        // Convert collector's stateId/localityId to names for matching with site entries
+        const collectorStateName = sudanStates.find(s => s.id === currentUser.stateId)?.name;
+        const collectorLocalityName = currentUser.stateId && currentUser.localityId
+          ? sudanStates.find(s => s.id === currentUser.stateId)?.localities.find(l => l.id === currentUser.localityId)?.name
+          : undefined;
+        
+        // Build query - match by state name or locality name
+        let availableSitesQuery = supabase
           .from('mmp_site_entries')
           .select('*')
           .ilike('status', 'Dispatched')
-          .or(`state.eq.${currentUser.stateId},locality.eq.${currentUser.localityId}`)
-          .is('accepted_by', null) // Only show unclaimed dispatched sites
+          .is('accepted_by', null); // Only show unclaimed dispatched sites
+        
+        // Add state/locality filters if we have the names
+        if (collectorStateName || collectorLocalityName) {
+          const conditions: string[] = [];
+          if (collectorStateName) {
+            conditions.push(`state.ilike.${collectorStateName}`);
+          }
+          if (collectorLocalityName) {
+            conditions.push(`locality.ilike.${collectorLocalityName}`);
+          }
+          if (conditions.length > 0) {
+            availableSitesQuery = availableSitesQuery.or(conditions.join(','));
+          }
+        }
+        
+        availableSitesQuery = availableSitesQuery
           .order('created_at', { ascending: false })
           .limit(1000);
 
@@ -2522,17 +2546,17 @@ const MMP = () => {
                               }
                             }
                             // Reload the entries after update with database-level filtering
-                            const { data: verifiedEntries, error } = await supabase
+                            // Filter by 'Approved and Costed' status, not 'verified'
+                            const { data: approvedCostedEntries, error } = await supabase
                               .from('mmp_site_entries')
                               .select('*')
-                              .ilike('status', 'verified')
-                              .gt('cost', 0)
+                              .or('status.ilike.Approved and Costed,status.ilike.Approved and costed')
                               .order('created_at', { ascending: false })
                               .limit(1000);
 
-                            if (!error && verifiedEntries) {
+                            if (!error && approvedCostedEntries) {
                               
-                              const formattedEntries = verifiedEntries.map(entry => {
+                              const formattedEntries = approvedCostedEntries.map(entry => {
                                 const additionalData = entry.additional_data || {};
                                 // Read fees from columns first, fallback to additional_data
                                 const enumeratorFee = entry.enumerator_fee ?? additionalData.enumerator_fee;
@@ -3185,20 +3209,21 @@ const MMP = () => {
                 }
               }
               // Reload approved and costed entries after dispatch
+              // Filter by 'Approved and Costed' status, not 'verified'
               if (verifiedSubTab === 'approvedCosted') {
-                const { data: verifiedEntries, error } = await supabase
+                const { data: approvedCostedEntries, error } = await supabase
                   .from('mmp_site_entries')
                   .select('*')
-                  .ilike('status', 'verified')
-                  .gt('cost', 0)
+                  .or('status.ilike.Approved and Costed,status.ilike.Approved and costed')
                   .order('created_at', { ascending: false })
                   .limit(1000);
 
-                if (!error && verifiedEntries) {
-                  const entriesWithCost = verifiedEntries;
-
-                  const formattedEntries = entriesWithCost.map(entry => {
+                if (!error && approvedCostedEntries) {
+                  const formattedEntries = approvedCostedEntries.map(entry => {
                     const additionalData = entry.additional_data || {};
+                    // Read fees from columns first, fallback to additional_data
+                    const enumeratorFee = entry.enumerator_fee ?? additionalData.enumerator_fee;
+                    const transportFee = entry.transport_fee ?? additionalData.transport_fee;
                     return {
                       ...entry,
                       siteName: entry.site_name,
@@ -3212,10 +3237,10 @@ const MMP = () => {
                       useWarehouseMonitoring: entry.use_warehouse_monitoring,
                       visitDate: entry.visit_date,
                       comments: entry.comments,
-                      enumerator_fee: additionalData.enumerator_fee,
-                      enumeratorFee: additionalData.enumerator_fee,
-                      transport_fee: additionalData.transport_fee,
-                      transportFee: additionalData.transport_fee,
+                      enumerator_fee: enumeratorFee,
+                      enumeratorFee: enumeratorFee,
+                      transport_fee: transportFee,
+                      transportFee: transportFee,
                       cost: entry.cost,
                       status: entry.status,
                       verified_by: entry.verified_by,
