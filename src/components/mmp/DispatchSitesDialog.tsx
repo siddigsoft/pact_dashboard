@@ -9,6 +9,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { Loader2 } from 'lucide-react';
+import { sudanStates } from '@/data/sudanStates';
 
 interface DispatchSitesDialogProps {
   open: boolean;
@@ -103,9 +104,31 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
     let filtered = collectors;
     
     if (dispatchType === 'state' && selectedState) {
-      filtered = filtered.filter(c => c.state_id === selectedState);
+      // Convert state name to state ID for matching
+      const stateId = sudanStates.find(s => s.name.toLowerCase() === selectedState.toLowerCase())?.id;
+      if (stateId) {
+        filtered = filtered.filter(c => c.state_id === stateId);
+      } else {
+        // Fallback: try direct match in case selectedState is already an ID
+        filtered = filtered.filter(c => c.state_id === selectedState);
+      }
     } else if (dispatchType === 'locality' && selectedLocality) {
-      filtered = filtered.filter(c => c.locality_id === selectedLocality);
+      // Convert locality name to locality ID for matching
+      // Need to find the state first to get the correct locality
+      let localityId: string | undefined;
+      for (const state of sudanStates) {
+        const locality = state.localities.find(l => l.name.toLowerCase() === selectedLocality.toLowerCase());
+        if (locality) {
+          localityId = locality.id;
+          break;
+        }
+      }
+      if (localityId) {
+        filtered = filtered.filter(c => c.locality_id === localityId);
+      } else {
+        // Fallback: try direct match in case selectedLocality is already an ID
+        filtered = filtered.filter(c => c.locality_id === selectedLocality);
+      }
     }
     
     if (search.trim()) {
