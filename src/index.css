@@ -456,4 +456,17 @@
   box-shadow: 0 2px 0 rgba(0, 0, 0, 0.15); /* pressed effect */
 }
 
+  /* Cyber-themed dialog forms */
+  .cyber-dialog-form label {
+    @apply text-cyan-200;
+  }
+  
+  .cyber-dialog-form .text-muted-foreground {
+    @apply text-cyan-300/70;
+  }
+  
+  .cyber-dialog-form h4 {
+    @apply text-cyan-100;
+  }
+
 }

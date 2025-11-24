@@ -253,7 +253,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     refreshUsers();
     
-    const pollingInterval = setInterval(refreshUsers, 30000);
+    const pollingInterval = setInterval(refreshUsers, 300000);
     
     return () => clearInterval(pollingInterval);
   }, []);

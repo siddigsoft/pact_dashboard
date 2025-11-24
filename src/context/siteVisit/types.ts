@@ -3,6 +3,7 @@ import { SiteVisit, Transaction, User } from '@/types';
 
 export interface SiteVisitContextType {
   siteVisits: SiteVisit[];
+  loading: boolean;
   verifySitePermit: (siteVisitId: string) => Promise<boolean>;
   assignSiteVisit: (siteVisitId: string, userId: string) => Promise<boolean>;
   startSiteVisit: (siteVisitId: string) => Promise<boolean>;

@@ -9,12 +9,9 @@ export interface ProjectBudget {
   periodStartDate?: string;
   periodEndDate?: string;
   categoryAllocations: {
-    site_visits: number;
-    transportation: number;
-    accommodation: number;
-    meals: number;
-    equipment: number;
-    other: number;
+    transportation_and_visit_fees: number;
+    permit_fee: number;
+    internet_and_communication_fees: number;
   };
   status: 'draft' | 'submitted' | 'approved' | 'active' | 'closed' | 'exceeded';
   approvedBy?: string;
@@ -39,11 +36,9 @@ export interface MMPBudget {
   completedSites: number;
   averageCostPerSiteCents: number;
   categoryBreakdown: {
-    site_visit_fees: number;
-    transportation: number;
-    accommodation: number;
-    meals: number;
-    other: number;
+    transportation_and_visit_fees: number;
+    permit_fee: number;
+    internet_and_communication_fees: number;
   };
   sourceType: 'project_allocation' | 'top_up' | 'reallocation' | 'additional_funding';
   parentBudgetId?: string;
@@ -63,7 +58,7 @@ export interface BudgetTransaction {
   transactionType: 'allocation' | 'spend' | 'top_up' | 'reallocation' | 'adjustment' | 'refund';
   amountCents: number;
   currency: string;
-  category?: 'site_visits' | 'transportation' | 'accommodation' | 'meals' | 'equipment' | 'other';
+  category?: 'transportation_and_visit_fees' | 'permit_fee' | 'internet_and_communication_fees';
   balanceBeforeCents?: number;
   balanceAfterCents?: number;
   description?: string;

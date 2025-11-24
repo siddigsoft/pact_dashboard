@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useMemo } from 'react';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
@@ -13,34 +13,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { format } from 'date-fns';
-import { Clock, CheckCircle, UserCheck, DollarSign } from "lucide-react";
-import { supabase } from '@/integrations/supabase/client';
-
-interface SiteVisit {
-  id: string;
-  siteName: string;
-  locality: string;
-  state: string;
-  dueDate: string;
-  status: string;
-  assignedTo?: string;
-  completedAt?: string;
-  rating?: number;
-  siteCode?: string;
-  activity?: string;
-  mainActivity?: string;
-  priority?: string;
-  fees?: { total?: number };
-  hub?: string;
-  cpName?: string;
-  visitType?: string;
-  visitTypeRaw?: string;
-  projectName?: string;
-  mmpDetails?: {
-    mmpId: string;
-    projectName: string;
-  };
-}
+import { Clock, CheckCircle, UserCheck, DollarSign, Loader2 } from "lucide-react";
+import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
 
 interface SiteVisitsOverviewProps {
   currentUserId?: string;
@@ -48,69 +22,36 @@ interface SiteVisitsOverviewProps {
 }
 
 const SiteVisitsOverview: React.FC<SiteVisitsOverviewProps> = ({ currentUserId, isAdmin = false }) => {
-  const [siteVisits, setSiteVisits] = useState<SiteVisit[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { siteVisits, loading } = useSiteVisitContext();
 
-  useEffect(() => {
-    setLoading(true);
-    const fetchVisits = async () => {
-      const { data, error } = await supabase
-        .from('mmp_site_entries')
-        .select('*')
-        .order('visit_date', { ascending: true });
+  const { pendingVisits, assignedVisits, completedVisits, totalCount, completionRate } = useMemo(() => {
+    const filteredVisits = isAdmin ? siteVisits : siteVisits.filter(visit => visit.assignedTo === currentUserId);
+    
+    const pending = filteredVisits.filter(visit => ['pending', 'permitVerified'].includes(visit.status));
+    const assigned = filteredVisits.filter(visit => ['assigned', 'inProgress'].includes(visit.status));
+    const completed = filteredVisits.filter(visit => visit.status === 'completed');
+    const total = filteredVisits.length;
+    const rate = total > 0 ? Math.round((completed.length / total) * 100) : 0;
 
-      if (error) {
-        setLoading(false);
-        return;
-      }
-
-      const mappedVisits: SiteVisit[] = (data || []).map((visit: any) => ({
-        id: visit.id,
-        siteName: visit.site_name,
-        locality: visit.locality || '',
-        state: visit.state || '',
-        dueDate: visit.visit_date || visit.created_at,
-        status: visit.status || 'Pending',
-        assignedTo: visit.additional_data?.assigned_to,
-        completedAt: visit.additional_data?.completed_at,
-        rating: visit.additional_data?.rating,
-        siteCode: visit.site_code,
-        activity: visit.activity_at_site || visit.main_activity,
-        mainActivity: visit.main_activity,
-        priority: visit.additional_data?.priority || 'medium',
-        fees: visit.additional_data?.fees || { total: visit.cost || 0 },
-        hub: visit.hub_office || '',
-        cpName: visit.cp_name || '',
-        visitType: visit.visit_type || '',
-        visitTypeRaw: visit.visit_type || '',
-      }));
-
-      setSiteVisits(mappedVisits);
-      setLoading(false);
+    return {
+      pendingVisits: pending,
+      assignedVisits: assigned,
+      completedVisits: completed,
+      totalCount: total,
+      completionRate: rate
     };
-
-    fetchVisits();
-  }, []);
+  }, [siteVisits, isAdmin, currentUserId]);
 
   if (loading) {
     return (
       <div className="space-y-4">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <Card key={i}>
-            <CardContent className="py-6 text-center">Loading...</CardContent>
-          </Card>
-        ))}
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <span className="ml-2 text-muted-foreground">Loading site visits...</span>
+        </div>
       </div>
     );
   }
-
-  const filteredVisits = isAdmin ? siteVisits : siteVisits.filter(visit => visit.assignedTo === currentUserId);
-  
-  const pendingVisits = filteredVisits.filter(visit => ['pending', 'permitVerified'].includes(visit.status));
-  const assignedVisits = filteredVisits.filter(visit => ['assigned', 'inProgress'].includes(visit.status));
-  const completedVisits = filteredVisits.filter(visit => visit.status === 'completed');
-  const totalCount = filteredVisits.length;
-  const completionRate = totalCount > 0 ? Math.round((completedVisits.length / totalCount) * 100) : 0;
   
   return (
     <div className="space-y-6">

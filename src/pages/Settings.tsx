@@ -12,6 +12,8 @@ import { Input } from "@/components/ui/input";
 import { useUser } from "@/context/user/UserContext";
 import { Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogClose, DialogDescription } from "@/components/ui/dialog";
 import LocationCapture from "@/components/LocationCapture";
+import RoleBadge from "@/components/user/RoleBadge";
+import UserClassificationBadge from "@/components/user/UserClassificationBadge";
 
 const Settings = () => {
   const { toast } = useToast();
@@ -399,12 +401,23 @@ const Settings = () => {
                 </div>
                 
                 <div className="grid gap-2">
-                  <Label htmlFor="role">Role</Label>
-                  <Input 
-                    id="role"
-                    value={currentUser?.role || "User"}
-                    disabled
-                  />
+                  <Label>Role</Label>
+                  <div className="flex items-center gap-2 pt-1">
+                    <RoleBadge role={currentUser?.role || "User"} size="md" />
+                  </div>
+                </div>
+                
+                <div className="grid gap-2">
+                  <Label>Classification</Label>
+                  <div className="flex items-center gap-2 pt-1">
+                    {currentUser && (
+                      <UserClassificationBadge 
+                        userId={currentUser.id} 
+                        size="md" 
+                        showUnassigned={true}
+                      />
+                    )}
+                  </div>
                 </div>
               </div>
               

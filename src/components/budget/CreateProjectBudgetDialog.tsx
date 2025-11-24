@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -25,12 +24,9 @@ export function CreateProjectBudgetDialog({ projectId, projectName, onSuccess }:
   const [fiscalYear, setFiscalYear] = useState(new Date().getFullYear().toString());
   const [notes, setNotes] = useState('');
 
-  const [categorySiteVisits, setCategorySiteVisits] = useState('');
-  const [categoryTransportation, setCategoryTransportation] = useState('');
-  const [categoryAccommodation, setCategoryAccommodation] = useState('');
-  const [categoryMeals, setCategoryMeals] = useState('');
-  const [categoryEquipment, setCategoryEquipment] = useState('');
-  const [categoryOther, setCategoryOther] = useState('');
+  const [categoryTransportAndVisit, setCategoryTransportAndVisit] = useState('');
+  const [categoryPermitFee, setCategoryPermitFee] = useState('');
+  const [categoryInternetComm, setCategoryInternetComm] = useState('');
 
   const handleSubmit = async () => {
     if (!totalBudget || parseFloat(totalBudget) <= 0) return;
@@ -40,12 +36,9 @@ export function CreateProjectBudgetDialog({ projectId, projectName, onSuccess }:
       const totalBudgetCents = Math.round(parseFloat(totalBudget) * 100);
       
       const categoryAllocations = {
-        site_visits: categorySiteVisits ? Math.round(parseFloat(categorySiteVisits) * 100) : 0,
-        transportation: categoryTransportation ? Math.round(parseFloat(categoryTransportation) * 100) : 0,
-        accommodation: categoryAccommodation ? Math.round(parseFloat(categoryAccommodation) * 100) : 0,
-        meals: categoryMeals ? Math.round(parseFloat(categoryMeals) * 100) : 0,
-        equipment: categoryEquipment ? Math.round(parseFloat(categoryEquipment) * 100) : 0,
-        other: categoryOther ? Math.round(parseFloat(categoryOther) * 100) : 0,
+        transportation_and_visit_fees: categoryTransportAndVisit ? Math.round(parseFloat(categoryTransportAndVisit) * 100) : 0,
+        permit_fee: categoryPermitFee ? Math.round(parseFloat(categoryPermitFee) * 100) : 0,
+        internet_and_communication_fees: categoryInternetComm ? Math.round(parseFloat(categoryInternetComm) * 100) : 0,
       };
 
       const periodStart = budgetPeriod === 'annual' 
@@ -86,37 +79,35 @@ export function CreateProjectBudgetDialog({ projectId, projectName, onSuccess }:
     setBudgetPeriod('annual');
     setFiscalYear(new Date().getFullYear().toString());
     setNotes('');
-    setCategorySiteVisits('');
-    setCategoryTransportation('');
-    setCategoryAccommodation('');
-    setCategoryMeals('');
-    setCategoryEquipment('');
-    setCategoryOther('');
+    setCategoryTransportAndVisit('');
+    setCategoryPermitFee('');
+    setCategoryInternetComm('');
   };
 
   const categoryTotal = [
-    categorySiteVisits,
-    categoryTransportation,
-    categoryAccommodation,
-    categoryMeals,
-    categoryEquipment,
-    categoryOther,
+    categoryTransportAndVisit,
+    categoryPermitFee,
+    categoryInternetComm,
   ].reduce((sum, val) => sum + (parseFloat(val) || 0), 0);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button data-testid="button-create-project-budget">
+        <button
+          type="button"
+          className="px-4 py-2 rounded-md bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white border border-blue-400/50 shadow-[0_0_15px_rgba(59,130,246,0.3)] focus:outline-none focus:ring-2 focus:ring-blue-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 transition inline-flex items-center"
+          data-testid="button-create-project-budget"
+        >
           <Plus className="w-4 h-4 mr-2" />
           Create Budget
-        </Button>
+        </button>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-gradient-to-br from-slate-900 via-blue-950 to-purple-950 border-blue-500/30 shadow-[0_0_50px_rgba(59,130,246,0.3)]">
         <DialogHeader>
-          <DialogTitle>Create Project Budget: {projectName}</DialogTitle>
+          <DialogTitle className="text-cyan-100">Create Project Budget: {projectName}</DialogTitle>
         </DialogHeader>
 
-        <div className="grid gap-4">
+        <div className="grid gap-4 cyber-dialog-form">
           <div className="grid grid-cols-2 gap-4">
             <div className="grid gap-2">
               <Label htmlFor="total-budget">Total Budget (SDG)</Label>
@@ -163,104 +154,62 @@ export function CreateProjectBudgetDialog({ projectId, projectName, onSuccess }:
             </div>
           )}
 
-          <div className="border-t pt-4">
-            <h4 className="font-medium mb-3">Category Allocations (Optional)</h4>
-            <div className="grid grid-cols-2 gap-3">
+          <div className="border-t border-cyan-500/20 pt-4">
+            <h4 className="font-medium mb-3 text-cyan-100">Category Allocations (Optional)</h4>
+            <div className="grid gap-3">
               <div className="grid gap-2">
-                <Label htmlFor="cat-site-visits">Site Visits (SDG)</Label>
+                <Label htmlFor="cat-transport-visit">Transportation and Visit Fees (SDG)</Label>
                 <Input
-                  id="cat-site-visits"
+                  id="cat-transport-visit"
                   type="number"
                   min="0"
                   step="0.01"
-                  value={categorySiteVisits}
-                  onChange={(e) => setCategorySiteVisits(e.target.value)}
+                  value={categoryTransportAndVisit}
+                  onChange={(e) => setCategoryTransportAndVisit(e.target.value)}
                   placeholder="0.00"
-                  data-testid="input-category-site-visits"
+                  data-testid="input-category-transport-visit"
                 />
               </div>
 
               <div className="grid gap-2">
-                <Label htmlFor="cat-transportation">Transportation (SDG)</Label>
+                <Label htmlFor="cat-permit-fee">Permit Fee (SDG)</Label>
                 <Input
-                  id="cat-transportation"
+                  id="cat-permit-fee"
                   type="number"
                   min="0"
                   step="0.01"
-                  value={categoryTransportation}
-                  onChange={(e) => setCategoryTransportation(e.target.value)}
+                  value={categoryPermitFee}
+                  onChange={(e) => setCategoryPermitFee(e.target.value)}
                   placeholder="0.00"
-                  data-testid="input-category-transportation"
+                  data-testid="input-category-permit-fee"
                 />
               </div>
 
               <div className="grid gap-2">
-                <Label htmlFor="cat-accommodation">Accommodation (SDG)</Label>
+                <Label htmlFor="cat-internet-comm">Internet & Communication Fees (SDG)</Label>
                 <Input
-                  id="cat-accommodation"
+                  id="cat-internet-comm"
                   type="number"
                   min="0"
                   step="0.01"
-                  value={categoryAccommodation}
-                  onChange={(e) => setCategoryAccommodation(e.target.value)}
+                  value={categoryInternetComm}
+                  onChange={(e) => setCategoryInternetComm(e.target.value)}
                   placeholder="0.00"
-                  data-testid="input-category-accommodation"
-                />
-              </div>
-
-              <div className="grid gap-2">
-                <Label htmlFor="cat-meals">Meals (SDG)</Label>
-                <Input
-                  id="cat-meals"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={categoryMeals}
-                  onChange={(e) => setCategoryMeals(e.target.value)}
-                  placeholder="0.00"
-                  data-testid="input-category-meals"
-                />
-              </div>
-
-              <div className="grid gap-2">
-                <Label htmlFor="cat-equipment">Equipment (SDG)</Label>
-                <Input
-                  id="cat-equipment"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={categoryEquipment}
-                  onChange={(e) => setCategoryEquipment(e.target.value)}
-                  placeholder="0.00"
-                  data-testid="input-category-equipment"
-                />
-              </div>
-
-              <div className="grid gap-2">
-                <Label htmlFor="cat-other">Other (SDG)</Label>
-                <Input
-                  id="cat-other"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={categoryOther}
-                  onChange={(e) => setCategoryOther(e.target.value)}
-                  placeholder="0.00"
-                  data-testid="input-category-other"
+                  data-testid="input-category-internet-comm"
                 />
               </div>
             </div>
 
             {categoryTotal > 0 && (
-              <div className="mt-3 p-3 bg-muted rounded-md">
+              <div className="mt-3 p-3 bg-gradient-to-r from-cyan-900/20 to-blue-900/20 backdrop-blur-sm border border-cyan-500/30 rounded-md shadow-[0_0_15px_rgba(6,182,212,0.2)]">
                 <div className="flex justify-between items-center">
-                  <span className="text-sm font-medium">Total Allocated:</span>
-                  <span className="text-sm font-bold">
+                  <span className="text-sm font-medium text-cyan-200">Total Allocated:</span>
+                  <span className="text-sm font-bold text-cyan-100">
                     SDG {categoryTotal.toLocaleString('en-SD', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
                 {totalBudget && categoryTotal > parseFloat(totalBudget) && (
-                  <p className="text-sm text-destructive mt-1">
+                  <p className="text-sm text-red-300 mt-1">
                     Category total exceeds budget by SDG {(categoryTotal - parseFloat(totalBudget)).toFixed(2)}
                   </p>
                 )}
@@ -281,23 +230,26 @@ export function CreateProjectBudgetDialog({ projectId, projectName, onSuccess }:
           </div>
         </div>
 
-        <DialogFooter>
-          <Button
-            variant="outline"
+        <div className="flex gap-3 justify-end pt-4 border-t border-cyan-500/20">
+          <button
+            type="button"
             onClick={() => setOpen(false)}
             disabled={loading}
+            className="px-4 py-2 rounded-md bg-transparent border border-cyan-500/30 text-cyan-200 hover:bg-cyan-900/20 shadow-[0_0_12px_rgba(6,182,212,0.25)] focus:outline-none focus:ring-2 focus:ring-cyan-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 transition disabled:opacity-50 disabled:cursor-not-allowed"
             data-testid="button-cancel"
           >
             Cancel
-          </Button>
-          <Button
+          </button>
+          <button
+            type="button"
             onClick={handleSubmit}
             disabled={!totalBudget || parseFloat(totalBudget) <= 0 || loading}
+            className="px-4 py-2 rounded-md bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white border border-cyan-400/50 shadow-[0_0_18px_rgba(6,182,212,0.35)] focus:outline-none focus:ring-2 focus:ring-cyan-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 transition disabled:opacity-60 disabled:cursor-not-allowed"
             data-testid="button-submit"
           >
             {loading ? 'Creating...' : 'Create Budget'}
-          </Button>
-        </DialogFooter>
+          </button>
+        </div>
       </DialogContent>
     </Dialog>
   );

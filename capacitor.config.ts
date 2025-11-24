@@ -2,16 +2,42 @@
 import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'app.lovable.91773677c07f4ef0aac332c7b3821cde',
-  appName: 'pact-consultancy',
+  appId: 'com.pact.workflow',
+  appName: 'PACT Workflow',
   webDir: 'dist',
   server: {
-    url: 'https://91773677-c07f-4ef0-aac3-32c7b3821cde.lovableproject.com?forceHideBadge=true',
-    cleartext: true
+    url: process.env.NODE_ENV === 'production' 
+      ? 'https://8061f5ee-0482-4ab7-b0dc-02ca73db7311-00-1mrfz5xd21tdt.riker.replit.dev'
+      : 'http://localhost:5000',
+    cleartext: false,
+    androidScheme: 'https',
+    iosScheme: 'https',
+    allowNavigation: [
+      'https://8061f5ee-0482-4ab7-b0dc-02ca73db7311-00-1mrfz5xd21tdt.riker.replit.dev',
+      'https://*.supabase.co'
+    ]
+  },
+  android: {
+    allowMixedContent: false,
+    webContentsDebuggingEnabled: false
+  },
+  ios: {
+    contentInset: 'always'
   },
   plugins: {
     SplashScreen: {
-      launchShowDuration: 2000
+      launchShowDuration: 2000,
+      backgroundColor: '#1e40af',
+      androidScaleType: 'CENTER_CROP',
+      showSpinner: true,
+      spinnerColor: '#ffffff'
+    },
+    PushNotifications: {
+      presentationOptions: ['badge', 'sound', 'alert']
+    },
+    LocalNotifications: {
+      smallIcon: 'ic_stat_icon_config_sample',
+      iconColor: '#1e40af'
     }
   }
 };

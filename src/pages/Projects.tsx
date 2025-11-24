@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, ChevronLeft } from 'lucide-react';
+import { Plus, FolderKanban, CheckCircle2, Clock, BarChart3 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { GradientStatCard } from '@/components/ui/gradient-stat-card';
 import ProjectList from '@/components/project/ProjectList';
 import { useProjectContext } from '@/context/project/ProjectContext';
 import { useAppContext } from '@/context/AppContext';
@@ -20,44 +21,82 @@ const ProjectsPage = () => {
     navigate(`/projects/${projectId}`);
   };
 
+  const projectStats = useMemo(() => {
+    const total = projects.length;
+    const completed = projects.filter(p => p.workflowStatus === 'completed').length;
+    const active = projects.filter(p => p.workflowStatus === 'active' || p.workflowStatus === 'in_progress').length;
+    const pending = projects.filter(p => p.workflowStatus === 'pending').length;
+    const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+    return { total, completed, active, pending, completionRate };
+  }, [projects]);
+
   return (
-    <div className="space-y-10 min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-blue-100 dark:from-gray-900 dark:via-gray-950 dark:to-gray-900 py-8 px-2 md:px-8">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-gradient-to-r from-blue-600/90 to-blue-400/80 dark:from-blue-900 dark:to-blue-700 p-7 rounded-2xl shadow-xl border border-blue-100 dark:border-blue-900">
-        <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => navigate("/dashboard")}
-            className="hover:bg-blue-100 dark:hover:bg-blue-900/40"
-          >
-            <ChevronLeft className="h-5 w-5 text-white dark:text-blue-200" />
-          </Button>
+    <div className="min-h-screen bg-background p-4 md:p-8 space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center">
+            <FolderKanban className="h-6 w-6 text-white" />
+          </div>
           <div>
-            <h1 className="text-3xl font-extrabold bg-gradient-to-r from-white to-blue-200 dark:from-blue-200 dark:to-blue-400 bg-clip-text text-transparent tracking-tight">
-              Projects
-            </h1>
-            <p className="text-blue-100 dark:text-blue-200/80 font-medium">
+            <h1 className="text-3xl font-bold">Projects</h1>
+            <p className="text-sm text-muted-foreground">
               Manage project planning and activity management
             </p>
           </div>
         </div>
-        <Button
-          className="bg-gradient-to-r from-blue-700 to-blue-500 hover:from-blue-800 hover:to-blue-600 text-white shadow-lg hover:shadow-xl transition-all duration-300 px-6 py-2 rounded-full font-semibold"
-          onClick={() => navigate('/projects/create')}
-        >
-          <Plus className="h-5 w-5 mr-2" />
+        <Button onClick={() => navigate('/projects/create')} data-testid="button-create-project">
+          <Plus className="h-4 w-4 mr-2" />
           Create Project
         </Button>
       </div>
+
+      {/* Statistics Grid */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <GradientStatCard
+          title="Total Projects"
+          value={projectStats.total}
+          subtitle="All projects"
+          icon={FolderKanban}
+          color="blue"
+          data-testid="card-stat-total-projects"
+        />
+
+        <GradientStatCard
+          title="Completed"
+          value={projectStats.completed}
+          subtitle={`${projectStats.completionRate}% completion`}
+          icon={CheckCircle2}
+          color="green"
+          data-testid="card-stat-completed-projects"
+        />
+
+        <GradientStatCard
+          title="Active Projects"
+          value={projectStats.active}
+          subtitle="Currently in progress"
+          icon={BarChart3}
+          color="cyan"
+          data-testid="card-stat-active-projects"
+        />
+
+        <GradientStatCard
+          title="Pending"
+          value={projectStats.pending}
+          subtitle="Awaiting start"
+          icon={Clock}
+          color="orange"
+          data-testid="card-stat-pending-projects"
+        />
+      </div>
       
-      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-lg p-6">
-        {/* Add status filter UI if needed */}
-        {/* <StatusFilter ... /> */}
+      {/* Project List */}
+      <div className="bg-card rounded-lg border p-6">
         <ProjectList 
           projects={projects} 
           onViewProject={handleViewProject}
           loading={loading}
-          // Pass workflow status if ProjectList supports it
         />
       </div>
     </div>

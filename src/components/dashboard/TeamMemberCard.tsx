@@ -8,12 +8,14 @@ import {
   CheckCircle2, 
   AlertCircle, 
   BarChart3,
-  MapPin
+  MapPin,
+  Award
 } from 'lucide-react';
 import { User } from '@/types/user';
 import { formatDistanceToNow } from 'date-fns';
 import { getUserStatus } from '@/utils/userStatusUtils';
 import { TeamMemberActions } from '@/components/team/TeamMemberActions';
+import { useClassification } from '@/context/classification/ClassificationContext';
 
 interface TeamMemberCardProps {
   user: User;
@@ -27,6 +29,8 @@ interface TeamMemberCardProps {
 }
 
 export const TeamMemberCard: React.FC<TeamMemberCardProps> = ({ user, workload, onClick }) => {
+  const { userClassifications } = useClassification();
+  
   // Get enhanced user status with three-tier color system
   const userStatus = getUserStatus(user);
   
@@ -56,6 +60,23 @@ export const TeamMemberCard: React.FC<TeamMemberCardProps> = ({ user, workload, 
     if (workloadPercentage >= 80) return 'text-red-600 dark:text-red-400';
     if (workloadPercentage >= 50) return 'text-orange-600 dark:text-orange-400';
     return 'text-green-600 dark:text-green-400';
+  };
+
+  // Get user classification
+  const userClassification = userClassifications.find(uc => uc.userId === user.id);
+
+  // Get classification level color
+  const getLevelColor = (level: string) => {
+    switch (level) {
+      case 'A':
+        return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 border-green-300 dark:border-green-700';
+      case 'B':
+        return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 border-blue-300 dark:border-blue-700';
+      case 'C':
+        return 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200 border-orange-300 dark:border-orange-700';
+      default:
+        return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200 border-gray-300 dark:border-gray-700';
+    }
   };
 
   return (
@@ -192,6 +213,29 @@ export const TeamMemberCard: React.FC<TeamMemberCardProps> = ({ user, workload, 
                 <span className="font-semibold ml-1">{user.performance.rating.toFixed(1)}</span>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Classification Badge */}
+        {userClassification && (
+          <div className="mt-2 pt-2 border-t border-border/50">
+            <div className="flex items-center justify-between text-[10px]">
+              <div className="flex items-center gap-1 text-muted-foreground uppercase tracking-wide">
+                <Award className="h-3 w-3" />
+                <span>Classification</span>
+              </div>
+              <Badge 
+                className={`text-[10px] h-5 px-1.5 border ${getLevelColor(userClassification.classificationLevel)}`}
+                data-testid={`badge-classification-${user.id}`}
+              >
+                Level {userClassification.classificationLevel}
+              </Badge>
+            </div>
+            {userClassification.hasRetainer && (
+              <div className="mt-1 text-[9px] text-right text-muted-foreground">
+                Retainer: SDG {((userClassification.retainerAmountCents || 0) / 100).toFixed(2)}/mo
+              </div>
+            )}
           </div>
         )}
       </CardContent>

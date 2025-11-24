@@ -12,6 +12,7 @@ import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import { Moon, Sun } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { UpdateDialog } from "@/components/UpdateDialog";
 
 interface MainLayoutContentProps {
   children?: React.ReactNode;
@@ -64,6 +65,7 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
 
   return (
     <TooltipProvider>
+      <UpdateDialog />
       <SidebarProvider>
         <div className="min-h-screen flex w-full">
           {!isMobile && <AppSidebar />}
@@ -77,7 +79,7 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
             ) : (
               <Navbar />
             )}
-            <div className={`flex-1 ${isMobile ? 'px-3 pb-24 pt-2' : 'p-4 md:p-6 lg:p-8'} ${isMobile ? 'bg-gray-50 dark:bg-gray-900' : 'bg-slate-50/70 dark:bg-gray-900/70'} overflow-y-auto relative z-0 min-w-0`}>
+            <div className={`flex-1 ${isMobile ? 'px-3 pb-safe-nav pt-safe' : 'p-4 md:p-6 lg:p-8'} ${isMobile ? 'bg-gray-50 dark:bg-gray-900 scroll-container' : 'bg-slate-50/70 dark:bg-gray-900/70'} overflow-y-auto relative z-0 min-w-0`}>
               {children || <Outlet />}
             </div>
             {isMobile && <MobileNavigation />}

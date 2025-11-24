@@ -13,12 +13,14 @@ const SiteVisitContext = createContext<SiteVisitContextType | undefined>(undefin
 
 export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [appSiteVisits, setAppSiteVisits] = useState<SiteVisit[]>([]);
+  const [loading, setLoading] = useState(true);
   const { toast } = useToast();
   const { currentUser, users, updateUser } = useUser();
   
   useEffect(() => {
     const loadSiteVisits = async () => {
       try {
+        setLoading(true);
         const visits = await fetchSiteVisits();
         setAppSiteVisits(visits);
       } catch (error) {
@@ -28,6 +30,8 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           description: "Please try refreshing the page.",
           variant: "destructive",
         });
+      } finally {
+        setLoading(false);
       }
     };
     
@@ -755,6 +759,7 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     <SiteVisitContext.Provider
       value={{
         siteVisits: appSiteVisits,
+        loading,
         verifySitePermit,
         assignSiteVisit,
         startSiteVisit,

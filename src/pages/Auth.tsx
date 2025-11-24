@@ -20,6 +20,7 @@ import {
 import AuthForm from "@/components/auth/AuthForm";
 import { useAppContext } from "@/context/AppContext";
 import { Badge } from "@/components/ui/badge";
+import { LoadingBadge } from "@/components/ui/loading-badge";
 import PactLogo from "@/assets/logo.png";
 import { 
   Dialog, 
