@@ -4,6 +4,22 @@
 
 The PACT (Planning, Approval, Coordination, and Tracking) Workflow Platform is a comprehensive field operations management system for managing Monthly Monitoring Plans (MMPs), site visits, and field team coordination. Built with React and TypeScript, it provides role-based access control, real-time collaboration, and end-to-end workflow management for field operations. Key capabilities include multi-tier user management, MMP and site visit workflows, real-time location sharing, financial tracking, reporting, mobile responsiveness, and a Mission Control Dashboard with role-aware navigation.
 
+## Recent Changes
+
+### Performance Optimizations (Nov 24, 2025)
+
+**Financial Operations Page Load Time Improvements:**
+- Eliminated duplicate database queries by using SiteVisitContext instead of direct Supabase calls in SiteVisitsOverview component
+- Added loading state to SiteVisitContext to prevent flash of empty content during initial data load
+- Reduced user polling interval from 30 seconds to 5 minutes (300000ms) to minimize database load
+- Implemented useMemo for derived calculations to prevent unnecessary re-renders
+- Result: Faster page load, reduced database queries, improved user experience
+
+**Mobile Theme Standardization:**
+- Fixed Vite production build error by replacing @apply directives with direct CSS variables in mobile.css
+- Updated mobile.css, MobileNavigation.tsx, and MobileAppHeader.tsx to use consistent cyber-tech gradient theme
+- Maintained theme consistency across web and mobile interfaces
+
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.
