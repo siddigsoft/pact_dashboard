@@ -1269,20 +1269,49 @@ const MMP = () => {
 
       setLoadingEnumerator(true);
       try {
+        console.log('🔍 Loading enumerator entries for user:', {
+          userId: currentUser.id,
+          stateId: currentUser.stateId,
+          localityId: currentUser.localityId,
+          role: currentUser.role
+        });
+
         // Load available sites in the enumerator's state or locality for "Available Sites" tab
         // These are sites with status "Dispatched" (bulk dispatched by state/locality)
         // Convert collector's stateId/localityId to names for matching with site entries
-        const collectorStateName = sudanStates.find(s => s.id === currentUser.stateId)?.name;
+        const collectorStateName = currentUser.stateId ? sudanStates.find(s => s.id === currentUser.stateId)?.name : undefined;
         const collectorLocalityName = currentUser.stateId && currentUser.localityId
           ? sudanStates.find(s => s.id === currentUser.stateId)?.localities.find(l => l.id === currentUser.localityId)?.name
           : undefined;
         
-        // Build query - match by state name or locality name
+        console.log('🔍 Collector location:', {
+          stateId: currentUser.stateId,
+          localityId: currentUser.localityId,
+          stateName: collectorStateName,
+          localityName: collectorLocalityName
+        });
+
+        // Debug: Check if there are any dispatched sites at all
+        const debugAllDispatchedQuery = supabase
+          .from('mmp_site_entries')
+          .select('id, site_name, state, locality, status, accepted_by')
+          .ilike('status', 'Dispatched')
+          .limit(10);
+        
+        const debugResult = await debugAllDispatchedQuery;
+        console.log('🔍 Debug - All dispatched sites (sample):', {
+          count: debugResult.data?.length || 0,
+          sample: debugResult.data,
+          error: debugResult.error
+        });
+        
+        // Build query for "Available Sites" - status = "Dispatched" (bulk dispatched)
+        // These are unclaimed sites (accepted_by IS NULL) in the collector's area
         let availableSitesQuery = supabase
           .from('mmp_site_entries')
           .select('*')
-          .ilike('status', 'Dispatched')
-          .is('accepted_by', null); // Only show unclaimed dispatched sites
+          .ilike('status', 'Dispatched') // Only "Dispatched" status (bulk dispatched)
+          .is('accepted_by', null); // Only unclaimed sites
         
         // Add state/locality filters if we have the names
         if (collectorStateName || collectorLocalityName) {
@@ -1296,6 +1325,9 @@ const MMP = () => {
           if (conditions.length > 0) {
             availableSitesQuery = availableSitesQuery.or(conditions.join(','));
           }
+        } else {
+          // If no state/locality is set, log a warning but still try to load all dispatched sites
+          console.warn('⚠️ Data collector has no stateId or localityId set. Loading all dispatched sites.');
         }
         
         availableSitesQuery = availableSitesQuery
@@ -1303,24 +1335,26 @@ const MMP = () => {
           .limit(1000);
 
         // Load smart assigned sites for "Smart Assigned" tab
-        // These are sites with status "Assigned" (individually dispatched) assigned to this collector
-        // AND not yet cost acknowledged
+        // These are sites with status "Assigned" (individually dispatched to this collector)
+        // When individually dispatched, accepted_by is set immediately, so we filter by accepted_by
+        // Only show sites that haven't been cost-acknowledged yet
         const smartAssignedQuery = supabase
           .from('mmp_site_entries')
           .select('*')
           .ilike('status', 'Assigned')
-          .eq('accepted_by', currentUser.id)
-          .or(`cost_acknowledged.is.null,cost_acknowledged.neq.true`)
+          .eq('accepted_by', currentUser.id) // Only sites individually assigned to this collector
           .order('created_at', { ascending: false })
           .limit(1000);
 
         // Load accepted sites for "My Sites" tab (all sites accepted/claimed by this collector)
-        // Includes both "Assigned" (smart assigned) and "Dispatched" (claimed available sites)
-        // Also includes cost-acknowledged Smart Assigned sites
+        // Includes:
+        // - "Assigned" sites (individually dispatched, accepted_by already set)
+        // - "Dispatched" sites that this collector has accepted (accepted_by = currentUser.id)
+        // - "accepted" status sites (legacy or manually accepted)
         const mySitesQuery = supabase
           .from('mmp_site_entries')
           .select('*')
-          .or(`accepted_by.eq.${currentUser.id},and(status.ilike.dispatched,accepted_by.is.null,or(state.eq.${currentUser?.stateId},locality.eq.${currentUser?.localityId}))`)
+          .eq('accepted_by', currentUser.id) // All sites where this collector is the accepted_by
           .order('created_at', { ascending: false })
           .limit(1000);
 
@@ -1331,9 +1365,27 @@ const MMP = () => {
           mySitesQuery
         ]);
 
-        if (availableResult.error) throw availableResult.error;
-        if (smartAssignedResult.error) throw smartAssignedResult.error;
-        if (mySitesResult.error) throw mySitesResult.error;
+        console.log('🔍 Query results:', {
+          availableCount: availableResult.data?.length || 0,
+          availableError: availableResult.error,
+          smartAssignedCount: smartAssignedResult.data?.length || 0,
+          smartAssignedError: smartAssignedResult.error,
+          mySitesCount: mySitesResult.data?.length || 0,
+          mySitesError: mySitesResult.error
+        });
+
+        if (availableResult.error) {
+          console.error('❌ Available sites query error:', availableResult.error);
+          throw availableResult.error;
+        }
+        if (smartAssignedResult.error) {
+          console.error('❌ Smart assigned query error:', smartAssignedResult.error);
+          throw smartAssignedResult.error;
+        }
+        if (mySitesResult.error) {
+          console.error('❌ My sites query error:', mySitesResult.error);
+          throw mySitesResult.error;
+        }
 
         // Format entries for display
         const formatEntries = (entries: any[]) => entries.map(entry => {
@@ -1371,7 +1423,13 @@ const MMP = () => {
         });
 
         const availableEntries = formatEntries(availableResult.data || []);
-        const smartAssignedEntries = formatEntries(smartAssignedResult.data || []);
+        // Filter smart assigned to exclude cost-acknowledged sites (they move to My Sites)
+        const rawSmartAssigned = formatEntries(smartAssignedResult.data || []);
+        const smartAssignedEntries = rawSmartAssigned.filter(entry => {
+          const additionalData = entry.additional_data || {};
+          const costAcknowledged = entry.cost_acknowledged ?? additionalData.cost_acknowledged;
+          return !costAcknowledged; // Only show non-acknowledged sites
+        });
         const mySitesEntries = formatEntries(mySitesResult.data || []);
 
         // Store all entries for reference
