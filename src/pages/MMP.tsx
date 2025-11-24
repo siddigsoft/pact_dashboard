@@ -227,11 +227,12 @@ const VerifiedSitesDisplay: React.FC<{ verifiedSites: SiteVisitRow[] }> = ({ ver
         }
 
         // Load from mmp_site_entries
+        // Filter for verified sites (case-insensitive)
         const { data: mmpEntries, error: mmpError } = await supabase
           .from('mmp_site_entries')
           .select('*')
           .in('mmp_file_id', mmpIds)
-          .eq('status', 'Verified');
+          .ilike('status', 'verified');
 
         if (mmpError) throw mmpError;
 
@@ -1986,17 +1987,17 @@ const MMP = () => {
                               }
                             }
                             // Reload the entries after update with database-level filtering
-                            const { data: verifiedEntries, error } = await supabase
+                            // Filter by 'Approved and Costed' status, not 'verified'
+                            const { data: approvedCostedEntries, error } = await supabase
                               .from('mmp_site_entries')
                               .select('*')
-                              .ilike('status', 'verified')
-                              .gt('cost', 0)
+                              .or('status.ilike.Approved and Costed,status.ilike.Approved and costed')
                               .order('created_at', { ascending: false })
                               .limit(1000);
 
-                            if (!error && verifiedEntries) {
+                            if (!error && approvedCostedEntries) {
                               
-                              const formattedEntries = verifiedEntries.map(entry => {
+                              const formattedEntries = approvedCostedEntries.map(entry => {
                                 const additionalData = entry.additional_data || {};
                                 // Read fees from columns first, fallback to additional_data
                                 const enumeratorFee = entry.enumerator_fee ?? additionalData.enumerator_fee;
@@ -2565,20 +2566,21 @@ const MMP = () => {
                 }
               }
               // Reload approved and costed entries after dispatch
+              // Filter by 'Approved and Costed' status, not 'verified'
               if (verifiedSubTab === 'approvedCosted') {
-                const { data: verifiedEntries, error } = await supabase
+                const { data: approvedCostedEntries, error } = await supabase
                   .from('mmp_site_entries')
                   .select('*')
-                  .ilike('status', 'verified')
-                  .gt('cost', 0)
+                  .or('status.ilike.Approved and Costed,status.ilike.Approved and costed')
                   .order('created_at', { ascending: false })
                   .limit(1000);
 
-                if (!error && verifiedEntries) {
-                  const entriesWithCost = verifiedEntries;
-
-                  const formattedEntries = entriesWithCost.map(entry => {
+                if (!error && approvedCostedEntries) {
+                  const formattedEntries = approvedCostedEntries.map(entry => {
                     const additionalData = entry.additional_data || {};
+                    // Read fees from columns first, fallback to additional_data
+                    const enumeratorFee = entry.enumerator_fee ?? additionalData.enumerator_fee;
+                    const transportFee = entry.transport_fee ?? additionalData.transport_fee;
                     return {
                       ...entry,
                       siteName: entry.site_name,
@@ -2592,10 +2594,10 @@ const MMP = () => {
                       useWarehouseMonitoring: entry.use_warehouse_monitoring,
                       visitDate: entry.visit_date,
                       comments: entry.comments,
-                      enumerator_fee: additionalData.enumerator_fee,
-                      enumeratorFee: additionalData.enumerator_fee,
-                      transport_fee: additionalData.transport_fee,
-                      transportFee: additionalData.transport_fee,
+                      enumerator_fee: enumeratorFee,
+                      enumeratorFee: enumeratorFee,
+                      transport_fee: transportFee,
+                      transportFee: transportFee,
                       cost: entry.cost,
                       status: entry.status,
                       verified_by: entry.verified_by,
