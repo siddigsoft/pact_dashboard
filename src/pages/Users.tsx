@@ -168,11 +168,36 @@ const Users = () => {
     let result = base;
     if (searchQuery) {
       const lowerQuery = searchQuery.toLowerCase();
-      result = result.filter(user =>
-        user.name?.toLowerCase().includes(lowerQuery) ||
-        user.email?.toLowerCase().includes(lowerQuery) ||
-        user.phone?.toLowerCase().includes(lowerQuery)
-      );
+      result = result.filter(user => {
+        // basic contact fields
+        const matchesContact = (
+          user.name?.toLowerCase().includes(lowerQuery) ||
+          user.email?.toLowerCase().includes(lowerQuery) ||
+          user.phone?.toLowerCase().includes(lowerQuery)
+        );
+
+        if (matchesContact) return true;
+
+        // primary role label (system or custom display name)
+        const primaryLabel = getPrimaryRoleLabel(user)?.toLowerCase() || '';
+        if (primaryLabel.includes(lowerQuery)) return true;
+
+        // raw profile.role (backwards compatibility) or roles array
+        if (user.role && user.role.toLowerCase().includes(lowerQuery)) return true;
+        if (Array.isArray(user.roles) && user.roles.some((r: any) => String(r).toLowerCase().includes(lowerQuery))) return true;
+
+        // any assigned role entry (system roles stored on user_roles.role or custom via role_id)
+        const urs = getUserRolesByUserId(user.id);
+        if (urs.some(ur => (ur.role && String(ur.role).toLowerCase().includes(lowerQuery)))) return true;
+        // for custom role ids, try mapping to display names
+        if (urs.some(ur => {
+          if (!ur.role_id) return false;
+          const r = allRoles.find(rr => rr.id === ur.role_id);
+          return !!(r && ((r.display_name || r.name) || '').toLowerCase().includes(lowerQuery));
+        })) return true;
+
+        return false;
+      });
     }
 
     if (selectedRole) {

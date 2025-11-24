@@ -84,7 +84,8 @@ export const UserRoleAssignment: React.FC<UserRoleAssignmentProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[80vh]">
+      {/* make dialog vertically scrollable when content is tall */}
+      <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Manage Users for {role?.display_name}</DialogTitle>
           <DialogDescription>
@@ -108,7 +109,8 @@ export const UserRoleAssignment: React.FC<UserRoleAssignmentProps> = ({
                 <SelectTrigger className="w-64">
                   <SelectValue placeholder="Select user" />
                 </SelectTrigger>
-                <SelectContent>
+                {/* allow a taller dropdown and scrolling for long user lists */}
+                <SelectContent className="max-h-[40vh]">
                   {filteredUsers.map(user => (
                     <SelectItem key={user.id} value={user.id}>
                       {user.name} ({user.email})
@@ -141,6 +143,7 @@ export const UserRoleAssignment: React.FC<UserRoleAssignmentProps> = ({
               <p className="text-gray-500 text-center py-8">No users assigned to this role</p>
             ) : (
               <div className="border rounded-lg">
+                <div className="max-h-[50vh] overflow-y-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -184,8 +187,9 @@ export const UserRoleAssignment: React.FC<UserRoleAssignmentProps> = ({
                       </TableRow>
                     ))}
                   </TableBody>
-                </Table>
-              </div>
+                  </Table>
+                  </div>
+                </div>
             )}
           </div>
         </div>
