@@ -11,8 +11,11 @@
     "preview": "vite preview",
     "cap:add:android": "npx cap add android",
     "cap:sync": "npm run build && npx cap sync",
+    "cap:copy": "npx cap copy",
+    "cap:update": "npx cap update",
     "cap:open:android": "npx cap open android",
-    "cap:build:android": "npm run build && npx cap sync && npx cap build android"
+    "cap:build:apk": "npm run build && npx cap sync && npx cap open android",
+    "cap:dev": "CAPACITOR_LIVE_RELOAD=true npm run dev"
   },
   "dependencies": {
     "@capacitor/android": "^7.2.0",
