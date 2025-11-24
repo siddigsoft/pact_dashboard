@@ -286,14 +286,32 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
         additionalData.dispatched_by = dispatchedBy;
         additionalData.dispatched_from_status = currentEntry?.status; // Track previous status
         
+        // Set different status based on dispatch type
+        // - "Dispatched" for state/locality bulk dispatch (available sites - can be claimed by any collector in the area)
+        // - "Assigned" for individual dispatch (smart assigned - directly assigned to specific collector)
+        const newStatus = dispatchType === 'individual' ? 'Assigned' : 'Dispatched';
+        
+        const updateData: any = {
+          status: newStatus,
+          dispatched_at: dispatchedAt,
+          dispatched_by: dispatchedBy,
+          additional_data: additionalData // Keep for backward compatibility
+        };
+        
+        // For individual dispatch, assign directly to the specific collector
+        if (dispatchType === 'individual' && selectedCollector) {
+          updateData.accepted_by = selectedCollector;
+          updateData.accepted_at = dispatchedAt;
+          additionalData.assigned_to = selectedCollector;
+          additionalData.assigned_at = dispatchedAt;
+          additionalData.assigned_by = dispatchedBy;
+          updateData.additional_data = additionalData;
+        }
+        // For bulk dispatch (state/locality), accepted_by remains null until collector claims it
+        
         const { error: entryUpdateError } = await supabase
           .from('mmp_site_entries')
-          .update({ 
-            status: 'Dispatched',
-            dispatched_at: dispatchedAt,
-            dispatched_by: dispatchedBy,
-            additional_data: additionalData // Keep for backward compatibility
-          })
+          .update(updateData)
           .eq('id', entryId);
         
         if (entryUpdateError) {
