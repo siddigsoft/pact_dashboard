@@ -109,6 +109,7 @@ export const mapMMPSiteEntryToSiteVisit = (entry: MMPSiteEntry): SiteVisit => {
     },
     mmpDetails: {
       mmpId: entry.mmp_files?.mmp_id || '',
+      projectId: entry.mmp_files?.project_id || '',
       projectName: entry.mmp_files?.name || '',
       uploadedBy: entry.mmp_files?.uploaded_by || '',
       uploadedAt: entry.mmp_files?.uploaded_at || '',

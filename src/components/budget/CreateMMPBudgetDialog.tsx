@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -114,18 +113,22 @@ export function CreateMMPBudgetDialog({
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         {trigger || (
-          <Button data-testid="button-create-mmp-budget">
+          <button
+            type="button"
+            className="px-4 py-2 rounded-md bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white border border-purple-400/50 shadow-[0_0_15px_rgba(168,85,247,0.3)] focus:outline-none focus:ring-2 focus:ring-purple-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 transition inline-flex items-center"
+            data-testid="button-create-mmp-budget"
+          >
             <DollarSign className="w-4 h-4 mr-2" />
             Allocate Budget
-          </Button>
+          </button>
         )}
       </DialogTrigger>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-gradient-to-br from-slate-900 via-purple-950 to-blue-950 border-purple-500/30 shadow-[0_0_50px_rgba(168,85,247,0.3)]">
         <DialogHeader>
-          <DialogTitle>Allocate Budget: {mmpName}</DialogTitle>
+          <DialogTitle className="text-purple-100">Allocate Budget: {mmpName}</DialogTitle>
         </DialogHeader>
 
-        <div className="grid gap-4">
+        <div className="grid gap-4 cyber-dialog-form">
           <div className="grid gap-2">
             <Label htmlFor="allocated-budget">Total Budget for MMP (SDG)</Label>
             <Input
@@ -139,7 +142,7 @@ export function CreateMMPBudgetDialog({
               data-testid="input-allocated-budget"
             />
             {allocatedBudget && totalSites > 0 && (
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-purple-300/70">
                 Average per site: SDG {averageCostPerSite.toFixed(2)} ({totalSites} sites)
               </p>
             )}
@@ -261,15 +264,15 @@ export function CreateMMPBudgetDialog({
             </div>
 
             {categoryTotal > 0 && (
-              <div className="mt-3 p-3 bg-muted rounded-md">
+              <div className="mt-3 p-3 bg-gradient-to-r from-purple-900/20 to-cyan-900/20 backdrop-blur-sm border border-purple-500/30 rounded-md shadow-[0_0_15px_rgba(168,85,247,0.2)]">
                 <div className="flex justify-between items-center">
-                  <span className="text-sm font-medium">Category Total:</span>
-                  <span className="text-sm font-bold">
+                  <span className="text-sm font-medium text-purple-200">Category Total:</span>
+                  <span className="text-sm font-bold text-purple-100">
                     SDG {categoryTotal.toLocaleString('en-SD', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
                 {allocatedBudget && categoryTotal > parseFloat(allocatedBudget) && (
-                  <p className="text-sm text-destructive mt-1">
+                  <p className="text-sm text-red-300 mt-1">
                     Category total exceeds budget by SDG {(categoryTotal - parseFloat(allocatedBudget)).toFixed(2)}
                   </p>
                 )}
@@ -290,16 +293,18 @@ export function CreateMMPBudgetDialog({
           </div>
         </div>
 
-        <DialogFooter>
-          <Button
-            variant="outline"
+        <div className="flex gap-3 justify-end pt-4 border-t border-purple-500/20">
+          <button
+            type="button"
             onClick={() => setOpen(false)}
             disabled={loading}
+            className="px-4 py-2 rounded-md bg-transparent border border-purple-500/30 text-purple-200 hover:bg-purple-900/20 shadow-[0_0_12px_rgba(168,85,247,0.25)] focus:outline-none focus:ring-2 focus:ring-purple-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 transition disabled:opacity-50 disabled:cursor-not-allowed"
             data-testid="button-cancel"
           >
             Cancel
-          </Button>
-          <Button
+          </button>
+          <button
+            type="button"
             onClick={handleSubmit}
             disabled={
               !allocatedBudget || 
@@ -307,11 +312,12 @@ export function CreateMMPBudgetDialog({
               loading ||
               (sourceType === 'project_allocation' && !projectBudgetId)
             }
+            className="px-4 py-2 rounded-md bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-700 hover:to-cyan-700 text-white border border-purple-400/50 shadow-[0_0_18px_rgba(168,85,247,0.35)] focus:outline-none focus:ring-2 focus:ring-purple-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 transition disabled:opacity-60 disabled:cursor-not-allowed"
             data-testid="button-submit"
           >
             {loading ? 'Allocating...' : 'Allocate Budget'}
-          </Button>
-        </DialogFooter>
+          </button>
+        </div>
       </DialogContent>
     </Dialog>
   );

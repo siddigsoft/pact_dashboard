@@ -90,25 +90,31 @@ html {
   padding-top: env(safe-area-inset-top);
 }
 
-/* Uber-like styling */
+/* Cyber-tech mobile styling */
 .mobile-app-card {
-  @apply rounded-xl shadow-md bg-white p-4 border border-gray-100;
+  @apply rounded-xl shadow-md p-4 border;
+  background-color: hsl(var(--card));
+  border-color: hsl(var(--border));
 }
 
 .mobile-section-title {
-  @apply text-lg font-semibold text-gray-800 mb-3;
+  @apply text-lg font-semibold mb-3;
+  color: hsl(var(--foreground));
 }
 
 .mobile-button-primary {
-  @apply bg-[#9b87f5] text-white rounded-full py-3 px-6 shadow-md;
+  @apply bg-gradient-to-br from-blue-500 to-blue-700 text-white rounded-full py-3 px-6 shadow-md;
 }
 
 .mobile-button-secondary {
-  @apply bg-white border border-[#9b87f5] text-[#9b87f5] rounded-full py-3 px-6;
+  @apply border rounded-full py-3 px-6;
+  background-color: hsl(var(--background));
+  border-color: hsl(var(--primary));
+  color: hsl(var(--primary));
 }
 
 .mobile-gradient-header {
-  @apply bg-gradient-to-r from-[#1A1F2C] to-[#2D3748] text-white;
+  @apply bg-gradient-to-r from-blue-600 to-purple-600 text-white;
 }
 
 .mobile-status-badge {
@@ -134,9 +140,11 @@ html {
   transition: transform 300ms ease-in;
 }
 
-/* Uber-like cards */
+/* Cyber-tech cards */
 .uber-card {
-  @apply rounded-xl shadow-md bg-white p-4 border border-gray-100 mb-3;
+  @apply rounded-xl shadow-md p-4 border mb-3;
+  background-color: hsl(var(--card));
+  border-color: hsl(var(--border));
 }
 
 .uber-card-header {
@@ -144,20 +152,24 @@ html {
 }
 
 .uber-card-title {
-  @apply font-bold text-gray-800;
+  @apply font-bold;
+  color: hsl(var(--foreground));
 }
 
 .uber-card-content {
-  @apply text-sm text-gray-600;
+  @apply text-sm;
+  color: hsl(var(--muted-foreground));
 }
 
 /* Mobile-specific list items */
 .mobile-list-item {
-  @apply flex items-center p-3 border-b border-gray-100;
+  @apply flex items-center p-3 border-b;
+  border-color: hsl(var(--border));
 }
 
 .mobile-list-item-icon {
-  @apply mr-3 text-gray-400;
+  @apply mr-3;
+  color: hsl(var(--muted-foreground));
 }
 
 .mobile-list-item-content {
@@ -165,16 +177,18 @@ html {
 }
 
 .mobile-list-item-title {
-  @apply font-medium text-gray-800;
+  @apply font-medium;
+  color: hsl(var(--foreground));
 }
 
 .mobile-list-item-subtitle {
-  @apply text-xs text-gray-500;
+  @apply text-xs;
+  color: hsl(var(--muted-foreground));
 }
 
-/* Floating action button like Uber */
+/* Floating action button - cyber-tech gradient */
 .floating-action-button {
-  @apply fixed bottom-20 right-4 h-14 w-14 rounded-full bg-[#9b87f5] text-white flex items-center justify-center shadow-lg z-50;
+  @apply fixed bottom-20 right-4 h-14 w-14 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 text-white flex items-center justify-center shadow-lg z-50;
 }
 
 /* Enhanced login page animations */
@@ -189,22 +203,23 @@ html {
   transition: opacity 300ms, transform 300ms;
 }
 
-/* Glass effect for login card */
+/* Glass effect for login card - theme-aware */
 .glass-card {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  background: rgba(255, 255, 255, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+  @apply border shadow-2xl;
+  background-color: hsl(var(--card) / 0.7);
+  border-color: hsl(var(--border) / 0.2);
 }
 
-/* Input field focus effects */
+/* Input field focus effects - theme-aware */
 .focus-ring {
   transition: all 0.2s ease;
 }
 
 .focus-ring:focus {
-  box-shadow: 0 0 0 2px rgba(155, 135, 245, 0.2);
+  @apply ring-2;
+  --tw-ring-color: hsl(var(--primary) / 0.2);
 }
 
 /* Enhanced touch feedback */
@@ -229,10 +244,30 @@ html {
   width: 100%;
 }
 
-/* Bottom Safe Area Padding */
+/* Safe Area Utilities */
 .pb-safe {
   padding-bottom: env(safe-area-inset-bottom);
   padding-bottom: constant(safe-area-inset-bottom);
+}
+
+.pt-safe {
+  padding-top: env(safe-area-inset-top);
+  padding-top: constant(safe-area-inset-top);
+}
+
+.pb-safe-nav {
+  padding-bottom: calc(4rem + env(safe-area-inset-bottom));
+  padding-bottom: calc(4rem + constant(safe-area-inset-bottom));
+}
+
+.mt-safe {
+  margin-top: env(safe-area-inset-top);
+  margin-top: constant(safe-area-inset-top);
+}
+
+.mb-safe {
+  margin-bottom: env(safe-area-inset-bottom);
+  margin-bottom: constant(safe-area-inset-bottom);
 }
 
 /* Improved touch targets */
@@ -251,7 +286,8 @@ html {
 
 /* Enhanced Loading States */
 .loading-skeleton {
-  @apply animate-pulse bg-gray-200 rounded;
+  @apply animate-pulse rounded;
+  background-color: hsl(var(--muted));
   background-image: linear-gradient(
     90deg,
     rgba(255, 255, 255, 0) 0,

@@ -96,6 +96,15 @@ export const useAuthorization = () => {
   };
 
   /**
+   * Check if user can edit fee structures (admin/ICT only - more restrictive than view)
+   */
+  const canEditFeeStructures = (): boolean => {
+    // Fee structure editing is restricted to admin and ICT roles only
+    // Financial admins can VIEW but cannot EDIT fee structures
+    return hasAnyRole(['admin', 'Admin', 'ict', 'ICT']);
+  };
+
+  /**
    * Higher-order component for conditional rendering based on permissions
    */
   const withPermission = (
@@ -134,6 +143,7 @@ export const useAuthorization = () => {
     canManageFinances,
     canViewAllSiteVisits,
     canCreateProjects,
+    canEditFeeStructures,
     
     // HOCs for conditional rendering
     withPermission,

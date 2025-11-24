@@ -11,12 +11,13 @@ import { useToast } from "@/hooks/use-toast";
 import { 
   BadgePercent, ClipboardList, DollarSign, ReceiptText, ShieldCheck, 
   CreditCard, ArrowUpDown, FileBarChart, AlertTriangle, FileText,
-  DatabaseBackup, ChevronDown, ArrowLeft
+  DatabaseBackup, ChevronDown, ArrowLeft, TrendingUp
 } from "lucide-react";
 import { FraudDetection } from "@/components/FraudDetection";
 import { ApprovalTierAnalytics } from "@/components/ApprovalTierAnalytics";
 import { BudgetForecast } from "@/components/BudgetForecast";
 import { FraudPreventionDashboard } from "@/components/FraudPreventionDashboard";
+import { RetainerProcessingCard } from "@/components/admin/RetainerProcessingCard";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -120,15 +121,22 @@ const Finance: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center mb-6">
+      <div className="flex items-center justify-between mb-6">
         <Button
           variant="outline"
           size="sm"
-          className="mr-4"
           onClick={() => navigate('/dashboard')}
+          data-testid="button-back-to-dashboard"
         >
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back
+        </Button>
+        <Button
+          onClick={() => navigate('/financial-operations')}
+          data-testid="button-financial-operations"
+        >
+          <TrendingUp className="h-4 w-4 mr-2" />
+          Financial Operations
         </Button>
       </div>
 
@@ -321,6 +329,8 @@ const Finance: React.FC = () => {
               <CreditCard className="h-5 w-5 text-blue-600" />
               Payment Processing
             </h2>
+
+            <RetainerProcessingCard />
           
               <FraudPreventionDashboard />
             

@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/context/user/UserContext';
+import { useClassification } from '@/context/classification/ClassificationContext';
 import type {
   Wallet,
   WalletTransaction,
@@ -27,7 +28,10 @@ interface WalletContextType {
   getSiteVisitCost: (siteVisitId: string) => Promise<SiteVisitCost | null>;
   assignSiteVisitCost: (siteVisitId: string, costs: Partial<SiteVisitCost>) => Promise<void>;
   updateSiteVisitCost: (costId: string, costs: Partial<SiteVisitCost>) => Promise<void>;
-  addSiteVisitFeeToWallet: (userId: string, siteVisitId: string, amount: number) => Promise<void>;
+  addSiteVisitFeeToWallet: (userId: string, siteVisitId: string, complexityMultiplier?: number) => Promise<void>;
+  calculateClassificationFee: (userId: string, complexityMultiplier?: number) => Promise<number>;
+  processMonthlyRetainers: () => Promise<{ processed: number; failed: number; total: number }>;
+  addRetainerToWallet: (userId: string, amountCents: number, currency: string, period: string) => Promise<void>;
   listWallets: () => Promise<Wallet[]>;
 }
 
@@ -106,6 +110,7 @@ function transformSiteVisitCostFromDB(data: any): SiteVisitCost {
 export function WalletProvider({ children }: { children: ReactNode }) {
   const { currentUser } = useUser();
   const { toast } = useToast();
+  const { getUserClassification, getActiveFeeStructure } = useClassification();
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
   const [withdrawalRequests, setWithdrawalRequests] = useState<WithdrawalRequest[]>([]);
@@ -475,8 +480,43 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const addSiteVisitFeeToWallet = async (userId: string, siteVisitId: string, amount: number) => {
+  const calculateClassificationFee = async (userId: string, complexityMultiplier: number = 1.0): Promise<number> => {
     try {
+      const classification = getUserClassification(userId);
+      
+      if (!classification) {
+        console.warn(`No classification found for user ${userId}, using default fee of 50 SDG`);
+        return 50;
+      }
+
+      const feeStructure = getActiveFeeStructure(
+        classification.classificationLevel,
+        classification.roleScope
+      );
+
+      if (!feeStructure) {
+        console.warn(`No fee structure found for ${classification.classificationLevel}/${classification.roleScope}, using default fee of 50 SDG`);
+        return 50;
+      }
+
+      const baseFeeCents = feeStructure.siteVisitBaseFeeCents;
+      
+      // Transport fees are now paid separately from approved site visits
+      // Fee structures only contain base fees per classification level
+      const adjustedCents = Math.round(baseFeeCents * complexityMultiplier);
+      const totalSDG = adjustedCents / 100;
+
+      return totalSDG;
+    } catch (error: any) {
+      console.error('Failed to calculate classification fee:', error);
+      return 50;
+    }
+  };
+
+  const addSiteVisitFeeToWallet = async (userId: string, siteVisitId: string, complexityMultiplier: number = 1.0) => {
+    try {
+      const amount = await calculateClassificationFee(userId, complexityMultiplier);
+
       const { data: targetWallet, error: walletError } = await supabase
         .from('wallets')
         .select('*')
@@ -500,7 +540,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             amount,
             currency: 'SDG',
             site_visit_id: siteVisitId,
-            description: 'Site visit fee',
+            description: `Site visit fee (${complexityMultiplier}x complexity)`,
             balance_before: 0,
             balance_after: amount,
             created_by: currentUser?.id,
@@ -533,7 +573,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         amount,
         currency: 'SDG',
         site_visit_id: siteVisitId,
-        description: 'Site visit fee',
+        description: `Site visit fee (${complexityMultiplier}x complexity)`,
         balance_before: currentBalance,
         balance_after: newBalance,
         created_by: currentUser?.id,
@@ -547,6 +587,158 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       }
     } catch (error: any) {
       console.error('Failed to add site visit fee:', error);
+      throw error;
+    }
+  };
+
+  const addRetainerToWallet = async (
+    userId: string,
+    amountCents: number,
+    currency: string,
+    period: string
+  ) => {
+    try {
+      const amount = amountCents / 100;
+
+      const { data: targetWallet, error: walletError } = await supabase
+        .from('wallets')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+
+      if (walletError) {
+        if (walletError.code === 'PGRST116') {
+          const { data: newWallet, error: createError } = await supabase
+            .from('wallets')
+            .insert({ user_id: userId, balances: { [currency]: amount }, total_earned: amount })
+            .select()
+            .single();
+
+          if (createError) throw createError;
+
+          await supabase.from('wallet_transactions').insert({
+            wallet_id: newWallet.id,
+            user_id: userId,
+            type: 'retainer',
+            amount,
+            currency,
+            description: `Monthly retainer - ${period}`,
+            balance_before: 0,
+            balance_after: amount,
+            created_by: currentUser?.id,
+          });
+
+          return;
+        }
+        throw walletError;
+      }
+
+      const currentBalance = targetWallet.balances[currency] || 0;
+      const newBalance = currentBalance + amount;
+      const newBalances = { ...targetWallet.balances, [currency]: newBalance };
+
+      const currentTotalEarned = parseFloat(targetWallet.total_earned || 0);
+      const { error: updateError } = await supabase
+        .from('wallets')
+        .update({
+          balances: newBalances,
+          total_earned: currentTotalEarned + amount,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', targetWallet.id);
+
+      if (updateError) throw updateError;
+
+      const { error: transactionError } = await supabase.from('wallet_transactions').insert({
+        wallet_id: targetWallet.id,
+        user_id: userId,
+        type: 'retainer',
+        amount,
+        currency,
+        description: `Monthly retainer - ${period}`,
+        balance_before: currentBalance,
+        balance_after: newBalance,
+        created_by: currentUser?.id,
+      });
+
+      if (transactionError) throw transactionError;
+
+      if (userId === currentUser?.id) {
+        await refreshWallet();
+        await refreshTransactions();
+      }
+    } catch (error: any) {
+      console.error('Failed to add retainer to wallet:', error);
+      throw error;
+    }
+  };
+
+  const processMonthlyRetainers = async (): Promise<{ processed: number; failed: number; total: number }> => {
+    try {
+      const now = new Date();
+      const currentPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+      const { data: eligibleUsers, error: fetchError } = await supabase
+        .from('current_user_classifications')
+        .select('*')
+        .eq('has_retainer', true)
+        .eq('is_active', true);
+
+      if (fetchError) throw fetchError;
+
+      if (!eligibleUsers || eligibleUsers.length === 0) {
+        return { processed: 0, failed: 0, total: 0 };
+      }
+
+      let processed = 0;
+      let failed = 0;
+
+      for (const user of eligibleUsers) {
+        try {
+          const { data: existingRetainer, error: checkError } = await supabase
+            .from('wallet_transactions')
+            .select('id')
+            .eq('user_id', user.user_id)
+            .eq('type', 'retainer')
+            .ilike('description', `%${currentPeriod}%`)
+            .maybeSingle();
+
+          if (checkError && checkError.code !== 'PGRST116') {
+            throw checkError;
+          }
+
+          if (existingRetainer) {
+            console.log(`Retainer already processed for user ${user.user_id} in ${currentPeriod}`);
+            continue;
+          }
+
+          await addRetainerToWallet(
+            user.user_id,
+            user.retainer_amount_cents,
+            user.retainer_currency,
+            currentPeriod
+          );
+
+          processed++;
+        } catch (error: any) {
+          console.error(`Failed to process retainer for user ${user.user_id}:`, error);
+          failed++;
+        }
+      }
+
+      toast({
+        title: 'Retainer Processing Complete',
+        description: `Processed ${processed} of ${eligibleUsers.length} retainers. ${failed} failed.`,
+      });
+
+      return { processed, failed, total: eligibleUsers.length };
+    } catch (error: any) {
+      console.error('Failed to process monthly retainers:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to process monthly retainers',
+        variant: 'destructive',
+      });
       throw error;
     }
   };
@@ -654,6 +846,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         assignSiteVisitCost,
         updateSiteVisitCost,
         addSiteVisitFeeToWallet,
+        calculateClassificationFee,
+        processMonthlyRetainers,
+        addRetainerToWallet,
         listWallets,
       }}
     >

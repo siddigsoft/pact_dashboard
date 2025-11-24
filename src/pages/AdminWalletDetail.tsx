@@ -217,43 +217,56 @@ const AdminWalletDetail = () => {
   };
 
   if (loading) {
-    return <div className="flex items-center justify-center h-64">Loading wallet data...</div>;
+    return <div className="flex items-center justify-center h-64 text-blue-300/70">Synchronizing wallet data...</div>;
   }
 
   if (!wallet) {
-    return <div className="flex items-center justify-center h-64">Wallet not found</div>;
+    return <div className="flex items-center justify-center h-64 text-red-400">Wallet not found</div>;
   }
 
   const currentBalance = wallet.balances[currency] || 0;
 
   return (
-    <div className="space-y-6" data-testid="page-admin-wallet-detail">
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader><CardTitle>Balance ({currency})</CardTitle></CardHeader>
-          <CardContent className="text-2xl font-bold" data-testid="text-balance">
-            {currencyFmt(currentBalance, currency)}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader><CardTitle>Total Earned</CardTitle></CardHeader>
-          <CardContent className="text-2xl font-bold" data-testid="text-total-earned">
-            {currencyFmt(wallet.totalEarned, currency)}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader><CardTitle>Total Withdrawn</CardTitle></CardHeader>
-          <CardContent className="text-2xl font-bold" data-testid="text-total-withdrawn">
-            {currencyFmt(wallet.totalWithdrawn, currency)}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader><CardTitle>Transaction Count</CardTitle></CardHeader>
-          <CardContent className="text-2xl font-bold" data-testid="text-transaction-count">
-            {transactions.length}
-          </CardContent>
-        </Card>
+    <div className="relative min-h-screen">
+      <div className="fixed inset-0 bg-gradient-to-br from-slate-950 via-blue-950 to-purple-950 -z-10">
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(59,130,246,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(59,130,246,0.05)_1px,transparent_1px)] bg-[size:50px_50px] [mask-image:radial-gradient(ellipse_80%_50%_at_50%_0%,#000,transparent)]"></div>
       </div>
+      
+      <div className="relative space-y-6 p-6" data-testid="page-admin-wallet-detail">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <Card className="bg-gradient-to-br from-slate-900/80 to-blue-900/80 border-blue-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(59,130,246,0.2)]">
+            <CardHeader>
+              <CardTitle className="text-blue-300 text-sm uppercase tracking-wider">Balance ({currency})</CardTitle>
+            </CardHeader>
+            <CardContent className="text-3xl font-bold bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent" data-testid="text-balance">
+              {currencyFmt(currentBalance, currency)}
+            </CardContent>
+          </Card>
+          <Card className="bg-gradient-to-br from-slate-900/80 to-purple-900/80 border-purple-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(168,85,247,0.2)]">
+            <CardHeader>
+              <CardTitle className="text-purple-300 text-sm uppercase tracking-wider">Total Earned</CardTitle>
+            </CardHeader>
+            <CardContent className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent" data-testid="text-total-earned">
+              {currencyFmt(wallet.totalEarned, currency)}
+            </CardContent>
+          </Card>
+          <Card className="bg-gradient-to-br from-slate-900/80 to-cyan-900/80 border-cyan-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(34,211,238,0.2)]">
+            <CardHeader>
+              <CardTitle className="text-cyan-300 text-sm uppercase tracking-wider">Total Withdrawn</CardTitle>
+            </CardHeader>
+            <CardContent className="text-3xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent" data-testid="text-total-withdrawn">
+              {currencyFmt(wallet.totalWithdrawn, currency)}
+            </CardContent>
+          </Card>
+          <Card className="bg-gradient-to-br from-slate-900/80 to-indigo-900/80 border-indigo-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(99,102,241,0.2)]">
+            <CardHeader>
+              <CardTitle className="text-indigo-300 text-sm uppercase tracking-wider">Transaction Count</CardTitle>
+            </CardHeader>
+            <CardContent className="text-3xl font-bold bg-gradient-to-r from-yellow-400 to-orange-400 bg-clip-text text-transparent" data-testid="text-transaction-count">
+              {transactions.length}
+            </CardContent>
+          </Card>
+        </div>
 
       <div className="flex items-center gap-3">
         <Dialog open={adjOpen} onOpenChange={setAdjOpen}>
@@ -356,6 +369,7 @@ const AdminWalletDetail = () => {
           </div>
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 };

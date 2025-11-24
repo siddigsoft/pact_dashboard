@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -55,27 +54,31 @@ export function TopUpBudgetDialog({ budgetId, budgetName, currentBalance, trigge
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         {trigger || (
-          <Button variant="outline" size="sm" data-testid="button-top-up-budget">
+          <button
+            type="button"
+            className="px-3 py-1.5 text-sm rounded-md bg-gradient-to-r from-green-600 to-cyan-600 hover:from-green-700 hover:to-cyan-700 text-white border border-green-400/50 shadow-[0_0_15px_rgba(34,197,94,0.3)] focus:outline-none focus:ring-2 focus:ring-green-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 transition inline-flex items-center"
+            data-testid="button-top-up-budget"
+          >
             <TrendingUp className="w-4 h-4 mr-2" />
             Top-Up Budget
-          </Button>
+          </button>
         )}
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="bg-gradient-to-br from-slate-900 via-green-950 to-cyan-950 border-green-500/30 shadow-[0_0_50px_rgba(34,197,94,0.3)]">
         <DialogHeader>
-          <DialogTitle>Top-Up Budget: {budgetName}</DialogTitle>
+          <DialogTitle className="text-green-100">Top-Up Budget: {budgetName}</DialogTitle>
         </DialogHeader>
 
-        <div className="grid gap-4">
-          <div className="p-3 bg-muted rounded-md">
+        <div className="grid gap-4 cyber-dialog-form">
+          <div className="p-3 bg-gradient-to-r from-green-900/20 to-cyan-900/20 backdrop-blur-sm border border-green-500/30 rounded-md shadow-[0_0_15px_rgba(34,197,94,0.2)]">
             <div className="flex justify-between items-center mb-1">
-              <span className="text-sm font-medium">Current Balance:</span>
-              <span className="text-sm font-bold">
+              <span className="text-sm font-medium text-green-200">Current Balance:</span>
+              <span className="text-sm font-bold text-green-100">
                 SDG {currentBalance.toLocaleString('en-SD', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             </div>
             {amount && (
-              <div className="flex justify-between items-center text-green-600">
+              <div className="flex justify-between items-center text-green-300">
                 <span className="text-sm font-medium">New Balance:</span>
                 <span className="text-sm font-bold">
                   SDG {newBalance.toLocaleString('en-SD', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -128,23 +131,26 @@ export function TopUpBudgetDialog({ budgetId, budgetName, currentBalance, trigge
           </div>
         </div>
 
-        <DialogFooter>
-          <Button
-            variant="outline"
+        <div className="flex gap-3 justify-end pt-4 border-t border-green-500/20">
+          <button
+            type="button"
             onClick={() => setOpen(false)}
             disabled={loading}
+            className="px-4 py-2 rounded-md bg-transparent border border-green-500/30 text-green-200 hover:bg-green-900/20 shadow-[0_0_12px_rgba(34,197,94,0.25)] focus:outline-none focus:ring-2 focus:ring-green-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 transition disabled:opacity-50 disabled:cursor-not-allowed"
             data-testid="button-cancel"
           >
             Cancel
-          </Button>
-          <Button
+          </button>
+          <button
+            type="button"
             onClick={handleSubmit}
             disabled={!amount || parseFloat(amount) <= 0 || !reason || loading}
+            className="px-4 py-2 rounded-md bg-gradient-to-r from-green-600 to-cyan-600 hover:from-green-700 hover:to-cyan-700 text-white border border-green-400/50 shadow-[0_0_18px_rgba(34,197,94,0.35)] focus:outline-none focus:ring-2 focus:ring-green-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 transition disabled:opacity-60 disabled:cursor-not-allowed"
             data-testid="button-submit"
           >
             {loading ? 'Processing...' : 'Top-Up Budget'}
-          </Button>
-        </DialogFooter>
+          </button>
+        </div>
       </DialogContent>
     </Dialog>
   );
