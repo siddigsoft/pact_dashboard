@@ -6,19 +6,23 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Upload, ChevronLeft, Trash2 } from 'lucide-react';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { MMPList } from '@/components/mmp/MMPList';
+import { useToast } from '@/hooks/use-toast';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import type { SiteVisitRow } from '@/components/mmp/MMPCategorySitesTable';
 import MMPSiteEntriesTable from '@/components/mmp/MMPSiteEntriesTable';
 import { supabase } from '@/integrations/supabase/client';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { useToast } from '@/hooks/use-toast';
 
 // Using relative import fallback in case path alias resolution misses new file
 import BulkClearForwardedDialog from '../components/mmp/BulkClearForwardedDialog';
 import { DispatchSitesDialog } from '@/components/mmp/DispatchSitesDialog';
 import { sudanStates } from '@/data/sudanStates';
+import { VisitReportDialog, VisitReportData } from '@/components/site-visit/VisitReportDialog';
 
 // Helper component to convert SiteVisitRow[] to site entries and display using MMPSiteEntriesTable
 const SitesDisplayTable: React.FC<{ 
@@ -387,6 +391,8 @@ const MMP = () => {
   const [verifiedSubTab, setVerifiedSubTab] = useState<'newSites' | 'approvedCosted' | 'dispatched' | 'accepted' | 'ongoing' | 'completed'>('newSites');
   // Subcategory state for Enumerator dashboard
   const [enumeratorSubTab, setEnumeratorSubTab] = useState<'availableSites' | 'smartAssigned' | 'mySites'>('availableSites');
+  // Sub-subcategory state for My Sites (Data Collector)
+  const [mySitesSubTab, setMySitesSubTab] = useState<'pending' | 'completed'>('pending');
   // Subcategory state for New MMPs (FOM only)
   const [newFomSubTab, setNewFomSubTab] = useState<'pending' | 'verified'>('pending');
   const [siteVisitStats, setSiteVisitStats] = useState<Record<string, {
@@ -419,6 +425,556 @@ const MMP = () => {
   const [completedCount, setCompletedCount] = useState(0);
   const [dispatchDialogOpen, setDispatchDialogOpen] = useState(false);
   const [dispatchType, setDispatchType] = useState<'state' | 'locality' | 'individual'>('state');
+
+  // Cost acknowledgment dialog state for Smart Assigned sites
+  const [costAcknowledgmentOpen, setCostAcknowledgmentOpen] = useState(false);
+  const [selectedSiteForAcknowledgment, setSelectedSiteForAcknowledgment] = useState<any>(null);
+  const [costAcknowledged, setCostAcknowledged] = useState(false);
+
+  // Site visit workflow state
+  const [startVisitDialogOpen, setStartVisitDialogOpen] = useState(false);
+  const [completeVisitDialogOpen, setCompleteVisitDialogOpen] = useState(false);
+  const [selectedSiteForVisit, setSelectedSiteForVisit] = useState<any>(null);
+  const [visitLocationTracking, setVisitLocationTracking] = useState<{[key: string]: boolean}>({});
+  const [visitLocations, setVisitLocations] = useState<{[key: string]: any[]}>({});
+  const [currentLocation, setCurrentLocation] = useState<{latitude: number, longitude: number} | null>(null);
+
+  // Visit report dialog state
+  const [visitReportDialogOpen, setVisitReportDialogOpen] = useState(false);
+  const [submittingReport, setSubmittingReport] = useState(false);
+
+  // Accept/Reject dialog state for Smart Assigned sites
+  const [acceptRejectDialogOpen, setAcceptRejectDialogOpen] = useState(false);
+  const [selectedSiteForAction, setSelectedSiteForAction] = useState<any>(null);
+  const [rejectComments, setRejectComments] = useState('');
+  const [showRejectConfirm, setShowRejectConfirm] = useState(false);
+
+  // Handle accepting a Smart Assigned site
+  const handleAcceptSite = async (site: any) => {
+    try {
+      const now = new Date().toISOString();
+      await supabase
+        .from('mmp_site_entries')
+        .update({
+          status: 'accepted',
+          accepted_by: currentUser?.id,
+          accepted_at: now,
+          updated_at: now
+        })
+        .eq('id', site.id);
+
+      toast({
+        title: 'Site Accepted',
+        description: 'The site has been successfully accepted and moved to "My Sites".',
+        variant: 'default'
+      });
+
+      // Reload data
+      window.location.reload();
+    } catch (error: any) {
+      console.error('Failed to accept site:', error);
+      toast({
+        title: 'Acceptance Failed',
+        description: error.message || 'Failed to accept the site. Please try again.',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  // Handle sending back available site to coordinator
+  const handleSendBackToCoordinator = async (site: any, comments: string) => {
+    if (!comments.trim()) {
+      toast({
+        title: 'Comments Required',
+        description: 'Please provide comments explaining why this site needs to be sent back.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    try {
+      const now = new Date().toISOString();
+      await supabase
+        .from('mmp_site_entries')
+        .update({
+          status: 'Rejected',
+          rejection_comments: comments.trim(),
+          rejected_by: currentUser?.id,
+          rejected_at: now,
+          updated_at: now,
+          additional_data: {
+            ...(site.additional_data || {}),
+            rejection_comments: comments.trim(),
+            rejected_by: currentUser?.id,
+            rejected_at: now
+          }
+        })
+        .eq('id', site.id);
+
+      toast({
+        title: 'Site Sent Back',
+        description: 'The site has been sent back to the coordinator for editing.',
+        variant: 'default'
+      });
+
+      // Reload available sites data
+      const loadEnumeratorEntries = async () => {
+        if (!isDataCollector || !currentUser?.id) return;
+
+        try {
+          // Load available sites in the enumerator's state or locality for "Available Sites" tab
+          const availableSitesQuery = supabase
+            .from('mmp_site_entries')
+            .select('*')
+            .ilike('status', 'Dispatched')
+            .or(`state.eq.${currentUser.stateId},locality.eq.${currentUser.localityId}`)
+            .is('accepted_by', null) // Only show unclaimed dispatched sites
+            .order('created_at', { ascending: false })
+            .limit(1000);
+
+          const { data: availableEntries, error: availableError } = await availableSitesQuery;
+          if (availableError) throw availableError;
+
+          // Format entries for display
+          const formatEntries = (entries: any[]) => entries.map(entry => {
+            const additionalData = entry.additional_data || {};
+            return {
+              ...entry,
+              siteName: entry.site_name,
+              siteCode: entry.site_code,
+              enumerator_fee: entry.enumerator_fee ?? additionalData.enumerator_fee,
+              enumeratorFee: entry.enumerator_fee ?? additionalData.enumerator_fee,
+              transport_fee: entry.transport_fee ?? additionalData.transport_fee,
+              transportFee: entry.transport_fee ?? additionalData.transport_fee,
+              additionalData: additionalData
+            };
+          });
+
+          const formattedAvailable = formatEntries(availableEntries || []);
+          setEnumeratorSiteEntries(formattedAvailable);
+
+          // Group available sites by state and locality combined
+          const groupedByStateLocality = formattedAvailable.reduce((acc, entry) => {
+            const state = entry.state || 'Unknown State';
+            const locality = entry.locality || 'Unknown Locality';
+            const key = `${state} - ${locality}`;
+            if (!acc[key]) acc[key] = [];
+            acc[key].push(entry);
+            return acc;
+          }, {} as Record<string, any[]>);
+          setEnumeratorGroupedByStates(groupedByStateLocality);
+        } catch (error) {
+          console.error('Failed to reload enumerator entries:', error);
+        }
+      };
+
+      await loadEnumeratorEntries();
+    } catch (error: any) {
+      console.error('Failed to send back site:', error);
+      toast({
+        title: 'Send Back Failed',
+        description: error.message || 'Failed to send the site back. Please try again.',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  // Handle cost acknowledgment for Smart Assigned sites
+  const handleCostAcknowledgment = (site: any) => {
+    setSelectedSiteForAcknowledgment(site);
+    setCostAcknowledgmentOpen(true);
+  };
+
+  // GPS location functions
+  const getCurrentLocation = (): Promise<{latitude: number, longitude: number}> => {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error('Geolocation is not supported by this browser'));
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          resolve({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude
+          });
+        },
+        (error) => {
+          reject(error);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 300000 // 5 minutes
+        }
+      );
+    });
+  };
+
+  const startLocationTracking = (siteId: string) => {
+    if (!visitLocationTracking[siteId]) {
+      const watchId = navigator.geolocation.watchPosition(
+        (position) => {
+          const location = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            timestamp: new Date().toISOString(),
+            accuracy: position.coords.accuracy
+          };
+
+          setVisitLocations(prev => ({
+            ...prev,
+            [siteId]: [...(prev[siteId] || []), location]
+          }));
+
+          setCurrentLocation({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude
+          });
+        },
+        (error) => {
+          console.error('Location tracking error:', error);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 30000 // 30 seconds
+        }
+      );
+
+      setVisitLocationTracking(prev => ({
+        ...prev,
+        [siteId]: true
+      }));
+
+      // Store watchId for cleanup
+      setVisitLocations(prev => ({
+        ...prev,
+        [siteId]: prev[siteId] || []
+      }));
+    }
+  };
+
+  const stopLocationTracking = (siteId: string) => {
+    setVisitLocationTracking(prev => ({
+      ...prev,
+      [siteId]: false
+    }));
+  };
+
+  // Handle starting a site visit
+  const handleStartVisit = async (site: any) => {
+    try {
+      // Get current location
+      const location = await getCurrentLocation();
+
+      const now = new Date().toISOString();
+
+      // Update site status to 'Ongoing' and save initial location
+      await supabase
+        .from('mmp_site_entries')
+        .update({
+          status: 'Ongoing',
+          visit_started_at: now,
+          visit_started_by: currentUser?.id,
+          updated_at: now,
+          additional_data: {
+            ...(site.additional_data || {}),
+            visit_started_at: now,
+            visit_started_by: currentUser?.id,
+            initial_location: location
+          }
+        })
+        .eq('id', site.id);
+
+      // Save initial location to site_locations table
+      await supabase
+        .from('site_locations')
+        .insert({
+          site_entry_id: site.id,
+          latitude: location.latitude,
+          longitude: location.longitude,
+          location_type: 'visit_start',
+          accuracy: 10, // Default accuracy
+          created_at: now
+        });
+
+      // Start location tracking
+      startLocationTracking(site.id);
+
+      toast({
+        title: 'Visit Started',
+        description: 'Site visit has been started and location tracking is active.',
+        variant: 'default'
+      });
+
+      // Reload data
+      window.location.reload();
+    } catch (error: any) {
+      console.error('Failed to start visit:', error);
+      toast({
+        title: 'Start Visit Failed',
+        description: error.message || 'Failed to start the site visit. Please try again.',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  // Handle completing a site visit
+  const handleCompleteVisit = async (site: any) => {
+    try {
+      // Get final location
+      const location = await getCurrentLocation();
+
+      const now = new Date().toISOString();
+
+      // Stop location tracking
+      stopLocationTracking(site.id);
+
+      // Update site status to 'Completed' and save final location
+      await supabase
+        .from('mmp_site_entries')
+        .update({
+          status: 'Completed',
+          visit_completed_at: now,
+          visit_completed_by: currentUser?.id,
+          updated_at: now,
+          additional_data: {
+            ...(site.additional_data || {}),
+            visit_completed_at: now,
+            visit_completed_by: currentUser?.id,
+            final_location: location
+          }
+        })
+        .eq('id', site.id);
+
+      // Save final location to site_locations table
+      await supabase
+        .from('site_locations')
+        .insert({
+          site_entry_id: site.id,
+          latitude: location.latitude,
+          longitude: location.longitude,
+          location_type: 'visit_end',
+          accuracy: 10, // Default accuracy
+          created_at: now
+        });
+
+      // Set the site for visit report and open dialog
+      setSelectedSiteForVisit(site);
+      setVisitReportDialogOpen(true);
+
+      toast({
+        title: 'Visit Completed',
+        description: 'Site visit has been completed. Please submit your report.',
+        variant: 'default'
+      });
+
+    } catch (error: any) {
+      console.error('Failed to complete visit:', error);
+      toast({
+        title: 'Complete Visit Failed',
+        description: error.message || 'Failed to complete the site visit. Please try again.',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  // Handle submitting visit report
+  const handleSubmitVisitReport = async (reportData: VisitReportData) => {
+    if (!selectedSiteForVisit) return;
+
+    try {
+      setSubmittingReport(true);
+
+      const site = selectedSiteForVisit;
+      const now = new Date().toISOString();
+
+      // Upload photos to Supabase storage
+      const photoUrls: string[] = [];
+      for (const photo of reportData.photos) {
+        const fileName = `visit-photos/${site.id}/${Date.now()}-${photo.name}`;
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('site-visit-photos')
+          .upload(fileName, photo);
+
+        if (uploadError) {
+          console.error('Error uploading photo:', uploadError);
+          continue; // Continue with other photos
+        }
+
+        // Get public URL
+        const { data: urlData } = supabase.storage
+          .from('site-visit-photos')
+          .getPublicUrl(fileName);
+
+        if (urlData?.publicUrl) {
+          photoUrls.push(urlData.publicUrl);
+        }
+      }
+
+      // Save report to site_visit_reports table
+      const { data: report, error: reportError } = await supabase
+        .from('site_visit_reports')
+        .insert({
+          site_entry_id: site.id,
+          enumerator_id: currentUser?.id,
+          activities: reportData.activities,
+          notes: reportData.notes,
+          visit_duration: reportData.visitDuration,
+          photo_urls: photoUrls,
+          location_data: reportData.locationData,
+          submitted_at: now,
+          created_at: now
+        })
+        .select()
+        .single();
+
+      if (reportError) throw reportError;
+
+      // Generate PDF report
+      await generateVisitReportPDF(site, reportData, report, photoUrls);
+
+      // Update site additional_data with report info
+      await supabase
+        .from('mmp_site_entries')
+        .update({
+          additional_data: {
+            ...(site.additional_data || {}),
+            visit_report_submitted: true,
+            visit_report_id: report.id,
+            visit_report_submitted_at: now
+          }
+        })
+        .eq('id', site.id);
+
+      toast({
+        title: 'Report Submitted',
+        description: 'Visit report has been submitted successfully.',
+        variant: 'default'
+      });
+
+      // Close dialog and reset state
+      setVisitReportDialogOpen(false);
+      setSelectedSiteForVisit(null);
+      setSubmittingReport(false);
+
+      // Reload data
+      window.location.reload();
+
+    } catch (error: any) {
+      console.error('Failed to submit visit report:', error);
+      toast({
+        title: 'Report Submission Failed',
+        description: error.message || 'Failed to submit the visit report. Please try again.',
+        variant: 'destructive'
+      });
+      setSubmittingReport(false);
+    }
+  };
+
+  // Generate PDF report for visit
+  const generateVisitReportPDF = async (site: any, reportData: VisitReportData, report: any, photoUrls: string[]) => {
+    try {
+      // Import jsPDF dynamically to avoid issues with SSR
+      const { jsPDF } = await import('jspdf');
+
+      const doc = new jsPDF();
+
+      // Title
+      doc.setFontSize(20);
+      doc.text('Site Visit Report', 105, 20, { align: 'center' });
+
+      // Site Information
+      doc.setFontSize(14);
+      doc.text('Site Information', 20, 40);
+
+      doc.setFontSize(10);
+      doc.text(`Site Code: ${site.siteCode || site.site_code || 'N/A'}`, 20, 55);
+      doc.text(`Site Name: ${site.siteName || site.site_name || 'N/A'}`, 20, 65);
+      doc.text(`Location: ${site.locality || site.state || 'N/A'}`, 20, 75);
+      doc.text(`CP Name: ${site.cpName || site.cp_name || 'N/A'}`, 20, 85);
+      doc.text(`Activity: ${site.siteActivity || site.activity_at_site || 'N/A'}`, 20, 95);
+
+      // Visit Information
+      doc.setFontSize(14);
+      doc.text('Visit Information', 20, 115);
+
+      doc.setFontSize(10);
+      const visitStart = site.additional_data?.visit_started_at;
+      const visitEnd = site.additional_data?.visit_completed_at;
+      doc.text(`Visit Started: ${visitStart ? new Date(visitStart).toLocaleString() : 'N/A'}`, 20, 130);
+      doc.text(`Visit Completed: ${visitEnd ? new Date(visitEnd).toLocaleString() : 'N/A'}`, 20, 140);
+      doc.text(`Visit Duration: ${reportData.visitDuration} minutes`, 20, 150);
+      doc.text(`Data Collector: ${currentUser?.fullName || currentUser?.email || 'N/A'}`, 20, 160);
+
+      // Activities Performed
+      doc.setFontSize(14);
+      doc.text('Activities Performed', 20, 180);
+
+      doc.setFontSize(10);
+      const activitiesLines = doc.splitTextToSize(reportData.activities, 170);
+      doc.text(activitiesLines, 20, 195);
+
+      // Additional Notes
+      const notesY = 195 + (activitiesLines.length * 5) + 10;
+      doc.setFontSize(14);
+      doc.text('Additional Notes', 20, notesY);
+
+      doc.setFontSize(10);
+      const notesLines = doc.splitTextToSize(reportData.notes, 170);
+      doc.text(notesLines, 20, notesY + 15);
+
+      // Location Data Summary
+      const locationY = notesY + 15 + (notesLines.length * 5) + 10;
+      if (reportData.locationData && reportData.locationData.length > 0) {
+        doc.setFontSize(14);
+        doc.text('Location Tracking Summary', 20, locationY);
+
+        doc.setFontSize(10);
+        doc.text(`Total Location Points: ${reportData.locationData.length}`, 20, locationY + 15);
+
+        // Show first and last location points
+        if (reportData.locationData.length > 0) {
+          const firstLocation = reportData.locationData[0];
+          const lastLocation = reportData.locationData[reportData.locationData.length - 1];
+
+          doc.text(`Start Location: ${firstLocation.latitude?.toFixed(6)}, ${firstLocation.longitude?.toFixed(6)}`, 20, locationY + 25);
+          doc.text(`End Location: ${lastLocation.latitude?.toFixed(6)}, ${lastLocation.longitude?.toFixed(6)}`, 20, locationY + 35);
+        }
+      }
+
+      // Photos information
+      const photosY = locationY + 50;
+      if (photoUrls.length > 0) {
+        doc.setFontSize(14);
+        doc.text('Photos Attached', 20, photosY);
+
+        doc.setFontSize(10);
+        doc.text(`Number of Photos: ${photoUrls.length}`, 20, photosY + 15);
+        doc.text('Photos are stored in the system and can be viewed in the dashboard.', 20, photosY + 25);
+      }
+
+      // Footer
+      const pageHeight = doc.internal.pageSize.height;
+      doc.setFontSize(8);
+      doc.text(`Report Generated: ${new Date().toLocaleString()}`, 20, pageHeight - 20);
+      doc.text(`Report ID: ${report.id}`, 20, pageHeight - 10);
+
+      // Save the PDF
+      const fileName = `visit-report-${site.siteCode || site.site_code || site.id}-${Date.now()}.pdf`;
+      doc.save(fileName);
+
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      toast({
+        title: 'PDF Generation Warning',
+        description: 'Report submitted successfully, but PDF generation failed. You can still view the report in the dashboard.',
+        variant: 'default'
+      });
+    }
+  };
 
   // Enumerator-specific state
   const [enumeratorSiteEntries, setEnumeratorSiteEntries] = useState<any[]>([]);
@@ -748,20 +1304,23 @@ const MMP = () => {
 
         // Load smart assigned sites for "Smart Assigned" tab
         // These are sites with status "Assigned" (individually dispatched) assigned to this collector
+        // AND not yet cost acknowledged
         const smartAssignedQuery = supabase
           .from('mmp_site_entries')
           .select('*')
           .ilike('status', 'Assigned')
           .eq('accepted_by', currentUser.id)
+          .or(`cost_acknowledged.is.null,cost_acknowledged.neq.true`)
           .order('created_at', { ascending: false })
           .limit(1000);
 
         // Load accepted sites for "My Sites" tab (all sites accepted/claimed by this collector)
         // Includes both "Assigned" (smart assigned) and "Dispatched" (claimed available sites)
+        // Also includes cost-acknowledged Smart Assigned sites
         const mySitesQuery = supabase
           .from('mmp_site_entries')
           .select('*')
-          .eq('accepted_by', currentUser.id)
+          .or(`accepted_by.eq.${currentUser.id},and(status.ilike.dispatched,accepted_by.is.null,or(state.eq.${currentUser?.stateId},locality.eq.${currentUser?.localityId}))`)
           .order('created_at', { ascending: false })
           .limit(1000);
 
@@ -2222,6 +2781,39 @@ const MMP = () => {
                       </div>
                     </Button>
                   </div>
+                  {enumeratorSubTab === 'mySites' && (
+                    <div className="mt-4">
+                      <div className="text-sm font-medium text-muted-foreground mb-2">Subcategories:</div>
+                      <div className="flex gap-2">
+                        <Button 
+                          variant={mySitesSubTab === 'pending' ? 'default' : 'outline'} 
+                          size="sm" 
+                          onClick={() => setMySitesSubTab('pending')} 
+                          className={mySitesSubTab === 'pending' ? 'bg-green-100 hover:bg-green-200 text-green-800 border border-green-300' : ''}
+                        >
+                          Pending Visits
+                          <Badge variant="secondary" className="ml-2">
+                            {enumeratorMySites.filter(site => 
+                              site.status?.toLowerCase() === 'accepted' || 
+                              site.status?.toLowerCase() === 'assigned' ||
+                              (site.accepted_by && site.status?.toLowerCase() !== 'completed')
+                            ).length}
+                          </Badge>
+                        </Button>
+                        <Button 
+                          variant={mySitesSubTab === 'completed' ? 'default' : 'outline'} 
+                          size="sm" 
+                          onClick={() => setMySitesSubTab('completed')} 
+                          className={mySitesSubTab === 'completed' ? 'bg-green-100 hover:bg-green-200 text-green-800 border border-green-300' : ''}
+                        >
+                          Completed
+                          <Badge variant="secondary" className="ml-2">
+                            {enumeratorMySites.filter(site => site.status?.toLowerCase() === 'completed').length}
+                          </Badge>
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 {loadingEnumerator ? (
                   <Card>
@@ -2251,6 +2843,8 @@ const MMP = () => {
                               <MMPSiteEntriesTable 
                                 siteEntries={sites} 
                                 editable={true}
+                                onAcceptSite={handleAcceptSite}
+                                onSendBackToCoordinator={handleSendBackToCoordinator}
                                 onUpdateSites={async (updatedSites) => {
                                   // Handle updates for enumerator sites
                                   try {
@@ -2354,10 +2948,33 @@ const MMP = () => {
                   <div className="mt-6">
                     <div className="flex items-center justify-between mb-4">
                       <div>
-                        <h3 className="text-lg font-semibold">My Sites</h3>
-                        {/* <p className="text-sm text-muted-foreground">Accepted sites + sites assigned to your area</p> */}
+                        <h3 className="text-lg font-semibold">
+                          {enumeratorSubTab === 'mySites' 
+                            ? (mySitesSubTab === 'pending' ? 'Pending Visits' : 'Completed Sites')
+                            : 'Smart Assigned Sites'
+                          }
+                        </h3>
+                        <p className="text-sm text-muted-foreground">
+                          {enumeratorSubTab === 'mySites'
+                            ? (mySitesSubTab === 'pending' 
+                                ? 'Sites that have been accepted or smart assigned' 
+                                : 'Sites that have been completed with submitted reports')
+                            : 'Sites assigned to your area that must be visited'
+                          }
+                        </p>
                       </div>
-                      <Badge variant="secondary">{enumeratorMySites.length} sites</Badge>
+                      <Badge variant="secondary">
+                        {enumeratorSubTab === 'mySites'
+                          ? (mySitesSubTab === 'pending' 
+                              ? enumeratorMySites.filter(site => 
+                                  site.status?.toLowerCase() === 'accepted' || 
+                                  site.status?.toLowerCase() === 'assigned' ||
+                                  (site.accepted_by && site.status?.toLowerCase() !== 'completed')
+                                ).length
+                              : enumeratorMySites.filter(site => site.status?.toLowerCase() === 'completed').length)
+                          : enumeratorSmartAssigned.length
+                        } sites
+                      </Badge>
                     </div>
                     {enumeratorSubTab === 'smartAssigned' && (
                       <div className="mb-4 p-3 sm:p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
@@ -2366,16 +2983,41 @@ const MMP = () => {
                         </p>
                       </div>
                     )}
-                    {(enumeratorSubTab === 'smartAssigned' ? enumeratorSmartAssigned : enumeratorMySites).length === 0 ? (
-                      <Card>
-                        <CardContent className="py-8">
-                          <div className="text-center text-muted-foreground">No sites assigned to you yet.</div>
-                        </CardContent>
-                      </Card>
-                    ) : (
-                      <MMPSiteEntriesTable 
-                          siteEntries={enumeratorSubTab === 'smartAssigned' ? enumeratorSmartAssigned : enumeratorMySites} 
+                    {(() => {
+                      const sitesToShow = enumeratorSubTab === 'mySites'
+                        ? (mySitesSubTab === 'pending' 
+                            ? enumeratorMySites.filter(site => 
+                                site.status?.toLowerCase() === 'accepted' || 
+                                site.status?.toLowerCase() === 'assigned' ||
+                                (site.accepted_by && site.status?.toLowerCase() !== 'completed')
+                              )
+                            : enumeratorMySites.filter(site => site.status?.toLowerCase() === 'completed'))
+                        : enumeratorSmartAssigned;
+                      
+                      return sitesToShow.length === 0 ? (
+                        <Card>
+                          <CardContent className="py-8">
+                            <div className="text-center text-muted-foreground">
+                              {enumeratorSubTab === 'mySites'
+                                ? (mySitesSubTab === 'pending' 
+                                    ? 'No pending visits found.' 
+                                    : 'No completed sites found.')
+                                : 'No sites assigned to you yet.'
+                              }
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ) : (
+                        <MMPSiteEntriesTable 
+                          siteEntries={sitesToShow} 
                           editable={true}
+                          onAcceptSite={enumeratorSubTab === 'smartAssigned' ? handleAcceptSite : undefined}
+                          onAcknowledgeCost={enumeratorSubTab === 'smartAssigned' ? handleCostAcknowledgment : undefined}
+                          onStartVisit={enumeratorSubTab === 'mySites' && mySitesSubTab === 'pending' ? handleStartVisit : undefined}
+                          onCompleteVisit={enumeratorSubTab === 'mySites' && mySitesSubTab === 'pending' ? handleCompleteVisit : undefined}
+                          currentUserId={currentUser?.id}
+                          showAcceptRejectForAssigned={enumeratorSubTab === 'smartAssigned'}
+                          showVisitActions={enumeratorSubTab === 'mySites' && mySitesSubTab === 'pending'}
                           onUpdateSites={async (updatedSites) => {
                             // Same update logic as above
                             try {
@@ -2500,7 +3142,8 @@ const MMP = () => {
                             }
                           }}
                         />
-                    )}
+                      );
+                    })()}
                   </div>
                 ) : null}
               </TabsContent>
@@ -2616,6 +3259,193 @@ const MMP = () => {
           />
         </>
       )}
+      {/* Cost Acknowledgment Dialog for Smart Assigned Sites */}
+      <Dialog open={costAcknowledgmentOpen} onOpenChange={setCostAcknowledgmentOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Cost Acknowledgment Required</DialogTitle>
+          </DialogHeader>
+          {selectedSiteForAcknowledgment && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">Site Name</p>
+                  <p className="font-medium">{selectedSiteForAcknowledgment.siteName || selectedSiteForAcknowledgment.site_name || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">State</p>
+                  <p className="font-medium">{selectedSiteForAcknowledgment.state || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Locality</p>
+                  <p className="font-medium">{selectedSiteForAcknowledgment.locality || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Activity at Site</p>
+                  <p className="font-medium">{selectedSiteForAcknowledgment.siteActivity || selectedSiteForAcknowledgment.activity_at_site || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Visit Date</p>
+                  <p className="font-medium">{selectedSiteForAcknowledgment.visitDate || selectedSiteForAcknowledgment.visit_date || '—'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Total Cost</p>
+                  <p className="font-semibold text-green-600">
+                    ${(selectedSiteForAcknowledgment.cost || 
+                      ((selectedSiteForAcknowledgment.enumerator_fee || selectedSiteForAcknowledgment.enumeratorFee || 20) + 
+                       (selectedSiteForAcknowledgment.transport_fee || selectedSiteForAcknowledgment.transportFee || 10))).toLocaleString()}
+                  </p>
+                </div>
+              </div>
+              
+              <div className="border-t pt-4">
+                <div className="flex items-start gap-3">
+                  <Checkbox
+                    id="costAcknowledgment"
+                    checked={costAcknowledged}
+                    onCheckedChange={(checked) => setCostAcknowledged(checked as boolean)}
+                    className="mt-1"
+                  />
+                  <div>
+                    <label htmlFor="costAcknowledgment" className="text-sm font-medium cursor-pointer">
+                      I acknowledge receipt of the smart assigned cost details
+                    </label>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      By checking this box, you confirm that you have reviewed and acknowledged the cost breakdown for this site visit.
+                      The site will then be moved to your "My Sites" under "Pending Visits".
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setCostAcknowledgmentOpen(false);
+                setSelectedSiteForAcknowledgment(null);
+                setCostAcknowledged(false);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={async () => {
+                if (selectedSiteForAcknowledgment && costAcknowledged) {
+                  try {
+                    // Update the site to mark it as cost acknowledged and move to My Sites
+                    const updateData = {
+                      cost_acknowledged: true,
+                      cost_acknowledged_at: new Date().toISOString(),
+                      cost_acknowledged_by: currentUser?.id,
+                      // Keep the status as "Assigned" but add a flag to indicate it's been acknowledged
+                      additional_data: {
+                        ...(selectedSiteForAcknowledgment.additional_data || {}),
+                        cost_acknowledged: true,
+                        cost_acknowledged_at: new Date().toISOString(),
+                        cost_acknowledged_by: currentUser?.id
+                      }
+                    };
+
+                    await supabase
+                      .from('mmp_site_entries')
+                      .update(updateData)
+                      .eq('id', selectedSiteForAcknowledgment.id);
+
+                    // Reload the data to reflect changes
+                    const loadEnumeratorEntries = async () => {
+                      if (!isDataCollector || !currentUser?.id) return;
+
+                      try {
+                        // Load smart assigned sites (status = 'Assigned' and not cost acknowledged)
+                        const smartAssignedQuery = supabase
+                          .from('mmp_site_entries')
+                          .select('*')
+                          .ilike('status', 'Assigned')
+                          .or(`and(cost_acknowledged.is.null,cost_acknowledged.neq.true)`)
+                          .eq('accepted_by', currentUser.id)
+                          .order('created_at', { ascending: false })
+                          .limit(1000);
+
+                        // Load my sites (all sites accepted by this collector OR cost acknowledged)
+                        const mySitesQuery = supabase
+                          .from('mmp_site_entries')
+                          .select('*')
+                          .or(`accepted_by.eq.${currentUser.id},cost_acknowledged.eq.true`)
+                          .order('created_at', { ascending: false })
+                          .limit(1000);
+
+                        const [smartRes, mySitesRes] = await Promise.all([smartAssignedQuery, mySitesQuery]);
+
+                        if (smartRes.error) throw smartRes.error;
+                        if (mySitesRes.error) throw mySitesRes.error;
+
+                        const formatEntries = (entries: any[]) => entries.map(entry => {
+                          const additionalData = entry.additional_data || {};
+                          return {
+                            ...entry,
+                            siteName: entry.site_name,
+                            siteCode: entry.site_code,
+                            enumerator_fee: entry.enumerator_fee ?? additionalData.enumerator_fee,
+                            enumeratorFee: entry.enumerator_fee ?? additionalData.enumerator_fee,
+                            transport_fee: entry.transport_fee ?? additionalData.transport_fee,
+                            transportFee: entry.transport_fee ?? additionalData.transport_fee,
+                            cost_acknowledged: entry.cost_acknowledged ?? additionalData.cost_acknowledged,
+                            additionalData: additionalData
+                          };
+                        });
+
+                        const smartAssignedEntries = formatEntries(smartRes.data || []);
+                        const mySitesEntries = formatEntries(mySitesRes.data || []);
+
+                        setEnumeratorSmartAssigned(smartAssignedEntries);
+                        setEnumeratorMySites(mySitesEntries);
+
+                      } catch (error) {
+                        console.error('Failed to reload enumerator entries:', error);
+                      }
+                    };
+
+                    await loadEnumeratorEntries();
+
+                    setCostAcknowledgmentOpen(false);
+                    setSelectedSiteForAcknowledgment(null);
+                    setCostAcknowledged(false);
+
+                    toast({
+                      title: 'Cost Acknowledged',
+                      description: 'The site has been moved to your "My Sites" under "Pending Visits".',
+                      variant: 'default'
+                    });
+
+                  } catch (error) {
+                    console.error('Failed to acknowledge cost:', error);
+                    toast({
+                      title: 'Error',
+                      description: 'Failed to acknowledge cost. Please try again.',
+                      variant: 'destructive'
+                    });
+                  }
+                }
+              }}
+              disabled={!costAcknowledged}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              Acknowledge & Continue
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Visit Report Dialog */}
+      <VisitReportDialog
+        open={visitReportDialogOpen}
+        onOpenChange={setVisitReportDialogOpen}
+        site={selectedSiteForVisit}
+        onSubmit={handleSubmitVisitReport}
+        isSubmitting={submittingReport}
+      />
     </div>
   );
 };
