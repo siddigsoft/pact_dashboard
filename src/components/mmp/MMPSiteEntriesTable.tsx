@@ -539,7 +539,7 @@ const MMPSiteEntriesTable = ({
         </div>
       </CardHeader>
       <CardContent>
-        <div className="rounded-md border w-full overflow-x-auto">
+        <div className="rounded-md border w-full overflow-x-auto overflow-y-visible">
           {/* Mobile Card Layout for small screens */}
           <div className="block lg:hidden">
             {paginatedSites.length > 0 ? (
@@ -662,7 +662,7 @@ const MMPSiteEntriesTable = ({
           </div>
 
           {/* Desktop Table Layout */}
-          <div className="hidden lg:block">
+          <div className="hidden lg:block overflow-x-auto">
             <div className="min-w-[1600px]">
               <Table>
                 <TableHeader>
