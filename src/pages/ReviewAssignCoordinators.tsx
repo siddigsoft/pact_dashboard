@@ -4,7 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { ChevronDown, ChevronRight, ArrowLeft } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { ChevronDown, ChevronRight, ArrowLeft, Eye, Pencil } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { useAppContext } from '@/context/AppContext';
@@ -26,6 +28,9 @@ const ReviewAssignCoordinators: React.FC = () => {
   const [batchForwarded, setBatchForwarded] = useState({} as Record<string, boolean>);
   const [expandedGroups, setExpandedGroups] = useState({} as Record<string, boolean>);
   const [forwardedSiteIds, setForwardedSiteIds] = useState<Set<string>>(new Set());
+  const [selectedSiteForView, setSelectedSiteForView] = useState<any>(null);
+  const [viewDialogOpen, setViewDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -342,22 +347,51 @@ const ReviewAssignCoordinators: React.FC = () => {
                           <div className="space-y-2">
                             {/* Show unforwarded sites first */}
                             {unforwardedSites.map((site: any) => (
-                              <label 
+                              <div 
                                 key={site.id} 
-                                className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-1 rounded"
+                                className="flex items-center gap-2 hover:bg-gray-50 p-1 rounded"
                               >
-                                <Checkbox
-                                  checked={selectedSites[groupKey]?.has(site.id) || false}
-                                  onCheckedChange={checked => {
-                                    setSelectedSites(s => {
-                                      const set = new Set(s[groupKey] || []);
-                                      if (checked) set.add(site.id); else set.delete(site.id);
-                                      return { ...s, [groupKey]: set };
-                                    });
-                                  }}
-                                />
-                                <span className="text-sm">{site.siteName || site.name || site.id}</span>
-                              </label>
+                                <label className="flex items-center gap-2 cursor-pointer flex-1">
+                                  <Checkbox
+                                    checked={selectedSites[groupKey]?.has(site.id) || false}
+                                    onCheckedChange={checked => {
+                                      setSelectedSites(s => {
+                                        const set = new Set(s[groupKey] || []);
+                                        if (checked) set.add(site.id); else set.delete(site.id);
+                                        return { ...s, [groupKey]: set };
+                                      });
+                                    }}
+                                  />
+                                  <span className="text-sm">{site.siteName || site.name || site.id}</span>
+                                </label>
+                                <div className="flex items-center gap-1">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 w-7 p-0"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedSiteForView(site);
+                                      setViewDialogOpen(true);
+                                    }}
+                                    title="View Details"
+                                  >
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 w-7 p-0"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      navigate(`/site-visits/${site.id}/edit`);
+                                    }}
+                                    title="Edit"
+                                  >
+                                    <Pencil className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </div>
                             ))}
                             {/* Show forwarded sites below, visually distinct */}
                             {forwardedSites.length > 0 && (
@@ -368,19 +402,48 @@ const ReviewAssignCoordinators: React.FC = () => {
                                   </div>
                                 )}
                                 {forwardedSites.map((site: any) => (
-                                  <label 
+                                  <div 
                                     key={site.id} 
-                                    className="flex items-center gap-2 p-1 rounded opacity-60 cursor-not-allowed"
+                                    className="flex items-center gap-2 p-1 rounded opacity-60"
                                   >
-                                    <Checkbox
-                                      checked={false}
-                                      disabled={true}
-                                    />
-                                    <span className="text-sm">
-                                      {site.siteName || site.name || site.id}
-                                      <span className="ml-2 text-green-600 text-xs font-medium">✓ Forwarded</span>
-                                    </span>
-                                  </label>
+                                    <label className="flex items-center gap-2 cursor-not-allowed flex-1">
+                                      <Checkbox
+                                        checked={false}
+                                        disabled={true}
+                                      />
+                                      <span className="text-sm">
+                                        {site.siteName || site.name || site.id}
+                                        <span className="ml-2 text-green-600 text-xs font-medium">✓ Forwarded</span>
+                                      </span>
+                                    </label>
+                                    <div className="flex items-center gap-1">
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-7 w-7 p-0"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setSelectedSiteForView(site);
+                                          setViewDialogOpen(true);
+                                        }}
+                                        title="View Details"
+                                      >
+                                        <Eye className="h-4 w-4" />
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-7 w-7 p-0"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          navigate(`/site-visits/${site.id}/edit`);
+                                        }}
+                                        title="Edit"
+                                      >
+                                        <Pencil className="h-4 w-4" />
+                                      </Button>
+                                    </div>
+                                  </div>
                                 ))}
                               </>
                             )}
@@ -395,6 +458,99 @@ const ReviewAssignCoordinators: React.FC = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Site Detail View Dialog */}
+      <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Site Details</DialogTitle>
+            <DialogDescription>
+              View details for {selectedSiteForView?.siteName || selectedSiteForView?.name || 'site'}
+            </DialogDescription>
+          </DialogHeader>
+          {selectedSiteForView && (
+            <div className="space-y-4 mt-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-xs text-muted-foreground">Site Name</Label>
+                  <p className="font-medium">{selectedSiteForView.siteName || selectedSiteForView.name || 'N/A'}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Site Code</Label>
+                  <p className="font-medium">{selectedSiteForView.siteCode || 'N/A'}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">State</Label>
+                  <p className="font-medium">{selectedSiteForView.state || 'N/A'}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Locality</Label>
+                  <p className="font-medium">{selectedSiteForView.locality || 'N/A'}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Hub Office</Label>
+                  <p className="font-medium">{selectedSiteForView.hubOffice || 'N/A'}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">CP Name</Label>
+                  <p className="font-medium">{selectedSiteForView.cpName || 'N/A'}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Visit Type</Label>
+                  <p className="font-medium">{selectedSiteForView.visitType || 'N/A'}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Visit Date</Label>
+                  <p className="font-medium">{selectedSiteForView.visitDate || 'N/A'}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Main Activity</Label>
+                  <p className="font-medium">{selectedSiteForView.mainActivity || 'N/A'}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Activity at Site</Label>
+                  <p className="font-medium">{selectedSiteForView.activityAtSite || 'N/A'}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Status</Label>
+                  <p className="font-medium">{selectedSiteForView.status || 'N/A'}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Monitoring By</Label>
+                  <p className="font-medium">{selectedSiteForView.monitoringBy || 'N/A'}</p>
+                </div>
+              </div>
+              {selectedSiteForView.comments && (
+                <div>
+                  <Label className="text-xs text-muted-foreground">Comments</Label>
+                  <p className="text-sm mt-1">{selectedSiteForView.comments}</p>
+                </div>
+              )}
+              {selectedSiteForView.verificationNotes && (
+                <div>
+                  <Label className="text-xs text-muted-foreground">Verification Notes</Label>
+                  <p className="text-sm mt-1">{selectedSiteForView.verificationNotes}</p>
+                </div>
+              )}
+              <div className="flex justify-end gap-2 pt-4 border-t">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setViewDialogOpen(false);
+                    navigate(`/site-visits/${selectedSiteForView.id}/edit`);
+                  }}
+                >
+                  <Pencil className="h-4 w-4 mr-2" />
+                  Edit Site
+                </Button>
+                <Button variant="outline" onClick={() => setViewDialogOpen(false)}>
+                  Close
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
