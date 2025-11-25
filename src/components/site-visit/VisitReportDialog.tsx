@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Camera, Upload, FileText, MapPin, Clock, User, AlertCircle, Navigation, Compass, ImageIcon } from 'lucide-react';
+import { Camera, Upload, FileText, MapPin, Clock, User, AlertCircle, Navigation, Compass, ImageIcon, Save } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { MMPSiteEntry } from '@/types/mmp';
@@ -54,21 +54,61 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
   const [showPhotoOptions, setShowPhotoOptions] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [showLocationRequiredDialog, setShowLocationRequiredDialog] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { toast } = useToast();
 
+  const locationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   // Check location permissions and start continuous monitoring when dialog opens
   useEffect(() => {
     if (open && site) {
+      // Reset location state when dialog opens
+      setCoordinates(null);
+      setLocationEnabled(false);
+      setIsGettingLocation(false);
+      setShowLocationRequiredDialog(false);
+      setAccuracyHistory([]);
+      
+      // Load existing draft data if available
+      if (site.additionalData) {
+        const draftData = site.additionalData;
+        setNotes(draftData.draft_notes || '');
+        setActivities(draftData.draft_activities || '');
+        setVisitDuration(typeof draftData.draft_visit_duration === 'number' ? draftData.draft_visit_duration : 0);
+        if (draftData.draft_coordinates && typeof draftData.draft_coordinates === 'object') {
+          setCoordinates(draftData.draft_coordinates);
+          setLocationEnabled(true);
+        }
+        // Note: Photos from draft are stored as URLs, not File objects
+        // They would need to be re-uploaded or handled differently
+      } else {
+        setNotes('');
+        setActivities('');
+        setPhotos([]);
+        setVisitDuration(0);
+      }
+
       setVisitStartTime(new Date()); // Start counting visit duration
       startLocationMonitoring();
+
+      // Set a timeout to close dialog if location is not obtained within 15 seconds
+      locationTimeoutRef.current = setTimeout(() => {
+        if (!coordinates && !locationEnabled) {
+          setShowLocationRequiredDialog(true); // Show notification dialog
+        }
+      }, 15000); // 15 seconds timeout
     } else {
       setVisitStartTime(null);
       setVisitDuration(0);
       stopLocationMonitoring();
+      if (locationTimeoutRef.current) {
+        clearTimeout(locationTimeoutRef.current);
+        locationTimeoutRef.current = null;
+      }
     }
 
     // Cleanup on unmount
@@ -77,17 +117,20 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
       if (cameraStream) {
         cameraStream.getTracks().forEach(track => track.stop());
       }
+      if (locationTimeoutRef.current) {
+        clearTimeout(locationTimeoutRef.current);
+        locationTimeoutRef.current = null;
+      }
     };
   }, [open, site]);
 
-  // Cleanup camera when dialog closes
+  // Clear location timeout when coordinates are successfully obtained
   useEffect(() => {
-    if (!open && cameraStream) {
-      cameraStream.getTracks().forEach(track => track.stop());
-      setCameraStream(null);
-      setShowCamera(false);
+    if (coordinates && locationTimeoutRef.current) {
+      clearTimeout(locationTimeoutRef.current);
+      locationTimeoutRef.current = null;
     }
-  }, [open, cameraStream]);
+  }, [coordinates]);
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (visitStartTime && open) {
@@ -108,13 +151,9 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
     try {
       // Check if geolocation is supported
       if (!navigator.geolocation) {
-        toast({
-          title: 'Location Not Supported',
-          description: 'Geolocation is not supported by this browser.',
-          variant: 'destructive'
-        });
         setLocationEnabled(false);
         setIsGettingLocation(false);
+        setShowLocationRequiredDialog(true); // Show notification dialog
         return;
       }
 
@@ -163,12 +202,7 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
           console.error('Location watch error:', error);
           setLocationEnabled(false);
           setIsGettingLocation(false);
-
-          toast({
-            title: 'Location Access Error',
-            description: 'Failed to get location updates. Please check your permissions.',
-            variant: 'destructive'
-          });
+          setShowLocationRequiredDialog(true); // Show notification dialog
         },
         {
           enableHighAccuracy: true,
@@ -183,12 +217,7 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
       console.error('Location monitoring setup error:', error);
       setLocationEnabled(false);
       setIsGettingLocation(false);
-
-      toast({
-        title: 'Location Setup Failed',
-        description: 'Failed to start location monitoring. Please refresh and try again.',
-        variant: 'destructive'
-      });
+      setShowLocationRequiredDialog(true); // Show notification dialog
     }
   };
 
@@ -346,6 +375,15 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
       return;
     }
 
+    if (photos.length === 0) {
+      toast({
+        title: 'Photo Required',
+        description: 'At least one photo is required to complete the site visit.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
     try {
       const reportData: VisitReportData = {
         notes,
@@ -378,6 +416,102 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
     }
   };
 
+  const handleSaveDraft = async () => {
+    if (!site) return;
+
+    if (!locationEnabled || !coordinates) {
+      toast({
+        title: 'Location Required',
+        description: 'Location access is required to save as draft.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    // Check location accuracy - must be 10 meters or better for draft
+    if (coordinates.accuracy > 10) {
+      toast({
+        title: 'Location Accuracy Too Low',
+        description: `Current accuracy is ±${coordinates.accuracy.toFixed(1)} meters. Please wait for better accuracy (≤10 meters) or use the compass icon to refresh location before saving as draft.`,
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    try {
+      const now = new Date().toISOString();
+
+      // Upload photos to Supabase storage for draft
+      const photoUrls: string[] = [];
+      for (const photo of photos) {
+        const fileName = `draft-photos/${site.id}/${Date.now()}-${photo.name}`;
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('site-visit-photos')
+          .upload(fileName, photo);
+
+        if (uploadError) {
+          console.error('Error uploading draft photo:', uploadError);
+          continue; // Continue with other photos
+        }
+
+        // Get public URL
+        const { data: urlData } = supabase.storage
+          .from('site-visit-photos')
+          .getPublicUrl(fileName);
+
+        if (urlData?.publicUrl) {
+          photoUrls.push(urlData.publicUrl);
+        }
+      }
+
+      // Save draft data to site entry
+      const draftData = {
+        draft_notes: notes,
+        draft_activities: activities,
+        draft_photo_urls: photoUrls,
+        draft_visit_duration: visitDuration,
+        draft_coordinates: coordinates,
+        draft_saved_at: now,
+        draft_location_accuracy: coordinates.accuracy,
+        // Ensure status remains "In Progress"
+        status: 'In Progress'
+      };
+
+      const { error: updateError } = await supabase
+        .from('mmp_site_entries')
+        .update({
+          additional_data: {
+            ...(site.additionalData || {}),
+            ...draftData
+          },
+          updated_at: now
+        })
+        .eq('id', site.id);
+
+      if (updateError) {
+        console.error('Error saving draft:', updateError);
+        throw updateError;
+      }
+
+      toast({
+        title: 'Draft Saved',
+        description: 'Your site visit progress has been saved as a draft. You can continue and submit it later when you have better internet connection.',
+        variant: 'default'
+      });
+
+      // Close dialog without resetting form (since they might want to continue)
+      onOpenChange(false);
+
+    } catch (error) {
+      console.error('Error saving draft:', error);
+      toast({
+        title: "Error",
+        description: "Failed to save draft. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const formatDuration = (minutes: number) => {
     const hours = Math.floor(minutes / 60);
     const mins = minutes % 60;
@@ -393,6 +527,11 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
           <DialogTitle className="flex items-center gap-2">
             <MapPin className="h-5 w-5 text-blue-600" />
             Complete Site Visit Report
+            {site?.additionalData?.draft_saved_at && (
+              <Badge variant="outline" className="ml-2 text-yellow-600 border-yellow-600">
+                Draft Loaded
+              </Badge>
+            )}
           </DialogTitle>
         </DialogHeader>
 
@@ -532,9 +671,6 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
               rows={4}
               className="resize-none"
             />
-            <p className="text-sm text-muted-foreground">
-              Please provide detailed information about what was done during the site visit.
-            </p>
           </div>
 
           {/* Notes */}
@@ -550,14 +686,14 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
               rows={3}
               className="resize-none"
             />
-            <p className="text-sm text-muted-foreground">
-              Optional: Include any relevant details that weren't covered in the activities section.
-            </p>
+
           </div>
 
           {/* Photo Upload */}
           <div className="space-y-3">
-            <Label className="text-base font-medium">Site Photos (Multiple Allowed)</Label>
+            <Label className="text-base font-medium">
+              Site Photos <span className="text-red-600 font-bold text-lg">*</span>
+            </Label>
             <div className="flex items-center gap-2">
               <Button
                 type="button"
@@ -586,7 +722,7 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
               />
             </div>
             <p className="text-sm text-muted-foreground">
-              Take multiple photos of the site, equipment, activities, or any relevant observations. You can add as many photos as needed.
+              At least one photo is required. Take multiple photos of the site, equipment, activities, or any relevant observations. You can add as many photos as needed.
             </p>
 
             {/* Photo Options Modal */}
@@ -705,12 +841,63 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
           </div>
         </div>
 
+        {/* Location Required Notification Dialog */}
+        <Dialog open={showLocationRequiredDialog} onOpenChange={(open) => {
+          if (!open) {
+            setShowLocationRequiredDialog(false);
+            onOpenChange(false); // Close main dialog and return to sites list
+          }
+        }}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-red-600">
+                <AlertCircle className="h-5 w-5" />
+                Location Access Required
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="text-center">
+                <MapPin className="h-12 w-12 text-red-500 mx-auto mb-4" />
+                <p className="text-lg font-medium text-gray-900 mb-2">
+                  Sorry, you can't complete the site visit without location enabled.
+                </p>
+                <p className="text-sm text-gray-600">
+                  Location access is required to ensure accurate site visit reporting and compliance with monitoring requirements.
+                </p>
+              </div>
+              <div className="flex gap-2 justify-center">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowLocationRequiredDialog(false);
+                    onOpenChange(false); // Close main dialog and return to sites list
+                  }}
+                  className="flex-1"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => {
+                    setShowLocationRequiredDialog(false);
+                    // Try to request location permission again
+                    startLocationMonitoring();
+                  }}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700"
+                >
+                  <Navigation className="h-4 w-4 mr-2" />
+                  Enable Location
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
         <DialogFooter className="flex-col sm:flex-row gap-2">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <AlertCircle className="h-4 w-4" />
             {!coordinates ? 'Location access required.' :
-             !activities.trim() ? 'Activities description required.' :
-             'All requirements met - ready to submit.'}
+             coordinates.accuracy > 10 ? 'Location accuracy must be ≤10 meters to save draft.' :
+             'Ready to save draft or submit.'}
           </div>
           <div className="flex gap-2">
             <Button
@@ -723,12 +910,21 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
             </Button>
             <Button
               type="button"
+              onClick={handleSaveDraft}
+              disabled={isSubmitting || !locationEnabled || !coordinates || coordinates.accuracy > 10}
+              className="flex items-center gap-2 bg-yellow-600 hover:bg-yellow-700"
+            >
+              <Save className="h-4 w-4" />
+              Save as Draft
+            </Button>
+            <Button
+              type="button"
               onClick={handleSubmit}
-              disabled={isSubmitting || !locationEnabled || !coordinates || !activities.trim()}
+              disabled={isSubmitting || !locationEnabled || !coordinates || !activities.trim() || photos.length === 0}
               className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
             >
               <FileText className="h-4 w-4" />
-              {isSubmitting ? 'Saving Visit...' : 'Finish Site'}
+              {isSubmitting ? 'Saving Visit...' : 'Finish Visit'}
             </Button>
           </div>
         </DialogFooter>

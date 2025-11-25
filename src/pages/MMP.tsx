@@ -393,7 +393,7 @@ const MMP = () => {
   // Subcategory state for Enumerator dashboard
   const [enumeratorSubTab, setEnumeratorSubTab] = useState<'availableSites' | 'smartAssigned' | 'mySites'>('availableSites');
   // Sub-subcategory state for My Sites (Data Collector)
-  const [mySitesSubTab, setMySitesSubTab] = useState<'pending' | 'completed'>('pending');
+  const [mySitesSubTab, setMySitesSubTab] = useState<'pending' | 'ongoing' | 'completed'>('pending');
   // Subcategory state for New MMPs (FOM only)
   const [newFomSubTab, setNewFomSubTab] = useState<'pending' | 'verified'>('pending');
   const [siteVisitStats, setSiteVisitStats] = useState<Record<string, {
@@ -3223,6 +3223,20 @@ const MMP = () => {
                           </Badge>
                         </Button>
                         <Button 
+                          variant={mySitesSubTab === 'ongoing' ? 'default' : 'outline'} 
+                          size="sm" 
+                          onClick={() => setMySitesSubTab('ongoing')} 
+                          className={mySitesSubTab === 'ongoing' ? 'bg-yellow-100 hover:bg-yellow-200 text-yellow-800 border border-yellow-300' : ''}
+                        >
+                          Ongoing
+                          <Badge variant="secondary" className="ml-2">
+                            {enumeratorMySites.filter(site => 
+                              site.status?.toLowerCase() === 'in progress' || 
+                              site.status?.toLowerCase() === 'in_progress'
+                            ).length}
+                          </Badge>
+                        </Button>
+                        <Button 
                           variant={mySitesSubTab === 'completed' ? 'default' : 'outline'} 
                           size="sm" 
                           onClick={() => setMySitesSubTab('completed')} 
@@ -3372,7 +3386,7 @@ const MMP = () => {
                       <div>
                         <h3 className="text-lg font-semibold">
                           {enumeratorSubTab === 'mySites' 
-                            ? (mySitesSubTab === 'pending' ? 'Pending Visits' : 'Completed Sites')
+                            ? (mySitesSubTab === 'pending' ? 'Pending Visits' : mySitesSubTab === 'ongoing' ? 'Ongoing Visits' : 'Completed Sites')
                             : 'Smart Assigned Sites'
                           }
                         </h3>
@@ -3380,6 +3394,8 @@ const MMP = () => {
                           {enumeratorSubTab === 'mySites'
                             ? (mySitesSubTab === 'pending' 
                                 ? 'Sites that have been accepted or smart assigned' 
+                                : mySitesSubTab === 'ongoing'
+                                ? 'Sites currently being visited or saved as drafts for offline access'
                                 : 'Sites that have been completed with submitted reports')
                             : 'Sites assigned to your area that must be visited'
                           }
@@ -3392,6 +3408,11 @@ const MMP = () => {
                                   site.status?.toLowerCase() === 'accepted' || 
                                   site.status?.toLowerCase() === 'assigned' ||
                                   (site.accepted_by && site.status?.toLowerCase() !== 'completed')
+                                ).length
+                              : mySitesSubTab === 'ongoing'
+                              ? enumeratorMySites.filter(site => 
+                                  site.status?.toLowerCase() === 'in progress' || 
+                                  site.status?.toLowerCase() === 'in_progress'
                                 ).length
                               : enumeratorMySites.filter(site => site.status?.toLowerCase() === 'completed').length)
                           : enumeratorSmartAssigned.length
@@ -3413,6 +3434,11 @@ const MMP = () => {
                                 site.status?.toLowerCase() === 'assigned' ||
                                 (site.accepted_by && site.status?.toLowerCase() !== 'completed')
                               )
+                            : mySitesSubTab === 'ongoing'
+                            ? enumeratorMySites.filter(site => 
+                                site.status?.toLowerCase() === 'in progress' || 
+                                site.status?.toLowerCase() === 'in_progress'
+                              )
                             : enumeratorMySites.filter(site => site.status?.toLowerCase() === 'completed'))
                         : enumeratorSmartAssigned;
                       
@@ -3423,6 +3449,8 @@ const MMP = () => {
                               {enumeratorSubTab === 'mySites'
                                 ? (mySitesSubTab === 'pending' 
                                     ? 'No pending visits found.' 
+                                    : mySitesSubTab === 'ongoing'
+                                    ? 'No ongoing visits found.'
                                     : 'No completed sites found.')
                                 : 'No sites assigned to you yet.'
                               }
@@ -3435,11 +3463,11 @@ const MMP = () => {
                           editable={true}
                           onAcceptSite={enumeratorSubTab === 'smartAssigned' ? handleAcceptSite : undefined}
                           onAcknowledgeCost={enumeratorSubTab === 'smartAssigned' ? handleCostAcknowledgment : undefined}
-                          onStartVisit={enumeratorSubTab === 'mySites' && mySitesSubTab === 'pending' ? handleStartVisit : undefined}
-                          onCompleteVisit={enumeratorSubTab === 'mySites' && mySitesSubTab === 'pending' ? handleCompleteVisit : undefined}
+                          onStartVisit={enumeratorSubTab === 'mySites' && (mySitesSubTab === 'pending' || mySitesSubTab === 'ongoing') ? handleStartVisit : undefined}
+                          onCompleteVisit={enumeratorSubTab === 'mySites' && (mySitesSubTab === 'pending' || mySitesSubTab === 'ongoing') ? handleCompleteVisit : undefined}
                           currentUserId={currentUser?.id}
                           showAcceptRejectForAssigned={enumeratorSubTab === 'smartAssigned'}
-                          showVisitActions={enumeratorSubTab === 'mySites' && mySitesSubTab === 'pending'}
+                          showVisitActions={enumeratorSubTab === 'mySites' && (mySitesSubTab === 'pending' || mySitesSubTab === 'ongoing')}
                           onUpdateSites={async (updatedSites) => {
                             // Same update logic as above
                             try {
