@@ -8,19 +8,19 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { WalletCard } from '@/components/wallet/WalletCard';
 import { supabase } from '@/integrations/supabase/client';
+import { adminListWallets } from '@/context/wallet/supabase';
 import { Search, RefreshCw, Wallet as WalletIcon, Zap, TrendingUp, Activity, DollarSign } from 'lucide-react';
 
 const fmt = (c: number, cur: string) => new Intl.NumberFormat(undefined, { style: 'currency', currency: cur || 'NGN', currencyDisplay: 'narrowSymbol' }).format((c||0)/100);
 
 const AdminWallets: React.FC = () => {
-  const { listWallets } = useWallet();
   const [rows, setRows] = useState<any[]>([]);
   const [search, setSearch] = useState('');
   const [currency, setCurrency] = useState('SDG');
   const navigate = useNavigate();
 
   const load = async () => {
-    const data = await listWallets();
+    const data = await adminListWallets();
     setRows(data || []);
     const c = data && data[0]?.balances ? Object.keys(data[0].balances)[0] : 'SDG';
     setCurrency(c);
@@ -44,7 +44,11 @@ const AdminWallets: React.FC = () => {
   const filtered = useMemo(() => {
     if (!search) return rows;
     const s = search.toLowerCase();
-    return rows.filter(r => (r.userId || '').toString().toLowerCase().includes(s));
+    return rows.filter(r => 
+      (r.owner_name || '').toString().toLowerCase().includes(s) ||
+      (r.user_id || '').toString().toLowerCase().includes(s) ||
+      (r.profiles?.email || '').toString().toLowerCase().includes(s)
+    );
   }, [rows, search]);
 
   const getBalance = (wallet: any, curr: string) => (wallet.balances?.[curr] || 0) * 100;
@@ -142,9 +146,15 @@ const AdminWallets: React.FC = () => {
               <WalletCard
                 key={wallet.id}
                 wallet={{
-                  ...wallet,
+                  id: wallet.id,
+                  userId: wallet.user_id,
+                  userName: wallet.owner_name || wallet.profiles?.full_name || wallet.profiles?.username,
+                  userEmail: wallet.profiles?.email,
                   balances: wallet.balances || {},
-                  pendingPayouts: (Number(wallet.totalEarned)||0) - (Number(wallet.totalWithdrawn)||0) - (wallet.balances?.[currency] || 0),
+                  totalEarned: wallet.total_earned,
+                  totalWithdrawn: wallet.total_withdrawn,
+                  updatedAt: wallet.updated_at,
+                  pendingPayouts: (Number(wallet.total_earned)||0) - (Number(wallet.total_withdrawn)||0) - (wallet.balances?.[currency] || 0),
                 }}
                 currency={currency}
                 onClick={(userId) => navigate(`/admin/wallets/${userId}`)}
