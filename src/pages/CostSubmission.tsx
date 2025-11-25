@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ChevronLeft, Plus, Clock, CheckCircle, XCircle, AlertCircle } from "lucide-react";
+import { ChevronLeft, Plus, Clock, CheckCircle, XCircle, AlertCircle, Sparkles, DollarSign, FileText } from "lucide-react";
 import { useSiteVisitContext } from "@/context/siteVisit/SiteVisitContext";
 import { useUserCostSubmissions, useCostSubmissions } from "@/context/costApproval/CostSubmissionContext";
 import { useAppContext } from "@/context/AppContext";
@@ -57,7 +57,7 @@ const CostSubmission = () => {
           variant="ghost"
           size="sm"
           onClick={() => navigate(-1)}
-          className="mb-4"
+          className="mb-4 hover-elevate"
           data-testid="button-back"
         >
           <ChevronLeft className="h-4 w-4 mr-2" />
@@ -65,91 +65,133 @@ const CostSubmission = () => {
         </Button>
 
         <div className="flex flex-col gap-2">
-          <h1 className="text-3xl font-bold tracking-tight">
-            {isAdmin ? "Cost Approval & Tracking" : "Cost Submission"}
-            {isAdmin && <Badge variant="outline" className="ml-2">Admin View</Badge>}
-          </h1>
-          <p className="text-muted-foreground">
-            {isAdmin 
-              ? "Review, approve, and track cost submissions from all team members"
-              : "Submit actual costs for completed site visits and track approval status"
-            }
-          </p>
+          <div className="flex items-center gap-3">
+            <div className="p-3 rounded-lg bg-gradient-to-br from-blue-500 to-blue-700">
+              <FileText className="h-8 w-8 text-white" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+                {isAdmin ? "Cost Approval & Tracking" : "Cost Submission"}
+                {isAdmin && (
+                  <Badge variant="outline" className="bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 border-purple-300">
+                    <Sparkles className="h-3 w-3 mr-1" />
+                    Admin View
+                  </Badge>
+                )}
+              </h1>
+              <p className="text-muted-foreground mt-1">
+                {isAdmin 
+                  ? "Review, approve, and track cost submissions from all team members"
+                  : "Submit actual costs for completed site visits and track approval status"
+                }
+              </p>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Stats Cards */}
+      {/* Stats Cards - Cyber Tech Theme */}
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
-        <Card data-testid="stat-pending">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Pending</p>
-                <p className="text-2xl font-bold text-amber-600">{submissionStats.pending}</p>
-              </div>
-              <Clock className="h-8 w-8 text-amber-600" />
-            </div>
+        <Card 
+          className="hover-elevate active-elevate-2 cursor-pointer overflow-hidden relative bg-gradient-to-br from-amber-500 to-orange-600 text-white border-0"
+          data-testid="stat-pending"
+        >
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-white/90">
+              Pending
+            </CardTitle>
+            <Clock className="h-5 w-5 text-white/80" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-white">{submissionStats.pending}</div>
+            <p className="text-xs text-white/80 mt-1">Awaiting review</p>
           </CardContent>
+          <Sparkles className="absolute -right-4 -bottom-4 h-24 w-24 text-white/10" />
         </Card>
 
-        <Card data-testid="stat-under-review">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Under Review</p>
-                <p className="text-2xl font-bold text-blue-600">{submissionStats.underReview}</p>
-              </div>
-              <AlertCircle className="h-8 w-8 text-blue-600" />
-            </div>
+        <Card 
+          className="hover-elevate active-elevate-2 cursor-pointer overflow-hidden relative bg-gradient-to-br from-blue-500 to-blue-700 text-white border-0"
+          data-testid="stat-under-review"
+        >
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-white/90">
+              Under Review
+            </CardTitle>
+            <AlertCircle className="h-5 w-5 text-white/80" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-white">{submissionStats.underReview}</div>
+            <p className="text-xs text-white/80 mt-1">Being processed</p>
           </CardContent>
+          <Sparkles className="absolute -right-4 -bottom-4 h-24 w-24 text-white/10" />
         </Card>
 
-        <Card data-testid="stat-approved">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Approved</p>
-                <p className="text-2xl font-bold text-green-600">{submissionStats.approved}</p>
-              </div>
-              <CheckCircle className="h-8 w-8 text-green-600" />
-            </div>
+        <Card 
+          className="hover-elevate active-elevate-2 cursor-pointer overflow-hidden relative bg-gradient-to-br from-green-500 to-emerald-700 text-white border-0"
+          data-testid="stat-approved"
+        >
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-white/90">
+              Approved
+            </CardTitle>
+            <CheckCircle className="h-5 w-5 text-white/80" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-white">{submissionStats.approved}</div>
+            <p className="text-xs text-white/80 mt-1">Ready for payment</p>
           </CardContent>
+          <Sparkles className="absolute -right-4 -bottom-4 h-24 w-24 text-white/10" />
         </Card>
 
-        <Card data-testid="stat-rejected">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Rejected</p>
-                <p className="text-2xl font-bold text-red-600">{submissionStats.rejected}</p>
-              </div>
-              <XCircle className="h-8 w-8 text-red-600" />
-            </div>
+        <Card 
+          className="hover-elevate active-elevate-2 cursor-pointer overflow-hidden relative bg-gradient-to-br from-red-500 to-red-700 text-white border-0"
+          data-testid="stat-rejected"
+        >
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-white/90">
+              Rejected
+            </CardTitle>
+            <XCircle className="h-5 w-5 text-white/80" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-white">{submissionStats.rejected}</div>
+            <p className="text-xs text-white/80 mt-1">Declined</p>
           </CardContent>
+          <Sparkles className="absolute -right-4 -bottom-4 h-24 w-24 text-white/10" />
         </Card>
 
-        <Card data-testid="stat-paid">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Paid</p>
-                <p className="text-2xl font-bold text-primary">{submissionStats.paid}</p>
-              </div>
-              <CheckCircle className="h-8 w-8 text-primary" />
-            </div>
+        <Card 
+          className="hover-elevate active-elevate-2 cursor-pointer overflow-hidden relative bg-gradient-to-br from-purple-500 to-purple-700 text-white border-0"
+          data-testid="stat-paid"
+        >
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-white/90">
+              Paid
+            </CardTitle>
+            <DollarSign className="h-5 w-5 text-white/80" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-white">{submissionStats.paid}</div>
+            <p className="text-xs text-white/80 mt-1">Completed</p>
           </CardContent>
+          <Sparkles className="absolute -right-4 -bottom-4 h-24 w-24 text-white/10" />
         </Card>
 
-        <Card data-testid="stat-total">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Total</p>
-                <p className="text-2xl font-bold">{submissionStats.total}</p>
-              </div>
-              <Plus className="h-8 w-8 text-muted-foreground" />
-            </div>
+        <Card 
+          className="hover-elevate active-elevate-2 cursor-pointer overflow-hidden relative bg-gradient-to-br from-slate-600 to-slate-800 text-white border-0"
+          data-testid="stat-total"
+        >
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-white/90">
+              Total
+            </CardTitle>
+            <FileText className="h-5 w-5 text-white/80" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-white">{submissionStats.total}</div>
+            <p className="text-xs text-white/80 mt-1">All submissions</p>
           </CardContent>
+          <Sparkles className="absolute -right-4 -bottom-4 h-24 w-24 text-white/10" />
         </Card>
       </div>
 

@@ -128,14 +128,14 @@ export const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children
       <NotificationProvider>
         <UserProvider>
           <ClassificationProvider>
-            <SiteVisitProvider>
-              <MMPProvider>
-                <ProjectProvider>
-                  <SettingsProvider>
-                    <ArchiveProvider>
-                      <RoleManagementProvider>
-                        <CompositeContextProvider>
-                          <WalletProvider>
+            <WalletProvider>
+              <SiteVisitProvider>
+                <MMPProvider>
+                  <ProjectProvider>
+                    <SettingsProvider>
+                      <ArchiveProvider>
+                        <RoleManagementProvider>
+                          <CompositeContextProvider>
                             <BudgetProvider>
                               <CostSubmissionProvider>
                                 <ChatProvider>
@@ -145,14 +145,14 @@ export const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children
                                 </ChatProvider>
                               </CostSubmissionProvider>
                             </BudgetProvider>
-                          </WalletProvider>
-                        </CompositeContextProvider>
-                      </RoleManagementProvider>
-                    </ArchiveProvider>
-                  </SettingsProvider>
-                </ProjectProvider>
-              </MMPProvider>
-            </SiteVisitProvider>
+                          </CompositeContextProvider>
+                        </RoleManagementProvider>
+                      </ArchiveProvider>
+                    </SettingsProvider>
+                  </ProjectProvider>
+                </MMPProvider>
+              </SiteVisitProvider>
+            </WalletProvider>
           </ClassificationProvider>
         </UserProvider>
       </NotificationProvider>
@@ -162,8 +162,8 @@ export const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children
 
 export const useAppContext = () => {
   const context = useContext(AppContext);
-  if (context === undefined) {
-    throw new Error('useAppContext must be used within an AppProvider');
+  if (!context) {
+    throw new Error('useAppContext must be used within AppProviders');
   }
   return context;
 };
