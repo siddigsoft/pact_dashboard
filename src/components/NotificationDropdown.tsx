@@ -230,7 +230,6 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
             title="Urgent"
             icon={<AlertCircle className="h-4 w-4 text-red-500" />}
             notifications={urgentNotifications}
-            onNotificationClick={handleNotificationClick}
             actionButtons={renderActionButtons}
           />
           
@@ -238,7 +237,6 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
             title="Warnings"
             icon={<AlertCircle className="h-4 w-4 text-amber-500" />}
             notifications={warningNotifications}
-            onNotificationClick={handleNotificationClick}
             actionButtons={renderActionButtons}
           />
           
@@ -246,7 +244,6 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
             title="Information"
             icon={<CheckCircle2 className="h-4 w-4 text-blue-500" />}
             notifications={infoNotifications}
-            onNotificationClick={handleNotificationClick}
             actionButtons={renderActionButtons}
           />
 

@@ -7,7 +7,7 @@ export interface NotificationGroupProps {
   title: string;
   icon: React.ReactNode;
   notifications: Notification[];
-  onNotificationClick: (notification: Notification) => void;
+  onNotificationClick?: (notification: Notification) => void;
   actionButtons?: (notification: Notification) => React.ReactNode;
 }
 
@@ -32,13 +32,12 @@ export const NotificationGroup: React.FC<NotificationGroupProps> = ({
         {notifications.map((notification) => (
           <Card
             key={notification.id}
-            onClick={() => onNotificationClick(notification)}
-            className={`cursor-pointer border-l-2 ${
+            className={`border-l-2 ${
               notification.type === 'error' ? 'border-l-destructive' :
               notification.type === 'warning' ? 'border-l-amber-500' :
               notification.type === 'success' ? 'border-l-green-500' :
               'border-l-blue-500'
-            } hover:bg-accent transition-colors ${notification.isRead ? 'opacity-70' : ''}`}
+            } ${notification.isRead ? 'opacity-70' : ''}`}
           >
             <CardContent className="p-3">
               <div className="flex justify-between items-start">
