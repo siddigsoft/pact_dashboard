@@ -976,6 +976,94 @@ const MMP = () => {
           created_at: now
         });
 
+      // Process wallet payment for the user who completed the site entry
+      try {
+        const acceptedBy = site.accepted_by || site.additional_data?.accepted_by;
+        
+        if (acceptedBy) {
+          // Get the cost amount from the site entry
+          const additionalData = site.additional_data || {};
+          const enumeratorFee = additionalData.enumerator_fee || site.enumerator_fee || 0;
+          const transportFee = additionalData.transport_fee || site.transport_fee || 0;
+          const directCost = site.cost || 0;
+          
+          // Calculate total cost: use direct cost if available, otherwise sum fees
+          const totalCost = directCost > 0 
+            ? directCost 
+            : (Number(enumeratorFee) + Number(transportFee));
+          
+          if (totalCost > 0) {
+            // Get or create wallet for the user
+            const { data: walletData, error: walletError } = await supabase
+              .from('wallets')
+              .select('*')
+              .eq('user_id', acceptedBy)
+              .single();
+
+            let walletId: string;
+            let currentBalance = 0;
+
+            if (walletError && walletError.code === 'PGRST116') {
+              // Wallet doesn't exist, create it
+              const { data: newWallet, error: createError } = await supabase
+                .from('wallets')
+                .insert({
+                  user_id: acceptedBy,
+                  balances: { SDG: totalCost },
+                  total_earned: totalCost,
+                })
+                .select()
+                .single();
+
+              if (createError) throw createError;
+              walletId = newWallet.id;
+            } else if (walletError) {
+              throw walletError;
+            } else {
+              walletId = walletData.id;
+              currentBalance = parseFloat(walletData.balances?.SDG || 0);
+              const newBalance = currentBalance + totalCost;
+
+              // Update wallet balance
+              await supabase
+                .from('wallets')
+                .update({
+                  balances: { ...walletData.balances, SDG: newBalance },
+                  total_earned: parseFloat(walletData.total_earned || 0) + totalCost,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('id', walletId);
+            }
+
+            // Create wallet transaction
+            await supabase.from('wallet_transactions').insert({
+              wallet_id: walletId,
+              user_id: acceptedBy,
+              type: 'site_visit_fee',
+              amount: totalCost,
+              currency: 'SDG',
+              site_visit_id: site.id, // Using site entry ID as reference
+              description: `MMP site entry completed: ${site.site_name || site.siteName || 'Site'}`,
+              balance_before: currentBalance,
+              balance_after: currentBalance + totalCost,
+              created_by: currentUser?.id,
+            });
+
+            console.log(`Payment of ${totalCost} SDG added to wallet for user ${acceptedBy} for site entry ${site.id}`);
+          }
+        } else {
+          console.warn(`No accepted_by user found for site entry ${site.id}, skipping wallet payment`);
+        }
+      } catch (walletErr) {
+        console.error('Failed to process wallet payment for completed site entry:', walletErr);
+        // Don't fail the entire operation if wallet payment fails
+        toast({
+          title: 'Payment Warning',
+          description: 'Site visit completed but wallet payment failed. Please contact support.',
+          variant: 'destructive',
+        });
+      }
+
       // Set the site for visit report and open dialog
       setSelectedSiteForVisit(site);
       setVisitReportDialogOpen(true);
