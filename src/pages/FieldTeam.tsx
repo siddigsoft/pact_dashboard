@@ -103,7 +103,11 @@ const FieldTeam = () => {
         user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (user.phone && user.phone.includes(searchTerm));
       
-      const matchesRole = roleFilter === 'all' || user.role?.toLowerCase() === roleFilter.toLowerCase();
+      const role = user.role?.toLowerCase() || '';
+      const isDataCollector = ['datacollector', 'data_collector', 'enumerator'].includes(role);
+      const matchesRole = roleFilter === 'all' || 
+        (roleFilter === 'datacollector' && isDataCollector) ||
+        user.role?.toLowerCase() === roleFilter.toLowerCase();
       const matchesStatus = statusFilter === 'all' || user.availability === statusFilter;
       
       return matchesSearch && matchesRole && matchesStatus;
@@ -115,13 +119,8 @@ const FieldTeam = () => {
     [fieldTeamUsers]
   );
   
-  const enumerators = useMemo(() => 
-    fieldTeamUsers.filter(u => u.role?.toLowerCase() === 'enumerator'), 
-    [fieldTeamUsers]
-  );
-  
   const dataCollectors = useMemo(() => 
-    fieldTeamUsers.filter(u => ['datacollector', 'data_collector'].includes(u.role?.toLowerCase() || '')), 
+    fieldTeamUsers.filter(u => ['datacollector', 'data_collector', 'enumerator'].includes(u.role?.toLowerCase() || '')), 
     [fieldTeamUsers]
   );
 
@@ -154,9 +153,15 @@ const FieldTeam = () => {
   const getRoleBadgeColor = (role: string) => {
     const r = role?.toLowerCase() || '';
     if (r === 'coordinator') return 'bg-purple-500';
-    if (r === 'enumerator') return 'bg-blue-500';
-    if (['datacollector', 'data_collector'].includes(r)) return 'bg-green-500';
+    if (['datacollector', 'data_collector', 'enumerator'].includes(r)) return 'bg-green-500';
     return 'bg-gray-500';
+  };
+  
+  const getDisplayRole = (role: string) => {
+    const r = role?.toLowerCase() || '';
+    if (['datacollector', 'data_collector', 'enumerator'].includes(r)) return 'Data Collector';
+    if (r === 'coordinator') return 'Coordinator';
+    return role;
   };
 
   const getStatusColor = (status: string) => {
@@ -192,7 +197,7 @@ const FieldTeam = () => {
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="font-semibold text-base truncate">{user.name}</h3>
                 <Badge variant="secondary" className={`${getRoleBadgeColor(user.role)} text-white text-xs`}>
-                  {user.role}
+                  {getDisplayRole(user.role)}
                 </Badge>
               </div>
               
@@ -295,7 +300,7 @@ const FieldTeam = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card 
           className="hover-elevate active-elevate-2 cursor-pointer overflow-hidden relative bg-gradient-to-br from-blue-500 to-blue-700 text-white border-0"
           onClick={() => setRoleFilter('all')}
@@ -331,26 +336,6 @@ const FieldTeam = () => {
             <div className="text-3xl font-bold text-white">{coordinators.length}</div>
             <p className="text-xs text-white/80 mt-1">
               {coordinators.filter(u => u.location?.latitude).length} with GPS
-            </p>
-          </CardContent>
-          <Sparkles className="absolute -right-4 -bottom-4 h-24 w-24 text-white/10" />
-        </Card>
-
-        <Card 
-          className="hover-elevate active-elevate-2 cursor-pointer overflow-hidden relative bg-gradient-to-br from-cyan-500 to-teal-600 text-white border-0"
-          onClick={() => setRoleFilter('enumerator')}
-          data-testid="card-enumerators"
-        >
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-white/90">
-              Enumerators
-            </CardTitle>
-            <Briefcase className="h-5 w-5 text-white/80" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-white">{enumerators.length}</div>
-            <p className="text-xs text-white/80 mt-1">
-              {enumerators.filter(u => u.location?.latitude).length} with GPS
             </p>
           </CardContent>
           <Sparkles className="absolute -right-4 -bottom-4 h-24 w-24 text-white/10" />
@@ -405,14 +390,13 @@ const FieldTeam = () => {
               </div>
               
               <Select value={roleFilter} onValueChange={setRoleFilter}>
-                <SelectTrigger className="w-[140px]" data-testid="select-role-filter">
+                <SelectTrigger className="w-[160px]" data-testid="select-role-filter">
                   <Filter className="h-4 w-4 mr-2" />
                   <SelectValue placeholder="Role" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Roles</SelectItem>
                   <SelectItem value="coordinator">Coordinators</SelectItem>
-                  <SelectItem value="enumerator">Enumerators</SelectItem>
                   <SelectItem value="datacollector">Data Collectors</SelectItem>
                 </SelectContent>
               </Select>
@@ -517,7 +501,7 @@ const FieldTeam = () => {
                         
                         <div className="col-span-2">
                           <Badge variant="secondary" className={`${getRoleBadgeColor(user.role)} text-white text-xs`}>
-                            {user.role}
+                            {getDisplayRole(user.role)}
                           </Badge>
                         </div>
                         

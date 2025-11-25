@@ -100,7 +100,7 @@ const PlanningSiteVisitsMap: React.FC<PlanningSiteVisitsMapProps> = ({ siteVisit
 
   // Group team members by role
   const teamByRole = useMemo(() => {
-    const enumerators = teamWithLocation.filter(m => 
+    const dataCollectors = teamWithLocation.filter(m => 
       m.roles?.some(r => r.toLowerCase().includes('datacollector') || r.toLowerCase().includes('enumerator'))
     );
     const coordinators = teamWithLocation.filter(m => 
@@ -109,7 +109,7 @@ const PlanningSiteVisitsMap: React.FC<PlanningSiteVisitsMapProps> = ({ siteVisit
     const supervisors = teamWithLocation.filter(m => 
       m.roles?.some(r => r.toLowerCase().includes('supervisor') || r.toLowerCase().includes('fom'))
     );
-    return { enumerators, coordinators, supervisors };
+    return { dataCollectors, coordinators, supervisors };
   }, [teamWithLocation]);
 
   const hasAnyData = visitsWithCoords.length > 0 || teamWithLocation.length > 0;
@@ -181,8 +181,8 @@ const PlanningSiteVisitsMap: React.FC<PlanningSiteVisitsMapProps> = ({ siteVisit
           <div className="h-4 border-l mx-1" />
           <div className="font-semibold text-foreground">Team:</div>
           <div className="flex items-center gap-1.5">
-            <div className="w-5 h-5 rounded-full bg-green-500 border-2 border-white flex items-center justify-center text-[10px] font-bold text-white">E</div>
-            <span>Data Collectors ({teamByRole.enumerators.length})</span>
+            <div className="w-5 h-5 rounded-full bg-green-500 border-2 border-white flex items-center justify-center text-[10px] font-bold text-white">D</div>
+            <span>Data Collectors ({teamByRole.dataCollectors.length})</span>
           </div>
           <div className="flex items-center gap-1.5">
             <div className="w-5 h-5 rounded-full bg-green-500 border-2 border-white flex items-center justify-center text-[10px] font-bold text-white">C</div>
