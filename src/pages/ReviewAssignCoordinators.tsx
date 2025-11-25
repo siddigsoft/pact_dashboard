@@ -22,6 +22,7 @@ const ReviewAssignCoordinators: React.FC = () => {
 
   const [mmpFile, setMmpFile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingForwardedStates, setLoadingForwardedStates] = useState(true);
   const [assignmentMap, setAssignmentMap] = useState({} as Record<string, string>);
   const [selectedSites, setSelectedSites] = useState({} as Record<string, Set<string>>);
   const [batchLoading, setBatchLoading] = useState({} as Record<string, boolean>);
@@ -33,57 +34,94 @@ const ReviewAssignCoordinators: React.FC = () => {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
 
   useEffect(() => {
-    if (id) {
-      const mmp = getMmpById(id);
-      if (mmp) {
+    if (!id) return;
+    
+    const loadData = async () => {
+      try {
+        // Step 1: Get MMP file
+        const mmp = getMmpById(id);
+        if (!mmp) {
+          toast({
+            title: "MMP Not Found",
+            description: "The requested MMP file could not be found.",
+            variant: "destructive"
+          });
+          navigate('/mmp');
+          return;
+        }
+
         setMmpFile(mmp);
-        setLoading(false);
         
-        // Load forwarded sites from database to prevent re-forwarding
-        const loadForwardedSites = async () => {
-          try {
-            const { data: siteEntries, error } = await supabase
-              .from('mmp_site_entries')
-              .select('id, forwarded_at, forwarded_by_user_id, forwarded_to_user_id')
-              .eq('mmp_file_id', id);
-            
-            if (error) {
-              console.error('Error loading forwarded sites:', error);
-              return;
-            }
-            
-            // Find sites that have been forwarded (have forwarded_at set)
+        // Step 2: Load forwarded sites from database BEFORE rendering
+        // This prevents errors and ensures correct state from the start
+        setLoadingForwardedStates(true);
+        try {
+          const { data: siteEntries, error } = await supabase
+            .from('mmp_site_entries')
+            .select('id, forwarded_at, forwarded_by_user_id, forwarded_to_user_id, dispatched_at, additional_data')
+            .eq('mmp_file_id', id);
+          
+          if (error) {
+            console.error('Error loading forwarded sites:', error);
+            toast({
+              title: "Warning",
+              description: "Could not load forwarded site states. Some sites may appear incorrectly.",
+              variant: "destructive"
+            });
+            // Continue with empty set rather than blocking
+            setForwardedSiteIds(new Set());
+          } else {
+            // Find sites that have been forwarded
+            // Check both new forwarded_at column and legacy dispatched_at/additional_data
             const forwarded = new Set<string>();
             (siteEntries || []).forEach((entry: any) => {
-              if (entry.forwarded_at) {
+              const hasForwardedAt = !!entry.forwarded_at;
+              const hasDispatchedAt = !!entry.dispatched_at;
+              const hasAssignedTo = !!(entry.additional_data?.assigned_to);
+              
+              // Site is forwarded if any of these conditions are true
+              if (hasForwardedAt || hasDispatchedAt || hasAssignedTo) {
                 forwarded.add(entry.id);
               }
             });
             
             setForwardedSiteIds(forwarded);
-          } catch (err) {
-            console.error('Failed to load forwarded sites:', err);
+            console.log(`Loaded ${forwarded.size} forwarded site(s) out of ${siteEntries?.length || 0} total`);
           }
-        };
-        
-        loadForwardedSites();
-      } else {
+        } catch (err) {
+          console.error('Failed to load forwarded sites:', err);
+          toast({
+            title: "Warning",
+            description: "Could not load forwarded site states. Please refresh the page.",
+            variant: "destructive"
+          });
+          setForwardedSiteIds(new Set());
+        } finally {
+          setLoadingForwardedStates(false);
+        }
+      } catch (err) {
+        console.error('Failed to load MMP data:', err);
         toast({
-          title: "MMP Not Found",
-          description: "The requested MMP file could not be found.",
+          title: "Error",
+          description: "Failed to load MMP data. Please try again.",
           variant: "destructive"
         });
-        navigate('/mmp');
+      } finally {
+        setLoading(false);
       }
-    }
+    };
+
+    loadData();
   }, [id, getMmpById, navigate, toast]);
 
-  if (loading) {
+  if (loading || loadingForwardedStates) {
     return (
       <div className="container mx-auto px-4 py-8">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-muted-foreground">Loading MMP file...</p>
+          <p className="mt-4 text-muted-foreground">
+            {loadingForwardedStates ? 'Checking forwarded site states...' : 'Loading MMP file...'}
+          </p>
         </div>
       </div>
     );
