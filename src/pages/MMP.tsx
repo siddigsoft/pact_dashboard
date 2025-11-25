@@ -23,6 +23,7 @@ import BulkClearForwardedDialog from '../components/mmp/BulkClearForwardedDialog
 import { DispatchSitesDialog } from '@/components/mmp/DispatchSitesDialog';
 import { sudanStates } from '@/data/sudanStates';
 import { VisitReportDialog, VisitReportData } from '@/components/site-visit/VisitReportDialog';
+import { StartVisitDialog } from '@/components/site-visit/StartVisitDialog';
 
 // Helper component to convert SiteVisitRow[] to site entries and display using MMPSiteEntriesTable
 const SitesDisplayTable: React.FC<{ 
@@ -442,6 +443,7 @@ const MMP = () => {
   // Visit report dialog state
   const [visitReportDialogOpen, setVisitReportDialogOpen] = useState(false);
   const [submittingReport, setSubmittingReport] = useState(false);
+  const [startingVisit, setStartingVisit] = useState(false);
 
   // Accept/Reject dialog state for Smart Assigned sites
   const [acceptRejectDialogOpen, setAcceptRejectDialogOpen] = useState(false);
@@ -452,8 +454,10 @@ const MMP = () => {
   // Handle accepting a Smart Assigned site
   const handleAcceptSite = async (site: any) => {
     try {
+      console.log('🔄 Starting site acceptance for site:', site.id, site.site_name);
+      
       const now = new Date().toISOString();
-      await supabase
+      const { error } = await supabase
         .from('mmp_site_entries')
         .update({
           status: 'accepted',
@@ -463,14 +467,198 @@ const MMP = () => {
         })
         .eq('id', site.id);
 
+      if (error) {
+        console.error('❌ Database update failed:', error);
+        throw error;
+      }
+
+      console.log('✅ Database update successful');
+
       toast({
         title: 'Site Accepted',
         description: 'The site has been successfully accepted and moved to "My Sites".',
         variant: 'default'
       });
 
-      // Reload data
-      window.location.reload();
+      // Reload enumerator data instead of full page reload
+      if (isDataCollector && currentUser?.id) {
+        setLoadingEnumerator(true);
+        try {
+          console.log('🔄 Reloading enumerator data after site acceptance...');
+
+          // Convert collector's stateId/localityId to names for matching with site entries
+          const collectorStateName = currentUser.stateId ? sudanStates.find(s => s.id === currentUser.stateId)?.name : undefined;
+          const collectorLocalityName = currentUser.stateId && currentUser.localityId
+            ? sudanStates.find(s => s.id === currentUser.stateId)?.localities.find(l => l.id === currentUser.localityId)?.name
+            : undefined;
+
+          // Build query for "Available Sites" - status = "Dispatched" (bulk dispatched)
+          // These are unclaimed sites (accepted_by IS NULL) in the collector's area
+          let availableSitesQuery = supabase
+            .from('mmp_site_entries')
+            .select('*')
+            .ilike('status', 'Dispatched') // Only "Dispatched" status (bulk dispatched)
+            .is('accepted_by', null); // Only unclaimed sites
+
+          // Add state/locality filters if we have the names
+          if (collectorStateName || collectorLocalityName) {
+            const conditions: string[] = [];
+            if (collectorStateName) {
+              conditions.push(`state.ilike.${collectorStateName}`);
+            }
+            if (collectorLocalityName) {
+              conditions.push(`locality.ilike.${collectorLocalityName}`);
+            }
+            if (conditions.length > 0) {
+              availableSitesQuery = availableSitesQuery.or(conditions.join(','));
+            }
+          }
+
+          availableSitesQuery = availableSitesQuery
+            .order('created_at', { ascending: false })
+            .limit(1000);
+
+          // Load smart assigned sites for "Smart Assigned" tab
+          const smartAssignedQuery = supabase
+            .from('mmp_site_entries')
+            .select('*')
+            .ilike('status', 'Assigned')
+            .eq('accepted_by', currentUser.id)
+            .order('created_at', { ascending: false })
+            .limit(1000);
+
+          // Load accepted sites for "My Sites" tab
+          const mySitesQuery = supabase
+            .from('mmp_site_entries')
+            .select('*')
+            .eq('accepted_by', currentUser.id)
+            .order('created_at', { ascending: false })
+            .limit(1000);
+
+          // Execute all queries in parallel
+          const [availableResult, smartAssignedResult, mySitesResult] = await Promise.all([
+            availableSitesQuery,
+            smartAssignedQuery,
+            mySitesQuery
+          ]);
+
+          console.log('🔍 Query results after acceptance:');
+          console.log('  Available sites:', availableResult.data?.length || 0, 'found');
+          console.log('  Smart assigned:', smartAssignedResult.data?.length || 0, 'found');
+          console.log('  My sites:', mySitesResult.data?.length || 0, 'found');
+
+          // Check if the accepted site is still in available sites (it shouldn't be)
+          const acceptedSiteInAvailable = availableResult.data?.find(s => s.id === site.id);
+          if (acceptedSiteInAvailable) {
+            console.error('❌ BUG: Accepted site still appears in Available Sites!', acceptedSiteInAvailable);
+          } else {
+            console.log('✅ Good: Accepted site no longer appears in Available Sites');
+          }
+
+          // Check if the accepted site appears in My Sites (it should)
+          const acceptedSiteInMySites = mySitesResult.data?.find(s => s.id === site.id);
+          if (acceptedSiteInMySites) {
+            console.log('✅ Good: Accepted site appears in My Sites');
+          } else {
+            console.error('❌ BUG: Accepted site does not appear in My Sites!');
+          }
+
+          // Format entries for display
+          const formatEntries = (entries: any[]) => entries.map(entry => {
+            const additionalData = entry.additional_data || {};
+            const enumeratorFee = entry.enumerator_fee ?? additionalData.enumerator_fee;
+            const transportFee = entry.transport_fee ?? additionalData.transport_fee;
+            return {
+              ...entry,
+              siteName: entry.site_name,
+              siteCode: entry.site_code,
+              hubOffice: entry.hub_office,
+              cpName: entry.cp_name,
+              siteActivity: entry.activity_at_site,
+              monitoringBy: entry.monitoring_by,
+              surveyTool: entry.survey_tool,
+              useMarketDiversion: entry.use_market_diversion,
+              useWarehouseMonitoring: entry.use_warehouse_monitoring,
+              visitDate: entry.visit_date,
+              comments: entry.comments,
+              enumerator_fee: enumeratorFee,
+              enumeratorFee: enumeratorFee,
+              transport_fee: transportFee,
+              transportFee: transportFee,
+              cost: entry.cost,
+              status: entry.status,
+              verified_by: entry.verified_by,
+              verified_at: entry.verified_at,
+              dispatched_by: entry.dispatched_by,
+              dispatched_at: entry.dispatched_at,
+              accepted_by: entry.accepted_by,
+              accepted_at: entry.accepted_at,
+              updated_at: entry.updated_at,
+              additionalData: additionalData
+            };
+          });
+
+          const availableEntries = formatEntries(availableResult.data || []);
+          const rawSmartAssigned = formatEntries(smartAssignedResult.data || []);
+          const smartAssignedEntries = rawSmartAssigned.filter(entry => {
+            const additionalData = entry.additional_data || {};
+            const costAcknowledged = entry.cost_acknowledged ?? additionalData.cost_acknowledged;
+            return !costAcknowledged;
+          });
+          const mySitesEntries = formatEntries(mySitesResult.data || []);
+
+          console.log('📊 Final state after formatting:');
+          console.log('  Available entries:', availableEntries.length);
+          console.log('  Smart assigned entries:', smartAssignedEntries.length);
+          console.log('  My sites entries:', mySitesEntries.length);
+
+          // Store all entries for reference
+          setEnumeratorSiteEntries(availableEntries);
+
+          // Group available sites by state and locality combined
+          const groupedByStateLocality = availableEntries.reduce((acc, entry) => {
+            const state = entry.state || 'Unknown State';
+            const locality = entry.locality || 'Unknown Locality';
+            const key = `${state} - ${locality}`;
+            if (!acc[key]) acc[key] = [];
+            acc[key].push(entry);
+            return acc;
+          }, {} as Record<string, any[]>);
+          setEnumeratorGroupedByStates(groupedByStateLocality);
+          setEnumeratorGroupedByLocality({});
+
+          // Set smart assigned entries
+          setEnumeratorSmartAssigned(smartAssignedEntries);
+
+          // Build deduplicated union for "My Sites"
+          try {
+            const byId = new Map<string, any>();
+            (smartAssignedEntries || []).forEach((e: any) => {
+              if (e && e.id) byId.set(String(e.id), e);
+            });
+            (mySitesEntries || []).forEach((e: any) => {
+              if (!e) return;
+              const key = e.id ? String(e.id) : `${e.mmp_file_id || e.mmpId}-${e.site_code || e.siteCode || ''}`;
+              if (!byId.has(key)) byId.set(key, e);
+            });
+            setEnumeratorMySites(Array.from(byId.values()));
+            console.log('✅ Enumerator data reloaded successfully after site acceptance');
+          } catch (e) {
+            console.error('❌ Error building My Sites union:', e);
+            setEnumeratorMySites(mySitesEntries);
+          }
+
+        } catch (reloadError) {
+          console.error('❌ Failed to reload enumerator data:', reloadError);
+          // Fallback to page reload if data reload fails
+          window.location.reload();
+        } finally {
+          setLoadingEnumerator(false);
+        }
+      } else {
+        // Fallback for non-enumerator users
+        window.location.reload();
+      }
     } catch (error: any) {
       console.error('Failed to accept site:', error);
       toast({
@@ -666,58 +854,86 @@ const MMP = () => {
   // Handle starting a site visit
   const handleStartVisit = async (site: any) => {
     try {
-      // Get current location
-      const location = await getCurrentLocation();
+      // Check location permissions first
+      if (!navigator.geolocation) {
+        toast({
+          title: 'Location Not Supported',
+          description: 'Geolocation is not supported by this browser.',
+          variant: 'destructive'
+        });
+        return;
+      }
 
+      // Request location permission
+      const permission = await navigator.permissions.query({ name: 'geolocation' });
+      if (permission.state === 'denied') {
+        toast({
+          title: 'Location Permission Denied',
+          description: 'Please enable location permissions in your browser settings to start site visits.',
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      // Set the site for visit and open start dialog
+      setSelectedSiteForVisit(site);
+      setStartVisitDialogOpen(true);
+
+    } catch (error: any) {
+      console.error('Failed to check location permissions:', error);
+      toast({
+        title: 'Permission Check Failed',
+        description: error.message || 'Failed to check location permissions. Please try again.',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  // Handle confirming start visit after dialog - now starts the visit (sets to in_progress)
+  const handleConfirmStartVisit = async () => {
+    if (!selectedSiteForVisit) return;
+
+    try {
+      setStartingVisit(true);
+
+      const site = selectedSiteForVisit;
       const now = new Date().toISOString();
 
-      // Update site status to 'Ongoing' and save initial location
+      // Update site status to 'In Progress' and save visit start information
       await supabase
         .from('mmp_site_entries')
         .update({
-          status: 'Ongoing',
+          status: 'In Progress',
           visit_started_at: now,
           visit_started_by: currentUser?.id,
           updated_at: now,
           additional_data: {
             ...(site.additional_data || {}),
             visit_started_at: now,
-            visit_started_by: currentUser?.id,
-            initial_location: location
+            visit_started_by: currentUser?.id
           }
         })
         .eq('id', site.id);
 
-      // Save initial location to site_locations table
-      await supabase
-        .from('site_locations')
-        .insert({
-          site_entry_id: site.id,
-          latitude: location.latitude,
-          longitude: location.longitude,
-          location_type: 'visit_start',
-          accuracy: 10, // Default accuracy
-          created_at: now
-        });
-
-      // Start location tracking
-      startLocationTracking(site.id);
-
       toast({
         title: 'Visit Started',
-        description: 'Site visit has been started and location tracking is active.',
+        description: 'Site visit has been started successfully. Please complete your visit report.',
         variant: 'default'
       });
 
-      // Reload data
-      window.location.reload();
+      // Close start dialog and open visit report dialog
+      setStartVisitDialogOpen(false);
+      setVisitReportDialogOpen(true);
+      setStartingVisit(false);
+
     } catch (error: any) {
       console.error('Failed to start visit:', error);
       toast({
-        title: 'Start Visit Failed',
+        title: 'Visit Start Failed',
         description: error.message || 'Failed to start the site visit. Please try again.',
         variant: 'destructive'
       });
+      setStartingVisit(false);
     }
   };
 
@@ -732,11 +948,10 @@ const MMP = () => {
       // Stop location tracking
       stopLocationTracking(site.id);
 
-      // Update site status to 'Completed' and save final location
+      // Update site with visit completion time and final location (but don't change status yet)
       await supabase
         .from('mmp_site_entries')
         .update({
-          status: 'Completed',
           visit_completed_at: now,
           visit_completed_by: currentUser?.id,
           updated_at: now,
@@ -871,15 +1086,20 @@ const MMP = () => {
 
   // Handle submitting visit report
   const handleSubmitVisitReport = async (reportData: VisitReportData) => {
-    if (!selectedSiteForVisit) return;
+    if (!selectedSiteForVisit) {
+      console.error('❌ No selected site for visit');
+      return;
+    }
 
     try {
+      console.log('🚀 Starting visit report submission for site:', selectedSiteForVisit.id);
       setSubmittingReport(true);
 
       const site = selectedSiteForVisit;
       const now = new Date().toISOString();
 
       // Upload photos to Supabase storage
+      console.log('📸 Uploading photos...');
       const photoUrls: string[] = [];
       for (const photo of reportData.photos) {
         const fileName = `visit-photos/${site.id}/${Date.now()}-${photo.name}`;
@@ -888,7 +1108,7 @@ const MMP = () => {
           .upload(fileName, photo);
 
         if (uploadError) {
-          console.error('Error uploading photo:', uploadError);
+          console.error('❌ Error uploading photo:', uploadError);
           continue; // Continue with other photos
         }
 
@@ -901,8 +1121,10 @@ const MMP = () => {
           photoUrls.push(urlData.publicUrl);
         }
       }
+      console.log('✅ Photos uploaded:', photoUrls.length);
 
       // Save report to site_visit_reports table
+      console.log('💾 Saving visit report to database...');
       const { data: report, error: reportError } = await supabase
         .from('site_visit_reports')
         .insert({
@@ -919,15 +1141,22 @@ const MMP = () => {
         .select()
         .single();
 
-      if (reportError) throw reportError;
+      if (reportError) {
+        console.error('❌ Report save error:', reportError);
+        throw reportError;
+      }
+      console.log('✅ Report saved with ID:', report.id);
 
       // Generate PDF report
+      console.log('📄 Generating PDF report...');
       await generateVisitReportPDF(site, reportData, report, photoUrls);
 
-      // Update site additional_data with report info
-      await supabase
+      // Update site status to 'Completed' and save report info
+      console.log('🔄 Updating site status to Completed...');
+      const { data: updateData, error: updateError } = await supabase
         .from('mmp_site_entries')
         .update({
+          status: 'Completed',
           additional_data: {
             ...(site.additional_data || {}),
             visit_report_submitted: true,
@@ -935,11 +1164,18 @@ const MMP = () => {
             visit_report_submitted_at: now
           }
         })
-        .eq('id', site.id);
+        .eq('id', site.id)
+        .select();
+
+      if (updateError) {
+        console.error('❌ Site status update error:', updateError);
+        throw updateError;
+      }
+      console.log('✅ Site status updated to Completed:', updateData);
 
       toast({
-        title: 'Report Submitted',
-        description: 'Visit report has been submitted successfully.',
+        title: 'Visit Report Submitted',
+        description: 'Visit report has been submitted successfully and site visit is now completed.',
         variant: 'default'
       });
 
@@ -948,11 +1184,51 @@ const MMP = () => {
       setSelectedSiteForVisit(null);
       setSubmittingReport(false);
 
-      // Reload data
-      window.location.reload();
+      // Reload enumerator data immediately instead of full page reload
+      if (isDataCollector && currentUser?.id) {
+        console.log('🔄 Reloading enumerator data after visit completion...');
+        try {
+          // Load updated my sites data
+          const { data: mySitesData, error: mySitesError } = await supabase
+            .from('mmp_site_entries')
+            .select('*')
+            .eq('accepted_by', currentUser.id)
+            .order('created_at', { ascending: false })
+            .limit(1000);
+
+          if (!mySitesError && mySitesData) {
+            const formatEntries = (entries: any[]) => entries.map(entry => {
+              const additionalData = entry.additional_data || {};
+              const enumeratorFee = entry.enumerator_fee ?? additionalData.enumerator_fee;
+              const transportFee = entry.transport_fee ?? additionalData.transport_fee;
+              return {
+                ...entry,
+                siteName: entry.site_name,
+                siteCode: entry.site_code,
+                enumerator_fee: enumeratorFee,
+                enumeratorFee: enumeratorFee,
+                transport_fee: transportFee,
+                transportFee: transportFee,
+                additionalData: additionalData
+              };
+            });
+
+            const formattedMySites = formatEntries(mySitesData);
+            setEnumeratorMySites(formattedMySites);
+            console.log('✅ Enumerator My Sites updated:', formattedMySites.length, 'sites');
+          }
+        } catch (error) {
+          console.error('❌ Failed to reload enumerator data:', error);
+        }
+      }
+
+      // Still do a full page reload as fallback
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
 
     } catch (error: any) {
-      console.error('Failed to submit visit report:', error);
+      console.error('❌ Failed to submit visit report:', error);
       toast({
         title: 'Report Submission Failed',
         description: error.message || 'Failed to submit the visit report. Please try again.',
@@ -3583,6 +3859,16 @@ const MMP = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Start Visit Dialog */}
+      <StartVisitDialog
+        open={startVisitDialogOpen}
+        onOpenChange={setStartVisitDialogOpen}
+        site={selectedSiteForVisit}
+        onConfirm={handleConfirmStartVisit}
+        isStarting={startingVisit}
+        currentUser={currentUser}
+      />
 
       {/* Visit Report Dialog */}
       <VisitReportDialog
