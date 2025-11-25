@@ -46,14 +46,25 @@ const AdminWallets: React.FC = () => {
   }, []);
 
   const filtered = useMemo(() => {
-    if (!search) return rows;
-    const s = search.toLowerCase();
-    return rows.filter(r => 
-      (r.owner_name || '').toString().toLowerCase().includes(s) ||
-      (r.user_id || '').toString().toLowerCase().includes(s) ||
-      (r.profiles?.email || '').toString().toLowerCase().includes(s)
-    );
-  }, [rows, search]);
+    // Filter out wallets with no balance and no earnings
+    let filtered = rows.filter(r => {
+      const balance = r.balances?.[currency] || 0;
+      const earned = Number(r.total_earned || 0);
+      return balance > 0 || earned > 0;
+    });
+    
+    // Apply search filter
+    if (search) {
+      const s = search.toLowerCase();
+      filtered = filtered.filter(r => 
+        (r.owner_name || '').toString().toLowerCase().includes(s) ||
+        (r.user_id || '').toString().toLowerCase().includes(s) ||
+        (r.profiles?.email || '').toString().toLowerCase().includes(s)
+      );
+    }
+    
+    return filtered;
+  }, [rows, search, currency]);
 
   const getBalance = (wallet: any, curr: string) => (wallet.balances?.[curr] || 0) * 100;
 
@@ -182,9 +193,13 @@ const AdminWallets: React.FC = () => {
                     <TableHead className="font-bold">User</TableHead>
                     <TableHead className="font-bold">Email</TableHead>
                     <TableHead className="font-bold text-right">Current Balance</TableHead>
-                    <TableHead className="font-bold text-right">Total Earned</TableHead>
+                    <TableHead className="font-bold text-right">
+                      <div className="flex flex-col">
+                        <span>Earnings Breakdown</span>
+                        <span className="text-xs font-normal text-muted-foreground">(Site Visits / Retainer)</span>
+                      </div>
+                    </TableHead>
                     <TableHead className="font-bold text-right">Total Withdrawn</TableHead>
-                    <TableHead className="font-bold text-right">Available</TableHead>
                     <TableHead className="font-bold text-center">Status</TableHead>
                     <TableHead className="font-bold">Last Updated</TableHead>
                   </TableRow>
@@ -194,8 +209,14 @@ const AdminWallets: React.FC = () => {
                     const balance = (wallet.balances?.[currency] || 0);
                     const earned = Number(wallet.total_earned || 0);
                     const withdrawn = Number(wallet.total_withdrawn || 0);
-                    const available = balance;
                     const isActive = balance > 0 || earned > 0;
+                    
+                    // Calculate breakdown from transactions
+                    const breakdown = wallet.breakdown || {};
+                    const siteVisitFees = Number(breakdown.site_visit_fee || 0);
+                    const retainerFees = Number(breakdown.retainer || 0);
+                    const bonuses = Number(breakdown.bonus || 0);
+                    const adjustments = Number(breakdown.adjustment || 0);
                     
                     return (
                       <TableRow 
@@ -221,17 +242,46 @@ const AdminWallets: React.FC = () => {
                           </span>
                         </TableCell>
                         <TableCell className="text-right">
-                          <span className="text-blue-600 dark:text-blue-400">
-                            {fmt(earned * 100, currency)}
-                          </span>
+                          <div className="flex flex-col gap-1 items-end">
+                            {siteVisitFees > 0 && (
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-muted-foreground">Site Visits:</span>
+                                <span className="text-sm font-medium text-blue-600 dark:text-blue-400">
+                                  {fmt(siteVisitFees * 100, currency)}
+                                </span>
+                              </div>
+                            )}
+                            {retainerFees > 0 && (
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-muted-foreground">Retainer:</span>
+                                <span className="text-sm font-medium text-purple-600 dark:text-purple-400">
+                                  {fmt(retainerFees * 100, currency)}
+                                </span>
+                              </div>
+                            )}
+                            {bonuses > 0 && (
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-muted-foreground">Bonuses:</span>
+                                <span className="text-sm font-medium text-green-600 dark:text-green-400">
+                                  {fmt(bonuses * 100, currency)}
+                                </span>
+                              </div>
+                            )}
+                            {adjustments !== 0 && (
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs text-muted-foreground">Adjustments:</span>
+                                <span className={`text-sm font-medium ${adjustments > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                                  {fmt(adjustments * 100, currency)}
+                                </span>
+                              </div>
+                            )}
+                            {earned === 0 && <span className="text-sm text-muted-foreground">No earnings yet</span>}
+                          </div>
                         </TableCell>
                         <TableCell className="text-right">
                           <span className="text-purple-600 dark:text-purple-400">
                             {fmt(withdrawn * 100, currency)}
                           </span>
-                        </TableCell>
-                        <TableCell className="text-right font-semibold">
-                          {fmt(available * 100, currency)}
                         </TableCell>
                         <TableCell className="text-center">
                           <Badge 
