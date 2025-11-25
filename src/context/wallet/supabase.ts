@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
  * Admin function to list all wallets with user profile information
  * This function JOINs with profiles table to get full_name, username, email
  * and displays owner_name with fallback priority: full_name → username → email → user_id
+ * Also includes transaction breakdown summary
  */
 export const adminListWallets = async (params: { search?: string; page?: number; pageSize?: number } = {}) => {
   const page = params.page || 1;
@@ -22,12 +23,33 @@ export const adminListWallets = async (params: { search?: string; page?: number;
     return [];
   }
   
+  // Get transaction breakdowns for all wallets in parallel
+  const walletIds = (data || []).map((w: any) => w.id);
+  const { data: transactions } = await supabase
+    .from('wallet_transactions')
+    .select('wallet_id, type, amount')
+    .in('wallet_id', walletIds);
+  
+  // Group transactions by wallet_id and type
+  const transactionsByWallet: Record<string, Record<string, number>> = {};
+  (transactions || []).forEach((tx: any) => {
+    if (!transactionsByWallet[tx.wallet_id]) {
+      transactionsByWallet[tx.wallet_id] = {};
+    }
+    if (!transactionsByWallet[tx.wallet_id][tx.type]) {
+      transactionsByWallet[tx.wallet_id][tx.type] = 0;
+    }
+    transactionsByWallet[tx.wallet_id][tx.type] += Number(tx.amount || 0);
+  });
+  
   const rows = (data || []).map((r: any) => ({
     ...r,
     owner_name: r.profiles?.full_name || r.profiles?.username || r.profiles?.email || r.user_id,
     // Convert numeric strings to numbers for proper calculations
     totalEarned: Number(r.total_earned || 0),
     totalWithdrawn: Number(r.total_withdrawn || 0),
+    // Add transaction breakdown
+    breakdown: transactionsByWallet[r.id] || {},
   }));
   
   return rows;
