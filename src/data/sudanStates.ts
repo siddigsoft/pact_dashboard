@@ -79,6 +79,7 @@ export const sudanStates: SudanState[] = [
   { id: 'northern', name: 'Northern State', code: 'NS', localities: [
     { id: 'ns-dongola', name: 'Dongola' },
     { id: 'ns-wadi-halfa', name: 'Wadi Halfa' },
+    { id: 'ns-al-borgag', name: 'Al Borgag' },
   ]},
   { id: 'west-kordofan', name: 'West Kordofan', code: 'WK', localities: [
     { id: 'wk-en-nahud', name: 'En Nahud' },
