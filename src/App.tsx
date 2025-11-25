@@ -67,6 +67,7 @@ const BudgetPage = lazy(() => import('./pages/Budget'));
 const Classifications = lazy(() => import('./pages/Classifications'));
 const CostSubmission = lazy(() => import('./pages/CostSubmission'));
 const FinancialOperations = lazy(() => import('./pages/FinancialOperations'));
+const SuperAdminManagement = lazy(() => import('./components/superAdmin/SuperAdminManagementPage').then(module => ({ default: module.SuperAdminManagementPage })));
 
 // Components (keep these eagerly loaded as they're used immediately)
 import MainLayout from './components/MainLayout';
@@ -187,6 +188,7 @@ const AppRoutes = () => {
         <Route path="/archive" element={<Archive />} />
         <Route path="/calendar" element={<Calendar />} />
         <Route path="/role-management" element={<RoleManagement />} />
+        <Route path="/super-admin-management" element={<SuperAdminManagement />} />
   <Route path="/monitoring-plan" element={<MonitoringPlanPage />} />
   <Route path="/field-operation-manager" element={<FieldOperationManagerPage />} />
   <Route path="/search" element={<GlobalSearchPage />} />

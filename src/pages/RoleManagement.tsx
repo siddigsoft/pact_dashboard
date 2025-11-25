@@ -35,6 +35,7 @@ const RoleManagement = () => {
   const [showUserAssignment, setShowUserAssignment] = useState(false);
   const [showPermissionTester, setShowPermissionTester] = useState(false);
   const [selectedRole, setSelectedRole] = useState<RoleWithPermissions | null>(null);
+  const [cloneSourceRole, setCloneSourceRole] = useState<RoleWithPermissions | null>(null);
 
   // Gate by granular permissions (fallback to legacy for backward compatibility)
   const canManageRoles = canManageRolesAuth();
@@ -142,6 +143,12 @@ const RoleManagement = () => {
     await removeRoleFromUser(userId, roleId, role);
     await refreshUsers();
   };
+
+  const handleCloneRole = (role: RoleWithPermissions) => {
+    setCloneSourceRole(role);
+    setShowCreateDialog(true);
+  };
+
   const systemRoles = roles.filter(role => role.is_system_role);
   const customRoles = roles.filter(role => !role.is_system_role);
 
@@ -247,6 +254,7 @@ const RoleManagement = () => {
               onEdit={handleEditRole}
               onDelete={handleDeleteRole}
               onViewUsers={handleViewUsers}
+              onClone={handleCloneRole}
               userCount={getAssignedUsers(role).length}
             />
           ))}
@@ -283,6 +291,7 @@ const RoleManagement = () => {
                 onEdit={handleEditRole}
                 onDelete={handleDeleteRole}
                 onViewUsers={handleViewUsers}
+                onClone={handleCloneRole}
                 userCount={getAssignedUsers(role).length}
               />
             ))}
@@ -293,9 +302,13 @@ const RoleManagement = () => {
       {/* Dialogs */}
       <CreateRoleDialog
         open={showCreateDialog}
-        onOpenChange={setShowCreateDialog}
+        onOpenChange={(isOpen) => {
+          setShowCreateDialog(isOpen);
+          if (!isOpen) setCloneSourceRole(null);
+        }}
         onCreateRole={handleCreateRole}
         isLoading={isLoading}
+        cloneSourceRole={cloneSourceRole}
       />
 
       <EditRoleDialog

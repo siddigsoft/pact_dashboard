@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { MoreHorizontal, Edit2, Trash2, Users, ChevronDown, ChevronRight, Shield, Eye, EyeOff } from 'lucide-react';
+import { MoreHorizontal, Edit2, Trash2, Users, ChevronDown, ChevronRight, Shield, Eye, EyeOff, Copy } from 'lucide-react';
 import { RoleWithPermissions, ResourceType, ActionType } from '@/types/roles';
 
 interface RoleCardProps {
@@ -12,6 +12,7 @@ interface RoleCardProps {
   onEdit: (role: RoleWithPermissions) => void;
   onDelete: (roleId: string) => void;
   onViewUsers: (role: RoleWithPermissions) => void;
+  onClone?: (role: RoleWithPermissions) => void;
   userCount?: number;
 }
 
@@ -35,7 +36,8 @@ const getPermissionDisplayName = (resource: ResourceType, action: ActionType): s
     update: 'Edit',
     delete: 'Delete',
     approve: 'Approve',
-    assign: 'Assign'
+    assign: 'Assign',
+    archive: 'Archive'
   };
 
   return `${actionNames[action]} ${resourceNames[resource]}`;
@@ -49,7 +51,8 @@ const getPermissionColor = (action: ActionType): string => {
     update: 'bg-yellow-100 text-yellow-800',
     delete: 'bg-red-100 text-red-800',
     approve: 'bg-purple-100 text-purple-800',
-    assign: 'bg-indigo-100 text-indigo-800'
+    assign: 'bg-indigo-100 text-indigo-800',
+    archive: 'bg-slate-100 text-slate-800'
   };
   return colors[action];
 };
@@ -71,6 +74,7 @@ export const RoleCard: React.FC<RoleCardProps> = ({
   onEdit,
   onDelete,
   onViewUsers,
+  onClone,
   userCount = 0
 }) => {
   const [isPermissionsExpanded, setIsPermissionsExpanded] = useState(false);
@@ -108,6 +112,12 @@ export const RoleCard: React.FC<RoleCardProps> = ({
               <Edit2 className="mr-2 h-4 w-4" />
               Edit Role
             </DropdownMenuItem>
+            {onClone && (
+              <DropdownMenuItem onClick={() => onClone(role)}>
+                <Copy className="mr-2 h-4 w-4" />
+                Clone Role
+              </DropdownMenuItem>
+            )}
             {!role.is_system_role && (
               <DropdownMenuItem 
                 onClick={() => onDelete(role.id)}
