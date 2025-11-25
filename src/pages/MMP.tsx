@@ -2723,40 +2723,43 @@ const MMP = () => {
   }
 
   return (
-    <div className="space-y-6 sm:space-y-10 min-h-screen bg-slate-50 dark:bg-gray-900 py-4 sm:py-8 px-2 sm:px-8">
+    <div className="space-y-6 sm:space-y-10 min-h-screen bg-slate-50 dark:bg-gray-900 py-4 sm:py-8 px-1 sm:px-4 md:px-8">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-blue-600 dark:bg-blue-900 p-4 sm:p-7 rounded-2xl shadow-xl border border-blue-100 dark:border-blue-900">
-        <div className="flex items-center gap-3 sm:gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/dashboard')} className="hover:bg-blue-100 dark:hover:bg-blue-900/40 flex-shrink-0">
-            <ChevronLeft className="h-5 w-5 text-white dark:text-blue-200" />
-          </Button>
-          <div className="min-w-0 flex-1">
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight truncate">
-              {isDataCollector ? 'My Sites Management' : 'MMP Management'}
-            </h1>
-            <p className="text-blue-100 dark:text-blue-200/80 font-medium text-sm sm:text-base mt-1">
-              {isAdmin || isICT
-                ? 'Upload, validate, and forward MMPs to Field Operations Managers'
-                : isFOM
-                  ? 'Process MMPs, attach permits, and assign sites to coordinators'
-                  : isCoordinator
-                    ? 'Review and verify site assignments'
-                    : isDataCollector
-                      ? 'View and manage your assigned sites.'
-                      : 'Manage your MMP files and site visits'}
-            </p>
+      <div className="flex flex-col gap-4 bg-blue-600 dark:bg-blue-900 p-2 sm:p-4 md:p-7 rounded-2xl shadow-xl border border-blue-100 dark:border-blue-900">
+        <div className="flex items-start sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+            <Button variant="ghost" size="icon" onClick={() => navigate('/dashboard')} className="hover:bg-blue-100 dark:hover:bg-blue-900/40 flex-shrink-0 h-8 w-8 sm:h-10 sm:w-10">
+              <ChevronLeft className="h-4 w-4 sm:h-5 sm:w-5 text-white dark:text-blue-200" />
+            </Button>
+            <div className="min-w-0 flex-1">
+              <h1 className="text-xl sm:text-2xl md:text-3xl font-extrabold text-white tracking-tight truncate">
+                {isDataCollector ? 'My Sites Management' : 'MMP Management'}
+              </h1>
+              <p className="text-blue-100 dark:text-blue-200/80 font-medium text-xs sm:text-sm md:text-base mt-1 leading-tight">
+                {isAdmin || isICT
+                  ? 'Upload, validate, and forward MMPs to Field Operations Managers'
+                  : isFOM
+                    ? 'Process MMPs, attach permits, and assign sites to coordinators'
+                    : isCoordinator
+                      ? 'Review and verify site assignments'
+                      : isDataCollector
+                        ? 'View and manage your assigned sites.'
+                        : 'Manage your MMP files and site visits'}
+              </p>
+            </div>
           </div>
+          {canCreate && (
+            <Button className="bg-blue-700 hover:bg-blue-800 text-white shadow-lg hover:shadow-xl transition-all duration-300 px-3 sm:px-4 md:px-6 py-2 rounded-full font-semibold text-xs sm:text-sm md:text-base flex-shrink-0 whitespace-nowrap" onClick={() => navigate('/mmp/upload')}>
+              <Upload className="h-3 w-3 sm:h-4 sm:w-4 md:h-5 md:w-5 mr-1 sm:mr-2" />
+              <span className="hidden xs:inline">Upload MMP</span>
+              <span className="xs:hidden">Upload</span>
+            </Button>
+          )}
         </div>
-        {canCreate && (
-          <Button className="bg-blue-700 hover:bg-blue-800 text-white shadow-lg hover:shadow-xl transition-all duration-300 px-4 sm:px-6 py-2 rounded-full font-semibold text-sm sm:text-base flex-shrink-0" onClick={() => navigate('/mmp/upload')}>
-            <Upload className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
-            Upload MMP
-          </Button>
-        )}
       </div>
 
       {/* Body */}
-      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-lg p-4 sm:p-6">
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-lg p-2 sm:p-4 md:p-6">
         {loading ? (
           <div className="text-center text-muted-foreground py-8">Loading MMP files...</div>
         ) : (
@@ -2791,16 +2794,18 @@ const MMP = () => {
             {!isCoordinator && (
               <TabsContent value="new">
                 {isFOM && (
-                  <div className="mb-4 flex flex-nowrap gap-2 items-center overflow-x-auto whitespace-nowrap">
-                    <div className="text-sm font-medium text-muted-foreground mr-2">Subcategory:</div>
-                    <Button variant={newFomSubTab === 'pending' ? 'default' : 'outline'} size="sm" onClick={() => setNewFomSubTab('pending')} className={newFomSubTab === 'pending' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''}>
-                      MMPs Pending Verification
-                      <Badge variant="secondary" className="ml-2">{newFomSubcategories.pending.length}</Badge>
-                    </Button>
-                    <Button variant={newFomSubTab === 'verified' ? 'default' : 'outline'} size="sm" onClick={() => setNewFomSubTab('verified')} className={newFomSubTab === 'verified' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''}>
-                      Verified MMPs
-                      <Badge variant="secondary" className="ml-2">{newFomSubcategories.verified.length}</Badge>
-                    </Button>
+                  <div className="mb-4">
+                    <div className="text-sm font-medium text-muted-foreground mb-2">Subcategory:</div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <Button variant={newFomSubTab === 'pending' ? 'default' : 'outline'} size="sm" onClick={() => setNewFomSubTab('pending')} className={newFomSubTab === 'pending' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''}>
+                        MMPs Pending Verification
+                        <Badge variant="secondary" className="ml-2">{newFomSubcategories.pending.length}</Badge>
+                      </Button>
+                      <Button variant={newFomSubTab === 'verified' ? 'default' : 'outline'} size="sm" onClick={() => setNewFomSubTab('verified')} className={newFomSubTab === 'verified' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''}>
+                        Verified MMPs
+                        <Badge variant="secondary" className="ml-2">{newFomSubcategories.verified.length}</Badge>
+                      </Button>
+                    </div>
                   </div>
                 )}
                 <MMPList mmpFiles={isFOM ? newFomSubcategories[newFomSubTab] : categorizedMMPs.new} />
@@ -2810,16 +2815,18 @@ const MMP = () => {
             {!isCoordinator && (
               <TabsContent value="forwarded">
                 {(isAdmin || isICT || isFOM) && (
-                  <div className="mb-4 flex flex-nowrap gap-2 items-center overflow-x-auto whitespace-nowrap">
-                    <div className="text-sm font-medium text-muted-foreground mr-2">Subcategory:</div>
-                    <Button variant={forwardedSubTab === 'pending' ? 'default' : 'outline'} size="sm" onClick={() => setForwardedSubTab('pending')} className={forwardedSubTab === 'pending' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''}>
-                      {isFOM ? 'Sites Pending Verification' : 'MMPs Pending Verification'}
-                      <Badge variant="secondary" className="ml-2">{forwardedSubcategories.pending.length}</Badge>
-                    </Button>
-                    <Button variant={forwardedSubTab === 'verified' ? 'default' : 'outline'} size="sm" onClick={() => setForwardedSubTab('verified')} className={forwardedSubTab === 'verified' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''}>
-                      {isFOM ? 'Verified Sites' : 'Verified MMPs'}
-                      <Badge variant="secondary" className="ml-2">{forwardedSubcategories.verified.length}</Badge>
-                    </Button>
+                  <div className="mb-4">
+                    <div className="text-sm font-medium text-muted-foreground mb-2">Subcategory:</div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <Button variant={forwardedSubTab === 'pending' ? 'default' : 'outline'} size="sm" onClick={() => setForwardedSubTab('pending')} className={forwardedSubTab === 'pending' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''}>
+                        {isFOM ? 'Sites Pending Verification' : 'MMPs Pending Verification'}
+                        <Badge variant="secondary" className="ml-2">{forwardedSubcategories.pending.length}</Badge>
+                      </Button>
+                      <Button variant={forwardedSubTab === 'verified' ? 'default' : 'outline'} size="sm" onClick={() => setForwardedSubTab('verified')} className={forwardedSubTab === 'verified' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''}>
+                        {isFOM ? 'Verified Sites' : 'Verified MMPs'}
+                        <Badge variant="secondary" className="ml-2">{forwardedSubcategories.verified.length}</Badge>
+                      </Button>
+                    </div>
                   </div>
                 )}
                 <MMPList mmpFiles={(isAdmin || isICT || isFOM) ? forwardedSubcategories[forwardedSubTab] : categorizedMMPs.forwarded} />
@@ -2835,42 +2842,44 @@ const MMP = () => {
 
             <TabsContent value="verified">
               {(isAdmin || isICT || isFOM || isCoordinator) && (
-                <div className="mb-4 flex flex-nowrap gap-2 items-center overflow-x-auto whitespace-nowrap">
-                  <div className="text-sm font-medium text-muted-foreground mr-2">Subcategory:</div>
-                  <Button variant={verifiedSubTab === 'newSites' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('newSites')} className={verifiedSubTab === 'newSites' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''}>
-                    New Sites
-                    <Badge variant="secondary" className="ml-2">
-                      {newSitesVerifiedCount}
-                    </Badge>
-                  </Button>
-                  <Button variant={verifiedSubTab === 'approvedCosted' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('approvedCosted')} className={verifiedSubTab === 'approvedCosted' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''}>
-                    Approved & Costed
-                    <Badge variant="secondary" className="ml-2">{approvedCostedCount}</Badge>
-                  </Button>
-                  <Button variant={verifiedSubTab === 'dispatched' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('dispatched')} className={verifiedSubTab === 'dispatched' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''}>
-                    Dispatched
-                    <Badge variant="secondary" className="ml-2">{dispatchedCount}</Badge>
-                  </Button>
-                  {(isAdmin || isICT || isFOM) && (
-                    <>
-                      <Button variant={verifiedSubTab === 'smartAssigned' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('smartAssigned')} className={verifiedSubTab === 'smartAssigned' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''}>
-                        Smart Assigned
-                        <Badge variant="secondary" className="ml-2">{smartAssignedCount}</Badge>
-                      </Button>
-                      <Button variant={verifiedSubTab === 'accepted' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('accepted')} className={verifiedSubTab === 'accepted' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''}>
-                        Accepted
-                        <Badge variant="secondary" className="ml-2">{acceptedCount}</Badge>
-                      </Button>
-                      <Button variant={verifiedSubTab === 'ongoing' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('ongoing')} className={verifiedSubTab === 'ongoing' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''}>
-                        Ongoing
-                        <Badge variant="secondary" className="ml-2">{ongoingCount}</Badge>
-                      </Button>
-                    </>
-                  )}
-                  <Button variant={verifiedSubTab === 'completed' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('completed')} className={verifiedSubTab === 'completed' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''}>
-                    Completed
-                    <Badge variant="secondary" className="ml-2">{completedCount}</Badge>
-                  </Button>
+                <div className="mb-4">
+                  <div className="text-sm font-medium text-muted-foreground mb-2">Subcategory:</div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-2">
+                    <Button variant={verifiedSubTab === 'newSites' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('newSites')} className={`${verifiedSubTab === 'newSites' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} text-xs`}>
+                      New Sites
+                      <Badge variant="secondary" className="ml-1 text-xs">
+                        {newSitesVerifiedCount}
+                      </Badge>
+                    </Button>
+                    <Button variant={verifiedSubTab === 'approvedCosted' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('approvedCosted')} className={`${verifiedSubTab === 'approvedCosted' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} text-xs`}>
+                      Approved & Costed
+                      <Badge variant="secondary" className="ml-1 text-xs">{approvedCostedCount}</Badge>
+                    </Button>
+                    <Button variant={verifiedSubTab === 'dispatched' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('dispatched')} className={`${verifiedSubTab === 'dispatched' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} text-xs`}>
+                      Dispatched
+                      <Badge variant="secondary" className="ml-1 text-xs">{dispatchedCount}</Badge>
+                    </Button>
+                    {(isAdmin || isICT || isFOM) && (
+                      <>
+                        <Button variant={verifiedSubTab === 'smartAssigned' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('smartAssigned')} className={`${verifiedSubTab === 'smartAssigned' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} text-xs`}>
+                          Smart Assigned
+                          <Badge variant="secondary" className="ml-1 text-xs">{smartAssignedCount}</Badge>
+                        </Button>
+                        <Button variant={verifiedSubTab === 'accepted' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('accepted')} className={`${verifiedSubTab === 'accepted' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} text-xs`}>
+                          Accepted
+                          <Badge variant="secondary" className="ml-1 text-xs">{acceptedCount}</Badge>
+                        </Button>
+                        <Button variant={verifiedSubTab === 'ongoing' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('ongoing')} className={`${verifiedSubTab === 'ongoing' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} text-xs`}>
+                          Ongoing
+                          <Badge variant="secondary" className="ml-1 text-xs">{ongoingCount}</Badge>
+                        </Button>
+                      </>
+                    )}
+                    <Button variant={verifiedSubTab === 'completed' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('completed')} className={`${verifiedSubTab === 'completed' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} text-xs`}>
+                      Completed
+                      <Badge variant="secondary" className="ml-1 text-xs">{completedCount}</Badge>
+                    </Button>
+                  </div>
                 </div>
               )}
               {verifiedSubTab !== 'approvedCosted' && verifiedSubTab !== 'dispatched' && verifiedSubTab !== 'smartAssigned' && verifiedSubTab !== 'accepted' && verifiedSubTab !== 'ongoing' && verifiedSubTab !== 'completed' && <MMPList mmpFiles={verifiedVisibleMMPs} />}
@@ -3361,7 +3370,7 @@ const MMP = () => {
                   {enumeratorSubTab === 'mySites' && (
                     <div className="mt-4">
                       <div className="text-sm font-medium text-muted-foreground mb-2">Subcategories:</div>
-                      <div className="flex gap-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                         <Button 
                           variant={mySitesSubTab === 'pending' ? 'default' : 'outline'} 
                           size="sm" 
@@ -3866,52 +3875,137 @@ const MMP = () => {
       )}
       {/* Cost Acknowledgment Dialog for Smart Assigned Sites */}
       <Dialog open={costAcknowledgmentOpen} onOpenChange={setCostAcknowledgmentOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Cost Acknowledgment Required</DialogTitle>
+            <DialogTitle className="text-xl font-semibold">Cost Acknowledgment Required</DialogTitle>
+            <p className="text-sm text-muted-foreground mt-1">
+              Review the complete site information and cost breakdown before acknowledging
+            </p>
           </DialogHeader>
           {selectedSiteForAcknowledgment && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">Site Name</p>
-                  <p className="font-medium">{selectedSiteForAcknowledgment.siteName || selectedSiteForAcknowledgment.site_name || '—'}</p>
+            <div className="space-y-6">
+              {/* Section 1: Site Details */}
+              <div className="bg-gray-50 p-5 rounded-lg border space-y-4">
+                <div className="flex items-center gap-2 pb-3 border-b">
+                  <div className="bg-gray-700 text-white rounded w-6 h-6 flex items-center justify-center font-semibold text-sm">
+                    1
+                  </div>
+                  <h3 className="text-base font-semibold text-gray-900">Site Details</h3>
                 </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">State</p>
-                  <p className="font-medium">{selectedSiteForAcknowledgment.state || '—'}</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="bg-white p-3 rounded border">
+                    <p className="text-xs font-medium text-gray-600 mb-1">Site Code</p>
+                    <p className="font-medium text-gray-900">{selectedSiteForAcknowledgment.siteCode || selectedSiteForAcknowledgment.site_code || '—'}</p>
+                  </div>
+                  <div className="bg-white p-3 rounded border">
+                    <p className="text-xs font-medium text-gray-600 mb-1">Site Name</p>
+                    <p className="font-medium text-gray-900">{selectedSiteForAcknowledgment.siteName || selectedSiteForAcknowledgment.site_name || '—'}</p>
+                  </div>
+                  <div className="bg-white p-3 rounded border">
+                    <p className="text-xs font-medium text-gray-600 mb-1">Hub Office</p>
+                    <p className="font-medium text-gray-900">{selectedSiteForAcknowledgment.hubOffice || selectedSiteForAcknowledgment.hub_office || '—'}</p>
+                  </div>
+                  <div className="bg-white p-3 rounded border">
+                    <p className="text-xs font-medium text-gray-600 mb-1">State</p>
+                    <p className="font-medium text-gray-900">{selectedSiteForAcknowledgment.state || '—'}</p>
+                  </div>
+                  <div className="bg-white p-3 rounded border">
+                    <p className="text-xs font-medium text-gray-600 mb-1">Locality</p>
+                    <p className="font-medium text-gray-900">{selectedSiteForAcknowledgment.locality || '—'}</p>
+                  </div>
+                  <div className="bg-white p-3 rounded border">
+                    <p className="text-xs font-medium text-gray-600 mb-1">CP Name</p>
+                    <p className="font-medium text-gray-900">{selectedSiteForAcknowledgment.cpName || selectedSiteForAcknowledgment.cp_name || '—'}</p>
+                  </div>
+                  <div className="bg-white p-3 rounded border">
+                    <p className="text-xs font-medium text-gray-600 mb-1">Activity at Site</p>
+                    <p className="font-medium text-gray-900">{selectedSiteForAcknowledgment.siteActivity || selectedSiteForAcknowledgment.activity_at_site || '—'}</p>
+                  </div>
+                  <div className="bg-white p-3 rounded border">
+                    <p className="text-xs font-medium text-gray-600 mb-1">Visit Date</p>
+                    <p className="font-medium text-gray-900">{selectedSiteForAcknowledgment.visitDate || selectedSiteForAcknowledgment.visit_date || '—'}</p>
+                  </div>
+                  <div className="bg-white p-3 rounded border">
+                    <p className="text-xs font-medium text-gray-600 mb-1">Monitoring By</p>
+                    <p className="font-medium text-gray-900">{selectedSiteForAcknowledgment.monitoringBy || selectedSiteForAcknowledgment.monitoring_by || '—'}</p>
+                  </div>
+                  <div className="bg-white p-3 rounded border">
+                    <p className="text-xs font-medium text-gray-600 mb-1">Survey Tool</p>
+                    <p className="font-medium text-gray-900">{selectedSiteForAcknowledgment.surveyTool || selectedSiteForAcknowledgment.survey_tool || '—'}</p>
+                  </div>
+                  <div className="bg-white p-3 rounded border">
+                    <p className="text-xs font-medium text-gray-600 mb-1">Market Diversion</p>
+                    <p className="font-medium text-gray-900">{selectedSiteForAcknowledgment.useMarketDiversion || selectedSiteForAcknowledgment.use_market_diversion ? 'Yes' : 'No'}</p>
+                  </div>
+                  <div className="bg-white p-3 rounded border">
+                    <p className="text-xs font-medium text-gray-600 mb-1">Warehouse Monitoring</p>
+                    <p className="font-medium text-gray-900">{selectedSiteForAcknowledgment.useWarehouseMonitoring || selectedSiteForAcknowledgment.use_warehouse_monitoring ? 'Yes' : 'No'}</p>
+                  </div>
+                  <div className="sm:col-span-2 bg-white p-3 rounded border">
+                    <p className="text-xs font-medium text-gray-600 mb-1">Comments</p>
+                    <p className="font-medium text-gray-900">{selectedSiteForAcknowledgment.comments || 'No comments provided'}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Locality</p>
-                  <p className="font-medium">{selectedSiteForAcknowledgment.locality || '—'}</p>
+              </div>
+
+              {/* Section 2: Site Cost Details */}
+              <div className="bg-gray-50 p-5 rounded-lg border space-y-4">
+                <div className="flex items-center gap-2 pb-3 border-b">
+                  <div className="bg-gray-700 text-white rounded w-6 h-6 flex items-center justify-center font-semibold text-sm">
+                    2
+                  </div>
+                  <h3 className="text-base font-semibold text-gray-900">Site Cost Details</h3>
                 </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Activity at Site</p>
-                  <p className="font-medium">{selectedSiteForAcknowledgment.siteActivity || selectedSiteForAcknowledgment.activity_at_site || '—'}</p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="bg-white p-4 rounded-lg border">
+                    <p className="text-xs font-medium text-gray-600 mb-2">Enumerator Fee</p>
+                    <p className="text-2xl font-semibold text-gray-900">
+                      ${(selectedSiteForAcknowledgment.enumerator_fee || selectedSiteForAcknowledgment.enumeratorFee || 20).toLocaleString()}
+                    </p>
+                    {(!selectedSiteForAcknowledgment.enumerator_fee && !selectedSiteForAcknowledgment.enumeratorFee) && (
+                      <p className="text-xs text-gray-500 mt-1">(Default Rate)</p>
+                    )}
+                    <p className="text-xs text-gray-600 mt-2">Payment for completing the site visit</p>
+                  </div>
+                  <div className="bg-white p-4 rounded-lg border">
+                    <p className="text-xs font-medium text-gray-600 mb-2">Transport Fee</p>
+                    <p className="text-2xl font-semibold text-gray-900">
+                      ${(selectedSiteForAcknowledgment.transport_fee || selectedSiteForAcknowledgment.transportFee || 10).toLocaleString()}
+                    </p>
+                    {(!selectedSiteForAcknowledgment.transport_fee && !selectedSiteForAcknowledgment.transportFee) && (
+                      <p className="text-xs text-gray-500 mt-1">(Default Rate)</p>
+                    )}
+                    <p className="text-xs text-gray-600 mt-2">Transportation reimbursement</p>
+                  </div>
+                  <div className="bg-blue-600 p-4 rounded-lg border border-blue-700">
+                    <p className="text-xs font-medium text-blue-100 mb-2">Total Cost</p>
+                    <p className="text-2xl font-bold text-white">
+                      ${(selectedSiteForAcknowledgment.cost || 
+                        ((selectedSiteForAcknowledgment.enumerator_fee || selectedSiteForAcknowledgment.enumeratorFee || 20) + 
+                         (selectedSiteForAcknowledgment.transport_fee || selectedSiteForAcknowledgment.transportFee || 10))).toLocaleString()}
+                    </p>
+                    <p className="text-xs text-blue-100 mt-2">Complete payment upon visit</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Visit Date</p>
-                  <p className="font-medium">{selectedSiteForAcknowledgment.visitDate || selectedSiteForAcknowledgment.visit_date || '—'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Total Cost</p>
-                  <p className="font-semibold text-green-600">
-                    ${(selectedSiteForAcknowledgment.cost || 
-                      ((selectedSiteForAcknowledgment.enumerator_fee || selectedSiteForAcknowledgment.enumeratorFee || 20) + 
-                       (selectedSiteForAcknowledgment.transport_fee || selectedSiteForAcknowledgment.transportFee || 10))).toLocaleString()}
+                <div className="bg-white p-4 rounded-lg border">
+                  <p className="text-sm font-semibold text-gray-900 mb-2">Payment Information</p>
+                  <p className="text-sm text-gray-700 leading-relaxed">
+                    Upon successful completion of the site visit, the total cost amount will be credited to your wallet. 
+                    Payment is processed automatically after you submit your visit report with photos and required documentation.
                   </p>
                 </div>
               </div>
-              
-              <div className="border-t pt-4">
-                <div className="flex items-start gap-3">
+
+              {/* Acknowledgment Section */}
+              <div className="bg-gray-50 p-4 rounded-lg border">
+                <div className="flex flex-col sm:flex-row sm:items-start gap-3">
                   <Checkbox
                     id="costAcknowledgment"
                     checked={costAcknowledged}
                     onCheckedChange={(checked) => setCostAcknowledged(checked as boolean)}
-                    className="mt-1"
+                    className="mt-1 flex-shrink-0"
                   />
-                  <div>
+                  <div className="flex-1">
                     <label htmlFor="costAcknowledgment" className="text-sm font-medium cursor-pointer">
                       I acknowledge receipt of the smart assigned cost details
                     </label>
@@ -3924,7 +4018,7 @@ const MMP = () => {
               </div>
             </div>
           )}
-          <DialogFooter>
+          <DialogFooter className="flex flex-col sm:flex-row gap-2 sm:gap-0">
             <Button 
               variant="outline" 
               onClick={() => {
@@ -3932,6 +4026,7 @@ const MMP = () => {
                 setSelectedSiteForAcknowledgment(null);
                 setCostAcknowledged(false);
               }}
+              className="w-full sm:w-auto order-2 sm:order-1"
             >
               Cancel
             </Button>
@@ -4172,7 +4267,7 @@ const MMP = () => {
                 }
               }}
               disabled={!costAcknowledged}
-              className="bg-green-600 hover:bg-green-700"
+              className="bg-green-600 hover:bg-green-700 w-full sm:w-auto order-1 sm:order-2"
             >
               Acknowledge & Continue
             </Button>
