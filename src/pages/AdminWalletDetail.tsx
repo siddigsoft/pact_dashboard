@@ -313,26 +313,28 @@ const AdminWalletDetail = () => {
   const currentBalance = wallet.balances[currency] || 0;
 
   return (
-    <div className="relative min-h-screen">
+    <div className="relative min-h-screen pb-safe">
       <div className="fixed inset-0 bg-gradient-to-br from-slate-950 via-blue-950 to-purple-950 -z-10">
         <div className="absolute inset-0 bg-[linear-gradient(rgba(59,130,246,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(59,130,246,0.05)_1px,transparent_1px)] bg-[size:50px_50px] [mask-image:radial-gradient(ellipse_80%_50%_at_50%_0%,#000,transparent)]"></div>
       </div>
       
-      <div className="relative space-y-6 p-6" data-testid="page-admin-wallet-detail">
+      <div className="relative space-y-4 md:space-y-6 p-3 md:p-6" data-testid="page-admin-wallet-detail">
         {/* User Header */}
         {userProfile && (
           <Card className="bg-gradient-to-br from-slate-900/80 to-blue-900/80 border-blue-500/30 backdrop-blur-xl">
-            <CardHeader>
-              <div className="flex items-center justify-between gap-4 flex-wrap">
-                <div>
-                  <CardTitle className="text-2xl font-bold text-blue-300">{userProfile.full_name || 'Unknown User'}</CardTitle>
-                  <p className="text-sm text-blue-400/70 mt-1">{userProfile.email}</p>
-                  <div className="flex items-center gap-2 mt-2">
-                    <Badge className="bg-purple-500/20 text-purple-300 border-purple-500/30">
+            <CardHeader className="p-4 md:p-6">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="w-full sm:w-auto">
+                  <CardTitle className="text-xl md:text-2xl font-bold text-blue-300 break-words">
+                    {userProfile.full_name || 'Unknown User'}
+                  </CardTitle>
+                  <p className="text-xs md:text-sm text-blue-400/70 mt-1 break-all">{userProfile.email}</p>
+                  <div className="flex items-center gap-2 mt-2 flex-wrap">
+                    <Badge className="bg-purple-500/20 text-purple-300 border-purple-500/30 text-xs">
                       {userProfile.role || 'N/A'}
                     </Badge>
                     {userProfile.hub_id && (
-                      <Badge className="bg-cyan-500/20 text-cyan-300 border-cyan-500/30">
+                      <Badge className="bg-cyan-500/20 text-cyan-300 border-cyan-500/30 text-xs">
                         Hub: {userProfile.hub_id}
                       </Badge>
                     )}
@@ -340,7 +342,10 @@ const AdminWalletDetail = () => {
                 </div>
                 <Dialog open={adjOpen} onOpenChange={setAdjOpen}>
                   <DialogTrigger asChild>
-                    <Button data-testid="button-adjust-balance" className="bg-gradient-to-r from-blue-600 to-purple-600">
+                    <Button 
+                      data-testid="button-adjust-balance" 
+                      className="bg-gradient-to-r from-blue-600 to-purple-600 w-full sm:w-auto min-h-11"
+                    >
                       Adjust Balance
                     </Button>
                   </DialogTrigger>
@@ -354,6 +359,7 @@ const AdminWalletDetail = () => {
                             variant={adjDirection === 'credit' ? 'default' : 'outline'} 
                             onClick={() => setAdjDirection('credit')}
                             data-testid="button-direction-credit"
+                            className="min-h-11"
                           >
                             Credit (Add)
                           </Button>
@@ -361,6 +367,7 @@ const AdminWalletDetail = () => {
                             variant={adjDirection === 'debit' ? 'default' : 'outline'} 
                             onClick={() => setAdjDirection('debit')}
                             data-testid="button-direction-debit"
+                            className="min-h-11"
                           >
                             Debit (Subtract)
                           </Button>
@@ -395,7 +402,7 @@ const AdminWalletDetail = () => {
                         onClick={handleAdjustBalance} 
                         disabled={!adjAmount}
                         data-testid="button-submit-adjustment"
-                        className="bg-gradient-to-r from-green-600 to-emerald-600"
+                        className="bg-gradient-to-r from-green-600 to-emerald-600 min-h-11"
                       >
                         Submit Adjustment
                       </Button>
@@ -408,36 +415,36 @@ const AdminWalletDetail = () => {
         )}
 
         {/* Summary Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
           <Card className="bg-gradient-to-br from-slate-900/80 to-blue-900/80 border-blue-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(59,130,246,0.2)]">
-            <CardHeader>
-              <CardTitle className="text-blue-300 text-sm uppercase tracking-wider">Balance ({currency})</CardTitle>
+            <CardHeader className="p-4 md:p-6">
+              <CardTitle className="text-blue-300 text-xs md:text-sm uppercase tracking-wider">Balance ({currency})</CardTitle>
             </CardHeader>
             <CardContent className="text-3xl font-bold bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent" data-testid="text-balance">
               {currencyFmt(currentBalance, currency)}
             </CardContent>
           </Card>
           <Card className="bg-gradient-to-br from-slate-900/80 to-purple-900/80 border-purple-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(168,85,247,0.2)]">
-            <CardHeader>
-              <CardTitle className="text-purple-300 text-sm uppercase tracking-wider">Total Earned</CardTitle>
+            <CardHeader className="p-4 md:p-6">
+              <CardTitle className="text-purple-300 text-xs md:text-sm uppercase tracking-wider">Total Earned</CardTitle>
             </CardHeader>
-            <CardContent className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent" data-testid="text-total-earned">
+            <CardContent className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent p-4 md:p-6" data-testid="text-total-earned">
               {currencyFmt(wallet.totalEarned, currency)}
             </CardContent>
           </Card>
           <Card className="bg-gradient-to-br from-slate-900/80 to-cyan-900/80 border-cyan-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(34,211,238,0.2)]">
-            <CardHeader>
-              <CardTitle className="text-cyan-300 text-sm uppercase tracking-wider">Total Withdrawn</CardTitle>
+            <CardHeader className="p-4 md:p-6">
+              <CardTitle className="text-cyan-300 text-xs md:text-sm uppercase tracking-wider">Total Withdrawn</CardTitle>
             </CardHeader>
-            <CardContent className="text-3xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent" data-testid="text-total-withdrawn">
+            <CardContent className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent p-4 md:p-6" data-testid="text-total-withdrawn">
               {currencyFmt(wallet.totalWithdrawn, currency)}
             </CardContent>
           </Card>
           <Card className="bg-gradient-to-br from-slate-900/80 to-indigo-900/80 border-indigo-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(99,102,241,0.2)]">
-            <CardHeader>
-              <CardTitle className="text-indigo-300 text-sm uppercase tracking-wider">Transaction Count</CardTitle>
+            <CardHeader className="p-4 md:p-6">
+              <CardTitle className="text-indigo-300 text-xs md:text-sm uppercase tracking-wider">Transaction Count</CardTitle>
             </CardHeader>
-            <CardContent className="text-3xl font-bold bg-gradient-to-r from-yellow-400 to-orange-400 bg-clip-text text-transparent" data-testid="text-transaction-count">
+            <CardContent className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-yellow-400 to-orange-400 bg-clip-text text-transparent p-4 md:p-6" data-testid="text-transaction-count">
               {transactions.length}
             </CardContent>
           </Card>
@@ -445,28 +452,44 @@ const AdminWalletDetail = () => {
 
       {/* Tabbed Content */}
       <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4 bg-gradient-to-r from-slate-900/80 to-blue-900/80 border border-blue-500/30 backdrop-blur-xl p-1">
-          <TabsTrigger value="overview" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-purple-600 data-[state=active]:text-white">
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 bg-gradient-to-r from-slate-900/80 to-blue-900/80 border border-blue-500/30 backdrop-blur-xl p-1">
+          <TabsTrigger 
+            value="overview" 
+            className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-purple-600 data-[state=active]:text-white text-xs md:text-sm min-h-11"
+            data-testid="tab-overview"
+          >
             Overview
           </TabsTrigger>
-          <TabsTrigger value="sites" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-purple-600 data-[state=active]:text-white">
-            Sites Visited
+          <TabsTrigger 
+            value="sites" 
+            className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-purple-600 data-[state=active]:text-white text-xs md:text-sm min-h-11"
+            data-testid="tab-sites"
+          >
+            Sites
           </TabsTrigger>
-          <TabsTrigger value="earnings" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-purple-600 data-[state=active]:text-white">
-            Earnings Breakdown
+          <TabsTrigger 
+            value="earnings" 
+            className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-purple-600 data-[state=active]:text-white text-xs md:text-sm min-h-11"
+            data-testid="tab-earnings"
+          >
+            Earnings
           </TabsTrigger>
-          <TabsTrigger value="transactions" className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-purple-600 data-[state=active]:text-white">
+          <TabsTrigger 
+            value="transactions" 
+            className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-purple-600 data-[state=active]:text-white text-xs md:text-sm min-h-11"
+            data-testid="tab-transactions"
+          >
             Transactions
           </TabsTrigger>
         </TabsList>
 
         {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
             <Card className="bg-gradient-to-br from-slate-900/80 to-green-900/80 border-green-500/30 backdrop-blur-xl">
-              <CardHeader>
-                <CardTitle className="text-green-300 flex items-center gap-2">
-                  <Briefcase className="w-5 h-5" />
+              <CardHeader className="p-4 md:p-6">
+                <CardTitle className="text-green-300 flex items-center gap-2 text-base md:text-lg">
+                  <Briefcase className="w-4 h-4 md:w-5 md:h-5" />
                   Work Statistics
                 </CardTitle>
               </CardHeader>
@@ -493,9 +516,9 @@ const AdminWalletDetail = () => {
             </Card>
 
             <Card className="bg-gradient-to-br from-slate-900/80 to-purple-900/80 border-purple-500/30 backdrop-blur-xl">
-              <CardHeader>
-                <CardTitle className="text-purple-300 flex items-center gap-2">
-                  <TrendingUp className="w-5 h-5" />
+              <CardHeader className="p-4 md:p-6">
+                <CardTitle className="text-purple-300 flex items-center gap-2 text-base md:text-lg">
+                  <TrendingUp className="w-4 h-4 md:w-5 md:h-5" />
                   Financial Summary
                 </CardTitle>
               </CardHeader>
@@ -526,14 +549,14 @@ const AdminWalletDetail = () => {
         {/* Sites Visited Tab */}
         <TabsContent value="sites">
           <Card className="bg-gradient-to-br from-slate-900/80 to-blue-900/80 border-blue-500/30 backdrop-blur-xl">
-            <CardHeader>
-              <CardTitle className="text-blue-300 flex items-center gap-2">
-                <MapPin className="w-5 h-5" />
+            <CardHeader className="p-4 md:p-6">
+              <CardTitle className="text-blue-300 flex items-center gap-2 text-base md:text-lg">
+                <MapPin className="w-4 h-4 md:w-5 md:h-5" />
                 Sites Visited ({siteVisits.length})
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="rounded-md border border-blue-500/30 overflow-x-auto">
+            <CardContent className="p-0 md:p-6">
+              <div className="rounded-md border border-blue-500/30 overflow-x-auto smooth-scroll">
                 <Table>
                   <TableHeader>
                     <TableRow className="border-blue-500/30 hover:bg-blue-500/5">
@@ -599,14 +622,14 @@ const AdminWalletDetail = () => {
         {/* Earnings Breakdown Tab */}
         <TabsContent value="earnings">
           <Card className="bg-gradient-to-br from-slate-900/80 to-purple-900/80 border-purple-500/30 backdrop-blur-xl">
-            <CardHeader>
-              <CardTitle className="text-purple-300 flex items-center gap-2">
-                <DollarSign className="w-5 h-5" />
+            <CardHeader className="p-4 md:p-6">
+              <CardTitle className="text-purple-300 flex items-center gap-2 text-base md:text-lg">
+                <DollarSign className="w-4 h-4 md:w-5 md:h-5" />
                 Earnings Breakdown by Source
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <CardContent className="space-y-4 md:space-y-6 p-4 md:p-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
                 <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/30">
                   <div className="flex items-center justify-between">
                     <div>
@@ -678,11 +701,11 @@ const AdminWalletDetail = () => {
         {/* Transactions Tab */}
         <TabsContent value="transactions">
           <Card className="bg-gradient-to-br from-slate-900/80 to-cyan-900/80 border-cyan-500/30 backdrop-blur-xl">
-            <CardHeader>
-              <CardTitle className="text-cyan-300">Transaction History ({transactions.length})</CardTitle>
+            <CardHeader className="p-4 md:p-6">
+              <CardTitle className="text-cyan-300 text-base md:text-lg">Transaction History ({transactions.length})</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="rounded-md border border-cyan-500/30 overflow-x-auto">
+            <CardContent className="p-0 md:p-6">
+              <div className="rounded-md border border-cyan-500/30 overflow-x-auto smooth-scroll">
                 <Table>
                   <TableHeader>
                     <TableRow className="border-cyan-500/30 hover:bg-cyan-500/5">
