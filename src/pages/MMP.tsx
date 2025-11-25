@@ -389,7 +389,7 @@ const MMP = () => {
   // Subcategory state for Forwarded MMPs (Admin/ICT only)
   const [forwardedSubTab, setForwardedSubTab] = useState<'pending' | 'verified'>('pending');
   // Subcategory state for Verified Sites (Admin/ICT only)
-  const [verifiedSubTab, setVerifiedSubTab] = useState<'newSites' | 'approvedCosted' | 'dispatched' | 'accepted' | 'ongoing' | 'completed'>('newSites');
+  const [verifiedSubTab, setVerifiedSubTab] = useState<'newSites' | 'approvedCosted' | 'dispatched' | 'smartAssigned' | 'accepted' | 'ongoing' | 'completed'>('newSites');
   // Subcategory state for Enumerator dashboard
   const [enumeratorSubTab, setEnumeratorSubTab] = useState<'availableSites' | 'smartAssigned' | 'mySites'>('availableSites');
   // Sub-subcategory state for My Sites (Data Collector)
@@ -424,8 +424,81 @@ const MMP = () => {
   const [completedSiteEntries, setCompletedSiteEntries] = useState<any[]>([]);
   const [loadingCompleted, setLoadingCompleted] = useState(false);
   const [completedCount, setCompletedCount] = useState(0);
+  const [smartAssignedSiteEntries, setSmartAssignedSiteEntries] = useState<any[]>([]);
+  const [loadingSmartAssigned, setLoadingSmartAssigned] = useState(false);
+  const [smartAssignedCount, setSmartAssignedCount] = useState(0);
   const [dispatchDialogOpen, setDispatchDialogOpen] = useState(false);
   const [dispatchType, setDispatchType] = useState<'state' | 'locality' | 'individual'>('state');
+
+  // Load smart assigned site entries only when the tab is active
+  useEffect(() => {
+    const loadSmartAssignedEntries = async () => {
+      if (verifiedSubTab !== 'smartAssigned') {
+        setSmartAssignedSiteEntries([]);
+        return;
+      }
+
+      setLoadingSmartAssigned(true);
+      try {
+        // Load entries with status = 'Assigned' (case-insensitive)
+        const { data: smartAssignedEntries, error: allError } = await supabase
+          .from('mmp_site_entries')
+          .select('*')
+          .ilike('status', 'Assigned')
+          .order('created_at', { ascending: false })
+          .limit(1000);
+
+        if (allError) throw allError;
+
+        // Format entries for MMPSiteEntriesTable
+        const formattedEntries = smartAssignedEntries.map(entry => {
+          const additionalData = entry.additional_data || {};
+          const enumeratorFee = entry.enumerator_fee ?? additionalData.enumerator_fee;
+          const transportFee = entry.transport_fee ?? additionalData.transport_fee;
+          return {
+            ...entry,
+            siteName: entry.site_name,
+            siteCode: entry.site_code,
+            hubOffice: entry.hub_office,
+            cpName: entry.cp_name,
+            siteActivity: entry.activity_at_site,
+            monitoringBy: entry.monitoring_by,
+            surveyTool: entry.survey_tool,
+            useMarketDiversion: entry.use_market_diversion,
+            useWarehouseMonitoring: entry.use_warehouse_monitoring,
+            visitDate: entry.visit_date,
+            comments: entry.comments,
+            enumerator_fee: enumeratorFee,
+            enumeratorFee: enumeratorFee,
+            transport_fee: transportFee,
+            transportFee: transportFee,
+            cost: entry.cost,
+            status: entry.status,
+            verified_by: entry.verified_by,
+            verified_at: entry.verified_at,
+            dispatched_by: entry.dispatched_by,
+            dispatched_at: entry.dispatched_at,
+            accepted_by: entry.accepted_by,
+            accepted_at: entry.accepted_at,
+            cost_acknowledged: entry.cost_acknowledged ?? additionalData.cost_acknowledged,
+            updated_at: entry.updated_at,
+            additionalData: additionalData
+          };
+        });
+
+        setSmartAssignedSiteEntries(formattedEntries);
+        setSmartAssignedCount(formattedEntries.length);
+      } catch (error) {
+        console.error('Failed to load smart assigned site entries:', error);
+        setSmartAssignedSiteEntries([]);
+        setSmartAssignedCount(0);
+      } finally {
+        setLoadingSmartAssigned(false);
+      }
+    };
+
+    loadSmartAssignedEntries();
+  }, [verifiedSubTab]);
 
   // Cost acknowledgment dialog state for Smart Assigned sites
   const [costAcknowledgmentOpen, setCostAcknowledgmentOpen] = useState(false);
@@ -2757,6 +2830,10 @@ const MMP = () => {
                   </Button>
                   {(isAdmin || isICT || isFOM) && (
                     <>
+                      <Button variant={verifiedSubTab === 'smartAssigned' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('smartAssigned')} className={verifiedSubTab === 'smartAssigned' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''}>
+                        Smart Assigned
+                        <Badge variant="secondary" className="ml-2">{smartAssignedCount}</Badge>
+                      </Button>
                       <Button variant={verifiedSubTab === 'accepted' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('accepted')} className={verifiedSubTab === 'accepted' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''}>
                         Accepted
                         <Badge variant="secondary" className="ml-2">{acceptedCount}</Badge>
@@ -2773,7 +2850,7 @@ const MMP = () => {
                   </Button>
                 </div>
               )}
-              {verifiedSubTab !== 'approvedCosted' && verifiedSubTab !== 'dispatched' && verifiedSubTab !== 'accepted' && verifiedSubTab !== 'ongoing' && verifiedSubTab !== 'completed' && <MMPList mmpFiles={verifiedVisibleMMPs} />}
+              {verifiedSubTab !== 'approvedCosted' && verifiedSubTab !== 'dispatched' && verifiedSubTab !== 'smartAssigned' && verifiedSubTab !== 'accepted' && verifiedSubTab !== 'ongoing' && verifiedSubTab !== 'completed' && <MMPList mmpFiles={verifiedVisibleMMPs} />}
               {(isAdmin || isICT || isFOM || isCoordinator) && verifiedSubTab === 'newSites' && (
                 <>
                   {(isAdmin || isICT) && verifiedCategorySiteRows.length > 0 && (
@@ -3074,6 +3151,34 @@ const MMP = () => {
                       </div>
                       <MMPSiteEntriesTable 
                         siteEntries={dispatchedSiteEntries} 
+                        editable={false}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+              {(isAdmin || isICT || isFOM) && verifiedSubTab === 'smartAssigned' && (
+                <div className="mt-6">
+                  {loadingSmartAssigned ? (
+                    <Card>
+                      <CardContent className="py-8">
+                        <div className="text-center text-muted-foreground">Loading smart assigned site entries...</div>
+                      </CardContent>
+                    </Card>
+                  ) : smartAssignedSiteEntries.length === 0 ? (
+                    <Card>
+                      <CardContent className="py-8">
+                        <div className="text-center text-muted-foreground">No smart assigned site entries found.</div>
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    <div>
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-semibold">Smart Assigned Site Entries</h3>
+                        <Badge variant="secondary">{smartAssignedSiteEntries.length} entries</Badge>
+                      </div>
+                      <MMPSiteEntriesTable 
+                        siteEntries={smartAssignedSiteEntries} 
                         editable={false}
                       />
                     </div>
