@@ -9,9 +9,10 @@ import { Badge } from '@/components/ui/badge';
 import { WalletCard } from '@/components/wallet/WalletCard';
 import { supabase } from '@/integrations/supabase/client';
 import { adminListWallets } from '@/context/wallet/supabase';
-import { Search, RefreshCw, Wallet as WalletIcon, Zap, TrendingUp, Activity, DollarSign, Grid3x3, Table2 } from 'lucide-react';
+import { Search, RefreshCw, Wallet as WalletIcon, Zap, TrendingUp, Activity, DollarSign, Grid3x3, Table2, ChevronDown, ChevronRight, MapPin, Calendar } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { format } from 'date-fns';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
 const fmt = (c: number, cur: string) => new Intl.NumberFormat(undefined, { style: 'currency', currency: cur || 'NGN', currencyDisplay: 'narrowSymbol' }).format((c||0)/100);
 
@@ -20,6 +21,8 @@ const AdminWallets: React.FC = () => {
   const [search, setSearch] = useState('');
   const [currency, setCurrency] = useState('SDG');
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('table');
+  const [expandedWallets, setExpandedWallets] = useState<Set<string>>(new Set());
+  const [transactionDetails, setTransactionDetails] = useState<Record<string, any[]>>({});
   const navigate = useNavigate();
 
   const load = async () => {
@@ -27,6 +30,31 @@ const AdminWallets: React.FC = () => {
     setRows(data || []);
     const c = data && data[0]?.balances ? Object.keys(data[0].balances)[0] : 'SDG';
     setCurrency(c);
+  };
+
+  const loadTransactionDetails = async (walletId: string) => {
+    if (transactionDetails[walletId]) return; // Already loaded
+
+    const { data, error } = await supabase
+      .from('wallet_transactions')
+      .select('*, site_visits!wallet_transactions_site_visit_id_fkey(id, name, location, visit_date)')
+      .eq('wallet_id', walletId)
+      .order('created_at', { ascending: false });
+
+    if (!error && data) {
+      setTransactionDetails(prev => ({ ...prev, [walletId]: data }));
+    }
+  };
+
+  const toggleWalletExpansion = async (walletId: string) => {
+    const newExpanded = new Set(expandedWallets);
+    if (newExpanded.has(walletId)) {
+      newExpanded.delete(walletId);
+    } else {
+      newExpanded.add(walletId);
+      await loadTransactionDetails(walletId);
+    }
+    setExpandedWallets(newExpanded);
   };
   
 
@@ -210,6 +238,8 @@ const AdminWallets: React.FC = () => {
                     const earned = Number(wallet.total_earned || 0);
                     const withdrawn = Number(wallet.total_withdrawn || 0);
                     const isActive = balance > 0 || earned > 0;
+                    const isExpanded = expandedWallets.has(wallet.id);
+                    const transactions = transactionDetails[wallet.id] || [];
                     
                     // Calculate breakdown from transactions
                     const breakdown = wallet.breakdown || {};
@@ -219,82 +249,154 @@ const AdminWallets: React.FC = () => {
                     const adjustments = Number(breakdown.adjustment || 0);
                     
                     return (
-                      <TableRow 
-                        key={wallet.id}
-                        className="hover-elevate cursor-pointer"
-                        onClick={() => navigate(`/admin/wallets/${wallet.user_id}`)}
-                        data-testid={`wallet-row-${wallet.user_id}`}
-                      >
-                        <TableCell className="font-medium">
-                          <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white text-xs font-bold">
-                              {(wallet.owner_name || wallet.profiles?.full_name || 'U')[0].toUpperCase()}
+                      <React.Fragment key={wallet.id}>
+                        <TableRow 
+                          className="hover-elevate"
+                          data-testid={`wallet-row-${wallet.user_id}`}
+                        >
+                          <TableCell className="font-medium">
+                            <div className="flex items-center gap-2">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleWalletExpansion(wallet.id);
+                                }}
+                              >
+                                {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                              </Button>
+                              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white text-xs font-bold">
+                                {(wallet.owner_name || wallet.profiles?.full_name || 'U')[0].toUpperCase()}
+                              </div>
+                              <span>{wallet.owner_name || wallet.profiles?.full_name || wallet.profiles?.username || 'Unknown'}</span>
                             </div>
-                            <span>{wallet.owner_name || wallet.profiles?.full_name || wallet.profiles?.username || 'Unknown'}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {wallet.profiles?.email || '-'}
-                        </TableCell>
-                        <TableCell className="text-right font-bold">
-                          <span className={balance > 0 ? 'text-green-600 dark:text-green-400' : ''}>
-                            {fmt(balance * 100, currency)}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex flex-col gap-1 items-end">
-                            {siteVisitFees > 0 && (
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs text-muted-foreground">Site Visits:</span>
-                                <span className="text-sm font-medium text-blue-600 dark:text-blue-400">
-                                  {fmt(siteVisitFees * 100, currency)}
-                                </span>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {wallet.profiles?.email || '-'}
+                          </TableCell>
+                          <TableCell className="text-right font-bold">
+                            <span className={balance > 0 ? 'text-green-600 dark:text-green-400' : ''}>
+                              {fmt(balance * 100, currency)}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex flex-col gap-1 items-end">
+                              {siteVisitFees > 0 && (
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-muted-foreground">Site Visits:</span>
+                                  <span className="text-sm font-medium text-blue-600 dark:text-blue-400">
+                                    {fmt(siteVisitFees * 100, currency)}
+                                  </span>
+                                </div>
+                              )}
+                              {retainerFees > 0 && (
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-muted-foreground">Retainer:</span>
+                                  <span className="text-sm font-medium text-purple-600 dark:text-purple-400">
+                                    {fmt(retainerFees * 100, currency)}
+                                  </span>
+                                </div>
+                              )}
+                              {bonuses > 0 && (
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-muted-foreground">Bonuses:</span>
+                                  <span className="text-sm font-medium text-green-600 dark:text-green-400">
+                                    {fmt(bonuses * 100, currency)}
+                                  </span>
+                                </div>
+                              )}
+                              {adjustments !== 0 && (
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-muted-foreground">Adjustments:</span>
+                                  <span className={`text-sm font-medium ${adjustments > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                                    {fmt(adjustments * 100, currency)}
+                                  </span>
+                                </div>
+                              )}
+                              {earned === 0 && <span className="text-sm text-muted-foreground">No earnings yet</span>}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <span className="text-purple-600 dark:text-purple-400">
+                              {fmt(withdrawn * 100, currency)}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <Badge 
+                              variant={isActive ? 'default' : 'secondary'}
+                              className={isActive ? 'bg-green-500/90 hover:bg-green-600' : ''}
+                            >
+                              {isActive ? 'ACTIVE' : 'INACTIVE'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground text-sm">
+                            {wallet.updated_at ? format(new Date(wallet.updated_at), 'MMM dd, yyyy') : '-'}
+                          </TableCell>
+                        </TableRow>
+                        
+                        {/* Expandable Transaction Details */}
+                        {isExpanded && (
+                          <TableRow>
+                            <TableCell colSpan={7} className="bg-muted/30 p-0">
+                              <div className="p-4 space-y-3">
+                                <h4 className="font-semibold text-sm flex items-center gap-2">
+                                  <Activity className="w-4 h-4" />
+                                  Transaction History ({transactions.length} transactions)
+                                </h4>
+                                
+                                {transactions.length === 0 ? (
+                                  <p className="text-sm text-muted-foreground">No transactions recorded</p>
+                                ) : (
+                                  <div className="space-y-2 max-h-96 overflow-y-auto">
+                                    {transactions.map((tx: any) => (
+                                      <div 
+                                        key={tx.id} 
+                                        className="flex items-start justify-between p-3 bg-background rounded-lg border"
+                                      >
+                                        <div className="flex-1 space-y-1">
+                                          <div className="flex items-center gap-2">
+                                            <Badge variant="outline" className="capitalize">
+                                              {tx.type.replace(/_/g, ' ')}
+                                            </Badge>
+                                            {tx.site_visits && (
+                                              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                                <MapPin className="w-3 h-3" />
+                                                <span>{tx.site_visits.name || tx.site_visits.location}</span>
+                                              </div>
+                                            )}
+                                          </div>
+                                          <p className="text-sm text-muted-foreground">
+                                            {tx.description || 'No description'}
+                                          </p>
+                                          {tx.site_visits?.visit_date && (
+                                            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                              <Calendar className="w-3 h-3" />
+                                              <span>{format(new Date(tx.site_visits.visit_date), 'MMM dd, yyyy')}</span>
+                                            </div>
+                                          )}
+                                          <p className="text-xs text-muted-foreground">
+                                            {format(new Date(tx.created_at), 'MMM dd, yyyy HH:mm')}
+                                          </p>
+                                        </div>
+                                        <div className="text-right">
+                                          <p className={`text-lg font-bold ${tx.amount > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                                            {tx.amount > 0 ? '+' : ''}{fmt(Number(tx.amount) * 100, tx.currency || currency)}
+                                          </p>
+                                          <p className="text-xs text-muted-foreground">
+                                            Balance: {fmt((Number(tx.balance_after) || 0) * 100, tx.currency || currency)}
+                                          </p>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
                               </div>
-                            )}
-                            {retainerFees > 0 && (
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs text-muted-foreground">Retainer:</span>
-                                <span className="text-sm font-medium text-purple-600 dark:text-purple-400">
-                                  {fmt(retainerFees * 100, currency)}
-                                </span>
-                              </div>
-                            )}
-                            {bonuses > 0 && (
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs text-muted-foreground">Bonuses:</span>
-                                <span className="text-sm font-medium text-green-600 dark:text-green-400">
-                                  {fmt(bonuses * 100, currency)}
-                                </span>
-                              </div>
-                            )}
-                            {adjustments !== 0 && (
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs text-muted-foreground">Adjustments:</span>
-                                <span className={`text-sm font-medium ${adjustments > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                                  {fmt(adjustments * 100, currency)}
-                                </span>
-                              </div>
-                            )}
-                            {earned === 0 && <span className="text-sm text-muted-foreground">No earnings yet</span>}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <span className="text-purple-600 dark:text-purple-400">
-                            {fmt(withdrawn * 100, currency)}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <Badge 
-                            variant={isActive ? 'default' : 'secondary'}
-                            className={isActive ? 'bg-green-500/90 hover:bg-green-600' : ''}
-                          >
-                            {isActive ? 'ACTIVE' : 'INACTIVE'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-muted-foreground text-sm">
-                          {wallet.updated_at ? format(new Date(wallet.updated_at), 'MMM dd, yyyy') : '-'}
-                        </TableCell>
-                      </TableRow>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </React.Fragment>
                     );
                   })}
                 </TableBody>
