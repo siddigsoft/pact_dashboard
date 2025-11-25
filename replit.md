@@ -6,6 +6,45 @@ The PACT (Planning, Approval, Coordination, and Tracking) Workflow Platform is a
 
 ## Recent Changes
 
+### Transportation Cost & Down-Payment System (Nov 25, 2025)
+
+**Complete Workflow Overhaul - Admin-Only Cost Calculation:**
+
+Transportation costs are now calculated **BEFORE** dispatch by admins only. Enumerators/coordinators request down-payments (up-front transportation costs) after site assignment through a two-tier approval workflow.
+
+**Database Changes:**
+- Created `down_payment_requests` table with two-tier approval (supervisor → admin)
+- Created `cost_adjustment_audit` table for complete cost modification tracking
+- Created `super_admins` table with 3-account limit enforcement
+- Created `deletion_audit_log` table for tracking all deletions (super-admin only)
+- Enhanced `site_visit_costs` with `cost_status`, `calculated_by`, `calculation_notes`
+
+**New Workflow:**
+1. **Admin calculates costs BEFORE dispatch** (transportation required, others optional)
+2. **Site assigned** to enumerator/coordinator
+3. **Enumerator requests down-payment** (full advance OR installments)
+4. **Hub supervisor approves** (Tier 1 approval)
+5. **Admin processes payment** (Tier 2 approval, credits wallet)
+6. **Enumerator completes work**
+7. **Admin adjusts final costs if needed** (with mandatory reason)
+
+**Key Features:**
+- ✅ No cost submission by enumerators (admin-only cost management)
+- ✅ Down-payment requests with flexible payment (installments vs full advance)
+- ✅ Two-tier approval workflow (supervisor → admin)
+- ✅ Complete audit trail for all cost adjustments (mandatory reasons)
+- ✅ Super-admin role (max 3 accounts, only role that can delete records)
+- ✅ Database-enforced 3-account limit for super-admins
+- ✅ Deletion audit log (all deletions tracked with reasons)
+
+**New TypeScript Types:**
+- `DownPaymentRequest` with installment plan support
+- `CostAdjustmentAudit` for cost modification tracking
+- `SuperAdmin` with activity tracking
+- `DeletionAuditLog` for deletion tracking
+
+**Migration File:** `supabase/migrations/20251125_down_payment_and_super_admin_system.sql`
+
 ### Performance Optimizations (Nov 24, 2025)
 
 **Financial Operations Page Load Time Improvements:**
