@@ -1656,11 +1656,11 @@ const MMP = () => {
     const loadAcceptedCount = async () => {
       try {
         // Use database count instead of loading all entries
-        // Count entries with status = 'accepted' OR accepted_by is not null
+        // Count entries with status = 'accepted' only
         const { count, error } = await supabase
           .from('mmp_site_entries')
           .select('*', { count: 'exact', head: true })
-          .or('status.ilike.accepted,accepted_by.not.is.null');
+          .ilike('status', 'accepted');
 
         if (error) throw error;
 
@@ -2168,11 +2168,11 @@ const MMP = () => {
 
       setLoadingAccepted(true);
       try {
-        // Use database-level filtering: entries with status = 'accepted' OR accepted_by is not null
+        // Use database-level filtering: only entries with status = 'accepted'
         const { data: acceptedEntries, error: allError } = await supabase
           .from('mmp_site_entries')
           .select('*')
-          .or('status.ilike.accepted,accepted_by.not.is.null')
+          .ilike('status', 'accepted')
           .order('accepted_at', { ascending: false })
           .limit(1000); // Limit to 1000 entries for performance
 
