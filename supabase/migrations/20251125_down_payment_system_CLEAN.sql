@@ -15,6 +15,8 @@ DROP POLICY IF EXISTS "down_payment_requests_admin_all" ON down_payment_requests
 DROP POLICY IF EXISTS "cost_adjustment_audit_admin_create" ON cost_adjustment_audit;
 DROP POLICY IF EXISTS "cost_adjustment_audit_view" ON cost_adjustment_audit;
 DROP POLICY IF EXISTS "super_admins_view" ON super_admins;
+DROP POLICY IF EXISTS "super_admins_view_own" ON super_admins;
+DROP POLICY IF EXISTS "super_admins_view_admin" ON super_admins;
 DROP POLICY IF EXISTS "super_admins_manage" ON super_admins;
 DROP POLICY IF EXISTS "deletion_audit_log_super_admin_create" ON deletion_audit_log;
 DROP POLICY IF EXISTS "deletion_audit_log_view" ON deletion_audit_log;
@@ -426,46 +428,50 @@ CREATE POLICY "cost_adjustment_audit_admin_create" ON cost_adjustment_audit
 CREATE POLICY "cost_adjustment_audit_view" ON cost_adjustment_audit
   FOR SELECT USING (auth.role() = 'authenticated');
 
--- Super-Admins Policies
-CREATE POLICY "super_admins_view" ON super_admins
+-- Super-Admins Policies (Fixed to avoid infinite recursion)
+-- Users can view their own super-admin record
+CREATE POLICY "super_admins_view_own" ON super_admins
+  FOR SELECT USING (user_id = auth.uid());
+
+-- Admins can view all super-admin records
+CREATE POLICY "super_admins_view_admin" ON super_admins
   FOR SELECT USING (
     EXISTS (
-      SELECT 1 FROM super_admins 
-      WHERE user_id = auth.uid() 
-      AND is_active = true
+      SELECT 1 FROM profiles 
+      WHERE id = auth.uid() 
+      AND role IN ('admin', 'ict')
     )
   );
 
+-- Only admins can manage super-admin records
 CREATE POLICY "super_admins_manage" ON super_admins
   FOR ALL USING (
     EXISTS (
-      SELECT 1 FROM super_admins 
-      WHERE user_id = auth.uid() 
-      AND is_active = true
+      SELECT 1 FROM profiles 
+      WHERE id = auth.uid() 
+      AND role IN ('admin', 'ict')
     )
   );
 
--- Deletion Audit Log Policies
+-- Deletion Audit Log Policies (Fixed to avoid infinite recursion)
+-- Only users who have a super_admins record can create deletion logs
 CREATE POLICY "deletion_audit_log_super_admin_create" ON deletion_audit_log
   FOR INSERT WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM super_admins 
-      WHERE user_id = auth.uid() 
-      AND is_active = true
+    deleted_by = auth.uid()
+    AND EXISTS (
+      SELECT 1 FROM profiles 
+      WHERE id = auth.uid() 
+      AND role IN ('admin', 'ict')
     )
   );
 
+-- Admins can view all deletion logs
 CREATE POLICY "deletion_audit_log_view" ON deletion_audit_log
   FOR SELECT USING (
     EXISTS (
       SELECT 1 FROM profiles 
       WHERE id = auth.uid() 
       AND role IN ('admin', 'financialAdmin', 'ict')
-    )
-    OR EXISTS (
-      SELECT 1 FROM super_admins 
-      WHERE user_id = auth.uid() 
-      AND is_active = true
     )
   );
 
