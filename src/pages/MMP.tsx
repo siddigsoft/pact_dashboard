@@ -3811,80 +3811,189 @@ const MMP = () => {
               onClick={async () => {
                 if (selectedSiteForAcknowledgment && costAcknowledged) {
                   try {
-                    // Update the site to mark it as cost acknowledged and move to My Sites
-                    const updateData = {
+                    const acknowledgedAt = new Date().toISOString();
+                    const acknowledgedBy = currentUser?.id;
+                    
+                    // Update the site: change status from "Assigned" to "Accepted"
+                    const updateData: any = {
+                      status: 'accepted', // Use lowercase to match other status values
                       cost_acknowledged: true,
-                      cost_acknowledged_at: new Date().toISOString(),
-                      cost_acknowledged_by: currentUser?.id,
-                      // Keep the status as "Assigned" but add a flag to indicate it's been acknowledged
+                      cost_acknowledged_at: acknowledgedAt,
+                      cost_acknowledged_by: acknowledgedBy,
+                      accepted_at: acknowledgedAt,
+                      accepted_by: acknowledgedBy || selectedSiteForAcknowledgment.accepted_by,
                       additional_data: {
                         ...(selectedSiteForAcknowledgment.additional_data || {}),
                         cost_acknowledged: true,
-                        cost_acknowledged_at: new Date().toISOString(),
-                        cost_acknowledged_by: currentUser?.id
+                        cost_acknowledged_at: acknowledgedAt,
+                        cost_acknowledged_by: acknowledgedBy
                       }
                     };
 
-                    await supabase
+                    console.log('🔄 Updating site status:', {
+                      siteId: selectedSiteForAcknowledgment.id,
+                      currentStatus: selectedSiteForAcknowledgment.status,
+                      newStatus: 'accepted',
+                      updateData
+                    });
+
+                    const { data: updateResult, error: updateError } = await supabase
                       .from('mmp_site_entries')
                       .update(updateData)
-                      .eq('id', selectedSiteForAcknowledgment.id);
+                      .eq('id', selectedSiteForAcknowledgment.id)
+                      .select();
+
+                    if (updateError) {
+                      console.error('❌ Update error:', updateError);
+                      throw updateError;
+                    }
+
+                    console.log('✅ Update successful:', updateResult);
 
                     // Reload the data to reflect changes
-                    const loadEnumeratorEntries = async () => {
-                      if (!isDataCollector || !currentUser?.id) return;
-
+                    // Use a small delay to ensure database consistency
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    
+                    // Reload all enumerator data using the same logic as the main load function
+                    if (isDataCollector && currentUser?.id) {
                       try {
-                        // Load smart assigned sites (status = 'Assigned' and not cost acknowledged)
+                        // Convert user location IDs to names for matching
+                        const collectorStateName = currentUser.stateId 
+                          ? sudanStates.find(s => s.id === currentUser.stateId)?.name 
+                          : undefined;
+                        const collectorLocalityName = currentUser.stateId && currentUser.localityId
+                          ? sudanStates.find(s => s.id === currentUser.stateId)?.localities.find(l => l.id === currentUser.localityId)?.name
+                          : undefined;
+
+                        // Load available sites (Dispatched, not accepted, matching location)
+                        let availableSitesQuery = supabase
+                          .from('mmp_site_entries')
+                          .select('*')
+                          .ilike('status', 'Dispatched')
+                          .is('accepted_by', null)
+                          .order('created_at', { ascending: false })
+                          .limit(1000);
+
+                        if (collectorStateName || collectorLocalityName) {
+                          const conditions: string[] = [];
+                          if (collectorStateName) conditions.push(`state.ilike.${collectorStateName}`);
+                          if (collectorLocalityName) conditions.push(`locality.ilike.${collectorLocalityName}`);
+                          if (conditions.length > 0) {
+                            availableSitesQuery = availableSitesQuery.or(conditions.join(','));
+                          }
+                        }
+
+                        // Load smart assigned sites (status = 'Assigned' only)
                         const smartAssignedQuery = supabase
                           .from('mmp_site_entries')
                           .select('*')
                           .ilike('status', 'Assigned')
-                          .or(`and(cost_acknowledged.is.null,cost_acknowledged.neq.true)`)
                           .eq('accepted_by', currentUser.id)
                           .order('created_at', { ascending: false })
                           .limit(1000);
 
-                        // Load my sites (all sites accepted by this collector OR cost acknowledged)
+                        // Load my sites (all sites accepted by this collector)
                         const mySitesQuery = supabase
                           .from('mmp_site_entries')
                           .select('*')
-                          .or(`accepted_by.eq.${currentUser.id},cost_acknowledged.eq.true`)
+                          .eq('accepted_by', currentUser.id)
                           .order('created_at', { ascending: false })
                           .limit(1000);
 
-                        const [smartRes, mySitesRes] = await Promise.all([smartAssignedQuery, mySitesQuery]);
+                        const [availableRes, smartRes, mySitesRes] = await Promise.all([
+                          availableSitesQuery,
+                          smartAssignedQuery,
+                          mySitesQuery
+                        ]);
 
-                        if (smartRes.error) throw smartRes.error;
-                        if (mySitesRes.error) throw mySitesRes.error;
+                        console.log('🔄 Reload after acknowledgment:', {
+                          availableCount: availableRes.data?.length || 0,
+                          smartAssignedCount: smartRes.data?.length || 0,
+                          mySitesCount: mySitesRes.data?.length || 0,
+                          updateResult: updateResult?.[0]?.status
+                        });
+
+                        if (availableRes.error) console.error('Available sites reload error:', availableRes.error);
+                        if (smartRes.error) console.error('Smart assigned reload error:', smartRes.error);
+                        if (mySitesRes.error) console.error('My sites reload error:', mySitesRes.error);
 
                         const formatEntries = (entries: any[]) => entries.map(entry => {
                           const additionalData = entry.additional_data || {};
+                          const enumeratorFee = entry.enumerator_fee ?? additionalData.enumerator_fee;
+                          const transportFee = entry.transport_fee ?? additionalData.transport_fee;
                           return {
                             ...entry,
                             siteName: entry.site_name,
                             siteCode: entry.site_code,
-                            enumerator_fee: entry.enumerator_fee ?? additionalData.enumerator_fee,
-                            enumeratorFee: entry.enumerator_fee ?? additionalData.enumerator_fee,
-                            transport_fee: entry.transport_fee ?? additionalData.transport_fee,
-                            transportFee: entry.transport_fee ?? additionalData.transport_fee,
+                            hubOffice: entry.hub_office,
+                            cpName: entry.cp_name,
+                            siteActivity: entry.activity_at_site,
+                            monitoringBy: entry.monitoring_by,
+                            surveyTool: entry.survey_tool,
+                            useMarketDiversion: entry.use_market_diversion,
+                            useWarehouseMonitoring: entry.use_warehouse_monitoring,
+                            visitDate: entry.visit_date,
+                            comments: entry.comments,
+                            enumerator_fee: enumeratorFee,
+                            enumeratorFee: enumeratorFee,
+                            transport_fee: transportFee,
+                            transportFee: transportFee,
+                            cost: entry.cost,
+                            status: entry.status,
+                            verified_by: entry.verified_by,
+                            verified_at: entry.verified_at,
+                            dispatched_by: entry.dispatched_by,
+                            dispatched_at: entry.dispatched_at,
+                            accepted_by: entry.accepted_by,
+                            accepted_at: entry.accepted_at,
+                            updated_at: entry.updated_at,
                             cost_acknowledged: entry.cost_acknowledged ?? additionalData.cost_acknowledged,
                             additionalData: additionalData
                           };
                         });
 
-                        const smartAssignedEntries = formatEntries(smartRes.data || []);
+                        const availableEntries = formatEntries(availableRes.data || []);
+                        const rawSmartAssigned = formatEntries(smartRes.data || []);
+                        // Filter smart assigned to exclude cost-acknowledged sites (they move to My Sites)
+                        const smartAssignedEntries = rawSmartAssigned.filter(entry => {
+                          const additionalData = entry.additional_data || {};
+                          const costAcknowledged = entry.cost_acknowledged ?? additionalData.cost_acknowledged;
+                          return !costAcknowledged;
+                        });
                         const mySitesEntries = formatEntries(mySitesRes.data || []);
 
+                        // Update state
+                        setEnumeratorSiteEntries(availableEntries);
+                        
+                        // Group available sites by state and locality
+                        const groupedByStateLocality = availableEntries.reduce((acc, entry) => {
+                          const state = entry.state || 'Unknown State';
+                          const locality = entry.locality || 'Unknown Locality';
+                          const key = `${state} - ${locality}`;
+                          if (!acc[key]) acc[key] = [];
+                          acc[key].push(entry);
+                          return acc;
+                        }, {} as Record<string, any[]>);
+                        setEnumeratorGroupedByStates(groupedByStateLocality);
+
                         setEnumeratorSmartAssigned(smartAssignedEntries);
-                        setEnumeratorMySites(mySitesEntries);
+                        
+                        // Build deduplicated union for "My Sites"
+                        const byId = new Map<string, any>();
+                        (smartAssignedEntries || []).forEach((e: any) => {
+                          if (e && e.id) byId.set(String(e.id), e);
+                        });
+                        (mySitesEntries || []).forEach((e: any) => {
+                          if (!e) return;
+                          const key = e.id ? String(e.id) : `${e.mmp_file_id || e.mmpId}-${e.site_code || e.siteCode || ''}`;
+                          if (!byId.has(key)) byId.set(key, e);
+                        });
+                        setEnumeratorMySites(Array.from(byId.values()));
 
                       } catch (error) {
                         console.error('Failed to reload enumerator entries:', error);
                       }
-                    };
-
-                    await loadEnumeratorEntries();
+                    }
 
                     setCostAcknowledgmentOpen(false);
                     setSelectedSiteForAcknowledgment(null);
@@ -3892,7 +4001,7 @@ const MMP = () => {
 
                     toast({
                       title: 'Cost Acknowledged',
-                      description: 'The site has been moved to your "My Sites" under "Pending Visits".',
+                      description: 'The site status has been changed to "Accepted" and moved to your "My Sites" under "Pending Visits".',
                       variant: 'default'
                     });
 
