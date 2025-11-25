@@ -389,7 +389,7 @@ const MMP = () => {
   // Subcategory state for Forwarded MMPs (Admin/ICT only)
   const [forwardedSubTab, setForwardedSubTab] = useState<'pending' | 'verified'>('pending');
   // Subcategory state for Verified Sites (Admin/ICT only)
-  const [verifiedSubTab, setVerifiedSubTab] = useState<'newSites' | 'approvedCosted' | 'dispatched' | 'smartAssigned' | 'accepted' | 'ongoing' | 'completed'>('newSites');
+  const [verifiedSubTab, setVerifiedSubTab] = useState<'newSites' | 'approvedCosted' | 'dispatched' | 'smartAssigned' | 'accepted' | 'ongoing' | 'completed' | 'rejected'>('newSites');
   // Subcategory state for Enumerator dashboard
   const [enumeratorSubTab, setEnumeratorSubTab] = useState<'availableSites' | 'smartAssigned' | 'mySites'>('availableSites');
   // Sub-subcategory state for My Sites (Data Collector)
@@ -424,6 +424,9 @@ const MMP = () => {
   const [completedSiteEntries, setCompletedSiteEntries] = useState<any[]>([]);
   const [loadingCompleted, setLoadingCompleted] = useState(false);
   const [completedCount, setCompletedCount] = useState(0);
+  const [rejectedSiteEntries, setRejectedSiteEntries] = useState<any[]>([]);
+  const [loadingRejected, setLoadingRejected] = useState(false);
+  const [rejectedCount, setRejectedCount] = useState(0);
   const [smartAssignedSiteEntries, setSmartAssignedSiteEntries] = useState<any[]>([]);
   const [loadingSmartAssigned, setLoadingSmartAssigned] = useState(false);
   const [smartAssignedCount, setSmartAssignedCount] = useState(0);
@@ -2395,6 +2398,77 @@ const MMP = () => {
     loadCompletedEntries();
   }, [verifiedSubTab]);
 
+  // Load rejected site entries only when the tab is active
+  useEffect(() => {
+    const loadRejectedEntries = async () => {
+      if (verifiedSubTab !== 'rejected') {
+        setRejectedSiteEntries([]);
+        return;
+      }
+
+      setLoadingRejected(true);
+      try {
+        // Use database-level filtering: entries with status = 'rejected'
+        const { data: rejectedEntries, error: allError } = await supabase
+          .from('mmp_site_entries')
+          .select('*')
+          .ilike('status', 'rejected')
+          .order('updated_at', { ascending: false })
+          .limit(1000); // Limit to 1000 entries for performance
+
+        if (allError) throw allError;
+
+        // Format entries for MMPSiteEntriesTable
+        const formattedEntries = rejectedEntries.map(entry => {
+          const additionalData = entry.additional_data || {};
+          // Read fees from columns first, fallback to additional_data
+          const enumeratorFee = entry.enumerator_fee ?? additionalData.enumerator_fee;
+          const transportFee = entry.transport_fee ?? additionalData.transport_fee;
+          return {
+            ...entry,
+            siteName: entry.site_name,
+            siteCode: entry.site_code,
+            hubOffice: entry.hub_office,
+            cpName: entry.cp_name,
+            siteActivity: entry.activity_at_site,
+            monitoringBy: entry.monitoring_by,
+            surveyTool: entry.survey_tool,
+            useMarketDiversion: entry.use_market_diversion,
+            useWarehouseMonitoring: entry.use_warehouse_monitoring,
+            visitDate: entry.visit_date,
+            comments: entry.comments,
+            enumerator_fee: enumeratorFee,
+            enumeratorFee: enumeratorFee,
+            transport_fee: transportFee,
+            transportFee: transportFee,
+            cost: entry.cost,
+            status: entry.status,
+            verified_by: entry.verified_by,
+            verified_at: entry.verified_at,
+            dispatched_by: entry.dispatched_by,
+            dispatched_at: entry.dispatched_at,
+            accepted_by: entry.accepted_by,
+            accepted_at: entry.accepted_at,
+            updated_at: entry.updated_at,
+            additionalData: additionalData
+          };
+        });
+
+        setRejectedSiteEntries(formattedEntries);
+        // Update count when entries are loaded (count is also loaded separately for badge)
+        setRejectedCount(formattedEntries.length);
+      } catch (error) {
+        console.error('Failed to load rejected site entries:', error);
+        setRejectedSiteEntries([]);
+        setRejectedCount(0);
+      } finally {
+        setLoadingRejected(false);
+      }
+    };
+
+    loadRejectedEntries();
+  }, [verifiedSubTab]);
+
   // Verified subcategories for Admin/ICT
   const verifiedSubcategories = useMemo(() => {
     const base = categorizedMMPs.verified || [];
@@ -2844,45 +2918,49 @@ const MMP = () => {
               {(isAdmin || isICT || isFOM || isCoordinator) && (
                 <div className="mb-4">
                   <div className="text-sm font-medium text-muted-foreground mb-2">Subcategory:</div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-2">
-                    <Button variant={verifiedSubTab === 'newSites' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('newSites')} className={`${verifiedSubTab === 'newSites' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} text-xs`}>
+                  <div className="flex gap-2 overflow-x-auto pb-2">
+                    <Button variant={verifiedSubTab === 'newSites' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('newSites')} className={`${verifiedSubTab === 'newSites' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} text-xs whitespace-nowrap flex-shrink-0`}>
                       New Sites
                       <Badge variant="secondary" className="ml-1 text-xs">
                         {newSitesVerifiedCount}
                       </Badge>
                     </Button>
-                    <Button variant={verifiedSubTab === 'approvedCosted' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('approvedCosted')} className={`${verifiedSubTab === 'approvedCosted' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} text-xs`}>
+                    <Button variant={verifiedSubTab === 'approvedCosted' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('approvedCosted')} className={`${verifiedSubTab === 'approvedCosted' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} text-xs whitespace-nowrap flex-shrink-0`}>
                       Approved & Costed
                       <Badge variant="secondary" className="ml-1 text-xs">{approvedCostedCount}</Badge>
                     </Button>
-                    <Button variant={verifiedSubTab === 'dispatched' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('dispatched')} className={`${verifiedSubTab === 'dispatched' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} text-xs`}>
+                    <Button variant={verifiedSubTab === 'dispatched' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('dispatched')} className={`${verifiedSubTab === 'dispatched' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} text-xs whitespace-nowrap flex-shrink-0`}>
                       Dispatched
                       <Badge variant="secondary" className="ml-1 text-xs">{dispatchedCount}</Badge>
                     </Button>
                     {(isAdmin || isICT || isFOM) && (
                       <>
-                        <Button variant={verifiedSubTab === 'smartAssigned' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('smartAssigned')} className={`${verifiedSubTab === 'smartAssigned' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} text-xs`}>
+                        <Button variant={verifiedSubTab === 'smartAssigned' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('smartAssigned')} className={`${verifiedSubTab === 'smartAssigned' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} text-xs whitespace-nowrap flex-shrink-0`}>
                           Smart Assigned
                           <Badge variant="secondary" className="ml-1 text-xs">{smartAssignedCount}</Badge>
                         </Button>
-                        <Button variant={verifiedSubTab === 'accepted' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('accepted')} className={`${verifiedSubTab === 'accepted' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} text-xs`}>
+                        <Button variant={verifiedSubTab === 'accepted' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('accepted')} className={`${verifiedSubTab === 'accepted' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} text-xs whitespace-nowrap flex-shrink-0`}>
                           Accepted
                           <Badge variant="secondary" className="ml-1 text-xs">{acceptedCount}</Badge>
                         </Button>
-                        <Button variant={verifiedSubTab === 'ongoing' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('ongoing')} className={`${verifiedSubTab === 'ongoing' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} text-xs`}>
+                        <Button variant={verifiedSubTab === 'ongoing' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('ongoing')} className={`${verifiedSubTab === 'ongoing' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} text-xs whitespace-nowrap flex-shrink-0`}>
                           Ongoing
                           <Badge variant="secondary" className="ml-1 text-xs">{ongoingCount}</Badge>
                         </Button>
                       </>
                     )}
-                    <Button variant={verifiedSubTab === 'completed' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('completed')} className={`${verifiedSubTab === 'completed' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} text-xs`}>
+                    <Button variant={verifiedSubTab === 'completed' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('completed')} className={`${verifiedSubTab === 'completed' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} text-xs whitespace-nowrap flex-shrink-0`}>
                       Completed
                       <Badge variant="secondary" className="ml-1 text-xs">{completedCount}</Badge>
+                    </Button>
+                    <Button variant={verifiedSubTab === 'rejected' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('rejected')} className={`${verifiedSubTab === 'rejected' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} text-xs whitespace-nowrap flex-shrink-0`}>
+                      Rejected
+                      <Badge variant="secondary" className="ml-1 text-xs">{rejectedCount}</Badge>
                     </Button>
                   </div>
                 </div>
               )}
-              {verifiedSubTab !== 'approvedCosted' && verifiedSubTab !== 'dispatched' && verifiedSubTab !== 'smartAssigned' && verifiedSubTab !== 'accepted' && verifiedSubTab !== 'ongoing' && verifiedSubTab !== 'completed' && <MMPList mmpFiles={verifiedVisibleMMPs} />}
+              {verifiedSubTab !== 'approvedCosted' && verifiedSubTab !== 'dispatched' && verifiedSubTab !== 'smartAssigned' && verifiedSubTab !== 'accepted' && verifiedSubTab !== 'ongoing' && verifiedSubTab !== 'completed' && verifiedSubTab !== 'rejected' && <MMPList mmpFiles={verifiedVisibleMMPs} />}
               {(isAdmin || isICT || isFOM || isCoordinator) && verifiedSubTab === 'newSites' && (
                 <>
                   {(isAdmin || isICT) && verifiedCategorySiteRows.length > 0 && (
@@ -3301,7 +3379,35 @@ const MMP = () => {
                   )}
                 </div>
               )}
-              {(isAdmin || isICT || isFOM || isCoordinator) && verifiedSubTab !== 'newSites' && verifiedSubTab !== 'approvedCosted' && verifiedSubTab !== 'dispatched' && verifiedSubTab !== 'accepted' && verifiedSubTab !== 'ongoing' && verifiedSubTab !== 'completed' && (
+              {(isAdmin || isICT || isFOM || isCoordinator) && verifiedSubTab === 'rejected' && (
+                <div className="mt-6">
+                  {loadingRejected ? (
+                    <Card>
+                      <CardContent className="py-8">
+                        <div className="text-center text-muted-foreground">Loading rejected site entries...</div>
+                      </CardContent>
+                    </Card>
+                  ) : rejectedSiteEntries.length === 0 ? (
+                    <Card>
+                      <CardContent className="py-8">
+                        <div className="text-center text-muted-foreground">No rejected site entries found.</div>
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    <div>
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-semibold">Rejected Site Entries</h3>
+                        <Badge variant="secondary">{rejectedSiteEntries.length} entries</Badge>
+                      </div>
+                      <MMPSiteEntriesTable 
+                        siteEntries={rejectedSiteEntries} 
+                        editable={false}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+              {(isAdmin || isICT || isFOM || isCoordinator) && verifiedSubTab !== 'newSites' && verifiedSubTab !== 'approvedCosted' && verifiedSubTab !== 'dispatched' && verifiedSubTab !== 'accepted' && verifiedSubTab !== 'ongoing' && verifiedSubTab !== 'completed' && verifiedSubTab !== 'rejected' && (
                 <div className="mt-6">
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-lg font-semibold">Sites by MMP</h3>
