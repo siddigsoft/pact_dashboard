@@ -3817,16 +3817,25 @@ const MMP = () => {
                     // Update the site: change status from "Assigned" to "Accepted"
                     const updateData: any = {
                       status: 'accepted', // Use lowercase to match other status values
+                      updated_at: new Date().toISOString(),
+                      // Set cost acknowledgment fields
                       cost_acknowledged: true,
                       cost_acknowledged_at: acknowledgedAt,
                       cost_acknowledged_by: acknowledgedBy,
+                      // Set acceptance fields
                       accepted_at: acknowledgedAt,
                       accepted_by: acknowledgedBy || selectedSiteForAcknowledgment.accepted_by,
+                      // Preserve existing additional_data and update with new fields
                       additional_data: {
                         ...(selectedSiteForAcknowledgment.additional_data || {}),
                         cost_acknowledged: true,
                         cost_acknowledged_at: acknowledgedAt,
-                        cost_acknowledged_by: acknowledgedBy
+                        cost_acknowledged_by: acknowledgedBy,
+                        // Ensure status is updated in additional_data for backward compatibility
+                        status: 'accepted',
+                        // Update timestamps in additional_data
+                        updated_at: new Date().toISOString(),
+                        last_modified: new Date().toISOString()
                       }
                     };
 
@@ -3837,11 +3846,30 @@ const MMP = () => {
                       updateData
                     });
 
+                    // First update the main fields
                     const { data: updateResult, error: updateError } = await supabase
                       .from('mmp_site_entries')
-                      .update(updateData)
+                      .update({
+                        status: 'accepted',
+                        cost_acknowledged: true,
+                        cost_acknowledged_at: acknowledgedAt,
+                        cost_acknowledged_by: acknowledgedBy,
+                        accepted_at: acknowledgedAt,
+                        accepted_by: acknowledgedBy || selectedSiteForAcknowledgment.accepted_by,
+                        updated_at: new Date().toISOString()
+                      })
                       .eq('id', selectedSiteForAcknowledgment.id)
                       .select();
+                    
+                    // Then update the additional_data with the full object
+                    if (!updateError) {
+                      await supabase
+                        .from('mmp_site_entries')
+                        .update({
+                          additional_data: updateData.additional_data
+                        })
+                        .eq('id', selectedSiteForAcknowledgment.id);
+                    }
 
                     if (updateError) {
                       console.error('❌ Update error:', updateError);
