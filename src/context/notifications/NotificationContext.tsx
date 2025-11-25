@@ -11,7 +11,7 @@ interface NotificationContextType {
   addNotification: (notification: Omit<Notification, 'id' | 'isRead' | 'createdAt'>) => void;
   markNotificationAsRead: (notificationId: string) => void;
   getUnreadNotificationsCount: () => number;
-  clearAllNotifications: () => Promise<void>;
+  clearAllNotifications: () => Promise<number>;
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
@@ -243,21 +243,34 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   }, []);
 
   const clearAllNotifications = useCallback(async () => {
-    if (!currentUserId) {
-      console.warn('Cannot clear notifications: no current user ID');
-      return;
+    // Get the authenticated user ID directly from Supabase auth
+    // This ensures it matches auth.uid() used in RLS policies
+    let userId: string | null = null;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      userId = user?.id || null;
+    } catch (err) {
+      console.error('Failed to get authenticated user:', err);
+      // Fallback to currentUserId from state
+      userId = currentUserId;
     }
     
-    console.log(`Attempting to delete all notifications for user: ${currentUserId}`);
+    if (!userId) {
+      console.warn('Cannot clear notifications: no authenticated user ID');
+      throw new Error('User not authenticated');
+    }
+    
+    console.log(`Attempting to delete all notifications for user: ${userId}`);
     
     // Delete all notifications for the current user from the database
+    // The RLS policy will ensure only the user's own notifications are deleted
     try {
       // Delete all notifications for the current user
       // Note: Supabase DELETE returns the deleted rows if .select() is used
       const { data: deletedData, error } = await supabase
         .from('notifications')
         .delete()
-        .eq('user_id', currentUserId)
+        .eq('user_id', userId) // Filter by user_id
         .select('id');
       
       if (error) {
@@ -265,10 +278,18 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         console.error('Error details:', JSON.stringify(error, null, 2));
         console.error('Error code:', error.code);
         console.error('Error message:', error.message);
+        
+        // Check if it's an RLS policy error
+        if (error.code === '42501' || error.message?.includes('policy')) {
+          console.error('RLS policy error: User may not have permission to delete notifications');
+          throw new Error('Permission denied: Unable to delete notifications. Please check RLS policies.');
+        }
+        
         throw error;
       }
       
-      console.log(`Successfully deleted ${deletedData?.length || 0} notifications`);
+      const deletedCount = deletedData?.length || 0;
+      console.log(`Successfully deleted ${deletedCount} notifications`);
       
       // Clear local state immediately
       setAppNotifications([]);
@@ -277,7 +298,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       const { data: remaining, error: verifyError } = await supabase
         .from('notifications')
         .select('id')
-        .eq('user_id', currentUserId)
+        .eq('user_id', userId)
         .limit(1);
       
       if (verifyError) {
@@ -287,6 +308,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       } else {
         console.log('Verification: All notifications successfully deleted');
       }
+      
+      return deletedCount;
     } catch (err) {
       console.error('Failed to clear all notifications:', err);
       // Don't clear local state if delete failed
