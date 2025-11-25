@@ -12,6 +12,7 @@ import {
   LayoutDashboard,
   ChevronUp,
   Shield,
+  ShieldCheck,
   Calendar,
   Archive,
   CreditCard,
@@ -100,6 +101,7 @@ const getMenuGroups = (
   const adminItems = [] as MenuGroup['items'];
   if (isAdmin || isICT || perms.users) adminItems.push({ title: "User Management", url: "/users", icon: Users });
   if (isAdmin || perms.roleManagement) adminItems.push({ title: "Role Management", url: "/role-management", icon: Shield });
+  if (isAdmin) adminItems.push({ title: "Super Admin", url: "/super-admin-management", icon: ShieldCheck });
   if (isAdmin || isFinancialAdmin) adminItems.push({ title: "Classifications", url: "/classifications", icon: Award });
   if (perms.financialOperations) adminItems.push({ title: "Financial Operations", url: "/financial-operations", icon: TrendingUp });
   if (isAdmin || perms.settings) adminItems.push({ title: "Settings", url: "/settings", icon: Settings });
