@@ -5,10 +5,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Textarea } from '@/components/ui/textarea';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Badge } from '@/components/ui/badge';
-import { Loader2 } from 'lucide-react';
+import { Loader2, DollarSign, AlertCircle, ArrowRight, ArrowLeft } from 'lucide-react';
 
 interface DispatchSitesDialogProps {
   open: boolean;
@@ -28,6 +30,16 @@ interface DataCollector {
   locality_id?: string | null;
 }
 
+interface SiteCosts {
+  siteId: string;
+  siteName: string;
+  transportation: number;
+  accommodation: number;
+  mealAllowance: number;
+  otherCosts: number;
+  calculationNotes: string;
+}
+
 export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
   open,
   onOpenChange,
@@ -35,12 +47,14 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
   dispatchType,
   onDispatched
 }) => {
+  const [step, setStep] = useState<'select' | 'costs'>('select');
   const [loading, setLoading] = useState(false);
   const [collectors, setCollectors] = useState<DataCollector[]>([]);
   const [selectedState, setSelectedState] = useState<string>('');
   const [selectedLocality, setSelectedLocality] = useState<string>('');
   const [selectedCollector, setSelectedCollector] = useState<string>('');
   const [selectedSites, setSelectedSites] = useState<Set<string>>(new Set());
+  const [siteCosts, setSiteCosts] = useState<Map<string, SiteCosts>>(new Map());
   const [search, setSearch] = useState('');
   const { toast } = useToast();
 
@@ -54,7 +68,7 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
           .from('profiles')
           .select('id, full_name, username, email, hub_id, state_id, locality_id')
           .or('role.eq.dataCollector,role.eq.datacollector')
-          .order('full_name', { ascending: true });
+          .order('full_name', { ascending: true});
 
         if (!cancelled) {
           if (error) {
@@ -73,6 +87,19 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
     };
     loadCollectors();
     return () => { cancelled = true; };
+  }, [open]);
+
+  // Reset state when dialog closes
+  useEffect(() => {
+    if (!open) {
+      setStep('select');
+      setSelectedSites(new Set());
+      setSiteCosts(new Map());
+      setSelectedState('');
+      setSelectedLocality('');
+      setSelectedCollector('');
+      setSearch('');
+    }
   }, [open]);
 
   // Get unique states and localities from site entries
@@ -154,7 +181,7 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
     });
   };
 
-  const handleDispatch = async () => {
+  const handleProceedToCosts = () => {
     if (selectedSites.size === 0) {
       toast({
         title: 'No sites selected',
@@ -191,9 +218,59 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
       return;
     }
 
+    // Initialize cost data for selected sites if not already set
+    const newCosts = new Map(siteCosts);
+    const selectedSiteObjects = filteredSiteEntries.filter(s => selectedSites.has(s.id));
+    
+    selectedSiteObjects.forEach(site => {
+      if (!newCosts.has(site.id)) {
+        const additionalData = site.additional_data || {};
+        newCosts.set(site.id, {
+          siteId: site.id,
+          siteName: site.site_name || site.siteName || 'Unknown Site',
+          transportation: additionalData.transport_fee || 0,
+          accommodation: 0,
+          mealAllowance: 0,
+          otherCosts: 0,
+          calculationNotes: '',
+        });
+      }
+    });
+
+    setSiteCosts(newCosts);
+    setStep('costs');
+  };
+
+  const updateSiteCost = (siteId: string, field: keyof SiteCosts, value: any) => {
+    setSiteCosts(prev => {
+      const newCosts = new Map(prev);
+      const existingCost = newCosts.get(siteId);
+      if (existingCost) {
+        newCosts.set(siteId, { ...existingCost, [field]: value });
+      }
+      return newCosts;
+    });
+  };
+
+  const handleDispatch = async () => {
+    // Validate that all selected sites have transportation costs entered
+    const selectedSiteObjects = filteredSiteEntries.filter(s => selectedSites.has(s.id));
+    const missingTransportation = selectedSiteObjects.filter(site => {
+      const costs = siteCosts.get(site.id);
+      return !costs || costs.transportation <= 0;
+    });
+
+    if (missingTransportation.length > 0) {
+      toast({
+        title: 'Missing Transportation Costs',
+        description: `Transportation cost is required for all sites. ${missingTransportation.length} site(s) missing transportation costs.`,
+        variant: 'destructive'
+      });
+      return;
+    }
+
     setLoading(true);
     try {
-      const selectedSiteObjects = filteredSiteEntries.filter(s => selectedSites.has(s.id));
       const targetCollectors = dispatchType === 'individual' 
         ? [selectedCollector]
         : filteredCollectors.map(c => c.id);
@@ -208,25 +285,64 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
         return;
       }
 
-      // Get current user for assigned_by
-      const { data: { user: authUserForAssign } } = await supabase.auth.getUser();
-      const assignedBy = authUserForAssign?.id;
+      // Get current user
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      const assignedBy = authUser?.id;
 
-      // Prepare notifications for collectors
-      const notificationRows: any[] = [];
-
+      // Step 1: Upsert site_visit_costs records BEFORE dispatch (delete existing + insert new)
       for (const siteEntry of selectedSiteObjects) {
-        const additionalData = siteEntry.additional_data || {};
-        const enumeratorFee = siteEntry.enumerator_fee || additionalData.enumerator_fee || 20;
-        const transportFee = siteEntry.transport_fee || additionalData.transport_fee || 10;
-        const totalCost = siteEntry.cost || (enumeratorFee + transportFee);
+        const costs = siteCosts.get(siteEntry.id);
+        if (costs) {
+          const totalCost = costs.transportation + costs.accommodation + costs.mealAllowance + costs.otherCosts;
+          
+          // Delete any existing cost records for this site to ensure single authoritative record
+          await supabase
+            .from('site_visit_costs')
+            .delete()
+            .eq('mmp_site_entry_id', siteEntry.id);
+          
+          // Insert fresh cost record
+          const { error: costError } = await supabase
+            .from('site_visit_costs')
+            .insert({
+              mmp_site_entry_id: siteEntry.id,
+              site_name: costs.siteName,
+              transportation_cost: costs.transportation,
+              accommodation_cost: costs.accommodation,
+              meal_allowance: costs.mealAllowance,
+              other_costs: costs.otherCosts,
+              total_cost: totalCost,
+              cost_status: 'calculated',
+              calculated_by: assignedBy,
+              calculation_notes: costs.calculationNotes || 'Admin-calculated costs before dispatch',
+            });
 
-        // Send notification to all target collectors
+          if (costError) {
+            console.error('Failed to save cost record:', costError);
+            toast({
+              title: 'Cost Save Failed',
+              description: `Failed to save costs for ${costs.siteName}. Please try again.`,
+              variant: 'destructive'
+            });
+            setLoading(false);
+            return;
+          }
+        }
+      }
+
+      // Step 2: Prepare notifications for collectors
+      const notificationRows: any[] = [];
+      for (const siteEntry of selectedSiteObjects) {
+        const costs = siteCosts.get(siteEntry.id);
+        const totalCost = costs 
+          ? costs.transportation + costs.accommodation + costs.mealAllowance + costs.otherCosts
+          : 0;
+
         for (const collectorId of targetCollectors) {
           notificationRows.push({
             user_id: collectorId,
             title: dispatchType === 'individual' ? 'Site Visit Assigned' : 'New Site Visit Available',
-            message: `Site "${siteEntry.site_name || siteEntry.siteName}" ${dispatchType === 'individual' ? 'has been assigned to you' : 'is available'}. Fee: ${totalCost} SDG (Enumerator: ${enumeratorFee} SDG, Transport: ${transportFee} SDG)`,
+            message: `Site "${costs?.siteName || siteEntry.site_name || 'Unknown'}" ${dispatchType === 'individual' ? 'has been assigned to you' : 'is available'}. Total Budget: ${totalCost} SDG (Transportation: ${costs?.transportation || 0} SDG)`,
             type: 'info',
             link: `/mmp?entry=${siteEntry.id}`,
             related_entity_id: siteEntry.id,
@@ -235,7 +351,7 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
         }
       }
 
-      // Send all notifications
+      // Send notifications
       if (notificationRows.length > 0) {
         const { error: notifError } = await supabase
           .from('notifications')
@@ -243,16 +359,11 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
 
         if (notifError) {
           console.error('Error creating notifications:', notifError);
-          // Don't throw, notifications are not critical
         }
       }
 
-      // Mark site entries as dispatched in mmp_site_entries
-      const siteEntryIds = Array.from(selectedSites);
+      // Step 3: Mark site entries as dispatched
       const dispatchedAt = new Date().toISOString();
-      
-      // Get current user for dispatched_by
-      const { data: { user: authUser } } = await supabase.auth.getUser();
       const currentUserProfile = authUser ? await supabase
         .from('profiles')
         .select('full_name, username, email')
@@ -263,10 +374,8 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
                           currentUserProfile?.data?.username || 
                           currentUserProfile?.data?.email || 
                           'System';
-      
-      // Update each entry individually to set status and new columns
-      for (const entryId of siteEntryIds) {
-        // Get current additional_data to preserve it
+
+      for (const entryId of Array.from(selectedSites)) {
         const { data: currentEntry } = await supabase
           .from('mmp_site_entries')
           .select('additional_data')
@@ -274,7 +383,6 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
           .single();
         
         const additionalData = currentEntry?.additional_data || {};
-        // Also store in additional_data for backward compatibility
         additionalData.dispatched_at = dispatchedAt;
         additionalData.dispatched_by = dispatchedBy;
         
@@ -284,7 +392,7 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
             status: 'Dispatched',
             dispatched_at: dispatchedAt,
             dispatched_by: dispatchedBy,
-            additional_data: additionalData // Keep for backward compatibility
+            additional_data: additionalData
           })
           .eq('id', entryId);
         
@@ -295,16 +403,12 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
 
       toast({
         title: 'Sites Dispatched',
-        description: `Successfully dispatched ${selectedSites.size} site(s) to ${targetCollectors.length} data collector(s).`,
+        description: `Successfully dispatched ${selectedSites.size} site(s) with calculated costs to ${targetCollectors.length} data collector(s).`,
         variant: 'default'
       });
 
       onDispatched?.();
       onOpenChange(false);
-      setSelectedSites(new Set());
-      setSelectedState('');
-      setSelectedLocality('');
-      setSelectedCollector('');
     } catch (error: any) {
       console.error('Error dispatching sites:', error);
       toast({
@@ -319,149 +423,158 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" data-testid="dialog-dispatch-sites">
         <DialogHeader>
-          <DialogTitle>
-            Dispatch Sites {dispatchType === 'state' ? 'by State' : dispatchType === 'locality' ? 'by Locality' : 'to Data Collector'}
+          <DialogTitle className="flex items-center gap-2">
+            {step === 'select' && `Dispatch Sites ${dispatchType === 'state' ? 'by State' : dispatchType === 'locality' ? 'by Locality' : 'to Data Collector'}`}
+            {step === 'costs' && (
+              <>
+                <DollarSign className="h-5 w-5 text-primary" />
+                Calculate Costs Before Dispatch
+              </>
+            )}
           </DialogTitle>
           <DialogDescription>
-            {dispatchType === 'state' && 'Select a state to dispatch sites to all data collectors in that state.'}
-            {dispatchType === 'locality' && 'Select a locality to dispatch sites. All data collectors in that locality will see these sites and can claim them.'}
-            {dispatchType === 'individual' && 'Select a data collector to dispatch sites directly to them.'}
+            {step === 'select' && (
+              <>
+                {dispatchType === 'state' && 'Select a state to dispatch sites to all data collectors in that state.'}
+                {dispatchType === 'locality' && 'Select a locality to dispatch sites. All data collectors in that locality will see these sites and can claim them.'}
+                {dispatchType === 'individual' && 'Select a data collector to dispatch sites directly to them.'}
+              </>
+            )}
+            {step === 'costs' && 'Enter transportation costs (required) and optional other costs for each site before dispatch.'}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
-          {dispatchType === 'state' && (
-            <div className="space-y-2">
-              <Label>Select State</Label>
-              <Select value={selectedState} onValueChange={setSelectedState}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a state" />
-                </SelectTrigger>
-                <SelectContent>
-                  {uniqueStates.length > 0 ? (
-                    uniqueStates.map(state => (
-                      <SelectItem key={state} value={state}>{state}</SelectItem>
-                    ))
-                  ) : (
-                    <SelectItem value="no-states" disabled>No states found</SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
-              {selectedState && (
-                <p className="text-sm text-muted-foreground">
-                  {filteredCollectors.length} data collector(s) found in {selectedState}
-                </p>
-              )}
-            </div>
-          )}
-
-          {dispatchType === 'locality' && (
-            <>
+        {step === 'select' && (
+          <div className="space-y-4 py-4">
+            {dispatchType === 'state' && (
               <div className="space-y-2">
-                <Label>Select State (optional)</Label>
-                <Select value={selectedState || '__ALL__'} onValueChange={(v) => setSelectedState(v === '__ALL__' ? '' : v)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="All states" />
+                <Label>Select State</Label>
+                <Select value={selectedState} onValueChange={setSelectedState}>
+                  <SelectTrigger data-testid="select-state">
+                    <SelectValue placeholder="Select a state" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="__ALL__">All states</SelectItem>
-                    {uniqueStates.map(state => (
-                      <SelectItem key={state} value={state}>{state}</SelectItem>
-                    ))}
+                    {uniqueStates.length > 0 ? (
+                      uniqueStates.map(state => (
+                        <SelectItem key={state} value={state}>{state}</SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="no-states" disabled>No states found</SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Select Locality</Label>
-                <Select value={selectedLocality} onValueChange={setSelectedLocality}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a locality" />
-                  </SelectTrigger>
-                <SelectContent>
-                  {uniqueLocalities.length > 0 ? (
-                    uniqueLocalities.map(locality => (
-                      <SelectItem key={locality} value={locality}>{locality}</SelectItem>
-                    ))
-                  ) : (
-                    <SelectItem value="no-localities" disabled>No localities found</SelectItem>
-                  )}
-                </SelectContent>
-                </Select>
-                {selectedLocality && (
+                {selectedState && (
                   <p className="text-sm text-muted-foreground">
-                    {filteredCollectors.length} data collector(s) found in {selectedLocality}
+                    {filteredCollectors.length} data collector(s) found in {selectedState}
                   </p>
                 )}
               </div>
-            </>
-          )}
+            )}
 
-          {dispatchType === 'individual' && (
-            <div className="space-y-2">
-              <Label>Search Data Collector</Label>
-              <Input
-                placeholder="Search by name, username, or email..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-              <div className="max-h-60 overflow-y-auto border rounded-md p-2 space-y-2">
-                {filteredCollectors.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-4">No data collectors found</p>
-                ) : (
-                  filteredCollectors.map(collector => (
-                    <div
-                      key={collector.id}
-                      className={`flex items-center space-x-2 p-2 rounded cursor-pointer hover:bg-muted ${
-                        selectedCollector === collector.id ? 'bg-muted' : ''
-                      }`}
-                      onClick={() => setSelectedCollector(collector.id)}
-                    >
-                      <Checkbox
-                        checked={selectedCollector === collector.id}
-                        onCheckedChange={() => setSelectedCollector(collector.id)}
-                      />
-                      <div className="flex-1">
-                        <p className="font-medium">{collector.full_name || collector.username || collector.email}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {collector.state_id && `State: ${collector.state_id}`}
-                          {collector.locality_id && ` | Locality: ${collector.locality_id}`}
-                        </p>
+            {dispatchType === 'locality' && (
+              <>
+                <div className="space-y-2">
+                  <Label>Select State (optional)</Label>
+                  <Select value={selectedState || '__ALL__'} onValueChange={(v) => setSelectedState(v === '__ALL__' ? '' : v)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="All states" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__ALL__">All states</SelectItem>
+                      {uniqueStates.map(state => (
+                        <SelectItem key={state} value={state}>{state}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Select Locality</Label>
+                  <Select value={selectedLocality} onValueChange={setSelectedLocality}>
+                    <SelectTrigger data-testid="select-locality">
+                      <SelectValue placeholder="Select a locality" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {uniqueLocalities.length > 0 ? (
+                        uniqueLocalities.map(locality => (
+                          <SelectItem key={locality} value={locality}>{locality}</SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="no-localities" disabled>No localities found</SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                  {selectedLocality && (
+                    <p className="text-sm text-muted-foreground">
+                      {filteredCollectors.length} data collector(s) found in {selectedLocality}
+                    </p>
+                  )}
+                </div>
+              </>
+            )}
+
+            {dispatchType === 'individual' && (
+              <div className="space-y-2">
+                <Label>Search Data Collector</Label>
+                <Input
+                  placeholder="Search by name, username, or email..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  data-testid="input-search-collector"
+                />
+                <div className="max-h-60 overflow-y-auto border rounded-md p-2 space-y-2">
+                  {filteredCollectors.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">No data collectors found</p>
+                  ) : (
+                    filteredCollectors.map(collector => (
+                      <div
+                        key={collector.id}
+                        className={`flex items-center space-x-2 p-2 rounded cursor-pointer hover-elevate ${
+                          selectedCollector === collector.id ? 'bg-muted' : ''
+                        }`}
+                        onClick={() => setSelectedCollector(collector.id)}
+                        data-testid={`collector-${collector.id}`}
+                      >
+                        <Checkbox
+                          checked={selectedCollector === collector.id}
+                          onCheckedChange={() => setSelectedCollector(collector.id)}
+                        />
+                        <div className="flex-1">
+                          <p className="font-medium">{collector.full_name || collector.username || collector.email}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {collector.state_id && `State: ${collector.state_id}`}
+                            {collector.locality_id && ` | Locality: ${collector.locality_id}`}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                  ))
-                )}
+                    ))
+                  )}
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label>Select Sites to Dispatch</Label>
-              <Button variant="outline" size="sm" onClick={handleSelectAll}>
-                {selectedSites.size === filteredSiteEntries.length ? 'Deselect All' : 'Select All'}
-              </Button>
-            </div>
-            <div className="max-h-60 overflow-y-auto border rounded-md p-2 space-y-2">
-              {filteredSiteEntries.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  {selectedState || selectedLocality ? 'No sites found for the selected criteria' : 'No sites available'}
-                </p>
-              ) : (
-                filteredSiteEntries.map(site => {
-                  const additionalData = site.additional_data || {};
-                  const enumeratorFee = additionalData.enumerator_fee || 20;
-                  const transportFee = additionalData.transport_fee || 10;
-                  const totalCost = site.cost || (enumeratorFee + transportFee);
-                  
-                  return (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>Select Sites to Dispatch</Label>
+                <Button variant="outline" size="sm" onClick={handleSelectAll} data-testid="button-select-all">
+                  {selectedSites.size === filteredSiteEntries.length ? 'Deselect All' : 'Select All'}
+                </Button>
+              </div>
+              <div className="max-h-60 overflow-y-auto border rounded-md p-2 space-y-2">
+                {filteredSiteEntries.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    {selectedState || selectedLocality ? 'No sites found for the selected criteria' : 'No sites available'}
+                  </p>
+                ) : (
+                  filteredSiteEntries.map(site => (
                     <div
                       key={site.id}
-                      className={`flex items-center space-x-2 p-2 rounded cursor-pointer hover:bg-muted ${
+                      className={`flex items-center space-x-2 p-2 rounded cursor-pointer hover-elevate ${
                         selectedSites.has(site.id) ? 'bg-muted' : ''
                       }`}
                       onClick={() => toggleSite(site.id)}
+                      data-testid={`site-${site.id}`}
                     >
                       <Checkbox
                         checked={selectedSites.has(site.id)}
@@ -472,39 +585,164 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
                         <p className="text-sm text-muted-foreground">
                           {site.locality && `Locality: ${site.locality}`}
                           {site.state && ` | State: ${site.state}`}
-                          {` | Fee: ${totalCost} SDG`}
                         </p>
                       </div>
                     </div>
-                  );
-                })
+                  ))
+                )}
+              </div>
+              {selectedSites.size > 0 && (
+                <p className="text-sm text-muted-foreground">
+                  {selectedSites.size} site(s) selected
+                </p>
               )}
             </div>
-            {selectedSites.size > 0 && (
-              <p className="text-sm text-muted-foreground">
-                {selectedSites.size} site(s) selected
-              </p>
-            )}
           </div>
-        </div>
+        )}
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
+        {step === 'costs' && (
+          <div className="space-y-4 py-4">
+            <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 p-4 rounded-md">
+              <div className="flex gap-2">
+                <AlertCircle className="h-5 w-5 text-blue-600 dark:text-blue-500 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium text-blue-800 dark:text-blue-200">Admin-Only Cost Calculation</p>
+                  <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
+                    Transportation cost is required for all sites. Other costs are optional. These costs will be saved before dispatch and used as the budget for down-payment requests.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2">
+              {Array.from(selectedSites).map(siteId => {
+                const site = filteredSiteEntries.find(s => s.id === siteId);
+                const costs = siteCosts.get(siteId);
+                if (!site || !costs) return null;
+
+                const totalCost = costs.transportation + costs.accommodation + costs.mealAllowance + costs.otherCosts;
+
+                return (
+                  <Card key={siteId} className="hover-elevate">
+                    <CardContent className="p-4 space-y-3">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h4 className="font-medium">{costs.siteName}</h4>
+                          <p className="text-sm text-muted-foreground">
+                            {site.locality && `${site.locality}, `}{site.state}
+                          </p>
+                        </div>
+                        <Badge variant="outline" className="text-lg font-bold">
+                          {totalCost.toFixed(2)} SDG
+                        </Badge>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <Label htmlFor={`transportation-${siteId}`} className="text-xs">
+                            Transportation (SDG) *
+                          </Label>
+                          <Input
+                            id={`transportation-${siteId}`}
+                            type="number"
+                            value={costs.transportation}
+                            onChange={(e) => updateSiteCost(siteId, 'transportation', parseFloat(e.target.value) || 0)}
+                            placeholder="Required"
+                            data-testid={`input-transportation-${siteId}`}
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor={`accommodation-${siteId}`} className="text-xs">
+                            Accommodation (SDG)
+                          </Label>
+                          <Input
+                            id={`accommodation-${siteId}`}
+                            type="number"
+                            value={costs.accommodation}
+                            onChange={(e) => updateSiteCost(siteId, 'accommodation', parseFloat(e.target.value) || 0)}
+                            placeholder="Optional"
+                            data-testid={`input-accommodation-${siteId}`}
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor={`meal-${siteId}`} className="text-xs">
+                            Meal Allowance (SDG)
+                          </Label>
+                          <Input
+                            id={`meal-${siteId}`}
+                            type="number"
+                            value={costs.mealAllowance}
+                            onChange={(e) => updateSiteCost(siteId, 'mealAllowance', parseFloat(e.target.value) || 0)}
+                            placeholder="Optional"
+                            data-testid={`input-meal-${siteId}`}
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor={`other-${siteId}`} className="text-xs">
+                            Other Costs (SDG)
+                          </Label>
+                          <Input
+                            id={`other-${siteId}`}
+                            type="number"
+                            value={costs.otherCosts}
+                            onChange={(e) => updateSiteCost(siteId, 'otherCosts', parseFloat(e.target.value) || 0)}
+                            placeholder="Optional"
+                            data-testid={`input-other-${siteId}`}
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <Label htmlFor={`notes-${siteId}`} className="text-xs">
+                          Calculation Notes (Optional)
+                        </Label>
+                        <Textarea
+                          id={`notes-${siteId}`}
+                          value={costs.calculationNotes}
+                          onChange={(e) => updateSiteCost(siteId, 'calculationNotes', e.target.value)}
+                          placeholder="Explain how these costs were calculated..."
+                          rows={2}
+                          data-testid={`textarea-notes-${siteId}`}
+                        />
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        <DialogFooter className="gap-2">
+          {step === 'costs' && (
+            <Button variant="outline" onClick={() => setStep('select')} disabled={loading} data-testid="button-back">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back
+            </Button>
+          )}
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading} data-testid="button-cancel">
             Cancel
           </Button>
-          <Button onClick={handleDispatch} disabled={loading || selectedSites.size === 0}>
-            {loading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Dispatching...
-              </>
-            ) : (
-              `Dispatch ${selectedSites.size} Site(s)`
-            )}
-          </Button>
+          {step === 'select' && (
+            <Button onClick={handleProceedToCosts} disabled={selectedSites.size === 0} data-testid="button-proceed">
+              Proceed to Costs
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
+          )}
+          {step === 'costs' && (
+            <Button onClick={handleDispatch} disabled={loading} data-testid="button-dispatch">
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Dispatching...
+                </>
+              ) : (
+                `Dispatch ${selectedSites.size} Site(s)`
+              )}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 };
-
