@@ -33,62 +33,94 @@ const AdminWalletDetail = () => {
   const [adjReason, setAdjReason] = useState('');
   const [adjDirection, setAdjDirection] = useState<'credit'|'debit'>('credit');
   const [loading, setLoading] = useState(true);
+  const [loadingProfile, setLoadingProfile] = useState(true);
+  const [loadingSiteVisits, setLoadingSiteVisits] = useState(true);
 
   const loadWalletData = async () => {
     if (!userId) return;
     
     try {
-      // Load user profile
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('id, full_name, email, role, hub_id')
-        .eq('id', userId)
-        .single();
-      
-      if (profileData) {
-        setUserProfile(profileData);
+      setLoading(true);
+      setLoadingProfile(true);
+      setLoadingSiteVisits(true);
+
+      const [profileResult, walletResult, txnResult, sitesResult] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('id, full_name, email, role, hub_id')
+          .eq('id', userId)
+          .single(),
+        supabase
+          .from('wallets')
+          .select('*')
+          .eq('user_id', userId)
+          .single(),
+        supabase
+          .from('wallet_transactions')
+          .select('*')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
+          .limit(200),
+        supabase
+          .from('site_visits')
+          .select(`
+            id,
+            site_name,
+            status,
+            assigned_at,
+            completed_at,
+            site_visit_costs (
+              total_cost,
+              transportation_cost,
+              accommodation_cost,
+              meal_allowance,
+              other_costs
+            )
+          `)
+          .eq('assigned_to', userId)
+          .order('assigned_at', { ascending: false })
+          .limit(100)
+      ]);
+
+      if (profileResult.error) {
+        console.error('Failed to load profile:', profileResult.error);
+      } else if (profileResult.data) {
+        setUserProfile(profileResult.data);
       }
+      setLoadingProfile(false);
 
-      // Load wallet
-      const { data: walletData, error: walletError } = await supabase
-        .from('wallets')
-        .select('*')
-        .eq('user_id', userId)
-        .single();
-
-      if (walletError) {
-        console.error('Failed to load wallet:', walletError);
+      let txnData: any[] = [];
+      
+      if (walletResult.error) {
+        console.error('Failed to load wallet:', walletResult.error);
+        setWallet(null);
         toast({
-          title: 'Error',
-          description: 'Failed to load wallet data',
+          title: 'Wallet Not Found',
+          description: 'This user does not have a wallet yet or it could not be loaded.',
           variant: 'destructive',
         });
-        return;
+      } else if (walletResult.data) {
+        const transformedWallet: Wallet = {
+          id: walletResult.data.id,
+          userId: walletResult.data.user_id,
+          balances: walletResult.data.balances || { SDG: 0 },
+          totalEarned: parseFloat(walletResult.data.total_earned || 0),
+          totalWithdrawn: parseFloat(walletResult.data.total_withdrawn || 0),
+          createdAt: walletResult.data.created_at,
+          updatedAt: walletResult.data.updated_at,
+        };
+        setWallet(transformedWallet);
+        
+        const walletCurrencies = Object.keys(transformedWallet.balances);
+        if (walletCurrencies.length > 0 && !walletCurrencies.includes(currency)) {
+          setCurrency(walletCurrencies[0] || 'SDG');
+        }
       }
 
-      const transformedWallet: Wallet = {
-        id: walletData.id,
-        userId: walletData.user_id,
-        balances: walletData.balances || { SDG: 0 },
-        totalEarned: parseFloat(walletData.total_earned || 0),
-        totalWithdrawn: parseFloat(walletData.total_withdrawn || 0),
-        createdAt: walletData.created_at,
-        updatedAt: walletData.updated_at,
-      };
-
-      setWallet(transformedWallet);
-      setCurrency('SDG');
-
-      // Load transactions
-      const { data: txnData, error: txnError } = await supabase
-        .from('wallet_transactions')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false});
-
-      if (txnError) {
-        console.error('Failed to load transactions:', txnError);
-      } else if (txnData) {
+      if (txnResult.error) {
+        console.error('Failed to load transactions:', txnResult.error);
+      } else if (txnResult.data) {
+        txnData = txnResult.data;
         const transformedTxns: WalletTransaction[] = txnData.map(t => ({
           id: t.id,
           walletId: t.wallet_id,
@@ -108,30 +140,11 @@ const AdminWalletDetail = () => {
         setTransactions(transformedTxns);
       }
 
-      // Load site visits with payment information
-      const { data: sitesData, error: sitesError } = await supabase
-        .from('site_visits')
-        .select(`
-          id,
-          site_name,
-          status,
-          assigned_at,
-          completed_at,
-          site_visit_costs (
-            total_cost,
-            transportation_cost,
-            accommodation_cost,
-            meal_allowance,
-            other_costs
-          )
-        `)
-        .eq('assigned_to', userId)
-        .order('assigned_at', { ascending: false });
-
-      if (!sitesError && sitesData) {
-        // Match sites with their payments from wallet transactions
-        const sitesWithPayments = sitesData.map(site => {
-          const payment = txnData?.find(
+      if (sitesResult.error) {
+        console.error('Failed to load site visits:', sitesResult.error);
+      } else if (sitesResult.data) {
+        const sitesWithPayments = sitesResult.data.map(site => {
+          const payment = txnData.find(
             t => t.site_visit_id === site.id && t.type === 'site_visit_fee'
           );
           return {
@@ -144,10 +157,18 @@ const AdminWalletDetail = () => {
         });
         setSiteVisits(sitesWithPayments);
       }
+      setLoadingSiteVisits(false);
     } catch (error) {
       console.error('Error loading wallet data:', error);
+      toast({
+        title: 'Error',
+        description: 'An unexpected error occurred while loading wallet data',
+        variant: 'destructive',
+      });
     } finally {
       setLoading(false);
+      setLoadingProfile(false);
+      setLoadingSiteVisits(false);
     }
   };
 
