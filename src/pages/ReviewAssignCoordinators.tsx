@@ -25,6 +25,7 @@ const ReviewAssignCoordinators: React.FC = () => {
   const [batchLoading, setBatchLoading] = useState({} as Record<string, boolean>);
   const [batchForwarded, setBatchForwarded] = useState({} as Record<string, boolean>);
   const [expandedGroups, setExpandedGroups] = useState({} as Record<string, boolean>);
+  const [forwardedSiteIds, setForwardedSiteIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (id) {
@@ -32,6 +33,35 @@ const ReviewAssignCoordinators: React.FC = () => {
       if (mmp) {
         setMmpFile(mmp);
         setLoading(false);
+        
+        // Load forwarded sites from database to prevent re-forwarding
+        const loadForwardedSites = async () => {
+          try {
+            const { data: siteEntries, error } = await supabase
+              .from('mmp_site_entries')
+              .select('id, forwarded_at, forwarded_by_user_id, forwarded_to_user_id')
+              .eq('mmp_file_id', id);
+            
+            if (error) {
+              console.error('Error loading forwarded sites:', error);
+              return;
+            }
+            
+            // Find sites that have been forwarded (have forwarded_at set)
+            const forwarded = new Set<string>();
+            (siteEntries || []).forEach((entry: any) => {
+              if (entry.forwarded_at) {
+                forwarded.add(entry.id);
+              }
+            });
+            
+            setForwardedSiteIds(forwarded);
+          } catch (err) {
+            console.error('Failed to load forwarded sites:', err);
+          }
+        };
+        
+        loadForwardedSites();
       } else {
         toast({
           title: "MMP Not Found",
@@ -70,7 +100,10 @@ const ReviewAssignCoordinators: React.FC = () => {
   }
 
   // Prepare site groups and coordinators
-  let entries: any[] = Array.isArray(mmpFile?.siteEntries) && mmpFile.siteEntries.length > 0 ? mmpFile.siteEntries : [];
+  // Show all sites (including forwarded ones) but mark them as forwarded
+  let entries: any[] = Array.isArray(mmpFile?.siteEntries) && mmpFile.siteEntries.length > 0 
+    ? mmpFile.siteEntries
+    : [];
   const stateNameToId = new Map<string, string>();
   // Add both full name and name without "State" suffix for better matching
   for (const s of sudanStates) {
@@ -126,19 +159,25 @@ const ReviewAssignCoordinators: React.FC = () => {
       // Update mmp_site_entries to assign to coordinator (keep status as Pending)
       const updatePromises = selectedSiteEntries.map(async (siteEntry: any) => {
         const existingAdditionalData = siteEntry.additional_data || {};
+        const forwardedAt = new Date().toISOString();
         
         // Update the mmp_site_entry in the database (assign to coordinator, keep status as Pending)
         const { data, error } = await supabase
           .from('mmp_site_entries')
           .update({
             status: 'Pending',
+            // New proper foreign key columns
+            forwarded_by_user_id: currentUser?.id || null,
+            forwarded_to_user_id: coordinatorId,
+            forwarded_at: forwardedAt,
+            // Keep legacy fields for backward compatibility
             dispatched_by: currentUser?.id || null,
-            dispatched_at: new Date().toISOString(),
+            dispatched_at: forwardedAt,
             additional_data: {
               ...existingAdditionalData,
               assigned_to: coordinatorId,
               assigned_by: currentUser?.id || null,
-              assigned_at: new Date().toISOString(),
+              assigned_at: forwardedAt,
               notes: `Forwarded from MMP ${mmpFile?.name || mmpFile?.mmpId} for CP verification`,
             }
           })
@@ -171,6 +210,12 @@ const ReviewAssignCoordinators: React.FC = () => {
       ]);
 
       toast({ title: 'Batch Forwarded', description: `Sites were forwarded to ${allCoordinators.find(c => c.id === coordinatorId)?.fullName || 'Coordinator'}.`, variant: 'default' });
+      
+      // Mark sites as forwarded to prevent re-forwarding
+      const newForwarded = new Set(forwardedSiteIds);
+      siteIds.forEach(id => newForwarded.add(id));
+      setForwardedSiteIds(newForwarded);
+      
       setBatchLoading(b => ({ ...b, [groupKey]: false }));
       setBatchForwarded(f => ({ ...f, [groupKey]: true }));
       setSelectedSites(s => ({ ...s, [groupKey]: new Set() }));
@@ -202,10 +247,19 @@ const ReviewAssignCoordinators: React.FC = () => {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {forwardedSiteIds.size > 0 && (
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-800">
+                <strong>{forwardedSiteIds.size}</strong> site(s) have already been forwarded and are excluded from this list.
+              </p>
+            </div>
+          )}
           <div className="space-y-6">
             {Object.entries(groupMap).length === 0 ? (
               <div className="text-center text-muted-foreground py-8">
-                No site groups found for this MMP.
+                {forwardedSiteIds.size > 0 
+                  ? 'All sites have been forwarded. No remaining sites to assign.'
+                  : 'No site groups found for this MMP.'}
               </div>
             ) : (
               Object.entries(groupMap).map(([groupKey, groupSites]) => {
@@ -213,10 +267,18 @@ const ReviewAssignCoordinators: React.FC = () => {
                 const isUnassigned = stateId === 'unassigned';
                 const recommended = isUnassigned ? null : getRecommendedCoordinator(stateId, localityId);
                 const selectedId = assignmentMap[groupKey] || recommended?.id || '';
-                // Initialize selectedSites for this group if not set
-                if (!selectedSites[groupKey]) {
-                  setSelectedSites(s => ({ ...s, [groupKey]: new Set(groupSites.map((site: any) => site.id)) }));
+                
+                // Separate forwarded and unforwarded sites
+                const forwardedSites = groupSites.filter((site: any) => forwardedSiteIds.has(site.id));
+                const unforwardedSites = groupSites.filter((site: any) => !forwardedSiteIds.has(site.id));
+                const hasUnforwardedSites = unforwardedSites.length > 0;
+                const hasForwardedSites = forwardedSites.length > 0;
+                
+                // Initialize selectedSites for this group if not set (only for unforwarded sites)
+                if (!selectedSites[groupKey] && hasUnforwardedSites) {
+                  setSelectedSites(s => ({ ...s, [groupKey]: new Set(unforwardedSites.map((site: any) => site.id)) }));
                 }
+                
                 return (
                   <div key={groupKey} className="border rounded-lg p-4 bg-gray-50">
                     <div className="flex items-center mb-3 font-medium cursor-pointer select-none" onClick={() => setExpandedGroups(g => ({ ...g, [groupKey]: !g[groupKey] }))}>
@@ -227,44 +289,63 @@ const ReviewAssignCoordinators: React.FC = () => {
                       {!isUnassigned && localityId && (
                         <span> / <span className="text-green-700">{sudanStates.find(s => s.id === stateId)?.localities.find(l => l.id === localityId)?.name || localityId}</span></span>
                       )}
+                      {hasForwardedSites && (
+                        <span className="ml-2 text-sm text-green-700 font-normal">
+                          ({forwardedSites.length} forwarded, {unforwardedSites.length} available)
+                        </span>
+                      )}
                     </div>
-                    <div className="mb-3 text-sm text-muted-foreground">
-                      Recommended: {recommended ? `${recommended.fullName || recommended.name || recommended.email}` : 'None'}
-                    </div>
-                    <div className="flex items-center gap-3 mb-3">
-                      <Select value={selectedId} onValueChange={val => setAssignmentMap(a => ({ ...a, [groupKey]: val }))}>
-                        <SelectTrigger className="max-w-md">
-                          <SelectValue placeholder="Select coordinator..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {allCoordinators.map(c => (
-                            <SelectItem key={c.id} value={c.id}>
-                              {c.fullName || c.name || c.email}
-                              {recommended?.id === c.id ? ' (Recommended)' : ''}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Button
-                        size="sm"
-                        onClick={() => handleForwardBatch(groupKey)}
-                        disabled={batchLoading[groupKey] || batchForwarded[groupKey] || !assignmentMap[groupKey] || !(selectedSites[groupKey]?.size > 0)}
-                        variant={batchForwarded[groupKey] ? 'secondary' : 'default'}
-                      >
-                        {batchForwarded[groupKey]
-                          ? 'Forwarded'
-                          : batchLoading[groupKey]
-                            ? 'Forwarding...'
-                            : 'Forward Selected'}
-                      </Button>
-                    </div>
+                    {hasForwardedSites && !hasUnforwardedSites && (
+                      <div className="mb-3 text-sm text-green-700 font-medium">
+                        ✓ All sites in this group have been forwarded
+                      </div>
+                    )}
+                    {hasUnforwardedSites && (
+                      <>
+                        <div className="mb-3 text-sm text-muted-foreground">
+                          Recommended: {recommended ? `${recommended.fullName || recommended.name || recommended.email}` : 'None'}
+                        </div>
+                        <div className="flex items-center gap-3 mb-3">
+                          <Select 
+                            value={selectedId} 
+                            onValueChange={val => setAssignmentMap(a => ({ ...a, [groupKey]: val }))}
+                          >
+                            <SelectTrigger className="max-w-md">
+                              <SelectValue placeholder="Select coordinator..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {allCoordinators.map(c => (
+                                <SelectItem key={c.id} value={c.id}>
+                                  {c.fullName || c.name || c.email}
+                                  {recommended?.id === c.id ? ' (Recommended)' : ''}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Button
+                            size="sm"
+                            onClick={() => handleForwardBatch(groupKey)}
+                            disabled={batchLoading[groupKey] || !assignmentMap[groupKey] || !(selectedSites[groupKey]?.size > 0)}
+                            variant="default"
+                          >
+                            {batchLoading[groupKey]
+                              ? 'Forwarding...'
+                              : 'Forward Selected'}
+                          </Button>
+                        </div>
+                      </>
+                    )}
                     {expandedGroups[groupKey] && (
                       <div className="mt-3">
                         <div className="font-medium text-sm mb-2">Select sites to forward:</div>
                         <div className="max-h-40 overflow-y-auto border rounded p-3 bg-white">
                           <div className="space-y-2">
-                            {groupSites.map((site: any) => (
-                              <label key={site.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-1 rounded">
+                            {/* Show unforwarded sites first */}
+                            {unforwardedSites.map((site: any) => (
+                              <label 
+                                key={site.id} 
+                                className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-1 rounded"
+                              >
                                 <Checkbox
                                   checked={selectedSites[groupKey]?.has(site.id) || false}
                                   onCheckedChange={checked => {
@@ -278,6 +359,31 @@ const ReviewAssignCoordinators: React.FC = () => {
                                 <span className="text-sm">{site.siteName || site.name || site.id}</span>
                               </label>
                             ))}
+                            {/* Show forwarded sites below, visually distinct */}
+                            {forwardedSites.length > 0 && (
+                              <>
+                                {unforwardedSites.length > 0 && (
+                                  <div className="border-t my-2 pt-2">
+                                    <div className="text-xs text-muted-foreground mb-1 font-medium">Already Forwarded:</div>
+                                  </div>
+                                )}
+                                {forwardedSites.map((site: any) => (
+                                  <label 
+                                    key={site.id} 
+                                    className="flex items-center gap-2 p-1 rounded opacity-60 cursor-not-allowed"
+                                  >
+                                    <Checkbox
+                                      checked={false}
+                                      disabled={true}
+                                    />
+                                    <span className="text-sm">
+                                      {site.siteName || site.name || site.id}
+                                      <span className="ml-2 text-green-600 text-xs font-medium">✓ Forwarded</span>
+                                    </span>
+                                  </label>
+                                ))}
+                              </>
+                            )}
                           </div>
                         </div>
                       </div>
