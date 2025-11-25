@@ -17,6 +17,20 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-shadow.png',
 });
 
+const escapeHtml = (str: string): string => {
+  const htmlEntities: Record<string, string> = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+    '/': '&#x2F;',
+    '`': '&#x60;',
+    '=': '&#x3D;'
+  };
+  return str.replace(/[&<>"'`=/]/g, (char) => htmlEntities[char] || char);
+};
+
 // Hub colors mapping
 const hubColors = {
   'kassala-hub': '#9b87f5',      // Primary Purple
@@ -86,32 +100,161 @@ const MapBoundsHandler = ({
   return null;
 };
 
-const createMarkerIcon = (type: 'user' | 'site', status?: string) => {
-  const color = type === 'user'
+const createMarkerIcon = (type: 'user' | 'site', status?: string, avatar?: string, name?: string) => {
+  const statusColor = type === 'user'
     ? (status === 'online' ? '#10b981' : status === 'busy' ? '#f59e0b' : '#6b7280')
     : (status === 'completed' ? '#10b981' : status === 'inProgress' ? '#6366f1' :
        status === 'assigned' ? '#f59e0b' : '#ef4444');
 
+  if (type === 'site') {
+    return L.divIcon({
+      className: 'custom-div-icon',
+      html: `
+        <div style="
+          background-color: ${statusColor};
+          width: 20px;
+          height: 20px;
+          border-radius: 4px;
+          border: 2px solid white;
+          box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        ">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+          </svg>
+        </div>
+      `,
+      iconSize: [20, 20],
+      iconAnchor: [10, 10],
+    });
+  }
+
+  const safeName = name ? escapeHtml(name) : '';
+  const safeAvatar = avatar ? escapeHtml(avatar) : '';
+  const initials = name ? escapeHtml(name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()) : '?';
+  const statusRingColor = status === 'online' ? '#10b981' : status === 'busy' ? '#f59e0b' : '#6b7280';
+  const pulseAnimation = status === 'online' ? 'animation: pulse 2s infinite;' : '';
+  
+  if (avatar) {
+    return L.divIcon({
+      className: 'custom-user-marker',
+      html: `
+        <style>
+          @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 0 0 ${statusRingColor}80; }
+            50% { box-shadow: 0 0 0 6px ${statusRingColor}00; }
+          }
+        </style>
+        <div style="
+          position: relative;
+          width: 44px;
+          height: 44px;
+          ${pulseAnimation}
+        ">
+          <div style="
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            border: 3px solid ${statusRingColor};
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            overflow: hidden;
+            background: white;
+          ">
+            <img 
+              src="${safeAvatar}" 
+              alt="${safeName || 'User'}"
+              style="width: 100%; height: 100%; object-fit: cover;"
+              onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+            />
+            <div style="
+              display: none;
+              width: 100%;
+              height: 100%;
+              background: linear-gradient(135deg, ${statusRingColor}90, ${statusRingColor});
+              color: white;
+              font-size: 14px;
+              font-weight: bold;
+              align-items: center;
+              justify-content: center;
+            ">${initials}</div>
+          </div>
+          <div style="
+            position: absolute;
+            bottom: -2px;
+            right: -2px;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: ${statusRingColor};
+            border: 2px solid white;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+          "></div>
+        </div>
+      `,
+      iconSize: [44, 44],
+      iconAnchor: [22, 22],
+      popupAnchor: [0, -22],
+    });
+  }
+
   return L.divIcon({
-    className: 'custom-div-icon',
+    className: 'custom-user-marker',
     html: `
+      <style>
+        @keyframes pulse {
+          0%, 100% { box-shadow: 0 0 0 0 ${statusRingColor}80; }
+          50% { box-shadow: 0 0 0 6px ${statusRingColor}00; }
+        }
+      </style>
       <div style="
-        background-color: ${color};
-        width: 16px;
-        height: 16px;
-        border-radius: ${type === 'user' ? '50%' : '2px'};
-        border: 2px solid white;
-        box-shadow: 0 0 0 2px ${color}40;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 8px;
-        color: white;
-        font-weight: bold;
-      ">${type === 'user' ? '👤' : '🏢'}</div>
+        position: relative;
+        width: 44px;
+        height: 44px;
+        ${pulseAnimation}
+      ">
+        <div style="
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 44px;
+          height: 44px;
+          border-radius: 50%;
+          border: 3px solid ${statusRingColor};
+          box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+          overflow: hidden;
+          background: linear-gradient(135deg, ${statusRingColor}90, ${statusRingColor});
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        ">
+          <span style="
+            color: white;
+            font-size: 14px;
+            font-weight: bold;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+          ">${initials}</span>
+        </div>
+        <div style="
+          position: absolute;
+          bottom: -2px;
+          right: -2px;
+          width: 14px;
+          height: 14px;
+          border-radius: 50%;
+          background: ${statusRingColor};
+          border: 2px solid white;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        "></div>
+      </div>
     `,
-    iconSize: [16, 16],
-    iconAnchor: [8, 8],
+    iconSize: [44, 44],
+    iconAnchor: [22, 22],
+    popupAnchor: [0, -22],
   });
 };
 
@@ -223,7 +366,7 @@ const LeafletMapContainer: React.FC<LeafletMapContainerProps> = ({
           <Marker 
             key={location.id}
             position={[location.latitude, location.longitude]}
-            icon={createMarkerIcon(location.type, location.status)}
+            icon={createMarkerIcon(location.type, location.status, location.avatar, location.name)}
             eventHandlers={{
               click: () => onLocationClick && onLocationClick(location.id)
             }}
