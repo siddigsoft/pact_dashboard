@@ -371,18 +371,8 @@ const MMPDetailView = () => {
             </div>
           )}
           
-          {/* Forward to Coordinators button for FOM users */}
-          {isFOM && mmpFile?.permits?.federal && (
-            <div>
-              <Button 
-                onClick={handleForwardToCoordinators}
-                className="bg-green-600 hover:bg-green-700"
-              >
-                <Send className="mr-2 h-4 w-4" />
-                Forward Sites to Coordinators
-              </Button>
-            </div>
-          )}
+          
+         
 
           {/* Review & Assign Coordinators button for FOM users */}
           {isFOM && mmpFile?.permits?.federal && (

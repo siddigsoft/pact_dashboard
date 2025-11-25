@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useSiteVisitRemindersUI } from '@/hooks/use-site-visit-reminders-ui';
 import { useAppContext } from '@/context/AppContext';
-import FloatingMessenger from '@/components/communication/FloatingMessenger';
 import LocationPermissionPrompt from '@/components/location/LocationPermissionPrompt';
 import { DashboardZoneLayout, DashboardZone } from '@/components/dashboard/DashboardZoneLayout';
 import { OperationsZone } from '@/components/dashboard/zones/OperationsZone';
@@ -63,7 +62,6 @@ const Dashboard = () => {
       {/* Floating components */}
       {SiteVisitRemindersDialog}
       <LocationPermissionPrompt />
-      <FloatingMessenger />
     </div>
   );
 };

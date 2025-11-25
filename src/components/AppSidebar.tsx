@@ -83,7 +83,7 @@ const getMenuGroups = (
 
   const projectItems = [] as MenuGroup['items'];
   if (isAdmin || isICT || perms.projects) projectItems.push({ title: "Projects", url: "/projects", icon: FolderKanban });
-  if (isAdmin || isICT || perms.mmp) projectItems.push({ title: "MMP Management", url: "/mmp", icon: Database });
+  if (isAdmin || isICT || perms.mmp) projectItems.push({ title: isDataCollector ? "My Sites Management" : "MMP Management", url: "/mmp", icon: Database });
   if (isAdmin || isICT || perms.siteVisits) projectItems.push({ title: "Site Visits", url: "/site-visits", icon: ClipboardList });
   if (isAdmin || perms.fieldOpManager) projectItems.push({ title: "Field Operation Manager", url: "/field-operation-manager", icon: ClipboardList });
   if (isAdmin || perms.archive) projectItems.push({ title: "Archive", url: "/archive", icon: Archive });

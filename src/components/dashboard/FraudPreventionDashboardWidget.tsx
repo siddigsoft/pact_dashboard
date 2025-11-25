@@ -10,11 +10,7 @@ interface FraudPreventionDashboardWidgetProps {
 const FraudPreventionDashboardWidget = ({ className }: FraudPreventionDashboardWidgetProps) => {
   return (
     <div className={cn("w-full", className)}>
-      <FraudPreventionDashboard 
-        suspiciousTransactionsCount={8} 
-        blockedTransactionsCount={3} 
-        highRiskAccountsCount={2} 
-      />
+      <FraudPreventionDashboard />
     </div>
   );
 };

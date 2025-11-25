@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import type { MMPStatus } from '@/types';
 import jsPDF from 'jspdf'; // npm install jspdf
 import autoTable from 'jspdf-autotable'; // npm install jspdf-autotable
+import { useAuthorization } from '@/hooks/use-authorization';
 
 const FIELD_OP_ROLE: import('@/types/roles').AppRole = 'Field Operation Manager (FOM)';
 
@@ -30,6 +31,7 @@ import { useUser } from '@/context/user/UserContext';
 const FieldOperationManagerPage = () => {
   const { roles } = useAppContext();
   const { currentUser } = useUser();
+  const { hasAnyRole } = useAuthorization();
   const navigate = useNavigate();
   const [mmpFiles, setMmpFiles] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -91,7 +93,8 @@ const FieldOperationManagerPage = () => {
     return false;
   };
 
-  const allowed = roles?.includes('Admin') || roles?.includes(FIELD_OP_ROLE) || roles?.includes('Field Operation Manager (FOM)');
+  // Check access: Admin or Field Operation Manager
+  const allowed = hasAnyRole(['admin', 'Admin']) || hasAnyRole(['fom', 'Field Operation Manager (FOM)', FIELD_OP_ROLE]);
   if (!allowed) {
     return (
       <div className="max-w-xl mx-auto mt-20 p-8 bg-white rounded-xl shadow text-center">

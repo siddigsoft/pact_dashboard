@@ -212,9 +212,10 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
       }
 
       const isAdminRole = roles.find(r => r.id === roleId)?.name === 'admin';
+      // Ensure desiredPermissions always includes a `conditions` property
       const desiredPermissions = isAdminRole
-        ? RESOURCES.flatMap(rsrc => ACTIONS.map(act => ({ resource: rsrc, action: act })))
-        : roleData.permissions;
+        ? RESOURCES.flatMap(rsrc => ACTIONS.map(act => ({ resource: rsrc, action: act, conditions: null } as any)))
+        : roleData.permissions?.map(p => ({ ...p, conditions: (p as any).conditions ?? null }));
 
       console.log('🔐 Processing permissions. isAdminRole:', isAdminRole, 'desiredPermissions:', desiredPermissions);
 
@@ -435,10 +436,13 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
 
         if (!userId) {
           setUserRoles(mapped);
+          console.log(`RoleManagement: fetched ${mapped.length} user_roles`);
         } else {
           setUserRoles(prev => {
             const others = prev.filter(ur => ur.user_id !== userId);
-            return [...others, ...mapped];
+            const combined = [...others, ...mapped];
+            console.log(`RoleManagement: fetched ${mapped.length} user_roles for ${userId}`);
+            return combined;
           });
         }
       }

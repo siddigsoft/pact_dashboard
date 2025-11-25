@@ -13,6 +13,7 @@ import { NotificationFilter } from './notification-center/NotificationFilter';
 import { Notification } from '@/types';
 import { useUser } from '@/context/user/UserContext';
 import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
+import { toast } from '@/hooks/toast';
 
 interface NotificationDropdownProps {
   onClose: () => void;
@@ -90,7 +91,21 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
   };
 
   const handleClearAll = async () => {
-    await clearAllNotifications();
+    try {
+      const deletedCount = await clearAllNotifications();
+      toast({
+        title: 'Notifications cleared',
+        description: `Successfully deleted ${deletedCount || notifications.length} notification${(deletedCount || notifications.length) !== 1 ? 's' : ''}`,
+        variant: 'success',
+      });
+    } catch (error) {
+      console.error('Failed to clear notifications:', error);
+      toast({
+        title: 'Failed to clear notifications',
+        description: error instanceof Error ? error.message : 'An error occurred while clearing notifications. Please try again.',
+        variant: 'destructive',
+      });
+    }
   };
 
   // Filter and group notifications
@@ -215,7 +230,6 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
             title="Urgent"
             icon={<AlertCircle className="h-4 w-4 text-red-500" />}
             notifications={urgentNotifications}
-            onNotificationClick={handleNotificationClick}
             actionButtons={renderActionButtons}
           />
           
@@ -223,7 +237,6 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
             title="Warnings"
             icon={<AlertCircle className="h-4 w-4 text-amber-500" />}
             notifications={warningNotifications}
-            onNotificationClick={handleNotificationClick}
             actionButtons={renderActionButtons}
           />
           
@@ -231,7 +244,6 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
             title="Information"
             icon={<CheckCircle2 className="h-4 w-4 text-blue-500" />}
             notifications={infoNotifications}
-            onNotificationClick={handleNotificationClick}
             actionButtons={renderActionButtons}
           />
 

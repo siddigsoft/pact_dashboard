@@ -15,6 +15,17 @@ export default defineConfig(({ mode }) => ({
     mode === 'development' &&
     componentTagger(),
   ].filter(Boolean),
+  optimizeDeps: {
+    exclude: [
+      'face-api.js',
+      'jspdf',
+      'jspdf-autotable',
+      'xlsx',
+      'docx',
+      'html2canvas',
+      '@octokit/rest'
+    ]
+  },
   esbuild: {
     drop: mode === 'production' ? ['console', 'debugger'] : [],
   },
@@ -23,21 +34,20 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
       "@assets": path.resolve(__dirname, "./attached_assets"),
     },
+    dedupe: ['react', 'react-dom'],
   },
   build: {
     chunkSizeWarningLimit: 1000,
     rollupOptions: {
       output: {
         manualChunks(id) {
-          // Core React libraries
-          if (id.includes('react') && !id.includes('react-')) {
-            return 'react-core';
-          }
-          if (id.includes('react-dom')) {
-            return 'react-dom';
+          // Core React libraries - keep in vendor chunk to ensure proper loading order
+          // React must be available before any other chunks that use it
+          if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/')) {
+            return 'vendor';
           }
           
-          // React Router
+          // React Router (depends on React, so should load after vendor)
           if (id.includes('react-router-dom') || id.includes('wouter')) {
             return 'router';
           }
@@ -118,7 +128,7 @@ export default defineConfig(({ mode }) => ({
             return 'date-utils';
           }
           
-          // All other node_modules
+          // All other node_modules (including React which we want here)
           if (id.includes('node_modules')) {
             return 'vendor';
           }

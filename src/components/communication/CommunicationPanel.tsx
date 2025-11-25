@@ -4,7 +4,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { 
   MessageSquare, 
-  Phone, 
   Bell, 
   Users, 
   Search, 
@@ -120,10 +119,6 @@ const CommunicationPanel = () => {
     setActiveChat(null);
   };
 
-  const handleOpenCalls = () => {
-    navigate('/calls');
-  };
-
   useEffect(() => {
     if (activeChat) {
       setShowChatView(true);
@@ -150,7 +145,7 @@ const CommunicationPanel = () => {
     <div className="flex flex-col h-full">
       <Tabs defaultValue="chats" className="w-full h-full flex flex-col">
         <div className="border-b px-2">
-          <TabsList className="w-full grid grid-cols-3 h-12">
+          <TabsList className="w-full grid grid-cols-2 h-12">
             <TabsTrigger value="chats" className="relative">
               <MessageSquare className="h-4 w-4 mr-1" />
               <span>Chats</span>
@@ -159,10 +154,6 @@ const CommunicationPanel = () => {
                   {unreadCount > 9 ? '9+' : unreadCount}
                 </Badge>
               )}
-            </TabsTrigger>
-            <TabsTrigger value="calls">
-              <Phone className="h-4 w-4 mr-1" />
-              <span>Calls</span>
             </TabsTrigger>
             <TabsTrigger value="notifications" className="relative">
               <Bell className="h-4 w-4 mr-1" />
@@ -258,24 +249,6 @@ const CommunicationPanel = () => {
                 <MessageSquare className="h-4 w-4 mr-2" />
                 Open Full Chat
               </Button>
-            </div>
-          </TabsContent>
-          
-          <TabsContent value="calls" className="mt-0 h-full">
-            <div className="flex flex-col items-center justify-center h-full p-6 text-center">
-              <div className="bg-primary/10 rounded-full p-6">
-                <Phone className="h-12 w-12 text-primary" />
-              </div>
-              <h3 className="text-xl font-medium mt-6">In-App Calling</h3>
-              <p className="text-muted-foreground max-w-sm mt-2">
-                Initiate voice calls directly to team members and site coordinators without leaving the app
-              </p>
-              <Button className="mt-6" onClick={handleOpenCalls}>
-                Open Call Center
-              </Button>
-              <p className="text-xs text-muted-foreground mt-4">
-                Calls are recorded and stored for audit purposes
-              </p>
             </div>
           </TabsContent>
           

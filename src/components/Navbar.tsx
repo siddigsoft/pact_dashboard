@@ -146,7 +146,7 @@ const Navbar = () => {
 					</Button>
 
 					{/* Chat */}
-					{/* <ChatNotificationIndicator /> */}
+					<ChatNotificationIndicator />
 
 					{/* Notifications */}
 					<DropdownMenu>
@@ -185,14 +185,6 @@ const Navbar = () => {
 							<DropdownMenuItem onClick={() => navigate(`/users/${currentUser?.id}`)}>
 								<UserIcon className="w-4 h-4 mr-2" />
 								Profile
-							</DropdownMenuItem>
-							<DropdownMenuItem onClick={() => navigate('/chat')}>
-								<MessageSquare className="w-4 h-4 mr-2" />
-								Messages
-							</DropdownMenuItem>
-							<DropdownMenuItem onClick={() => navigate('/settings')}>
-								<Settings className="w-4 h-4 mr-2" />
-								Settings
 							</DropdownMenuItem>
 							<DropdownMenuSeparator />
 							<DropdownMenuItem onClick={handleLogout}>

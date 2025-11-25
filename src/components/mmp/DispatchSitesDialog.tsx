@@ -10,7 +10,13 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+<<<<<<< HEAD
 import { Loader2, DollarSign, AlertCircle, ArrowRight, ArrowLeft } from 'lucide-react';
+=======
+import { Badge } from '@/components/ui/badge';
+import { Loader2 } from 'lucide-react';
+import { sudanStates } from '@/data/sudanStates';
+>>>>>>> d547407286fdfc08a9125a0526ea82f1b3a32265
 
 interface DispatchSitesDialogProps {
   open: boolean;
@@ -130,9 +136,31 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
     let filtered = collectors;
     
     if (dispatchType === 'state' && selectedState) {
-      filtered = filtered.filter(c => c.state_id === selectedState);
+      // Convert state name to state ID for matching
+      const stateId = sudanStates.find(s => s.name.toLowerCase() === selectedState.toLowerCase())?.id;
+      if (stateId) {
+        filtered = filtered.filter(c => c.state_id === stateId);
+      } else {
+        // Fallback: try direct match in case selectedState is already an ID
+        filtered = filtered.filter(c => c.state_id === selectedState);
+      }
     } else if (dispatchType === 'locality' && selectedLocality) {
-      filtered = filtered.filter(c => c.locality_id === selectedLocality);
+      // Convert locality name to locality ID for matching
+      // Need to find the state first to get the correct locality
+      let localityId: string | undefined;
+      for (const state of sudanStates) {
+        const locality = state.localities.find(l => l.name.toLowerCase() === selectedLocality.toLowerCase());
+        if (locality) {
+          localityId = locality.id;
+          break;
+        }
+      }
+      if (localityId) {
+        filtered = filtered.filter(c => c.locality_id === localityId);
+      } else {
+        // Fallback: try direct match in case selectedLocality is already an ID
+        filtered = filtered.filter(c => c.locality_id === selectedLocality);
+      }
     }
     
     if (search.trim()) {
@@ -374,26 +402,68 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
                           currentUserProfile?.data?.username || 
                           currentUserProfile?.data?.email || 
                           'System';
+<<<<<<< HEAD
 
       for (const entryId of Array.from(selectedSites)) {
+=======
+      
+      // Update each entry individually to set status and new columns
+      for (const entryId of siteEntryIds) {
+        // Get current entry to check status and preserve additional_data
+>>>>>>> d547407286fdfc08a9125a0526ea82f1b3a32265
         const { data: currentEntry } = await supabase
           .from('mmp_site_entries')
-          .select('additional_data')
+          .select('status, additional_data')
           .eq('id', entryId)
           .single();
+        
+        // Only dispatch sites that are in "Approved and Costed" status
+        const currentStatus = currentEntry?.status?.toLowerCase() || '';
+        if (currentStatus !== 'approved and costed') {
+          console.warn(`Skipping entry ${entryId} with status "${currentEntry?.status}" - only "Approved and Costed" sites can be dispatched`);
+          continue;
+        }
         
         const additionalData = currentEntry?.additional_data || {};
         additionalData.dispatched_at = dispatchedAt;
         additionalData.dispatched_by = dispatchedBy;
+        additionalData.dispatched_from_status = currentEntry?.status; // Track previous status
+        
+        // Set different status based on dispatch type
+        // - "Dispatched" for state/locality bulk dispatch (available sites - can be claimed by any collector in the area)
+        // - "Assigned" for individual dispatch (smart assigned - directly assigned to specific collector)
+        const newStatus = dispatchType === 'individual' ? 'Assigned' : 'Dispatched';
+        
+        const updateData: any = {
+          status: newStatus,
+          dispatched_at: dispatchedAt,
+          dispatched_by: dispatchedBy,
+          additional_data: additionalData // Keep for backward compatibility
+        };
+        
+        // For individual dispatch, assign directly to the specific collector
+        if (dispatchType === 'individual' && selectedCollector) {
+          updateData.accepted_by = selectedCollector;
+          updateData.accepted_at = dispatchedAt;
+          additionalData.assigned_to = selectedCollector;
+          additionalData.assigned_at = dispatchedAt;
+          additionalData.assigned_by = dispatchedBy;
+          updateData.additional_data = additionalData;
+        }
+        // For bulk dispatch (state/locality), accepted_by remains null until collector claims it
         
         const { error: entryUpdateError } = await supabase
           .from('mmp_site_entries')
+<<<<<<< HEAD
           .update({ 
             status: 'Dispatched',
             dispatched_at: dispatchedAt,
             dispatched_by: dispatchedBy,
             additional_data: additionalData
           })
+=======
+          .update(updateData)
+>>>>>>> d547407286fdfc08a9125a0526ea82f1b3a32265
           .eq('id', entryId);
         
         if (entryUpdateError) {

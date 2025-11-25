@@ -3,9 +3,11 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label';
 import { Search, Eye, Pencil, Check, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 
@@ -14,9 +16,32 @@ interface MMPSiteEntriesTableProps {
   onViewSiteDetail?: (site: any) => void;
   editable?: boolean;
   onUpdateSites?: (sites: any[]) => Promise<boolean> | void;
+  onAcceptSite?: (site: any) => void;
+  onRejectSite?: (site: any, comments: string) => void;
+  currentUserId?: string;
+  showAcceptRejectForAssigned?: boolean;
+  onAcknowledgeCost?: (site: any) => void;
+  onStartVisit?: (site: any) => void;
+  onCompleteVisit?: (site: any) => void;
+  showVisitActions?: boolean;
+  onSendBackToCoordinator?: (site: any, comments: string) => void;
 }
 
-const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, onUpdateSites }: MMPSiteEntriesTableProps) => {
+const MMPSiteEntriesTable = ({ 
+  siteEntries, 
+  onViewSiteDetail, 
+  editable = false, 
+  onUpdateSites,
+  onAcceptSite,
+  onRejectSite,
+  currentUserId,
+  showAcceptRejectForAssigned = false,
+  onAcknowledgeCost,
+  onStartVisit,
+  onCompleteVisit,
+  showVisitActions = false,
+  onSendBackToCoordinator
+}: MMPSiteEntriesTableProps) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -26,6 +51,12 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
   const [editingId, setEditingId] = useState<string | number | null>(null);
   const [draft, setDraft] = useState<any | null>(null);
   const [savingId, setSavingId] = useState<string | number | null>(null);
+  // Accept/Reject dialog state
+  const [acceptRejectOpen, setAcceptRejectOpen] = useState(false);
+  const [rejectComments, setRejectComments] = useState('');
+  // Send back to coordinator dialog state
+  const [sendBackOpen, setSendBackOpen] = useState(false);
+  const [sendBackComments, setSendBackComments] = useState('');
 
   // Debounce search query to reduce filtering operations
   useEffect(() => {
@@ -51,6 +82,7 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
     const hubOffice = site.hubOffice || site.hub_office || vd?.hubOffice || ad['Hub Office'] || ad['Hub Office:'] || '—';
     const state = site.state || site.state_name || vd?.state || ad['State'] || ad['State:'] || '—';
     const locality = site.locality || site.locality_name || vd?.locality || ad['Locality'] || ad['Locality:'] || '—';
+    const siteCode = site.siteCode || site.site_code || vd?.siteCode || ad['Site Code'] || ad['Site Code:'] || '—';
     const siteName = site.siteName || site.site_name || vd?.siteName || ad['Site Name'] || ad['Site Name:'] || '—';
     const cpName = site.cpName || site.cp_name || vd?.cpName || ad['CP Name'] || ad['CP name'] || ad['CP Name:'] || '—';
     const siteActivity = site.siteActivity || site.activity_at_site || site.activity || vd?.siteActivity || ad['Activity at the site'] || ad['Activity at Site'] || ad['Activity at the site:'] || '—';
@@ -120,21 +152,72 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
     const acceptedAt = site.accepted_at || (ad['accepted_at'] ? new Date(ad['accepted_at']).toISOString() : undefined) || (ad['Accepted At'] ? new Date(ad['Accepted At']).toISOString() : undefined) || undefined;
     const acceptedBy = site.accepted_by || ad['accepted_by'] || ad['Accepted By'] || undefined;
     
+    // Rejection information - read from new columns first, then fallback to additional_data
+    const rejectionComments = site.rejection_comments || ad['rejection_comments'] || ad['rejection_reason'] || undefined;
+    const rejectedBy = site.rejected_by || ad['rejected_by'] || undefined;
+    const rejectedAt = site.rejected_at || (ad['rejected_at'] ? new Date(ad['rejected_at']).toISOString() : undefined) || undefined;
+    
     // Timestamps
     const createdAt = site.created_at || undefined;
     const updatedAt = site.updated_at || site.last_modified || undefined;
 
     return { 
-      hubOffice, state, locality, mmpName, siteName, cpName, siteActivity, 
+      hubOffice, state, locality, siteCode, mmpName, siteName, cpName, siteActivity, 
       monitoringBy, surveyTool, useMarketDiversion, useWarehouseMonitoring,
       mainActivity, visitType, visitDate, comments, 
       enumeratorFee: finalEnumeratorFee, transportFee: finalTransportFee, cost: totalCost,
       verifiedBy, verifiedAt, verificationNotes, status,
-      dispatchedAt, dispatchedBy, acceptedAt, acceptedBy, createdAt, updatedAt
+      dispatchedAt, dispatchedBy, acceptedAt, acceptedBy, 
+      rejectionComments, rejectedBy, rejectedAt,
+      createdAt, updatedAt
     };
   };
 
   const handleView = (site: any) => {
+    // Check if this is a Smart Assigned site that needs cost acknowledgment
+    const isSmartAssignedNeedingAcknowledgment = showAcceptRejectForAssigned && 
+                                                 site.status?.toLowerCase() === 'assigned' && 
+                                                 site.accepted_by === currentUserId &&
+                                                 (!site.cost_acknowledged && !site.additional_data?.cost_acknowledged);
+    
+    if (isSmartAssignedNeedingAcknowledgment && onAcknowledgeCost) {
+      onAcknowledgeCost(site);
+      return;
+    }
+    
+    // Check if this is a Smart Assigned site that needs Accept/Reject dialog
+    const isSmartAssigned = showAcceptRejectForAssigned && 
+                           site.status?.toLowerCase() === 'assigned' && 
+                           site.accepted_by === currentUserId;
+    
+    if (isSmartAssigned && onAcceptSite && onRejectSite) {
+      setSelectedSite(site);
+      setRejectComments('');
+      setAcceptRejectOpen(true);
+      return;
+    }
+
+    // Check if this is an accepted site that needs Start Visit
+    const isAcceptedSite = showVisitActions && 
+                          site.status?.toLowerCase() === 'accepted' && 
+                          site.accepted_by === currentUserId;
+    
+    if (isAcceptedSite && onStartVisit) {
+      onStartVisit(site);
+      return;
+    }
+
+    // Check if this is an ongoing site that needs Complete Visit
+    const isOngoingSite = showVisitActions && 
+                         site.status?.toLowerCase() === 'ongoing' && 
+                         site.accepted_by === currentUserId;
+    
+    if (isOngoingSite && onCompleteVisit) {
+      onCompleteVisit(site);
+      return;
+    }
+    
+    // Otherwise show regular detail dialog
     if (onViewSiteDetail) {
       onViewSiteDetail(site);
       return;
@@ -218,6 +301,9 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
       'Accepted By': 'accepted_by', 'accepted_by': 'accepted_by',
       'Accepted At': 'accepted_at', 'accepted_at': 'accepted_at',
       'Status': 'status', 'Status:': 'status', 'status': 'status',
+      'Rejection Comments': 'rejection_comments', 'rejection_comments': 'rejection_comments', 'rejection_reason': 'rejection_comments',
+      'Rejected By': 'rejected_by', 'rejected_by': 'rejected_by',
+      'Rejected At': 'rejected_at', 'rejected_at': 'rejected_at',
     };
 
     const toBool = (v: any): boolean | null => {
@@ -258,9 +344,15 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
         } else if (columnName === 'cost' || columnName === 'enumerator_fee' || columnName === 'transport_fee') {
           const numVal = toNum(adValue);
           if (numVal !== null) migrated[columnName] = numVal;
-        } else if (columnName === 'verified_at' || columnName === 'dispatched_at') {
+        } else if (columnName === 'verified_at' || columnName === 'dispatched_at' || columnName === 'accepted_at' || columnName === 'rejected_at') {
           const dateVal = toDate(adValue);
           if (dateVal !== null) migrated[columnName] = dateVal;
+        } else if (columnName === 'rejected_by') {
+          // Handle UUID for rejected_by
+          const uuidVal = String(adValue).trim();
+          if (uuidVal && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uuidVal)) {
+            migrated[columnName] = uuidVal;
+          }
         } else {
           migrated[columnName] = String(adValue).trim();
         }
@@ -447,79 +539,22 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
         </div>
       </CardHeader>
       <CardContent>
-        <div className="rounded-md border w-full overflow-x-auto">
-          <div className="min-w-[2400px]">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-muted/50">
-                <TableHead>Hub Office</TableHead>
-                <TableHead>State</TableHead>
-                <TableHead>Locality</TableHead>
-                <TableHead>MMP Name</TableHead>
-                <TableHead>Site Name</TableHead>
-                <TableHead>CP Name</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Activity at Site</TableHead>
-                <TableHead>Monitoring By</TableHead>
-                <TableHead>Survey Tool</TableHead>
-                <TableHead>Market Diversion</TableHead>
-                <TableHead>Warehouse Monitoring</TableHead>
-                <TableHead>Visit Date</TableHead>
-                <TableHead>Enumerator Fee</TableHead>
-                <TableHead>Transport Fee</TableHead>
-                <TableHead>Total Cost</TableHead>
-                <TableHead>Comments</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Verified By</TableHead>
-                <TableHead>Verified At</TableHead>
-                <TableHead>Verification Notes</TableHead>
-                <TableHead>Dispatched At</TableHead>
-                <TableHead>Dispatched By</TableHead>
-                <TableHead>Accepted At</TableHead>
-                <TableHead>Accepted By</TableHead>
-                <TableHead>Created At</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {paginatedSites.length > 0 ? (
-                paginatedSites.map((site, idx) => {
+        <div className="rounded-md border w-full overflow-x-auto overflow-y-visible">
+          {/* Mobile Card Layout for small screens */}
+          <div className="block lg:hidden">
+            {paginatedSites.length > 0 ? (
+              <div className="space-y-4 p-4">
+                {paginatedSites.map((site, idx) => {
                   const row = normalizeSite(site);
                   const isEditing = editable && (editingId === (site.id ?? site._key ?? site.siteCode));
                   return (
-                    <TableRow key={site.id ?? site.siteCode ?? site._key ?? idx} className="hover:bg-muted/30">
-                      <TableCell className="font-mono text-xs">
-                        {isEditing ? (
-                          <Input value={draft?.hubOffice ?? row.hubOffice ?? ''} onChange={(e) => setDraft((d:any)=> ({...(d||{}), hubOffice: e.target.value}))} className="h-8" />
-                        ) : row.hubOffice}
-                      </TableCell>
-                      <TableCell>
-                        {isEditing ? (
-                          <Input value={draft?.state ?? row.state ?? ''} onChange={(e) => setDraft((d:any)=> ({...(d||{}), state: e.target.value}))} className="h-8" />
-                        ) : row.state}
-                      </TableCell>
-                      <TableCell>
-                        {isEditing ? (
-                          <Input value={draft?.locality ?? row.locality ?? ''} onChange={(e) => setDraft((d:any)=> ({...(d||{}), locality: e.target.value}))} className="h-8" />
-                        ) : row.locality}
-                      </TableCell>
-                      <TableCell>
-                        {row.mmpName}
-                      </TableCell>
-                      <TableCell>
-                        {isEditing ? (
-                          <Input value={draft?.siteName ?? row.siteName ?? ''} onChange={(e) => setDraft((d:any)=> ({...(d||{}), siteName: e.target.value}))} className="h-8" />
-                        ) : row.siteName}
-                      </TableCell>
-                      <TableCell>
-                        {isEditing ? (
-                          <Input value={draft?.cpName ?? row.cpName ?? ''} onChange={(e) => setDraft((d:any)=> ({...(d||{}), cpName: e.target.value}))} className="h-8" />
-                        ) : row.cpName}
-                      </TableCell>
-                      <TableCell>
-                        {isEditing ? (
-                          <Input value={draft?.status ?? row.status ?? 'Pending'} onChange={(e) => setDraft((d:any)=> ({...(d||{}), status: e.target.value}))} className="h-8" />
-                        ) : (
+                    <Card key={site.id ?? site.siteCode ?? site._key ?? idx} className="p-4">
+                      <div className="space-y-3">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <h3 className="font-semibold text-lg">{row.siteName || 'Unnamed Site'}</h3>
+                            <p className="text-sm text-muted-foreground">{row.state}, {row.locality}</p>
+                          </div>
                           <Badge 
                             className={
                               row.status?.toLowerCase() === 'verified' ? 'bg-green-100 text-green-700' :
@@ -532,264 +567,449 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
                           >
                             {row.status || 'Pending'}
                           </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {isEditing ? (
-                          <Input value={draft?.siteActivity ?? row.siteActivity ?? ''} onChange={(e) => setDraft((d:any)=> ({...(d||{}), siteActivity: e.target.value}))} className="h-8" />
-                        ) : row.siteActivity}
-                      </TableCell>
-                      <TableCell>
-                        {isEditing ? (
-                          <Input value={draft?.monitoringBy ?? row.monitoringBy ?? ''} onChange={(e) => setDraft((d:any)=> ({...(d||{}), monitoringBy: e.target.value}))} className="h-8" />
-                        ) : row.monitoringBy}
-                      </TableCell>
-                      <TableCell>
-                        {isEditing ? (
-                          <Input value={draft?.surveyTool ?? row.surveyTool ?? ''} onChange={(e) => setDraft((d:any)=> ({...(d||{}), surveyTool: e.target.value}))} className="h-8" />
-                        ) : row.surveyTool}
-                      </TableCell>
-                      <TableCell>
-                        {isEditing ? (
-                          <div className="flex items-center gap-2">
-                            <Checkbox
-                              checked={toBool(draft?.useMarketDiversion ?? row.useMarketDiversion)}
-                              onCheckedChange={(v) => setDraft((d:any)=> ({...(d||{}), useMarketDiversion: Boolean(v)}))}
-                            />
-                            <span className="text-xs">Yes</span>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <span className="text-muted-foreground">Visit Date:</span>
+                            <p className="font-medium">{row.visitDate || '—'}</p>
                           </div>
-                        ) : (row.useMarketDiversion ? 'Yes' : 'No')}
-                      </TableCell>
-                      <TableCell>
-                        {isEditing ? (
-                          <div className="flex items-center gap-2">
-                            <Checkbox
-                              checked={toBool(draft?.useWarehouseMonitoring ?? row.useWarehouseMonitoring)}
-                              onCheckedChange={(v) => setDraft((d:any)=> ({...(d||{}), useWarehouseMonitoring: Boolean(v)}))}
-                            />
-                            <span className="text-xs">Yes</span>
+                          <div>
+                            <span className="text-muted-foreground">Total Cost:</span>
+                            <p className="font-medium text-green-600">
+                              {row.cost !== undefined && row.cost !== null && String(row.cost) !== '' && String(row.cost) !== '—'
+                                ? `$${Number(row.cost).toLocaleString()}`
+                                : '—'}
+                            </p>
                           </div>
-                        ) : (row.useWarehouseMonitoring ? 'Yes' : 'No')}
-                      </TableCell>
-                      <TableCell>
-                        {isEditing ? (
-                          <Input value={draft?.visitDate ?? row.visitDate ?? ''} onChange={(e) => setDraft((d:any)=> ({...(d||{}), visitDate: e.target.value}))} className="h-8" />
-                        ) : row.visitDate}
-                      </TableCell>
-                      <TableCell>
-                        {isEditing ? (
-                          <Input
-                            type="number"
-                            step="0.01"
-                            value={draft?.enumeratorFee ?? (Number.isFinite(Number(row.enumeratorFee)) ? Number(row.enumeratorFee) : '')}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setDraft((d:any)=> {
-                                const newDraft = {...(d||{}), enumeratorFee: val};
-                                // Auto-calculate total cost
-                                const enumFee = Number(val) || 0;
-                                const transFee = Number(d?.transportFee ?? row.transportFee ?? 0);
-                                newDraft.cost = enumFee + transFee;
-                                return newDraft;
-                              });
-                            }}
-                            className="h-8"
-                            placeholder="20"
-                          />
-                        ) : (
-                          (row.enumeratorFee !== undefined && row.enumeratorFee !== null && String(row.enumeratorFee) !== '')
-                            ? `$${Number(row.enumeratorFee).toLocaleString()}`
-                            : '—'
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {isEditing ? (
-                          <Input
-                            type="number"
-                            step="0.01"
-                            min="10"
-                            max="25"
-                            value={draft?.transportFee ?? (Number.isFinite(Number(row.transportFee)) ? Number(row.transportFee) : '')}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setDraft((d:any)=> {
-                                const newDraft = {...(d||{}), transportFee: val};
-                                // Auto-calculate total cost
-                                const enumFee = Number(d?.enumeratorFee ?? row.enumeratorFee ?? 0);
-                                const transFee = Number(val) || 0;
-                                newDraft.cost = enumFee + transFee;
-                                return newDraft;
-                              });
-                            }}
-                            className="h-8"
-                            placeholder="10"
-                          />
-                        ) : (
-                          (row.transportFee !== undefined && row.transportFee !== null && String(row.transportFee) !== '')
-                            ? `$${Number(row.transportFee).toLocaleString()}`
-                            : '—'
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {isEditing ? (
-                          <div className="font-semibold text-blue-600">
-                            ${((Number(draft?.enumeratorFee ?? row.enumeratorFee ?? 0)) + (Number(draft?.transportFee ?? row.transportFee ?? 0))).toLocaleString()}
+                          <div>
+                            <span className="text-muted-foreground">CP Name:</span>
+                            <p className="font-medium">{row.cpName || '—'}</p>
                           </div>
-                        ) : (
-                          (row.cost !== undefined && row.cost !== null && String(row.cost) !== '' && String(row.cost) !== '—')
-                            ? `$${Number(row.cost).toLocaleString()}`
-                            : '—'
+                          <div>
+                            <span className="text-muted-foreground">Activity:</span>
+                            <p className="font-medium">{row.siteActivity || '—'}</p>
+                          </div>
+                        </div>
+
+                        {row.comments && row.comments !== '—' && (
+                          <div>
+                            <span className="text-muted-foreground text-sm">Comments:</span>
+                            <p className="text-sm mt-1">{row.comments}</p>
+                          </div>
                         )}
-                      </TableCell>
-                      <TableCell>
-                        {isEditing ? (
-                          <Input value={draft?.comments ?? row.comments ?? ''} onChange={(e) => setDraft((d:any)=> ({...(d||{}), comments: e.target.value}))} className="h-8" />
-                        ) : row.comments}
-                      </TableCell>
-                      <TableCell>
-                        {isEditing ? (
-                          <Input 
-                            value={draft?.status ?? row.status ?? ''} 
-                            onChange={(e) => setDraft((d:any)=> ({...(d||{}), status: e.target.value}))} 
-                            className="h-8" 
-                          />
-                        ) : (
-                          <Badge variant={row.status === 'Verified' ? 'default' : row.status === 'Dispatched' ? 'secondary' : 'outline'}>
-                            {row.status || 'Pending'}
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {isEditing ? (
-                          <Input 
-                            value={draft?.verifiedBy ?? row.verifiedBy ?? ''} 
-                            onChange={(e) => setDraft((d:any)=> ({...(d||{}), verifiedBy: e.target.value}))} 
-                            placeholder="Coordinator name"
-                            className="h-8" 
-                          />
-                        ) : (
-                          row.verifiedBy ? (
-                            <div className="font-medium">{row.verifiedBy}</div>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {isEditing ? (
-                          <Input 
-                            type="date"
-                            value={draft?.verifiedAt ? new Date(draft.verifiedAt).toISOString().split('T')[0] : (row.verifiedAt ? new Date(row.verifiedAt).toISOString().split('T')[0] : '')} 
-                            onChange={(e) => {
-                              const date = e.target.value ? new Date(e.target.value).toISOString() : '';
-                              setDraft((d:any)=> ({...(d||{}), verifiedAt: date}));
-                            }} 
-                            className="h-8" 
-                          />
-                        ) : (
-                          row.verifiedAt ? (
-                            <div className="text-sm">
-                              {new Date(row.verifiedAt).toLocaleDateString()}
-                              <div className="text-xs text-muted-foreground">
-                                {new Date(row.verifiedAt).toLocaleTimeString()}
+
+                        <div className="flex gap-2 pt-2 border-t">
+                          {editable ? (
+                            isEditing ? (
+                              <div className="flex gap-2 w-full">
+                                <Button size="sm" onClick={() => saveEdit(site)} disabled={savingId === (site.id ?? site._key ?? 'saving')} className="flex-1">
+                                  <Check className="h-4 w-4 mr-1" /> {savingId === (site.id ?? site._key ?? 'saving') ? 'Saving...' : 'Save'}
+                                </Button>
+                                <Button size="sm" variant="outline" onClick={cancelEdit} className="flex-1">
+                                  <X className="h-4 w-4 mr-1" /> Cancel
+                                </Button>
                               </div>
-                            </div>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {isEditing ? (
-                          <Input 
-                            value={draft?.verificationNotes ?? row.verificationNotes ?? ''} 
-                            onChange={(e) => setDraft((d:any)=> ({...(d||{}), verificationNotes: e.target.value}))} 
-                            placeholder="Verification notes"
-                            className="h-8" 
-                          />
-                        ) : (
-                          row.verificationNotes ? (
-                            <div className="text-sm max-w-xs" title={row.verificationNotes}>
-                              {row.verificationNotes.length > 50 
-                                ? `${row.verificationNotes.substring(0, 50)}...` 
-                                : row.verificationNotes}
-                            </div>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {row.dispatchedAt ? (
-                          <div className="text-sm">
-                            {new Date(row.dispatchedAt).toLocaleDateString()}
-                            <div className="text-xs text-muted-foreground">
-                              {new Date(row.dispatchedAt).toLocaleTimeString()}
-                            </div>
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {row.dispatchedBy ? (
-                          <div className="font-medium text-sm">{row.dispatchedBy}</div>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {row.acceptedAt ? (
-                          <div className="text-sm">
-                            {new Date(row.acceptedAt).toLocaleDateString()}
-                            <div className="text-xs text-muted-foreground">
-                              {new Date(row.acceptedAt).toLocaleTimeString()}
-                            </div>
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {row.acceptedBy ? (
-                          <div className="font-medium text-sm">{row.acceptedBy}</div>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {row.createdAt ? (
-                          <div className="text-sm">
-                            {new Date(row.createdAt).toLocaleDateString()}
-                            <div className="text-xs text-muted-foreground">
-                              {new Date(row.createdAt).toLocaleTimeString()}
-                            </div>
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {editable ? (
-                          isEditing ? (
-                            <div className="flex items-center gap-2">
-                              <Button size="sm" onClick={() => saveEdit(site)} disabled={savingId === (site.id ?? site._key ?? 'saving')} className="inline-flex items-center gap-1">
-                                <Check className="h-4 w-4" /> {savingId === (site.id ?? site._key ?? 'saving') ? 'Saving...' : 'Save'}
-                              </Button>
-                              <Button size="sm" variant="outline" onClick={cancelEdit} className="inline-flex items-center gap-1">
-                                <X className="h-4 w-4" /> Cancel
+                            ) : (
+                              <div className="flex gap-2 w-full">
+                                <Button variant="outline" size="sm" onClick={() => startEdit(site)} className="flex-1">
+                                  <Pencil className="h-4 w-4 mr-1" /> Edit
+                                </Button>
+                                <Button variant="ghost" size="sm" onClick={() => handleView(site)} className="flex-1">
+                                  <Eye className="h-4 w-4 mr-1" /> View
+                                </Button>
+                              </div>
+                            )
+                          ) : showVisitActions ? (
+                            <div className="flex gap-2 w-full">
+                              {site.status?.toLowerCase() === 'accepted' && (
+                                <Button variant="default" size="sm" onClick={() => handleView(site)} className="flex-1 bg-blue-600 hover:bg-blue-700">
+                                  <Eye className="h-4 w-4 mr-1" /> Start Visit
+                                </Button>
+                              )}
+                              {site.status?.toLowerCase() === 'ongoing' && (
+                                <Button variant="default" size="sm" onClick={() => handleView(site)} className="flex-1 bg-green-600 hover:bg-green-700">
+                                  <Check className="h-4 w-4 mr-1" /> Complete Visit
+                                </Button>
+                              )}
+                              <Button variant="ghost" size="sm" onClick={() => {
+                                if (onViewSiteDetail) {
+                                  onViewSiteDetail(site);
+                                } else {
+                                  setSelectedSite(site);
+                                  setDetailOpen(true);
+                                }
+                              }} className="flex-1">
+                                <Eye className="h-4 w-4 mr-1" /> Details
                               </Button>
                             </div>
                           ) : (
-                            <div className="flex items-center gap-2">
-                              <Button 
-                                variant="outline" 
-                                size="sm" 
-                                onClick={() => startEdit(site)}
-                                className="inline-flex items-center gap-1">
-                                <Pencil className="h-4 w-4" />
-                                Edit
-                              </Button>
+                            <Button variant="ghost" size="sm" onClick={() => handleView(site)} className="w-full">
+                              <Eye className="h-4 w-4 mr-1" /> View Details
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="p-8 text-center text-muted-foreground">
+                No results.
+              </div>
+            )}
+          </div>
+
+          {/* Desktop Table Layout */}
+          <div className="hidden lg:block overflow-x-auto">
+            <div className="min-w-[1600px]">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50">
+                    <TableHead className="w-[100px]">Hub Office</TableHead>
+                    <TableHead className="w-[80px]">State</TableHead>
+                    <TableHead className="w-[100px]">Locality</TableHead>
+                    <TableHead className="w-[120px]">MMP Name</TableHead>
+                    <TableHead className="w-[150px]">Site Name</TableHead>
+                    <TableHead className="w-[120px]">CP Name</TableHead>
+                    <TableHead className="w-[100px]">Status</TableHead>
+                    <TableHead className="w-[140px]">Activity at Site</TableHead>
+                    <TableHead className="w-[120px]">Monitoring By</TableHead>
+                    <TableHead className="w-[120px]">Survey Tool</TableHead>
+                    <TableHead className="w-[100px]">Market Diversion</TableHead>
+                    <TableHead className="w-[120px]">Warehouse Monitoring</TableHead>
+                    <TableHead className="w-[100px]">Visit Date</TableHead>
+                    <TableHead className="w-[100px]">Enumerator Fee</TableHead>
+                    <TableHead className="w-[100px]">Transport Fee</TableHead>
+                    <TableHead className="w-[100px]">Total Cost</TableHead>
+                    <TableHead className="w-[200px]">Comments</TableHead>
+                    <TableHead className="w-[100px]">Verified By</TableHead>
+                    <TableHead className="w-[120px]">Verified At</TableHead>
+                    <TableHead className="w-[150px]">Verification Notes</TableHead>
+                    <TableHead className="w-[120px]">Dispatched At</TableHead>
+                    <TableHead className="w-[120px]">Dispatched By</TableHead>
+                    <TableHead className="w-[120px]">Accepted At</TableHead>
+                    <TableHead className="w-[120px]">Accepted By</TableHead>
+                    <TableHead className="w-[120px]">Created At</TableHead>
+                    <TableHead className="w-[150px]">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {paginatedSites.length > 0 ? (
+                    paginatedSites.map((site, idx) => {
+                      const row = normalizeSite(site);
+                      const isEditing = editable && (editingId === (site.id ?? site._key ?? site.siteCode));
+                      return (
+                        <TableRow key={site.id ?? site.siteCode ?? site._key ?? idx} className="hover:bg-muted/30">
+                          <TableCell className="font-mono text-xs">
+                            {isEditing ? (
+                              <Input value={draft?.hubOffice ?? row.hubOffice ?? ''} onChange={(e) => setDraft((d:any)=> ({...(d||{}), hubOffice: e.target.value}))} className="h-8" />
+                            ) : row.hubOffice}
+                          </TableCell>
+                          <TableCell>
+                            {isEditing ? (
+                              <Input value={draft?.state ?? row.state ?? ''} onChange={(e) => setDraft((d:any)=> ({...(d||{}), state: e.target.value}))} className="h-8" />
+                            ) : row.state}
+                          </TableCell>
+                          <TableCell>
+                            {isEditing ? (
+                              <Input value={draft?.locality ?? row.locality ?? ''} onChange={(e) => setDraft((d:any)=> ({...(d||{}), locality: e.target.value}))} className="h-8" />
+                            ) : row.locality}
+                          </TableCell>
+                          <TableCell>
+                            {row.mmpName}
+                          </TableCell>
+                          <TableCell>
+                            {isEditing ? (
+                              <Input value={draft?.siteName ?? row.siteName ?? ''} onChange={(e) => setDraft((d:any)=> ({...(d||{}), siteName: e.target.value}))} className="h-8" />
+                            ) : row.siteName}
+                          </TableCell>
+                          <TableCell>
+                            {isEditing ? (
+                              <Input value={draft?.cpName ?? row.cpName ?? ''} onChange={(e) => setDraft((d:any)=> ({...(d||{}), cpName: e.target.value}))} className="h-8" />
+                            ) : row.cpName}
+                          </TableCell>
+                          <TableCell>
+                            {isEditing ? (
+                              <Input value={draft?.status ?? row.status ?? 'Pending'} onChange={(e) => setDraft((d:any)=> ({...(d||{}), status: e.target.value}))} className="h-8" />
+                            ) : (
+                              <Badge 
+                                className={
+                                  row.status?.toLowerCase() === 'verified' ? 'bg-green-100 text-green-700' :
+                                  row.status?.toLowerCase() === 'rejected' ? 'bg-red-100 text-red-700' :
+                                  row.status?.toLowerCase() === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                                  row.status?.toLowerCase() === 'approved' ? 'bg-blue-100 text-blue-700' :
+                                  row.status?.toLowerCase() === 'accepted' ? 'bg-purple-100 text-purple-700' :
+                                  'bg-gray-100 text-gray-700'
+                                }
+                              >
+                                {row.status || 'Pending'}
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {isEditing ? (
+                              <Input value={draft?.siteActivity ?? row.siteActivity ?? ''} onChange={(e) => setDraft((d:any)=> ({...(d||{}), siteActivity: e.target.value}))} className="h-8" />
+                            ) : row.siteActivity}
+                          </TableCell>
+                          <TableCell>
+                            {isEditing ? (
+                              <Input value={draft?.monitoringBy ?? row.monitoringBy ?? ''} onChange={(e) => setDraft((d:any)=> ({...(d||{}), monitoringBy: e.target.value}))} className="h-8" />
+                            ) : row.monitoringBy}
+                          </TableCell>
+                          <TableCell>
+                            {isEditing ? (
+                              <Input value={draft?.surveyTool ?? row.surveyTool ?? ''} onChange={(e) => setDraft((d:any)=> ({...(d||{}), surveyTool: e.target.value}))} className="h-8" />
+                            ) : row.surveyTool}
+                          </TableCell>
+                          <TableCell>
+                            {isEditing ? (
+                              <div className="flex items-center gap-2">
+                                <Checkbox
+                                  checked={toBool(draft?.useMarketDiversion ?? row.useMarketDiversion)}
+                                  onCheckedChange={(v) => setDraft((d:any)=> ({...(d||{}), useMarketDiversion: Boolean(v)}))}
+                                />
+                                <span className="text-xs">Yes</span>
+                              </div>
+                            ) : (row.useMarketDiversion ? 'Yes' : 'No')}
+                          </TableCell>
+                          <TableCell>
+                            {isEditing ? (
+                              <div className="flex items-center gap-2">
+                                <Checkbox
+                                  checked={toBool(draft?.useWarehouseMonitoring ?? row.useWarehouseMonitoring)}
+                                  onCheckedChange={(v) => setDraft((d:any)=> ({...(d||{}), useWarehouseMonitoring: Boolean(v)}))}
+                                />
+                                <span className="text-xs">Yes</span>
+                              </div>
+                            ) : (row.useWarehouseMonitoring ? 'Yes' : 'No')}
+                          </TableCell>
+                          <TableCell>
+                            {isEditing ? (
+                              <Input value={draft?.visitDate ?? row.visitDate ?? ''} onChange={(e) => setDraft((d:any)=> ({...(d||{}), visitDate: e.target.value}))} className="h-8" />
+                            ) : row.visitDate}
+                          </TableCell>
+                          <TableCell>
+                            {isEditing ? (
+                              <Input
+                                type="number"
+                                step="0.01"
+                                value={draft?.enumeratorFee ?? (Number.isFinite(Number(row.enumeratorFee)) ? Number(row.enumeratorFee) : '')}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setDraft((d:any)=> {
+                                    const newDraft = {...(d||{}), enumeratorFee: val};
+                                    // Auto-calculate total cost
+                                    const enumFee = Number(val) || 0;
+                                    const transFee = Number(d?.transportFee ?? row.transportFee ?? 0);
+                                    newDraft.cost = enumFee + transFee;
+                                    return newDraft;
+                                  });
+                                }}
+                                className="h-8"
+                                placeholder="20"
+                              />
+                            ) : (
+                              (row.enumeratorFee !== undefined && row.enumeratorFee !== null && String(row.enumeratorFee) !== '')
+                                ? `$${Number(row.enumeratorFee).toLocaleString()}`
+                                : '—'
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {isEditing ? (
+                              <Input
+                                type="number"
+                                step="0.01"
+                                min="10"
+                                max="25"
+                                value={draft?.transportFee ?? (Number.isFinite(Number(row.transportFee)) ? Number(row.transportFee) : '')}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setDraft((d:any)=> {
+                                    const newDraft = {...(d||{}), transportFee: val};
+                                    // Auto-calculate total cost
+                                    const enumFee = Number(d?.enumeratorFee ?? row.enumeratorFee ?? 0);
+                                    const transFee = Number(val) || 0;
+                                    newDraft.cost = enumFee + transFee;
+                                    return newDraft;
+                                  });
+                                }}
+                                className="h-8"
+                                placeholder="10"
+                              />
+                            ) : (
+                              (row.transportFee !== undefined && row.transportFee !== null && String(row.transportFee) !== '')
+                                ? `$${Number(row.transportFee).toLocaleString()}`
+                                : '—'
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {isEditing ? (
+                              <div className="font-semibold text-blue-600">
+                                ${((Number(draft?.enumeratorFee ?? row.enumeratorFee ?? 0)) + (Number(draft?.transportFee ?? row.transportFee ?? 0))).toLocaleString()}
+                              </div>
+                            ) : (
+                              (row.cost !== undefined && row.cost !== null && String(row.cost) !== '' && String(row.cost) !== '—')
+                                ? `$${Number(row.cost).toLocaleString()}`
+                                : '—'
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {isEditing ? (
+                              <Input value={draft?.comments ?? row.comments ?? ''} onChange={(e) => setDraft((d:any)=> ({...(d||{}), comments: e.target.value}))} className="h-8" />
+                            ) : row.comments}
+                          </TableCell>
+                          <TableCell>
+                            {row.verifiedBy ? (
+                              <div className="font-medium">{row.verifiedBy}</div>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {row.verifiedAt ? (
+                              <div className="text-sm">
+                                {new Date(row.verifiedAt).toLocaleDateString()}
+                                <div className="text-xs text-muted-foreground">
+                                  {new Date(row.verifiedAt).toLocaleTimeString()}
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {row.verificationNotes ? (
+                              <div className="text-sm max-w-xs" title={row.verificationNotes}>
+                                {row.verificationNotes.length > 50 
+                                  ? `${row.verificationNotes.substring(0, 50)}...` 
+                                  : row.verificationNotes}
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {row.dispatchedAt ? (
+                              <div className="text-sm">
+                                {new Date(row.dispatchedAt).toLocaleDateString()}
+                                <div className="text-xs text-muted-foreground">
+                                  {new Date(row.dispatchedAt).toLocaleTimeString()}
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {row.dispatchedBy ? (
+                              <div className="font-medium text-sm">{row.dispatchedBy}</div>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {row.acceptedAt ? (
+                              <div className="text-sm">
+                                {new Date(row.acceptedAt).toLocaleDateString()}
+                                <div className="text-xs text-muted-foreground">
+                                  {new Date(row.acceptedAt).toLocaleTimeString()}
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {row.acceptedBy ? (
+                              <div className="font-medium text-sm">{row.acceptedBy}</div>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {row.createdAt ? (
+                              <div className="text-sm">
+                                {new Date(row.createdAt).toLocaleDateString()}
+                                <div className="text-xs text-muted-foreground">
+                                  {new Date(row.createdAt).toLocaleTimeString()}
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {editable ? (
+                              isEditing ? (
+                                <div className="flex items-center gap-2">
+                                  <Button size="sm" onClick={() => saveEdit(site)} disabled={savingId === (site.id ?? site._key ?? 'saving')} className="inline-flex items-center gap-1">
+                                    <Check className="h-4 w-4" /> {savingId === (site.id ?? site._key ?? 'saving') ? 'Saving...' : 'Save'}
+                                  </Button>
+                                  <Button size="sm" variant="outline" onClick={cancelEdit} className="inline-flex items-center gap-1">
+                                    <X className="h-4 w-4" /> Cancel
+                                  </Button>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-2">
+                                  <Button 
+                                    variant="outline" 
+                                    size="sm" 
+                                    onClick={() => startEdit(site)}
+                                    className="inline-flex items-center gap-1">
+                                    <Pencil className="h-4 w-4" />
+                                    Edit
+                                  </Button>
+                                  <Button 
+                                    variant="ghost" 
+                                    size="sm" 
+                                    onClick={() => handleView(site)}
+                                    className="hover:bg-muted inline-flex items-center gap-1">
+                                    <Eye className="h-4 w-4" />
+                                    View
+                                  </Button>
+                                </div>
+                              )
+                            ) : showVisitActions ? (
+                              <div className="flex items-center gap-2">
+                                {site.status?.toLowerCase() === 'accepted' && (
+                                  <Button 
+                                    variant="default" 
+                                    size="sm" 
+                                    onClick={() => handleView(site)}
+                                    className="bg-blue-600 hover:bg-blue-700 inline-flex items-center gap-1">
+                                    <Eye className="h-4 w-4" />
+                                    Start Visit
+                                  </Button>
+                                )}
+                                {site.status?.toLowerCase() === 'ongoing' && (
+                                  <Button 
+                                    variant="default" 
+                                    size="sm" 
+                                    onClick={() => handleView(site)}
+                                    className="bg-green-600 hover:bg-green-700 inline-flex items-center gap-1">
+                                    <Check className="h-4 w-4" />
+                                    Complete Visit
+                                  </Button>
+                                )}
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  onClick={() => {
+                                    if (onViewSiteDetail) {
+                                      onViewSiteDetail(site);
+                                    } else {
+                                      setSelectedSite(site);
+                                      setDetailOpen(true);
+                                    }
+                                  }}
+                                  className="hover:bg-muted inline-flex items-center gap-1">
+                                  <Eye className="h-4 w-4" />
+                                  View Details
+                                </Button>
+                              </div>
+                            ) : (
                               <Button 
                                 variant="ghost" 
                                 size="sm" 
@@ -798,31 +1018,21 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
                                 <Eye className="h-4 w-4" />
                                 View
                               </Button>
-                            </div>
-                          )
-                        ) : (
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
-                            onClick={() => handleView(site)}
-                            className="hover:bg-muted inline-flex items-center gap-1">
-                            <Eye className="h-4 w-4" />
-                            View
-                          </Button>
-                        )}
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={24} className="h-24 text-center">
+                        No results.
                       </TableCell>
                     </TableRow>
-                  );
-                })
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={20} className="h-24 text-center">
-                    No results.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           </div>
         </div>
         {/* Pagination Controls */}
@@ -860,65 +1070,283 @@ const MMPSiteEntriesTable = ({ siteEntries, onViewSiteDetail, editable = false, 
 
       {/* Local fallback dialog for site detail view */}
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-semibold">
+              {(selectedSite && normalizeSite(selectedSite).siteName) || 'Site Details'}
+            </DialogTitle>
+            <p className="text-sm text-muted-foreground mt-1">
+              Review the complete site information and cost breakdown
+            </p>
+          </DialogHeader>
+          {selectedSite && (() => {
+            const row = normalizeSite(selectedSite);
+            const isAvailableSite = row.status?.toLowerCase() === 'dispatched' && !row.acceptedBy;
+            return (
+              <div className="space-y-6">
+                {/* Section 1: Site Details */}
+                <div className="bg-gray-50 p-5 rounded-lg border space-y-4">
+                  <div className="flex items-center gap-2 pb-3 border-b">
+                    <div className="bg-gray-700 text-white rounded w-6 h-6 flex items-center justify-center font-semibold text-sm">
+                      1
+                    </div>
+                    <h3 className="text-base font-semibold text-gray-900">Site Details</h3>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="bg-white p-3 rounded border">
+                      <p className="text-xs font-medium text-gray-600 mb-1">Site Code</p>
+                      <p className="font-medium text-gray-900">{row.siteCode || '—'}</p>
+                    </div>
+                    <div className="bg-white p-3 rounded border">
+                      <p className="text-xs font-medium text-gray-600 mb-1">Site Name</p>
+                      <p className="font-medium text-gray-900">{row.siteName || '—'}</p>
+                    </div>
+                    <div className="bg-white p-3 rounded border">
+                      <p className="text-xs font-medium text-gray-600 mb-1">Hub Office</p>
+                      <p className="font-medium text-gray-900">{row.hubOffice || '—'}</p>
+                    </div>
+                    <div className="bg-white p-3 rounded border">
+                      <p className="text-xs font-medium text-gray-600 mb-1">State</p>
+                      <p className="font-medium text-gray-900">{row.state || '—'}</p>
+                    </div>
+                    <div className="bg-white p-3 rounded border">
+                      <p className="text-xs font-medium text-gray-600 mb-1">Locality</p>
+                      <p className="font-medium text-gray-900">{row.locality || '—'}</p>
+                    </div>
+                    <div className="bg-white p-3 rounded border">
+                      <p className="text-xs font-medium text-gray-600 mb-1">CP Name</p>
+                      <p className="font-medium text-gray-900">{row.cpName || '—'}</p>
+                    </div>
+                    <div className="bg-white p-3 rounded border">
+                      <p className="text-xs font-medium text-gray-600 mb-1">Activity at Site</p>
+                      <p className="font-medium text-gray-900">{row.siteActivity || '—'}</p>
+                    </div>
+                    <div className="bg-white p-3 rounded border">
+                      <p className="text-xs font-medium text-gray-600 mb-1">Visit Date</p>
+                      <p className="font-medium text-gray-900">{row.visitDate || '—'}</p>
+                    </div>
+                    <div className="bg-white p-3 rounded border">
+                      <p className="text-xs font-medium text-gray-600 mb-1">Monitoring By</p>
+                      <p className="font-medium text-gray-900">{row.monitoringBy || '—'}</p>
+                    </div>
+                    <div className="bg-white p-3 rounded border">
+                      <p className="text-xs font-medium text-gray-600 mb-1">Survey Tool</p>
+                      <p className="font-medium text-gray-900">{row.surveyTool || '—'}</p>
+                    </div>
+                    <div className="bg-white p-3 rounded border">
+                      <p className="text-xs font-medium text-gray-600 mb-1">Market Diversion</p>
+                      <p className="font-medium text-gray-900">{row.useMarketDiversion ? 'Yes' : 'No'}</p>
+                    </div>
+                    <div className="bg-white p-3 rounded border">
+                      <p className="text-xs font-medium text-gray-600 mb-1">Warehouse Monitoring</p>
+                      <p className="font-medium text-gray-900">{row.useWarehouseMonitoring ? 'Yes' : 'No'}</p>
+                    </div>
+                    <div className="sm:col-span-2 bg-white p-3 rounded border">
+                      <p className="text-xs font-medium text-gray-600 mb-1">Comments</p>
+                      <p className="font-medium text-gray-900">{row.comments || 'No comments provided'}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 2: Site Cost Details */}
+                <div className="bg-gray-50 p-5 rounded-lg border space-y-4">
+                  <div className="flex items-center gap-2 pb-3 border-b">
+                    <div className="bg-gray-700 text-white rounded w-6 h-6 flex items-center justify-center font-semibold text-sm">
+                      2
+                    </div>
+                    <h3 className="text-base font-semibold text-gray-900">Site Cost Details</h3>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="bg-white p-4 rounded-lg border">
+                      <p className="text-xs font-medium text-gray-600 mb-2">Enumerator Fee</p>
+                      <p className="text-2xl font-semibold text-gray-900">
+                        {row.enumeratorFee !== undefined && row.enumeratorFee !== null && String(row.enumeratorFee) !== ''
+                          ? `$${Number(row.enumeratorFee).toLocaleString()}`
+                          : '$20'}
+                      </p>
+                      {(!row.enumeratorFee || row.enumeratorFee === null || String(row.enumeratorFee) === '') && (
+                        <p className="text-xs text-gray-500 mt-1">(Default Rate)</p>
+                      )}
+                      <p className="text-xs text-gray-600 mt-2">Payment for completing the site visit</p>
+                    </div>
+                    <div className="bg-white p-4 rounded-lg border">
+                      <p className="text-xs font-medium text-gray-600 mb-2">Transport Fee</p>
+                      <p className="text-2xl font-semibold text-gray-900">
+                        {row.transportFee !== undefined && row.transportFee !== null && String(row.transportFee) !== ''
+                          ? `$${Number(row.transportFee).toLocaleString()}`
+                          : '$10'}
+                      </p>
+                      {(!row.transportFee || row.transportFee === null || String(row.transportFee) === '') && (
+                        <p className="text-xs text-gray-500 mt-1">(Default Rate)</p>
+                      )}
+                      <p className="text-xs text-gray-600 mt-2">Transportation reimbursement</p>
+                    </div>
+                    <div className="bg-blue-600 p-4 rounded-lg border border-blue-700">
+                      <p className="text-xs font-medium text-blue-100 mb-2">Total Cost</p>
+                      <p className="text-2xl font-bold text-white">
+                        ${(row.cost !== undefined && row.cost !== null && String(row.cost) !== '' && String(row.cost) !== '—')
+                          ? Number(row.cost).toLocaleString()
+                          : (Number(row.enumeratorFee || 20) + Number(row.transportFee || 10)).toLocaleString()}
+                      </p>
+                      <p className="text-xs text-blue-100 mt-2">Complete payment upon visit</p>
+                    </div>
+                  </div>
+                  <div className="bg-white p-4 rounded-lg border">
+                    <p className="text-sm font-semibold text-gray-900 mb-2">Payment Information</p>
+                    <p className="text-sm text-gray-700 leading-relaxed">
+                      Upon successful completion of the site visit, the total cost amount will be credited to your wallet. 
+                      Payment is processed automatically after you submit your visit report with photos and required documentation.
+                    </p>
+                  </div>
+                </div>
+
+                {isAvailableSite && onAcceptSite && (
+                  <div className="border-t pt-4 flex flex-col sm:flex-row gap-3">
+                    <Button
+                      onClick={() => {
+                        onAcceptSite(selectedSite);
+                        setDetailOpen(false);
+                      }}
+                      className="flex-1"
+                      size="lg"
+                    >
+                      Accept Site
+                    </Button>
+                    {onSendBackToCoordinator && (
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setSendBackComments('');
+                          setSendBackOpen(true);
+                        }}
+                        className="flex-1"
+                        size="lg"
+                      >
+                        Send Back to Coordinator
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
+
+      {/* Send Back to Coordinator Dialog */}
+      <Dialog open={sendBackOpen} onOpenChange={setSendBackOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Send Back to Coordinator</DialogTitle>
+            <DialogDescription>
+              Provide comments explaining why this site needs to be sent back to the coordinator for editing.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="sendBackComments">Comments</Label>
+              <Textarea
+                id="sendBackComments"
+                placeholder="Enter your comments here..."
+                value={sendBackComments}
+                onChange={(e) => setSendBackComments(e.target.value)}
+                rows={4}
+              />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setSendBackOpen(false);
+                  setSendBackComments('');
+                }}
+              >
+                Cancel
+              </Button>
+              <Button 
+                onClick={() => {
+                  if (selectedSite && onSendBackToCoordinator) {
+                    onSendBackToCoordinator(selectedSite, sendBackComments);
+                    setSendBackOpen(false);
+                    setSendBackComments('');
+                    setDetailOpen(false);
+                  }
+                }}
+                disabled={!sendBackComments.trim()}
+                className="bg-orange-600 hover:bg-orange-700"
+              >
+                Send Back
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Accept/Reject Dialog for Smart Assigned sites */}
+      <Dialog open={acceptRejectOpen} onOpenChange={setAcceptRejectOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{(selectedSite && normalizeSite(selectedSite).siteName) || 'Site Details'}</DialogTitle>
+            <DialogTitle>Acknowledge Site Assignment</DialogTitle>
+            <DialogDescription>
+              Please acknowledge this site assignment to move it to your pending visits.
+            </DialogDescription>
           </DialogHeader>
           {selectedSite && (() => {
             const row = normalizeSite(selectedSite);
             return (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">Hub Office</p>
-                  <p className="font-medium">{row.hubOffice || '—'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">State</p>
-                  <p className="font-medium">{row.state || '—'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Locality</p>
-                  <p className="font-medium">{row.locality || '—'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Site Name</p>
-                  <p className="font-medium">{row.siteName || '—'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">CP Name</p>
-                  <p className="font-medium">{row.cpName || '—'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Activity at Site</p>
-                  <p className="font-medium">{row.siteActivity || '—'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Monitoring By</p>
-                  <p className="font-medium">{row.monitoringBy || '—'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Survey Tool</p>
-                  <p className="font-medium">{row.surveyTool || '—'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Market Diversion</p>
-                  <p className="font-medium">{row.useMarketDiversion ? 'Yes' : 'No'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Warehouse Monitoring</p>
-                  <p className="font-medium">{row.useWarehouseMonitoring ? 'Yes' : 'No'}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Visit Date</p>
-                  <p className="font-medium">{row.visitDate || '—'}</p>
-                </div>
-                <div className="sm:col-span-2">
-                  <p className="text-sm text-muted-foreground">Comments</p>
-                  <p className="font-medium">{row.comments || '—'}</p>
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Site Name</p>
+                    <p className="font-medium">{row.siteName || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">State</p>
+                    <p className="font-medium">{row.state || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Locality</p>
+                    <p className="font-medium">{row.locality || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Activity at Site</p>
+                    <p className="font-medium">{row.siteActivity || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Visit Date</p>
+                    <p className="font-medium">{row.visitDate || '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Total Cost</p>
+                    <p className="font-medium">{row.cost ? `$${Number(row.cost).toLocaleString()}` : '—'}</p>
+                  </div>
                 </div>
               </div>
             );
           })()}
+          <DialogFooter className="gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setAcceptRejectOpen(false);
+                setSelectedSite(null);
+                setRejectComments('');
+              }}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={() => {
+                onAcceptSite?.(selectedSite);
+                setAcceptRejectOpen(false);
+                setSelectedSite(null);
+                setRejectComments('');
+              }}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              Acknowledge Assignment
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </Card>
