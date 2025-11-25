@@ -37,7 +37,7 @@ const AdminWallets: React.FC = () => {
 
     const { data, error } = await supabase
       .from('wallet_transactions')
-      .select('*, site_visits!wallet_transactions_site_visit_id_fkey(id, name, location, visit_date)')
+      .select('*, site_visits!wallet_transactions_site_visit_id_fkey(id, site_name, site_code, locality, state, completed_at)')
       .eq('wallet_id', walletId)
       .order('created_at', { ascending: false });
 
@@ -244,9 +244,10 @@ const AdminWallets: React.FC = () => {
                     // Calculate breakdown from transactions
                     const breakdown = wallet.breakdown || {};
                     const siteVisitFees = Number(breakdown.site_visit_fee || 0);
-                    const retainerFees = Number(breakdown.retainer || 0);
                     const bonuses = Number(breakdown.bonus || 0);
                     const adjustments = Number(breakdown.adjustment || 0);
+                    const penalties = Number(breakdown.penalty || 0);
+                    const withdrawals = Number(breakdown.withdrawal || 0);
                     
                     return (
                       <React.Fragment key={wallet.id}>
@@ -291,14 +292,6 @@ const AdminWallets: React.FC = () => {
                                   </span>
                                 </div>
                               )}
-                              {retainerFees > 0 && (
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs text-muted-foreground">Retainer:</span>
-                                  <span className="text-sm font-medium text-purple-600 dark:text-purple-400">
-                                    {fmt(retainerFees * 100, currency)}
-                                  </span>
-                                </div>
-                              )}
                               {bonuses > 0 && (
                                 <div className="flex items-center gap-2">
                                   <span className="text-xs text-muted-foreground">Bonuses:</span>
@@ -312,6 +305,22 @@ const AdminWallets: React.FC = () => {
                                   <span className="text-xs text-muted-foreground">Adjustments:</span>
                                   <span className={`text-sm font-medium ${adjustments > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                                     {fmt(adjustments * 100, currency)}
+                                  </span>
+                                </div>
+                              )}
+                              {penalties < 0 && (
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-muted-foreground">Penalties:</span>
+                                  <span className="text-sm font-medium text-red-600 dark:text-red-400">
+                                    {fmt(penalties * 100, currency)}
+                                  </span>
+                                </div>
+                              )}
+                              {withdrawals < 0 && (
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-muted-foreground">Withdrawals:</span>
+                                  <span className="text-sm font-medium text-orange-600 dark:text-orange-400">
+                                    {fmt(withdrawals * 100, currency)}
                                   </span>
                                 </div>
                               )}
@@ -363,17 +372,17 @@ const AdminWallets: React.FC = () => {
                                             {tx.site_visits && (
                                               <div className="flex items-center gap-1 text-xs text-muted-foreground">
                                                 <MapPin className="w-3 h-3" />
-                                                <span>{tx.site_visits.name || tx.site_visits.location}</span>
+                                                <span>{tx.site_visits.site_name} - {tx.site_visits.locality}, {tx.site_visits.state}</span>
                                               </div>
                                             )}
                                           </div>
                                           <p className="text-sm text-muted-foreground">
                                             {tx.description || 'No description'}
                                           </p>
-                                          {tx.site_visits?.visit_date && (
+                                          {tx.site_visits?.completed_at && (
                                             <div className="flex items-center gap-1 text-xs text-muted-foreground">
                                               <Calendar className="w-3 h-3" />
-                                              <span>{format(new Date(tx.site_visits.visit_date), 'MMM dd, yyyy')}</span>
+                                              <span>{format(new Date(tx.site_visits.completed_at), 'MMM dd, yyyy')}</span>
                                             </div>
                                           )}
                                           <p className="text-xs text-muted-foreground">
