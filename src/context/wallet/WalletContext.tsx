@@ -619,13 +619,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           await supabase.from('wallet_transactions').insert({
             wallet_id: newWallet.id,
             user_id: userId,
-            type: 'retainer',
+            type: 'adjustment',
             amount,
             currency,
             description: `Monthly retainer - ${period}`,
             balance_before: 0,
             balance_after: amount,
             created_by: currentUser?.id,
+            metadata: { type: 'retainer', period },
           });
 
           return;
@@ -652,13 +653,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const { error: transactionError } = await supabase.from('wallet_transactions').insert({
         wallet_id: targetWallet.id,
         user_id: userId,
-        type: 'retainer',
+        type: 'adjustment',
         amount,
         currency,
         description: `Monthly retainer - ${period}`,
         balance_before: currentBalance,
         balance_after: newBalance,
         created_by: currentUser?.id,
+        metadata: { type: 'retainer', period },
       });
 
       if (transactionError) throw transactionError;
