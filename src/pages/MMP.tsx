@@ -1674,6 +1674,29 @@ const MMP = () => {
     loadAcceptedCount();
   }, [mmpFiles]); // Reload when MMP files change
 
+  // Always load the smart assigned count for the badge, regardless of active tab
+  useEffect(() => {
+    const loadSmartAssignedCount = async () => {
+      try {
+        // Use database count instead of loading all entries
+        // Count entries with status = 'Assigned' only
+        const { count, error } = await supabase
+          .from('mmp_site_entries')
+          .select('*', { count: 'exact', head: true })
+          .ilike('status', 'Assigned');
+
+        if (error) throw error;
+
+        setSmartAssignedCount(count || 0);
+      } catch (error) {
+        console.error('Failed to load smart assigned count:', error);
+        setSmartAssignedCount(0);
+      }
+    };
+
+    loadSmartAssignedCount();
+  }, [mmpFiles]); // Reload when MMP files change
+
   // Always load the ongoing count for the badge, regardless of active tab
   useEffect(() => {
     const loadOngoingCount = async () => {
