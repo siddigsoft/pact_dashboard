@@ -71,7 +71,7 @@ export const CreateRoleDialog: React.FC<CreateRoleDialogProps> = ({
     if (cloneSourceRole && open) {
       // Pre-fill with cloned role data
       setFormData({
-        name: `${cloneSourceRole.name}_copy`,
+        name: `${cloneSourceRole.display_name} Copy`,
         display_name: `${cloneSourceRole.display_name} (Copy)`,
         description: cloneSourceRole.description || '',
         permissions: cloneSourceRole.permissions.map(p => ({ 
@@ -166,6 +166,24 @@ export const CreateRoleDialog: React.FC<CreateRoleDialogProps> = ({
     const trimmedDisplay = formData.display_name.trim();
     if (!trimmedName || !trimmedDisplay) {
       setError('Role name and display name are required.');
+      return;
+    }
+
+    // Validate role name format (must be Title Case or UPPERCASE)
+    const hasLowercase = /[a-z]/.test(trimmedName);
+    const hasUnderscore = /_/.test(trimmedName);
+    const isAllUppercase = trimmedName === trimmedName.toUpperCase();
+    const isTitleCase = trimmedName.split(' ').every(word => 
+      word.length > 0 && word[0] === word[0].toUpperCase()
+    );
+
+    if (hasLowercase && hasUnderscore) {
+      setError('Role name cannot use snake_case (lowercase with underscores). Use Title Case (e.g., "Project Manager") or UPPERCASE instead.');
+      return;
+    }
+
+    if (!isAllUppercase && !isTitleCase) {
+      setError('Role name must use Title Case (e.g., "Project Manager") or be UPPERCASE.');
       return;
     }
 
@@ -376,12 +394,12 @@ export const CreateRoleDialog: React.FC<CreateRoleDialogProps> = ({
                       id="name"
                       value={formData.name}
                       onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                      placeholder="e.g., project_manager"
+                      placeholder="e.g., Project Manager"
                       required
                       data-testid="input-role-name"
                     />
                     <p className="text-xs text-muted-foreground">
-                      Lowercase with underscores, used for system identification
+                      Use Title Case (e.g., "Project Manager") or UPPERCASE for system identification
                     </p>
                   </div>
                   <div className="space-y-2">
