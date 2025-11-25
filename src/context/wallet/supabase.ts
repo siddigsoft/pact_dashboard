@@ -9,6 +9,8 @@ export const adminListWallets = async (params: { search?: string; page?: number;
   const page = params.page || 1;
   const pageSize = params.pageSize || 100;
   
+  console.log('[adminListWallets] Starting query...');
+  
   let q = supabase
     .from('wallets')
     .select('*, profiles:profiles!wallets_user_id_fkey(full_name, username, email)')
@@ -17,8 +19,14 @@ export const adminListWallets = async (params: { search?: string; page?: number;
   
   const { data, error } = await q;
   
+  console.log('[adminListWallets] Query result:', { 
+    dataCount: data?.length || 0, 
+    error: error?.message,
+    rawData: data 
+  });
+  
   if (error) {
-    console.error('Error fetching wallets:', error);
+    console.error('[adminListWallets] Error fetching wallets:', error);
     return [];
   }
   
@@ -29,6 +37,8 @@ export const adminListWallets = async (params: { search?: string; page?: number;
     totalEarned: Number(r.total_earned || 0),
     totalWithdrawn: Number(r.total_withdrawn || 0),
   }));
+  
+  console.log('[adminListWallets] Processed rows:', rows);
   
   return rows;
 };

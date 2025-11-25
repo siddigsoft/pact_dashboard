@@ -20,11 +20,21 @@ const AdminWallets: React.FC = () => {
   const navigate = useNavigate();
 
   const load = async () => {
+    console.log('[AdminWallets] Loading wallets...');
+    console.log('[AdminWallets] Supabase URL:', supabase.supabaseUrl);
     const data = await adminListWallets();
+    console.log('[AdminWallets] Wallets loaded:', data?.length || 0, 'wallets');
+    console.log('[AdminWallets] Data:', data);
     setRows(data || []);
     const c = data && data[0]?.balances ? Object.keys(data[0].balances)[0] : 'SDG';
     setCurrency(c);
   };
+  
+  // Expose load function to window for manual testing
+  useEffect(() => {
+    (window as any).loadWallets = load;
+    (window as any).supabase = supabase;
+  }, []);
 
   useEffect(() => { load(); }, []);
 
