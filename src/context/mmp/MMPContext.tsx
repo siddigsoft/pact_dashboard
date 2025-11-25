@@ -95,6 +95,13 @@ const migrateAdditionalDataToColumns = (entry: any): any => {
     'Status': 'status',
     'Status:': 'status',
     'status': 'status',
+    'Rejection Comments': 'rejection_comments',
+    'rejection_comments': 'rejection_comments',
+    'rejection_reason': 'rejection_comments',
+    'Rejected By': 'rejected_by',
+    'rejected_by': 'rejected_by',
+    'Rejected At': 'rejected_at',
+    'rejected_at': 'rejected_at',
   };
 
   // Helper to convert value to boolean
@@ -146,10 +153,16 @@ const migrateAdditionalDataToColumns = (entry: any): any => {
         if (numVal !== null) {
           migrated[columnName] = numVal;
         }
-      } else if (columnName === 'verified_at' || columnName === 'dispatched_at') {
+      } else if (columnName === 'verified_at' || columnName === 'dispatched_at' || columnName === 'accepted_at' || columnName === 'rejected_at') {
         const dateVal = toDate(adValue);
         if (dateVal !== null) {
           migrated[columnName] = dateVal;
+        }
+      } else if (columnName === 'rejected_by') {
+        // Handle UUID for rejected_by
+        const uuidVal = String(adValue).trim();
+        if (uuidVal && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uuidVal)) {
+          migrated[columnName] = uuidVal;
         }
       } else {
         // String fields

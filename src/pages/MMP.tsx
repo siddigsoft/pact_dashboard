@@ -755,7 +755,17 @@ const MMP = () => {
 
     try {
       const now = new Date().toISOString();
-      await supabase
+      const existingAdditionalData = site.additional_data || {};
+      
+      // Identify coordinator to notify (from forwarded_to_user_id)
+      // Note: dispatched_by is text (name), not UUID, so we use forwarded_to_user_id which is UUID
+      const coordinatorId = site.forwarded_to_user_id || 
+                           existingAdditionalData.assigned_to || 
+                           existingAdditionalData.dispatched_by_user_id ||
+                           existingAdditionalData.forwarded_to_user_id;
+      
+      // Update site entry - use dedicated rejection columns (new schema)
+      const { error: updateError } = await supabase
         .from('mmp_site_entries')
         .update({
           status: 'Rejected',
@@ -763,14 +773,42 @@ const MMP = () => {
           rejected_by: currentUser?.id,
           rejected_at: now,
           updated_at: now,
+          // Also store in additional_data for backward compatibility and audit trail
           additional_data: {
-            ...(site.additional_data || {}),
+            ...existingAdditionalData,
             rejection_comments: comments.trim(),
             rejected_by: currentUser?.id,
-            rejected_at: now
+            rejected_at: now,
+            rejection_reason: comments.trim(), // Alternative key for compatibility
+            sent_back_by: currentUser?.id,
+            sent_back_at: now
           }
         })
         .eq('id', site.id);
+
+      if (updateError) throw updateError;
+
+      // Create notification for coordinator if we can identify them
+      if (coordinatorId && typeof coordinatorId === 'string') {
+        try {
+          // Get site details for notification
+          const siteName = site.site_name || site.siteName || site.siteCode || 'Site';
+          const mmpName = site.mmp_name || site.mmpName || 'MMP';
+          
+          await supabase.from('notifications').insert({
+            user_id: coordinatorId,
+            title: 'Site Sent Back for Editing',
+            message: `Site "${siteName}" from ${mmpName} has been sent back with comments: ${comments.trim().substring(0, 100)}${comments.length > 100 ? '...' : ''}`,
+            type: 'warning',
+            link: `/coordinator/sites`,
+            related_entity_id: site.id,
+            related_entity_type: 'mmpFile'
+          });
+        } catch (notifError) {
+          // Log but don't fail the operation if notification fails
+          console.warn('Failed to create notification for coordinator:', notifError);
+        }
+      }
 
       toast({
         title: 'Site Sent Back',
