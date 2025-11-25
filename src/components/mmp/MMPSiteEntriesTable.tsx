@@ -152,6 +152,11 @@ const MMPSiteEntriesTable = ({
     const acceptedAt = site.accepted_at || (ad['accepted_at'] ? new Date(ad['accepted_at']).toISOString() : undefined) || (ad['Accepted At'] ? new Date(ad['Accepted At']).toISOString() : undefined) || undefined;
     const acceptedBy = site.accepted_by || ad['accepted_by'] || ad['Accepted By'] || undefined;
     
+    // Rejection information - read from new columns first, then fallback to additional_data
+    const rejectionComments = site.rejection_comments || ad['rejection_comments'] || ad['rejection_reason'] || undefined;
+    const rejectedBy = site.rejected_by || ad['rejected_by'] || undefined;
+    const rejectedAt = site.rejected_at || (ad['rejected_at'] ? new Date(ad['rejected_at']).toISOString() : undefined) || undefined;
+    
     // Timestamps
     const createdAt = site.created_at || undefined;
     const updatedAt = site.updated_at || site.last_modified || undefined;
@@ -162,7 +167,9 @@ const MMPSiteEntriesTable = ({
       mainActivity, visitType, visitDate, comments, 
       enumeratorFee: finalEnumeratorFee, transportFee: finalTransportFee, cost: totalCost,
       verifiedBy, verifiedAt, verificationNotes, status,
-      dispatchedAt, dispatchedBy, acceptedAt, acceptedBy, createdAt, updatedAt
+      dispatchedAt, dispatchedBy, acceptedAt, acceptedBy, 
+      rejectionComments, rejectedBy, rejectedAt,
+      createdAt, updatedAt
     };
   };
 
@@ -294,6 +301,9 @@ const MMPSiteEntriesTable = ({
       'Accepted By': 'accepted_by', 'accepted_by': 'accepted_by',
       'Accepted At': 'accepted_at', 'accepted_at': 'accepted_at',
       'Status': 'status', 'Status:': 'status', 'status': 'status',
+      'Rejection Comments': 'rejection_comments', 'rejection_comments': 'rejection_comments', 'rejection_reason': 'rejection_comments',
+      'Rejected By': 'rejected_by', 'rejected_by': 'rejected_by',
+      'Rejected At': 'rejected_at', 'rejected_at': 'rejected_at',
     };
 
     const toBool = (v: any): boolean | null => {
@@ -334,9 +344,15 @@ const MMPSiteEntriesTable = ({
         } else if (columnName === 'cost' || columnName === 'enumerator_fee' || columnName === 'transport_fee') {
           const numVal = toNum(adValue);
           if (numVal !== null) migrated[columnName] = numVal;
-        } else if (columnName === 'verified_at' || columnName === 'dispatched_at') {
+        } else if (columnName === 'verified_at' || columnName === 'dispatched_at' || columnName === 'accepted_at' || columnName === 'rejected_at') {
           const dateVal = toDate(adValue);
           if (dateVal !== null) migrated[columnName] = dateVal;
+        } else if (columnName === 'rejected_by') {
+          // Handle UUID for rejected_by
+          const uuidVal = String(adValue).trim();
+          if (uuidVal && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uuidVal)) {
+            migrated[columnName] = uuidVal;
+          }
         } else {
           migrated[columnName] = String(adValue).trim();
         }
