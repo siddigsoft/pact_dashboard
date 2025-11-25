@@ -33,6 +33,8 @@ interface WalletContextType {
   processMonthlyRetainers: () => Promise<{ processed: number; failed: number; total: number }>;
   addRetainerToWallet: (userId: string, amountCents: number, currency: string, period: string) => Promise<void>;
   listWallets: () => Promise<Wallet[]>;
+  adminAdjustBalance: (userId: string, amount: number, currency: string, reason: string, adjustmentType: 'credit' | 'debit') => Promise<void>;
+  adminListWithdrawalRequests: () => Promise<WithdrawalRequest[]>;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
@@ -761,6 +763,129 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const adminAdjustBalance = async (
+    userId: string,
+    amount: number,
+    currency: string,
+    reason: string,
+    adjustmentType: 'credit' | 'debit'
+  ) => {
+    if (!currentUser?.id) {
+      throw new Error('Admin user not authenticated');
+    }
+
+    try {
+      const { data: targetWallet, error: walletError } = await supabase
+        .from('wallets')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+
+      if (walletError) {
+        if (walletError.code === 'PGRST116') {
+          // Wallet does not exist
+          if (adjustmentType === 'debit') {
+            throw new Error('Cannot debit from non-existent wallet. Please credit first to create the wallet.');
+          }
+
+          // Only allow credit for new wallets
+          const { data: newWallet, error: createError } = await supabase
+            .from('wallets')
+            .insert({ user_id: userId, balances: { [currency]: amount }, total_earned: amount })
+            .select()
+            .single();
+
+          if (createError) throw createError;
+
+          await supabase.from('wallet_transactions').insert({
+            wallet_id: newWallet.id,
+            user_id: userId,
+            type: 'adjustment',
+            amount,
+            currency,
+            description: `Admin ${adjustmentType}: ${reason}`,
+            balance_before: 0,
+            balance_after: amount,
+            created_by: currentUser.id,
+            metadata: { adjustmentType, adminReason: reason },
+          });
+
+          toast({
+            title: 'Balance Adjusted',
+            description: `Successfully credited ${currency} ${amount.toFixed(2)}`,
+          });
+          return;
+        }
+        throw walletError;
+      }
+
+      const currentBalance = targetWallet.balances[currency] || 0;
+      const adjustmentAmount = adjustmentType === 'credit' ? amount : -amount;
+      const newBalance = currentBalance + adjustmentAmount;
+
+      if (newBalance < 0) {
+        throw new Error('Adjustment would result in negative balance');
+      }
+
+      const newBalances = { ...targetWallet.balances, [currency]: newBalance };
+
+      const { error: updateError } = await supabase
+        .from('wallets')
+        .update({
+          balances: newBalances,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', targetWallet.id);
+
+      if (updateError) throw updateError;
+
+      const { error: transactionError } = await supabase.from('wallet_transactions').insert({
+        wallet_id: targetWallet.id,
+        user_id: userId,
+        type: 'adjustment',
+        amount: adjustmentAmount,
+        currency,
+        description: `Admin ${adjustmentType}: ${reason}`,
+        balance_before: currentBalance,
+        balance_after: newBalance,
+        created_by: currentUser.id,
+        metadata: { adjustmentType, adminReason: reason },
+      });
+
+      if (transactionError) throw transactionError;
+
+      toast({
+        title: 'Balance Adjusted',
+        description: `Successfully ${adjustmentType === 'credit' ? 'credited' : 'debited'} ${currency} ${amount.toFixed(2)}`,
+      });
+    } catch (error: any) {
+      console.error('Failed to adjust balance:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to adjust balance',
+        variant: 'destructive',
+      });
+      throw error;
+    }
+  };
+
+  const adminListWithdrawalRequests = async (): Promise<WithdrawalRequest[]> => {
+    try {
+      const { data, error } = await supabase
+        .from('withdrawal_requests')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(200);
+
+      if (error) throw error;
+
+      return (data || []).map(transformWithdrawalRequestFromDB);
+    } catch (error: any) {
+      console.error('Failed to list withdrawal requests:', error);
+      return [];
+    }
+  };
+
   useEffect(() => {
     const initWallet = async () => {
       if (!currentUser?.id) {
@@ -852,6 +977,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         processMonthlyRetainers,
         addRetainerToWallet,
         listWallets,
+        adminAdjustBalance,
+        adminListWithdrawalRequests,
       }}
     >
       {children}
