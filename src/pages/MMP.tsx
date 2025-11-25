@@ -968,12 +968,13 @@ const MMP = () => {
       await supabase
         .from('site_locations')
         .insert({
-          site_entry_id: site.id,
+          site_id: site.id,
+          user_id: currentUser?.id || null,
           latitude: location.latitude,
           longitude: location.longitude,
-          location_type: 'visit_end',
-          accuracy: 10, // Default accuracy
-          created_at: now
+          accuracy: 10, // Default accuracy value
+          notes: 'Visit end location',
+          recorded_at: now
         });
 
       // Process wallet payment for the user who completed the site entry
@@ -1123,20 +1124,25 @@ const MMP = () => {
       }
       console.log('✅ Photos uploaded:', photoUrls.length);
 
-      // Save report to site_visit_reports table
+      // Prepare coordinates in the format expected by the database (JSONB with latitude and longitude)
+      const coordinatesJsonb = reportData.coordinates ? {
+        latitude: reportData.coordinates.latitude,
+        longitude: reportData.coordinates.longitude,
+        accuracy: reportData.coordinates.accuracy
+      } : {};
+
+      // Save report to reports table
       console.log('💾 Saving visit report to database...');
       const { data: report, error: reportError } = await supabase
-        .from('site_visit_reports')
+        .from('reports')
         .insert({
-          site_entry_id: site.id,
-          enumerator_id: currentUser?.id,
+          site_visit_id: site.id,
+          submitted_by: currentUser?.id || null,
           activities: reportData.activities,
-          notes: reportData.notes,
-          visit_duration: reportData.visitDuration,
-          photo_urls: photoUrls,
-          location_data: reportData.locationData,
-          submitted_at: now,
-          created_at: now
+          notes: reportData.notes || 'No additional notes provided',
+          duration_minutes: reportData.visitDuration,
+          coordinates: coordinatesJsonb,
+          submitted_at: now
         })
         .select()
         .single();
@@ -1146,6 +1152,27 @@ const MMP = () => {
         throw reportError;
       }
       console.log('✅ Report saved with ID:', report.id);
+
+      // Link photos to report via report_photos table
+      if (photoUrls.length > 0) {
+        console.log('📎 Linking photos to report...');
+        const reportPhotos = photoUrls.map((photoUrl, index) => ({
+          report_id: report.id,
+          photo_url: photoUrl,
+          storage_path: null // Can be added if we track the storage path
+        }));
+
+        const { error: photosError } = await supabase
+          .from('report_photos')
+          .insert(reportPhotos);
+
+        if (photosError) {
+          console.error('❌ Error linking photos to report:', photosError);
+          // Don't throw - report is already created, just log the error
+        } else {
+          console.log('✅ Photos linked to report');
+        }
+      }
 
       // Generate PDF report
       console.log('📄 Generating PDF report...');

@@ -385,7 +385,112 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
     }
 
     try {
-      const reportData: VisitReportData = {
+      // Prepare coordinates in the format expected by the database (JSONB with latitude and longitude)
+      const coordinatesJsonb = coordinates ? {
+        latitude: coordinates.latitude,
+        longitude: coordinates.longitude,
+        accuracy: coordinates.accuracy
+      } : {};
+
+      // Upload photos to storage first
+      const photoUrls: string[] = [];
+      const photoStoragePaths: string[] = [];
+      
+      for (const photo of photos) {
+        const fileName = `reports/${site.id}/${Date.now()}-${Math.random().toString(36).substring(7)}-${photo.name}`;
+        
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('site-visit-photos')
+          .upload(fileName, photo);
+
+        if (uploadError) {
+          console.error('Error uploading photo:', uploadError);
+          
+          // Check if it's a bucket not found error
+          if (uploadError.message?.includes('Bucket not found') || uploadError.message?.includes('not found')) {
+            toast({
+              title: 'Storage Bucket Not Found',
+              description: 'The site-visit-photos storage bucket has not been created. Please contact your administrator to run the database migration.',
+              variant: 'destructive'
+            });
+            return; // Stop processing if bucket doesn't exist
+          }
+          
+          toast({
+            title: 'Photo Upload Error',
+            description: `Failed to upload ${photo.name}: ${uploadError.message || 'Unknown error'}. Please try again.`,
+            variant: 'destructive'
+          });
+          continue; // Continue with other photos for other errors
+        }
+
+        // Get public URL
+        const { data: urlData } = supabase.storage
+          .from('site-visit-photos')
+          .getPublicUrl(fileName);
+
+        if (urlData?.publicUrl) {
+          photoUrls.push(urlData.publicUrl);
+          photoStoragePaths.push(fileName);
+        }
+      }
+
+      if (photoUrls.length === 0) {
+        toast({
+          title: 'Photo Upload Failed',
+          description: 'Failed to upload photos. Please try again or contact support if the issue persists.',
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      // Create report record
+      const { data: reportData, error: reportError } = await supabase
+        .from('reports')
+        .insert({
+          site_visit_id: site.id,
+          notes: notes || 'No additional notes provided',
+          activities: activities,
+          duration_minutes: visitDuration,
+          coordinates: coordinatesJsonb,
+          submitted_by: currentUser?.id || null,
+          submitted_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+
+      if (reportError) {
+        console.error('Error saving to reports table:', reportError);
+        throw reportError;
+      }
+
+      if (!reportData) {
+        throw new Error('Failed to create report record');
+      }
+
+      // Link photos to report via report_photos table
+      const reportPhotos = photoUrls.map((photoUrl, index) => ({
+        report_id: reportData.id,
+        photo_url: photoUrl,
+        storage_path: photoStoragePaths[index] || null
+      }));
+
+      const { error: photosError } = await supabase
+        .from('report_photos')
+        .insert(reportPhotos);
+
+      if (photosError) {
+        console.error('Error linking photos to report:', photosError);
+        // Don't throw here - report is already created, just log the error
+        toast({
+          title: 'Warning',
+          description: 'Report created but some photos may not be linked properly.',
+          variant: 'default'
+        });
+      }
+
+      // Call the parent onSubmit handler if provided
+      const visitReportData: VisitReportData = {
         notes,
         activities,
         photos,
@@ -394,7 +499,7 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
         coordinates
       };
 
-      await onSubmit(reportData);
+      await onSubmit(visitReportData);
 
       // Reset form
       setNotes('');
@@ -404,6 +509,12 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
       setVisitStartTime(null);
       setCoordinates(null);
       setLocationEnabled(false);
+
+      toast({
+        title: 'Visit Report Submitted',
+        description: 'Your site visit report has been successfully submitted.',
+        variant: 'default'
+      });
 
       onOpenChange(false);
     } catch (error) {
@@ -451,7 +562,19 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
 
         if (uploadError) {
           console.error('Error uploading draft photo:', uploadError);
-          continue; // Continue with other photos
+          
+          // Check if it's a bucket not found error
+          if (uploadError.message?.includes('Bucket not found') || uploadError.message?.includes('not found')) {
+            toast({
+              title: 'Storage Bucket Not Found',
+              description: 'The site-visit-photos storage bucket has not been created. Please contact your administrator to run the database migration.',
+              variant: 'destructive'
+            });
+            return; // Stop processing if bucket doesn't exist
+          }
+          
+          // For other errors, continue with other photos
+          continue;
         }
 
         // Get public URL
