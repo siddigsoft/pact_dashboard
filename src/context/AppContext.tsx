@@ -15,8 +15,8 @@ import { WalletProvider } from './wallet/WalletContext';
 import { BudgetProvider } from './budget/BudgetContext';
 import { ClassificationProvider } from './classification/ClassificationContext';
 import { CostSubmissionProvider } from './costApproval/CostSubmissionContext';
-
-
+import { DownPaymentProvider } from './downPayment/DownPaymentContext';
+import { SuperAdminProvider } from './superAdmin/SuperAdminContext';
 
 interface CompositeContextType {
   currentUser: ReturnType<typeof useUser>['currentUser'];
@@ -138,11 +138,15 @@ export const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children
                           <CompositeContextProvider>
                             <BudgetProvider>
                               <CostSubmissionProvider>
-                                <ChatProvider>
-                                  <CommunicationProvider>
-                                    {children}
-                                  </CommunicationProvider>
-                                </ChatProvider>
+                                <DownPaymentProvider>
+                                  <SuperAdminProvider>
+                                    <ChatProvider>
+                                      <CommunicationProvider>
+                                        {children}
+                                      </CommunicationProvider>
+                                    </ChatProvider>
+                                  </SuperAdminProvider>
+                                </DownPaymentProvider>
                               </CostSubmissionProvider>
                             </BudgetProvider>
                           </CompositeContextProvider>
