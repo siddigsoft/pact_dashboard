@@ -4,7 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { ChevronDown, ChevronRight, ArrowLeft } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { ChevronDown, ChevronRight, ArrowLeft, Eye, Pencil } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { useAppContext } from '@/context/AppContext';
@@ -20,35 +22,106 @@ const ReviewAssignCoordinators: React.FC = () => {
 
   const [mmpFile, setMmpFile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingForwardedStates, setLoadingForwardedStates] = useState(true);
   const [assignmentMap, setAssignmentMap] = useState({} as Record<string, string>);
   const [selectedSites, setSelectedSites] = useState({} as Record<string, Set<string>>);
   const [batchLoading, setBatchLoading] = useState({} as Record<string, boolean>);
   const [batchForwarded, setBatchForwarded] = useState({} as Record<string, boolean>);
   const [expandedGroups, setExpandedGroups] = useState({} as Record<string, boolean>);
+  const [forwardedSiteIds, setForwardedSiteIds] = useState<Set<string>>(new Set());
+  const [selectedSiteForView, setSelectedSiteForView] = useState<any>(null);
+  const [viewDialogOpen, setViewDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
 
   useEffect(() => {
-    if (id) {
-      const mmp = getMmpById(id);
-      if (mmp) {
+    if (!id) return;
+    
+    const loadData = async () => {
+      try {
+        // Step 1: Get MMP file
+        const mmp = getMmpById(id);
+        if (!mmp) {
+          toast({
+            title: "MMP Not Found",
+            description: "The requested MMP file could not be found.",
+            variant: "destructive"
+          });
+          navigate('/mmp');
+          return;
+        }
+
         setMmpFile(mmp);
-        setLoading(false);
-      } else {
+        
+        // Step 2: Load forwarded sites from database BEFORE rendering
+        // This prevents errors and ensures correct state from the start
+        setLoadingForwardedStates(true);
+        try {
+          const { data: siteEntries, error } = await supabase
+            .from('mmp_site_entries')
+            .select('id, forwarded_at, forwarded_by_user_id, forwarded_to_user_id, dispatched_at, additional_data')
+            .eq('mmp_file_id', id);
+          
+          if (error) {
+            console.error('Error loading forwarded sites:', error);
+            toast({
+              title: "Warning",
+              description: "Could not load forwarded site states. Some sites may appear incorrectly.",
+              variant: "destructive"
+            });
+            // Continue with empty set rather than blocking
+            setForwardedSiteIds(new Set());
+          } else {
+            // Find sites that have been forwarded
+            // Check both new forwarded_at column and legacy dispatched_at/additional_data
+            const forwarded = new Set<string>();
+            (siteEntries || []).forEach((entry: any) => {
+              const hasForwardedAt = !!entry.forwarded_at;
+              const hasDispatchedAt = !!entry.dispatched_at;
+              const hasAssignedTo = !!(entry.additional_data?.assigned_to);
+              
+              // Site is forwarded if any of these conditions are true
+              if (hasForwardedAt || hasDispatchedAt || hasAssignedTo) {
+                forwarded.add(entry.id);
+              }
+            });
+            
+            setForwardedSiteIds(forwarded);
+            console.log(`Loaded ${forwarded.size} forwarded site(s) out of ${siteEntries?.length || 0} total`);
+          }
+        } catch (err) {
+          console.error('Failed to load forwarded sites:', err);
+          toast({
+            title: "Warning",
+            description: "Could not load forwarded site states. Please refresh the page.",
+            variant: "destructive"
+          });
+          setForwardedSiteIds(new Set());
+        } finally {
+          setLoadingForwardedStates(false);
+        }
+      } catch (err) {
+        console.error('Failed to load MMP data:', err);
         toast({
-          title: "MMP Not Found",
-          description: "The requested MMP file could not be found.",
+          title: "Error",
+          description: "Failed to load MMP data. Please try again.",
           variant: "destructive"
         });
-        navigate('/mmp');
+      } finally {
+        setLoading(false);
       }
-    }
+    };
+
+    loadData();
   }, [id, getMmpById, navigate, toast]);
 
-  if (loading) {
+  if (loading || loadingForwardedStates) {
     return (
       <div className="container mx-auto px-4 py-8">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-muted-foreground">Loading MMP file...</p>
+          <p className="mt-4 text-muted-foreground">
+            {loadingForwardedStates ? 'Checking forwarded site states...' : 'Loading MMP file...'}
+          </p>
         </div>
       </div>
     );
@@ -70,9 +143,20 @@ const ReviewAssignCoordinators: React.FC = () => {
   }
 
   // Prepare site groups and coordinators
-  let entries: any[] = Array.isArray(mmpFile?.siteEntries) && mmpFile.siteEntries.length > 0 ? mmpFile.siteEntries : [];
+  // Show all sites (including forwarded ones) but mark them as forwarded
+  let entries: any[] = Array.isArray(mmpFile?.siteEntries) && mmpFile.siteEntries.length > 0 
+    ? mmpFile.siteEntries
+    : [];
   const stateNameToId = new Map<string, string>();
-  for (const s of sudanStates) stateNameToId.set(s.name.toLowerCase(), s.id);
+  // Add both full name and name without "State" suffix for better matching
+  for (const s of sudanStates) {
+    const normalizedName = s.name.toLowerCase();
+    stateNameToId.set(normalizedName, s.id);
+    // Also add without "State" suffix (e.g., "Northern" matches "Northern State")
+    if (normalizedName.endsWith(' state')) {
+      stateNameToId.set(normalizedName.replace(/\s+state$/, ''), s.id);
+    }
+  }
   const localitiesByState = new Map<string, Map<string, string>>();
   for (const s of sudanStates) {
     const map = new Map<string, string>();
@@ -118,19 +202,25 @@ const ReviewAssignCoordinators: React.FC = () => {
       // Update mmp_site_entries to assign to coordinator (keep status as Pending)
       const updatePromises = selectedSiteEntries.map(async (siteEntry: any) => {
         const existingAdditionalData = siteEntry.additional_data || {};
+        const forwardedAt = new Date().toISOString();
         
         // Update the mmp_site_entry in the database (assign to coordinator, keep status as Pending)
         const { data, error } = await supabase
           .from('mmp_site_entries')
           .update({
             status: 'Pending',
+            // New proper foreign key columns
+            forwarded_by_user_id: currentUser?.id || null,
+            forwarded_to_user_id: coordinatorId,
+            forwarded_at: forwardedAt,
+            // Keep legacy fields for backward compatibility
             dispatched_by: currentUser?.id || null,
-            dispatched_at: new Date().toISOString(),
+            dispatched_at: forwardedAt,
             additional_data: {
               ...existingAdditionalData,
               assigned_to: coordinatorId,
               assigned_by: currentUser?.id || null,
-              assigned_at: new Date().toISOString(),
+              assigned_at: forwardedAt,
               notes: `Forwarded from MMP ${mmpFile?.name || mmpFile?.mmpId} for CP verification`,
             }
           })
@@ -163,6 +253,12 @@ const ReviewAssignCoordinators: React.FC = () => {
       ]);
 
       toast({ title: 'Batch Forwarded', description: `Sites were forwarded to ${allCoordinators.find(c => c.id === coordinatorId)?.fullName || 'Coordinator'}.`, variant: 'default' });
+      
+      // Mark sites as forwarded to prevent re-forwarding
+      const newForwarded = new Set(forwardedSiteIds);
+      siteIds.forEach(id => newForwarded.add(id));
+      setForwardedSiteIds(newForwarded);
+      
       setBatchLoading(b => ({ ...b, [groupKey]: false }));
       setBatchForwarded(f => ({ ...f, [groupKey]: true }));
       setSelectedSites(s => ({ ...s, [groupKey]: new Set() }));
@@ -194,10 +290,19 @@ const ReviewAssignCoordinators: React.FC = () => {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {forwardedSiteIds.size > 0 && (
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-800">
+                <strong>{forwardedSiteIds.size}</strong> site(s) have already been forwarded and are excluded from this list.
+              </p>
+            </div>
+          )}
           <div className="space-y-6">
             {Object.entries(groupMap).length === 0 ? (
               <div className="text-center text-muted-foreground py-8">
-                No site groups found for this MMP.
+                {forwardedSiteIds.size > 0 
+                  ? 'All sites have been forwarded. No remaining sites to assign.'
+                  : 'No site groups found for this MMP.'}
               </div>
             ) : (
               Object.entries(groupMap).map(([groupKey, groupSites]) => {
@@ -205,10 +310,18 @@ const ReviewAssignCoordinators: React.FC = () => {
                 const isUnassigned = stateId === 'unassigned';
                 const recommended = isUnassigned ? null : getRecommendedCoordinator(stateId, localityId);
                 const selectedId = assignmentMap[groupKey] || recommended?.id || '';
-                // Initialize selectedSites for this group if not set
-                if (!selectedSites[groupKey]) {
-                  setSelectedSites(s => ({ ...s, [groupKey]: new Set(groupSites.map((site: any) => site.id)) }));
+                
+                // Separate forwarded and unforwarded sites
+                const forwardedSites = groupSites.filter((site: any) => forwardedSiteIds.has(site.id));
+                const unforwardedSites = groupSites.filter((site: any) => !forwardedSiteIds.has(site.id));
+                const hasUnforwardedSites = unforwardedSites.length > 0;
+                const hasForwardedSites = forwardedSites.length > 0;
+                
+                // Initialize selectedSites for this group if not set (only for unforwarded sites)
+                if (!selectedSites[groupKey] && hasUnforwardedSites) {
+                  setSelectedSites(s => ({ ...s, [groupKey]: new Set(unforwardedSites.map((site: any) => site.id)) }));
                 }
+                
                 return (
                   <div key={groupKey} className="border rounded-lg p-4 bg-gray-50">
                     <div className="flex items-center mb-3 font-medium cursor-pointer select-none" onClick={() => setExpandedGroups(g => ({ ...g, [groupKey]: !g[groupKey] }))}>
@@ -219,57 +332,159 @@ const ReviewAssignCoordinators: React.FC = () => {
                       {!isUnassigned && localityId && (
                         <span> / <span className="text-green-700">{sudanStates.find(s => s.id === stateId)?.localities.find(l => l.id === localityId)?.name || localityId}</span></span>
                       )}
+                      {hasForwardedSites && (
+                        <span className="ml-2 text-sm text-green-700 font-normal">
+                          ({forwardedSites.length} forwarded, {unforwardedSites.length} available)
+                        </span>
+                      )}
                     </div>
-                    <div className="mb-3 text-sm text-muted-foreground">
-                      Recommended: {recommended ? `${recommended.fullName || recommended.name || recommended.email}` : 'None'}
-                    </div>
-                    <div className="flex items-center gap-3 mb-3">
-                      <Select value={selectedId} onValueChange={val => setAssignmentMap(a => ({ ...a, [groupKey]: val }))}>
-                        <SelectTrigger className="max-w-md">
-                          <SelectValue placeholder="Select coordinator..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {allCoordinators.map(c => (
-                            <SelectItem key={c.id} value={c.id}>
-                              {c.fullName || c.name || c.email}
-                              {recommended?.id === c.id ? ' (Recommended)' : ''}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Button
-                        size="sm"
-                        onClick={() => handleForwardBatch(groupKey)}
-                        disabled={batchLoading[groupKey] || batchForwarded[groupKey] || !assignmentMap[groupKey] || !(selectedSites[groupKey]?.size > 0)}
-                        variant={batchForwarded[groupKey] ? 'secondary' : 'default'}
-                      >
-                        {batchForwarded[groupKey]
-                          ? 'Forwarded'
-                          : batchLoading[groupKey]
-                            ? 'Forwarding...'
-                            : 'Forward Selected'}
-                      </Button>
-                    </div>
+                    {hasForwardedSites && !hasUnforwardedSites && (
+                      <div className="mb-3 text-sm text-green-700 font-medium">
+                        ✓ All sites in this group have been forwarded
+                      </div>
+                    )}
+                    {hasUnforwardedSites && (
+                      <>
+                        <div className="mb-3 text-sm text-muted-foreground">
+                          Recommended: {recommended ? `${recommended.fullName || recommended.name || recommended.email}` : 'None'}
+                        </div>
+                        <div className="flex items-center gap-3 mb-3">
+                          <Select 
+                            value={selectedId} 
+                            onValueChange={val => setAssignmentMap(a => ({ ...a, [groupKey]: val }))}
+                          >
+                            <SelectTrigger className="max-w-md">
+                              <SelectValue placeholder="Select coordinator..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {allCoordinators.map(c => (
+                                <SelectItem key={c.id} value={c.id}>
+                                  {c.fullName || c.name || c.email}
+                                  {recommended?.id === c.id ? ' (Recommended)' : ''}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Button
+                            size="sm"
+                            onClick={() => handleForwardBatch(groupKey)}
+                            disabled={batchLoading[groupKey] || !assignmentMap[groupKey] || !(selectedSites[groupKey]?.size > 0)}
+                            variant="default"
+                          >
+                            {batchLoading[groupKey]
+                              ? 'Forwarding...'
+                              : 'Forward Selected'}
+                          </Button>
+                        </div>
+                      </>
+                    )}
                     {expandedGroups[groupKey] && (
                       <div className="mt-3">
                         <div className="font-medium text-sm mb-2">Select sites to forward:</div>
                         <div className="max-h-40 overflow-y-auto border rounded p-3 bg-white">
                           <div className="space-y-2">
-                            {groupSites.map((site: any) => (
-                              <label key={site.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-1 rounded">
-                                <Checkbox
-                                  checked={selectedSites[groupKey]?.has(site.id) || false}
-                                  onCheckedChange={checked => {
-                                    setSelectedSites(s => {
-                                      const set = new Set(s[groupKey] || []);
-                                      if (checked) set.add(site.id); else set.delete(site.id);
-                                      return { ...s, [groupKey]: set };
-                                    });
-                                  }}
-                                />
-                                <span className="text-sm">{site.siteName || site.name || site.id}</span>
-                              </label>
+                            {/* Show unforwarded sites first */}
+                            {unforwardedSites.map((site: any) => (
+                              <div 
+                                key={site.id} 
+                                className="flex items-center gap-2 hover:bg-gray-50 p-1 rounded"
+                              >
+                                <label className="flex items-center gap-2 cursor-pointer flex-1">
+                                  <Checkbox
+                                    checked={selectedSites[groupKey]?.has(site.id) || false}
+                                    onCheckedChange={checked => {
+                                      setSelectedSites(s => {
+                                        const set = new Set(s[groupKey] || []);
+                                        if (checked) set.add(site.id); else set.delete(site.id);
+                                        return { ...s, [groupKey]: set };
+                                      });
+                                    }}
+                                  />
+                                  <span className="text-sm">{site.siteName || site.name || site.id}</span>
+                                </label>
+                                <div className="flex items-center gap-1">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 w-7 p-0"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedSiteForView(site);
+                                      setViewDialogOpen(true);
+                                    }}
+                                    title="View Details"
+                                  >
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 w-7 p-0"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      navigate(`/site-visits/${site.id}/edit`);
+                                    }}
+                                    title="Edit"
+                                  >
+                                    <Pencil className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </div>
                             ))}
+                            {/* Show forwarded sites below, visually distinct */}
+                            {forwardedSites.length > 0 && (
+                              <>
+                                {unforwardedSites.length > 0 && (
+                                  <div className="border-t my-2 pt-2">
+                                    <div className="text-xs text-muted-foreground mb-1 font-medium">Already Forwarded:</div>
+                                  </div>
+                                )}
+                                {forwardedSites.map((site: any) => (
+                                  <div 
+                                    key={site.id} 
+                                    className="flex items-center gap-2 p-1 rounded opacity-60"
+                                  >
+                                    <label className="flex items-center gap-2 cursor-not-allowed flex-1">
+                                      <Checkbox
+                                        checked={false}
+                                        disabled={true}
+                                      />
+                                      <span className="text-sm">
+                                        {site.siteName || site.name || site.id}
+                                        <span className="ml-2 text-green-600 text-xs font-medium">✓ Forwarded</span>
+                                      </span>
+                                    </label>
+                                    <div className="flex items-center gap-1">
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-7 w-7 p-0"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setSelectedSiteForView(site);
+                                          setViewDialogOpen(true);
+                                        }}
+                                        title="View Details"
+                                      >
+                                        <Eye className="h-4 w-4" />
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-7 w-7 p-0"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          navigate(`/site-visits/${site.id}/edit`);
+                                        }}
+                                        title="Edit"
+                                      >
+                                        <Pencil className="h-4 w-4" />
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -281,6 +496,99 @@ const ReviewAssignCoordinators: React.FC = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Site Detail View Dialog */}
+      <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Site Details</DialogTitle>
+            <DialogDescription>
+              View details for {selectedSiteForView?.siteName || selectedSiteForView?.name || 'site'}
+            </DialogDescription>
+          </DialogHeader>
+          {selectedSiteForView && (
+            <div className="space-y-4 mt-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-xs text-muted-foreground">Site Name</Label>
+                  <p className="font-medium">{selectedSiteForView.siteName || selectedSiteForView.name || 'N/A'}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Site Code</Label>
+                  <p className="font-medium">{selectedSiteForView.siteCode || 'N/A'}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">State</Label>
+                  <p className="font-medium">{selectedSiteForView.state || 'N/A'}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Locality</Label>
+                  <p className="font-medium">{selectedSiteForView.locality || 'N/A'}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Hub Office</Label>
+                  <p className="font-medium">{selectedSiteForView.hubOffice || 'N/A'}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">CP Name</Label>
+                  <p className="font-medium">{selectedSiteForView.cpName || 'N/A'}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Visit Type</Label>
+                  <p className="font-medium">{selectedSiteForView.visitType || 'N/A'}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Visit Date</Label>
+                  <p className="font-medium">{selectedSiteForView.visitDate || 'N/A'}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Main Activity</Label>
+                  <p className="font-medium">{selectedSiteForView.mainActivity || 'N/A'}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Activity at Site</Label>
+                  <p className="font-medium">{selectedSiteForView.activityAtSite || 'N/A'}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Status</Label>
+                  <p className="font-medium">{selectedSiteForView.status || 'N/A'}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Monitoring By</Label>
+                  <p className="font-medium">{selectedSiteForView.monitoringBy || 'N/A'}</p>
+                </div>
+              </div>
+              {selectedSiteForView.comments && (
+                <div>
+                  <Label className="text-xs text-muted-foreground">Comments</Label>
+                  <p className="text-sm mt-1">{selectedSiteForView.comments}</p>
+                </div>
+              )}
+              {selectedSiteForView.verificationNotes && (
+                <div>
+                  <Label className="text-xs text-muted-foreground">Verification Notes</Label>
+                  <p className="text-sm mt-1">{selectedSiteForView.verificationNotes}</p>
+                </div>
+              )}
+              <div className="flex justify-end gap-2 pt-4 border-t">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setViewDialogOpen(false);
+                    navigate(`/site-visits/${selectedSiteForView.id}/edit`);
+                  }}
+                >
+                  <Pencil className="h-4 w-4 mr-2" />
+                  Edit Site
+                </Button>
+                <Button variant="outline" onClick={() => setViewDialogOpen(false)}>
+                  Close
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

@@ -601,7 +601,15 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
   // Prepare site groups and coordinators for modal
   let entries: any[] = Array.isArray(mmpFile?.siteEntries) && mmpFile.siteEntries.length > 0 ? mmpFile.siteEntries : [];
   const stateNameToId = new Map<string, string>();
-  for (const s of sudanStates) stateNameToId.set(s.name.toLowerCase(), s.id);
+  // Add both full name and name without "State" suffix for better matching
+  for (const s of sudanStates) {
+    const normalizedName = s.name.toLowerCase();
+    stateNameToId.set(normalizedName, s.id);
+    // Also add without "State" suffix (e.g., "Northern" matches "Northern State")
+    if (normalizedName.endsWith(' state')) {
+      stateNameToId.set(normalizedName.replace(/\s+state$/, ''), s.id);
+    }
+  }
   const localitiesByState = new Map<string, Map<string, string>>();
   for (const s of sudanStates) {
     const map = new Map<string, string>();
