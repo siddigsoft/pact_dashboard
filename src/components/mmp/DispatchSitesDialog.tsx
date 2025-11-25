@@ -10,13 +10,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-<<<<<<< HEAD
 import { Loader2, DollarSign, AlertCircle, ArrowRight, ArrowLeft } from 'lucide-react';
-=======
-import { Badge } from '@/components/ui/badge';
-import { Loader2 } from 'lucide-react';
 import { sudanStates } from '@/data/sudanStates';
->>>>>>> d547407286fdfc08a9125a0526ea82f1b3a32265
 
 interface DispatchSitesDialogProps {
   open: boolean;
@@ -402,15 +397,10 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
                           currentUserProfile?.data?.username || 
                           currentUserProfile?.data?.email || 
                           'System';
-<<<<<<< HEAD
-
-      for (const entryId of Array.from(selectedSites)) {
-=======
       
       // Update each entry individually to set status and new columns
-      for (const entryId of siteEntryIds) {
+      for (const entryId of Array.from(selectedSites)) {
         // Get current entry to check status and preserve additional_data
->>>>>>> d547407286fdfc08a9125a0526ea82f1b3a32265
         const { data: currentEntry } = await supabase
           .from('mmp_site_entries')
           .select('status, additional_data')
@@ -454,16 +444,7 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
         
         const { error: entryUpdateError } = await supabase
           .from('mmp_site_entries')
-<<<<<<< HEAD
-          .update({ 
-            status: 'Dispatched',
-            dispatched_at: dispatchedAt,
-            dispatched_by: dispatchedBy,
-            additional_data: additionalData
-          })
-=======
           .update(updateData)
->>>>>>> d547407286fdfc08a9125a0526ea82f1b3a32265
           .eq('id', entryId);
         
         if (entryUpdateError) {
