@@ -16,6 +16,7 @@ import AvatarUpload from '@/components/registration/AvatarUpload';
 import { hubs, sudanStates, getLocalitiesByState } from '@/data/sudanStates';
 import { supabase } from '@/integrations/supabase/client';
 import { User as UserType } from '@/types/user';
+import { TwoFactorChallenge } from './TwoFactorChallenge';
 
 interface AuthFormProps {
   mode: 'login' | 'signup';
@@ -41,6 +42,10 @@ const AuthForm = ({ mode }: AuthFormProps) => {
   const [selectedLocality, setSelectedLocality] = useState('');
   const [availableStates, setAvailableStates] = useState<string[]>([]);
   const [localities, setLocalities] = useState<{ id: string; name: string; }[]>([]);
+
+  const [showMFAChallenge, setShowMFAChallenge] = useState(false);
+  const [pendingLoginEmail, setPendingLoginEmail] = useState('');
+  const [pendingLoginPassword, setPendingLoginPassword] = useState('');
 
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -192,15 +197,41 @@ const AuthForm = ({ mode }: AuthFormProps) => {
           navigate('/registration-success');
         }
       } else {
-        const success = await login(email, password);
+        const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
 
-        if (success) {
+        if (authError) {
           toast({
-            title: "Welcome back!",
-            description: "You have successfully logged in.",
-            variant: "default"
+            title: "Login failed",
+            description: authError.message || "Invalid email or password. Please try again.",
+            variant: "destructive",
           });
-          navigate('/dashboard');
+          setIsLoading(false);
+          return;
+        }
+
+        if (authData.user) {
+          const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+          
+          if (aalData && aalData.currentLevel === 'aal1' && aalData.nextLevel === 'aal2') {
+            setPendingLoginEmail(email);
+            setPendingLoginPassword(password);
+            setShowMFAChallenge(true);
+            setIsLoading(false);
+            return;
+          }
+
+          const success = await login(email, password);
+          if (success) {
+            toast({
+              title: "Welcome back!",
+              description: "You have successfully logged in.",
+              variant: "default"
+            });
+            navigate('/dashboard');
+          }
         }
       }
     } catch (error: any) {
@@ -213,6 +244,45 @@ const AuthForm = ({ mode }: AuthFormProps) => {
       setIsLoading(false);
     }
   };
+
+  const handleMFASuccess = async () => {
+    toast({
+      title: "Welcome back!",
+      description: "You have successfully logged in with two-factor authentication.",
+      variant: "default"
+    });
+    
+    const success = await login(pendingLoginEmail, pendingLoginPassword);
+    if (success) {
+      navigate('/dashboard');
+    }
+    setShowMFAChallenge(false);
+  };
+
+  const handleMFACancel = async () => {
+    await supabase.auth.signOut();
+    setShowMFAChallenge(false);
+    setPendingLoginEmail('');
+    setPendingLoginPassword('');
+  };
+
+  if (mode === 'login' && showMFAChallenge) {
+    return (
+      <div className="py-4">
+        <TwoFactorChallenge
+          onSuccess={handleMFASuccess}
+          onCancel={handleMFACancel}
+          onError={(error) => {
+            toast({
+              title: "Verification Failed",
+              description: error,
+              variant: "destructive"
+            });
+          }}
+        />
+      </div>
+    );
+  }
 
   if (mode === 'login') {
     return (
@@ -227,6 +297,7 @@ const AuthForm = ({ mode }: AuthFormProps) => {
               onChange={(e) => setEmail(e.target.value)}
               required
               className="pl-10 bg-white/50 focus:bg-white transition-colors"
+              data-testid="input-email"
             />
           </div>
         </div>
@@ -241,11 +312,13 @@ const AuthForm = ({ mode }: AuthFormProps) => {
               onChange={(e) => setPassword(e.target.value)}
               required
               className="pl-10 pr-10 bg-white/50 focus:bg-white transition-colors"
+              data-testid="input-password"
             />
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
               className="absolute right-3 top-3 text-gray-400 hover:text-gray-600"
+              data-testid="button-toggle-password"
             >
               {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
             </button>
@@ -261,6 +334,7 @@ const AuthForm = ({ mode }: AuthFormProps) => {
                    disabled:opacity-70 disabled:cursor-not-allowed
                    disabled:hover:scale-100 disabled:hover:bg-[#9b87f5]"
           disabled={isLoading}
+          data-testid="button-login"
         >
           {isLoading ? (
             <div className="flex items-center justify-center gap-2">
