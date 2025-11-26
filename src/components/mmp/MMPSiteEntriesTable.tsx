@@ -706,7 +706,7 @@ const MMPSiteEntriesTable = ({
                     <TableHead className="w-[100px]">Market Diversion</TableHead>
                     <TableHead className="w-[120px]">Warehouse Monitoring</TableHead>
                     <TableHead className="w-[100px]">Visit Date</TableHead>
-                    <TableHead className="w-[100px]">Enumerator Fee</TableHead>
+                    <TableHead className="w-[100px]">DC Fee</TableHead>
                     <TableHead className="w-[100px]">Transport Fee</TableHead>
                     <TableHead className="w-[100px]">Total Cost</TableHead>
                     <TableHead className="w-[200px]">Comments</TableHead>
@@ -1251,7 +1251,7 @@ const MMPSiteEntriesTable = ({
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div className="bg-white p-4 rounded-lg border">
-                      <p className="text-xs font-medium text-gray-600 mb-2">Enumerator Fee</p>
+                      <p className="text-xs font-medium text-gray-600 mb-2">Data Collector Fee</p>
                       <p className="text-2xl font-semibold text-gray-900">
                         {row.enumeratorFee !== undefined && row.enumeratorFee !== null && String(row.enumeratorFee) !== ''
                           ? `$${Number(row.enumeratorFee).toLocaleString()}`

@@ -454,6 +454,10 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
   const hasPermission = (userId: string, resource: ResourceType, action: ActionType): boolean => {
     const perms = permissionsCache[userId];
     if (!perms) return false;
+    
+    const hasSuperAdminPerm = perms.some(p => p.resource === 'system' && p.action === 'override');
+    if (hasSuperAdminPerm) return true;
+    
     return perms.some(p => p.resource === resource && p.action === action);
   };
 

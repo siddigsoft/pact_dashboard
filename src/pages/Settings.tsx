@@ -19,7 +19,11 @@ import {
   Globe,
   Lock,
   Save,
-  RefreshCw
+  RefreshCw,
+  Shield,
+  Smartphone,
+  CheckCircle,
+  XCircle
 } from "lucide-react";
 import { useSettings } from "@/context/settings/SettingsContext";
 import { Input } from "@/components/ui/input";
@@ -29,6 +33,9 @@ import LocationCapture from "@/components/LocationCapture";
 import RoleBadge from "@/components/user/RoleBadge";
 import UserClassificationBadge from "@/components/user/UserClassificationBadge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { TwoFactorSetup } from "@/components/auth/TwoFactorSetup";
+import { useMFA } from "@/hooks/use-mfa";
+import { Badge } from "@/components/ui/badge";
 
 const Settings = () => {
   const { toast } = useToast();
@@ -44,12 +51,16 @@ const Settings = () => {
     loading
   } = useSettings();
 
+  const { mfaEnabled, loading: mfaLoading, checkMFAStatus, unenrollMFA } = useMFA();
+
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [changing, setChanging] = useState(false);
   const [activeTab, setActiveTab] = useState("general");
+  const [showMFASetup, setShowMFASetup] = useState(false);
+  const [disablingMFA, setDisablingMFA] = useState(false);
   
   const [name, setName] = useState(currentUser?.name || "");
   const [email, setEmail] = useState(currentUser?.email || "");
@@ -60,6 +71,10 @@ const Settings = () => {
       setEmail(currentUser.email || "");
     }
   }, [currentUser]);
+
+  useEffect(() => {
+    checkMFAStatus();
+  }, [checkMFAStatus]);
 
   const handleNotificationsToggle = (enabled: boolean) => {
     updateNotificationSettings({
@@ -141,6 +156,36 @@ const Settings = () => {
         shareLocationWithTeam: checked
       }
     });
+  };
+
+  const handleDisableMFA = async () => {
+    setDisablingMFA(true);
+    try {
+      const success = await unenrollMFA();
+      if (success) {
+        toast({
+          title: "2FA Disabled",
+          description: "Two-factor authentication has been disabled for your account.",
+          variant: "default",
+        });
+        await checkMFAStatus();
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to disable two-factor authentication. Please try again.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Error disabling MFA:", error);
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred while disabling 2FA.",
+        variant: "destructive",
+      });
+    } finally {
+      setDisablingMFA(false);
+    }
   };
 
   const handleChangePassword = async () => {
@@ -326,7 +371,7 @@ const Settings = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-3 lg:grid-cols-6 gap-1">
+        <TabsList className="grid w-full grid-cols-4 lg:grid-cols-7 gap-1">
           <TabsTrigger value="general" className="flex items-center gap-1" data-testid="tab-general">
             <SettingsIcon className="h-4 w-4" />
             <span className="hidden sm:inline">General</span>
@@ -342,6 +387,10 @@ const Settings = () => {
           <TabsTrigger value="appearance" className="flex items-center gap-1" data-testid="tab-appearance">
             <Palette className="h-4 w-4" />
             <span className="hidden sm:inline">Appearance</span>
+          </TabsTrigger>
+          <TabsTrigger value="security" className="flex items-center gap-1" data-testid="tab-security">
+            <Shield className="h-4 w-4" />
+            <span className="hidden sm:inline">Security</span>
           </TabsTrigger>
           <TabsTrigger value="profile" className="flex items-center gap-1" data-testid="tab-profile">
             <User className="h-4 w-4" />
@@ -591,6 +640,122 @@ const Settings = () => {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="security" className="space-y-4">
+          <Card className="border shadow-sm">
+            <CardHeader className="bg-gradient-to-r from-emerald-50 to-teal-100 dark:from-emerald-900/20 dark:to-teal-800/20 border-b">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-emerald-500 rounded-lg">
+                  <Shield className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <CardTitle className="text-lg">Security Settings</CardTitle>
+                  <CardDescription>
+                    Manage two-factor authentication and security options
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6 pt-6">
+              <div className="p-4 bg-muted/50 rounded-lg">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <Smartphone className="h-5 w-5 text-muted-foreground" />
+                    <div className="space-y-1">
+                      <Label className="text-base font-medium">Two-Factor Authentication (2FA)</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Add an extra layer of security to your account using an authenticator app
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {mfaLoading ? (
+                      <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
+                    ) : mfaEnabled ? (
+                      <Badge variant="default" className="bg-green-500 hover:bg-green-600">
+                        <CheckCircle className="h-3 w-3 mr-1" />
+                        Enabled
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary">
+                        <XCircle className="h-3 w-3 mr-1" />
+                        Disabled
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {mfaEnabled ? (
+                <div className="p-4 border rounded-lg bg-green-50 dark:bg-green-900/20">
+                  <div className="flex items-start gap-3">
+                    <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400 mt-0.5" />
+                    <div className="space-y-2">
+                      <p className="font-medium text-green-800 dark:text-green-200">
+                        Two-factor authentication is active
+                      </p>
+                      <p className="text-sm text-green-700 dark:text-green-300">
+                        Your account is protected with an authenticator app. You'll need to enter a code from your app when signing in.
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleDisableMFA}
+                        disabled={disablingMFA}
+                        className="mt-2"
+                        data-testid="button-disable-2fa"
+                      >
+                        {disablingMFA ? (
+                          <>
+                            <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                            Disabling...
+                          </>
+                        ) : (
+                          <>
+                            <XCircle className="mr-2 h-4 w-4" />
+                            Disable 2FA
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-4 border rounded-lg">
+                  <div className="flex items-start gap-3">
+                    <Shield className="h-5 w-5 text-muted-foreground mt-0.5" />
+                    <div className="space-y-2">
+                      <p className="font-medium">Enhance your account security</p>
+                      <p className="text-sm text-muted-foreground">
+                        Two-factor authentication adds an extra layer of protection. When enabled, you'll need to enter a code from your authenticator app in addition to your password when signing in.
+                      </p>
+                      <Button
+                        onClick={() => setShowMFASetup(true)}
+                        className="mt-2"
+                        data-testid="button-enable-2fa"
+                      >
+                        <Shield className="mr-2 h-4 w-4" />
+                        Enable Two-Factor Authentication
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="pt-4 border-t">
+                <h4 className="text-sm font-medium mb-3">Supported Authenticator Apps</h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {["Google Authenticator", "Authy", "1Password", "Microsoft Authenticator"].map((app) => (
+                    <div key={app} className="flex items-center gap-2 p-2 bg-muted/50 rounded text-sm">
+                      <Smartphone className="h-4 w-4 text-muted-foreground" />
+                      {app}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
         
         <TabsContent value="profile" className="space-y-4">
           <Card className="border shadow-sm">
@@ -758,6 +923,35 @@ const Settings = () => {
         </TabsContent>
         
       </Tabs>
+
+      <Dialog open={showMFASetup} onOpenChange={setShowMFASetup}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5 text-primary" />
+              Enable Two-Factor Authentication
+            </DialogTitle>
+            <DialogDescription>
+              Scan the QR code with your authenticator app to set up 2FA
+            </DialogDescription>
+          </DialogHeader>
+          <TwoFactorSetup
+            onSetupComplete={() => {
+              setShowMFASetup(false);
+              checkMFAStatus();
+              toast({
+                title: "2FA Enabled",
+                description: "Two-factor authentication has been enabled for your account.",
+                variant: "default",
+              });
+            }}
+            onDisabled={() => {
+              setShowMFASetup(false);
+              checkMFAStatus();
+            }}
+          />
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={showChangePassword} onOpenChange={setShowChangePassword}>
         <DialogContent className="sm:max-w-md">

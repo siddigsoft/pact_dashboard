@@ -160,11 +160,11 @@ export default function WalletReports() {
         />
       </div>
 
-      <Tabs defaultValue="enumerators" className="space-y-4">
+      <Tabs defaultValue="datacollectors" className="space-y-4">
         <TabsList>
-          <TabsTrigger value="enumerators">
+          <TabsTrigger value="datacollectors">
             <Users className="w-4 h-4 mr-2" />
-            Enumerator Performance
+            Data Collector Performance
           </TabsTrigger>
           <TabsTrigger value="transactions">
             <Activity className="w-4 h-4 mr-2" />
@@ -172,22 +172,22 @@ export default function WalletReports() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="enumerators">
+        <TabsContent value="datacollectors">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Users className="w-5 h-5 text-primary" />
-                Enumerator Withdrawal Summary
+                Data Collector Withdrawal Summary
               </CardTitle>
               <CardDescription>
-                Individual enumerator withdrawal statistics and performance
+                Individual data collector withdrawal statistics and performance
               </CardDescription>
             </CardHeader>
             <CardContent>
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Enumerator</TableHead>
+                    <TableHead>Data Collector</TableHead>
                     <TableHead className="text-right">Requests</TableHead>
                     <TableHead className="text-right">Approved</TableHead>
                     <TableHead className="text-right">Total Requested</TableHead>
@@ -198,7 +198,7 @@ export default function WalletReports() {
                   {enumeratorStats.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                        No enumerator data available
+                        No data collector data available
                       </TableCell>
                     </TableRow>
                   ) : (

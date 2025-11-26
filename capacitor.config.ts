@@ -84,6 +84,22 @@ const config: CapacitorConfig = {
     StatusBar: {
       style: 'dark',
       backgroundColor: '#1e40af'
+    },
+    Geolocation: {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 0
+    },
+    Camera: {
+      presentationStyle: 'popover',
+      saveToGallery: true,
+      quality: 90
+    },
+    Network: {
+      connectionType: true
+    },
+    Filesystem: {
+      directory: 'Documents'
     }
   }
 };

@@ -20,6 +20,7 @@ interface UserContextType {
   updateUserAvailability: (status: 'online' | 'offline' | 'busy') => Promise<boolean>;
   toggleLocationSharing: (isSharing: boolean) => Promise<boolean>;
   refreshUsers: () => Promise<void>;
+  hydrateCurrentUser: () => Promise<boolean>;
   roles: AppRole[];
   hasRole: (role: AppRole) => boolean;
   addRole: (userId: string, role: AppRole) => Promise<boolean>;
@@ -399,6 +400,61 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error('Bootstrap sign-in error:', e);
       return false;
     }
+  };
+
+  const hydrateCurrentUser = async (): Promise<boolean> => {
+    const maxRetries = 10;
+    const baseDelay = 300;
+    
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        if (attempt > 0) {
+          const delay = Math.min(baseDelay * Math.pow(1.5, attempt - 1), 2000);
+          console.log(`Hydration retry attempt ${attempt + 1}/${maxRetries}, delay ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+        
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) {
+          console.error('Error getting session for hydration:', sessionError);
+          continue;
+        }
+        if (!session?.user) {
+          console.log('No session found for hydration');
+          continue;
+        }
+        
+        const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+        console.log('Hydration AAL level:', aalData?.currentLevel, 'Next level:', aalData?.nextLevel);
+        
+        if (aalData?.nextLevel === 'aal2' && aalData?.currentLevel === 'aal1') {
+          console.log('Session still at AAL1, MFA not yet complete, retrying...');
+          continue;
+        }
+        
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        if (userError) {
+          console.error('Error getting user for hydration:', userError);
+          continue;
+        }
+        if (!user) {
+          console.log('No user found for hydration');
+          continue;
+        }
+        
+        const result = await setUserFromAuthUser(user);
+        if (result) {
+          console.log('Successfully hydrated current user');
+          return true;
+        }
+        console.log('setUserFromAuthUser returned false, retrying...');
+      } catch (error) {
+        console.error(`Error hydrating current user (attempt ${attempt + 1}):`, error);
+      }
+    }
+    
+    console.error('Failed to hydrate current user after all retries');
+    return false;
   };
 
   useEffect(() => {
@@ -1051,6 +1107,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updateUserAvailability,
         toggleLocationSharing,
         refreshUsers,
+        hydrateCurrentUser,
         roles,
         hasRole,
         addRole,
