@@ -52,11 +52,13 @@ const AuthForm = ({ mode }: AuthFormProps) => {
   
   let login: (email: string, password: string) => Promise<boolean> = async () => false;
   let registerUser: (userData: Partial<UserType>) => Promise<boolean> = async () => false;
+  let hydrateCurrentUser: () => Promise<boolean> = async () => false;
   
   try {
     const appContext = useAppContext();
     login = appContext.login;
     registerUser = appContext.registerUser;
+    hydrateCurrentUser = appContext.hydrateCurrentUser;
   } catch (error) {
     console.error("Error accessing AppContext:", error);
   }
@@ -246,17 +248,38 @@ const AuthForm = ({ mode }: AuthFormProps) => {
   };
 
   const handleMFASuccess = async () => {
+    try {
+      const success = await hydrateCurrentUser();
+      if (!success) {
+        console.error('Failed to hydrate current user after MFA');
+        toast({
+          title: "Error",
+          description: "Failed to load user profile. Please try again.",
+          variant: "destructive"
+        });
+        return;
+      }
+    } catch (error) {
+      console.error('Error hydrating user after MFA:', error);
+      toast({
+        title: "Error",
+        description: "An error occurred while loading your profile.",
+        variant: "destructive"
+      });
+      return;
+    }
+    
     toast({
       title: "Welcome back!",
       description: "You have successfully logged in with two-factor authentication.",
       variant: "default"
     });
     
-    const success = await login(pendingLoginEmail, pendingLoginPassword);
-    if (success) {
-      navigate('/dashboard');
-    }
     setShowMFAChallenge(false);
+    setPendingLoginEmail('');
+    setPendingLoginPassword('');
+    
+    navigate('/dashboard');
   };
 
   const handleMFACancel = async () => {

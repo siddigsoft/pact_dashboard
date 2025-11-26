@@ -268,6 +268,41 @@ export function useMFA() {
         return { success: false, error: 'Invalid verification code. Please try again.' };
       }
       
+      let currentAalLevel: string | null = null;
+      const maxRetries = 15;
+      const baseDelay = 200;
+      
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        if (attempt > 0) {
+          const delay = Math.min(baseDelay * Math.pow(1.5, attempt - 1), 3000);
+          console.log(`Waiting for AAL2 session (attempt ${attempt + 1}/${maxRetries}, delay ${delay}ms)...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+        
+        await supabase.auth.getSession();
+        
+        const { data: aalData, error: aalError } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+        if (aalError) {
+          console.error('Error getting AAL:', aalError);
+          continue;
+        }
+        
+        currentAalLevel = aalData?.currentLevel || null;
+        console.log(`AAL level after attempt ${attempt + 1}:`, currentAalLevel);
+        
+        if (currentAalLevel === 'aal2') {
+          await supabase.auth.getSession();
+          console.log('Session confirmed at AAL2');
+          break;
+        }
+      }
+      
+      if (currentAalLevel !== 'aal2') {
+        console.error('Failed to achieve AAL2 after MFA verification');
+        setState(prev => ({ ...prev, isLoading: false }));
+        return { success: false, error: 'Session upgrade failed. Please try logging in again.' };
+      }
+      
       setState(prev => ({
         ...prev,
         currentLevel: 'aal2',

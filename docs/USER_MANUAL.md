@@ -1201,8 +1201,80 @@ Update your profile:
 Manage account security:
 
 - **Change Password**: Update your password
+- **Two-Factor Authentication**: Add extra security to your account
 - **Session Management**: View active sessions
 - **Login History**: See recent logins
+
+### 19.2.1 Two-Factor Authentication (2FA)
+
+Two-factor authentication adds an extra layer of security to your account by requiring both your password and a verification code from your mobile device.
+
+#### Why Enable 2FA?
+
+| Benefit | Description |
+|---------|-------------|
+| **Enhanced Security** | Protects your account even if your password is compromised |
+| **Compliance** | Meets security requirements for sensitive data access |
+| **Peace of Mind** | Know your account is protected by industry-standard security |
+
+#### Setting Up 2FA
+
+1. Go to **Settings** > **Security**
+2. Find the **Two-Factor Authentication** section
+3. Click **"Enable Two-Factor Authentication"**
+4. A QR code will appear on screen
+5. Open your authenticator app (Google Authenticator, Authy, Microsoft Authenticator, or 1Password)
+6. Scan the QR code with your app
+7. Enter the 6-digit verification code shown in your app
+8. Click **"Verify & Enable"**
+
+**Important**: If you cannot scan the QR code, click "Cannot scan?" to view the secret key that you can manually enter into your authenticator app.
+
+#### Logging In with 2FA
+
+Once 2FA is enabled, your login process will include an additional step:
+
+1. Enter your email and password as usual
+2. Click **"Sign In"**
+3. A verification screen will appear
+4. Open your authenticator app
+5. Enter the 6-digit code shown in your app
+6. Click **"Verify"** to complete login
+
+#### Managing 2FA
+
+- **View Enrolled Authenticators**: See which devices are set up for 2FA
+- **Add Backup Authenticator**: Set up a second authenticator app as backup
+- **Remove Authenticator**: Remove an authenticator device (requires verification)
+
+#### Disabling 2FA
+
+1. Go to **Settings** > **Security**
+2. Find your enrolled authenticator in the **Two-Factor Authentication** section
+3. Click the trash icon next to the authenticator
+4. Confirm removal in the dialog
+5. Your account will return to password-only authentication
+
+**Warning**: Disabling 2FA reduces your account security. Only disable if necessary.
+
+#### Supported Authenticator Apps
+
+The following apps are compatible with PACT 2FA:
+
+- Google Authenticator (iOS, Android)
+- Authy (iOS, Android, Desktop)
+- Microsoft Authenticator (iOS, Android)
+- 1Password (iOS, Android, Desktop)
+- Any TOTP-compatible authenticator app
+
+#### Troubleshooting 2FA
+
+| Issue | Solution |
+|-------|----------|
+| **Code not working** | Ensure your device time is synchronized (Settings > Date & Time > Automatic) |
+| **Lost authenticator device** | Contact your administrator to reset 2FA |
+| **QR code not scanning** | Use the manual secret key entry option |
+| **App not showing codes** | Check that you added the correct account in your authenticator app |
 
 ## 19.3 Notification Preferences
 

@@ -101,8 +101,27 @@ Jane Smith,jane@example.com,+0987654321,Coordinator,Junior
 | **Deactivate** | User list > Select user > Actions > Deactivate |
 | **Reactivate** | User list > Filter: Inactive > Select > Reactivate |
 | **Reset Password** | User detail > Security > Reset Password |
+| **Reset 2FA** | User detail > Security > Reset Two-Factor Authentication |
 | **Force Logout** | User detail > Sessions > End All Sessions |
 | **Delete** | User detail > Actions > Delete (with audit log) |
+
+### Two-Factor Authentication Management
+
+As an administrator, you can help users manage their 2FA settings:
+
+**When a user loses access to their authenticator:**
+1. Navigate to the user's detail page
+2. Go to **Security** settings
+3. Click **"Reset Two-Factor Authentication"**
+4. Confirm the reset
+5. Notify the user they can now log in with just their password
+6. Advise them to set up 2FA again from their Settings > Security page
+
+**Best Practices:**
+- Encourage all users to enable 2FA for enhanced security
+- Recommend users set up a backup authenticator app
+- Keep a secure process for verifying user identity before resetting 2FA
+- Document all 2FA resets in the audit log for security compliance
 
 ## 2.3 User Classifications
 
