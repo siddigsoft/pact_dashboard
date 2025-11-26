@@ -120,6 +120,67 @@ async function setWorkflowStageAwaitingPermits(mmpId: string) {
   } catch {}
 }
 
+/**
+ * Checks for existing site codes in the database
+ * @param siteCodes Array of site codes to check
+ * @returns Object with duplicate site codes and their details
+ */
+async function checkExistingSiteCodes(siteCodes: string[]): Promise<{
+  duplicates: Array<{ siteCode: string; existingEntry: { id: string; site_name: string; mmp_file_id: string } }>;
+  uniqueCodes: string[];
+}> {
+  if (!siteCodes || siteCodes.length === 0) {
+    return { duplicates: [], uniqueCodes: [] };
+  }
+
+  // Filter out empty/null site codes
+  const validSiteCodes = siteCodes.filter(code => code && code.trim() !== '');
+  
+  if (validSiteCodes.length === 0) {
+    return { duplicates: [], uniqueCodes: [] };
+  }
+
+  try {
+    // Query database for existing site codes
+    const { data: existingEntries, error } = await supabase
+      .from('mmp_site_entries')
+      .select('id, site_code, site_name, mmp_file_id')
+      .in('site_code', validSiteCodes);
+
+    if (error) {
+      console.error('Error checking existing site codes:', error);
+      // Don't block upload on query error, but log it
+      return { duplicates: [], uniqueCodes: validSiteCodes };
+    }
+
+    const existingSiteCodes = new Set((existingEntries || []).map(e => e.site_code));
+    const duplicates: Array<{ siteCode: string; existingEntry: { id: string; site_name: string; mmp_file_id: string } }> = [];
+    const uniqueCodes: string[] = [];
+
+    // Categorize site codes
+    validSiteCodes.forEach(code => {
+      const existing = (existingEntries || []).find(e => e.site_code === code);
+      if (existing) {
+        duplicates.push({
+          siteCode: code,
+          existingEntry: {
+            id: existing.id,
+            site_name: existing.site_name,
+            mmp_file_id: existing.mmp_file_id
+          }
+        });
+      } else {
+        uniqueCodes.push(code);
+      }
+    });
+
+    return { duplicates, uniqueCodes };
+  } catch (error) {
+    console.error('Unexpected error checking existing site codes:', error);
+    return { duplicates: [], uniqueCodes: validSiteCodes };
+  }
+}
+
 // Parse file through validateCSV and map rows to MMPSiteEntry while preserving unmapped columns
 async function parseAndCountEntries(file: File): Promise<{ entries: MMPSiteEntry[]; count: number; errors: string[]; warnings: string[]; rawErrors: CSVValidationError[]; rawWarnings: CSVValidationError[] }> {
   const issues: string[] = [];
@@ -397,6 +458,50 @@ export async function uploadMMPFile(
       };
     }
 
+    // Check for duplicate site codes in the database - BLOCKING
+    onProgress?.({ current: 40, total: 100, stage: 'Checking for duplicate site codes' });
+    const siteCodes = entries.map(e => e.siteCode).filter(Boolean) as string[];
+    const { duplicates } = await checkExistingSiteCodes(siteCodes);
+    
+    // Block upload if duplicate site codes are found
+    if (duplicates.length > 0) {
+      // Remove uploaded file to avoid orphaned storage object
+      try { await supabase.storage.from('mmp-files').remove([filePath]); } catch {}
+      
+      // Build detailed error message
+      const duplicateDetails = duplicates.map(dup => 
+        `  - "${dup.siteCode}" (Site: ${dup.existingEntry.site_name || 'Unknown'})`
+      ).join('\n');
+      
+      const errorMessage = `Upload blocked: ${duplicates.length} site code(s) already exist in the database:\n${duplicateDetails}\n\nPlease remove or update these site codes before uploading.`;
+      
+      // Create error entries for validation report
+      const duplicateErrors = duplicates.map(dup => ({
+        type: 'error' as const,
+        message: `Site Code "${dup.siteCode}" already exists in database (Site: ${dup.existingEntry.site_name || 'Unknown'})`,
+        row: entries.findIndex(e => e.siteCode === dup.siteCode) + 1,
+        column: 'Site Code',
+        category: 'duplicate_site_code_db'
+      }));
+      
+      // Build CSV report
+      const header = 'type,row,column,category,message\n';
+      const esc = (s: any) => '"' + String(s ?? '').replace(/"/g, '""') + '"';
+      const allErrors = [...rawErrors, ...duplicateErrors];
+      const rows = allErrors.map(e => [e.type, e.row ?? '', e.column ?? '', e.category ?? '', e.message].map(esc).join(','));
+      const report = header + rows.join('\n');
+      
+      toast.error(`Upload blocked: ${duplicates.length} duplicate site code(s) found in database`);
+      
+      return {
+        success: false,
+        error: errorMessage,
+        validationReport: report,
+        validationErrors: allErrors,
+        validationWarnings: rawWarnings,
+      };
+    }
+
     // Prepare uploader info (name and role) for persistence
     let uploaderDisplay = 'Unknown';
     try {
@@ -601,7 +706,8 @@ export async function uploadMMPFile(
       await notifyStakeholdersOnUpload({ id: mmpData.id, name: mmpData.name, hub: mmpData.hub });
       return {
         success: true,
-        mmpData: mmpData
+        mmpData: mmpData,
+        validationWarnings: rawWarnings
       };
     }
 
@@ -613,7 +719,8 @@ export async function uploadMMPFile(
 
     return {
       success: true,
-      mmpData: mmpData
+      mmpData: mmpData,
+      validationWarnings: rawWarnings
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';

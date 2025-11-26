@@ -75,13 +75,17 @@ export const generateSiteCode = (prefix: string, sequenceNumber: number) => {
 
 /**
  * Validates a site code format
+ * Format: [Hub 2 chars][State 2 chars][Date 6 chars]-[4 digits]
+ * Example: KOKH230524-0001 for Khartoum Hub, Khartoum State, May 24, 2023
  * @param code Site code to validate
  * @returns Boolean indicating if the site code is valid
  */
 export const validateSiteCode = (code: string): boolean => {
-  // Basic validation: Prefix followed by at least 4 digits
-  const regex = /^[A-Z]{2,4}\d{4,}$/;
-  return regex.test(code);
+  if (!code || typeof code !== 'string') return false;
+  // Format: [Hub 2 chars][State 2 chars][Date 6 chars]-[4 digits]
+  // Example: KOKH230524-0001
+  const regex = /^[A-Z]{2}[A-Z]{2}\d{6}-\d{4}$/;
+  return regex.test(code.trim());
 };
 
 /**

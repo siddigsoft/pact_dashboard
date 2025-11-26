@@ -233,7 +233,7 @@ const MMPUpload = () => {
       if (!validateSiteCode(sc)) {
         warnings.push({
           type: 'warning',
-          message: 'Site Code must follow pattern [HH][SS][YYMMDD]-[0001] (e.g., KOKH230524-0001)',
+          message: 'Site Code must follow format [Hub 2 chars][State 2 chars][Date 6 chars]-[4 digits] (e.g., KOKH230524-0001)',
           row: rowNumber,
           column: 'Site Code',
           category: 'invalid_site_code'
