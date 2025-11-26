@@ -297,16 +297,47 @@ export function useMFA() {
     setState(prev => ({ ...prev, enrollmentData: null }));
   }, []);
 
+  const checkMFAStatus = useCallback(async () => {
+    await listFactors();
+    await getAuthenticatorAssuranceLevel();
+  }, [listFactors, getAuthenticatorAssuranceLevel]);
+
+  const unenrollMFA = useCallback(async () => {
+    const factors = await listFactors();
+    const verifiedFactors = factors.filter(f => f.status === 'verified');
+    
+    if (verifiedFactors.length === 0) {
+      return true;
+    }
+    
+    let success = true;
+    for (const factor of verifiedFactors) {
+      const result = await unenrollFactor(factor.id);
+      if (!result) {
+        success = false;
+        break;
+      }
+    }
+    
+    return success;
+  }, [listFactors, unenrollFactor]);
+
+  const mfaEnabled = state.factors.some(f => f.status === 'verified');
+
   return {
     ...state,
+    loading: state.isLoading,
+    mfaEnabled,
     enrollTOTP,
     verifyTOTP,
     unenrollFactor,
+    unenrollMFA,
     listFactors,
     getAuthenticatorAssuranceLevel,
     challengeAndVerify,
     requiresMFA,
     hasMFAEnabled,
     clearEnrollment,
+    checkMFAStatus,
   };
 }
