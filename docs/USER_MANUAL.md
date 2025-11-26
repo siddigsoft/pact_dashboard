@@ -181,15 +181,26 @@ Switch between:
 
 | Role | Description | Primary Permissions |
 |------|-------------|---------------------|
-| **Super Admin** | Highest authority with full system access | All permissions |
-| **Admin** | System administrator | User management, all operations |
-| **ICT** | Technical administrator | System configuration, user support |
-| **Field Operation Manager (FOM)** | Manages field operations | MMP approval, team coordination |
-| **Financial Admin** | Manages financial operations | Budget, payments, approvals |
+| **Super Admin** | Highest authority with full system access | All Admin permissions PLUS: manage super admins, view/restore deleted records, system overrides, manage all wallets |
+| **Admin** | System administrator | User management, role management, project/MMP/site visit CRUD, financial approvals |
+| **ICT** | Technical administrator | System configuration, user support, MMP management |
+| **Field Operation Manager (FOM)** | Manages field operations | MMP approval, team coordination, site visit assignment |
+| **Financial Admin** | Manages financial operations | Budget management, payment approvals, wallet operations |
 | **Supervisor** | Supervises field teams | Team monitoring, site visit review |
 | **Coordinator** | Coordinates field activities | Site visit management |
 | **Data Collector** | Collects field data | Site visit execution |
 | **Reviewer** | Reviews submissions | Read-only access to verify data |
+
+### Super Admin Exclusive Capabilities
+
+Super Admin is the highest role in the system with these exclusive permissions:
+
+- **Manage Super Admins**: Create, deactivate, and manage other super admin accounts (maximum 3 allowed)
+- **Audit Log Access**: Full access to deletion audit logs
+- **Record Restoration**: Ability to restore deleted records
+- **System Override**: Override system restrictions and approvals
+- **All Wallet Management**: Full control over all user wallets
+- **Complete Permission Bypass**: All permission checks automatically pass
 
 ## 4.2 Viewing Users
 
