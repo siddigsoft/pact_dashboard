@@ -328,7 +328,7 @@ export const validateCSV = async (
           if (!validateSiteCode(record['Site Code'])) {
             warnings.push({
               type: 'warning',
-              message: 'Site Code must follow pattern [HH][SS][YYMMDD]-[0001] (e.g., KOKH230524-0001)',
+              message: 'Site Code must follow format [Hub 2 chars][State 2 chars][Date 6 chars]-[4 digits] (e.g., KOKH230524-0001)',
               row,
               column: 'Site Code',
               category: 'invalid_site_code'
@@ -336,7 +336,7 @@ export const validateCSV = async (
           } else if (siteCodes.has(record['Site Code'])) {
             warnings.push({
               type: 'warning',
-              message: `Duplicate Site Code: ${record['Site Code']}`,
+              message: `Duplicate Site Code in file: ${record['Site Code']}`,
               row,
               column: 'Site Code',
               category: 'duplicate_site_code'
