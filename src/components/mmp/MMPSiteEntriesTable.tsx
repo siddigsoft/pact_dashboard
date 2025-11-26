@@ -599,6 +599,32 @@ const MMPSiteEntriesTable = ({
                           </div>
                         )}
 
+                        {row.status?.toLowerCase() === 'rejected' && (row.rejectionComments || row.rejectedBy || row.rejectedAt) && (
+                          <div className="bg-red-50 p-3 rounded border border-red-200">
+                            <span className="text-red-700 font-medium text-sm">Rejection Information:</span>
+                            {row.rejectionComments && (
+                              <div className="mt-2">
+                                <span className="text-red-600 text-xs font-medium">Reason:</span>
+                                <p className="text-sm text-gray-900 mt-1 whitespace-pre-wrap">{row.rejectionComments}</p>
+                              </div>
+                            )}
+                            <div className="grid grid-cols-2 gap-2 mt-2">
+                              {row.rejectedBy && (
+                                <div>
+                                  <span className="text-red-600 text-xs font-medium">Rejected By:</span>
+                                  <p className="text-sm text-gray-900">{row.rejectedBy}</p>
+                                </div>
+                              )}
+                              {row.rejectedAt && (
+                                <div>
+                                  <span className="text-red-600 text-xs font-medium">Rejected At:</span>
+                                  <p className="text-sm text-gray-900">{new Date(row.rejectedAt).toLocaleString()}</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
                         <div className="flex gap-2 pt-2 border-t">
                           {editable ? (
                             isEditing ? (
@@ -684,6 +710,9 @@ const MMPSiteEntriesTable = ({
                     <TableHead className="w-[100px]">Transport Fee</TableHead>
                     <TableHead className="w-[100px]">Total Cost</TableHead>
                     <TableHead className="w-[200px]">Comments</TableHead>
+                    <TableHead className="w-[200px]">Rejection Reason</TableHead>
+                    <TableHead className="w-[100px]">Rejected By</TableHead>
+                    <TableHead className="w-[120px]">Rejected At</TableHead>
                     <TableHead className="w-[100px]">Verified By</TableHead>
                     <TableHead className="w-[120px]">Verified At</TableHead>
                     <TableHead className="w-[150px]">Verification Notes</TableHead>
@@ -859,6 +888,36 @@ const MMPSiteEntriesTable = ({
                             {isEditing ? (
                               <Input value={draft?.comments ?? row.comments ?? ''} onChange={(e) => setDraft((d:any)=> ({...(d||{}), comments: e.target.value}))} className="h-8" />
                             ) : row.comments}
+                          </TableCell>
+                          <TableCell>
+                            {row.rejectionComments ? (
+                              <div className="text-sm max-w-xs text-red-700 font-medium" title={row.rejectionComments}>
+                                {row.rejectionComments.length > 50 
+                                  ? `${row.rejectionComments.substring(0, 50)}...` 
+                                  : row.rejectionComments}
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {row.rejectedBy ? (
+                              <div className="font-medium text-sm text-red-700">{row.rejectedBy}</div>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {row.rejectedAt ? (
+                              <div className="text-sm">
+                                {new Date(row.rejectedAt).toLocaleDateString()}
+                                <div className="text-xs text-muted-foreground">
+                                  {new Date(row.rejectedAt).toLocaleTimeString()}
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
                           </TableCell>
                           <TableCell>
                             {row.verifiedBy ? (
@@ -1147,6 +1206,40 @@ const MMPSiteEntriesTable = ({
                     </div>
                   </div>
                 </div>
+
+                {/* Section: Rejection Information (if rejected) */}
+                {row.status?.toLowerCase() === 'rejected' && (row.rejectionComments || row.rejectedBy || row.rejectedAt) && (
+                  <div className="bg-red-50 p-5 rounded-lg border border-red-200 space-y-4">
+                    <div className="flex items-center gap-2 pb-3 border-b border-red-300">
+                      <div className="bg-red-600 text-white rounded w-6 h-6 flex items-center justify-center font-semibold text-sm">
+                        !
+                      </div>
+                      <h3 className="text-base font-semibold text-red-900">Rejection Information</h3>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {row.rejectionComments && (
+                        <div className="sm:col-span-2 bg-white p-3 rounded border border-red-200">
+                          <p className="text-xs font-medium text-red-600 mb-1">Rejection Reason</p>
+                          <p className="font-medium text-gray-900 whitespace-pre-wrap">{row.rejectionComments}</p>
+                        </div>
+                      )}
+                      {row.rejectedBy && (
+                        <div className="bg-white p-3 rounded border border-red-200">
+                          <p className="text-xs font-medium text-red-600 mb-1">Rejected By</p>
+                          <p className="font-medium text-gray-900">{row.rejectedBy}</p>
+                        </div>
+                      )}
+                      {row.rejectedAt && (
+                        <div className="bg-white p-3 rounded border border-red-200">
+                          <p className="text-xs font-medium text-red-600 mb-1">Rejected At</p>
+                          <p className="font-medium text-gray-900">
+                            {new Date(row.rejectedAt).toLocaleString()}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* Section 2: Site Cost Details */}
                 <div className="bg-gray-50 p-5 rounded-lg border space-y-4">

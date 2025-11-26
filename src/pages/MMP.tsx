@@ -1784,6 +1784,29 @@ const MMP = () => {
     loadCompletedCount();
   }, [mmpFiles]); // Reload when MMP files change
 
+  // Always load the rejected count for the badge, regardless of active tab
+  useEffect(() => {
+    const loadRejectedCount = async () => {
+      try {
+        // Use database count instead of loading all entries
+        // Count entries with status = 'rejected'
+        const { count, error } = await supabase
+          .from('mmp_site_entries')
+          .select('*', { count: 'exact', head: true })
+          .ilike('status', 'rejected');
+
+        if (error) throw error;
+
+        setRejectedCount(count || 0);
+      } catch (error) {
+        console.error('Failed to load rejected count:', error);
+        setRejectedCount(0);
+      }
+    };
+
+    loadRejectedCount();
+  }, [mmpFiles]); // Reload when MMP files change
+
   // Load enumerator site entries only when user is DataCollector
   useEffect(() => {
     const loadEnumeratorEntries = async () => {
@@ -2451,7 +2474,7 @@ const MMP = () => {
           .from('mmp_site_entries')
           .select('*')
           .ilike('status', 'rejected')
-          .order('updated_at', { ascending: false })
+          .order('rejected_at', { ascending: false, nullsFirst: false })
           .limit(1000); // Limit to 1000 entries for performance
 
         if (allError) throw allError;
@@ -2462,6 +2485,10 @@ const MMP = () => {
           // Read fees from columns first, fallback to additional_data
           const enumeratorFee = entry.enumerator_fee ?? additionalData.enumerator_fee;
           const transportFee = entry.transport_fee ?? additionalData.transport_fee;
+          // Read rejection data from columns first, fallback to additional_data
+          const rejectionComments = entry.rejection_comments ?? additionalData.rejection_comments ?? additionalData.rejection_reason;
+          const rejectedBy = entry.rejected_by ?? additionalData.rejected_by;
+          const rejectedAt = entry.rejected_at ?? additionalData.rejected_at;
           return {
             ...entry,
             siteName: entry.site_name,
@@ -2487,6 +2514,13 @@ const MMP = () => {
             dispatched_at: entry.dispatched_at,
             accepted_by: entry.accepted_by,
             accepted_at: entry.accepted_at,
+            // Include rejection data
+            rejection_comments: rejectionComments,
+            rejectionComments: rejectionComments,
+            rejected_by: rejectedBy,
+            rejectedBy: rejectedBy,
+            rejected_at: rejectedAt,
+            rejectedAt: rejectedAt,
             updated_at: entry.updated_at,
             additionalData: additionalData
           };
