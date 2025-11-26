@@ -4,7 +4,8 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   Home, Map, FileText, Users, MessageSquare, Receipt, 
   DollarSign, Wallet, FolderOpen, BarChart, Calendar,
-  Settings, Archive, MoreHorizontal, X, Sparkles
+  Settings, Archive, MoreHorizontal, X, Sparkles, CreditCard,
+  CheckCircle, TrendingUp
 } from 'lucide-react';
 import { useChat } from '@/context/chat/ChatContextSupabase';
 import { useAppContext } from '@/context/AppContext';
@@ -45,7 +46,11 @@ const MobileNavigation = () => {
 
   const secondaryNavItems: NavItem[] = [
     { icon: DollarSign, label: 'Finance', path: '/finance', roles: ['admin' as AppRole, 'financialAdmin' as AppRole, 'fom' as AppRole] },
+    { icon: TrendingUp, label: 'Financial Ops', path: '/financial-operations', roles: ['admin' as AppRole, 'financialAdmin' as AppRole, 'fom' as AppRole] },
     { icon: Wallet, label: 'Wallet', path: '/wallet', roles: [] },
+    { icon: CreditCard, label: 'Admin Wallets', path: '/admin/wallets', roles: ['admin' as AppRole, 'financialAdmin' as AppRole] },
+    { icon: CheckCircle, label: 'Withdrawals', path: '/withdrawal-approval', roles: ['admin' as AppRole, 'financialAdmin' as AppRole, 'fom' as AppRole] },
+    { icon: DollarSign, label: 'Budget', path: '/budget', roles: ['admin' as AppRole, 'financialAdmin' as AppRole, 'fom' as AppRole] },
     { icon: FolderOpen, label: 'Projects', path: '/projects', roles: [] },
     { icon: BarChart, label: 'Reports', path: '/reports', roles: ['admin' as AppRole, 'supervisor' as AppRole, 'fom' as AppRole, 'financialAdmin' as AppRole] },
     { icon: Receipt, label: 'Costs', path: '/cost-submission', roles: ['dataCollector' as AppRole, 'admin' as AppRole] },

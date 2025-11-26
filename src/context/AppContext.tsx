@@ -15,8 +15,8 @@ import { WalletProvider } from './wallet/WalletContext';
 import { BudgetProvider } from './budget/BudgetContext';
 import { ClassificationProvider } from './classification/ClassificationContext';
 import { CostSubmissionProvider } from './costApproval/CostSubmissionContext';
-
-
+import { DownPaymentProvider } from './downPayment/DownPaymentContext';
+import { SuperAdminProvider } from './superAdmin/SuperAdminContext';
 
 interface CompositeContextType {
   currentUser: ReturnType<typeof useUser>['currentUser'];
@@ -128,31 +128,35 @@ export const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children
       <NotificationProvider>
         <UserProvider>
           <ClassificationProvider>
-            <SiteVisitProvider>
-              <MMPProvider>
-                <ProjectProvider>
-                  <SettingsProvider>
-                    <ArchiveProvider>
-                      <RoleManagementProvider>
-                        <CompositeContextProvider>
-                          <WalletProvider>
+            <WalletProvider>
+              <SiteVisitProvider>
+                <MMPProvider>
+                  <ProjectProvider>
+                    <SettingsProvider>
+                      <ArchiveProvider>
+                        <RoleManagementProvider>
+                          <CompositeContextProvider>
                             <BudgetProvider>
                               <CostSubmissionProvider>
-                                <ChatProvider>
-                                  <CommunicationProvider>
-                                    {children}
-                                  </CommunicationProvider>
-                                </ChatProvider>
+                                <DownPaymentProvider>
+                                  <SuperAdminProvider>
+                                    <ChatProvider>
+                                      <CommunicationProvider>
+                                        {children}
+                                      </CommunicationProvider>
+                                    </ChatProvider>
+                                  </SuperAdminProvider>
+                                </DownPaymentProvider>
                               </CostSubmissionProvider>
                             </BudgetProvider>
-                          </WalletProvider>
-                        </CompositeContextProvider>
-                      </RoleManagementProvider>
-                    </ArchiveProvider>
-                  </SettingsProvider>
-                </ProjectProvider>
-              </MMPProvider>
-            </SiteVisitProvider>
+                          </CompositeContextProvider>
+                        </RoleManagementProvider>
+                      </ArchiveProvider>
+                    </SettingsProvider>
+                  </ProjectProvider>
+                </MMPProvider>
+              </SiteVisitProvider>
+            </WalletProvider>
           </ClassificationProvider>
         </UserProvider>
       </NotificationProvider>
@@ -162,8 +166,8 @@ export const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children
 
 export const useAppContext = () => {
   const context = useContext(AppContext);
-  if (context === undefined) {
-    throw new Error('useAppContext must be used within an AppProvider');
+  if (!context) {
+    throw new Error('useAppContext must be used within AppProviders');
   }
   return context;
 };

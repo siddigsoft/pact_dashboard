@@ -7,6 +7,7 @@ import { calculateOnTimeRate, calculateUserRating } from './utils';
 import { isUserNearSite, calculateUserWorkload, calculateDistance } from '@/utils/collectorUtils';
 import { fetchSiteVisits, createSiteVisitInDb, updateSiteVisitInDb, deleteSiteVisitInDb } from './supabase';
 import { useNotifications } from '../notifications/NotificationContext';
+import { useWallet } from '../wallet/WalletContext';
 import { supabase } from '@/integrations/supabase/client';
 
 const SiteVisitContext = createContext<SiteVisitContextType | undefined>(undefined);
@@ -16,6 +17,7 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
   const { currentUser, users, updateUser } = useUser();
+  const { addSiteVisitFeeToWallet } = useWallet();
   
   useEffect(() => {
     const loadSiteVisits = async () => {
@@ -560,83 +562,43 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         });
       });
 
+      const complexityMap: Record<string, number> = {
+        'low': 1.0,
+        'medium': 1.5,
+        'high': 2.0,
+      };
+      
+      const complexityMultiplier = complexityMap[siteVisit.complexity] ?? 1.0;
+      
       try {
-        const { data: costData, error: costError } = await supabase
-          .from('site_visit_costs')
-          .select('*')
-          .eq('site_visit_id', siteVisitId)
-          .single();
+        await addSiteVisitFeeToWallet(assignedUserId, siteVisitId, complexityMultiplier);
 
-        if (costData && !costError) {
-          const totalCost = (
-            parseFloat(costData.transportation_cost || 0) +
-            parseFloat(costData.accommodation_cost || 0) +
-            parseFloat(costData.meal_allowance || 0) +
-            parseFloat(costData.other_costs || 0)
-          );
-
-          if (totalCost > 0) {
-            const { data: walletData, error: walletError } = await supabase
-              .from('wallets')
-              .select('*')
-              .eq('user_id', assignedUserId)
-              .single();
-
-            let walletId = walletData?.id;
-            let currentBalance = 0;
-
-            if (!walletData || walletError) {
-              const { data: newWallet, error: createError } = await supabase
-                .from('wallets')
-                .insert({
-                  user_id: assignedUserId,
-                  balances: { SDG: totalCost },
-                  total_earned: totalCost,
-                })
-                .select()
-                .single();
-
-              if (createError) throw createError;
-              walletId = newWallet.id;
-            } else {
-              currentBalance = parseFloat(walletData.balances?.SDG || 0);
-              const newBalance = currentBalance + totalCost;
-              
-              await supabase
-                .from('wallets')
-                .update({
-                  balances: { ...walletData.balances, SDG: newBalance },
-                  total_earned: parseFloat(walletData.total_earned || 0) + totalCost,
-                  updated_at: new Date().toISOString(),
-                })
-                .eq('id', walletId);
-            }
-
-            await supabase.from('wallet_transactions').insert({
-              wallet_id: walletId,
-              user_id: assignedUserId,
-              type: 'site_visit_completion',
-              amount: totalCost,
-              currency: 'SDG',
-              site_visit_id: siteVisitId,
-              description: `Site visit completed: ${siteVisit.siteName}`,
-              balance_before: currentBalance,
-              balance_after: currentBalance + totalCost,
-              created_by: currentUser.id,
-            });
-
-            addNotification({
-              userId: assignedUserId,
-              title: "Payment Received",
-              message: `${totalCost.toFixed(2)} SDG added to your wallet for completing ${siteVisit.siteName}`,
-              type: "success",
-              relatedEntityId: siteVisitId,
-              relatedEntityType: "siteVisit",
-            });
-          }
-        }
+        addNotification({
+          userId: assignedUserId,
+          title: "Payment Received",
+          message: `Site visit fee added to your wallet for completing ${siteVisit.siteName}`,
+          type: "success",
+          relatedEntityId: siteVisitId,
+          relatedEntityType: "siteVisit",
+        });
       } catch (walletErr) {
         console.error('Failed to add wallet payment:', walletErr);
+        console.warn('Wallet payment failed, but site visit is still marked as completed');
+        
+        toast({
+          title: "Warning: Payment Processing Failed",
+          description: "Site visit completed successfully, but wallet payment could not be processed. Please contact support.",
+          variant: "destructive",
+        });
+        
+        addNotification({
+          userId: assignedUserId,
+          title: "Payment Processing Failed",
+          message: `Site visit ${siteVisit.siteName} was completed, but wallet payment failed. Please contact support.`,
+          type: "error",
+          relatedEntityId: siteVisitId,
+          relatedEntityType: "siteVisit",
+        });
       }
 
       toast({

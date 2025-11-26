@@ -12,6 +12,7 @@ import {
   LayoutDashboard,
   ChevronUp,
   Shield,
+  ShieldCheck,
   Calendar,
   Archive,
   CreditCard,
@@ -40,6 +41,7 @@ import {
 } from "@/components/ui/sidebar";
 import { AppRole } from "@/types";
 import { useAuthorization } from "@/hooks/use-authorization";
+import { useSuperAdmin } from "@/context/superAdmin/SuperAdminContext";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -61,7 +63,8 @@ interface MenuGroup {
 const getMenuGroups = (
   roles: AppRole[] = [], 
   defaultRole: string = 'dataCollector',
-  perms: Record<string, boolean> = {}
+  perms: Record<string, boolean> = {},
+  isSuperAdmin: boolean = false
 ): MenuGroup[] => {
   const isAdmin = roles.includes('admin' as AppRole) || defaultRole === 'admin';
   const isICT = roles.includes('ict' as AppRole) || defaultRole === 'ict';
@@ -100,6 +103,7 @@ const getMenuGroups = (
   const adminItems = [] as MenuGroup['items'];
   if (isAdmin || isICT || perms.users) adminItems.push({ title: "User Management", url: "/users", icon: Users });
   if (isAdmin || perms.roleManagement) adminItems.push({ title: "Role Management", url: "/role-management", icon: Shield });
+  if (isSuperAdmin) adminItems.push({ title: "Super Admin", url: "/super-admin-management", icon: ShieldCheck });
   if (isAdmin || isFinancialAdmin) adminItems.push({ title: "Classifications", url: "/classifications", icon: Award });
   if (perms.financialOperations) adminItems.push({ title: "Financial Operations", url: "/financial-operations", icon: TrendingUp });
   if (isAdmin || perms.settings) adminItems.push({ title: "Settings", url: "/settings", icon: Settings });
@@ -122,6 +126,7 @@ const AppSidebar = () => {
   const navigate = useNavigate();
   const { currentUser, logout, roles } = useAppContext();
   const { showDueReminders } = useSiteVisitReminders();
+  const { isSuperAdmin } = useSuperAdmin();
   
   const { checkPermission, hasAnyRole, canManageRoles } = useAuthorization();
   const isAdmin = hasAnyRole(['admin']);
@@ -140,7 +145,7 @@ const AppSidebar = () => {
     settings: checkPermission('settings', 'read') || isAdmin,
     financialOperations: checkPermission('finances', 'update') || checkPermission('finances', 'approve') || isAdmin || hasAnyRole(['financialAdmin']),
   };
-  const menuGroups = currentUser ? getMenuGroups(roles || [], currentUser.role, perms) : [];
+  const menuGroups = currentUser ? getMenuGroups(roles || [], currentUser.role, perms, isSuperAdmin) : [];
 
   const getInitials = (name: string) =>
     name.split(" ").map((part) => part[0]).join("").toUpperCase().substring(0, 2);
