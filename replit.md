@@ -57,3 +57,13 @@ Real-time capabilities include a Live Dashboard powered by Supabase Realtime cha
 
 *   **Hosting:** Replit (development), Vercel (production-ready configuration).
 *   **Mobile Deployment:** Capacitor (iOS/Android builds, native device API access).
+
+## Documentation
+
+Complete user and administrator documentation is available in the `/docs` folder:
+
+*   **USER_MANUAL.md** - Comprehensive A-Z guide for all users covering all features
+*   **QUICK_START_GUIDE.md** - 5-minute getting started guide
+*   **ADMIN_GUIDE.md** - Complete administrator and system configuration guide
+*   **MOBILE_APP_GUIDE.md** - iOS and Android mobile application guide
+*   **BUG_REPORT_AND_ENHANCEMENTS.md** - Current issues and recommended improvements
