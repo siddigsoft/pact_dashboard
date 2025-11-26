@@ -23,6 +23,7 @@ interface CompositeContextType {
   authReady: boolean;
   users: ReturnType<typeof useUser>['users'];
   refreshUsers: ReturnType<typeof useUser>['refreshUsers'];
+  hydrateCurrentUser: ReturnType<typeof useUser>['hydrateCurrentUser'];
   login: ReturnType<typeof useUser>['login'];
   logout: ReturnType<typeof useUser>['logout'];
   registerUser: ReturnType<typeof useUser>['registerUser'];

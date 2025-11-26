@@ -4136,7 +4136,7 @@ const MMP = () => {
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div className="bg-white p-4 rounded-lg border">
-                    <p className="text-xs font-medium text-gray-600 mb-2">Enumerator Fee</p>
+                    <p className="text-xs font-medium text-gray-600 mb-2">Data Collector Fee</p>
                     <p className="text-2xl font-semibold text-gray-900">
                       ${(selectedSiteForAcknowledgment.enumerator_fee || selectedSiteForAcknowledgment.enumeratorFee || 20).toLocaleString()}
                     </p>

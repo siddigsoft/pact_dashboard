@@ -16,7 +16,37 @@ The frontend is built with React 18, TypeScript, React Router DOM v6, Vite, Tail
 
 ### Backend Architecture
 
-The backend leverages PostgreSQL via Supabase, with robust Row Level Security (RLS) and real-time subscriptions. The database schema supports profiles, roles, projects, MMPs, site visits, budgets, wallets, and cost submissions, including detailed audit logs for financial transactions and deletions. Authentication is handled by Supabase Auth, providing email/password login, session management, and role-based access control. Data flow is managed through context providers, with optimistic updates and Supabase Storage for file management.
+The backend leverages PostgreSQL via Supabase, with robust Row Level Security (RLS) and real-time subscriptions. The database schema supports profiles, roles, projects, MMPs, site visits, budgets, wallets, and cost submissions, including detailed audit logs for financial transactions and deletions. Authentication is handled by Supabase Auth, providing email/password login, Google OAuth, session management, role-based access control, and Two-Factor Authentication (2FA) using TOTP. Data flow is managed through context providers, with optimistic updates and Supabase Storage for file management.
+
+### Two-Factor Authentication (2FA)
+
+The platform implements TOTP-based two-factor authentication using Supabase's built-in MFA system:
+
+*   **Key Files:**
+    *   `src/hooks/use-mfa.ts` - Custom hook for MFA operations (enroll, verify, unenroll, status checks)
+    *   `src/components/auth/TwoFactorSetup.tsx` - QR code enrollment and factor management component
+    *   `src/components/auth/TwoFactorChallenge.tsx` - Login verification challenge component
+    *   `src/components/auth/AuthForm.tsx` - Updated login flow with MFA challenge integration
+
+*   **Authentication Flow:**
+    1. User enters email/password and clicks Sign In
+    2. System authenticates credentials via Supabase Auth
+    3. If 2FA is enabled (AAL2 required), the TwoFactorChallenge component is displayed
+    4. User enters 6-digit code from their authenticator app
+    5. Code is verified via Supabase MFA challenge/verify flow with robust AAL2 polling (up to 15 retries with exponential backoff)
+    6. User context is hydrated with retry logic (up to 10 retries) to handle eventual consistency
+    7. Upon successful verification and hydration, user proceeds to the dashboard
+
+*   **Supported Authenticator Apps:**
+    *   Google Authenticator
+    *   Authy
+    *   Microsoft Authenticator
+    *   1Password
+    *   Any TOTP-compatible app
+
+*   **Settings Integration:**
+    *   Users manage 2FA in Settings > Security tab
+    *   Can enable/disable 2FA, view enrolled authenticators, add backup authenticators
 
 ### Authorization System
 
@@ -57,3 +87,13 @@ Real-time capabilities include a Live Dashboard powered by Supabase Realtime cha
 
 *   **Hosting:** Replit (development), Vercel (production-ready configuration).
 *   **Mobile Deployment:** Capacitor (iOS/Android builds, native device API access).
+
+## Documentation
+
+Complete user and administrator documentation is available in the `/docs` folder:
+
+*   **USER_MANUAL.md** - Comprehensive A-Z guide for all users covering all features
+*   **QUICK_START_GUIDE.md** - 5-minute getting started guide
+*   **ADMIN_GUIDE.md** - Complete administrator and system configuration guide
+*   **MOBILE_APP_GUIDE.md** - iOS and Android mobile application guide
+*   **BUG_REPORT_AND_ENHANCEMENTS.md** - Current issues and recommended improvements

@@ -1,13 +1,28 @@
 import React, { useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
-import { Icon, LatLngBounds } from 'leaflet';
+import L, { Icon, LatLngBounds } from 'leaflet';
 import { MapPin, Calendar, User as UserIcon, Navigation, Briefcase } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { SiteVisit } from '@/types/siteVisit';
 import { User } from '@/types/user';
 import { format } from 'date-fns';
 import { getUserStatus } from '@/utils/userStatusUtils';
 import 'leaflet/dist/leaflet.css';
+
+const escapeHtml = (str: string): string => {
+  const htmlEntities: Record<string, string> = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+    '/': '&#x2F;',
+    '`': '&#x60;',
+    '=': '&#x3D;'
+  };
+  return str.replace(/[&<>"'`=/]/g, (char) => htmlEntities[char] || char);
+};
 
 interface PlanningSiteVisitsMapProps {
   siteVisits: SiteVisit[];
@@ -61,27 +76,148 @@ const createSiteIcon = (status: string, priority: string) => {
   });
 };
 
-const createTeamMemberIcon = (role: string, statusType: 'online' | 'same-day' | 'offline') => {
-  // Color based on status
-  let borderColor = '#22c55e'; // green for online
-  if (statusType === 'same-day') borderColor = '#f97316'; // orange for active today
-  if (statusType === 'offline') borderColor = '#9ca3af'; // gray for offline
+const createTeamMemberIcon = (
+  role: string, 
+  statusType: 'online' | 'same-day' | 'offline',
+  avatar?: string,
+  name?: string
+) => {
+  let borderColor = '#22c55e';
+  if (statusType === 'same-day') borderColor = '#f97316';
+  if (statusType === 'offline') borderColor = '#9ca3af';
   
-  // Icon shape based on role
-  let roleSymbol = 'E'; // Enumerator/DataCollector
+  let roleSymbol = 'D';
   if (role.toLowerCase().includes('coordinator')) roleSymbol = 'C';
   if (role.toLowerCase().includes('supervisor') || role.toLowerCase().includes('fom')) roleSymbol = 'S';
   
-  return new Icon({
-    iconUrl: `data:image/svg+xml;base64,${btoa(`
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-        <circle cx="16" cy="16" r="14" fill="${borderColor}" stroke="white" stroke-width="2"/>
-        <text x="16" y="21" text-anchor="middle" font-size="16" font-weight="bold" fill="white">${roleSymbol}</text>
-      </svg>
-    `)}`,
-    iconSize: [28, 28],
-    iconAnchor: [14, 28],
-    popupAnchor: [0, -28],
+  const safeName = name ? escapeHtml(name) : '';
+  const safeAvatar = avatar ? escapeHtml(avatar) : '';
+  const initials = name ? escapeHtml(name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()) : roleSymbol;
+
+  if (avatar) {
+    return L.divIcon({
+      className: 'custom-team-marker-with-photo',
+      html: `
+        <style>
+          @keyframes pulse-anim {
+            0%, 100% { box-shadow: 0 0 0 0 ${borderColor}80; }
+            50% { box-shadow: 0 0 0 8px ${borderColor}00; }
+          }
+        </style>
+        <div style="
+          position: relative;
+          width: 52px;
+          height: 52px;
+          ${statusType === 'online' ? 'animation: pulse-anim 2s infinite;' : ''}
+        ">
+          <div style="
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            border: 3px solid ${borderColor};
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            overflow: hidden;
+            background: white;
+          ">
+            <img 
+              src="${safeAvatar}" 
+              alt="${safeName || 'Team Member'}"
+              style="width: 100%; height: 100%; object-fit: cover;"
+              onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+            />
+            <div style="
+              display: none;
+              width: 100%;
+              height: 100%;
+              background: linear-gradient(135deg, ${borderColor}90, ${borderColor});
+              color: white;
+              font-size: 16px;
+              font-weight: bold;
+              align-items: center;
+              justify-content: center;
+            ">${initials}</div>
+          </div>
+          <div style="
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: ${borderColor};
+            border: 2px solid white;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: bold;
+            color: white;
+          ">${roleSymbol}</div>
+        </div>
+      `,
+      iconSize: [52, 52],
+      iconAnchor: [26, 26],
+      popupAnchor: [0, -26],
+    });
+  }
+  
+  return L.divIcon({
+    className: 'custom-team-marker',
+    html: `
+      <style>
+        @keyframes pulse-anim {
+          0%, 100% { box-shadow: 0 0 0 0 ${borderColor}80; }
+          50% { box-shadow: 0 0 0 8px ${borderColor}00; }
+        }
+      </style>
+      <div style="
+        position: relative;
+        width: 52px;
+        height: 52px;
+        ${statusType === 'online' ? 'animation: pulse-anim 2s infinite;' : ''}
+      ">
+        <div style="
+          width: 48px;
+          height: 48px;
+          border-radius: 50%;
+          border: 3px solid ${borderColor};
+          box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+          overflow: hidden;
+          background: linear-gradient(135deg, ${borderColor}90, ${borderColor});
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        ">
+          <span style="
+            color: white;
+            font-size: 16px;
+            font-weight: bold;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+          ">${initials}</span>
+        </div>
+        <div style="
+          position: absolute;
+          bottom: 0;
+          right: 0;
+          width: 18px;
+          height: 18px;
+          border-radius: 50%;
+          background: ${borderColor};
+          border: 2px solid white;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 10px;
+          font-weight: bold;
+          color: white;
+        ">${roleSymbol}</div>
+      </div>
+    `,
+    iconSize: [52, 52],
+    iconAnchor: [26, 26],
+    popupAnchor: [0, -26],
   });
 };
 
@@ -100,7 +236,7 @@ const PlanningSiteVisitsMap: React.FC<PlanningSiteVisitsMapProps> = ({ siteVisit
 
   // Group team members by role
   const teamByRole = useMemo(() => {
-    const enumerators = teamWithLocation.filter(m => 
+    const dataCollectors = teamWithLocation.filter(m => 
       m.roles?.some(r => r.toLowerCase().includes('datacollector') || r.toLowerCase().includes('enumerator'))
     );
     const coordinators = teamWithLocation.filter(m => 
@@ -109,7 +245,7 @@ const PlanningSiteVisitsMap: React.FC<PlanningSiteVisitsMapProps> = ({ siteVisit
     const supervisors = teamWithLocation.filter(m => 
       m.roles?.some(r => r.toLowerCase().includes('supervisor') || r.toLowerCase().includes('fom'))
     );
-    return { enumerators, coordinators, supervisors };
+    return { dataCollectors, coordinators, supervisors };
   }, [teamWithLocation]);
 
   const hasAnyData = visitsWithCoords.length > 0 || teamWithLocation.length > 0;
@@ -181,8 +317,8 @@ const PlanningSiteVisitsMap: React.FC<PlanningSiteVisitsMapProps> = ({ siteVisit
           <div className="h-4 border-l mx-1" />
           <div className="font-semibold text-foreground">Team:</div>
           <div className="flex items-center gap-1.5">
-            <div className="w-5 h-5 rounded-full bg-green-500 border-2 border-white flex items-center justify-center text-[10px] font-bold text-white">E</div>
-            <span>Data Collectors ({teamByRole.enumerators.length})</span>
+            <div className="w-5 h-5 rounded-full bg-green-500 border-2 border-white flex items-center justify-center text-[10px] font-bold text-white">D</div>
+            <span>Data Collectors ({teamByRole.dataCollectors.length})</span>
           </div>
           <div className="flex items-center gap-1.5">
             <div className="w-5 h-5 rounded-full bg-green-500 border-2 border-white flex items-center justify-center text-[10px] font-bold text-white">C</div>
@@ -343,34 +479,37 @@ const PlanningSiteVisitsMap: React.FC<PlanningSiteVisitsMapProps> = ({ siteVisit
               <Marker
                 key={`team-${member.id}`}
                 position={[member.location!.latitude, member.location!.longitude]}
-                icon={createTeamMemberIcon(role, status.type)}
+                icon={createTeamMemberIcon(role, status.type, member.avatar, member.fullName)}
               >
                 <Popup>
-                  <div className="p-2 min-w-[250px]">
-                    <h4 className="font-semibold text-sm mb-2 flex items-center gap-2">
-                      <UserIcon className="h-4 w-4" />
-                      {member.fullName}
-                    </h4>
+                  <div className="p-3 min-w-[280px]">
+                    <div className="flex items-start gap-3 mb-3">
+                      <Avatar className="h-14 w-14 border-2" style={{ borderColor: status.type === 'online' ? '#22c55e' : status.type === 'same-day' ? '#f97316' : '#9ca3af' }}>
+                        <AvatarImage src={member.avatar} alt={member.fullName} />
+                        <AvatarFallback className="text-lg font-bold" style={{ backgroundColor: status.type === 'online' ? '#22c55e' : status.type === 'same-day' ? '#f97316' : '#9ca3af', color: 'white' }}>
+                          {member.fullName?.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() || '?'}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1">
+                        <h4 className="font-semibold text-base">{member.fullName}</h4>
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <Badge variant="outline" className="text-xs h-5">
+                            {role}
+                          </Badge>
+                          <Badge 
+                            variant={status.type === 'online' ? 'default' : 'outline'}
+                            className={`text-xs h-5 ${
+                              status.type === 'online' ? 'bg-green-500 hover:bg-green-600' :
+                              status.type === 'same-day' ? 'bg-orange-500 hover:bg-orange-600 text-white' :
+                              ''
+                            }`}
+                          >
+                            {status.label}
+                          </Badge>
+                        </div>
+                      </div>
+                    </div>
                     <div className="space-y-1.5 text-xs">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-muted-foreground">Role:</span>
-                        <Badge variant="outline" className="text-xs h-5">
-                          {role}
-                        </Badge>
-                      </div>
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-muted-foreground">Status:</span>
-                        <Badge 
-                          variant={status.type === 'online' ? 'default' : 'outline'}
-                          className={`text-xs h-5 ${
-                            status.type === 'online' ? 'bg-green-500 hover:bg-green-600' :
-                            status.type === 'same-day' ? 'bg-orange-500 hover:bg-orange-600 text-white' :
-                            ''
-                          }`}
-                        >
-                          {status.label}
-                        </Badge>
-                      </div>
                       {member.email && (
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-muted-foreground">Email:</span>
