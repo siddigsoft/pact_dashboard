@@ -21,6 +21,14 @@ export type NotificationSettings = {
   enabled: boolean;
   email: boolean;
   sound: boolean;
+  browserPush: boolean;
+  categories: {
+    assignments: boolean;
+    approvals: boolean;
+    financial: boolean;
+    team: boolean;
+    system: boolean;
+  };
 };
 
 export type AppearanceSettings = {
@@ -78,12 +86,21 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
   const [dataVisibilitySettings, setDataVisibilitySettings] = useState<DataVisibilitySettings | null>(null);
   const [dashboardSettings, setDashboardSettings] = useState<DashboardSettings | null>(null);
   
-  // Frontend-only settings that we'll eventually migrate to the database
-  const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>({
+  const defaultNotificationSettings: NotificationSettings = {
     enabled: true,
     email: false,
     sound: false,
-  });
+    browserPush: false,
+    categories: {
+      assignments: true,
+      approvals: true,
+      financial: true,
+      team: true,
+      system: true,
+    },
+  };
+  
+  const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>(defaultNotificationSettings);
   const [appearanceSettings, setAppearanceSettings] = useState<AppearanceSettings>({
     darkMode: false,
     theme: 'default',
@@ -117,6 +134,22 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
               darkMode: userData.settings.theme === 'dark',
               theme: userData.settings.theme === 'system' ? 'default' : userData.settings.theme,
             }));
+          }
+          if (userData.settings?.notificationPreferences) {
+            const savedPrefs = userData.settings.notificationPreferences;
+            setNotificationSettings({
+              enabled: savedPrefs.enabled ?? defaultNotificationSettings.enabled,
+              email: savedPrefs.email ?? defaultNotificationSettings.email,
+              sound: savedPrefs.sound ?? defaultNotificationSettings.sound,
+              browserPush: savedPrefs.browserPush ?? defaultNotificationSettings.browserPush,
+              categories: {
+                assignments: savedPrefs.categories?.assignments ?? defaultNotificationSettings.categories.assignments,
+                approvals: savedPrefs.categories?.approvals ?? defaultNotificationSettings.categories.approvals,
+                financial: savedPrefs.categories?.financial ?? defaultNotificationSettings.categories.financial,
+                team: savedPrefs.categories?.team ?? defaultNotificationSettings.categories.team,
+                system: savedPrefs.categories?.system ?? defaultNotificationSettings.categories.system,
+              },
+            });
           }
         }
 
@@ -197,10 +230,8 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
     }
   };
   
-  // Update notification settings (currently frontend-only)
   const updateNotificationSettings = async (settings: NotificationSettings) => {
     setNotificationSettings(settings);
-    // We'll update user settings in the database
     await updateUserSettings({ notificationPreferences: settings });
   };
   

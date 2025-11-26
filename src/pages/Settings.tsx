@@ -97,6 +97,34 @@ const Settings = () => {
     });
   };
 
+  const handleBrowserPushToggle = async (checked: boolean) => {
+    if (checked && 'Notification' in window) {
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') {
+        toast({
+          title: "Permission denied",
+          description: "Browser notifications were not enabled. Please allow notifications in your browser settings.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+    updateNotificationSettings({
+      ...notificationSettings,
+      browserPush: checked
+    });
+  };
+
+  const handleCategoryToggle = (category: keyof typeof notificationSettings.categories, checked: boolean) => {
+    updateNotificationSettings({
+      ...notificationSettings,
+      categories: {
+        ...notificationSettings.categories,
+        [category]: checked
+      }
+    });
+  };
+
   const handleDarkModeToggle = (checked: boolean) => {
     updateAppearanceSettings({
       ...appearanceSettings,
@@ -543,6 +571,101 @@ const Settings = () => {
                   disabled={!notificationSettings.enabled}
                   data-testid="switch-sound-alerts"
                 />
+              </div>
+              
+              <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
+                <div className="space-y-1">
+                  <Label htmlFor="browser-push" className="text-base font-medium">Browser Push Notifications</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Receive notifications even when the browser tab is in the background
+                  </p>
+                </div>
+                <Switch 
+                  id="browser-push" 
+                  checked={notificationSettings.browserPush}
+                  onCheckedChange={handleBrowserPushToggle}
+                  disabled={!notificationSettings.enabled}
+                  data-testid="switch-browser-push"
+                />
+              </div>
+
+              <div className="pt-4 border-t">
+                <h4 className="text-sm font-semibold mb-3">Notification Categories</h4>
+                <p className="text-xs text-muted-foreground mb-4">
+                  Choose which types of notifications you want to receive
+                </p>
+                
+                <div className="grid gap-3">
+                  <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="cat-assignments" className="text-sm font-medium">Site Assignments</Label>
+                      <p className="text-xs text-muted-foreground">New assignments and site visit updates</p>
+                    </div>
+                    <Switch 
+                      id="cat-assignments"
+                      checked={notificationSettings.categories?.assignments ?? true}
+                      onCheckedChange={(checked) => handleCategoryToggle('assignments', checked)}
+                      disabled={!notificationSettings.enabled}
+                      data-testid="switch-cat-assignments"
+                    />
+                  </div>
+                  
+                  <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="cat-approvals" className="text-sm font-medium">Approvals</Label>
+                      <p className="text-xs text-muted-foreground">MMP approvals and review requests</p>
+                    </div>
+                    <Switch 
+                      id="cat-approvals"
+                      checked={notificationSettings.categories?.approvals ?? true}
+                      onCheckedChange={(checked) => handleCategoryToggle('approvals', checked)}
+                      disabled={!notificationSettings.enabled}
+                      data-testid="switch-cat-approvals"
+                    />
+                  </div>
+                  
+                  <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="cat-financial" className="text-sm font-medium">Financial</Label>
+                      <p className="text-xs text-muted-foreground">Down-payments, costs, and budget updates</p>
+                    </div>
+                    <Switch 
+                      id="cat-financial"
+                      checked={notificationSettings.categories?.financial ?? true}
+                      onCheckedChange={(checked) => handleCategoryToggle('financial', checked)}
+                      disabled={!notificationSettings.enabled}
+                      data-testid="switch-cat-financial"
+                    />
+                  </div>
+                  
+                  <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="cat-team" className="text-sm font-medium">Team Updates</Label>
+                      <p className="text-xs text-muted-foreground">Team member status and location changes</p>
+                    </div>
+                    <Switch 
+                      id="cat-team"
+                      checked={notificationSettings.categories?.team ?? true}
+                      onCheckedChange={(checked) => handleCategoryToggle('team', checked)}
+                      disabled={!notificationSettings.enabled}
+                      data-testid="switch-cat-team"
+                    />
+                  </div>
+                  
+                  <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="cat-system" className="text-sm font-medium">System Alerts</Label>
+                      <p className="text-xs text-muted-foreground">Important system messages and warnings</p>
+                    </div>
+                    <Switch 
+                      id="cat-system"
+                      checked={notificationSettings.categories?.system ?? true}
+                      onCheckedChange={(checked) => handleCategoryToggle('system', checked)}
+                      disabled={!notificationSettings.enabled}
+                      data-testid="switch-cat-system"
+                    />
+                  </div>
+                </div>
               </div>
               
               <div className="flex justify-end pt-4 border-t">

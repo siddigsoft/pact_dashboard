@@ -60,6 +60,34 @@ The platform includes an MMP Upload Workflow for CSV files, featuring upload to 
 
 Real-time capabilities include a Live Dashboard powered by Supabase Realtime channels for key tables, providing toast notifications and automatic data refresh. Real-time location sharing involves GPS coordinate capture, live updates, privacy controls, and location-based assignment.
 
+### Notification System
+
+The platform features a comprehensive notification system with browser push notification support:
+
+*   **Key Files:**
+    *   `src/context/notifications/NotificationContext.tsx` - Core notification context with Supabase realtime subscriptions
+    *   `src/components/BrowserNotificationListener.tsx` - Browser push notification handler
+    *   `src/context/settings/SettingsContext.tsx` - Notification settings persistence
+
+*   **Notification Settings (persisted to database):**
+    *   `enabled` - Master toggle for all notifications
+    *   `email` - Email notification preference
+    *   `sound` - Sound alerts preference
+    *   `browserPush` - Browser desktop push notifications
+    *   `categories` - Granular category toggles:
+        *   `assignments` - Site visit assignments
+        *   `approvals` - MMP and approval workflow notifications
+        *   `financial` - Budget, payments, and cost notifications
+        *   `team` - Team member status and location updates
+        *   `system` - System alerts and warnings
+
+*   **Browser Push Notifications:**
+    *   Requires user permission (requested when enabling the feature)
+    *   Shows desktop notifications when tab is in background
+    *   Respects category preferences for filtering
+    *   Supports click-to-navigate to notification link
+    *   Optional sound alerts
+
 ### Core Feature Specifications
 
 **Transportation Cost & Down-Payment System:** This system calculates transportation costs before dispatch by admins, manages down-payment requests from enumerators/coordinators via a two-tier approval workflow (supervisor → admin), and tracks all cost adjustments with a complete audit trail. It includes a `super_admin` role with a 3-account limit and a deletion audit log.
