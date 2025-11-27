@@ -42,7 +42,9 @@ import {
   Mail,
   HelpCircle,
   Award,
-  Flame
+  Flame,
+  Loader2,
+  RefreshCw
 } from 'lucide-react';
 import { format, isToday, isPast, addDays, differenceInDays, parseISO, isValid } from 'date-fns';
 import { Button } from '@/components/ui/button';
@@ -61,7 +63,7 @@ interface Filters {
 }
 
 export const DataCollectorZone: React.FC = () => {
-  const { currentUser } = useAppContext();
+  const { currentUser, updateUserLocation } = useAppContext();
   const { siteVisits, startSiteVisit } = useSiteVisitContext();
   const { wallet, transactions, stats, getBalance } = useWallet();
   const navigate = useNavigate();
@@ -72,6 +74,108 @@ export const DataCollectorZone: React.FC = () => {
     priority: '',
     dateRange: ''
   });
+  const [isUpdatingLocation, setIsUpdatingLocation] = useState(false);
+  const [locationLastUpdated, setLocationLastUpdated] = useState<string | null>(null);
+
+  // Get current location info
+  const currentLocation = useMemo(() => {
+    if (!currentUser?.location) return null;
+    const loc = typeof currentUser.location === 'string' 
+      ? JSON.parse(currentUser.location) 
+      : currentUser.location;
+    return {
+      latitude: loc?.latitude || loc?.lat,
+      longitude: loc?.longitude || loc?.lng || loc?.lon
+    };
+  }, [currentUser?.location]);
+
+  const hasLocation = currentLocation?.latitude && currentLocation?.longitude;
+
+  // Get location last updated time
+  useEffect(() => {
+    if (currentUser?.location) {
+      // Try to get last updated from profile
+      const fetchLastUpdated = async () => {
+        try {
+          const { data } = await supabase
+            .from('profiles')
+            .select('location_updated_at')
+            .eq('id', currentUser.id)
+            .single();
+          if (data?.location_updated_at) {
+            setLocationLastUpdated(data.location_updated_at);
+          }
+        } catch (error) {
+          console.error('Error fetching location update time:', error);
+        }
+      };
+      fetchLastUpdated();
+    }
+  }, [currentUser?.id, currentUser?.location]);
+
+  // Handle location update
+  const handleUpdateLocation = async () => {
+    if (!navigator.geolocation) {
+      toast({
+        title: 'Location Not Supported',
+        description: 'Geolocation is not supported by your browser.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setIsUpdatingLocation(true);
+    
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        try {
+          const success = await updateUserLocation(latitude, longitude);
+          if (success) {
+            toast({
+              title: 'Location Updated',
+              description: `Your location has been updated: ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`,
+              variant: 'default'
+            });
+            setLocationLastUpdated(new Date().toISOString());
+          } else {
+            throw new Error('Failed to update location');
+          }
+        } catch (error: any) {
+          console.error('Error updating location:', error);
+          toast({
+            title: 'Location Update Failed',
+            description: error?.message || 'Failed to save your location. Please try again.',
+            variant: 'destructive'
+          });
+        } finally {
+          setIsUpdatingLocation(false);
+        }
+      },
+      (error) => {
+        console.error('Geolocation error:', error);
+        let errorMsg = 'Failed to get your location';
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            errorMsg = 'Location permission denied. Please enable location access in your browser settings.';
+            break;
+          case error.POSITION_UNAVAILABLE:
+            errorMsg = 'Location information is unavailable.';
+            break;
+          case error.TIMEOUT:
+            errorMsg = 'Location request timed out. Please try again.';
+            break;
+        }
+        toast({
+          title: 'Location Error',
+          description: errorMsg,
+          variant: 'destructive'
+        });
+        setIsUpdatingLocation(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
+  };
 
   // Get visits assigned to this data collector
   const myVisits = useMemo(() => {
@@ -330,6 +434,72 @@ export const DataCollectorZone: React.FC = () => {
           onClick={() => setActiveTab('wallet')}
         />
       </div>
+
+      {/* Location Update Card */}
+      <Card className="border-blue-200 bg-blue-50 dark:bg-blue-950/20">
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-start gap-3 flex-1">
+              <div className="w-10 h-10 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0">
+                <MapPin className="h-5 w-5 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <h3 className="font-semibold text-blue-900 dark:text-blue-100">Location Sharing</h3>
+                  {hasLocation ? (
+                    <Badge variant="default" className="bg-green-600">
+                      <CheckCircle2 className="h-3 w-3 mr-1" />
+                      Enabled
+                    </Badge>
+                  ) : (
+                    <Badge variant="destructive">Not Set</Badge>
+                  )}
+                </div>
+                <p className="text-sm text-blue-800 dark:text-blue-200 mb-2">
+                  Share your location to appear on the team map and receive nearby site visit assignments.
+                </p>
+                {hasLocation && currentLocation && (
+                  <div className="text-xs text-blue-700 dark:text-blue-300 space-y-1">
+                    <div>
+                      <span className="font-medium">Current Location:</span>{' '}
+                      Lat: {currentLocation.latitude.toFixed(6)}, Lng: {currentLocation.longitude.toFixed(6)}
+                    </div>
+                    {locationLastUpdated && (
+                      <div>
+                        <span className="font-medium">Last Updated:</span>{' '}
+                        {format(parseISO(locationLastUpdated), 'MMM dd, yyyy h:mm:ss a')}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {!hasLocation && (
+                  <p className="text-xs text-blue-700 dark:text-blue-300">
+                    Your location will be visible to supervisors and coordinators for assignment purposes.
+                  </p>
+                )}
+              </div>
+            </div>
+            <Button
+              onClick={handleUpdateLocation}
+              disabled={isUpdatingLocation}
+              className="flex-shrink-0 gap-2"
+              variant={hasLocation ? "default" : "default"}
+            >
+              {isUpdatingLocation ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Updating...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="h-4 w-4" />
+                  {hasLocation ? 'Update Location' : 'Share Location'}
+                </>
+              )}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Streak & Performance Banner */}
       {(streak > 0 || completionRate > 0) && (
