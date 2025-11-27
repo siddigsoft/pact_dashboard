@@ -598,17 +598,7 @@ const SiteVisits = () => {
               </p>
             </div>
           </div>
-          {checkPermission('site_visits', 'create') || hasAnyRole(['admin']) ? (
-            <Button 
-              className="bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-primary-foreground shadow-lg hover:shadow-xl transition-all duration-300" 
-              asChild
-            >
-              <Link to="/site-visits/create" className="gap-2">
-                <Plus className="h-4 w-4" />
-                Create Site Visit
-              </Link>
-            </Button>
-          ) : null}
+          
         </div>
 
         <FOMSiteVisitsDashboard visits={fomVisits} />
