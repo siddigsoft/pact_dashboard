@@ -494,8 +494,8 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
                     <>
                       <p className="text-2xl font-semibold text-gray-900 mt-2">
                         {row.enumeratorFee !== undefined && row.enumeratorFee !== null && String(row.enumeratorFee) !== ''
-                          ? `$${Number(row.enumeratorFee).toLocaleString()}`
-                          : '$20'}
+                          ? `${Number(row.enumeratorFee).toLocaleString()} SDG`
+                          : '20 SDG'}
                       </p>
                       {(!row.enumeratorFee || row.enumeratorFee === null || String(row.enumeratorFee) === '') && (
                         <p className="text-xs text-gray-500 mt-1">(Default Rate)</p>
@@ -530,8 +530,8 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
                     <>
                       <p className="text-2xl font-semibold text-gray-900 mt-2">
                         {row.transportFee !== undefined && row.transportFee !== null && String(row.transportFee) !== ''
-                          ? `$${Number(row.transportFee).toLocaleString()}`
-                          : '$10'}
+                          ? `${Number(row.transportFee).toLocaleString()} SDG`
+                          : '10 SDG'}
                       </p>
                       {(!row.transportFee || row.transportFee === null || String(row.transportFee) === '') && (
                         <p className="text-xs text-gray-500 mt-1">(Default Rate)</p>
@@ -544,13 +544,13 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
                   <Label className="text-xs font-medium text-blue-100">Total Cost</Label>
                   {isEditing ? (
                     <p className="text-2xl font-bold text-white mt-2">
-                      ${((Number(draft?.enumeratorFee ?? 0)) + (Number(draft?.transportFee ?? 0))).toLocaleString()}
+                      {((Number(draft?.enumeratorFee ?? 0)) + (Number(draft?.transportFee ?? 0))).toLocaleString()} SDG
                     </p>
                   ) : (
                     <p className="text-2xl font-bold text-white mt-2">
-                      ${(row.cost !== undefined && row.cost !== null && String(row.cost) !== '' && String(row.cost) !== '—')
-                        ? Number(row.cost).toLocaleString()
-                        : (Number(row.enumeratorFee || 20) + Number(row.transportFee || 10)).toLocaleString()}
+                      {(row.cost !== undefined && row.cost !== null && String(row.cost) !== '' && String(row.cost) !== '—')
+                        ? `${Number(row.cost).toLocaleString()} SDG`
+                        : `${(Number(row.enumeratorFee || 20) + Number(row.transportFee || 10)).toLocaleString()} SDG`}
                     </p>
                   )}
                   <p className="text-xs text-blue-100 mt-2">Complete payment upon visit</p>
