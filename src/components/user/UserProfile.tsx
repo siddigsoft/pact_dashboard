@@ -63,7 +63,7 @@ const UserProfile: React.FC<UserProfileProps> = ({ user, showActions = true }) =
   };
 
   // Check if the current user is an admin
-  const isAdmin = hasRole('admin');
+  const isAdmin = hasRole('Admin');
   
   return (
     <Card className="overflow-hidden">

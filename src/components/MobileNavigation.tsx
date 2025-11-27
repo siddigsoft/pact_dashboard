@@ -5,7 +5,7 @@ import {
   Home, Map, FileText, Users, MessageSquare, Receipt, 
   DollarSign, Wallet, FolderOpen, BarChart, Calendar,
   Settings, Archive, MoreHorizontal, X, Sparkles, CreditCard,
-  CheckCircle, TrendingUp
+  CheckCircle, TrendingUp, MapPin
 } from 'lucide-react';
 import { useChat } from '@/context/chat/ChatContextSupabase';
 import { useAppContext } from '@/context/AppContext';
@@ -38,26 +38,27 @@ const MobileNavigation = () => {
 
   const primaryNavItems: NavItem[] = [
     { icon: Home, label: 'Home', path: '/dashboard', roles: [] },
-    { icon: Map, label: 'Field', path: '/field-team', roles: [] },
+    { icon: MapPin, label: 'Sites', path: '/site-visits', roles: [] },
     { icon: FileText, label: 'MMP', path: '/mmp', roles: [] },
     { icon: MessageSquare, label: 'Chat', path: '/chat', badge: unreadChatCount, roles: [] },
     { icon: MoreHorizontal, label: 'More', path: '', roles: [] }
   ];
 
   const secondaryNavItems: NavItem[] = [
-    { icon: DollarSign, label: 'Finance', path: '/finance', roles: ['admin' as AppRole, 'financialAdmin' as AppRole, 'fom' as AppRole] },
-    { icon: TrendingUp, label: 'Financial Ops', path: '/financial-operations', roles: ['admin' as AppRole, 'financialAdmin' as AppRole, 'fom' as AppRole] },
+    { icon: Map, label: 'Field Team', path: '/field-team', roles: [] },
+    { icon: DollarSign, label: 'Finance', path: '/finance', roles: ['Admin' as AppRole, 'FinancialAdmin' as AppRole, 'Field Operation Manager (FOM)' as AppRole] },
+    { icon: TrendingUp, label: 'Financial Ops', path: '/financial-operations', roles: ['Admin' as AppRole, 'FinancialAdmin' as AppRole, 'Field Operation Manager (FOM)' as AppRole] },
     { icon: Wallet, label: 'Wallet', path: '/wallet', roles: [] },
-    { icon: CreditCard, label: 'Admin Wallets', path: '/admin/wallets', roles: ['admin' as AppRole, 'financialAdmin' as AppRole] },
-    { icon: CheckCircle, label: 'Withdrawals', path: '/withdrawal-approval', roles: ['admin' as AppRole, 'financialAdmin' as AppRole, 'fom' as AppRole] },
-    { icon: DollarSign, label: 'Budget', path: '/budget', roles: ['admin' as AppRole, 'financialAdmin' as AppRole, 'fom' as AppRole] },
+    { icon: CreditCard, label: 'Admin Wallets', path: '/admin/wallets', roles: ['Admin' as AppRole, 'FinancialAdmin' as AppRole] },
+    { icon: CheckCircle, label: 'Withdrawals', path: '/withdrawal-approval', roles: ['Admin' as AppRole, 'FinancialAdmin' as AppRole, 'Field Operation Manager (FOM)' as AppRole] },
+    { icon: DollarSign, label: 'Budget', path: '/budget', roles: ['Admin' as AppRole, 'FinancialAdmin' as AppRole, 'Field Operation Manager (FOM)' as AppRole] },
     { icon: FolderOpen, label: 'Projects', path: '/projects', roles: [] },
-    { icon: BarChart, label: 'Reports', path: '/reports', roles: ['admin' as AppRole, 'supervisor' as AppRole, 'fom' as AppRole, 'financialAdmin' as AppRole] },
-    { icon: Receipt, label: 'Costs', path: '/cost-submission', roles: ['dataCollector' as AppRole, 'admin' as AppRole] },
+    { icon: BarChart, label: 'Reports', path: '/reports', roles: ['Admin' as AppRole, 'Supervisor' as AppRole, 'Field Operation Manager (FOM)' as AppRole, 'FinancialAdmin' as AppRole] },
+    { icon: Receipt, label: 'Costs', path: '/cost-submission', roles: ['DataCollector' as AppRole, 'Admin' as AppRole] },
     { icon: Calendar, label: 'Calendar', path: '/calendar', roles: [] },
     { icon: Users, label: 'Team', path: '/users', roles: [] },
     { icon: Settings, label: 'Settings', path: '/settings', roles: [] },
-    { icon: Archive, label: 'Archive', path: '/archive', roles: ['admin' as AppRole, 'supervisor' as AppRole, 'fom' as AppRole] }
+    { icon: Archive, label: 'Archive', path: '/archive', roles: ['Admin' as AppRole, 'Supervisor' as AppRole, 'Field Operation Manager (FOM)' as AppRole] }
   ].filter(item => hasRole(item.roles || []));
 
   const isActive = (path: string) => {
