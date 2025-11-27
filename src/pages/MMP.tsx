@@ -3,7 +3,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { Upload, ChevronLeft, Trash2 } from 'lucide-react';
+import { Upload, ChevronLeft, Trash2, Hand } from 'lucide-react';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { MMPList } from '@/components/mmp/MMPList';
 import { useToast } from '@/hooks/use-toast';
@@ -3672,7 +3672,23 @@ const MMP = () => {
                     </CardContent>
                   </Card>
                 ) : enumeratorSubTab === 'availableSites' ? (
-                  <div className="space-y-2">
+                  <div className="space-y-4">
+                    <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border-blue-200 dark:border-blue-800">
+                      <CardContent className="py-4 px-4">
+                        <div className="flex items-start gap-3">
+                          <div className="p-2 bg-blue-100 dark:bg-blue-900/50 rounded-full shrink-0">
+                            <Hand className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                          </div>
+                          <div className="flex-1">
+                            <h3 className="font-semibold text-blue-900 dark:text-blue-100 text-base">First-Come, First-Served</h3>
+                            <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
+                              Tap <span className="font-semibold">"Claim Site"</span> to assign a site to yourself. Be quick - other enumerators can see these sites too!
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    
                     {Object.keys(enumeratorGroupedByStates).length === 0 ? (
                       <Card>
                         <CardContent className="py-8">
@@ -3695,6 +3711,11 @@ const MMP = () => {
                                 editable={true}
                                 onAcceptSite={handleAcceptSite}
                                 onSendBackToCoordinator={handleSendBackToCoordinator}
+                                showClaimButton={true}
+                                currentUserId={currentUser?.id}
+                                onSiteClaimed={() => {
+                                  setEnumeratorSiteEntries(prev => prev.filter(s => !sites.find(site => site.id === s.id && s.accepted_by)));
+                                }}
                                 onUpdateSites={async (updatedSites) => {
                                   // Handle updates for enumerator sites
                                   try {
