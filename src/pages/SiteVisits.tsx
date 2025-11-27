@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -109,17 +109,83 @@ const SiteVisits = () => {
     }
   }, [searchParams]);
 
+  // Check if user is a data collector
+  const isDataCollector = useMemo(() => {
+    if (!currentUser) return false;
+    const role = (currentUser.role || '').toLowerCase();
+    return role === 'datacollector' || role === 'data collector';
+  }, [currentUser]);
+
   useEffect(() => {
     const canViewAll = canViewAllSiteVisits();
-    let filtered = canViewAll
-      ? siteVisits
-      : siteVisits.filter(visit => visit.assignedTo === currentUser?.id);
+    
+    // For data collectors, apply special filtering logic:
+    // - "dispatched" status: show ALL dispatched visits (not filtered by user)
+    // - "assigned", "accepted", "ongoing", "completed": filter by assignedTo === currentUser.id
+    // - Other statuses or "all": filter by assignedTo === currentUser.id
+    let filtered: SiteVisit[];
+    
+    if (isDataCollector && currentUser?.id) {
+      // Check if we're filtering by a specific status
+      if (statusFilter === "dispatched") {
+        // For dispatched status, show ALL dispatched visits regardless of assignedTo
+        filtered = siteVisits.filter(visit => 
+          visit.status?.toLowerCase() === 'dispatched'
+        );
+      } else if (statusFilter === "all") {
+        // For "all", show dispatched (all) + assigned/accepted/ongoing/completed (filtered by user)
+        const dispatchedVisits = siteVisits.filter(visit => 
+          visit.status?.toLowerCase() === 'dispatched'
+        );
+        const userAssignedVisits = siteVisits.filter(visit => {
+          const status = visit.status?.toLowerCase();
+          return visit.assignedTo === currentUser.id && 
+                 (status === 'assigned' || status === 'accepted' || 
+                  status === 'ongoing' || status === 'completed');
+        });
+        filtered = [...dispatchedVisits, ...userAssignedVisits];
+      } else {
+        // For specific statuses (assigned, accepted, ongoing, completed), filter by user
+        const statusesToFilterByUser = ['assigned', 'accepted', 'ongoing', 'completed'];
+        if (statusesToFilterByUser.includes(statusFilter.toLowerCase())) {
+          filtered = siteVisits.filter(visit => 
+            visit.assignedTo === currentUser.id && 
+            visit.status?.toLowerCase() === statusFilter.toLowerCase()
+          );
+        } else {
+          // For other statuses, still filter by user
+          filtered = siteVisits.filter(visit => visit.assignedTo === currentUser.id);
+        }
+      }
+    } else {
+      // For non-data collectors, use existing logic
+      filtered = canViewAll
+        ? siteVisits
+        : siteVisits.filter(visit => visit.assignedTo === currentUser?.id);
+    }
 
     if (statusFilter !== "all") {
       if (statusFilter === "overdue") {
         filtered = filtered.filter(visit => isOverdue(visit.dueDate, visit.status));
+      } else if (statusFilter === "scheduled") {
+        // Scheduled includes both assigned and permitVerified
+        filtered = filtered.filter(visit => 
+          visit.status === 'assigned' || visit.status === 'permitVerified'
+        );
+      } else if (statusFilter === "dispatched") {
+        // For dispatched status, only apply filter if user is NOT a data collector
+        // (data collectors already have all dispatched visits from above)
+        if (!isDataCollector) {
+          filtered = filtered.filter(visit => visit.status?.toLowerCase() === 'dispatched');
+        }
       } else {
-        filtered = filtered.filter(visit => visit.status === statusFilter);
+        // For other statuses, only apply filter if:
+        // - User is NOT a data collector, OR
+        // - User is a data collector but the status is not one we already filtered (assigned, accepted, ongoing, completed)
+        const statusesAlreadyFiltered = ['assigned', 'accepted', 'ongoing', 'completed'];
+        if (!isDataCollector || !statusesAlreadyFiltered.includes(statusFilter.toLowerCase())) {
+          filtered = filtered.filter(visit => visit.status?.toLowerCase() === statusFilter.toLowerCase());
+        }
       }
     }
 
@@ -167,10 +233,17 @@ const SiteVisits = () => {
     setFilteredVisits(filtered);
     
     if (view === 'map' && filtered.length > 0) {
-      const pendingVisit = filtered.find(v => v.status === 'pending');
-      setSelectedVisit(pendingVisit || null);
+      // For data collectors viewing dispatched, select first dispatched visit
+      // Otherwise, select first pending visit
+      let selected: SiteVisit | undefined;
+      if (isDataCollector && statusFilter === 'dispatched') {
+        selected = filtered.find(v => v.status?.toLowerCase() === 'dispatched');
+      } else {
+        selected = filtered.find(v => v.status === 'pending');
+      }
+      setSelectedVisit(selected || null);
     }
-  }, [currentUser, siteVisits, statusFilter, searchTerm, sortBy, view, hubParam, regionParam, monthParam]);
+  }, [currentUser, siteVisits, statusFilter, searchTerm, sortBy, view, hubParam, regionParam, monthParam, isDataCollector, canViewAllSiteVisits]);
 
   const handleRemoveFilter = (filterType: string) => {
     setActiveFilters(prev => ({
@@ -193,14 +266,13 @@ const SiteVisits = () => {
   const handleStatusClick = (status: string) => {
     // Handle special case for scheduled status (which includes multiple statuses)
     if (status === 'scheduled') {
-      // For scheduled, we'll filter to show assigned and permitVerified statuses
-      // Since we can only filter by one status at a time, we'll default to 'assigned'
-      setStatusFilter('assigned');
+      // For scheduled, we use a special filter that will show both assigned and permitVerified
+      setStatusFilter('scheduled');
       setActiveFilters(prev => ({
         ...prev,
-        status: 'assigned',
+        status: 'scheduled',
       }));
-      setSearchParams({ status: 'assigned' });
+      setSearchParams({ status: 'scheduled' });
     } else {
       setStatusFilter(status);
       setActiveFilters(prev => ({
@@ -319,10 +391,21 @@ const SiteVisits = () => {
             </>
           ) : (
             <div className="space-y-4">
-              <h3 className="text-lg font-medium">Select a site visit to assign</h3>
+              <h3 className="text-lg font-medium">
+                {isDataCollector && statusFilter === 'dispatched' 
+                  ? 'Select a dispatched site visit to accept' 
+                  : 'Select a site visit to assign'}
+              </h3>
               <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
                 {filteredVisits
-                  .filter(visit => visit.status === 'pending')
+                  .filter(visit => {
+                    // For data collectors viewing dispatched, show dispatched visits
+                    if (isDataCollector && statusFilter === 'dispatched') {
+                      return visit.status?.toLowerCase() === 'dispatched';
+                    }
+                    // Otherwise, show pending visits
+                    return visit.status === 'pending';
+                  })
                   .slice(0, 6)
                   .map(visit => (
                     <Card 
@@ -343,9 +426,18 @@ const SiteVisits = () => {
                     </Card>
                   ))}
                 
-                {filteredVisits.filter(visit => visit.status === 'pending').length === 0 && (
+                {filteredVisits.filter(visit => {
+                  if (isDataCollector && statusFilter === 'dispatched') {
+                    return visit.status?.toLowerCase() === 'dispatched';
+                  }
+                  return visit.status === 'pending';
+                }).length === 0 && (
                   <div className="col-span-full flex items-center justify-center p-8 bg-muted/20 rounded-lg">
-                    <p className="text-muted-foreground">No pending site visits to assign</p>
+                    <p className="text-muted-foreground">
+                      {isDataCollector && statusFilter === 'dispatched'
+                        ? 'No dispatched site visits available'
+                        : 'No pending site visits to assign'}
+                    </p>
                   </div>
                 )}
               </div>
@@ -481,11 +573,14 @@ const SiteVisits = () => {
               Site Visits
             </h1>
             <p className="text-muted-foreground">
-              Manage and track all site visits
+              {isDataCollector 
+                ? "View and manage your assigned site visits" 
+                : "Manage and track all site visits"}
             </p>
           </div>
         </div>
-        {(checkPermission('site_visits', 'create') || hasAnyRole(['admin'])) && (
+        {/* Hide create button for data collectors - they only complete assigned visits */}
+        {!isDataCollector && (checkPermission('site_visits', 'create') || hasAnyRole(['admin'])) && (
           <Button 
             className="bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-primary-foreground shadow-lg hover:shadow-xl transition-all duration-300" 
             asChild
@@ -499,14 +594,39 @@ const SiteVisits = () => {
       </div>
 
       <SiteVisitStats 
-        visits={siteVisits} 
+        visits={(() => {
+          // For data collectors, show:
+          // - All dispatched visits (for dispatched stat)
+          // - Their assigned/accepted/ongoing/completed visits (for other stats)
+          if (isDataCollector && currentUser?.id) {
+            const dispatchedVisits = siteVisits.filter(visit => 
+              visit.status?.toLowerCase() === 'dispatched'
+            );
+            const userAssignedVisits = siteVisits.filter(visit => {
+              const status = visit.status?.toLowerCase();
+              return visit.assignedTo === currentUser.id && 
+                     (status === 'assigned' || status === 'accepted' || 
+                      status === 'ongoing' || status === 'completed');
+            });
+            return [...dispatchedVisits, ...userAssignedVisits];
+          }
+          // For other users, show all visits they can view
+          const canViewAll = canViewAllSiteVisits();
+          return canViewAll 
+            ? siteVisits 
+            : siteVisits.filter(visit => visit.assignedTo === currentUser?.id);
+        })()}
         onStatusClick={handleStatusClick}
+        isDataCollector={isDataCollector}
       />
 
-      <ApprovedMMPList 
-        mmps={approvedMMPs} // Pass the filtered MMP files
-        onSelectMMP={(mmp) => navigate(`/site-visits/create/mmp/${mmp.id}`)}
-      />
+      {/* Hide MMP section for data collectors - they don't create visits from MMPs */}
+      {!isDataCollector && (
+        <ApprovedMMPList 
+          mmps={approvedMMPs} // Pass the filtered MMP files
+          onSelectMMP={(mmp) => navigate(`/site-visits/create/mmp/${mmp.id}`)}
+        />
+      )}
 
       <div className="flex flex-col gap-4" data-results-section>
         <div className="flex flex-col md:flex-row md:items-center gap-4 justify-between">
@@ -547,12 +667,27 @@ const SiteVisits = () => {
         {statusFilter !== 'all' && (
           <div className="flex items-center gap-2 p-3 bg-primary/5 border border-primary/20 rounded-lg">
             <div className="text-sm font-medium text-primary">
-              Showing {statusFilter === 'assigned' ? 'scheduled' : statusFilter === 'overdue' ? 'overdue' : statusFilter} visits
+              Showing {statusFilter === 'scheduled' 
+                ? 'scheduled (assigned & permit verified)' 
+                : statusFilter === 'overdue' 
+                ? 'overdue' 
+                : statusFilter} visits
+              {isDataCollector && currentUser?.id && (
+                <span className="text-xs text-muted-foreground ml-2">
+                  {statusFilter.toLowerCase() === 'dispatched' 
+                    ? '(All dispatched sites)' 
+                    : '(Your assignments only)'}
+                </span>
+              )}
             </div>
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => handleStatusClick('all')}
+              onClick={() => {
+                setStatusFilter('all');
+                setActiveFilters(prev => ({ ...prev, status: 'all' }));
+                setSearchParams({});
+              }}
               className="text-primary hover:text-primary/80"
             >
               Clear filter
