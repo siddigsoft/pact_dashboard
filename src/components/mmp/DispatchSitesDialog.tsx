@@ -355,15 +355,20 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
         ? [selectedCollector]
         : filteredCollectors.map(c => c.id);
 
-      if (targetCollectors.length === 0) {
+      // For individual dispatch, we need a specific collector
+      if (dispatchType === 'individual' && targetCollectors.length === 0) {
         toast({
-          title: 'No collectors found',
-          description: `No data collectors found for the selected ${dispatchType === 'state' ? 'state' : 'locality'}.`,
+          title: 'No collector selected',
+          description: 'Please select a data collector to assign the sites to.',
           variant: 'destructive'
         });
         setLoading(false);
         return;
       }
+      
+      // For state/locality dispatch, we can proceed even without collectors
+      // Sites will be available for claiming when collectors are added later
+      const noCollectorsWarning = (dispatchType === 'state' || dispatchType === 'locality') && targetCollectors.length === 0;
 
       // Get current user
       const { data: { user: authUser } } = await supabase.auth.getUser();
@@ -612,6 +617,12 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
           description: `Dispatched ${successCount} site(s), but ${errorCount} failed. Check console for details.`,
           variant: 'destructive'
         });
+      } else if (noCollectorsWarning) {
+        toast({
+          title: 'Sites Dispatched - No Collectors Yet',
+          description: `Successfully dispatched ${successCount} site(s). No data collectors are currently registered in this ${dispatchType === 'state' ? 'state' : 'locality'}. Sites will be available for claiming when collectors are added.`,
+          variant: 'default'
+        });
       } else {
         toast({
           title: 'Sites Dispatched',
@@ -679,9 +690,21 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
                   </SelectContent>
                 </Select>
                 {selectedState && (
-                  <p className="text-sm text-muted-foreground">
-                    {filteredCollectors.length} data collector(s) found in {selectedState}
-                  </p>
+                  filteredCollectors.length > 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      {filteredCollectors.length} data collector(s) found in {selectedState}
+                    </p>
+                  ) : (
+                    <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 rounded-md">
+                      <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-500 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-medium text-amber-800 dark:text-amber-200">No data collectors in {selectedState}</p>
+                        <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
+                          You can still dispatch sites. They will be available for claiming when collectors are registered in this state.
+                        </p>
+                      </div>
+                    </div>
+                  )
                 )}
               </div>
             )}
@@ -719,9 +742,21 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
                     </SelectContent>
                   </Select>
                   {selectedLocality && (
-                    <p className="text-sm text-muted-foreground">
-                      {filteredCollectors.length} data collector(s) found in {selectedLocality}
-                    </p>
+                    filteredCollectors.length > 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        {filteredCollectors.length} data collector(s) found in {selectedLocality}
+                      </p>
+                    ) : (
+                      <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 rounded-md">
+                        <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-500 flex-shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-sm font-medium text-amber-800 dark:text-amber-200">No data collectors in {selectedLocality}</p>
+                          <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
+                            You can still dispatch sites. They will be available for claiming when collectors are registered in this locality.
+                          </p>
+                        </div>
+                      </div>
+                    )
                   )}
                 </div>
               </>
