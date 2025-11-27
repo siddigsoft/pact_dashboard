@@ -262,7 +262,7 @@ export const stateColors: Record<string, string> = {
 };
 
 export const hubColors: Record<string, string> = {
-  'kassala-hub': '#8B5CF6',
+  'kassala-hub': '#22C55E',
   'kosti-hub': '#F97316',
   'el-fasher-hub': '#EC4899',
   'dongola-hub': '#3B82F6',
