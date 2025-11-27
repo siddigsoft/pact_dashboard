@@ -6,12 +6,13 @@ import {
   Calendar, 
   Shield, 
   TrendingUp,
-  Briefcase
+  Briefcase,
+  MapPin
 } from 'lucide-react';
 import { useAppContext } from '@/context/AppContext';
 import { DashboardCommandBar } from './DashboardCommandBar';
 
-export type DashboardZone = 'operations' | 'team' | 'planning' | 'compliance' | 'performance' | 'fom';
+export type DashboardZone = 'operations' | 'team' | 'planning' | 'compliance' | 'performance' | 'fom' | 'data-collector';
 
 interface DashboardZoneLayoutProps {
   activeZone: DashboardZone;
@@ -27,6 +28,14 @@ const zones = [
     description: 'Field operations manager',
     color: 'text-purple-500',
     roles: ['fom', 'fieldoperationmanager']
+  },
+  {
+    id: 'data-collector' as DashboardZone,
+    label: 'My Visits',
+    icon: MapPin,
+    description: 'Data collector',
+    color: 'text-green-500',
+    roles: ['datacollector', 'datacollector']
   },
   {
     id: 'operations' as DashboardZone,

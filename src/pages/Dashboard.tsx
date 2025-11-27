@@ -9,6 +9,7 @@ import { PlanningZone } from '@/components/dashboard/zones/PlanningZone';
 import { ComplianceZone } from '@/components/dashboard/zones/ComplianceZone';
 import { PerformanceZone } from '@/components/dashboard/zones/PerformanceZone';
 import { FOMZone } from '@/components/dashboard/zones/FOMZone';
+import { DataCollectorZone } from '@/components/dashboard/zones/DataCollectorZone';
 
 // Helper to normalize roles for matching
 const normalizeRole = (role: string): string => {
@@ -33,6 +34,16 @@ const Dashboard = () => {
       return 'fom';
     }
     
+    // Check if user is Data Collector
+    const isDataCollector = roles?.some(r => {
+      const normalized = normalizeRole(r);
+      return normalized.includes('datacollector');
+    });
+    
+    if (isDataCollector) {
+      return 'data-collector';
+    }
+    
     // All other users default to Operations zone as the primary command center
     return 'operations';
   }, [roles]);
@@ -47,6 +58,8 @@ const Dashboard = () => {
     switch (activeZone) {
       case 'fom':
         return <FOMZone />;
+      case 'data-collector':
+        return <DataCollectorZone />;
       case 'operations':
         return <OperationsZone />;
       case 'team':
