@@ -329,12 +329,7 @@ export const FOMZone: React.FC = () => {
             </p>
           </div>
         </div>
-        <div className="flex gap-2">
-          <Button onClick={() => navigate('/mmp/new')} className="gap-2">
-            <Plus className="h-4 w-4" />
-            New MMP
-          </Button>
-        </div>
+     
       </div>
 
       {/* Key Metrics Grid */}
