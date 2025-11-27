@@ -8,6 +8,7 @@ import { TeamZone } from '@/components/dashboard/zones/TeamZone';
 import { PlanningZone } from '@/components/dashboard/zones/PlanningZone';
 import { ComplianceZone } from '@/components/dashboard/zones/ComplianceZone';
 import { PerformanceZone } from '@/components/dashboard/zones/PerformanceZone';
+import { FOMZone } from '@/components/dashboard/zones/FOMZone';
 
 // Helper to normalize roles for matching
 const normalizeRole = (role: string): string => {
@@ -22,7 +23,17 @@ const Dashboard = () => {
 
   // Determine default zone based on user role
   const defaultZone = useMemo((): DashboardZone => {
-    // All users default to Operations zone as the primary command center
+    // Check if user is FOM
+    const isFOM = roles?.some(r => {
+      const normalized = normalizeRole(r);
+      return normalized.includes('fom') || normalized.includes('fieldoperationmanager');
+    });
+    
+    if (isFOM) {
+      return 'fom';
+    }
+    
+    // All other users default to Operations zone as the primary command center
     return 'operations';
   }, [roles]);
 
@@ -34,6 +45,8 @@ const Dashboard = () => {
 
   const renderZoneContent = () => {
     switch (activeZone) {
+      case 'fom':
+        return <FOMZone />;
       case 'operations':
         return <OperationsZone />;
       case 'team':

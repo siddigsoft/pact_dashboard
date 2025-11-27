@@ -5,12 +5,13 @@ import {
   Users, 
   Calendar, 
   Shield, 
-  TrendingUp
+  TrendingUp,
+  Briefcase
 } from 'lucide-react';
 import { useAppContext } from '@/context/AppContext';
 import { DashboardCommandBar } from './DashboardCommandBar';
 
-export type DashboardZone = 'operations' | 'team' | 'planning' | 'compliance' | 'performance';
+export type DashboardZone = 'operations' | 'team' | 'planning' | 'compliance' | 'performance' | 'fom';
 
 interface DashboardZoneLayoutProps {
   activeZone: DashboardZone;
@@ -20,12 +21,20 @@ interface DashboardZoneLayoutProps {
 
 const zones = [
   {
+    id: 'fom' as DashboardZone,
+    label: 'FOM Dashboard',
+    icon: Briefcase,
+    description: 'Field operations manager',
+    color: 'text-purple-500',
+    roles: ['fom', 'fieldoperationmanager']
+  },
+  {
     id: 'operations' as DashboardZone,
     label: 'Operations',
     icon: ClipboardList,
     description: 'Field operations',
     color: 'text-blue-500',
-    roles: ['admin', 'fom', 'supervisor', 'coordinator']
+    roles: ['admin', 'supervisor', 'coordinator']
   },
   {
     id: 'team' as DashboardZone,
@@ -68,9 +77,18 @@ export const DashboardZoneLayout: React.FC<DashboardZoneLayoutProps> = ({
 }) => {
   const { roles } = useAppContext();
 
+  const normalizeRoleForMatch = (role: string): string => {
+    return role.toLowerCase()
+      .replace(/\s+/g, '')
+      .replace(/[()]/g, '');
+  };
+
   const hasRoleAccess = (zoneRoles: string[]) => {
-    if (roles?.some(r => r.toLowerCase() === 'admin')) return true;
-    return roles?.some(r => zoneRoles.includes(r.toLowerCase()));
+    if (roles?.some(r => normalizeRoleForMatch(r) === 'admin')) return true;
+    return roles?.some(r => {
+      const normalized = normalizeRoleForMatch(r);
+      return zoneRoles.some(zr => normalized.includes(zr) || zr === normalized);
+    });
   };
 
   const availableZones = zones.filter(z => hasRoleAccess(z.roles));
