@@ -1,6 +1,7 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useSiteVisitRemindersUI } from '@/hooks/use-site-visit-reminders-ui';
 import { useAppContext } from '@/context/AppContext';
+import { useSettings } from '@/context/settings/SettingsContext';
 import LocationPermissionPrompt from '@/components/location/LocationPermissionPrompt';
 import { DashboardZoneLayout, DashboardZone } from '@/components/dashboard/DashboardZoneLayout';
 import { OperationsZone } from '@/components/dashboard/zones/OperationsZone';
@@ -10,8 +11,10 @@ import { ComplianceZone } from '@/components/dashboard/zones/ComplianceZone';
 import { PerformanceZone } from '@/components/dashboard/zones/PerformanceZone';
 import { FOMZone } from '@/components/dashboard/zones/FOMZone';
 import { DataCollectorZone } from '@/components/dashboard/zones/DataCollectorZone';
+import { FinancialZone } from '@/components/dashboard/zones/FinancialZone';
+import { ICTZone } from '@/components/dashboard/zones/ICTZone';
+import { DashboardZone as DashboardZoneType } from '@/types/user-preferences';
 
-// Helper to normalize roles for matching
 const normalizeRole = (role: string): string => {
   return role.toLowerCase()
     .replace(/\s+/g, '')
@@ -20,44 +23,43 @@ const normalizeRole = (role: string): string => {
 
 const Dashboard = () => {
   const { SiteVisitRemindersDialog, showDueReminders } = useSiteVisitRemindersUI();
-  const { roles } = useAppContext();
+  const { roles, currentUser } = useAppContext();
+  const { dashboardPreferences, getDefaultZoneForRole } = useSettings();
 
-  // Determine default zone based on user role
   const defaultZone = useMemo((): DashboardZone => {
-    // Check if user is admin - admins should NOT see FOM or Data Collector dashboards
-    const isAdmin = roles?.some(r => {
-      const normalized = normalizeRole(r);
-      return normalized === 'admin';
-    });
-    
-    // If admin, default to operations zone (their original dashboard)
-    if (isAdmin) {
-      return 'operations';
+    if (dashboardPreferences?.defaultZone) {
+      const prefZone = dashboardPreferences.defaultZone as DashboardZone;
+      if (['operations', 'fom', 'data-collector', 'team', 'planning', 'compliance', 'performance', 'financial', 'ict'].includes(prefZone)) {
+        return prefZone;
+      }
     }
     
-    // Check if user is FOM
+    const isAdmin = roles?.some(r => normalizeRole(r) === 'admin');
+    if (isAdmin) return 'operations';
+    
     const isFOM = roles?.some(r => {
       const normalized = normalizeRole(r);
       return normalized.includes('fom') || normalized.includes('fieldoperationmanager');
     });
+    if (isFOM) return 'fom';
+
+    const isSupervisor = roles?.some(r => normalizeRole(r).includes('supervisor'));
+    if (isSupervisor) return 'team';
+
+    const isCoordinator = roles?.some(r => normalizeRole(r).includes('coordinator'));
+    if (isCoordinator) return 'planning';
+
+    const isFinancialAdmin = roles?.some(r => normalizeRole(r).includes('financialadmin'));
+    if (isFinancialAdmin) return 'performance';
+
+    const isICT = roles?.some(r => normalizeRole(r) === 'ict');
+    if (isICT) return 'operations';
     
-    if (isFOM) {
-      return 'fom';
-    }
+    const isDataCollector = roles?.some(r => normalizeRole(r).includes('datacollector'));
+    if (isDataCollector) return 'data-collector';
     
-    // Check if user is Data Collector
-    const isDataCollector = roles?.some(r => {
-      const normalized = normalizeRole(r);
-      return normalized.includes('datacollector');
-    });
-    
-    if (isDataCollector) {
-      return 'data-collector';
-    }
-    
-    // All other users default to Operations zone as the primary command center
     return 'operations';
-  }, [roles]);
+  }, [roles, dashboardPreferences?.defaultZone]);
 
   const [activeZone, setActiveZone] = useState<DashboardZone>(defaultZone);
 
@@ -81,6 +83,10 @@ const Dashboard = () => {
         return <ComplianceZone />;
       case 'performance':
         return <PerformanceZone />;
+      case 'financial':
+        return <FinancialZone />;
+      case 'ict':
+        return <ICTZone />;
       default:
         return <OperationsZone />;
     }

@@ -59,17 +59,24 @@ export type DashboardSettings = {
   last_updated?: string;
 };
 
+import { MenuPreferences, DashboardPreferences, DEFAULT_MENU_PREFERENCES, DEFAULT_DASHBOARD_PREFERENCES, DashboardZone, ROLE_DEFAULT_ZONES } from '@/types/user-preferences';
+
 type SettingsContextType = {
   userSettings: UserSettings | null;
   dataVisibilitySettings: DataVisibilitySettings | null;
   dashboardSettings: DashboardSettings | null;
   notificationSettings: NotificationSettings;
   appearanceSettings: AppearanceSettings;
+  menuPreferences: MenuPreferences;
+  dashboardPreferences: DashboardPreferences;
   updateUserSettings: (settings: Partial<UserSettings['settings']>) => Promise<void>;
   updateNotificationSettings: (settings: NotificationSettings) => Promise<void>;
   updateAppearanceSettings: (settings: AppearanceSettings) => Promise<void>;
   updateDataVisibilitySettings: (settings: Partial<DataVisibilitySettings>) => Promise<void>;
   updateDashboardSettings: (settings: Partial<DashboardSettings>) => Promise<void>;
+  updateMenuPreferences: (prefs: Partial<MenuPreferences>) => Promise<void>;
+  updateDashboardPreferences: (prefs: Partial<DashboardPreferences>) => Promise<void>;
+  getDefaultZoneForRole: (role: string) => DashboardZone;
   loading: boolean;
   error: string | null;
 };
@@ -105,6 +112,9 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
     darkMode: false,
     theme: 'default',
   });
+  
+  const [menuPreferences, setMenuPreferences] = useState<MenuPreferences>(DEFAULT_MENU_PREFERENCES);
+  const [dashboardPreferences, setDashboardPreferences] = useState<DashboardPreferences>(DEFAULT_DASHBOARD_PREFERENCES);
 
   // Fetch settings from the database when the component mounts
   useEffect(() => {
@@ -150,6 +160,12 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
                 system: savedPrefs.categories?.system ?? defaultNotificationSettings.categories.system,
               },
             });
+          }
+          if (userData.settings?.menuPreferences) {
+            setMenuPreferences({ ...DEFAULT_MENU_PREFERENCES, ...userData.settings.menuPreferences });
+          }
+          if (userData.settings?.dashboardPreferences) {
+            setDashboardPreferences({ ...DEFAULT_DASHBOARD_PREFERENCES, ...userData.settings.dashboardPreferences });
           }
         }
 
@@ -351,6 +367,23 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
       });
     }
   };
+
+  const updateMenuPreferences = async (prefs: Partial<MenuPreferences>) => {
+    const updated = { ...menuPreferences, ...prefs };
+    setMenuPreferences(updated);
+    await updateUserSettings({ menuPreferences: updated });
+  };
+
+  const updateDashboardPreferences = async (prefs: Partial<DashboardPreferences>) => {
+    const updated = { ...dashboardPreferences, ...prefs };
+    setDashboardPreferences(updated);
+    await updateUserSettings({ dashboardPreferences: updated });
+  };
+
+  const getDefaultZoneForRole = (role: string): DashboardZone => {
+    const normalizedRole = role.toLowerCase();
+    return ROLE_DEFAULT_ZONES[normalizedRole] || 'operations';
+  };
   
   return (
     <SettingsContext.Provider
@@ -360,11 +393,16 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
         dashboardSettings,
         notificationSettings,
         appearanceSettings,
+        menuPreferences,
+        dashboardPreferences,
         updateUserSettings,
         updateNotificationSettings,
         updateAppearanceSettings,
         updateDataVisibilitySettings,
         updateDashboardSettings,
+        updateMenuPreferences,
+        updateDashboardPreferences,
+        getDefaultZoneForRole,
         loading,
         error
       }}
