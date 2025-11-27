@@ -374,32 +374,35 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
       const { data: { user: authUser } } = await supabase.auth.getUser();
       const assignedBy = authUser?.id;
 
-      // Step 1: Upsert site_visit_costs records BEFORE dispatch (delete existing + insert new)
+      // Step 1: Store costs directly in mmp_site_entries (avoids schema cache issues with site_visit_costs)
       for (const siteEntry of selectedSiteObjects) {
         const costs = siteCosts.get(siteEntry.id);
         if (costs) {
           const totalCost = costs.transportation + costs.accommodation + costs.mealAllowance + costs.otherCosts;
           
-          // Delete any existing cost records for this site to ensure single authoritative record
-          await supabase
-            .from('site_visit_costs')
-            .delete()
-            .eq('mmp_site_entry_id', siteEntry.id);
-          
-          // Insert fresh cost record
+          // Update mmp_site_entries with cost data
           const { error: costError } = await supabase
-            .from('site_visit_costs')
-            .insert({
-              mmp_site_entry_id: siteEntry.id,
-              transportation_cost: costs.transportation,
-              accommodation_cost: costs.accommodation,
-              meal_allowance: costs.mealAllowance,
-              other_costs: costs.otherCosts,
-              total_cost: totalCost,
-              cost_status: 'calculated',
-              calculated_by: assignedBy,
-              calculation_notes: costs.calculationNotes || `Costs for ${costs.siteName} - Admin-calculated before dispatch`,
-            });
+            .from('mmp_site_entries')
+            .update({
+              cost: totalCost,
+              transport_fee: costs.transportation,
+              enumerator_fee: costs.mealAllowance,
+              additional_data: {
+                ...(siteEntry.additional_data || {}),
+                dispatch_costs: {
+                  transportation_cost: costs.transportation,
+                  accommodation_cost: costs.accommodation,
+                  meal_allowance: costs.mealAllowance,
+                  other_costs: costs.otherCosts,
+                  total_cost: totalCost,
+                  cost_status: 'calculated',
+                  calculated_by: assignedBy,
+                  calculated_at: new Date().toISOString(),
+                  calculation_notes: costs.calculationNotes || `Admin-calculated before dispatch`,
+                }
+              }
+            })
+            .eq('id', siteEntry.id);
 
           if (costError) {
             console.error('Failed to save cost record:', costError);
