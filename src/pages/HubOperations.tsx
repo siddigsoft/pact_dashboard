@@ -21,6 +21,7 @@ import StateMapCard, { getStateCoords, getStateColor } from '@/components/hub-op
 import HubCard from '@/components/hub-operations/HubCard';
 import SiteCard from '@/components/hub-operations/SiteCard';
 import LeafletMapContainer from '@/components/map/LeafletMapContainer';
+import SudanMapView from '@/components/hub-operations/SudanMapView';
 import { 
   Building2, 
   MapPin, 
@@ -886,21 +887,32 @@ export default function HubOperations() {
         <TabsContent value="overview" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Sudan Operations Map</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Map className="h-5 w-5" />
+                Sudan Operations Map
+              </CardTitle>
               <CardDescription>
-                Overview of all hubs, states, and registered sites across Sudan
+                Interactive map showing all 18 states with their boundaries, hub assignments, and registered sites
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="h-[500px] rounded-lg overflow-hidden">
-                <LeafletMapContainer
-                  locations={mapLocations}
-                  height="500px"
-                  defaultCenter={[15.5, 32.5]}
-                  defaultZoom={5}
-                  showHubs={true}
-                />
-              </div>
+              <SudanMapView
+                hubs={hubs}
+                sites={sites}
+                selectedStateId={selectedState}
+                selectedHubId={filterHub || null}
+                onStateClick={(stateId) => {
+                  setSelectedState(stateId);
+                  setActiveTab('states');
+                }}
+                onHubClick={(hubId) => {
+                  setFilterHub(hubId);
+                  setActiveTab('hubs');
+                }}
+                showHubLabels={true}
+                showStateLabels={true}
+                height="550px"
+              />
             </CardContent>
           </Card>
 
