@@ -107,8 +107,18 @@ export default function HubOperations() {
       
       if (error) throw error;
       setHubs(data || []);
+      localStorage.removeItem('pact_hubs_local');
     } catch (err) {
-      console.error('Error loading hubs:', err);
+      console.error('Error loading hubs from database, using local storage:', err);
+      const storedHubs = localStorage.getItem('pact_hubs_local');
+      if (storedHubs) {
+        try {
+          setHubs(JSON.parse(storedHubs));
+          return;
+        } catch (e) {
+          console.error('Error parsing stored hubs:', e);
+        }
+      }
       const hubsFromLocal = defaultHubs.map((hub: any) => ({
         id: hub.id,
         name: hub.name,
@@ -119,6 +129,7 @@ export default function HubOperations() {
         created_by: 'system'
       }));
       setHubs(hubsFromLocal);
+      localStorage.setItem('pact_hubs_local', JSON.stringify(hubsFromLocal));
     }
   };
 
@@ -131,8 +142,18 @@ export default function HubOperations() {
       
       if (error && error.code !== '42P01') throw error;
       setSites(data || []);
+      localStorage.removeItem('pact_sites_local');
     } catch (err) {
-      console.error('Error loading sites:', err);
+      console.error('Error loading sites from database, using local storage:', err);
+      const storedSites = localStorage.getItem('pact_sites_local');
+      if (storedSites) {
+        try {
+          setSites(JSON.parse(storedSites));
+          return;
+        } catch (e) {
+          console.error('Error parsing stored sites:', e);
+        }
+      }
       setSites([]);
     }
   };
@@ -177,7 +198,9 @@ export default function HubOperations() {
       const { error } = await supabase.from('hubs').insert(hubData);
 
       if (error && error.code === '42P01') {
-        setHubs(prev => [...prev, hubData]);
+        const newHubs = [...hubs, hubData];
+        setHubs(newHubs);
+        localStorage.setItem('pact_hubs_local', JSON.stringify(newHubs));
         toast({ title: 'Success', description: 'Hub created (local mode)', variant: 'default' });
       } else if (error) {
         throw error;
@@ -213,8 +236,10 @@ export default function HubOperations() {
         .eq('id', editingHub.id);
 
       if (error && error.code === '42P01') {
-        setHubs(prev => prev.map(h => h.id === editingHub.id ? editingHub : h));
-        toast({ title: 'Success', description: 'Hub updated (local mode)', variant: 'default' });
+        const updatedHubs = hubs.map(h => h.id === editingHub.id ? { ...editingHub, updated_at: new Date().toISOString() } : h);
+        setHubs(updatedHubs);
+        localStorage.setItem('pact_hubs_local', JSON.stringify(updatedHubs));
+        toast({ title: 'Success', description: 'Hub updated successfully', variant: 'default' });
       } else if (error) {
         throw error;
       } else {
@@ -240,8 +265,10 @@ export default function HubOperations() {
       const { error } = await supabase.from('hubs').delete().eq('id', deleteTarget.id);
 
       if (error && error.code === '42P01') {
-        setHubs(prev => prev.filter(h => h.id !== deleteTarget.id));
-        toast({ title: 'Success', description: 'Hub deleted (local mode)', variant: 'default' });
+        const filteredHubs = hubs.filter(h => h.id !== deleteTarget.id);
+        setHubs(filteredHubs);
+        localStorage.setItem('pact_hubs_local', JSON.stringify(filteredHubs));
+        toast({ title: 'Success', description: 'Hub deleted successfully', variant: 'default' });
       } else if (error) {
         throw error;
       } else {
@@ -305,7 +332,9 @@ export default function HubOperations() {
       const { error } = await supabase.from('sites_registry').insert(siteData);
 
       if (error && error.code === '42P01') {
-        setSites(prev => [siteData, ...prev]);
+        const newSites = [siteData, ...sites];
+        setSites(newSites);
+        localStorage.setItem('pact_sites_local', JSON.stringify(newSites));
         toast({ title: 'Success', description: `Site registered: ${siteCode}`, variant: 'default' });
       } else if (error) {
         throw error;
@@ -332,8 +361,10 @@ export default function HubOperations() {
       const { error } = await supabase.from('sites_registry').delete().eq('id', deleteTarget.id);
 
       if (error && error.code === '42P01') {
-        setSites(prev => prev.filter(s => s.id !== deleteTarget.id));
-        toast({ title: 'Success', description: 'Site deleted (local mode)', variant: 'default' });
+        const filteredSites = sites.filter(s => s.id !== deleteTarget.id);
+        setSites(filteredSites);
+        localStorage.setItem('pact_sites_local', JSON.stringify(filteredSites));
+        toast({ title: 'Success', description: 'Site deleted successfully', variant: 'default' });
       } else if (error) {
         throw error;
       } else {
