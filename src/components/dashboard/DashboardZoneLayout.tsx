@@ -7,12 +7,14 @@ import {
   Shield, 
   TrendingUp,
   Briefcase,
-  MapPin
+  MapPin,
+  DollarSign,
+  Server
 } from 'lucide-react';
 import { useAppContext } from '@/context/AppContext';
 import { DashboardCommandBar } from './DashboardCommandBar';
 
-export type DashboardZone = 'operations' | 'team' | 'planning' | 'compliance' | 'performance' | 'fom' | 'data-collector';
+export type DashboardZone = 'operations' | 'team' | 'planning' | 'compliance' | 'performance' | 'fom' | 'data-collector' | 'financial' | 'ict';
 
 interface DashboardZoneLayoutProps {
   activeZone: DashboardZone;
@@ -76,6 +78,22 @@ const zones = [
     description: 'Analytics & goals',
     color: 'text-indigo-500',
     roles: ['admin', 'fom', 'financialadmin']
+  },
+  {
+    id: 'financial' as DashboardZone,
+    label: 'Financial',
+    icon: DollarSign,
+    description: 'Budget & costs',
+    color: 'text-green-500',
+    roles: ['admin', 'financialadmin']
+  },
+  {
+    id: 'ict' as DashboardZone,
+    label: 'ICT',
+    icon: Server,
+    description: 'System health',
+    color: 'text-cyan-500',
+    roles: ['admin', 'ict']
   }
 ];
 

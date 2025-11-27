@@ -113,6 +113,42 @@ The platform features a comprehensive notification system with browser push noti
 
 *   **Access Control:** SuperAdmin and Admin roles only
 
+*   **Database Status:** Tables (`hubs`, `sites_registry`, `project_scopes`) need to be created via Supabase migration. Page handles missing tables gracefully.
+
+### Navigation & User Preferences
+
+A comprehensive user preference system for sidebar navigation and dashboard personalization:
+
+*   **Key Files:**
+    *   `src/types/user-preferences.ts` - Type definitions for menu and dashboard preferences
+    *   `src/components/AppSidebar.tsx` - Workflow-aligned sidebar with 6 logical menu groups
+    *   `src/context/settings/SettingsContext.tsx` - Extended with menu/dashboard preference methods
+    *   `src/pages/Settings.tsx` - Navigation preferences tab in Settings page
+
+*   **Sidebar Menu Groups (Workflow-Aligned):**
+    1. **Overview** - Dashboard, My Wallet, Cost Submission
+    2. **Planning & Setup** - Projects, MMP Management, Hub Operations
+    3. **Field Operations** - Site Visits, Field Team, Field Operation Manager
+    4. **Verification & Review** - Site Verification, Archive
+    5. **Data & Reports** - Data Visibility, Reports
+    6. **Administration** - User/Role Management, Super Admin, Financial Operations, Budget, Settings
+
+*   **Dashboard Zones (Role-Based):**
+    *   `operations` - SuperAdmin/Admin system overview
+    *   `fom` - Field Operations Manager hub & team management
+    *   `team` - Supervisor team activity & compliance
+    *   `planning` - Coordinator site verification, MMP status
+    *   `dataCollector` - Data Collector my sites, wallet, upcoming visits
+    *   `financial` - FinancialAdmin budget, cost approvals
+    *   `ict` - ICT system health, user stats
+
+*   **User Customization Features:**
+    *   Hide/show menu items (persisted in user_settings.settings JSON)
+    *   Pin items to top of menu groups
+    *   Collapse menu groups by default
+    *   Choose default dashboard zone
+    *   Settings > Navigation tab for preference management
+
 ## External Dependencies
 
 ### Third-Party Services
