@@ -29,6 +29,7 @@ import {
 import { SiteVisitCostDialog } from "@/components/wallet/SiteVisitCostDialog";
 import { useAuthorization } from "@/hooks/use-authorization";
 import { SiteVisitCosts } from "@/components/site-visit/SiteVisitCosts";
+import { NearestEnumeratorsCard } from "@/components/site-visit/NearestEnumeratorsCard";
 
 const SiteVisitDetail = () => {
   const navigate = useNavigate();
@@ -209,7 +210,20 @@ const SiteVisitDetail = () => {
             </div>
             
             <div className="space-y-6">
-       
+              {/* Nearest Enumerators Card - shows enumerators sorted by GPS proximity */}
+              {hasAnyRole(['admin', 'ict', 'fom']) && siteVisit.coordinates && (
+                <NearestEnumeratorsCard
+                  siteVisit={siteVisit}
+                  allUsers={users}
+                  showAssignButton={siteVisit.status === "pending" || siteVisit.status === "permitVerified"}
+                  onAssign={(userId) => {
+                    toast({
+                      title: "Assignment started",
+                      description: "Use the Assign button above to complete the assignment process.",
+                    });
+                  }}
+                />
+              )}
               
               <SiteVisitCosts 
                 siteCode={siteVisit.siteCode}
