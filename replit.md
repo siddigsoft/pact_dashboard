@@ -92,6 +92,27 @@ The platform features a comprehensive notification system with browser push noti
 
 **Transportation Cost & Down-Payment System:** This system calculates transportation costs before dispatch by admins, manages down-payment requests from enumerators/coordinators via a two-tier approval workflow (supervisor → admin), and tracks all cost adjustments with a complete audit trail. It includes a `super_admin` role with a 3-account limit and a deletion audit log.
 
+**Hub & Field Operations Structure:** A comprehensive geographical management system accessible at `/hub-operations`:
+
+*   **Key Files:**
+    *   `src/pages/HubOperations.tsx` - Main page with tabbed interface
+    *   `src/types/hub-operations.ts` - Type definitions for hubs, sites registry, and project scope
+
+*   **Features:**
+    *   **Hub Management:** Create/edit/delete hubs and assign states to each hub
+    *   **States & Localities View:** Hierarchical view of all 18 Sudan states and their localities
+    *   **Sites Registry:** Master registry of all sites with unique IDs in format: `{StateCode}-{LocalityCode}-{SiteName}-{0001}-{ActivityType}`
+    *   **Project Scope Linking:** Associate projects with specific hubs and geographical areas
+
+*   **Site ID Format:** `KH-OMD-SITENAME-0001-TPM` where:
+    *   `KH` - State code (2 letters)
+    *   `OMD` - Locality code (3 letters from name)
+    *   `SITENAME` - Site name (up to 6 characters)
+    *   `0001` - Sequence number (4 digits)
+    *   `TPM` - Activity type (TPM, PDM, CFM, FCS, OTHER)
+
+*   **Access Control:** SuperAdmin and Admin roles only
+
 ## External Dependencies
 
 ### Third-Party Services

@@ -20,6 +20,7 @@ import {
   Award,
   Receipt,
   TrendingUp,
+  Building2,
 } from "lucide-react";
 import { useSiteVisitReminders } from "@/hooks/use-site-visit-reminders";
 import Logo from "../assets/logo.png";
@@ -104,6 +105,7 @@ const getMenuGroups = (
   if (isAdmin || isICT || perms.users) adminItems.push({ title: "User Management", url: "/users", icon: Users });
   if (isAdmin || perms.roleManagement) adminItems.push({ title: "Role Management", url: "/role-management", icon: Shield });
   if (isSuperAdmin) adminItems.push({ title: "Super Admin", url: "/super-admin-management", icon: ShieldCheck });
+  if (isAdmin || isSuperAdmin) adminItems.push({ title: "Hub Operations", url: "/hub-operations", icon: Building2 });
   if (isAdmin || isFinancialAdmin) adminItems.push({ title: "Classifications", url: "/classifications", icon: Award });
   if (perms.financialOperations) adminItems.push({ title: "Financial Operations", url: "/financial-operations", icon: TrendingUp });
   // Hide Settings from data collectors
