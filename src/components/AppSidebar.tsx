@@ -106,7 +106,8 @@ const getMenuGroups = (
   if (isSuperAdmin) adminItems.push({ title: "Super Admin", url: "/super-admin-management", icon: ShieldCheck });
   if (isAdmin || isFinancialAdmin) adminItems.push({ title: "Classifications", url: "/classifications", icon: Award });
   if (perms.financialOperations) adminItems.push({ title: "Financial Operations", url: "/financial-operations", icon: TrendingUp });
-  if (isAdmin || perms.settings) adminItems.push({ title: "Settings", url: "/settings", icon: Settings });
+  // Hide Settings from data collectors
+  if ((isAdmin || perms.settings) && !isDataCollector) adminItems.push({ title: "Settings", url: "/settings", icon: Settings });
   if (isAdmin || isFinancialAdmin) adminItems.push({ title: "Budget", url: "/budget", icon: DollarSign });
   if (isAdmin || isFinancialAdmin) adminItems.push({ title: "Wallets", url: "/admin/wallets", icon: CreditCard });
 
@@ -130,6 +131,10 @@ const AppSidebar = () => {
   
   const { checkPermission, hasAnyRole, canManageRoles } = useAuthorization();
   const isAdmin = hasAnyRole(['admin']);
+  // Check if user is a data collector
+  const isDataCollector = roles?.includes('dataCollector' as AppRole) || 
+                          currentUser?.role?.toLowerCase() === 'datacollector' ||
+                          currentUser?.role?.toLowerCase() === 'data collector';
   const perms = {
     dashboard: true,
     projects: checkPermission('projects', 'read') || isAdmin || hasAnyRole(['ict']),
@@ -254,13 +259,15 @@ const AppSidebar = () => {
                   <p className="text-xs text-muted-foreground">{currentUser.email}</p>
                 </div>
               </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem asChild>
-                <Link to="/settings">
-                  <Settings className="mr-2 h-4 w-4" />
-                  <span>Settings</span>
-                </Link>
-              </DropdownMenuItem>
+              {!isDataCollector && <DropdownMenuSeparator />}
+              {!isDataCollector && (
+                <DropdownMenuItem asChild>
+                  <Link to="/settings">
+                    <Settings className="mr-2 h-4 w-4" />
+                    <span>Settings</span>
+                  </Link>
+                </DropdownMenuItem>
+              )}
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onClick={handleLogout}
