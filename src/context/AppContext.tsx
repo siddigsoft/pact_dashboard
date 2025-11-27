@@ -17,6 +17,7 @@ import { ClassificationProvider } from './classification/ClassificationContext';
 import { CostSubmissionProvider } from './costApproval/CostSubmissionContext';
 import { DownPaymentProvider } from './downPayment/DownPaymentContext';
 import { SuperAdminProvider } from './superAdmin/SuperAdminContext';
+import BrowserNotificationListener from '@/components/BrowserNotificationListener';
 
 interface CompositeContextType {
   currentUser: ReturnType<typeof useUser>['currentUser'];
@@ -143,6 +144,7 @@ export const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children
                                   <SuperAdminProvider>
                                     <ChatProvider>
                                       <CommunicationProvider>
+                                        <BrowserNotificationListener />
                                         {children}
                                       </CommunicationProvider>
                                     </ChatProvider>

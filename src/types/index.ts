@@ -9,6 +9,8 @@ export * from './chat';
 export * from './archive'; // Added archive types
 export * from './roles'; // Export roles types
 export * from './wallet';
+export * from './hub-operations';
+export * from './user-preferences';
 
 // Re-export geo-types but rename SiteVisit to GeoSiteVisit to avoid naming conflict
 export type { DataCollector, GeoSiteVisit, Assignment, Hub } from './geo-types';

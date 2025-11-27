@@ -23,7 +23,11 @@ import {
   Shield,
   Smartphone,
   CheckCircle,
-  XCircle
+  XCircle,
+  Menu,
+  Pin,
+  EyeOff,
+  LayoutDashboard
 } from "lucide-react";
 import { useSettings } from "@/context/settings/SettingsContext";
 import { Input } from "@/components/ui/input";
@@ -44,10 +48,14 @@ const Settings = () => {
     userSettings,
     notificationSettings,
     appearanceSettings,
+    menuPreferences,
+    dashboardPreferences,
     updateUserSettings,
     updateNotificationSettings,
     updateAppearanceSettings,
     updateDataVisibilitySettings,
+    updateMenuPreferences,
+    updateDashboardPreferences,
     loading
   } = useSettings();
 
@@ -94,6 +102,34 @@ const Settings = () => {
     updateNotificationSettings({
       ...notificationSettings,
       sound: checked
+    });
+  };
+
+  const handleBrowserPushToggle = async (checked: boolean) => {
+    if (checked && 'Notification' in window) {
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') {
+        toast({
+          title: "Permission denied",
+          description: "Browser notifications were not enabled. Please allow notifications in your browser settings.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+    updateNotificationSettings({
+      ...notificationSettings,
+      browserPush: checked
+    });
+  };
+
+  const handleCategoryToggle = (category: keyof typeof notificationSettings.categories, checked: boolean) => {
+    updateNotificationSettings({
+      ...notificationSettings,
+      categories: {
+        ...notificationSettings.categories,
+        [category]: checked
+      }
     });
   };
 
@@ -371,10 +407,14 @@ const Settings = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4 lg:grid-cols-7 gap-1">
+        <TabsList className="grid w-full grid-cols-4 lg:grid-cols-8 gap-1">
           <TabsTrigger value="general" className="flex items-center gap-1" data-testid="tab-general">
             <SettingsIcon className="h-4 w-4" />
             <span className="hidden sm:inline">General</span>
+          </TabsTrigger>
+          <TabsTrigger value="navigation" className="flex items-center gap-1" data-testid="tab-navigation">
+            <Menu className="h-4 w-4" />
+            <span className="hidden sm:inline">Navigation</span>
           </TabsTrigger>
           <TabsTrigger value="location" className="flex items-center gap-1" data-testid="tab-location">
             <MapPin className="h-4 w-4" />
@@ -455,6 +495,152 @@ const Settings = () => {
                 >
                   <Save className="mr-2 h-4 w-4" />
                   Save Changes
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+        
+        <TabsContent value="navigation" className="space-y-4">
+          <Card className="border shadow-sm">
+            <CardHeader className="bg-gradient-to-r from-indigo-50 to-indigo-100 dark:from-indigo-900/20 dark:to-indigo-800/20 border-b">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-indigo-500 rounded-lg">
+                  <Menu className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <CardTitle className="text-lg">Navigation Preferences</CardTitle>
+                  <CardDescription>
+                    Customize your sidebar menu and dashboard layout
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6 pt-6">
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <LayoutDashboard className="h-5 w-5 text-indigo-600" />
+                  <h3 className="font-semibold">Default Dashboard Zone</h3>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Choose which dashboard view to show when you log in
+                </p>
+                <Select 
+                  value={dashboardPreferences?.defaultZone || "operations"}
+                  onValueChange={(value) => updateDashboardPreferences({ defaultZone: value as any })}
+                >
+                  <SelectTrigger className="w-full sm:w-[300px]" data-testid="select-default-zone">
+                    <SelectValue placeholder="Select default zone" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="operations">Operations (Admin Overview)</SelectItem>
+                    <SelectItem value="fom">Field Operations Manager</SelectItem>
+                    <SelectItem value="team">Team Management</SelectItem>
+                    <SelectItem value="planning">Planning</SelectItem>
+                    <SelectItem value="compliance">Compliance</SelectItem>
+                    <SelectItem value="performance">Performance & Analytics</SelectItem>
+                    <SelectItem value="financial">Financial Operations</SelectItem>
+                    <SelectItem value="data-collector">Data Collector</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="border-t pt-6 space-y-4">
+                <div className="flex items-center gap-2">
+                  <Pin className="h-5 w-5 text-amber-600" />
+                  <h3 className="font-semibold">Pinned Menu Items</h3>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Pinned items appear at the top of their menu groups for quick access
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {menuPreferences?.pinnedItems?.length > 0 ? (
+                    menuPreferences.pinnedItems.map((url) => (
+                      <Badge key={url} variant="secondary" className="gap-1">
+                        <Pin className="h-3 w-3" />
+                        {url.replace('/', '')}
+                        <Button 
+                          size="icon" 
+                          variant="ghost" 
+                          className="h-4 w-4 ml-1"
+                          onClick={() => {
+                            const updated = menuPreferences.pinnedItems.filter(i => i !== url);
+                            updateMenuPreferences({ pinnedItems: updated });
+                          }}
+                          data-testid={`button-unpin-${url.replace('/', '')}`}
+                        >
+                          <XCircle className="h-3 w-3" />
+                        </Button>
+                      </Badge>
+                    ))
+                  ) : (
+                    <p className="text-sm text-muted-foreground italic">No pinned items. Right-click menu items to pin them.</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="border-t pt-6 space-y-4">
+                <div className="flex items-center gap-2">
+                  <EyeOff className="h-5 w-5 text-gray-600" />
+                  <h3 className="font-semibold">Hidden Menu Items</h3>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Hidden items won't appear in your sidebar menu
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {menuPreferences?.hiddenItems?.length > 0 ? (
+                    menuPreferences.hiddenItems.map((url) => (
+                      <Badge key={url} variant="outline" className="gap-1">
+                        <EyeOff className="h-3 w-3" />
+                        {url.replace('/', '')}
+                        <Button 
+                          size="icon" 
+                          variant="ghost" 
+                          className="h-4 w-4 ml-1"
+                          onClick={() => {
+                            const updated = menuPreferences.hiddenItems.filter(i => i !== url);
+                            updateMenuPreferences({ hiddenItems: updated });
+                          }}
+                          data-testid={`button-show-${url.replace('/', '')}`}
+                        >
+                          <Eye className="h-3 w-3" />
+                        </Button>
+                      </Badge>
+                    ))
+                  ) : (
+                    <p className="text-sm text-muted-foreground italic">No hidden items. Right-click menu items to hide them.</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-4 border-t">
+                <Button 
+                  variant="outline"
+                  className="mr-2"
+                  onClick={() => {
+                    updateMenuPreferences({
+                      hiddenItems: [],
+                      pinnedItems: [],
+                      collapsedGroups: [],
+                      favoritePages: []
+                    });
+                    updateDashboardPreferences({
+                      defaultZone: 'operations',
+                      hiddenWidgets: [],
+                      widgetOrder: [],
+                      quickStats: [],
+                      defaultTimeRange: 'week'
+                    });
+                    toast({
+                      title: "Preferences reset",
+                      description: "Navigation preferences have been reset to defaults.",
+                      variant: "success",
+                    });
+                  }}
+                  data-testid="button-reset-nav"
+                >
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Reset to Defaults
                 </Button>
               </div>
             </CardContent>
@@ -543,6 +729,101 @@ const Settings = () => {
                   disabled={!notificationSettings.enabled}
                   data-testid="switch-sound-alerts"
                 />
+              </div>
+              
+              <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
+                <div className="space-y-1">
+                  <Label htmlFor="browser-push" className="text-base font-medium">Browser Push Notifications</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Receive notifications even when the browser tab is in the background
+                  </p>
+                </div>
+                <Switch 
+                  id="browser-push" 
+                  checked={notificationSettings.browserPush}
+                  onCheckedChange={handleBrowserPushToggle}
+                  disabled={!notificationSettings.enabled}
+                  data-testid="switch-browser-push"
+                />
+              </div>
+
+              <div className="pt-4 border-t">
+                <h4 className="text-sm font-semibold mb-3">Notification Categories</h4>
+                <p className="text-xs text-muted-foreground mb-4">
+                  Choose which types of notifications you want to receive
+                </p>
+                
+                <div className="grid gap-3">
+                  <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="cat-assignments" className="text-sm font-medium">Site Assignments</Label>
+                      <p className="text-xs text-muted-foreground">New assignments and site visit updates</p>
+                    </div>
+                    <Switch 
+                      id="cat-assignments"
+                      checked={notificationSettings.categories?.assignments ?? true}
+                      onCheckedChange={(checked) => handleCategoryToggle('assignments', checked)}
+                      disabled={!notificationSettings.enabled}
+                      data-testid="switch-cat-assignments"
+                    />
+                  </div>
+                  
+                  <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="cat-approvals" className="text-sm font-medium">Approvals</Label>
+                      <p className="text-xs text-muted-foreground">MMP approvals and review requests</p>
+                    </div>
+                    <Switch 
+                      id="cat-approvals"
+                      checked={notificationSettings.categories?.approvals ?? true}
+                      onCheckedChange={(checked) => handleCategoryToggle('approvals', checked)}
+                      disabled={!notificationSettings.enabled}
+                      data-testid="switch-cat-approvals"
+                    />
+                  </div>
+                  
+                  <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="cat-financial" className="text-sm font-medium">Financial</Label>
+                      <p className="text-xs text-muted-foreground">Down-payments, costs, and budget updates</p>
+                    </div>
+                    <Switch 
+                      id="cat-financial"
+                      checked={notificationSettings.categories?.financial ?? true}
+                      onCheckedChange={(checked) => handleCategoryToggle('financial', checked)}
+                      disabled={!notificationSettings.enabled}
+                      data-testid="switch-cat-financial"
+                    />
+                  </div>
+                  
+                  <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="cat-team" className="text-sm font-medium">Team Updates</Label>
+                      <p className="text-xs text-muted-foreground">Team member status and location changes</p>
+                    </div>
+                    <Switch 
+                      id="cat-team"
+                      checked={notificationSettings.categories?.team ?? true}
+                      onCheckedChange={(checked) => handleCategoryToggle('team', checked)}
+                      disabled={!notificationSettings.enabled}
+                      data-testid="switch-cat-team"
+                    />
+                  </div>
+                  
+                  <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="cat-system" className="text-sm font-medium">System Alerts</Label>
+                      <p className="text-xs text-muted-foreground">Important system messages and warnings</p>
+                    </div>
+                    <Switch 
+                      id="cat-system"
+                      checked={notificationSettings.categories?.system ?? true}
+                      onCheckedChange={(checked) => handleCategoryToggle('system', checked)}
+                      disabled={!notificationSettings.enabled}
+                      data-testid="switch-cat-system"
+                    />
+                  </div>
+                </div>
               </div>
               
               <div className="flex justify-end pt-4 border-t">

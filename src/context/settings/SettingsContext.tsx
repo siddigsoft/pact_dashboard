@@ -21,6 +21,14 @@ export type NotificationSettings = {
   enabled: boolean;
   email: boolean;
   sound: boolean;
+  browserPush: boolean;
+  categories: {
+    assignments: boolean;
+    approvals: boolean;
+    financial: boolean;
+    team: boolean;
+    system: boolean;
+  };
 };
 
 export type AppearanceSettings = {
@@ -51,17 +59,24 @@ export type DashboardSettings = {
   last_updated?: string;
 };
 
+import { MenuPreferences, DashboardPreferences, DEFAULT_MENU_PREFERENCES, DEFAULT_DASHBOARD_PREFERENCES, DashboardZone, ROLE_DEFAULT_ZONES } from '@/types/user-preferences';
+
 type SettingsContextType = {
   userSettings: UserSettings | null;
   dataVisibilitySettings: DataVisibilitySettings | null;
   dashboardSettings: DashboardSettings | null;
   notificationSettings: NotificationSettings;
   appearanceSettings: AppearanceSettings;
+  menuPreferences: MenuPreferences;
+  dashboardPreferences: DashboardPreferences;
   updateUserSettings: (settings: Partial<UserSettings['settings']>) => Promise<void>;
   updateNotificationSettings: (settings: NotificationSettings) => Promise<void>;
   updateAppearanceSettings: (settings: AppearanceSettings) => Promise<void>;
   updateDataVisibilitySettings: (settings: Partial<DataVisibilitySettings>) => Promise<void>;
   updateDashboardSettings: (settings: Partial<DashboardSettings>) => Promise<void>;
+  updateMenuPreferences: (prefs: Partial<MenuPreferences>) => Promise<void>;
+  updateDashboardPreferences: (prefs: Partial<DashboardPreferences>) => Promise<void>;
+  getDefaultZoneForRole: (role: string) => DashboardZone;
   loading: boolean;
   error: string | null;
 };
@@ -78,16 +93,28 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
   const [dataVisibilitySettings, setDataVisibilitySettings] = useState<DataVisibilitySettings | null>(null);
   const [dashboardSettings, setDashboardSettings] = useState<DashboardSettings | null>(null);
   
-  // Frontend-only settings that we'll eventually migrate to the database
-  const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>({
+  const defaultNotificationSettings: NotificationSettings = {
     enabled: true,
     email: false,
     sound: false,
-  });
+    browserPush: false,
+    categories: {
+      assignments: true,
+      approvals: true,
+      financial: true,
+      team: true,
+      system: true,
+    },
+  };
+  
+  const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>(defaultNotificationSettings);
   const [appearanceSettings, setAppearanceSettings] = useState<AppearanceSettings>({
     darkMode: false,
     theme: 'default',
   });
+  
+  const [menuPreferences, setMenuPreferences] = useState<MenuPreferences>(DEFAULT_MENU_PREFERENCES);
+  const [dashboardPreferences, setDashboardPreferences] = useState<DashboardPreferences>(DEFAULT_DASHBOARD_PREFERENCES);
 
   // Fetch settings from the database when the component mounts
   useEffect(() => {
@@ -117,6 +144,28 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
               darkMode: userData.settings.theme === 'dark',
               theme: userData.settings.theme === 'system' ? 'default' : userData.settings.theme,
             }));
+          }
+          if (userData.settings?.notificationPreferences) {
+            const savedPrefs = userData.settings.notificationPreferences;
+            setNotificationSettings({
+              enabled: savedPrefs.enabled ?? defaultNotificationSettings.enabled,
+              email: savedPrefs.email ?? defaultNotificationSettings.email,
+              sound: savedPrefs.sound ?? defaultNotificationSettings.sound,
+              browserPush: savedPrefs.browserPush ?? defaultNotificationSettings.browserPush,
+              categories: {
+                assignments: savedPrefs.categories?.assignments ?? defaultNotificationSettings.categories.assignments,
+                approvals: savedPrefs.categories?.approvals ?? defaultNotificationSettings.categories.approvals,
+                financial: savedPrefs.categories?.financial ?? defaultNotificationSettings.categories.financial,
+                team: savedPrefs.categories?.team ?? defaultNotificationSettings.categories.team,
+                system: savedPrefs.categories?.system ?? defaultNotificationSettings.categories.system,
+              },
+            });
+          }
+          if (userData.settings?.menuPreferences) {
+            setMenuPreferences({ ...DEFAULT_MENU_PREFERENCES, ...userData.settings.menuPreferences });
+          }
+          if (userData.settings?.dashboardPreferences) {
+            setDashboardPreferences({ ...DEFAULT_DASHBOARD_PREFERENCES, ...userData.settings.dashboardPreferences });
           }
         }
 
@@ -197,10 +246,8 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
     }
   };
   
-  // Update notification settings (currently frontend-only)
   const updateNotificationSettings = async (settings: NotificationSettings) => {
     setNotificationSettings(settings);
-    // We'll update user settings in the database
     await updateUserSettings({ notificationPreferences: settings });
   };
   
@@ -320,6 +367,23 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
       });
     }
   };
+
+  const updateMenuPreferences = async (prefs: Partial<MenuPreferences>) => {
+    const updated = { ...menuPreferences, ...prefs };
+    setMenuPreferences(updated);
+    await updateUserSettings({ menuPreferences: updated });
+  };
+
+  const updateDashboardPreferences = async (prefs: Partial<DashboardPreferences>) => {
+    const updated = { ...dashboardPreferences, ...prefs };
+    setDashboardPreferences(updated);
+    await updateUserSettings({ dashboardPreferences: updated });
+  };
+
+  const getDefaultZoneForRole = (role: string): DashboardZone => {
+    const normalizedRole = role.toLowerCase();
+    return ROLE_DEFAULT_ZONES[normalizedRole] || 'operations';
+  };
   
   return (
     <SettingsContext.Provider
@@ -329,11 +393,16 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
         dashboardSettings,
         notificationSettings,
         appearanceSettings,
+        menuPreferences,
+        dashboardPreferences,
         updateUserSettings,
         updateNotificationSettings,
         updateAppearanceSettings,
         updateDataVisibilitySettings,
         updateDashboardSettings,
+        updateMenuPreferences,
+        updateDashboardPreferences,
+        getDefaultZoneForRole,
         loading,
         error
       }}

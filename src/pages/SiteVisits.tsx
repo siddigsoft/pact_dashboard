@@ -570,7 +570,6 @@ const SiteVisits = () => {
     );
   };
 
-  // For FOM users, show the dashboard view
   if (isFOM) {
     const canViewAll = canViewAllSiteVisits();
     const fomVisits = canViewAll 
@@ -578,27 +577,26 @@ const SiteVisits = () => {
       : siteVisits.filter(visit => visit.assignedTo === currentUser?.id);
 
     return (
-      <div className="space-y-8 animate-fade-in">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-gradient-to-r from-background to-muted p-6 rounded-lg shadow-sm">
-          <div className="flex items-center gap-4">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => navigate("/dashboard")}
-              className="hover:bg-background/50"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <div>
-              <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
-                Site Visits Dashboard
-              </h1>
-              <p className="text-muted-foreground">
-                Browse sites by state and filter by status
-              </p>
-            </div>
+      <div className="container mx-auto p-6 space-y-6">
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-2" data-testid="text-page-title-fom">
+              <MapPin className="h-8 w-8 text-primary" />
+              Site Visits Dashboard
+            </h1>
+            <p className="text-muted-foreground mt-1">
+              Browse sites by state and filter by status
+            </p>
           </div>
-          
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate("/dashboard")}
+            data-testid="button-back-dashboard-fom"
+          >
+            <ChevronLeft className="h-4 w-4 mr-2" />
+            Dashboard
+          </Button>
         </div>
 
         <FOMSiteVisitsDashboard visits={fomVisits} />
@@ -607,40 +605,43 @@ const SiteVisits = () => {
   }
 
   return (
-    <div className="space-y-8 animate-fade-in">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-gradient-to-r from-background to-muted p-6 rounded-lg shadow-sm">
-        <div className="flex items-center gap-4">
+    <div className="container mx-auto p-6 space-y-6">
+      {/* Header - Matching Hub Operations Style */}
+      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-2" data-testid="text-page-title-site-visits">
+            <MapPin className="h-8 w-8 text-primary" />
+            Site Visits
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            {isDataCollector 
+              ? "View and manage your assigned site visits" 
+              : "Manage and track all site visits across all projects"}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
           <Button
             variant="ghost"
-            size="icon"
+            size="sm"
             onClick={() => navigate("/dashboard")}
-            className="hover:bg-background/50"
+            data-testid="button-back-dashboard"
           >
-            <ChevronLeft className="h-4 w-4" />
+            <ChevronLeft className="h-4 w-4 mr-2" />
+            Dashboard
           </Button>
-          <div>
-            <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
-              Site Visits
-            </h1>
-            <p className="text-muted-foreground">
-              {isDataCollector 
-                ? "View and manage your assigned site visits" 
-                : "Manage and track all site visits"}
-            </p>
-          </div>
+          {!isDataCollector && (checkPermission('site_visits', 'create') || hasAnyRole(['admin'])) && (
+            <Button 
+              size="sm"
+              asChild
+              data-testid="button-create-site-visit"
+            >
+              <Link to="/site-visits/create" className="gap-2">
+                <Plus className="h-4 w-4" />
+                Create Site Visit
+              </Link>
+            </Button>
+          )}
         </div>
-        {/* Hide create button for data collectors - they only complete assigned visits */}
-        {!isDataCollector && (checkPermission('site_visits', 'create') || hasAnyRole(['admin'])) && (
-          <Button 
-            className="bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-primary-foreground shadow-lg hover:shadow-xl transition-all duration-300" 
-            asChild
-          >
-            <Link to="/site-visits/create" className="gap-2">
-              <Plus className="h-4 w-4" />
-              Create Site Visit
-            </Link>
-          </Button>
-        )}
       </div>
 
       <SiteVisitStats 

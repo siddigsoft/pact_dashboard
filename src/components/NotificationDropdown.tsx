@@ -181,77 +181,101 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
 
   return (
     <DropdownMenuContent 
-      className="w-[380px] p-0 notification-dropdown shadow-lg border border-blue-100 dark:border-blue-800 rounded-xl overflow-hidden" 
+      className="w-[420px] p-0 notification-dropdown shadow-xl border border-border rounded-xl overflow-hidden" 
       align="end"
       ref={containerRef}
+      data-testid="notification-dropdown"
     >
-      <div className="flex items-center justify-between p-4 pb-2 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30">
-        <DropdownMenuLabel className="text-base p-0 flex items-center gap-1 text-blue-800 dark:text-blue-300">
-          <Bell className="h-4 w-4" />
-          Notifications
-          {unreadMessages > 0 && (
-            <span className="bg-blue-100 text-blue-700 dark:bg-blue-800 dark:text-blue-200 text-xs rounded-full px-2 py-0.5 ml-2">
-              +{unreadMessages} messages
-            </span>
-          )}
-        </DropdownMenuLabel>
-        <div className="flex gap-1">
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            onClick={handleMarkAllRead} 
-            className="h-8 px-2 text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-100/50"
-          >
-            <CheckCheck className="h-3 w-3 mr-1" />
-            Mark all read
-          </Button>
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            onClick={handleClearAll} 
-            className="h-8 px-2 text-xs text-blue-600 hover:text-blue-800 hover:bg-blue-100/50"
-          >
-            Clear all
-          </Button>
+      {/* Header with gradient background */}
+      <div className="bg-gradient-to-br from-primary/10 via-primary/5 to-background p-4 border-b">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-primary/10">
+              <Bell className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <DropdownMenuLabel className="text-base font-semibold p-0 text-foreground">
+                Notifications
+              </DropdownMenuLabel>
+              {(counts.unread > 0 || unreadMessages > 0) && (
+                <p className="text-xs text-muted-foreground">
+                  {counts.unread > 0 && `${counts.unread} unread`}
+                  {counts.unread > 0 && unreadMessages > 0 && ' · '}
+                  {unreadMessages > 0 && `${unreadMessages} new messages`}
+                </p>
+              )}
+            </div>
+          </div>
+          <div className="flex gap-1">
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={handleMarkAllRead}
+              disabled={counts.unread === 0}
+              data-testid="button-mark-all-read"
+            >
+              <CheckCheck className="h-4 w-4" />
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={handleClearAll}
+              disabled={counts.all === 0}
+              data-testid="button-clear-all"
+            >
+              Clear all
+            </Button>
+          </div>
         </div>
       </div>
       
+      {/* Filter tabs */}
       <NotificationFilter
         activeFilter={activeFilter}
         onFilterChange={setActiveFilter}
         counts={counts}
       />
       
-      <DropdownMenuSeparator className="bg-blue-100 dark:bg-blue-800/30" />
-      
-      <ScrollArea className="h-[400px] bg-white dark:bg-slate-900">
-        <div className="p-2 space-y-3">
+      {/* Notification list */}
+      <ScrollArea className="h-[420px] bg-background">
+        <div className="p-3 space-y-4">
           <NotificationGroup
             title="Urgent"
             icon={<AlertCircle className="h-4 w-4 text-red-500" />}
             notifications={urgentNotifications}
+            onNotificationClick={handleNotificationClick}
             actionButtons={renderActionButtons}
+            variant="urgent"
           />
           
           <NotificationGroup
             title="Warnings"
             icon={<AlertCircle className="h-4 w-4 text-amber-500" />}
             notifications={warningNotifications}
+            onNotificationClick={handleNotificationClick}
             actionButtons={renderActionButtons}
+            variant="warning"
           />
           
           <NotificationGroup
             title="Information"
             icon={<CheckCircle2 className="h-4 w-4 text-blue-500" />}
             notifications={infoNotifications}
+            onNotificationClick={handleNotificationClick}
             actionButtons={renderActionButtons}
+            variant="info"
           />
 
           {filteredNotifications.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-8 text-center">
-              <Bell className="h-12 w-12 text-slate-300 dark:text-slate-600" />
-              <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-                No notifications to display
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <div className="p-4 rounded-full bg-muted/50 mb-3">
+                <Bell className="h-10 w-10 text-muted-foreground/50" />
+              </div>
+              <p className="text-sm font-medium text-muted-foreground">
+                No notifications
+              </p>
+              <p className="text-xs text-muted-foreground/70 mt-1">
+                You're all caught up!
               </p>
             </div>
           )}
