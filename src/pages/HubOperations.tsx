@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/toast';
 import { useAppContext } from '@/context/AppContext';
+import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { supabase } from '@/integrations/supabase/client';
 import { sudanStates, getLocalitiesByState, hubs as defaultHubs, getTotalLocalityCount } from '@/data/sudanStates';
 import { ManagedHub, SiteRegistry, ProjectScope, generateSiteCode } from '@/types/hub-operations';
@@ -43,6 +44,7 @@ import {
 
 export default function HubOperations() {
   const { currentUser } = useAppContext();
+  const { isSuperAdmin } = useSuperAdmin();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState('overview');
   const [loading, setLoading] = useState(false);
@@ -83,7 +85,8 @@ export default function HubOperations() {
     gps_longitude: ''
   });
 
-  const canManage = currentUser?.role === 'superAdmin' || currentUser?.role === 'admin';
+  const userRole = currentUser?.role?.toLowerCase() || '';
+  const canManage = isSuperAdmin || userRole === 'admin' || userRole === 'superadmin' || userRole === 'super_admin';
 
   useEffect(() => {
     loadData();

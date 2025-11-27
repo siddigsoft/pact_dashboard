@@ -72,12 +72,12 @@ export default function HubCard({
             </div>
           </div>
           {canManage && (
-            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="flex gap-1">
               <Button 
                 size="icon" 
                 variant="ghost" 
-                className="h-8 w-8 text-white hover:bg-white/20"
-                onClick={onEdit}
+                className="h-8 w-8 text-white bg-white/10 hover:bg-white/30"
+                onClick={(e) => { e.stopPropagation(); onEdit?.(); }}
                 data-testid={`button-edit-hub-${hub.id}`}
               >
                 <Edit2 className="h-4 w-4" />
@@ -85,8 +85,8 @@ export default function HubCard({
               <Button 
                 size="icon" 
                 variant="ghost" 
-                className="h-8 w-8 text-white hover:bg-white/20"
-                onClick={onDelete}
+                className="h-8 w-8 text-white bg-white/10 hover:bg-white/30"
+                onClick={(e) => { e.stopPropagation(); onDelete?.(); }}
                 data-testid={`button-delete-hub-${hub.id}`}
               >
                 <Trash2 className="h-4 w-4" />
