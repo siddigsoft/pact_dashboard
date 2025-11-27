@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -1285,24 +1286,51 @@ export default function HubOperations() {
                   
                   <div>
                     <h4 className="font-semibold mb-2">Assigned States ({selectedHub.states.length})</h4>
-                    <ScrollArea className="h-48 border rounded-md p-3">
-                      <div className="grid grid-cols-1 gap-2">
+                    <ScrollArea className="h-64 border rounded-md">
+                      <Accordion type="multiple" className="w-full">
                         {hubStates.map(state => state && (
-                          <div key={state.id} className="flex items-center justify-between p-2 bg-muted/30 rounded text-sm">
-                            <div className="flex items-center gap-2">
-                              <div 
-                                className="w-3 h-3 rounded-full" 
-                                style={{ backgroundColor: getStateColor(state.id) }}
-                              />
-                              <span>{state.name}</span>
-                              <Badge variant="outline" className="text-xs">{state.code}</Badge>
-                            </div>
-                            <span className="text-muted-foreground text-xs">
-                              {state.localities.length} localities
-                            </span>
-                          </div>
+                          <AccordionItem key={state.id} value={state.id} className="border-b last:border-b-0">
+                            <AccordionTrigger className="px-3 py-2 hover:no-underline" data-testid={`accordion-state-${state.id}`}>
+                              <div className="flex items-center justify-between w-full pr-2">
+                                <div className="flex items-center gap-2">
+                                  <div 
+                                    className="w-3 h-3 rounded-full flex-shrink-0" 
+                                    style={{ backgroundColor: getStateColor(state.id) }}
+                                  />
+                                  <span className="font-medium">{state.name}</span>
+                                  <Badge variant="outline" className="text-xs">{state.code}</Badge>
+                                </div>
+                                <Badge variant="secondary" className="text-xs ml-2">
+                                  {state.localities.length} localities
+                                </Badge>
+                              </div>
+                            </AccordionTrigger>
+                            <AccordionContent className="px-3 pb-3">
+                              <div className="bg-muted/30 rounded-md p-2">
+                                <ScrollArea className="h-40">
+                                  <div className="grid grid-cols-2 gap-1.5">
+                                    {state.localities.map(locality => (
+                                      <div 
+                                        key={locality.id} 
+                                        className="flex items-center gap-1.5 p-1.5 bg-background/60 rounded text-xs"
+                                        data-testid={`locality-${locality.id}`}
+                                      >
+                                        <Globe className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                                        <span className="truncate flex-1">{locality.name}</span>
+                                        {locality.nameAr && (
+                                          <span className="text-muted-foreground text-[10px] truncate max-w-[60px]">
+                                            {locality.nameAr}
+                                          </span>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </ScrollArea>
+                              </div>
+                            </AccordionContent>
+                          </AccordionItem>
                         ))}
-                      </div>
+                      </Accordion>
                     </ScrollArea>
                   </div>
                   
