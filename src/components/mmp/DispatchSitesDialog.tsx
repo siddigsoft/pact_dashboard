@@ -325,14 +325,22 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
   };
 
   const handleDispatch = async () => {
+    console.log('🚀 Starting dispatch process...');
+    console.log('📍 Dispatch type:', dispatchType);
+    console.log('📍 Selected sites count:', selectedSites.size);
+    console.log('📍 Filtered site entries:', filteredSiteEntries.length);
+    
     // Validate that all selected sites have transportation costs entered
     const selectedSiteObjects = filteredSiteEntries.filter(s => selectedSites.has(s.id));
+    console.log('📍 Selected site objects:', selectedSiteObjects.length);
+    
     const missingTransportation = selectedSiteObjects.filter(site => {
       const costs = siteCosts.get(site.id);
       return !costs || costs.transportation <= 0;
     });
 
     if (missingTransportation.length > 0) {
+      console.warn('❌ Missing transportation costs for:', missingTransportation.map(s => s.site_name || s.siteName));
       toast({
         title: 'Missing Transportation Costs',
         description: `Transportation cost is required for all sites. ${missingTransportation.length} site(s) missing transportation costs.`,
@@ -500,6 +508,7 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
       }
 
       // Step 3: Mark site entries as dispatched
+      console.log('📍 Step 3: Marking site entries as dispatched...');
       const dispatchedAt = new Date().toISOString();
       const currentUserProfile = authUser ? await supabase
         .from('profiles')
@@ -512,19 +521,35 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
                           currentUserProfile?.data?.email || 
                           'System';
       
+      console.log('📍 Dispatched by:', dispatchedBy);
+      console.log('📍 Processing', selectedSites.size, 'entries...');
+      
+      let successCount = 0;
+      let skippedCount = 0;
+      let errorCount = 0;
+      
       // Update each entry individually to set status and new columns
       for (const entryId of Array.from(selectedSites)) {
         // Get current entry to check status and preserve additional_data
-        const { data: currentEntry } = await supabase
+        const { data: currentEntry, error: fetchError } = await supabase
           .from('mmp_site_entries')
-          .select('status, additional_data')
+          .select('status, additional_data, site_name')
           .eq('id', entryId)
           .single();
+        
+        if (fetchError) {
+          console.error(`❌ Error fetching entry ${entryId}:`, fetchError);
+          errorCount++;
+          continue;
+        }
+        
+        console.log(`📍 Entry ${entryId}: status="${currentEntry?.status}", site="${currentEntry?.site_name}"`);
         
         // Only dispatch sites that are in "Approved and Costed" status
         const currentStatus = currentEntry?.status?.toLowerCase() || '';
         if (currentStatus !== 'approved and costed') {
-          console.warn(`Skipping entry ${entryId} with status "${currentEntry?.status}" - only "Approved and Costed" sites can be dispatched`);
+          console.warn(`⚠️ Skipping entry ${entryId} with status "${currentEntry?.status}" - only "Approved and Costed" sites can be dispatched`);
+          skippedCount++;
           continue;
         }
         
@@ -562,15 +587,38 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
           .eq('id', entryId);
         
         if (entryUpdateError) {
-          console.error(`Error updating site entry ${entryId}:`, entryUpdateError);
+          console.error(`❌ Error updating site entry ${entryId}:`, entryUpdateError);
+          errorCount++;
+        } else {
+          console.log(`✅ Successfully dispatched entry ${entryId}`);
+          successCount++;
         }
       }
 
-      toast({
-        title: 'Sites Dispatched',
-        description: `Successfully dispatched ${selectedSites.size} site(s) with calculated costs to ${targetCollectors.length} data collector(s).`,
-        variant: 'default'
-      });
+      console.log(`📊 Dispatch summary: ${successCount} success, ${skippedCount} skipped, ${errorCount} errors`);
+      
+      if (successCount === 0 && skippedCount > 0) {
+        toast({
+          title: 'No Sites Dispatched',
+          description: `${skippedCount} site(s) were skipped because they are not in "Approved and Costed" status.`,
+          variant: 'destructive'
+        });
+        return;
+      }
+      
+      if (errorCount > 0) {
+        toast({
+          title: 'Partial Dispatch',
+          description: `Dispatched ${successCount} site(s), but ${errorCount} failed. Check console for details.`,
+          variant: 'destructive'
+        });
+      } else {
+        toast({
+          title: 'Sites Dispatched',
+          description: `Successfully dispatched ${successCount} site(s) with calculated costs to ${targetCollectors.length} data collector(s).${skippedCount > 0 ? ` (${skippedCount} skipped)` : ''}`,
+          variant: 'default'
+        });
+      }
 
       onDispatched?.();
       onOpenChange(false);

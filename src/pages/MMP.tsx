@@ -3161,6 +3161,8 @@ const MMP = () => {
                               setDispatchDialogOpen(true);
                             }}
                             className="bg-blue-50 hover:bg-blue-100"
+                            disabled={approvedCostedSiteEntries.length < 2}
+                            title={approvedCostedSiteEntries.length < 2 ? 'Bulk dispatch requires at least 2 sites' : ''}
                           >
                             Bulk Dispatch by State
                           </Button>
@@ -3172,6 +3174,8 @@ const MMP = () => {
                               setDispatchDialogOpen(true);
                             }}
                             className="bg-blue-50 hover:bg-blue-100"
+                            disabled={approvedCostedSiteEntries.length < 2}
+                            title={approvedCostedSiteEntries.length < 2 ? 'Bulk dispatch requires at least 2 sites' : ''}
                           >
                             Bulk Dispatch by Locality
                           </Button>
