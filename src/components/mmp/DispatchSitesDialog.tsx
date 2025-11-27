@@ -374,31 +374,35 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
       const { data: { user: authUser } } = await supabase.auth.getUser();
       const assignedBy = authUser?.id;
 
-      // Step 1: Store costs directly in mmp_site_entries (avoids schema cache issues with site_visit_costs)
+      // Step 1: Store TRANSPORT costs only in mmp_site_entries
+      // IMPORTANT: Enumerator fee is NOT set at dispatch - it's calculated at claim time
+      // based on the claiming data collector's classification level (A, B, or C)
       for (const siteEntry of selectedSiteObjects) {
         const costs = siteCosts.get(siteEntry.id);
         if (costs) {
-          const totalCost = costs.transportation + costs.accommodation + costs.mealAllowance + costs.otherCosts;
+          // Transport budget = transportation + accommodation + meal per diem + other logistics
+          const transportBudget = costs.transportation + costs.accommodation + costs.mealAllowance + costs.otherCosts;
           
-          // Update mmp_site_entries with cost data
+          // Update mmp_site_entries with transport costs only (enumerator_fee remains null)
           const { error: costError } = await supabase
             .from('mmp_site_entries')
             .update({
-              cost: totalCost,
-              transport_fee: costs.transportation,
-              enumerator_fee: costs.mealAllowance,
+              transport_fee: transportBudget,
+              // NOTE: enumerator_fee is NOT set here - it will be calculated at claim time
+              // based on the collector's classification (Level A, B, or C)
               additional_data: {
                 ...(siteEntry.additional_data || {}),
                 dispatch_costs: {
                   transportation_cost: costs.transportation,
                   accommodation_cost: costs.accommodation,
-                  meal_allowance: costs.mealAllowance,
-                  other_costs: costs.otherCosts,
-                  total_cost: totalCost,
-                  cost_status: 'calculated',
+                  meal_per_diem: costs.mealAllowance,
+                  other_logistics: costs.otherCosts,
+                  transport_budget_total: transportBudget,
+                  enumerator_fee_status: 'pending_claim',
+                  cost_status: 'transport_only',
                   calculated_by: assignedBy,
                   calculated_at: new Date().toISOString(),
-                  calculation_notes: costs.calculationNotes || `Admin-calculated before dispatch`,
+                  calculation_notes: costs.calculationNotes || `Transport budget set at dispatch. Enumerator fee will be calculated at claim time based on collector classification.`,
                 }
               }
             })
@@ -468,7 +472,8 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
 
       for (const siteEntry of selectedSiteObjects) {
         const costs = siteCosts.get(siteEntry.id);
-        const totalCost = costs 
+        // Transport budget only - enumerator fee is calculated at claim time
+        const transportBudget = costs 
           ? costs.transportation + costs.accommodation + costs.mealAllowance + costs.otherCosts
           : 0;
         
@@ -484,8 +489,8 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
             user_id: memberId,
             title: isDirectAssignment ? 'Site Visit Assigned to You' : 'New Site Dispatched in Your Area',
             message: isDirectAssignment 
-              ? `Site "${siteName}" has been assigned to you. Total Budget: ${totalCost} SDG (Transportation: ${costs?.transportation || 0} SDG)`
-              : `Site "${siteName}" in ${siteLocality ? siteLocality + ', ' : ''}${siteState} has been dispatched. Budget: ${totalCost} SDG`,
+              ? `Site "${siteName}" has been assigned to you. Transport Budget: ${transportBudget} SDG. Your fee will be calculated based on your classification when you claim.`
+              : `Site "${siteName}" in ${siteLocality ? siteLocality + ', ' : ''}${siteState} has been dispatched. Transport Budget: ${transportBudget} SDG`,
             type: isDirectAssignment ? 'info' : 'success',
             link: `/mmp?entry=${siteEntry.id}`,
             related_entity_id: siteEntry.id,
@@ -936,7 +941,7 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
                 
                 <div className="flex items-center justify-between pt-2 border-t">
                   <div className="text-sm">
-                    <span className="text-muted-foreground">Total per site: </span>
+                    <span className="text-muted-foreground">Transport Budget per site: </span>
                     <span className="font-bold text-primary">
                       {(bulkCost.transportation + bulkCost.accommodation + bulkCost.mealAllowance + bulkCost.otherCosts).toFixed(2)} SDG
                     </span>
@@ -946,6 +951,15 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
                     Apply to All Sites
                   </Button>
                 </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950">
+              <CardContent className="p-3">
+                <p className="text-sm text-blue-800 dark:text-blue-200">
+                  <strong>Note:</strong> Data Collector Fee will be calculated automatically when a collector claims the site, 
+                  based on their classification level (A, B, or C). The total payout = Transport Budget + Collector Fee.
+                </p>
               </CardContent>
             </Card>
 
@@ -960,7 +974,7 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
                 const costs = siteCosts.get(siteId);
                 if (!site || !costs) return null;
 
-                const totalCost = costs.transportation + costs.accommodation + costs.mealAllowance + costs.otherCosts;
+                const transportBudget = costs.transportation + costs.accommodation + costs.mealAllowance + costs.otherCosts;
 
                 return (
                   <Card key={siteId} className="hover-elevate">
@@ -972,9 +986,12 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
                             {site.locality && `${site.locality}, `}{site.state}
                           </p>
                         </div>
-                        <Badge variant="outline" className="text-lg font-bold">
-                          {totalCost.toFixed(2)} SDG
-                        </Badge>
+                        <div className="text-right">
+                          <Badge variant="outline" className="text-lg font-bold">
+                            {transportBudget.toFixed(2)} SDG
+                          </Badge>
+                          <p className="text-xs text-muted-foreground mt-1">Transport Budget</p>
+                        </div>
                       </div>
 
                       <div className="grid grid-cols-2 gap-3">

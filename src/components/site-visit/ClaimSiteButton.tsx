@@ -1,8 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Hand, Loader2, CheckCircle } from 'lucide-react';
+import { Hand, Loader2, CheckCircle, Wallet, Car, User, AlertCircle } from 'lucide-react';
+import { useClaimFeeCalculation, type ClaimFeeBreakdown } from '@/hooks/use-claim-fee-calculation';
+import { CLASSIFICATION_LABELS, CLASSIFICATION_COLORS } from '@/types/classification';
 
 interface ClaimSiteButtonProps {
   siteId: string;
@@ -27,12 +31,33 @@ export function ClaimSiteButton({
 }: ClaimSiteButtonProps) {
   const [claiming, setClaiming] = useState(false);
   const [claimed, setClaimed] = useState(false);
+  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [feeBreakdown, setFeeBreakdown] = useState<ClaimFeeBreakdown | null>(null);
   const { toast } = useToast();
+  const { calculateFeeForClaim, loading: calculatingFee } = useClaimFeeCalculation();
 
-  const handleClaim = async () => {
+  const handleInitiateClaim = async () => {
     if (claiming || claimed || disabled) return;
 
+    const breakdown = await calculateFeeForClaim(siteId, userId);
+    if (breakdown) {
+      setFeeBreakdown(breakdown);
+      setShowConfirmation(true);
+    } else {
+      toast({
+        title: 'Error',
+        description: 'Could not calculate fees. Please try again.',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const handleConfirmClaim = async () => {
+    if (!feeBreakdown) return;
+
     setClaiming(true);
+    setShowConfirmation(false);
+
     try {
       const { data, error } = await supabase.rpc('claim_site_visit', {
         p_site_id: siteId,
@@ -52,10 +77,44 @@ export function ClaimSiteButton({
       const result = data as { success: boolean; error?: string; message: string; site_name?: string };
 
       if (result.success) {
+        const { data: currentEntry } = await supabase
+          .from('mmp_site_entries')
+          .select('additional_data')
+          .eq('id', siteId)
+          .single();
+
+        const existingData = currentEntry?.additional_data || {};
+
+        const { error: updateError } = await supabase
+          .from('mmp_site_entries')
+          .update({
+            enumerator_fee: feeBreakdown.enumeratorFee,
+            cost: feeBreakdown.totalPayout,
+            additional_data: {
+              ...existingData,
+              claim_fee_calculation: {
+                transport_budget: feeBreakdown.transportBudget,
+                enumerator_fee: feeBreakdown.enumeratorFee,
+                total_payout: feeBreakdown.totalPayout,
+                classification_level: feeBreakdown.classificationLevel,
+                role_scope: feeBreakdown.roleScope,
+                fee_source: feeBreakdown.feeSource,
+                calculated_at: new Date().toISOString(),
+                calculated_for_user: userId,
+                claimed_at: new Date().toISOString()
+              }
+            }
+          })
+          .eq('id', siteId);
+
+        if (updateError) {
+          console.error('Error updating site with fee after claim:', updateError);
+        }
+
         setClaimed(true);
         toast({
           title: 'Site Claimed!',
-          description: result.message,
+          description: `${result.message} Your fee: ${feeBreakdown.enumeratorFee.toFixed(2)} SDG + Transport: ${feeBreakdown.transportBudget.toFixed(2)} SDG = ${feeBreakdown.totalPayout.toFixed(2)} SDG`,
           variant: 'default'
         });
         onClaimed?.();
@@ -104,26 +163,122 @@ export function ClaimSiteButton({
   }
 
   return (
-    <Button
-      variant={variant}
-      size={size}
-      onClick={handleClaim}
-      disabled={claiming || disabled}
-      className={`bg-primary hover:bg-primary/90 ${className}`}
-      data-testid={`button-claim-${siteId}`}
-    >
-      {claiming ? (
-        <>
-          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-          Claiming...
-        </>
-      ) : (
-        <>
-          <Hand className="h-4 w-4 mr-2" />
-          Claim Site
-        </>
-      )}
-    </Button>
+    <>
+      <Button
+        variant={variant}
+        size={size}
+        onClick={handleInitiateClaim}
+        disabled={claiming || disabled || calculatingFee}
+        className={`bg-primary hover:bg-primary/90 ${className}`}
+        data-testid={`button-claim-${siteId}`}
+      >
+        {claiming || calculatingFee ? (
+          <>
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            {calculatingFee ? 'Calculating...' : 'Claiming...'}
+          </>
+        ) : (
+          <>
+            <Hand className="h-4 w-4 mr-2" />
+            Claim Site
+          </>
+        )}
+      </Button>
+
+      <Dialog open={showConfirmation} onOpenChange={setShowConfirmation}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Wallet className="h-5 w-5 text-primary" />
+              Confirm Site Claim
+            </DialogTitle>
+            <DialogDescription>
+              Review your payment breakdown before claiming "{siteName}"
+            </DialogDescription>
+          </DialogHeader>
+
+          {feeBreakdown && (
+            <div className="space-y-4 py-4">
+              {feeBreakdown.classificationLevel && (
+                <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                  <span className="text-sm font-medium">Your Classification</span>
+                  <Badge className={CLASSIFICATION_COLORS[feeBreakdown.classificationLevel]}>
+                    {CLASSIFICATION_LABELS[feeBreakdown.classificationLevel]}
+                  </Badge>
+                </div>
+              )}
+
+              {feeBreakdown.feeSource === 'default' && (
+                <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg">
+                  <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                  <p className="text-sm text-amber-800 dark:text-amber-200">
+                    No classification found. Using default rate of {feeBreakdown.enumeratorFee.toFixed(2)} SDG.
+                    Contact your supervisor to get classified for accurate rates.
+                  </p>
+                </div>
+              )}
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between py-2 border-b">
+                  <div className="flex items-center gap-2">
+                    <Car className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm">Transport Budget</span>
+                  </div>
+                  <span className="font-medium">{feeBreakdown.transportBudget.toFixed(2)} SDG</span>
+                </div>
+
+                <div className="flex items-center justify-between py-2 border-b">
+                  <div className="flex items-center gap-2">
+                    <User className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm">Your Collector Fee</span>
+                  </div>
+                  <span className="font-medium">{feeBreakdown.enumeratorFee.toFixed(2)} SDG</span>
+                </div>
+
+                <div className="flex items-center justify-between py-3 bg-primary/10 rounded-lg px-3">
+                  <div className="flex items-center gap-2">
+                    <Wallet className="h-5 w-5 text-primary" />
+                    <span className="font-semibold">Total Payout</span>
+                  </div>
+                  <span className="text-xl font-bold text-primary">{feeBreakdown.totalPayout.toFixed(2)} SDG</span>
+                </div>
+              </div>
+
+              <p className="text-xs text-muted-foreground text-center">
+                This amount will be credited to your wallet after completing the site visit.
+              </p>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setShowConfirmation(false)}
+              data-testid="button-cancel-claim"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConfirmClaim}
+              disabled={claiming}
+              data-testid="button-confirm-claim"
+            >
+              {claiming ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Claiming...
+                </>
+              ) : (
+                <>
+                  <Hand className="h-4 w-4 mr-2" />
+                  Confirm Claim
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 

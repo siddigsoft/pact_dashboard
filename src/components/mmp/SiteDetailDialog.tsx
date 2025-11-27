@@ -462,16 +462,16 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
             )}
 
             {/* Section 2: Site Cost Details */}
-            <div className="bg-gray-50 p-5 rounded-lg border space-y-4">
+            <div className="bg-gray-50 dark:bg-gray-800 p-5 rounded-lg border space-y-4">
               <div className="flex items-center gap-2 pb-3 border-b">
                 <div className="bg-gray-700 text-white rounded w-6 h-6 flex items-center justify-center font-semibold text-sm">
                   2
                 </div>
-                <h3 className="text-base font-semibold text-gray-900">Site Cost Details</h3>
+                <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">Site Cost Details</h3>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="bg-white p-4 rounded-lg border">
-                  <Label className="text-xs font-medium text-gray-600">Data Collector Fee</Label>
+                <div className="bg-white dark:bg-gray-900 p-4 rounded-lg border">
+                  <Label className="text-xs font-medium text-gray-600 dark:text-gray-400">Data Collector Fee</Label>
                   {isEditing ? (
                     <Input
                       type="number"
@@ -488,30 +488,34 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
                         });
                       }}
                       className="mt-2 text-2xl font-semibold"
-                      placeholder="20"
+                      placeholder="Calculated at claim"
                     />
                   ) : (
                     <>
-                      <p className="text-2xl font-semibold text-gray-900 mt-2">
-                        {row.enumeratorFee !== undefined && row.enumeratorFee !== null && String(row.enumeratorFee) !== ''
-                          ? `${Number(row.enumeratorFee).toLocaleString()} SDG`
-                          : '20 SDG'}
-                      </p>
-                      {(!row.enumeratorFee || row.enumeratorFee === null || String(row.enumeratorFee) === '') && (
-                        <p className="text-xs text-gray-500 mt-1">(Default Rate)</p>
+                      {row.enumeratorFee !== undefined && row.enumeratorFee !== null && Number(row.enumeratorFee) > 0 ? (
+                        <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mt-2">
+                          {Number(row.enumeratorFee).toLocaleString()} SDG
+                        </p>
+                      ) : (
+                        <div className="mt-2">
+                          <p className="text-lg font-semibold text-amber-600 dark:text-amber-400">
+                            Pending
+                          </p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            Calculated when claimed based on collector classification
+                          </p>
+                        </div>
                       )}
                     </>
                   )}
-                  <p className="text-xs text-gray-600 mt-2">Payment for completing the site visit</p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-2">Payment for completing the site visit</p>
                 </div>
-                <div className="bg-white p-4 rounded-lg border">
-                  <Label className="text-xs font-medium text-gray-600">Transport Fee</Label>
+                <div className="bg-white dark:bg-gray-900 p-4 rounded-lg border">
+                  <Label className="text-xs font-medium text-gray-600 dark:text-gray-400">Transport Budget</Label>
                   {isEditing ? (
                     <Input
                       type="number"
                       step="0.01"
-                      min="10"
-                      max="25"
                       value={draft?.transportFee ?? ''}
                       onChange={(e) => {
                         const val = e.target.value;
@@ -524,43 +528,55 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
                         });
                       }}
                       className="mt-2 text-2xl font-semibold"
-                      placeholder="10"
+                      placeholder="Set at dispatch"
                     />
                   ) : (
                     <>
-                      <p className="text-2xl font-semibold text-gray-900 mt-2">
-                        {row.transportFee !== undefined && row.transportFee !== null && String(row.transportFee) !== ''
+                      <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mt-2">
+                        {row.transportFee !== undefined && row.transportFee !== null && Number(row.transportFee) > 0
                           ? `${Number(row.transportFee).toLocaleString()} SDG`
-                          : '10 SDG'}
+                          : '0 SDG'}
                       </p>
-                      {(!row.transportFee || row.transportFee === null || String(row.transportFee) === '') && (
-                        <p className="text-xs text-gray-500 mt-1">(Default Rate)</p>
+                      {(!row.transportFee || row.transportFee === null || Number(row.transportFee) === 0) && (
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">(Set at dispatch)</p>
                       )}
                     </>
                   )}
-                  <p className="text-xs text-gray-600 mt-2">Transportation reimbursement</p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-2">Transportation and logistics</p>
                 </div>
                 <div className="bg-blue-600 p-4 rounded-lg border border-blue-700">
-                  <Label className="text-xs font-medium text-blue-100">Total Cost</Label>
+                  <Label className="text-xs font-medium text-blue-100">Total Payout</Label>
                   {isEditing ? (
                     <p className="text-2xl font-bold text-white mt-2">
                       {((Number(draft?.enumeratorFee ?? 0)) + (Number(draft?.transportFee ?? 0))).toLocaleString()} SDG
                     </p>
                   ) : (
-                    <p className="text-2xl font-bold text-white mt-2">
-                      {(row.cost !== undefined && row.cost !== null && String(row.cost) !== '' && String(row.cost) !== '—')
-                        ? `${Number(row.cost).toLocaleString()} SDG`
-                        : `${(Number(row.enumeratorFee || 20) + Number(row.transportFee || 10)).toLocaleString()} SDG`}
-                    </p>
+                    <>
+                      {row.enumeratorFee !== undefined && row.enumeratorFee !== null && Number(row.enumeratorFee) > 0 ? (
+                        <p className="text-2xl font-bold text-white mt-2">
+                          {(Number(row.enumeratorFee) + Number(row.transportFee || 0)).toLocaleString()} SDG
+                        </p>
+                      ) : (
+                        <div className="mt-2">
+                          <p className="text-lg font-bold text-blue-100">
+                            {Number(row.transportFee || 0).toLocaleString()} SDG + Fee
+                          </p>
+                          <p className="text-xs text-blue-200 mt-1">
+                            Collector fee added at claim
+                          </p>
+                        </div>
+                      )}
+                    </>
                   )}
                   <p className="text-xs text-blue-100 mt-2">Complete payment upon visit</p>
                 </div>
               </div>
-              <div className="bg-white p-4 rounded-lg border">
-                <p className="text-sm font-semibold text-gray-900 mb-2">Payment Information</p>
-                <p className="text-sm text-gray-700 leading-relaxed">
-                  Upon successful completion of the site visit, the total cost amount will be credited to your wallet. 
-                  Payment is processed automatically after you submit your visit report with photos and required documentation.
+              <div className="bg-white dark:bg-gray-900 p-4 rounded-lg border">
+                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">Payment Information</p>
+                <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+                  {row.enumeratorFee !== undefined && row.enumeratorFee !== null && Number(row.enumeratorFee) > 0 
+                    ? 'Upon successful completion of the site visit, the total payout will be credited to your wallet. Payment is processed automatically after you submit your visit report with photos and required documentation.'
+                    : 'Your collector fee will be calculated based on your classification level (A, B, or C) when you claim this site. The total payout = Transport Budget + Your Collector Fee.'}
                 </p>
               </div>
             </div>
