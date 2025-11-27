@@ -95,14 +95,26 @@ The platform features a comprehensive notification system with browser push noti
 **Hub & Field Operations Structure:** A comprehensive geographical management system accessible at `/hub-operations`:
 
 *   **Key Files:**
-    *   `src/pages/HubOperations.tsx` - Main page with tabbed interface
+    *   `src/pages/HubOperations.tsx` - Main page with tabbed interface (redesigned Nov 2025)
     *   `src/types/hub-operations.ts` - Type definitions for hubs, sites registry, and project scope
+    *   `src/components/hub-operations/StateMapCard.tsx` - Interactive state map cards with Leaflet
+    *   `src/components/hub-operations/HubCard.tsx` - Hub display card with gradient header
+    *   `src/components/hub-operations/SiteCard.tsx` - Site registry card with status badges
+    *   `supabase/migrations/001_hub_operations_tables.sql` - Database migration for hub tables
 
 *   **Features:**
     *   **Hub Management:** Create/edit/delete hubs and assign states to each hub
-    *   **States & Localities View:** Hierarchical view of all 18 Sudan states and their localities
+    *   **States & Localities View:** Hierarchical view of all 18 Sudan states and their localities with interactive Leaflet maps
     *   **Sites Registry:** Master registry of all sites with unique IDs in format: `{StateCode}-{LocalityCode}-{SiteName}-{0001}-{ActivityType}`
     *   **Project Scope Linking:** Associate projects with specific hubs and geographical areas
+    *   **Gradient Stat Cards:** Users Management style gradient stat cards for quick overview
+
+*   **UI Design Pattern (Nov 2025):**
+    *   Matches Users Management page layout with gradient stat cards
+    *   Interactive StateMapCard showing state location on Leaflet map
+    *   Card-based layout for hubs, states, and sites
+    *   Tabbed interface with Overview, Hubs, States, and Sites tabs
+    *   Grid/List/Map view toggle for sites
 
 *   **Site ID Format:** `KH-OMD-SITENAME-0001-TPM` where:
     *   `KH` - State code (2 letters)
@@ -113,7 +125,20 @@ The platform features a comprehensive notification system with browser push noti
 
 *   **Access Control:** SuperAdmin and Admin roles only
 
-*   **Database Status:** Tables (`hubs`, `sites_registry`, `project_scopes`) need to be created via Supabase migration. Page handles missing tables gracefully.
+*   **Database Status:** SQL migration available in `supabase/migrations/001_hub_operations_tables.sql`. Run in Supabase SQL Editor to create tables (`hubs`, `sites_registry`, `project_scopes`) with RLS policies. Page handles missing tables gracefully with local fallback data.
+
+**Site Visits Enhancement (Nov 2025):** The Site Visits page has been redesigned to match the Hub Operations and Users Management design pattern:
+
+*   **Key Files:**
+    *   `src/pages/SiteVisits.tsx` - Main page with enhanced header and layout
+    *   `src/components/site-visit/SiteVisitStats.tsx` - Gradient stat cards matching Hub Operations style
+    *   `src/components/site-visit/SiteVisitCard.tsx` - Enhanced site visit card component
+
+*   **Design Improvements:**
+    *   Gradient stat cards (Pending, In Progress, Completed, Scheduled, Overdue)
+    *   Consistent header style with icon and action buttons
+    *   Container layout matching Hub Operations page
+    *   Data collector specific view with Dispatched, Assigned, Accepted, Ongoing, Completed stats
 
 ### Sudan Administrative Data
 
