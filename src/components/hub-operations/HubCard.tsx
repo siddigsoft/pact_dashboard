@@ -24,7 +24,7 @@ interface HubCardProps {
 }
 
 const hubGradients: { [key: string]: string } = {
-  'kassala-hub': 'from-purple-500 to-purple-700',
+  'kassala-hub': 'from-green-500 to-green-700',
   'kosti-hub': 'from-orange-500 to-orange-700',
   'el-fasher-hub': 'from-pink-500 to-pink-700',
   'dongola-hub': 'from-blue-500 to-blue-700',
