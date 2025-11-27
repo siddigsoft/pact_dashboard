@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Pencil, Save, X } from 'lucide-react';
+import { ClaimSiteButton } from '@/components/site-visit/ClaimSiteButton';
 
 interface SiteDetailDialogProps {
   open: boolean;
@@ -17,6 +18,8 @@ interface SiteDetailDialogProps {
   onAcceptSite?: (site: any) => void;
   onSendBackToCoordinator?: (site: any, comments: string) => void;
   currentUserId?: string;
+  onClaimed?: () => void;
+  enableFirstClaim?: boolean;
 }
 
 const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
@@ -27,7 +30,9 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
   onUpdateSite,
   onAcceptSite,
   onSendBackToCoordinator,
-  currentUserId
+  currentUserId,
+  onClaimed,
+  enableFirstClaim = false
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState<any>(null);
@@ -661,18 +666,34 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
             </div>
 
             {/* Action Buttons */}
-            {isAvailableSite && onAcceptSite && !isEditing && (
+            {isAvailableSite && !isEditing && (
               <div className="border-t pt-4 flex flex-col sm:flex-row gap-3">
-                <Button
-                  onClick={() => {
-                    onAcceptSite(site);
-                    onOpenChange(false);
-                  }}
-                  className="flex-1"
-                  size="lg"
-                >
-                  Accept Site
-                </Button>
+                {enableFirstClaim && currentUserId ? (
+                  <ClaimSiteButton
+                    siteId={site.id}
+                    siteName={row?.siteName || 'Site'}
+                    userId={currentUserId}
+                    onClaimed={() => {
+                      onClaimed?.();
+                      onOpenChange(false);
+                    }}
+                    size="lg"
+                    className="flex-1"
+                    data-testid={`button-claim-site-${site.id}`}
+                  />
+                ) : onAcceptSite ? (
+                  <Button
+                    onClick={() => {
+                      onAcceptSite(site);
+                      onOpenChange(false);
+                    }}
+                    className="flex-1"
+                    size="lg"
+                    data-testid="button-accept-site"
+                  >
+                    Accept Site
+                  </Button>
+                ) : null}
                 {onSendBackToCoordinator && (
                   <Button
                     variant="outline"
@@ -682,6 +703,7 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
                     }}
                     className="flex-1"
                     size="lg"
+                    data-testid="button-send-back"
                   >
                     Send Back to Coordinator
                   </Button>
