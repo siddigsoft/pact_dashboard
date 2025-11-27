@@ -15,6 +15,8 @@ import { format, isValid } from "date-fns";
 import { CalendarIcon } from "lucide-react";
 import ApprovedMMPList from '@/components/site-visit/ApprovedMMPList';
 import SiteVisitStats from '@/components/site-visit/SiteVisitStats';
+import SiteVisitsByState from '@/components/site-visit/SiteVisitsByState';
+import FOMSiteVisitsDashboard from '@/components/site-visit/FOMSiteVisitsDashboard';
 import VisitFilters from '@/components/site-visit/VisitFilters';
 import ViewToggle from '@/components/site-visit/ViewToggle';
 import AssignmentMap from '@/components/site-visit/AssignmentMap';
@@ -91,9 +93,6 @@ const SiteVisits = () => {
     );
   }
 
-  // Filter for approved MMPs
-  const approvedMMPs = mmpFiles?.filter(mmp => mmp.status === 'approved') || [];
-
   useEffect(() => {
     setIsLoading(true);
     const timer = setTimeout(() => setIsLoading(false), 1000);
@@ -115,6 +114,21 @@ const SiteVisits = () => {
     const role = (currentUser.role || '').toLowerCase();
     return role === 'datacollector' || role === 'data collector';
   }, [currentUser]);
+
+  // Check if user is FOM (Field Operations Manager)
+  const isFOM = useMemo(() => {
+    if (!currentUser) return false;
+    const role = (currentUser.role || '').toLowerCase();
+    return hasAnyRole(['fom', 'Field Operation Manager (FOM)', 'Field Operations Manager']) || 
+           role === 'fom' || 
+           role === 'field operation manager (fom)' ||
+           role === 'field operations manager';
+  }, [currentUser]);
+
+  // Filter for approved MMPs (only for non-FOM users)
+  const approvedMMPs = useMemo(() => {
+    return !isFOM ? (mmpFiles?.filter(mmp => mmp.status === 'approved') || []) : [];
+  }, [isFOM, mmpFiles]);
 
   useEffect(() => {
     const canViewAll = canViewAllSiteVisits();
@@ -555,6 +569,52 @@ const SiteVisits = () => {
       </div>
     );
   };
+
+  // For FOM users, show the dashboard view
+  if (isFOM) {
+    const canViewAll = canViewAllSiteVisits();
+    const fomVisits = canViewAll 
+      ? siteVisits 
+      : siteVisits.filter(visit => visit.assignedTo === currentUser?.id);
+
+    return (
+      <div className="space-y-8 animate-fade-in">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-gradient-to-r from-background to-muted p-6 rounded-lg shadow-sm">
+          <div className="flex items-center gap-4">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => navigate("/dashboard")}
+              className="hover:bg-background/50"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <div>
+              <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
+                Site Visits Dashboard
+              </h1>
+              <p className="text-muted-foreground">
+                Browse sites by state and filter by status
+              </p>
+            </div>
+          </div>
+          {checkPermission('site_visits', 'create') || hasAnyRole(['admin']) ? (
+            <Button 
+              className="bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-primary-foreground shadow-lg hover:shadow-xl transition-all duration-300" 
+              asChild
+            >
+              <Link to="/site-visits/create" className="gap-2">
+                <Plus className="h-4 w-4" />
+                Create Site Visit
+              </Link>
+            </Button>
+          ) : null}
+        </div>
+
+        <FOMSiteVisitsDashboard visits={fomVisits} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 animate-fade-in">
