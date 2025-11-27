@@ -115,6 +115,21 @@ The platform features a comprehensive notification system with browser push noti
 
 *   **Database Status:** Tables (`hubs`, `sites_registry`, `project_scopes`) need to be created via Supabase migration. Page handles missing tables gracefully.
 
+### Sudan Administrative Data
+
+Complete Sudan administrative structure based on official OCHA/WFP COD-AB (Common Operational Dataset - Administrative Boundaries):
+
+*   **Key File:** `src/data/sudanStates.ts`
+*   **Source:** [HDX Dataset](https://data.humdata.org/dataset/cod-ab-sdn) - Last reviewed August 2024
+*   **Structure:**
+    *   **18 States** (Admin Level 1)
+    *   **188 Localities** (Admin Level 2) + Abyei PCA area
+*   **Features:**
+    *   English and Arabic names for all localities
+    *   WFP Hub structure (5 operational hubs)
+    *   Helper functions: `getLocalitiesByState()`, `getStateName()`, `getStateCode()`, `searchLocalities()`
+    *   Locality search supporting both English and Arabic names
+
 ### Navigation & User Preferences
 
 A comprehensive user preference system for sidebar navigation and dashboard personalization:
