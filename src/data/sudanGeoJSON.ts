@@ -204,25 +204,11 @@ export const sudanStateBoundaries = {
 
 export const hubLocations = [
   {
-    id: 'kassala-hub',
-    name: 'Kassala Hub',
-    coordinates: [15.4507, 36.4048] as [number, number],
-    color: '#22C55E',
-    states: ['red-sea', 'kassala', 'gedaref']
-  },
-  {
-    id: 'kosti-hub',
-    name: 'Kosti Hub',
-    coordinates: [13.1629, 32.6635] as [number, number],
-    color: '#F97316',
-    states: ['white-nile', 'sennar', 'blue-nile', 'gezira']
-  },
-  {
-    id: 'el-fasher-hub',
-    name: 'El Fasher Hub',
-    coordinates: [13.6289, 25.3493] as [number, number],
-    color: '#EC4899',
-    states: ['north-darfur', 'west-darfur', 'south-darfur', 'central-darfur', 'east-darfur']
+    id: 'country-office',
+    name: 'Country Office',
+    coordinates: [15.5007, 32.5599] as [number, number],
+    color: '#8B5CF6',
+    states: ['khartoum', 'red-sea']
   },
   {
     id: 'dongola-hub',
@@ -232,11 +218,25 @@ export const hubLocations = [
     states: ['northern', 'river-nile']
   },
   {
-    id: 'country-office',
-    name: 'Country Office',
-    coordinates: [15.5007, 32.5599] as [number, number],
-    color: '#8B5CF6',
-    states: ['khartoum', 'north-kordofan', 'south-kordofan', 'west-kordofan']
+    id: 'forchana-hub',
+    name: 'Forchana Hub',
+    coordinates: [13.6289, 25.3493] as [number, number],
+    color: '#EC4899',
+    states: ['west-darfur', 'central-darfur']
+  },
+  {
+    id: 'kassala-hub',
+    name: 'Kassala Hub',
+    coordinates: [15.4507, 36.4048] as [number, number],
+    color: '#22C55E',
+    states: ['kassala', 'gedaref', 'gezira', 'sennar', 'blue-nile']
+  },
+  {
+    id: 'kosti-hub',
+    name: 'Kosti Hub',
+    coordinates: [13.1629, 32.6635] as [number, number],
+    color: '#F97316',
+    states: ['white-nile', 'north-kordofan', 'south-kordofan', 'west-kordofan', 'north-darfur', 'south-darfur', 'east-darfur']
   }
 ];
 
@@ -262,9 +262,9 @@ export const stateColors: Record<string, string> = {
 };
 
 export const hubColors: Record<string, string> = {
+  'country-office': '#8B5CF6',
+  'dongola-hub': '#3B82F6',
+  'forchana-hub': '#EC4899',
   'kassala-hub': '#22C55E',
   'kosti-hub': '#F97316',
-  'el-fasher-hub': '#EC4899',
-  'dongola-hub': '#3B82F6',
-  'country-office': '#8B5CF6',
 };

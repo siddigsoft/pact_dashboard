@@ -61,6 +61,8 @@ export default function HubOperations() {
   const [selectedState, setSelectedState] = useState<string | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ type: 'hub' | 'site'; id: string; name: string } | null>(null);
+  const [hubDetailOpen, setHubDetailOpen] = useState(false);
+  const [selectedHub, setSelectedHub] = useState<ManagedHub | null>(null);
   
   const [editingHub, setEditingHub] = useState<ManagedHub | null>(null);
   const [editingSite, setEditingSite] = useState<SiteRegistry | null>(null);
@@ -947,7 +949,10 @@ export default function HubOperations() {
                   setDeleteTarget({ type: 'hub', id: hub.id, name: hub.name });
                   setDeleteDialogOpen(true);
                 }}
-                onViewDetails={() => setActiveTab('hubs')}
+                onViewDetails={() => {
+                  setSelectedHub(hub);
+                  setHubDetailOpen(true);
+                }}
               />
             ))}
           </div>
@@ -970,7 +975,10 @@ export default function HubOperations() {
                   setDeleteTarget({ type: 'hub', id: hub.id, name: hub.name });
                   setDeleteDialogOpen(true);
                 }}
-                onViewDetails={() => {}}
+                onViewDetails={() => {
+                  setSelectedHub(hub);
+                  setHubDetailOpen(true);
+                }}
               />
             ))}
           </div>
@@ -1211,6 +1219,99 @@ export default function HubOperations() {
                       <ScrollArea className="h-32 border rounded-md p-3">
                         <div className="space-y-2">
                           {stateSites.map(site => (
+                            <div key={site.id} className="flex items-center justify-between p-2 bg-muted/30 rounded text-sm">
+                              <div className="flex items-center gap-2">
+                                <Navigation className="h-3 w-3 text-muted-foreground" />
+                                <span>{site.site_name}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Badge variant="outline" className="text-xs">{site.activity_type}</Badge>
+                                <Badge variant={site.status === 'active' ? 'default' : 'secondary'} className="text-xs">
+                                  {site.status}
+                                </Badge>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </ScrollArea>
+                    </div>
+                  )}
+                </div>
+              </>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
+
+      {/* Hub Detail Dialog */}
+      <Dialog open={hubDetailOpen} onOpenChange={setHubDetailOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          {selectedHub && (() => {
+            const hubSites = sites.filter(s => s.hub_id === selectedHub.id);
+            const hubStates = selectedHub.states.map(stateId => 
+              sudanStates.find(s => s.id === stateId)
+            ).filter(Boolean);
+            const totalLocalities = hubStates.reduce((acc, state) => 
+              acc + (state?.localities.length || 0), 0
+            );
+            
+            return (
+              <>
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <Building2 className="h-5 w-5" />
+                    {selectedHub.name}
+                  </DialogTitle>
+                  <DialogDescription>
+                    {selectedHub.description || `Covering ${selectedHub.states.length} states`}
+                  </DialogDescription>
+                </DialogHeader>
+                
+                <div className="space-y-4">
+                  <div className="grid grid-cols-3 gap-3 text-center">
+                    <div className="p-3 bg-muted/50 rounded-lg">
+                      <p className="text-2xl font-bold">{selectedHub.states.length}</p>
+                      <p className="text-sm text-muted-foreground">States</p>
+                    </div>
+                    <div className="p-3 bg-muted/50 rounded-lg">
+                      <p className="text-2xl font-bold">{totalLocalities}</p>
+                      <p className="text-sm text-muted-foreground">Localities</p>
+                    </div>
+                    <div className="p-3 bg-muted/50 rounded-lg">
+                      <p className="text-2xl font-bold">{hubSites.length}</p>
+                      <p className="text-sm text-muted-foreground">Sites</p>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <h4 className="font-semibold mb-2">Assigned States ({selectedHub.states.length})</h4>
+                    <ScrollArea className="h-48 border rounded-md p-3">
+                      <div className="grid grid-cols-1 gap-2">
+                        {hubStates.map(state => state && (
+                          <div key={state.id} className="flex items-center justify-between p-2 bg-muted/30 rounded text-sm">
+                            <div className="flex items-center gap-2">
+                              <div 
+                                className="w-3 h-3 rounded-full" 
+                                style={{ backgroundColor: getStateColor(state.id) }}
+                              />
+                              <span>{state.name}</span>
+                              <Badge variant="outline" className="text-xs">{state.code}</Badge>
+                            </div>
+                            <span className="text-muted-foreground text-xs">
+                              {state.localities.length} localities
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  </div>
+                  
+                  {hubSites.length > 0 && (
+                    <div>
+                      <h4 className="font-semibold mb-2">Registered Sites ({hubSites.length})</h4>
+                      <ScrollArea className="h-32 border rounded-md p-3">
+                        <div className="space-y-2">
+                          {hubSites.map(site => (
                             <div key={site.id} className="flex items-center justify-between p-2 bg-muted/30 rounded text-sm">
                               <div className="flex items-center gap-2">
                                 <Navigation className="h-3 w-3 text-muted-foreground" />

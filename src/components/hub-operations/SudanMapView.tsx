@@ -176,11 +176,11 @@ export default function SudanMapView({
       const coords = hub.coordinates;
       if (!coords || (!coords.latitude && !coords.longitude)) {
         const defaultCoords: Record<string, [number, number]> = {
+          'country-office': [15.5007, 32.5599],
+          'dongola-hub': [19.1653, 30.4763],
+          'forchana-hub': [13.6289, 25.3493],
           'kassala-hub': [15.4507, 36.4048],
           'kosti-hub': [13.1629, 32.6635],
-          'el-fasher-hub': [13.6289, 25.3493],
-          'dongola-hub': [19.1653, 30.4763],
-          'country-office': [15.5007, 32.5599],
         };
         return {
           ...hub,
