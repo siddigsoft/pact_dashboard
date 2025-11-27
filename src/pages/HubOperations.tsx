@@ -73,8 +73,7 @@ export default function HubOperations() {
   const [newHub, setNewHub] = useState({
     name: '',
     description: '',
-    states: [] as string[],
-    coordinates: { latitude: 0, longitude: 0 }
+    states: [] as string[]
   });
   
   const [newSite, setNewSite] = useState({
@@ -177,6 +176,42 @@ export default function HubOperations() {
     }
   };
 
+  const calculateHubCoordinates = (stateIds: string[]) => {
+    const stateCoords: Record<string, { lat: number; lng: number }> = {
+      'khartoum': { lat: 15.5007, lng: 32.5599 },
+      'gezira': { lat: 14.4, lng: 33.5 },
+      'red-sea': { lat: 19.6, lng: 37.2 },
+      'kassala': { lat: 15.45, lng: 36.4 },
+      'gedaref': { lat: 14.0, lng: 35.4 },
+      'white-nile': { lat: 13.2, lng: 32.5 },
+      'blue-nile': { lat: 11.8, lng: 34.2 },
+      'sennar': { lat: 13.5, lng: 33.6 },
+      'north-kordofan': { lat: 13.9, lng: 30.8 },
+      'south-kordofan': { lat: 11.2, lng: 29.9 },
+      'west-kordofan': { lat: 12.7, lng: 29.2 },
+      'north-darfur': { lat: 15.6, lng: 24.9 },
+      'south-darfur': { lat: 11.7, lng: 24.9 },
+      'west-darfur': { lat: 12.9, lng: 22.5 },
+      'east-darfur': { lat: 11.5, lng: 26.1 },
+      'central-darfur': { lat: 12.9, lng: 23.5 },
+      'river-nile': { lat: 18.5, lng: 33.9 },
+      'northern': { lat: 19.6, lng: 30.4 },
+    };
+    
+    if (stateIds.length === 0) return { latitude: 15.5, longitude: 32.5 };
+    
+    const coords = stateIds
+      .map(id => stateCoords[id])
+      .filter(Boolean);
+    
+    if (coords.length === 0) return { latitude: 15.5, longitude: 32.5 };
+    
+    const avgLat = coords.reduce((sum, c) => sum + c.lat, 0) / coords.length;
+    const avgLng = coords.reduce((sum, c) => sum + c.lng, 0) / coords.length;
+    
+    return { latitude: avgLat, longitude: avgLng };
+  };
+
   const handleCreateHub = async () => {
     if (!newHub.name.trim()) {
       toast({ title: 'Error', description: 'Hub name is required', variant: 'destructive' });
@@ -190,11 +225,13 @@ export default function HubOperations() {
     try {
       setLoading(true);
       const hubId = `hub-${Date.now()}`;
+      const coordinates = calculateHubCoordinates(newHub.states);
+      
       const hubData = {
         id: hubId,
         name: newHub.name,
         description: newHub.description,
-        coordinates: newHub.coordinates,
+        coordinates: coordinates,
         created_by: currentUser?.id || 'unknown'
       };
 
@@ -217,7 +254,7 @@ export default function HubOperations() {
       toast({ title: 'Success', description: 'Hub created successfully', variant: 'default' });
       loadHubs();
 
-      setNewHub({ name: '', description: '', states: [], coordinates: { latitude: 0, longitude: 0 } });
+      setNewHub({ name: '', description: '', states: [] });
       setHubDialogOpen(false);
     } catch (err) {
       console.error('Error creating hub:', err);
@@ -232,13 +269,14 @@ export default function HubOperations() {
 
     try {
       setLoading(true);
+      const coordinates = calculateHubCoordinates(editingHub.states);
       
       const { error: hubError } = await supabase
         .from('hubs')
         .update({
           name: editingHub.name,
           description: editingHub.description,
-          coordinates: editingHub.coordinates
+          coordinates: coordinates
         })
         .eq('id', editingHub.id);
 
@@ -480,7 +518,7 @@ export default function HubOperations() {
           
           <Dialog open={hubDialogOpen} onOpenChange={setHubDialogOpen}>
             <DialogTrigger asChild>
-              <Button size="sm" onClick={() => { setEditingHub(null); setNewHub({ name: '', description: '', states: [], coordinates: { latitude: 0, longitude: 0 } }); }} data-testid="button-add-hub">
+              <Button size="sm" onClick={() => { setEditingHub(null); setNewHub({ name: '', description: '', states: [] }); }} data-testid="button-add-hub">
                 <Plus className="mr-2 h-4 w-4" />
                 Add Hub
               </Button>
@@ -518,42 +556,6 @@ export default function HubOperations() {
                     placeholder="Optional description"
                     data-testid="textarea-hub-description"
                   />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="hub-lat">Latitude</Label>
-                    <Input
-                      id="hub-lat"
-                      type="number"
-                      step="0.0001"
-                      value={(editingHub?.coordinates?.latitude ?? newHub.coordinates.latitude) || ''}
-                      onChange={(e) => {
-                        const lat = parseFloat(e.target.value) || 0;
-                        editingHub 
-                          ? setEditingHub({ ...editingHub, coordinates: { ...editingHub.coordinates!, latitude: lat } })
-                          : setNewHub({ ...newHub, coordinates: { ...newHub.coordinates, latitude: lat } });
-                      }}
-                      placeholder="15.5007"
-                      data-testid="input-hub-latitude"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="hub-lng">Longitude</Label>
-                    <Input
-                      id="hub-lng"
-                      type="number"
-                      step="0.0001"
-                      value={(editingHub?.coordinates?.longitude ?? newHub.coordinates.longitude) || ''}
-                      onChange={(e) => {
-                        const lng = parseFloat(e.target.value) || 0;
-                        editingHub 
-                          ? setEditingHub({ ...editingHub, coordinates: { ...editingHub.coordinates!, longitude: lng } })
-                          : setNewHub({ ...newHub, coordinates: { ...newHub.coordinates, longitude: lng } });
-                      }}
-                      placeholder="32.5599"
-                      data-testid="input-hub-longitude"
-                    />
-                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label>Assign States *</Label>
