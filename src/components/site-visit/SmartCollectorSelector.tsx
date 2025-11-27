@@ -8,8 +8,20 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { calculateDistance, calculateUserWorkload } from '@/utils/collectorUtils';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { Loader2, Search } from 'lucide-react';
+import { Loader2, Search, AlertTriangle, Circle, Filter } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface SmartCollectorSelectorProps {
   siteVisit: SiteVisit;
@@ -41,6 +53,8 @@ const SmartCollectorSelector: React.FC<SmartCollectorSelectorProps> = ({
   const [autoAssigning, setAutoAssigning] = useState<boolean>(false);
   const [workloadCounts, setWorkloadCounts] = useState<Record<string, number>>({});
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [showOnlineOnly, setShowOnlineOnly] = useState<boolean>(true);
+  const [offlineWarningUser, setOfflineWarningUser] = useState<EnhancedUser | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -125,8 +139,11 @@ const SmartCollectorSelector: React.FC<SmartCollectorSelectorProps> = ({
       };
     });
 
-    // Sort by: hub match -> state match -> locality match -> distance (coords)
+    // Sort by: online status -> hub match -> state match -> locality match -> distance (coords)
     enhancedUsers.sort((a, b) => {
+      const aOnline = a.availability === 'online';
+      const bOnline = b.availability === 'online';
+      if (aOnline !== bOnline) return aOnline ? -1 : 1;
       if (a.isHubMatch !== b.isHubMatch) return a.isHubMatch ? -1 : 1;
       if (a.isStateMatch !== b.isStateMatch) return a.isStateMatch ? -1 : 1;
       if (a.isLocalityMatch !== b.isLocalityMatch) return a.isLocalityMatch ? -1 : 1;
@@ -134,7 +151,31 @@ const SmartCollectorSelector: React.FC<SmartCollectorSelectorProps> = ({
     });
 
     setSortedUsers(enhancedUsers);
-  }, [users, siteVisit, allSiteVisits]);
+  }, [users, siteVisit, allSiteVisits, workloadCounts]);
+
+  const handleAssignClick = async (user: EnhancedUser) => {
+    if (user.availability !== 'online') {
+      setOfflineWarningUser(user);
+    } else {
+      setAssigningUserId(user.id);
+      try {
+        await onAssign(user.id);
+      } finally {
+        setAssigningUserId(null);
+      }
+    }
+  };
+
+  const confirmOfflineAssignment = async () => {
+    if (!offlineWarningUser) return;
+    setAssigningUserId(offlineWarningUser.id);
+    try {
+      await onAssign(offlineWarningUser.id);
+    } finally {
+      setAssigningUserId(null);
+      setOfflineWarningUser(null);
+    }
+  };
 
   if (isOpen !== undefined) {
     return (
@@ -149,7 +190,7 @@ const SmartCollectorSelector: React.FC<SmartCollectorSelectorProps> = ({
   }
   
   return renderContent();
-  
+
   function renderContent() {
     const fallbackCollectors = users.filter(user => {
       const roleVal = (user.role || '').toString();
@@ -159,29 +200,86 @@ const SmartCollectorSelector: React.FC<SmartCollectorSelectorProps> = ({
     }) as EnhancedUser[];
     const allUsers: EnhancedUser[] = sortedUsers.length > 0 ? sortedUsers : fallbackCollectors;
     
-    // Filter users based on search query
-    const displayUsers: EnhancedUser[] = searchQuery.trim() === '' 
+    // Filter users based on search query and availability filter
+    let displayUsers: EnhancedUser[] = searchQuery.trim() === '' 
       ? allUsers
       : allUsers.filter(user => 
           user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
           user.email?.toLowerCase().includes(searchQuery.toLowerCase())
         );
+    
+    // Apply availability filter
+    if (showOnlineOnly) {
+      displayUsers = displayUsers.filter(user => user.availability === 'online');
+    }
+
+    const onlineCount = allUsers.filter(u => u.availability === 'online').length;
+    const offlineCount = allUsers.length - onlineCount;
+
     return (
       <div className="p-4">
+        <AlertDialog open={!!offlineWarningUser} onOpenChange={(open) => !open && setOfflineWarningUser(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-amber-500" />
+                Assign to Offline Collector?
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                <strong>{offlineWarningUser?.name}</strong> is currently marked as <strong>offline</strong> and may not receive this assignment notification immediately.
+                <br /><br />
+                Are you sure you want to proceed?
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={confirmOfflineAssignment} className="bg-amber-500 hover:bg-amber-600">
+                Assign Anyway
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
         <h2 className="text-xl font-semibold mb-4">Smart Collector Assignment</h2>
-        <p className="text-sm text-gray-500 mb-4">
-          The system prioritizes by hub, then state, then locality, then distance.
+        <p className="text-sm text-muted-foreground mb-4">
+          The system prioritizes online collectors, then by hub, state, locality, and distance.
         </p>
         
-        <div className="relative mb-4">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-          <Input
-            type="text"
-            placeholder="Search collectors by name or email..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
-          />
+        <div className="flex flex-col sm:flex-row gap-3 mb-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+            <Input
+              type="text"
+              placeholder="Search collectors by name or email..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10"
+              data-testid="input-search-collectors"
+            />
+          </div>
+          <div className="flex items-center gap-2 px-3 py-2 bg-muted/50 rounded-md">
+            <Filter className="h-4 w-4 text-muted-foreground" />
+            <Switch
+              id="show-online-only"
+              checked={showOnlineOnly}
+              onCheckedChange={setShowOnlineOnly}
+              data-testid="switch-online-filter"
+            />
+            <Label htmlFor="show-online-only" className="text-sm cursor-pointer">
+              Online only
+            </Label>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-4 mb-3 text-sm text-muted-foreground">
+          <div className="flex items-center gap-1">
+            <Circle className="h-3 w-3 fill-green-500 text-green-500" />
+            <span>{onlineCount} online</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <Circle className="h-3 w-3 fill-gray-400 text-gray-400" />
+            <span>{offlineCount} offline</span>
+          </div>
         </div>
         <div className="mb-3 flex justify-end">
           <Button
@@ -291,15 +389,9 @@ const SmartCollectorSelector: React.FC<SmartCollectorSelectorProps> = ({
                       </div>
                       
                       <Button 
-                        onClick={async () => {
-                          setAssigningUserId(user.id);
-                          try {
-                            await onAssign(user.id);
-                          } finally {
-                            setAssigningUserId(null);
-                          }
-                        }}
+                        onClick={() => handleAssignClick(user)}
                         disabled={assigningUserId !== null || autoAssigning}
+                        data-testid={`button-assign-${user.id}`}
                       >
                         {assigningUserId === user.id ? (
                           <>

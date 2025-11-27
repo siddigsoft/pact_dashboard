@@ -10,7 +10,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, DollarSign, AlertCircle, ArrowRight, ArrowLeft } from 'lucide-react';
+import { Loader2, DollarSign, AlertCircle, ArrowRight, ArrowLeft, Copy, Users } from 'lucide-react';
 import { sudanStates } from '@/data/sudanStates';
 
 interface DispatchSitesDialogProps {
@@ -57,6 +57,13 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
   const [selectedSites, setSelectedSites] = useState<Set<string>>(new Set());
   const [siteCosts, setSiteCosts] = useState<Map<string, SiteCosts>>(new Map());
   const [search, setSearch] = useState('');
+  const [bulkCost, setBulkCost] = useState({
+    transportation: 0,
+    accommodation: 0,
+    mealAllowance: 0,
+    otherCosts: 0,
+    calculationNotes: ''
+  });
   const { toast } = useToast();
 
   // Load data collectors
@@ -100,6 +107,13 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
       setSelectedLocality('');
       setSelectedCollector('');
       setSearch('');
+      setBulkCost({
+        transportation: 0,
+        accommodation: 0,
+        mealAllowance: 0,
+        otherCosts: 0,
+        calculationNotes: ''
+      });
     }
   }, [open]);
 
@@ -275,6 +289,41 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
     });
   };
 
+  const applyBulkCostToAll = () => {
+    if (bulkCost.transportation <= 0) {
+      toast({
+        title: 'Transportation cost required',
+        description: 'Please enter a transportation cost before applying to all sites.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setSiteCosts(prev => {
+      const newCosts = new Map(prev);
+      Array.from(selectedSites).forEach(siteId => {
+        const existingCost = newCosts.get(siteId);
+        if (existingCost) {
+          newCosts.set(siteId, {
+            ...existingCost,
+            transportation: bulkCost.transportation,
+            accommodation: bulkCost.accommodation,
+            mealAllowance: bulkCost.mealAllowance,
+            otherCosts: bulkCost.otherCosts,
+            calculationNotes: bulkCost.calculationNotes || existingCost.calculationNotes
+          });
+        }
+      });
+      return newCosts;
+    });
+
+    toast({
+      title: 'Costs applied',
+      description: `Applied uniform costs to ${selectedSites.size} site(s).`,
+      variant: 'default'
+    });
+  };
+
   const handleDispatch = async () => {
     // Validate that all selected sites have transportation costs entered
     const selectedSiteObjects = filteredSiteEntries.filter(s => selectedSites.has(s.id));
@@ -353,20 +402,76 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
         }
       }
 
-      // Step 2: Prepare notifications for collectors
+      // Step 2: Prepare notifications for collectors AND all team members in same state/locality
       const notificationRows: any[] = [];
+      
+      // Get all team members (coordinators, supervisors, admins) in the same state/locality
+      const siteStates = new Set<string>();
+      const siteLocalities = new Set<string>();
+      
+      selectedSiteObjects.forEach(entry => {
+        const state = entry.state || entry.state_name;
+        const locality = entry.locality || entry.locality_name;
+        if (state) siteStates.add(state.trim());
+        if (locality) siteLocalities.add(locality.trim());
+      });
+
+      // Convert state/locality names to IDs for matching
+      const stateIds = new Set<string>();
+      const localityIds = new Set<string>();
+      
+      for (const stateName of siteStates) {
+        const stateData = sudanStates.find(s => s.name.toLowerCase() === stateName.toLowerCase());
+        if (stateData) {
+          stateIds.add(stateData.id);
+          // Also get locality IDs for this state
+          for (const localityName of siteLocalities) {
+            const localityData = stateData.localities.find(l => l.name.toLowerCase() === localityName.toLowerCase());
+            if (localityData) {
+              localityIds.add(localityData.id);
+            }
+          }
+        }
+      }
+
+      // Fetch all team members in the same state/locality (coordinators, supervisors, admins, enumerators)
+      let teamMembersQuery = supabase
+        .from('profiles')
+        .select('id, full_name, role, state_id, locality_id')
+        .in('role', ['coordinator', 'supervisor', 'admin', 'enumerator', 'dataCollector', 'datacollector']);
+      
+      // Filter by state or locality if we have them
+      if (stateIds.size > 0) {
+        teamMembersQuery = teamMembersQuery.in('state_id', Array.from(stateIds));
+      }
+      
+      const { data: teamMembers } = await teamMembersQuery;
+      const allTeamMemberIds = new Set<string>(teamMembers?.map(m => m.id) || []);
+      
+      // Add target collectors to the set
+      targetCollectors.forEach(id => allTeamMemberIds.add(id));
+
       for (const siteEntry of selectedSiteObjects) {
         const costs = siteCosts.get(siteEntry.id);
         const totalCost = costs 
           ? costs.transportation + costs.accommodation + costs.mealAllowance + costs.otherCosts
           : 0;
+        
+        const siteName = costs?.siteName || siteEntry.site_name || 'Unknown';
+        const siteState = siteEntry.state || siteEntry.state_name || '';
+        const siteLocality = siteEntry.locality || siteEntry.locality_name || '';
 
-        for (const collectorId of targetCollectors) {
+        // Notify all team members in the same region
+        for (const memberId of allTeamMemberIds) {
+          const isDirectAssignment = dispatchType === 'individual' && targetCollectors.includes(memberId);
+          
           notificationRows.push({
-            user_id: collectorId,
-            title: dispatchType === 'individual' ? 'Site Visit Assigned' : 'New Site Visit Available',
-            message: `Site "${costs?.siteName || siteEntry.site_name || 'Unknown'}" ${dispatchType === 'individual' ? 'has been assigned to you' : 'is available'}. Total Budget: ${totalCost} SDG (Transportation: ${costs?.transportation || 0} SDG)`,
-            type: 'info',
+            user_id: memberId,
+            title: isDirectAssignment ? 'Site Visit Assigned to You' : 'New Site Dispatched in Your Area',
+            message: isDirectAssignment 
+              ? `Site "${siteName}" has been assigned to you. Total Budget: ${totalCost} SDG (Transportation: ${costs?.transportation || 0} SDG)`
+              : `Site "${siteName}" in ${siteLocality ? siteLocality + ', ' : ''}${siteState} has been dispatched. Budget: ${totalCost} SDG`,
+            type: isDirectAssignment ? 'info' : 'success',
             link: `/mmp?entry=${siteEntry.id}`,
             related_entity_id: siteEntry.id,
             related_entity_type: 'mmpFile'
@@ -374,11 +479,20 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
         }
       }
 
-      // Send notifications
-      if (notificationRows.length > 0) {
+      // Send notifications (deduplicate by user_id + related_entity_id to avoid duplicate notifications)
+      const uniqueNotifications = new Map<string, any>();
+      for (const notif of notificationRows) {
+        const key = `${notif.user_id}-${notif.related_entity_id}`;
+        if (!uniqueNotifications.has(key)) {
+          uniqueNotifications.set(key, notif);
+        }
+      }
+      
+      const finalNotifications = Array.from(uniqueNotifications.values());
+      if (finalNotifications.length > 0) {
         const { error: notifError } = await supabase
           .from('notifications')
-          .insert(notificationRows);
+          .insert(finalNotifications);
 
         if (notifError) {
           console.error('Error creating notifications:', notifError);
@@ -665,7 +779,97 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
               </div>
             </div>
 
-            <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2">
+            <Card className="border-2 border-dashed border-primary/30 bg-primary/5">
+              <CardContent className="p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Copy className="h-5 w-5 text-primary" />
+                  <h4 className="font-semibold text-primary">Apply Same Cost to All Sites</h4>
+                  <Badge variant="secondary" className="ml-auto">{selectedSites.size} sites</Badge>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Enter costs once and apply to all {selectedSites.size} selected sites for bulk dispatch.
+                </p>
+                
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="bulk-transportation" className="text-xs">Transportation (SDG) *</Label>
+                    <Input
+                      id="bulk-transportation"
+                      type="number"
+                      value={bulkCost.transportation || ''}
+                      onChange={(e) => setBulkCost(prev => ({ ...prev, transportation: parseFloat(e.target.value) || 0 }))}
+                      placeholder="Enter amount"
+                      data-testid="input-bulk-transportation"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="bulk-accommodation" className="text-xs">Accommodation (SDG)</Label>
+                    <Input
+                      id="bulk-accommodation"
+                      type="number"
+                      value={bulkCost.accommodation || ''}
+                      onChange={(e) => setBulkCost(prev => ({ ...prev, accommodation: parseFloat(e.target.value) || 0 }))}
+                      placeholder="Optional"
+                      data-testid="input-bulk-accommodation"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="bulk-meal" className="text-xs">Meal Allowance (SDG)</Label>
+                    <Input
+                      id="bulk-meal"
+                      type="number"
+                      value={bulkCost.mealAllowance || ''}
+                      onChange={(e) => setBulkCost(prev => ({ ...prev, mealAllowance: parseFloat(e.target.value) || 0 }))}
+                      placeholder="Optional"
+                      data-testid="input-bulk-meal"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="bulk-other" className="text-xs">Other Costs (SDG)</Label>
+                    <Input
+                      id="bulk-other"
+                      type="number"
+                      value={bulkCost.otherCosts || ''}
+                      onChange={(e) => setBulkCost(prev => ({ ...prev, otherCosts: parseFloat(e.target.value) || 0 }))}
+                      placeholder="Optional"
+                      data-testid="input-bulk-other"
+                    />
+                  </div>
+                </div>
+                
+                <div>
+                  <Label htmlFor="bulk-notes" className="text-xs">Calculation Notes (Optional)</Label>
+                  <Textarea
+                    id="bulk-notes"
+                    value={bulkCost.calculationNotes}
+                    onChange={(e) => setBulkCost(prev => ({ ...prev, calculationNotes: e.target.value }))}
+                    placeholder="Notes to apply to all sites..."
+                    rows={2}
+                    data-testid="textarea-bulk-notes"
+                  />
+                </div>
+                
+                <div className="flex items-center justify-between pt-2 border-t">
+                  <div className="text-sm">
+                    <span className="text-muted-foreground">Total per site: </span>
+                    <span className="font-bold text-primary">
+                      {(bulkCost.transportation + bulkCost.accommodation + bulkCost.mealAllowance + bulkCost.otherCosts).toFixed(2)} SDG
+                    </span>
+                  </div>
+                  <Button onClick={applyBulkCostToAll} variant="default" data-testid="button-apply-bulk">
+                    <Copy className="mr-2 h-4 w-4" />
+                    Apply to All Sites
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Users className="h-4 w-4" />
+              <span>All team members in the same state/locality will be notified when sites are dispatched.</span>
+            </div>
+
+            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
               {Array.from(selectedSites).map(siteId => {
                 const site = filteredSiteEntries.find(s => s.id === siteId);
                 const costs = siteCosts.get(siteId);
