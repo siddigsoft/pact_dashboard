@@ -559,16 +559,26 @@ export default function HubOperations() {
                 </div>
                 <div className="space-y-2">
                   <Label>Assign States *</Label>
-                  <p className="text-sm text-muted-foreground">Select states to include in this hub</p>
+                  <p className="text-sm text-muted-foreground">Select states to include in this hub. States already assigned to other hubs are disabled.</p>
                   <ScrollArea className="h-64 border rounded-md p-3">
                     <div className="space-y-2">
                       {sudanStates.map(state => {
                         const isSelected = (editingHub?.states ?? newHub.states).includes(state.id);
+                        const assignedHub = hubs.find(h => 
+                          h.id !== editingHub?.id && h.states.includes(state.id)
+                        );
+                        const isDisabled = !!assignedHub;
+                        
                         return (
                           <div 
                             key={state.id} 
-                            className={`flex items-center space-x-2 p-2 rounded cursor-pointer hover:bg-accent ${isSelected ? 'bg-primary/10' : ''}`}
+                            className={`flex items-center space-x-2 p-2 rounded ${
+                              isDisabled 
+                                ? 'opacity-50 cursor-not-allowed bg-muted' 
+                                : `cursor-pointer hover:bg-accent ${isSelected ? 'bg-primary/10' : ''}`
+                            }`}
                             onClick={() => {
+                              if (isDisabled) return;
                               const currentStates = editingHub?.states ?? newHub.states;
                               const updatedStates = isSelected
                                 ? currentStates.filter(s => s !== state.id)
@@ -578,12 +588,16 @@ export default function HubOperations() {
                                 : setNewHub({ ...newHub, states: updatedStates });
                             }}
                           >
-                            <Checkbox checked={isSelected} />
+                            <Checkbox checked={isSelected} disabled={isDisabled} />
                             <div className="flex-1">
                               <p className="font-medium">{state.name}</p>
-                              <p className="text-xs text-muted-foreground">{state.localities.length} localities</p>
+                              {isDisabled ? (
+                                <p className="text-xs text-destructive">Assigned to: {assignedHub?.name}</p>
+                              ) : (
+                                <p className="text-xs text-muted-foreground">{state.localities.length} localities</p>
+                              )}
                             </div>
-                            <Badge variant="outline">{state.code}</Badge>
+                            <Badge variant={isDisabled ? "secondary" : "outline"}>{state.code}</Badge>
                           </div>
                         );
                       })}
