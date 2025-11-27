@@ -24,6 +24,17 @@ const Dashboard = () => {
 
   // Determine default zone based on user role
   const defaultZone = useMemo((): DashboardZone => {
+    // Check if user is admin - admins should NOT see FOM or Data Collector dashboards
+    const isAdmin = roles?.some(r => {
+      const normalized = normalizeRole(r);
+      return normalized === 'admin';
+    });
+    
+    // If admin, default to operations zone (their original dashboard)
+    if (isAdmin) {
+      return 'operations';
+    }
+    
     // Check if user is FOM
     const isFOM = roles?.some(r => {
       const normalized = normalizeRole(r);

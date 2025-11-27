@@ -93,11 +93,10 @@ export const DashboardZoneLayout: React.FC<DashboardZoneLayoutProps> = ({
   };
 
   const hasRoleAccess = (zoneRoles: string[]) => {
-    if (roles?.some(r => normalizeRoleForMatch(r) === 'admin')) return true;
     return roles?.some(r => {
       const normalized = normalizeRoleForMatch(r);
       return zoneRoles.some(zr => normalized.includes(zr) || zr === normalized);
-    });
+    }) ?? false;
   };
 
   const availableZones = zones.filter(z => hasRoleAccess(z.roles));
