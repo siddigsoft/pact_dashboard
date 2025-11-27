@@ -355,26 +355,7 @@ const CreateSiteVisitUrgent = () => {
                 value={field.value}
                 className="grid grid-cols-1 lg:grid-cols-2 gap-6"
               >
-                <div className="relative group">
-                  <RadioGroupItem value="existing" id="existing" className="peer sr-only" />
-                  <Label
-                    htmlFor="existing"
-                    className="flex flex-col space-y-4 rounded-xl border-2 border-muted bg-card p-6 hover:bg-accent/50 hover:border-primary/50 peer-data-[state=checked]:border-primary peer-data-[state=checked]:bg-primary/5 cursor-pointer transition-all duration-200 group-hover:shadow-md"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-3">
-                        <Building2 className="h-5 w-5 text-blue-600" />
-                        <span className="font-semibold">Existing Approved Site</span>
-                      </div>
-                      <Badge variant="secondary" className="text-xs">
-                        {approvedMmpSites.length} available
-                      </Badge>
-                    </div>
-                    <p className="text-sm text-muted-foreground leading-relaxed">
-                      Select from sites already approved in MMP files. This option ensures compliance with existing project plans.
-                    </p>
-                  </Label>
-                </div>
+               
 
                 <div className="relative group">
                   <RadioGroupItem value="new" id="new" className="peer sr-only" />

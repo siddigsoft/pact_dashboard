@@ -57,29 +57,7 @@ const CreateSiteVisit = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card className="cursor-pointer hover:border-primary" onClick={() => navigate('/site-visits/create/mmp')}>
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <FileText className="h-5 w-5 mr-2" />
-              From MMP
-            </CardTitle>
-            <CardDescription>
-              Create site visits using data from approved MMP files
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              Use this option to create site visits based on site entries in approved MMP files. 
-              This is the standard method for creating scheduled site visits.
-            </p>
-          </CardContent>
-          <CardFooter>
-            <Button variant="outline" className="w-full">
-              Select MMP
-            </Button>
-          </CardFooter>
-        </Card>
-
+      
         <Card className="cursor-pointer hover:border-primary" onClick={() => navigate('/site-visits/create/urgent')}>
           <CardHeader>
             <CardTitle className="flex items-center">
