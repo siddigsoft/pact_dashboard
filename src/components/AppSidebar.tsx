@@ -70,6 +70,11 @@ const getMenuGroups = (
   const isICT = roles.includes('ict' as AppRole) || defaultRole === 'ict';
   const isFinancialAdmin = roles.includes('financialAdmin' as AppRole) || defaultRole === 'financialAdmin';
   const isDataCollector = roles.includes('dataCollector' as AppRole) || defaultRole === 'dataCollector';
+  // Check for FOM role (can be 'fom' or 'Field Operation Manager (FOM)')
+  const isFOM = roles.some(r => {
+    const normalized = r.toLowerCase().replace(/\s+/g, '').replace(/[()]/g, '');
+    return normalized.includes('fom') || normalized.includes('fieldoperationmanager');
+  }) || defaultRole.toLowerCase().includes('fom');
   // Build items per permission, allowing admin bypass
   const mainItems = [] as MenuGroup['items'];
   if (isAdmin || isICT || perms.dashboard) mainItems.push({ title: "Dashboard", url: "/dashboard", icon: LayoutDashboard });
@@ -89,7 +94,7 @@ const getMenuGroups = (
   if (isAdmin || isICT || perms.mmp) projectItems.push({ title: isDataCollector ? "My Sites Management" : "MMP Management", url: "/mmp", icon: Database });
   if (isAdmin || isICT || perms.siteVisits) projectItems.push({ title: "Site Visits", url: "/site-visits", icon: ClipboardList });
   if (isAdmin || perms.fieldOpManager) projectItems.push({ title: "Field Operation Manager", url: "/field-operation-manager", icon: ClipboardList });
-  if (isAdmin || perms.archive) projectItems.push({ title: "Archive", url: "/archive", icon: Archive });
+  if ((isAdmin || perms.archive) && !isFOM) projectItems.push({ title: "Archive", url: "/archive", icon: Archive });
   if (showSitesForVerification) projectItems.push({ title: "Site Verification", url: "/coordinator/sites", icon: ClipboardList });
 
   // ICT should NOT have access to Team or Data & Reports
@@ -97,8 +102,8 @@ const getMenuGroups = (
   if ((isAdmin || perms.fieldTeam) && !isICT) teamItems.push({ title: "Field Team", url: "/field-team", icon: Activity });
 
   const dataItems = [] as MenuGroup['items'];
-  if ((isAdmin || perms.dataVisibility) && !isICT) dataItems.push({ title: "Data Visibility", url: "/data-visibility", icon: Link2 });
-  if ((isAdmin || perms.reports) && !isICT) dataItems.push({ title: "Reports", url: "/reports", icon: Calendar });
+  if ((isAdmin || perms.dataVisibility) && !isICT && !isFOM) dataItems.push({ title: "Data Visibility", url: "/data-visibility", icon: Link2 });
+  if ((isAdmin || perms.reports) && !isICT && !isFOM) dataItems.push({ title: "Reports", url: "/reports", icon: Calendar });
 
   const adminItems = [] as MenuGroup['items'];
   if (isAdmin || isICT || perms.users) adminItems.push({ title: "User Management", url: "/users", icon: Users });
