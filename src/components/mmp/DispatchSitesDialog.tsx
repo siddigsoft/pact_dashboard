@@ -391,7 +391,6 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
             .from('site_visit_costs')
             .insert({
               mmp_site_entry_id: siteEntry.id,
-              site_name: costs.siteName,
               transportation_cost: costs.transportation,
               accommodation_cost: costs.accommodation,
               meal_allowance: costs.mealAllowance,
@@ -399,7 +398,7 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
               total_cost: totalCost,
               cost_status: 'calculated',
               calculated_by: assignedBy,
-              calculation_notes: costs.calculationNotes || 'Admin-calculated costs before dispatch',
+              calculation_notes: costs.calculationNotes || `Costs for ${costs.siteName} - Admin-calculated before dispatch`,
             });
 
           if (costError) {
