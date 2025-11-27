@@ -323,7 +323,7 @@
                       data-testid={`group-label-${group.id}`}
                     >
                       <span>{group.label}</span>
-                      <ChevronDown className={h-3 w-3 transition-transform duration-200 ${isCollapsed ? '-rotate-90' : ''}} />
+                      <ChevronDown className={`h-3 w-3 transition-transform duration-200 ${isCollapsed ? '-rotate-90' : ''}`} />
                     </SidebarGroupLabel>
                   </CollapsibleTrigger>
                   <CollapsibleContent>
@@ -342,7 +342,7 @@
                                     : "hover:bg-blue-50 dark:hover:bg-blue-800"
                                 }`}
                             >
-                              <Link to={item.url} className="flex items-center gap-3" data-testid={`nav-link-${item.id}`}
+                              <Link to={item.url} className="flex items-center gap-3" data-testid={`nav-link-${item.id}`}>
                                 <item.icon
                                   className={`h-5 w-5 ${
                                     pathname === item.url
