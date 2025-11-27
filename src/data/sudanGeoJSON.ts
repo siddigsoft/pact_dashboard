@@ -207,7 +207,7 @@ export const hubLocations = [
     id: 'kassala-hub',
     name: 'Kassala Hub',
     coordinates: [15.4507, 36.4048] as [number, number],
-    color: '#8B5CF6',
+    color: '#22C55E',
     states: ['red-sea', 'kassala', 'gedaref']
   },
   {

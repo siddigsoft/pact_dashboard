@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { MapContainer, TileLayer, GeoJSON, Marker, Popup, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { sudanStateBoundaries, stateColors, hubColors } from '@/data/sudanGeoJSON';
+import { sudanStateBoundaries, stateColors, hubColors, hubLocations } from '@/data/sudanGeoJSON';
 import { ManagedHub, SiteRegistry } from '@/types/hub-operations';
 import { sudanStates } from '@/data/sudanStates';
 
@@ -93,7 +93,18 @@ export default function SudanMapView({
   height = "500px",
 }: SudanMapViewProps) {
   const getHubForState = (stateId: string) => {
-    return hubs.find(hub => hub.states?.includes(stateId));
+    const hubFromProps = hubs.find(hub => hub.states?.includes(stateId));
+    if (hubFromProps) return hubFromProps;
+    
+    const hubFromLocations = hubLocations.find(hub => hub.states.includes(stateId));
+    if (hubFromLocations) {
+      return {
+        id: hubFromLocations.id,
+        name: hubFromLocations.name,
+        states: hubFromLocations.states,
+      } as ManagedHub;
+    }
+    return undefined;
   };
 
   const stateStyle = (feature: any) => {

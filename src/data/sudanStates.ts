@@ -390,7 +390,7 @@ export const hubs: Hub[] = [
   {
     id: 'kosti-hub',
     name: 'Kosti Hub',
-    states: ['white-nile', 'sennar', 'blue-nile'],
+    states: ['white-nile', 'sennar', 'blue-nile', 'gezira'],
     coordinates: { latitude: 13.2, longitude: 32.5 }
   },
   {
@@ -408,7 +408,7 @@ export const hubs: Hub[] = [
   {
     id: 'country-office',
     name: 'Country Office (Khartoum)',
-    states: ['khartoum', 'gezira', 'north-kordofan', 'south-kordofan', 'west-kordofan'],
+    states: ['khartoum', 'north-kordofan', 'south-kordofan', 'west-kordofan'],
     coordinates: { latitude: 15.5007, longitude: 32.5599 }
   }
 ];
