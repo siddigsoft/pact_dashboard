@@ -24,6 +24,7 @@ import { DispatchSitesDialog } from '@/components/mmp/DispatchSitesDialog';
 import { sudanStates } from '@/data/sudanStates';
 import { VisitReportDialog, VisitReportData } from '@/components/site-visit/VisitReportDialog';
 import { StartVisitDialog } from '@/components/site-visit/StartVisitDialog';
+import { useSiteClaimRealtime } from '@/hooks/use-site-claim-realtime';
 
 // Helper component to convert SiteVisitRow[] to site entries and display using MMPSiteEntriesTable
 const SitesDisplayTable: React.FC<{ 
@@ -527,28 +528,72 @@ const MMP = () => {
   const [rejectComments, setRejectComments] = useState('');
   const [showRejectConfirm, setShowRejectConfirm] = useState(false);
 
-  // Handle accepting a Smart Assigned site
+  // Handle accepting/claiming a site (works for both Smart Assigned and Available Sites)
   const handleAcceptSite = async (site: any) => {
     try {
-      console.log('🔄 Starting site acceptance for site:', site.id, site.site_name);
+      console.log('🔄 Starting site acceptance/claim for site:', site.id, site.site_name);
       
-      const now = new Date().toISOString();
-      const { error } = await supabase
-        .from('mmp_site_entries')
-        .update({
-          status: 'accepted',
-          accepted_by: currentUser?.id,
-          accepted_at: now,
-          updated_at: now
-        })
-        .eq('id', site.id);
+      const isDispatchedSite = site.status?.toLowerCase() === 'dispatched';
+      
+      if (isDispatchedSite && currentUser?.id) {
+        // Use atomic claim RPC for dispatched sites (first-claim system)
+        console.log('📍 Using atomic claim RPC for dispatched site...');
+        const { data: result, error: rpcError } = await supabase.rpc('claim_site_visit', {
+          p_site_id: site.id,
+          p_user_id: currentUser.id
+        });
+        
+        if (rpcError) {
+          console.error('❌ Claim RPC failed:', rpcError);
+          toast({
+            title: 'Claim Failed',
+            description: rpcError.message || 'Could not claim this site. It may have been claimed by another enumerator.',
+            variant: 'destructive'
+          });
+          return;
+        }
+        
+        const claimResult = result as { success: boolean; error?: string; message: string };
+        
+        if (!claimResult.success) {
+          console.error('❌ Claim rejected:', claimResult);
+          let description = claimResult.message;
+          
+          if (claimResult.error === 'ALREADY_CLAIMED') {
+            description = 'Another enumerator claimed this site first. Try a different site.';
+          } else if (claimResult.error === 'CLAIM_IN_PROGRESS') {
+            description = 'Someone else is claiming this site right now. Try again in a moment.';
+          }
+          
+          toast({
+            title: 'Could Not Claim Site',
+            description,
+            variant: 'destructive'
+          });
+          return;
+        }
+        
+        console.log('✅ Site claimed successfully via RPC');
+      } else {
+        // Standard accept for Smart Assigned sites
+        const now = new Date().toISOString();
+        const { error } = await supabase
+          .from('mmp_site_entries')
+          .update({
+            status: 'accepted',
+            accepted_by: currentUser?.id,
+            accepted_at: now,
+            updated_at: now
+          })
+          .eq('id', site.id);
 
-      if (error) {
-        console.error('❌ Database update failed:', error);
-        throw error;
+        if (error) {
+          console.error('❌ Database update failed:', error);
+          throw error;
+        }
+        
+        console.log('✅ Database update successful');
       }
-
-      console.log('✅ Database update successful');
 
       toast({
         title: 'Site Accepted',
@@ -1514,6 +1559,29 @@ const MMP = () => {
   // We intentionally DO NOT fallback to checkPermission here to prevent other roles (e.g. FOM)
   // that may have broad permissions from seeing the upload control.
   const canCreate = isAdmin || isICT;
+
+  // Real-time subscription for site claims (Uber-like first-claim system)
+  // When another enumerator claims a site, it will be removed from available sites in real-time
+  const handleSiteClaimedRealtime = React.useCallback((siteId: string, claimedBy: string) => {
+    // Skip if we're the one who claimed it
+    if (claimedBy === currentUser?.id) return;
+    
+    // Remove the claimed site from available sites immediately
+    setEnumeratorSiteEntries(prev => prev.filter(s => s.id !== siteId));
+    setEnumeratorGroupedByStates(prev => {
+      const updated = { ...prev };
+      Object.keys(updated).forEach(key => {
+        updated[key] = updated[key].filter(s => s.id !== siteId);
+        if (updated[key].length === 0) delete updated[key];
+      });
+      return updated;
+    });
+  }, [currentUser?.id]);
+
+  useSiteClaimRealtime({
+    onSiteClaimed: handleSiteClaimedRealtime,
+    enabled: isDataCollector
+  });
 
   // Debug: Log role checks
   useEffect(() => {
