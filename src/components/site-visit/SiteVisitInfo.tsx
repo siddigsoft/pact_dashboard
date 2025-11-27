@@ -242,22 +242,7 @@ export const SiteVisitInfo = ({ siteVisit }: SiteVisitInfoProps) => {
         )}
       </div>
 
-      {/* Description Card (conditionally rendered if not already shown) */}
-      {siteVisit.permitDetails && (
-        <Card>
-          <CardHeader className="bg-muted/30">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <FileText className="h-5 w-5 text-primary" />
-              Description
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-6">
-            <p className="text-sm">
-              {siteVisit.description || 'No description provided'}
-            </p>
-          </CardContent>
-        </Card>
-      )}
+    
     </div>
   );
 };
