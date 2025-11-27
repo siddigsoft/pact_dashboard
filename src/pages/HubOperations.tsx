@@ -100,25 +100,29 @@ export default function HubOperations() {
 
   const loadHubs = async () => {
     try {
-      const { data, error } = await supabase
+      const { data: hubsData, error: hubsError } = await supabase
         .from('hubs')
         .select('*')
         .order('name');
       
-      if (error) throw error;
-      setHubs(data || []);
-      localStorage.removeItem('pact_hubs_local');
+      if (hubsError) throw hubsError;
+
+      const { data: hubStatesData, error: statesError } = await supabase
+        .from('hub_states')
+        .select('*');
+      
+      if (statesError && statesError.code !== '42P01') throw statesError;
+
+      const hubsWithStates = (hubsData || []).map(hub => ({
+        ...hub,
+        states: (hubStatesData || [])
+          .filter(hs => hs.hub_id === hub.id)
+          .map(hs => hs.state_id)
+      }));
+
+      setHubs(hubsWithStates);
     } catch (err) {
-      console.error('Error loading hubs from database, using local storage:', err);
-      const storedHubs = localStorage.getItem('pact_hubs_local');
-      if (storedHubs) {
-        try {
-          setHubs(JSON.parse(storedHubs));
-          return;
-        } catch (e) {
-          console.error('Error parsing stored hubs:', e);
-        }
-      }
+      console.error('Error loading hubs from database, using fallback:', err);
       const hubsFromLocal = defaultHubs.map((hub: any) => ({
         id: hub.id,
         name: hub.name,
@@ -129,7 +133,6 @@ export default function HubOperations() {
         created_by: 'system'
       }));
       setHubs(hubsFromLocal);
-      localStorage.setItem('pact_hubs_local', JSON.stringify(hubsFromLocal));
     }
   };
 
@@ -185,29 +188,33 @@ export default function HubOperations() {
 
     try {
       setLoading(true);
+      const hubId = `hub-${Date.now()}`;
       const hubData = {
-        id: `hub-${Date.now()}`,
+        id: hubId,
         name: newHub.name,
         description: newHub.description,
-        states: newHub.states,
         coordinates: newHub.coordinates,
-        created_at: new Date().toISOString(),
         created_by: currentUser?.id || 'unknown'
       };
 
-      const { error } = await supabase.from('hubs').insert(hubData);
+      const { error: hubError } = await supabase.from('hubs').insert(hubData);
+      if (hubError) throw hubError;
 
-      if (error && error.code === '42P01') {
-        const newHubs = [...hubs, hubData];
-        setHubs(newHubs);
-        localStorage.setItem('pact_hubs_local', JSON.stringify(newHubs));
-        toast({ title: 'Success', description: 'Hub created (local mode)', variant: 'default' });
-      } else if (error) {
-        throw error;
-      } else {
-        toast({ title: 'Success', description: 'Hub created successfully', variant: 'default' });
-        loadHubs();
-      }
+      const hubStatesData = newHub.states.map(stateId => {
+        const state = sudanStates.find(s => s.id === stateId);
+        return {
+          hub_id: hubId,
+          state_id: stateId,
+          state_name: state?.name || stateId,
+          state_code: state?.code || ''
+        };
+      });
+
+      const { error: statesError } = await supabase.from('hub_states').insert(hubStatesData);
+      if (statesError) throw statesError;
+
+      toast({ title: 'Success', description: 'Hub created successfully', variant: 'default' });
+      loadHubs();
 
       setNewHub({ name: '', description: '', states: [], coordinates: { latitude: 0, longitude: 0 } });
       setHubDialogOpen(false);
@@ -224,28 +231,35 @@ export default function HubOperations() {
 
     try {
       setLoading(true);
-      const { error } = await supabase
+      
+      const { error: hubError } = await supabase
         .from('hubs')
         .update({
           name: editingHub.name,
           description: editingHub.description,
-          states: editingHub.states,
-          coordinates: editingHub.coordinates,
-          updated_at: new Date().toISOString()
+          coordinates: editingHub.coordinates
         })
         .eq('id', editingHub.id);
 
-      if (error && error.code === '42P01') {
-        const updatedHubs = hubs.map(h => h.id === editingHub.id ? { ...editingHub, updated_at: new Date().toISOString() } : h);
-        setHubs(updatedHubs);
-        localStorage.setItem('pact_hubs_local', JSON.stringify(updatedHubs));
-        toast({ title: 'Success', description: 'Hub updated successfully', variant: 'default' });
-      } else if (error) {
-        throw error;
-      } else {
-        toast({ title: 'Success', description: 'Hub updated successfully', variant: 'default' });
-        loadHubs();
-      }
+      if (hubError) throw hubError;
+
+      await supabase.from('hub_states').delete().eq('hub_id', editingHub.id);
+
+      const hubStatesData = editingHub.states.map(stateId => {
+        const state = sudanStates.find(s => s.id === stateId);
+        return {
+          hub_id: editingHub.id,
+          state_id: stateId,
+          state_name: state?.name || stateId,
+          state_code: state?.code || ''
+        };
+      });
+
+      const { error: statesError } = await supabase.from('hub_states').insert(hubStatesData);
+      if (statesError) throw statesError;
+
+      toast({ title: 'Success', description: 'Hub updated successfully', variant: 'default' });
+      loadHubs();
 
       setEditingHub(null);
       setHubDialogOpen(false);
