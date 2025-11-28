@@ -33,6 +33,7 @@ export interface User {
   location?: {
     latitude?: number;
     longitude?: number;
+    accuracy?: number;
     region?: string;
     address?: string;
     isSharing?: boolean;

@@ -16,7 +16,7 @@ interface UserContextType {
   approveUser: (userId: string) => Promise<boolean>;
   rejectUser: (userId: string) => Promise<boolean>;
   updateUser: (user: User) => Promise<boolean>;
-  updateUserLocation: (latitude: number, longitude: number) => Promise<boolean>;
+  updateUserLocation: (latitude: number, longitude: number, accuracy?: number) => Promise<boolean>;
   updateUserAvailability: (status: 'online' | 'offline' | 'busy') => Promise<boolean>;
   toggleLocationSharing: (isSharing: boolean) => Promise<boolean>;
   refreshUsers: () => Promise<void>;
@@ -849,7 +849,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const updateUserLocation = async (latitude: number, longitude: number): Promise<boolean> => {
+  const updateUserLocation = async (latitude: number, longitude: number, accuracy?: number): Promise<boolean> => {
     try {
       if (!currentUser) return false;
 
@@ -858,6 +858,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ...(currentUser.location || {}),
         latitude,
         longitude,
+        accuracy: accuracy !== undefined ? accuracy : (currentUser.location?.accuracy || undefined),
         lastUpdated: now,
         isSharing: true,
       } as NonNullable<User['location']>;
