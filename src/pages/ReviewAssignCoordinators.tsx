@@ -24,6 +24,7 @@ const ReviewAssignCoordinators: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [loadingForwardedStates, setLoadingForwardedStates] = useState(true);
   const [assignmentMap, setAssignmentMap] = useState({} as Record<string, string>);
+  const [supervisorMap, setSupervisorMap] = useState({} as Record<string, string>);
   const [selectedSites, setSelectedSites] = useState({} as Record<string, Set<string>>);
   const [batchLoading, setBatchLoading] = useState({} as Record<string, boolean>);
   const [batchForwarded, setBatchForwarded] = useState({} as Record<string, boolean>);
@@ -178,6 +179,9 @@ const ReviewAssignCoordinators: React.FC = () => {
   // All coordinators in the system
   const allCoordinators = users.filter(u => u.role === 'coordinator');
 
+  // All supervisors in the system
+  const allSupervisors = users.filter(u => u.role === 'supervisor');
+
   // Helper to get recommended coordinator for a group
   function getRecommendedCoordinator(stateId: string, localityId: string) {
     return allCoordinators.find(c => c.stateId === stateId && (c.localityId === localityId || !localityId));
@@ -189,6 +193,7 @@ const ReviewAssignCoordinators: React.FC = () => {
     try {
       const mmpId = mmpFile?.id || mmpFile?.mmpId;
       const coordinatorId = assignmentMap[groupKey];
+      const supervisorId = supervisorMap[groupKey];
       const siteIds = Array.from(selectedSites[groupKey] || []);
       if (!coordinatorId || siteIds.length === 0) {
         toast({ title: 'Select sites and coordinator', description: 'Please select at least one site and a coordinator.', variant: 'destructive' });
@@ -221,6 +226,7 @@ const ReviewAssignCoordinators: React.FC = () => {
               assigned_to: coordinatorId,
               assigned_by: currentUser?.id || null,
               assigned_at: forwardedAt,
+              supervisor_id: supervisorId || null,
               notes: `Forwarded from MMP ${mmpFile?.name || mmpFile?.mmpId} for CP verification`,
             }
           })
@@ -240,7 +246,7 @@ const ReviewAssignCoordinators: React.FC = () => {
       await Promise.all(updatePromises);
 
       // Send notification to coordinator
-      await supabase.from('notifications').insert([
+      const notifications = [
         {
           user_id: coordinatorId,
           title: 'Sites forwarded for CP verification',
@@ -250,9 +256,24 @@ const ReviewAssignCoordinators: React.FC = () => {
           related_entity_id: mmpId,
           related_entity_type: 'mmpFile',
         }
-      ]);
+      ];
 
-      toast({ title: 'Batch Forwarded', description: `Sites were forwarded to ${allCoordinators.find(c => c.id === coordinatorId)?.fullName || 'Coordinator'}.`, variant: 'default' });
+      // Send notification to supervisor if selected
+      if (supervisorId) {
+        notifications.push({
+          user_id: supervisorId,
+          title: 'Sites assigned to coordinator for verification',
+          message: `${mmpFile?.name || 'MMP'}: ${siteIds.length} site(s) have been assigned to ${allCoordinators.find(c => c.id === coordinatorId)?.fullName || 'Coordinator'} for CP verification`,
+          type: 'info',
+          link: `/supervisor/sites`,
+          related_entity_id: mmpId,
+          related_entity_type: 'mmpFile',
+        });
+      }
+
+      await supabase.from('notifications').insert(notifications);
+
+      toast({ title: 'Batch Forwarded', description: `Sites were forwarded to ${allCoordinators.find(c => c.id === coordinatorId)?.fullName || 'Coordinator'}${supervisorId ? ` and notified ${allSupervisors.find(s => s.id === supervisorId)?.fullName || 'Supervisor'}` : ''}.`, variant: 'default' });
       
       // Mark sites as forwarded to prevent re-forwarding
       const newForwarded = new Set(forwardedSiteIds);
@@ -286,7 +307,7 @@ const ReviewAssignCoordinators: React.FC = () => {
         <CardHeader>
           <CardTitle>Review & Assign Coordinators</CardTitle>
           <CardDescription>
-            Review the MMP sites and assign them to coordinators for verification. Sites are grouped by state and locality for efficient assignment.
+            Review the MMP sites and assign them to coordinators for verification. Optionally assign supervisors to receive notifications. Sites are grouped by state and locality for efficient assignment.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -348,23 +369,40 @@ const ReviewAssignCoordinators: React.FC = () => {
                         <div className="mb-3 text-sm text-muted-foreground">
                           Recommended: {recommended ? `${recommended.fullName || recommended.name || recommended.email}` : 'None'}
                         </div>
-                        <div className="flex items-center gap-3 mb-3">
-                          <Select 
-                            value={selectedId} 
-                            onValueChange={val => setAssignmentMap(a => ({ ...a, [groupKey]: val }))}
-                          >
-                            <SelectTrigger className="max-w-md">
-                              <SelectValue placeholder="Select coordinator..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {allCoordinators.map(c => (
-                                <SelectItem key={c.id} value={c.id}>
-                                  {c.fullName || c.name || c.email}
-                                  {recommended?.id === c.id ? ' (Recommended)' : ''}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                        <div className="flex flex-col gap-3 mb-3">
+                          <div className="flex items-center gap-3">
+                            <Select 
+                              value={selectedId} 
+                              onValueChange={val => setAssignmentMap(a => ({ ...a, [groupKey]: val }))}
+                            >
+                              <SelectTrigger className="max-w-md">
+                                <SelectValue placeholder="Select coordinator..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {allCoordinators.map(c => (
+                                  <SelectItem key={c.id} value={c.id}>
+                                    {c.fullName || c.name || c.email}
+                                    {recommended?.id === c.id ? ' (Recommended)' : ''}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Select 
+                              value={supervisorMap[groupKey] || ''} 
+                              onValueChange={val => setSupervisorMap(s => ({ ...s, [groupKey]: val }))}
+                            >
+                              <SelectTrigger className="max-w-md">
+                                <SelectValue placeholder="Select supervisor (optional - for notifications only)..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {allSupervisors.map(s => (
+                                  <SelectItem key={s.id} value={s.id}>
+                                    {s.fullName || s.name || s.email}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
                           <Button
                             size="sm"
                             onClick={() => handleForwardBatch(groupKey)}
