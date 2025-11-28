@@ -43,6 +43,18 @@ const AuthForm = ({ mode }: AuthFormProps) => {
   const [availableStates, setAvailableStates] = useState<string[]>([]);
   const [localities, setLocalities] = useState<{ id: string; name: string; }[]>([]);
 
+  // Validation error states
+  const [fieldErrors, setFieldErrors] = useState({
+    avatar: false,
+    fullName: false,
+    email: false,
+    password: false,
+    hub: false,
+    state: false,
+    locality: false,
+    phone: false,
+  });
+
   const [showMFAChallenge, setShowMFAChallenge] = useState(false);
   const [pendingLoginEmail, setPendingLoginEmail] = useState('');
   const [pendingLoginPassword, setPendingLoginPassword] = useState('');
@@ -102,6 +114,17 @@ const AuthForm = ({ mode }: AuthFormProps) => {
   const handleAvatarChange = (file: File | null, previewUrl: string | null) => {
     setAvatarFile(file);
     setAvatarPreviewUrl(previewUrl);
+    if (file) {
+      setFieldErrors(prev => ({ ...prev, avatar: false }));
+    }
+  };
+
+  const scrollToField = (fieldId: string) => {
+    const element = document.getElementById(fieldId);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      element.focus();
+    }
   };
 
   const handleGoogleSignIn = async () => {
@@ -142,6 +165,76 @@ const AuthForm = ({ mode }: AuthFormProps) => {
 
     try {
       if (mode === 'signup') {
+        // Clear previous errors
+        setFieldErrors({
+          avatar: false,
+          fullName: false,
+          email: false,
+          password: false,
+          hub: false,
+          state: false,
+          locality: false,
+          phone: false,
+        });
+
+        // Validate required fields
+        let firstErrorField = '';
+        let hasErrors = false;
+        
+        if (!fullName.trim()) {
+          setFieldErrors(prev => ({ ...prev, fullName: true }));
+          if (!firstErrorField) firstErrorField = 'full-name';
+          hasErrors = true;
+        }
+
+        if (!email.trim()) {
+          setFieldErrors(prev => ({ ...prev, email: true }));
+          if (!firstErrorField) firstErrorField = 'email';
+          hasErrors = true;
+        }
+
+        if (!password.trim()) {
+          setFieldErrors(prev => ({ ...prev, password: true }));
+          if (!firstErrorField) firstErrorField = 'password';
+          hasErrors = true;
+        }
+
+        if (showHubSelection && !selectedHub) {
+          setFieldErrors(prev => ({ ...prev, hub: true }));
+          if (!firstErrorField) firstErrorField = 'hub-select';
+          hasErrors = true;
+        }
+
+        if (showHubSelection && !selectedState) {
+          setFieldErrors(prev => ({ ...prev, state: true }));
+          if (!firstErrorField) firstErrorField = 'state-select';
+          hasErrors = true;
+        }
+
+        if (showHubSelection && selectedState && !selectedLocality) {
+          setFieldErrors(prev => ({ ...prev, locality: true }));
+          if (!firstErrorField) firstErrorField = 'locality-select';
+          hasErrors = true;
+        }
+
+        if (!phone.trim()) {
+          setFieldErrors(prev => ({ ...prev, phone: true }));
+          if (!firstErrorField) firstErrorField = 'phone';
+          hasErrors = true;
+        }
+
+        if (!avatarFile) {
+          setFieldErrors(prev => ({ ...prev, avatar: true }));
+          if (!firstErrorField) firstErrorField = 'avatar-upload';
+          hasErrors = true;
+        }
+
+        if (hasErrors) {
+          setIsLoading(false);
+          if (firstErrorField) scrollToField(firstErrorField);
+          return;
+        }
+
         // Upload avatar first if provided
         let uploadedAvatarUrl = "";
         if (avatarFile) {
@@ -311,40 +404,46 @@ const AuthForm = ({ mode }: AuthFormProps) => {
     return (
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">
-          <div className="relative">
-            <Mail className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
-            <Input
-              type="email"
-              placeholder="Email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="pl-10 bg-white/50 focus:bg-white transition-colors"
-              data-testid="input-email"
-            />
+          <div id="login-email">
+            <label className="text-sm font-medium">Email <span className="text-red-500">*</span></label>
+            <div className="relative">
+              <Mail className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+              <Input
+                type="email"
+                placeholder="Email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                className="pl-10 bg-white/50 focus:bg-white transition-colors focus:border-red-500"
+                data-testid="input-email"
+              />
+            </div>
           </div>
         </div>
 
         <div className="space-y-2">
-          <div className="relative">
-            <Lock className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
-            <Input
-              type={showPassword ? "text" : "password"}
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              className="pl-10 pr-10 bg-white/50 focus:bg-white transition-colors"
-              data-testid="input-password"
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3 top-3 text-gray-400 hover:text-gray-600"
-              data-testid="button-toggle-password"
-            >
-              {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-            </button>
+          <div id="login-password">
+            <label className="text-sm font-medium">Password <span className="text-red-500">*</span></label>
+            <div className="relative">
+              <Lock className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+              <Input
+                type={showPassword ? "text" : "password"}
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                className="pl-10 pr-10 bg-white/50 focus:bg-white transition-colors focus:border-red-500"
+                data-testid="input-password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-3 text-gray-400 hover:text-gray-600"
+                data-testid="button-toggle-password"
+              >
+                {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -414,48 +513,105 @@ const AuthForm = ({ mode }: AuthFormProps) => {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      <AvatarUpload 
-        onImageChange={handleAvatarChange}
-        previewUrl={avatarPreviewUrl}
-      />
+      <div id="avatar-upload">
+        <AvatarUpload 
+          onImageChange={handleAvatarChange}
+          previewUrl={avatarPreviewUrl}
+          required={true}
+          error={fieldErrors.avatar}
+        />
+        {fieldErrors.avatar && (
+          <p className="text-red-500 text-sm mt-1">Profile picture is required</p>
+        )}
+      </div>
+
+      <div id="full-name">
+        <label className="text-sm font-medium">Full Name <span className="text-red-500">*</span></label>
+        <div className="relative">
+          <User className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+          <Input
+            placeholder="Full Name"
+            value={fullName}
+            onChange={(e) => {
+              setFullName(e.target.value);
+              if (fieldErrors.fullName) {
+                setFieldErrors(prev => ({ ...prev, fullName: false }));
+              }
+            }}
+            required
+            className={`pl-10 bg-white/50 focus:bg-white transition-colors focus:border-red-500 ${
+              fieldErrors.fullName ? 'border-red-500 focus:border-red-500' : ''
+            }`}
+          />
+        </div>
+        {fieldErrors.fullName && (
+          <p className="text-red-500 text-sm mt-1">Full name is required</p>
+        )}
+      </div>
 
       <div className="space-y-4">
         {/* Email (required for signup) */}
-        <div className="relative">
-          <Mail className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
-          <Input
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            className="pl-10 bg-white/50 focus:bg-white transition-colors"
-          />
+        <div id="email">
+          <label className="text-sm font-medium">Email <span className="text-red-500">*</span></label>
+          <div className="relative">
+            <Mail className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+            <Input
+              type="email"
+              placeholder="Email"
+              value={email}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                if (fieldErrors.email) {
+                  setFieldErrors(prev => ({ ...prev, email: false }));
+                }
+              }}
+              required
+              className={`pl-10 bg-white/50 focus:bg-white transition-colors focus:border-red-500 ${
+                fieldErrors.email ? 'border-red-500 focus:border-red-500' : ''
+              }`}
+            />
+          </div>
+          {fieldErrors.email && (
+            <p className="text-red-500 text-sm mt-1">Email is required</p>
+          )}
         </div>
 
         {/* Password (required for signup) */}
-        <div className="relative">
-          <Lock className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
-          <Input
-            type={showPassword ? 'text' : 'password'}
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            className="pl-10 pr-10 bg-white/50 focus:bg-white transition-colors"
-          />
-          <button
-            type="button"
-            onClick={() => setShowPassword(!showPassword)}
-            className="absolute right-3 top-3 text-gray-400 hover:text-gray-600"
-          >
-            {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-          </button>
+        <div id="password">
+          <label className="text-sm font-medium">Password <span className="text-red-500">*</span></label>
+          <div className="relative">
+            <Lock className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+            <Input
+              type={showPassword ? 'text' : 'password'}
+              placeholder="Password"
+              value={password}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                if (fieldErrors.password) {
+                  setFieldErrors(prev => ({ ...prev, password: false }));
+                }
+              }}
+              required
+              className={`pl-10 pr-10 bg-white/50 focus:bg-white transition-colors focus:border-red-500 ${
+                fieldErrors.password ? 'border-red-500 focus:border-red-500' : ''
+              }`}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-3 text-gray-400 hover:text-gray-600"
+            >
+              {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+            </button>
+          </div>
+          {fieldErrors.password && (
+            <p className="text-red-500 text-sm mt-1">Password is required</p>
+          )}
         </div>
 
         <div>
           <Select value={role} onValueChange={setRole}>
-            <SelectTrigger className="w-full">
+            <SelectTrigger className="w-full focus:border-red-500">
               <SelectValue placeholder="Select your role" />
             </SelectTrigger>
             <SelectContent>
@@ -470,9 +626,15 @@ const AuthForm = ({ mode }: AuthFormProps) => {
         </div>
 
         {showHubSelection && (
-          <div>
-            <Select value={selectedHub} onValueChange={setSelectedHub}>
-              <SelectTrigger className="w-full">
+          <div id="hub-select">
+            <label className="text-sm font-medium">Hub <span className="text-red-500">*</span></label>
+            <Select value={selectedHub} onValueChange={(value) => {
+              setSelectedHub(value);
+              if (fieldErrors.hub) {
+                setFieldErrors(prev => ({ ...prev, hub: false }));
+              }
+            }}>
+              <SelectTrigger className={`w-full focus:border-red-500 ${fieldErrors.hub ? 'border-red-500 focus:border-red-500' : ''}`}>
                 <SelectValue placeholder="Select your hub" />
               </SelectTrigger>
               <SelectContent>
@@ -481,13 +643,22 @@ const AuthForm = ({ mode }: AuthFormProps) => {
                 ))}
               </SelectContent>
             </Select>
+            {fieldErrors.hub && (
+              <p className="text-red-500 text-sm mt-1">Hub selection is required</p>
+            )}
           </div>
         )}
 
         {showHubSelection && selectedHub && (
-          <div>
-            <Select value={selectedState} onValueChange={setSelectedState}>
-              <SelectTrigger className="w-full">
+          <div id="state-select">
+            <label className="text-sm font-medium">State <span className="text-red-500">*</span></label>
+            <Select value={selectedState} onValueChange={(value) => {
+              setSelectedState(value);
+              if (fieldErrors.state) {
+                setFieldErrors(prev => ({ ...prev, state: false }));
+              }
+            }}>
+              <SelectTrigger className={`w-full focus:border-red-500 ${fieldErrors.state ? 'border-red-500 focus:border-red-500' : ''}`}>
                 <SelectValue placeholder="Select state" />
               </SelectTrigger>
               <SelectContent>
@@ -499,14 +670,23 @@ const AuthForm = ({ mode }: AuthFormProps) => {
                 })}
               </SelectContent>
             </Select>
+            {fieldErrors.state && (
+              <p className="text-red-500 text-sm mt-1">State selection is required</p>
+            )}
           </div>
         )}
 
         {showHubSelection && selectedState && localities.length > 0 && (
-          <div>
-            <Select value={selectedLocality} onValueChange={setSelectedLocality}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select locality (optional)" />
+          <div id="locality-select">
+            <label className="text-sm font-medium">Locality <span className="text-red-500">*</span></label>
+            <Select value={selectedLocality} onValueChange={(value) => {
+              setSelectedLocality(value);
+              if (fieldErrors.locality) {
+                setFieldErrors(prev => ({ ...prev, locality: false }));
+              }
+            }}>
+              <SelectTrigger className={`w-full focus:border-red-500 ${fieldErrors.locality ? 'border-red-500 focus:border-red-500' : ''}`}>
+                <SelectValue placeholder="Select locality" />
               </SelectTrigger>
               <SelectContent>
                 {localities.map((loc) => (
@@ -514,40 +694,49 @@ const AuthForm = ({ mode }: AuthFormProps) => {
                 ))}
               </SelectContent>
             </Select>
+            {fieldErrors.locality && (
+              <p className="text-red-500 text-sm mt-1">Locality selection is required</p>
+            )}
           </div>
         )}
 
         <div className="space-y-4">
-          <div className="relative">
-            <User className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
-            <Input
-              placeholder="Full Name"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              required
-              className="pl-10 bg-white/50 focus:bg-white transition-colors"
-            />
+          <div id="phone">
+            <label className="text-sm font-medium">Phone Number <span className="text-red-500">*</span></label>
+            <div className="relative">
+              <Phone className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+              <Input
+                type="tel"
+                placeholder="Phone Number"
+                value={phone}
+                onChange={(e) => {
+                  setPhone(e.target.value);
+                  if (fieldErrors.phone) {
+                    setFieldErrors(prev => ({ ...prev, phone: false }));
+                  }
+                }}
+                required
+                className={`pl-10 bg-white/50 focus:bg-white transition-colors focus:border-red-500 ${
+                  fieldErrors.phone ? 'border-red-500 focus:border-red-500' : ''
+                }`}
+              />
+            </div>
+            {fieldErrors.phone && (
+              <p className="text-red-500 text-sm mt-1">Phone number is required</p>
+            )}
           </div>
 
-          <div className="relative">
-            <Phone className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
-            <Input
-              type="tel"
-              placeholder="Phone Number"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              className="pl-10 bg-white/50 focus:bg-white transition-colors"
-            />
-          </div>
-
-          <div className="relative">
-            <Badge className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
-            <Input
-              placeholder="Employee ID (Optional)"
-              value={employeeId}
-              onChange={(e) => setEmployeeId(e.target.value)}
-              className="pl-10 bg-white/50 focus:bg-white transition-colors"
-            />
+          <div>
+            <label className="text-sm font-medium">Employee ID</label>
+            <div className="relative">
+              <Badge className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+              <Input
+                placeholder="Employee ID (Optional)"
+                value={employeeId}
+                onChange={(e) => setEmployeeId(e.target.value)}
+                className="pl-10 bg-white/50 focus:bg-white transition-colors focus:border-red-500"
+              />
+            </div>
           </div>
         </div>
       </div>
