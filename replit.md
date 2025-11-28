@@ -54,6 +54,13 @@ The backend uses PostgreSQL via Supabase, leveraging Row Level Security (RLS) an
     - Same file + different month = ALLOWED (recurring monthly monitoring)
     This allows reusing the same file template for monthly monitoring cycles.
 
+*   **Same-Site-Same-Month Prevention (Nov 2025):** Added validation to prevent duplicate site entries within the same month:
+    - Before upload, checks if any sites in the file already exist in other MMPs for the same month
+    - Matches by site_code (primary) or site_name + state + locality (secondary)
+    - Blocks upload if duplicates found, showing which sites are already scheduled
+    - Error message lists up to 5 duplicate sites with their existing MMP names
+    This ensures each site can only be monitored once per monthly period.
+
 ## External Dependencies
 
 *   **Supabase:** PostgreSQL database, Authentication, Realtime subscriptions, Storage, Row Level Security.

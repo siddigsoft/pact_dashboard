@@ -134,6 +134,186 @@ interface SiteForRegistry {
 }
 
 /**
+ * Result of duplicate site check
+ */
+interface DuplicateSiteCheckResult {
+  hasDuplicates: boolean;
+  duplicateSites: Array<{
+    siteName: string;
+    siteCode?: string;
+    state?: string;
+    locality?: string;
+    existingMmpName: string;
+  }>;
+  message?: string;
+}
+
+/**
+ * Check if any sites in the upload file already exist for the same month
+ * This prevents the same site from being monitored multiple times in the same month
+ */
+async function checkDuplicateSitesInMonth(
+  sites: SiteForRegistry[],
+  month: string,
+  projectId?: string
+): Promise<DuplicateSiteCheckResult> {
+  const result: DuplicateSiteCheckResult = {
+    hasDuplicates: false,
+    duplicateSites: []
+  };
+
+  if (!month || sites.length === 0) {
+    return result;
+  }
+
+  const normalizedMonth = month.trim().toLowerCase();
+  console.log('[Duplicate Sites Check] Checking for existing sites in month:', normalizedMonth);
+
+  try {
+    // Get all MMP files for this month (optionally filtered by project)
+    let query = supabase
+      .from('mmp_files')
+      .select('id, name, month, status')
+      .not('status', 'in', '("archived","deleted","cancelled")');
+    
+    // Filter by month
+    query = query.ilike('month', normalizedMonth);
+    
+    // Optionally filter by project
+    if (projectId) {
+      query = query.eq('project_id', projectId);
+    }
+
+    const { data: existingMmps, error: mmpError } = await query;
+
+    if (mmpError) {
+      console.error('[Duplicate Sites Check] Error fetching MMPs:', mmpError);
+      return result;
+    }
+
+    if (!existingMmps || existingMmps.length === 0) {
+      console.log('[Duplicate Sites Check] No existing MMPs for this month');
+      return result;
+    }
+
+    console.log(`[Duplicate Sites Check] Found ${existingMmps.length} existing MMP(s) for month ${normalizedMonth}`);
+    const mmpIds = existingMmps.map(m => m.id);
+    const mmpNameMap = new Map(existingMmps.map(m => [m.id, m.name]));
+
+    // Get all site entries from these MMPs
+    const { data: existingSiteEntries, error: siteError } = await supabase
+      .from('mmp_site_entries')
+      .select('id, site_code, site_name, state, locality, mmp_file_id')
+      .in('mmp_file_id', mmpIds);
+
+    if (siteError) {
+      console.error('[Duplicate Sites Check] Error fetching site entries:', siteError);
+      return result;
+    }
+
+    if (!existingSiteEntries || existingSiteEntries.length === 0) {
+      console.log('[Duplicate Sites Check] No existing site entries for this month');
+      return result;
+    }
+
+    console.log(`[Duplicate Sites Check] Found ${existingSiteEntries.length} existing site entries for month ${normalizedMonth}`);
+
+    // Build lookup sets for fast comparison
+    // Set 1: site_code lookup (if available)
+    const existingSiteCodeMap = new Map<string, { mmpId: string; siteName: string }>();
+    // Set 2: site_name + state + locality composite key
+    const existingCompositeKeyMap = new Map<string, { mmpId: string; siteCode?: string }>();
+
+    for (const entry of existingSiteEntries) {
+      // Index by site_code
+      if (entry.site_code) {
+        const normalizedCode = entry.site_code.trim().toLowerCase();
+        existingSiteCodeMap.set(normalizedCode, {
+          mmpId: entry.mmp_file_id,
+          siteName: entry.site_name || ''
+        });
+      }
+
+      // Index by composite key (site_name + state + locality)
+      const compositeKey = [
+        (entry.site_name || '').trim().toLowerCase(),
+        (entry.state || '').trim().toLowerCase(),
+        (entry.locality || '').trim().toLowerCase()
+      ].join('|');
+      
+      if (compositeKey !== '||') { // Only add if at least one value is present
+        existingCompositeKeyMap.set(compositeKey, {
+          mmpId: entry.mmp_file_id,
+          siteCode: entry.site_code
+        });
+      }
+    }
+
+    // Check each site in the upload file against existing sites
+    for (const site of sites) {
+      let isDuplicate = false;
+      let matchedMmpId: string | null = null;
+      let matchReason = '';
+
+      // Check 1: Match by site_code
+      if (site.siteCode) {
+        const normalizedCode = site.siteCode.trim().toLowerCase();
+        const match = existingSiteCodeMap.get(normalizedCode);
+        if (match) {
+          isDuplicate = true;
+          matchedMmpId = match.mmpId;
+          matchReason = `site code "${site.siteCode}"`;
+        }
+      }
+
+      // Check 2: Match by site_name + state + locality (if not already matched)
+      if (!isDuplicate && site.siteName) {
+        const compositeKey = [
+          (site.siteName || '').trim().toLowerCase(),
+          (site.state || '').trim().toLowerCase(),
+          (site.locality || '').trim().toLowerCase()
+        ].join('|');
+
+        const match = existingCompositeKeyMap.get(compositeKey);
+        if (match) {
+          isDuplicate = true;
+          matchedMmpId = match.mmpId;
+          matchReason = `site name "${site.siteName}" in ${site.state}/${site.locality}`;
+        }
+      }
+
+      if (isDuplicate && matchedMmpId) {
+        result.hasDuplicates = true;
+        result.duplicateSites.push({
+          siteName: site.siteName || 'Unknown',
+          siteCode: site.siteCode,
+          state: site.state,
+          locality: site.locality,
+          existingMmpName: mmpNameMap.get(matchedMmpId) || 'Unknown MMP'
+        });
+        console.log(`[Duplicate Sites Check] DUPLICATE FOUND: ${matchReason} already exists in "${mmpNameMap.get(matchedMmpId)}"`);
+      }
+    }
+
+    if (result.hasDuplicates) {
+      const siteList = result.duplicateSites.slice(0, 5).map(s => 
+        `"${s.siteName}"${s.siteCode ? ` (${s.siteCode})` : ''}`
+      ).join(', ');
+      const moreCount = result.duplicateSites.length > 5 ? ` and ${result.duplicateSites.length - 5} more` : '';
+      result.message = `${result.duplicateSites.length} site(s) already exist for ${normalizedMonth}: ${siteList}${moreCount}. Each site can only be monitored once per month.`;
+      console.log(`[Duplicate Sites Check] BLOCKED: ${result.duplicateSites.length} duplicate sites found`);
+    } else {
+      console.log('[Duplicate Sites Check] No duplicate sites found - all sites are unique for this month');
+    }
+
+  } catch (error) {
+    console.error('[Duplicate Sites Check] Unexpected error:', error);
+  }
+
+  return result;
+}
+
+/**
  * Result of registry site lookup/creation
  */
 interface RegistrySiteResult {
@@ -670,6 +850,34 @@ export async function uploadMMPFile(
       const { data: { user } } = await supabase.auth.getUser();
       if (user?.id) currentUserId = user.id;
     } catch {}
+
+    // NEW: Check for duplicate sites in the same month
+    // This prevents the same site from being monitored multiple times per month
+    onProgress?.({ current: 38, total: 100, stage: 'Checking for duplicate sites in this month' });
+    
+    const sitesForDuplicateCheck: SiteForRegistry[] = entries.map(e => ({
+      siteCode: e.siteCode,
+      siteName: e.siteName,
+      state: e.state,
+      locality: e.locality,
+    }));
+
+    const duplicateSitesResult = await checkDuplicateSitesInMonth(
+      sitesForDuplicateCheck,
+      metadata?.month || '',
+      metadata?.projectId
+    );
+
+    if (duplicateSitesResult.hasDuplicates) {
+      console.error('[Duplicate Sites Check] Upload blocked - duplicate sites found');
+      // Remove uploaded file to avoid orphaned storage object
+      try { await supabase.storage.from('mmp-files').remove([filePath]); } catch {}
+      
+      return {
+        success: false,
+        error: duplicateSitesResult.message || `This upload contains sites that have already been scheduled for monitoring in ${metadata?.month}. Each site can only appear once per month.`,
+      };
+    }
 
     // Ensure all sites exist in Sites Registry (create if new, link if existing)
     onProgress?.({ current: 40, total: 100, stage: 'Registering sites in Sites Registry' });
