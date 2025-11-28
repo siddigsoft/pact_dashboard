@@ -174,7 +174,7 @@ export function CostAdjustmentDialog({
               </div>
               <div>
                 <Label className="text-muted-foreground">Previous Total</Label>
-                <p className="font-medium">{previousTotal.toFixed(2)} SDG</p>
+                <p className="font-medium">{previousTotal.toLocaleString()} SDG</p>
               </div>
             </div>
           </div>
@@ -264,12 +264,12 @@ export function CostAdjustmentDialog({
           <div className="flex justify-between items-center p-4 bg-primary/10 rounded-md border border-primary/20">
             <div>
               <p className="text-sm font-medium">New Total Cost:</p>
-              <p className="text-2xl font-bold text-primary">{newTotal.toFixed(2)} SDG</p>
+              <p className="text-2xl font-bold text-primary">{newTotal.toLocaleString()} SDG</p>
             </div>
             <div className="text-right">
               <p className="text-sm font-medium">Difference:</p>
               <p className={`text-xl font-bold ${difference > 0 ? 'text-red-600' : difference < 0 ? 'text-green-600' : ''}`}>
-                {difference > 0 ? '+' : ''}{difference.toFixed(2)} SDG
+                {difference > 0 ? '+' : ''}{difference.toLocaleString()} SDG
               </p>
             </div>
           </div>
