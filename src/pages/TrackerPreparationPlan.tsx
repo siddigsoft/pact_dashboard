@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { useLocation } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,6 +12,7 @@ import { Separator } from '@/components/ui/separator';
 import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/toast';
 import { useAppContext } from '@/context/AppContext';
+import { useAuthorization } from '@/hooks/use-authorization';
 import { supabase } from '@/integrations/supabase/client';
 import { sudanStates } from '@/data/sudanStates';
 import { format, parseISO } from 'date-fns';
@@ -78,11 +78,9 @@ const years = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);
 export default function TrackerPreparationPlan() {
   const { currentUser } = useAppContext();
   const { toast } = useToast();
-  const location = useLocation();
+  const { hasAnyRole } = useAuthorization();
   
-  const isAdmin = currentUser?.role === 'admin';
-  const isICT = currentUser?.role === 'ict';
-  const hasAccess = isAdmin || isICT;
+  const hasAccess = hasAnyRole(['admin', 'Admin', 'ict', 'ICT']);
   
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
@@ -100,6 +98,8 @@ export default function TrackerPreparationPlan() {
   });
   
   const filtersRef = useRef(filters);
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  
   useEffect(() => {
     filtersRef.current = filters;
   }, [filters]);
@@ -125,10 +125,12 @@ export default function TrackerPreparationPlan() {
   useEffect(() => {
     if (!hasAccess) return;
     
-    const channelId = `tracker-realtime-${Date.now()}`;
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+    }
     
     const channel = supabase
-      .channel(channelId)
+      .channel('tracker-realtime')
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'mmp_site_entries' },
@@ -150,9 +152,14 @@ export default function TrackerPreparationPlan() {
         }
       )
       .subscribe();
+    
+    channelRef.current = channel;
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
     };
   }, [hasAccess]);
   
@@ -189,17 +196,18 @@ export default function TrackerPreparationPlan() {
     }
   };
 
-  const loadTrackerData = async () => {
+  const loadTrackerData = useCallback(async () => {
+    const currentFilters = filtersRef.current;
     setLoading(true);
     try {
       let filesQuery = supabase
         .from('mmp_files')
         .select('id')
-        .eq('month', filters.month)
-        .eq('year', filters.year);
+        .eq('month', currentFilters.month)
+        .eq('year', currentFilters.year);
       
-      if (filters.projectId) {
-        filesQuery = filesQuery.eq('project_id', filters.projectId);
+      if (currentFilters.projectId) {
+        filesQuery = filesQuery.eq('project_id', currentFilters.projectId);
       }
       
       const { data: mmpFiles, error: filesError } = await filesQuery;
@@ -217,13 +225,14 @@ export default function TrackerPreparationPlan() {
       let mmpQuery = supabase
         .from('mmp_site_entries')
         .select('*')
-        .in('mmp_file_id', fileIds);
+        .in('mmp_file_id', fileIds)
+        .not('verified_at', 'is', null);
 
-      if (filters.hubId) {
-        mmpQuery = mmpQuery.eq('hub_office', filters.hubId);
+      if (currentFilters.hubId) {
+        mmpQuery = mmpQuery.eq('hub_office', currentFilters.hubId);
       }
-      if (filters.states.length > 0) {
-        mmpQuery = mmpQuery.in('state', filters.states);
+      if (currentFilters.states.length > 0) {
+        mmpQuery = mmpQuery.in('state', currentFilters.states);
       }
 
       const { data: mmpEntries, error: mmpError } = await mmpQuery;
@@ -352,7 +361,7 @@ export default function TrackerPreparationPlan() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   const summary: TrackerSummary = useMemo(() => {
     const totalPlanned = lineItems.length;
