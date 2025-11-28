@@ -423,6 +423,7 @@ const MMPSiteEntriesTable = ({
         onAcceptSite={onAcceptSite}
         onSendBackToCoordinator={onSendBackToCoordinator}
         currentUserId={currentUserId}
+        onStartVisit={onStartVisit}
       />
 
     </Card>
