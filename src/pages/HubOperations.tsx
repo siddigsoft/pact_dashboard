@@ -845,7 +845,7 @@ export default function HubOperations() {
             </TabsTrigger>
             <TabsTrigger value="sites" data-testid="tab-sites">
               <Navigation className="h-4 w-4 mr-2" />
-              Register Site
+              Sites
             </TabsTrigger>
           </TabsList>
 
