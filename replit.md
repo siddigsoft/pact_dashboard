@@ -39,6 +39,12 @@ The backend utilizes PostgreSQL through Supabase, incorporating Row Level Securi
     - Key files: `use-claim-fee-calculation.ts` (hook), `ClaimSiteButton.tsx` (UI), `DispatchSitesDialog.tsx` (dispatch), `SiteDetailDialog.tsx` (display).
 *   **Sudan Administrative Data:** Integrated complete Sudan administrative structure (18 states, 188 localities) based on official OCHA/WFP COD-AB, including English/Arabic names and helper functions.
 *   **Navigation & User Preferences:** A comprehensive system for customizing the sidebar navigation (6 workflow-aligned menu groups) and dashboard personalization (role-based zones). Users can hide/show menu items, pin items, collapse groups, and choose a default dashboard zone.
+*   **Sites Registry GPS Integration:** Links MMP site entries with the master Sites Registry to enable GPS coordinate lookup. The system:
+    - **During MMP Upload:** Matches uploaded sites to registry entries by exact site code or name+state+locality combination, storing GPS coordinates and match metadata in `additional_data.registry_gps`
+    - **During Dispatch:** Re-validates registry matches and enriches site entries with GPS data if found; preserves existing GPS data if no new match is found
+    - **UI Display:** SiteDetailDialog shows GPS coordinates (latitude/longitude) with match type badge (Site Code, Name + Location, or Partial Match) when available
+    - **Data Structure:** Consistent nested `registry_gps` object with latitude, longitude, source, site_id, site_code, match_type, match_confidence, and matched_at fields
+    - Key files: `sitesRegistryMatcher.ts` (matching logic), `mmpFileUpload.ts` (upload enrichment), `DispatchSitesDialog.tsx` (dispatch enrichment), `SiteDetailDialog.tsx` (display)
 
 ## External Dependencies
 

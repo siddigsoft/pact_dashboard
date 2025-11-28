@@ -10,8 +10,9 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, DollarSign, AlertCircle, ArrowRight, ArrowLeft, Copy, Users } from 'lucide-react';
+import { Loader2, DollarSign, AlertCircle, ArrowRight, ArrowLeft, Copy, Users, MapPin } from 'lucide-react';
 import { sudanStates } from '@/data/sudanStates';
+import { fetchAllRegistrySites, matchSiteToRegistry } from '@/utils/sitesRegistryMatcher';
 
 interface DispatchSitesDialogProps {
   open: boolean;
@@ -374,6 +375,11 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
       const { data: { user: authUser } } = await supabase.auth.getUser();
       const assignedBy = authUser?.id;
 
+      // Step 0: Fetch Sites Registry to get GPS coordinates
+      console.log('📍 Fetching Sites Registry for GPS coordinates...');
+      const registrySites = await fetchAllRegistrySites();
+      console.log(`📍 Found ${registrySites.length} sites in registry`);
+
       // Step 1: Store TRANSPORT costs only in mmp_site_entries
       // IMPORTANT: Enumerator fee is NOT set at dispatch - it's calculated at claim time
       // based on the claiming data collector's classification level (A, B, or C)
@@ -382,6 +388,33 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
         if (costs) {
           // Transport budget = transportation + accommodation + meal per diem + other logistics
           const transportBudget = costs.transportation + costs.accommodation + costs.mealAllowance + costs.otherCosts;
+          
+          // Look up GPS coordinates from Sites Registry
+          // Only update registry_gps if a match is found; preserve existing data if no match
+          const existingRegistryGps = siteEntry.additional_data?.registry_gps || null;
+          
+          const registryMatch = matchSiteToRegistry(
+            {
+              id: siteEntry.id,
+              siteCode: siteEntry.site_code,
+              siteName: siteEntry.site_name || siteEntry.siteName,
+              state: siteEntry.state || siteEntry.state_name,
+              locality: siteEntry.locality || siteEntry.locality_name,
+            },
+            registrySites
+          );
+          
+          // Build registry_gps object - only update if match found, otherwise preserve existing
+          const registryGps = registryMatch.matchedRegistry ? {
+            latitude: registryMatch.gpsCoordinates?.latitude || null,
+            longitude: registryMatch.gpsCoordinates?.longitude || null,
+            source: 'sites_registry',
+            site_id: registryMatch.matchedRegistry.id,
+            site_code: registryMatch.matchedRegistry.site_code,
+            match_type: registryMatch.matchType,
+            match_confidence: registryMatch.matchConfidence,
+            matched_at: new Date().toISOString(),
+          } : existingRegistryGps;
           
           // Update mmp_site_entries with transport costs only (enumerator_fee remains null)
           const { error: costError } = await supabase
@@ -392,6 +425,7 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
               // based on the collector's classification (Level A, B, or C)
               additional_data: {
                 ...(siteEntry.additional_data || {}),
+                ...(registryGps ? { registry_gps: registryGps } : {}),
                 dispatch_costs: {
                   transportation_cost: costs.transportation,
                   accommodation_cost: costs.accommodation,

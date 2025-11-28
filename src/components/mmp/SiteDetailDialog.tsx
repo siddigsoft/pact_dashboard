@@ -119,6 +119,18 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
     const createdAt = site.created_at || undefined;
     const updatedAt = site.updated_at || site.last_modified || undefined;
 
+    // Extract GPS coordinates from registry lookup (stored in additional_data.registry_gps)
+    const registryGps = ad.registry_gps || {};
+    const registryGpsLatitude = registryGps.latitude || undefined;
+    const registryGpsLongitude = registryGps.longitude || undefined;
+    const registrySiteId = registryGps.site_id || undefined;
+    const registrySiteCode = registryGps.site_code || undefined;
+    const registryMatchType = registryGps.match_type || undefined;
+    const registryMatchConfidence = registryGps.match_confidence || undefined;
+    const gpsSource = registryGps.source || undefined;
+    
+    const hasGpsCoordinates = registryGpsLatitude && registryGpsLongitude;
+
     return { 
       hubOffice, state, locality, siteCode, siteName, cpName, siteActivity, 
       monitoringBy, surveyTool, useMarketDiversion, useWarehouseMonitoring,
@@ -127,7 +139,9 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
       verifiedBy, verifiedAt, verificationNotes, status,
       dispatchedAt, dispatchedBy, acceptedAt, acceptedBy, 
       rejectionComments, rejectedBy, rejectedAt,
-      createdAt, updatedAt
+      createdAt, updatedAt,
+      registryGpsLatitude, registryGpsLongitude, registrySiteId, registrySiteCode,
+      registryMatchType, registryMatchConfidence, gpsSource, hasGpsCoordinates
     };
   };
 
@@ -361,6 +375,37 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
                     <p className="font-medium text-gray-900 mt-1">{row.locality || '—'}</p>
                   )}
                 </div>
+                {row.hasGpsCoordinates && (
+                  <div className="sm:col-span-2 bg-blue-50 dark:bg-blue-900/20 p-3 rounded-md border border-blue-200 dark:border-blue-800">
+                    <Label className="text-xs font-medium text-blue-700 dark:text-blue-300 flex items-center gap-1">
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                      GPS Coordinates (from Sites Registry)
+                    </Label>
+                    <div className="flex flex-wrap gap-4 mt-2">
+                      <div>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">Latitude:</span>
+                        <p className="font-mono text-sm font-medium text-gray-900 dark:text-gray-100">{row.registryGpsLatitude}</p>
+                      </div>
+                      <div>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">Longitude:</span>
+                        <p className="font-mono text-sm font-medium text-gray-900 dark:text-gray-100">{row.registryGpsLongitude}</p>
+                      </div>
+                      {row.registryMatchType && (
+                        <div>
+                          <span className="text-xs text-gray-500 dark:text-gray-400">Match:</span>
+                          <Badge className="ml-1 bg-blue-100 text-blue-700 dark:bg-blue-800 dark:text-blue-200" variant="secondary">
+                            {row.registryMatchType === 'exact_code' ? 'Site Code' : 
+                             row.registryMatchType === 'name_location' ? 'Name + Location' :
+                             row.registryMatchType === 'partial' ? 'Partial Match' : row.registryMatchType}
+                          </Badge>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
                 <div>
                   <Label className="text-xs font-medium text-gray-600">CP Name</Label>
                   {isEditing ? (
