@@ -29,9 +29,11 @@ export function TwoFactorSetup({ onSetupComplete, onDisabled }: TwoFactorSetupPr
   } = useMFA();
 
   const [verificationCode, setVerificationCode] = useState('');
+  const [disableVerificationCode, setDisableVerificationCode] = useState('');
   const [isEnrolling, setIsEnrolling] = useState(false);
   const [copiedSecret, setCopiedSecret] = useState(false);
   const [factorToRemove, setFactorToRemove] = useState<MFAFactor | null>(null);
+  const [disableError, setDisableError] = useState('');
 
   useEffect(() => {
     listFactors();
@@ -82,11 +84,34 @@ export function TwoFactorSetup({ onSetupComplete, onDisabled }: TwoFactorSetupPr
   const handleRemoveFactor = async () => {
     if (!factorToRemove) return;
     
+    // Require verification code before disabling
+    if (disableVerificationCode.length !== 6) {
+      setDisableError('Please enter the 6-digit code from your authenticator app');
+      return;
+    }
+
+    setDisableError('');
+    
+    // First verify the code to ensure the user has access to their authenticator
+    const verified = await verifyTOTP(factorToRemove.id, disableVerificationCode);
+    if (!verified) {
+      setDisableError('Invalid code. Please try again.');
+      return;
+    }
+    
+    // Now unenroll the factor
     const success = await unenrollFactor(factorToRemove.id);
     if (success) {
       setFactorToRemove(null);
+      setDisableVerificationCode('');
       onDisabled?.();
     }
+  };
+
+  const handleCloseRemoveDialog = () => {
+    setFactorToRemove(null);
+    setDisableVerificationCode('');
+    setDisableError('');
   };
 
   const verifiedFactors = factors.filter(f => f.status === 'verified');
@@ -285,7 +310,7 @@ export function TwoFactorSetup({ onSetupComplete, onDisabled }: TwoFactorSetupPr
         )}
       </CardContent>
 
-      <Dialog open={!!factorToRemove} onOpenChange={(open) => !open && setFactorToRemove(null)}>
+      <Dialog open={!!factorToRemove} onOpenChange={(open) => !open && handleCloseRemoveDialog()}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -293,13 +318,44 @@ export function TwoFactorSetup({ onSetupComplete, onDisabled }: TwoFactorSetupPr
               Remove Two-Factor Authentication
             </DialogTitle>
             <DialogDescription>
-              Are you sure you want to remove this authenticator? Your account will be less secure without two-factor authentication.
+              To remove two-factor authentication, enter the 6-digit code from your authenticator app.
             </DialogDescription>
           </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Verification Code</p>
+              <Input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={6}
+                placeholder="000000"
+                value={disableVerificationCode}
+                onChange={(e) => {
+                  setDisableVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6));
+                  setDisableError('');
+                }}
+                className="text-center text-2xl tracking-[0.5em] font-mono"
+                data-testid="input-disable-verification-code"
+              />
+              {disableError && (
+                <p className="text-sm text-destructive">{disableError}</p>
+              )}
+            </div>
+            
+            <Alert className="border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/20">
+              <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+              <AlertDescription className="text-amber-800 dark:text-amber-200">
+                Your account will be less secure without two-factor authentication.
+              </AlertDescription>
+            </Alert>
+          </div>
+          
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => setFactorToRemove(null)}
+              onClick={handleCloseRemoveDialog}
               disabled={isLoading}
               data-testid="button-cancel-remove"
             >
@@ -308,16 +364,16 @@ export function TwoFactorSetup({ onSetupComplete, onDisabled }: TwoFactorSetupPr
             <Button
               variant="destructive"
               onClick={handleRemoveFactor}
-              disabled={isLoading}
+              disabled={isLoading || disableVerificationCode.length !== 6}
               data-testid="button-confirm-remove"
             >
               {isLoading ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Removing...
+                  Verifying...
                 </>
               ) : (
-                'Remove'
+                'Remove 2FA'
               )}
             </Button>
           </DialogFooter>

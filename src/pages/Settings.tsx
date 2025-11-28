@@ -1,11 +1,12 @@
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { 
   Settings as SettingsIcon, 
   Bell, 
@@ -27,8 +28,12 @@ import {
   Menu,
   Pin,
   EyeOff,
-  LayoutDashboard
+  LayoutDashboard,
+  Camera,
+  Upload,
+  AlertCircle
 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 import { useSettings } from "@/context/settings/SettingsContext";
 import { Input } from "@/components/ui/input";
 import { useUser } from "@/context/user/UserContext";
@@ -73,13 +78,100 @@ const Settings = () => {
   
   const [name, setName] = useState(currentUser?.name || "");
   const [email, setEmail] = useState(currentUser?.email || "");
+  const [avatar, setAvatar] = useState(currentUser?.avatar || "");
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (currentUser) {
       setName(currentUser.name || "");
       setEmail(currentUser.email || "");
+      setAvatar(currentUser.avatar || "");
     }
   }, [currentUser]);
+
+  const getInitials = (name: string) => {
+    return name
+      .split(' ')
+      .map(part => part[0])
+      .join('')
+      .toUpperCase()
+      .substring(0, 2);
+  };
+
+  const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !currentUser) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: "Invalid File",
+        description: "Please upload an image file (JPG, PNG, etc.)",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: "File Too Large",
+        description: "Image must be less than 5MB",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsUploadingAvatar(true);
+
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${currentUser.id}-${Date.now()}.${fileExt}`;
+      const filePath = `avatars/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      const { data: urlData } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath);
+
+      const avatarUrl = urlData.publicUrl;
+
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ avatar_url: avatarUrl })
+        .eq('id', currentUser.id);
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      setAvatar(avatarUrl);
+      
+      if (updateUser) {
+        updateUser({ ...currentUser, avatar: avatarUrl });
+      }
+
+      toast({
+        title: "Avatar Updated",
+        description: "Your profile picture has been updated successfully"
+      });
+    } catch (error: any) {
+      console.error('Avatar upload error:', error);
+      toast({
+        title: "Upload Failed",
+        description: error.message || "Failed to upload avatar. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  };
 
   useEffect(() => {
     checkMFAStatus();
@@ -157,11 +249,22 @@ const Settings = () => {
   const handleSaveProfile = async () => {
     if (!currentUser) return;
     
+    // Validate required avatar
+    if (!avatar && !currentUser.avatar) {
+      toast({
+        title: "Profile picture required",
+        description: "Please upload a profile picture before saving. This is required for site claiming.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     try {
       const success = await updateUser({
         ...currentUser,
         name,
-        email
+        email,
+        avatar: avatar || currentUser.avatar
       });
       
       if (success) {
@@ -1065,6 +1168,64 @@ const Settings = () => {
               </div>
             </CardHeader>
             <CardContent className="space-y-6 pt-6">
+              {/* Profile Picture Section */}
+              <div className="flex flex-col items-center gap-4 pb-6 border-b">
+                <Label className="text-base font-medium">Profile Picture <span className="text-destructive">*</span></Label>
+                <div className="relative group">
+                  <Avatar className="h-24 w-24 border-2 border-border">
+                    {avatar ? (
+                      <AvatarImage src={avatar} alt={name} className="object-cover" />
+                    ) : null}
+                    <AvatarFallback className="text-2xl font-semibold bg-primary/10">
+                      {getInitials(name || currentUser?.name || "U")}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div 
+                    className="absolute inset-0 bg-black/60 rounded-full opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity cursor-pointer"
+                    onClick={() => avatarInputRef.current?.click()}
+                  >
+                    {isUploadingAvatar ? (
+                      <Upload className="h-6 w-6 text-white animate-pulse" />
+                    ) : (
+                      <Camera className="h-6 w-6 text-white" />
+                    )}
+                  </div>
+                </div>
+                <input
+                  ref={avatarInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleAvatarUpload}
+                  data-testid="input-avatar"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => avatarInputRef.current?.click()}
+                  disabled={isUploadingAvatar}
+                  data-testid="button-upload-avatar"
+                >
+                  {isUploadingAvatar ? (
+                    <>
+                      <Upload className="mr-2 h-4 w-4 animate-spin" />
+                      Uploading...
+                    </>
+                  ) : (
+                    <>
+                      <Camera className="mr-2 h-4 w-4" />
+                      {avatar ? "Change Photo" : "Upload Photo"}
+                    </>
+                  )}
+                </Button>
+                {!avatar && (
+                  <div className="flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400">
+                    <AlertCircle className="h-4 w-4" />
+                    <span>Profile picture is required for site claiming</span>
+                  </div>
+                )}
+              </div>
+
               <div className="grid gap-6 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="name" className="text-base font-medium">Full Name</Label>
