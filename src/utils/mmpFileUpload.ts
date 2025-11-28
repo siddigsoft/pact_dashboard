@@ -186,17 +186,19 @@ async function ensureSitesInRegistry(
 
   try {
     // Fetch all existing registry sites for matching
+    console.log('[Sites Registry] Fetching existing sites from registry...');
     const { data: existingRegistrySites, error: fetchError } = await supabase
       .from('sites_registry')
       .select('id, site_code, site_name, state_name, locality_name, mmp_count');
 
     if (fetchError) {
-      console.error('Error fetching sites registry:', fetchError);
+      console.error('[Sites Registry] ERROR fetching sites registry:', fetchError);
       errors.push('Failed to fetch sites registry: ' + fetchError.message);
       return { siteRegistryMap, newSitesCount, existingSitesCount, errors };
     }
 
     const registrySites = existingRegistrySites || [];
+    console.log(`[Sites Registry] Found ${registrySites.length} existing sites in registry`);
     const sitesToCreate: Array<{
       siteKey: string;
       site: SiteForRegistry;
@@ -257,6 +259,7 @@ async function ensureSitesInRegistry(
 
       if (matchedSite) {
         // Site exists - add to map and increment mmp_count later
+        console.log(`[Sites Registry] MATCHED: "${siteName}" (${state}/${locality}) -> Registry ID: ${matchedSite.id}, Site Code: ${matchedSite.site_code}`);
         siteRegistryMap.set(siteKey, {
           registrySiteId: matchedSite.id,
           siteCode: matchedSite.site_code,
@@ -267,6 +270,7 @@ async function ensureSitesInRegistry(
       } else {
         // Site doesn't exist - queue for creation
         const generatedCode = siteCode || generateSiteCode(siteName, state, locality);
+        console.log(`[Sites Registry] NEW: "${siteName}" (${state}/${locality}) -> Will create with code: ${generatedCode}`);
         sitesToCreate.push({ siteKey, site, generatedCode });
       }
     }
@@ -684,6 +688,12 @@ export async function uploadMMPFile(
     }
 
     // Add informational message about registry processing
+    console.log(`[Sites Registry] ===== SUMMARY =====`);
+    console.log(`[Sites Registry] Total sites in file: ${sitesForRegistry.length}`);
+    console.log(`[Sites Registry] Existing sites linked: ${existingSitesCount}`);
+    console.log(`[Sites Registry] New sites created: ${newSitesCount}`);
+    console.log(`[Sites Registry] ===================`);
+    
     if (newSitesCount > 0 || existingSitesCount > 0) {
       const registryInfo: CSVValidationError = {
         type: 'warning' as const,
