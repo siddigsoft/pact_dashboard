@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -77,6 +78,11 @@ const years = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);
 export default function TrackerPreparationPlan() {
   const { currentUser } = useAppContext();
   const { toast } = useToast();
+  const location = useLocation();
+  
+  const isAdmin = currentUser?.role === 'admin';
+  const isICT = currentUser?.role === 'ict';
+  const hasAccess = isAdmin || isICT;
   
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
@@ -93,6 +99,11 @@ export default function TrackerPreparationPlan() {
     activityTypes: []
   });
   
+  const filtersRef = useRef(filters);
+  useEffect(() => {
+    filtersRef.current = filters;
+  }, [filters]);
+  
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [configName, setConfigName] = useState('');
   const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
@@ -100,14 +111,67 @@ export default function TrackerPreparationPlan() {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    loadInitialData();
-  }, []);
+    if (hasAccess) {
+      loadInitialData();
+    }
+  }, [hasAccess]);
 
   useEffect(() => {
-    if (filters.month && filters.year) {
+    if (hasAccess && filters.month && filters.year) {
       loadTrackerData();
     }
-  }, [filters]);
+  }, [filters, hasAccess]);
+
+  useEffect(() => {
+    if (!hasAccess) return;
+    
+    const channelId = `tracker-realtime-${Date.now()}`;
+    
+    const channel = supabase
+      .channel(channelId)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'mmp_site_entries' },
+        (payload) => {
+          console.log('[Tracker] MMP entry changed:', payload.eventType);
+          if (filtersRef.current.month && filtersRef.current.year) {
+            loadTrackerData();
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'site_visits' },
+        (payload) => {
+          console.log('[Tracker] Site visit changed:', payload.eventType);
+          if (filtersRef.current.month && filtersRef.current.year) {
+            loadTrackerData();
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [hasAccess]);
+  
+  if (!hasAccess) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
+            <h2 className="text-xl font-semibold mb-2">Access Restricted</h2>
+            <p className="text-muted-foreground text-center">
+              You do not have permission to access the Tracker Preparation Plan.
+              This page is only available to Admin and ICT users.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const loadInitialData = async () => {
     try {
@@ -128,17 +192,35 @@ export default function TrackerPreparationPlan() {
   const loadTrackerData = async () => {
     setLoading(true);
     try {
+      let filesQuery = supabase
+        .from('mmp_files')
+        .select('id')
+        .eq('month', filters.month)
+        .eq('year', filters.year);
+      
+      if (filters.projectId) {
+        filesQuery = filesQuery.eq('project_id', filters.projectId);
+      }
+      
+      const { data: mmpFiles, error: filesError } = await filesQuery;
+      
+      if (filesError) throw filesError;
+      
+      const fileIds = (mmpFiles || []).map((f: any) => f.id);
+      
+      if (fileIds.length === 0) {
+        setLineItems([]);
+        setLoading(false);
+        return;
+      }
+      
       let mmpQuery = supabase
         .from('mmp_site_entries')
         .select('*')
-        .eq('month', filters.month)
-        .eq('year', filters.year);
+        .in('mmp_file_id', fileIds);
 
-      if (filters.projectId) {
-        mmpQuery = mmpQuery.eq('project_id', filters.projectId);
-      }
       if (filters.hubId) {
-        mmpQuery = mmpQuery.eq('hub_id', filters.hubId);
+        mmpQuery = mmpQuery.eq('hub_office', filters.hubId);
       }
       if (filters.states.length > 0) {
         mmpQuery = mmpQuery.in('state', filters.states);
@@ -151,22 +233,32 @@ export default function TrackerPreparationPlan() {
       const registryIds = (mmpEntries || []).map((e: any) => e.registry_site_id).filter(Boolean);
 
       let siteVisits: any[] = [];
-      if (mmpIds.length > 0 || registryIds.length > 0) {
-        const conditions: string[] = [];
-        if (mmpIds.length > 0) {
-          conditions.push(`mmp_site_entry_id.in.(${mmpIds.join(',')})`);
-        }
-        if (registryIds.length > 0) {
-          conditions.push(`registry_site_id.in.(${registryIds.join(',')})`);
-        }
-        
-        const { data: svData, error: svError } = await supabase
+      
+      if (mmpIds.length > 0) {
+        const { data: svByMmpId, error: svMmpError } = await supabase
           .from('site_visits')
           .select('*')
-          .or(conditions.join(','));
+          .in('mmp_site_entry_id', mmpIds);
         
-        if (svError) throw svError;
-        siteVisits = svData || [];
+        if (svMmpError) throw svMmpError;
+        if (svByMmpId) siteVisits.push(...svByMmpId);
+      }
+      
+      if (registryIds.length > 0) {
+        const { data: svByRegistry, error: svRegError } = await supabase
+          .from('site_visits')
+          .select('*')
+          .in('registry_site_id', registryIds);
+        
+        if (svRegError) throw svRegError;
+        if (svByRegistry) {
+          const existingIds = new Set(siteVisits.map(sv => sv.id));
+          svByRegistry.forEach(sv => {
+            if (!existingIds.has(sv.id)) {
+              siteVisits.push(sv);
+            }
+          });
+        }
       }
 
       const siteVisitsByMmpEntry = new Map<string, any[]>();

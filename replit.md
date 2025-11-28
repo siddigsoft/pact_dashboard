@@ -49,15 +49,21 @@ The backend utilizes PostgreSQL through Supabase, incorporating Row Level Securi
     - **UI Display:** SiteDetailDialog shows registry linkage status and GPS coordinates from both database column and legacy `additional_data.registry_gps`
     - Key files: `mmpFileUpload.ts` (upload/registration), `sitesRegistryMatcher.ts` (matching logic), `MMP.tsx` (GPS save on visit completion), `SiteDetailDialog.tsx` (display)
 *   **Tracker Preparation Plan System:** Comprehensive planned vs actual site coverage analysis and invoice preparation tool. Features:
-    - **Coverage Tracking:** Compares planned MMP site entries against actual completed site visits with coverage percentages
+    - **Coverage Tracking:** Compares planned MMP site entries against actual completed site visits with coverage percentages. All verified MMP entries appear as "Planned" immediately after coordinator verification.
+    - **Real-Time Updates:** Uses Supabase Realtime subscriptions for both `mmp_site_entries` and `site_visits` tables. Completed site visits appear as "Actual" immediately.
     - **Multi-View Analysis:** Overview dashboard with summary cards, detailed site table with expandable rows, breakdowns by State, Hub, and Enumerator
     - **Financial Tracking:** Shows planned budget, actual costs, variance, enumerator fees, and transport costs
     - **Smart Data Aggregation:** Only fetches site visits linked to filtered MMP entries via mmp_site_entry_id or registry_site_id; handles multi-visit scenarios by selecting best visit (Completed > In Progress > first)
     - **Invoice Preparation:** Dialog showing comprehensive cost breakdown (fees, transport, accommodation, meals, logistics) with totals; supports invoice generation workflow
     - **Export Capabilities:** Excel export with multiple sheets (Summary, Site Details with totals row, By State, By Hub, Enumerator Summary); PDF export with tables and summary statistics
     - **Save/Load Configurations:** Filter presets saved to `tracker_plan_configs` Supabase table for quick access
-    - **Role Access:** Available to Admin, SuperAdmin, FinancialAdmin, and FOM roles via sidebar "Data & Reports" section
+    - **Role Access:** Available to Admin and ICT roles only via sidebar "Data & Reports" section
     - Key files: `TrackerPreparationPlan.tsx` (main page), `tracker.ts` (types), `tracker_plan_configs` (Supabase table)
+*   **Site Visit Details Enhancement:** Comprehensive site visit details page with unified data sources. Features:
+    - **Unified Cost Breakdown:** SiteVisitCostsUnified component fetches cost data from both mmp_site_entries and site_visits for consistent display with itemized breakdown (transportation, accommodation, meal per diem, logistics, enumerator fee)
+    - **Workflow Audit Trail:** SiteVisitAuditTrail component shows timeline of site workflow steps (creation, dispatch, claim/assignment, GPS capture, cost acknowledgment, completion) with timestamps and user attribution
+    - **Streamlined Layout:** Cards organized in a responsive 2-column layout with info, dates, and audit trail on the left; costs and nearby enumerators on the right
+    - Key files: `SiteVisitDetail.tsx` (page), `SiteVisitCostsUnified.tsx` (costs), `SiteVisitAuditTrail.tsx` (timeline)
 
 ## External Dependencies
 

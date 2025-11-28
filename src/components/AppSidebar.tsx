@@ -180,7 +180,7 @@
     if (!isHidden('/reports') && ((isAdmin || perms.reports) && !isICT)) {
       dataItems.push({ id: 'reports', title: "Reports", url: "/reports", icon: Calendar, priority: 2, isPinned: isPinned('/reports') });
     }
-    if (!isHidden('/tracker-preparation-plan') && (isAdmin || isSuperAdmin || isFinancialAdmin || isFOM)) {
+    if (!isHidden('/tracker-preparation-plan') && (isAdmin || isICT)) {
       dataItems.push({ id: 'tracker-plan', title: "Tracker Preparation", url: "/tracker-preparation-plan", icon: BarChart3, priority: 3, isPinned: isPinned('/tracker-preparation-plan') });
     }
     if (dataItems.length) groups.push({ id: 'reports', label: "Data & Reports", order: 5, items: dataItems });
