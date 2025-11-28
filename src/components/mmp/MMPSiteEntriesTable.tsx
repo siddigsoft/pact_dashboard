@@ -276,7 +276,7 @@ const MMPSiteEntriesTable = ({
                             <span className="text-muted-foreground">Total Cost:</span>
                             <p className="font-medium text-green-600">
                               {row.cost !== undefined && row.cost !== null && String(row.cost) !== '' && String(row.cost) !== '—'
-                                ? `$${Number(row.cost).toLocaleString()}`
+                                ? `SDG ${Number(row.cost).toLocaleString()}`
                                 : '—'}
                             </p>
                           </div>

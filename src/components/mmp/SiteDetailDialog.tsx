@@ -284,9 +284,18 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
   // Initialize draft when entering edit mode
   useEffect(() => {
     if (isEditing && row && !draft) {
-      setDraft({ ...row });
+      const newDraft = { ...row };
+      // Use calculated fee if available, otherwise use stored fee
+      if (classificationFee !== null && classificationFee > 0) {
+        newDraft.enumeratorFee = classificationFee;
+        newDraft.cost = classificationFee + (row.transportFee || 0);
+      } else if (row.enumeratorFee !== undefined && row.enumeratorFee !== null && Number(row.enumeratorFee) > 0) {
+        // Ensure cost is properly calculated from stored fees
+        newDraft.cost = Number(row.enumeratorFee) + (Number(row.transportFee) || 0);
+      }
+      setDraft(newDraft);
     }
-  }, [isEditing, row]);
+  }, [isEditing, row, classificationFee]);
 
   // Load classification fee for the relevant user if enumerator_fee is not set
   useEffect(() => {
@@ -787,6 +796,17 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
                           return newDraft;
                         });
                       }}
+                      onBlur={() => {
+                        // When user finishes editing, use calculated fee if available
+                        if (classificationFee !== null && classificationFee > 0 && !draft?.enumeratorFee) {
+                          setDraft((d: any) => {
+                            const newDraft = { ...d, enumeratorFee: classificationFee };
+                            const transFee = Number(d?.transportFee ?? row.transportFee ?? 0);
+                            newDraft.cost = classificationFee + transFee;
+                            return newDraft;
+                          });
+                        }
+                      }}
                       className="mt-2 text-2xl font-semibold"
                       placeholder="Calculated at claim"
                     />
@@ -826,7 +846,10 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
                         const val = e.target.value;
                         setDraft((d: any) => {
                           const newDraft = { ...d, transportFee: val };
-                          const enumFee = Number(d?.enumeratorFee ?? row.enumeratorFee ?? 0);
+                          // Use calculated fee if available, otherwise use stored or draft fee
+                          const enumFee = classificationFee !== null && classificationFee > 0 
+                            ? classificationFee 
+                            : Number(d?.enumeratorFee ?? row.enumeratorFee ?? 0);
                           const transFee = Number(val) || 0;
                           newDraft.cost = enumFee + transFee;
                           return newDraft;
@@ -853,7 +876,7 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
                   <Label className="text-xs font-medium text-blue-100">Total Payout</Label>
                   {isEditing ? (
                     <p className="text-2xl font-bold text-white mt-2">
-                      {((Number(draft?.enumeratorFee ?? 0)) + (Number(draft?.transportFee ?? 0))).toLocaleString()} SDG
+                      {((classificationFee !== null && classificationFee > 0 ? classificationFee : Number(draft?.enumeratorFee ?? 0)) + (Number(draft?.transportFee ?? 0))).toLocaleString()} SDG
                     </p>
                   ) : (
                     <>
