@@ -12,7 +12,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, DollarSign, AlertCircle, ArrowRight, ArrowLeft, Copy, Users, MapPin } from 'lucide-react';
 import { sudanStates } from '@/data/sudanStates';
-import { fetchAllRegistrySites, matchSiteToRegistry } from '@/utils/sitesRegistryMatcher';
+import { fetchAllRegistrySites, matchSiteToRegistry, RegistryLinkage } from '@/utils/sitesRegistryMatcher';
 
 interface DispatchSitesDialogProps {
   open: boolean;
@@ -389,8 +389,9 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
           // Transport budget = transportation + accommodation + meal per diem + other logistics
           const transportBudget = costs.transportation + costs.accommodation + costs.mealAllowance + costs.otherCosts;
           
-          // Look up GPS coordinates from Sites Registry
-          // Only update registry_gps if a match is found; preserve existing data if no match
+          // Look up GPS coordinates from Sites Registry with enhanced matching
+          // Only update registry_linkage if a match is found; preserve existing data if no match
+          const existingRegistryLinkage = siteEntry.additional_data?.registry_linkage || null;
           const existingRegistryGps = siteEntry.additional_data?.registry_gps || null;
           
           const registryMatch = matchSiteToRegistry(
@@ -401,20 +402,35 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
               state: siteEntry.state || siteEntry.state_name,
               locality: siteEntry.locality || siteEntry.locality_name,
             },
-            registrySites
+            registrySites,
+            {
+              userId: assignedBy || 'system',
+              sourceWorkflow: 'dispatch',
+            }
           );
           
-          // Build registry_gps object - only update if match found, otherwise preserve existing
-          const registryGps = registryMatch.matchedRegistry ? {
-            latitude: registryMatch.gpsCoordinates?.latitude || null,
-            longitude: registryMatch.gpsCoordinates?.longitude || null,
-            source: 'sites_registry',
-            site_id: registryMatch.matchedRegistry.id,
-            site_code: registryMatch.matchedRegistry.site_code,
-            match_type: registryMatch.matchType,
-            match_confidence: registryMatch.matchConfidence,
-            matched_at: new Date().toISOString(),
-          } : existingRegistryGps;
+          // Build enhanced registry_linkage - update if auto-accepted, otherwise preserve existing
+          let registryLinkage: RegistryLinkage | null = existingRegistryLinkage;
+          let registryGps: any = existingRegistryGps;
+          
+          if (registryMatch.autoAccepted && registryMatch.matchedRegistry) {
+            // Auto-accepted match (>90% confidence) - update both structures
+            registryLinkage = registryMatch.registryLinkage;
+            registryGps = {
+              latitude: registryMatch.gpsCoordinates?.latitude || null,
+              longitude: registryMatch.gpsCoordinates?.longitude || null,
+              accuracy_meters: registryMatch.gpsCoordinates?.accuracy_meters,
+              source: 'sites_registry',
+              site_id: registryMatch.matchedRegistry.id,
+              site_code: registryMatch.matchedRegistry.site_code,
+              match_type: registryMatch.matchType,
+              match_confidence: registryMatch.matchConfidence,
+              matched_at: registryMatch.registryLinkage.audit.matched_at,
+            };
+          } else if (registryMatch.requiresReview && !existingRegistryLinkage) {
+            // New match requiring review - store for later manual selection
+            registryLinkage = registryMatch.registryLinkage;
+          }
           
           // Update mmp_site_entries with transport costs only (enumerator_fee remains null)
           const { error: costError } = await supabase
@@ -425,6 +441,7 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
               // based on the collector's classification (Level A, B, or C)
               additional_data: {
                 ...(siteEntry.additional_data || {}),
+                ...(registryLinkage ? { registry_linkage: registryLinkage } : {}),
                 ...(registryGps ? { registry_gps: registryGps } : {}),
                 dispatch_costs: {
                   transportation_cost: costs.transportation,
