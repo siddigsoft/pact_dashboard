@@ -7,9 +7,11 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Pencil, Save, X } from 'lucide-react';
-import { ClaimSiteButton } from '@/components/site-visit/ClaimSiteButton';
+import { AcceptSiteButton } from '@/components/site-visit/AcceptSiteButton';
+import { RequestDownPaymentButton } from '@/components/site-visit/RequestDownPaymentButton';
 import { useAppContext } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
+import { calculateEnumeratorFeeForUser } from '@/hooks/use-claim-fee-calculation';
 
 interface SiteDetailDialogProps {
   open: boolean;
@@ -43,6 +45,8 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
   const [sendBackComments, setSendBackComments] = useState('');
   const { users } = useAppContext();
   const [acceptedByName, setAcceptedByName] = useState<string | null>(null);
+  const [dispatchedByName, setDispatchedByName] = useState<string | null>(null);
+  const [classificationFee, setClassificationFee] = useState<number | null>(null);
 
   // Normalize site data
   const normalizeSite = (site: any) => {
@@ -77,28 +81,17 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
 
     const comments = site.comments || site.notes || '';
     
-    const enumeratorFee = site.enumerator_fee ?? ad['Enumerator Fee'] ?? ad['enumerator_fee'] ?? 
-      (site.additional_data?.enumerator_fee ? Number(site.additional_data.enumerator_fee) : undefined);
-    const transportFee = site.transport_fee ?? ad['Transport Fee'] ?? ad['transport_fee'] ?? 
-      (site.additional_data?.transport_fee ? Number(site.additional_data.transport_fee) : undefined);
+    const enumeratorFee = site.enumerator_fee;
+    const transportFee = site.transport_fee;
+    const cost = site.cost ?? site.price ?? vd?.cost ?? vd?.price;
     
-    const cost = site.cost ?? site.price ?? vd?.cost ?? vd?.price ?? ad['Cost'] ?? ad['Price'] ?? ad['Amount'];
+    const displayedEnumeratorFee = (enumeratorFee !== undefined && enumeratorFee !== null)
+      ? Number(enumeratorFee)
+      : undefined; // show Pending when not set
+    const displayedTransportFee = (transportFee !== undefined && transportFee !== null) ? Number(transportFee) : undefined;
     
-    let finalEnumeratorFee = enumeratorFee;
-    let finalTransportFee = transportFee;
-    
-    if (cost && (!finalEnumeratorFee || !finalTransportFee)) {
-      if (Number(cost) === 30) {
-        finalEnumeratorFee = finalEnumeratorFee ?? 20;
-        finalTransportFee = finalTransportFee ?? 10;
-      } else if (cost && !finalEnumeratorFee && !finalTransportFee) {
-        finalEnumeratorFee = finalEnumeratorFee ?? (cost ? Number(cost) - 10 : undefined);
-        finalTransportFee = finalTransportFee ?? 10;
-      }
-    }
-    
-    const totalCost = (finalEnumeratorFee && finalTransportFee) 
-      ? Number(finalEnumeratorFee) + Number(finalTransportFee)
+    const totalCost = (displayedEnumeratorFee !== undefined && displayedTransportFee !== undefined)
+      ? displayedEnumeratorFee + displayedTransportFee
       : (cost ? Number(cost) : undefined);
 
     const verifiedBy = site.verified_by || ad['Verified By'] || ad['Verified By:'] || undefined;
@@ -199,7 +192,7 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
       hubOffice, state, locality, siteCode, siteName, cpName, siteActivity, 
       monitoringBy, surveyTool, useMarketDiversion, useWarehouseMonitoring,
       visitDate, comments, 
-      enumeratorFee: finalEnumeratorFee, transportFee: finalTransportFee, cost: totalCost,
+      enumeratorFee: displayedEnumeratorFee, transportFee: displayedTransportFee, cost: totalCost,
       verifiedBy, verifiedAt, verificationNotes, status,
       dispatchedAt, dispatchedBy, acceptedAt, acceptedBy, 
       rejectionComments, rejectedBy, rejectedAt,
@@ -253,12 +246,68 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
     return () => { cancelled = true; };
   }, [row?.acceptedBy, users]);
 
+  useEffect(() => {
+    const id = row?.dispatchedBy as string | undefined;
+    if (!id) {
+      setDispatchedByName(null);
+      return;
+    }
+    const looksLikeUUID = typeof id === 'string' && /[0-9a-fA-F-]{30,}/.test(id);
+    if (!looksLikeUUID) {
+      setDispatchedByName(id);
+      return;
+    }
+    const local = users?.find(u => u.id === id);
+    if (local) {
+      setDispatchedByName(local.fullName || local.name || local.username || local.email || id);
+      return;
+    }
+    let cancelled = false;
+    const fetchProfile = async () => {
+      try {
+        const { data } = await supabase
+          .from('profiles')
+          .select('full_name,username,email')
+          .eq('id', id)
+          .single();
+        if (!cancelled) {
+          setDispatchedByName(data?.full_name || data?.username || data?.email || id);
+        }
+      } catch {
+        if (!cancelled) setDispatchedByName(id);
+      }
+    };
+    fetchProfile();
+    return () => { cancelled = true; };
+  }, [row?.dispatchedBy, users]);
+
   // Initialize draft when entering edit mode
   useEffect(() => {
     if (isEditing && row && !draft) {
       setDraft({ ...row });
     }
   }, [isEditing, row]);
+
+  // Load classification fee for the relevant user if enumerator_fee is not set
+  useEffect(() => {
+    let cancelled = false;
+    const loadClassification = async () => {
+      try {
+        // Prefer accepted_by for the site; otherwise use the viewer's id
+        const userId = (site?.accepted_by as string) || currentUserId;
+        if (!userId) {
+          setClassificationFee(null);
+          return;
+        }
+        const result = await calculateEnumeratorFeeForUser(userId);
+        if (!cancelled) setClassificationFee(result.fee);
+      } catch {
+        if (!cancelled) setClassificationFee(null);
+      }
+    };
+    loadClassification();
+    return () => { cancelled = true; };
+  }, [site?.accepted_by, currentUserId]);
 
   // Reset when dialog closes
   useEffect(() => {
@@ -741,9 +790,14 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
                       className="mt-2 text-2xl font-semibold"
                       placeholder="Calculated at claim"
                     />
+
                   ) : (
                     <>
-                      {row.enumeratorFee !== undefined && row.enumeratorFee !== null && Number(row.enumeratorFee) > 0 ? (
+                      {classificationFee !== null && classificationFee > 0 ? (
+                        <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mt-2">
+                          {Number(classificationFee).toLocaleString()} SDG
+                        </p>
+                      ) : row.enumeratorFee !== undefined && row.enumeratorFee !== null && Number(row.enumeratorFee) > 0 ? (
                         <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mt-2">
                           {Number(row.enumeratorFee).toLocaleString()} SDG
                         </p>
@@ -803,7 +857,11 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
                     </p>
                   ) : (
                     <>
-                      {row.enumeratorFee !== undefined && row.enumeratorFee !== null && Number(row.enumeratorFee) > 0 ? (
+                      {classificationFee !== null && classificationFee > 0 ? (
+                        <p className="text-2xl font-bold text-white mt-2">
+                          {(Number(classificationFee) + Number(row.transportFee || 0)).toLocaleString()} SDG
+                        </p>
+                      ) : row.enumeratorFee !== undefined && row.enumeratorFee !== null && Number(row.enumeratorFee) > 0 ? (
                         <p className="text-2xl font-bold text-white mt-2">
                           {(Number(row.enumeratorFee) + Number(row.transportFee || 0)).toLocaleString()} SDG
                         </p>
@@ -881,7 +939,7 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
                 {row.dispatchedBy && (
                   <div>
                     <Label className="text-xs font-medium text-gray-600">Dispatched By</Label>
-                    <p className="font-medium text-gray-900 mt-1">{row.dispatchedBy}</p>
+                    <p className="font-medium text-gray-900 mt-1">{dispatchedByName || row.dispatchedBy}</p>
                   </div>
                 )}
                 {row.dispatchedAt && (
@@ -933,34 +991,19 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
             </div>
 
             {/* Action Buttons */}
-            {isAvailableSite && !isEditing && (
+            {isAvailableSite && !isEditing && currentUserId && (
               <div className="border-t pt-4 flex flex-col sm:flex-row gap-3">
-                {enableFirstClaim && currentUserId ? (
-                  <ClaimSiteButton
-                    siteId={site.id}
-                    siteName={row?.siteName || 'Site'}
-                    userId={currentUserId}
-                    onClaimed={() => {
-                      onClaimed?.();
-                      onOpenChange(false);
-                    }}
-                    size="lg"
-                    className="flex-1"
-                    data-testid={`button-claim-site-${site.id}`}
-                  />
-                ) : onAcceptSite ? (
-                  <Button
-                    onClick={() => {
-                      onAcceptSite(site);
-                      onOpenChange(false);
-                    }}
-                    className="flex-1"
-                    size="lg"
-                    data-testid="button-accept-site"
-                  >
-                    Accept Site
-                  </Button>
-                ) : null}
+                <AcceptSiteButton
+                  site={site}
+                  userId={currentUserId}
+                  onAccepted={() => {
+                    onClaimed?.();
+                    onAcceptSite?.(site);
+                    onOpenChange(false);
+                  }}
+                  size="lg"
+                  className="flex-1 bg-primary hover:bg-primary/90"
+                />
                 {onSendBackToCoordinator && (
                   <Button
                     variant="outline"
@@ -977,6 +1020,36 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
                 )}
               </div>
             )}
+
+            {/* Request Down Payment for Accepted Sites */}
+            {(() => {
+              const acceptedBy = site?.accepted_by || site?.acceptedBy || row.acceptedBy;
+              const transportFee = site?.transport_fee || site?.transportFee || row.transportFee || 0;
+              const status = (row.status || site?.status || '').toLowerCase();
+              const isAcceptedOrOngoing = status === 'accepted' || status === 'ongoing';
+              const isOwner = acceptedBy === currentUserId;
+              const hasTransportBudget = transportFee > 0;
+              
+              if (isAcceptedOrOngoing && isOwner && hasTransportBudget && !isEditing) {
+                return (
+                  <div className="border-t pt-4">
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <p className="text-sm font-medium">Need transport advance?</p>
+                        <p className="text-xs text-muted-foreground">
+                          Request up to {transportFee} SDG before your visit
+                        </p>
+                      </div>
+                      <RequestDownPaymentButton
+                        site={site}
+                        size="default"
+                      />
+                    </div>
+                  </div>
+                );
+              }
+              return null;
+            })()}
           </div>
 
           <DialogFooter>
