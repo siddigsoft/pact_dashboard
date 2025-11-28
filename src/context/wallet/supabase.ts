@@ -34,10 +34,18 @@ export const adminListWallets = async (params: { search?: string; page?: number;
   
   // Get transaction breakdowns for all wallets in parallel
   const walletIds = (data || []).map((w: any) => w.id);
-  const { data: transactions } = await supabase
+  console.log('[adminListWallets] Fetching transactions for wallet IDs:', walletIds);
+  
+  const { data: transactions, error: txError } = await supabase
     .from('wallet_transactions')
     .select('wallet_id, type, amount')
     .in('wallet_id', walletIds);
+  
+  console.log('[adminListWallets] Transaction query result:', {
+    count: transactions?.length,
+    error: txError,
+    sample: transactions?.[0]
+  });
   
   // Group transactions by wallet_id and type
   const transactionsByWallet: Record<string, Record<string, number>> = {};
@@ -51,15 +59,22 @@ export const adminListWallets = async (params: { search?: string; page?: number;
     transactionsByWallet[tx.wallet_id][tx.type] += Number(tx.amount || 0);
   });
   
-  const rows = (data || []).map((r: any) => ({
-    ...r,
-    owner_name: r.profiles?.full_name || r.profiles?.username || r.profiles?.email || r.user_id,
-    // Convert numeric strings to numbers for proper calculations
-    totalEarned: Number(r.total_earned || 0),
-    totalWithdrawn: Number(r.total_withdrawn || 0),
-    // Add transaction breakdown
-    breakdown: transactionsByWallet[r.id] || {},
-  }));
+  console.log('[adminListWallets] Transaction breakdown by wallet:', transactionsByWallet);
+  
+  const rows = (data || []).map((r: any) => {
+    const breakdown = transactionsByWallet[r.id] || {};
+    console.log(`[adminListWallets] Wallet ${r.id} breakdown:`, breakdown);
+    
+    return {
+      ...r,
+      owner_name: r.profiles?.full_name || r.profiles?.username || r.profiles?.email || r.user_id,
+      // Convert numeric strings to numbers for proper calculations
+      totalEarned: Number(r.total_earned || 0),
+      totalWithdrawn: Number(r.total_withdrawn || 0),
+      // Add transaction breakdown
+      breakdown,
+    };
+  });
   
   return rows;
 };
