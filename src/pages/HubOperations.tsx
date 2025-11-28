@@ -17,6 +17,7 @@ import { useAppContext } from '@/context/AppContext';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { supabase } from '@/integrations/supabase/client';
 import { sudanStates, getLocalitiesByState, hubs as defaultHubs, getTotalLocalityCount } from '@/data/sudanStates';
+import { sudanStateBoundaries } from '@/data/sudanGeoJSON';
 import { ManagedHub, SiteRegistry, ProjectScope, generateSiteCode } from '@/types/hub-operations';
 import StateMapCard, { getStateCoords, getStateColor } from '@/components/hub-operations/StateMapCard';
 import HubCard from '@/components/hub-operations/HubCard';
@@ -24,6 +25,41 @@ import SiteCard from '@/components/hub-operations/SiteCard';
 import LeafletMapContainer from '@/components/map/LeafletMapContainer';
 import SudanMapView from '@/components/hub-operations/SudanMapView';
 import SiteDetailDialog from '@/components/mmp/SiteDetailDialog';
+import { MapContainer, TileLayer, Circle, Marker, Popup, GeoJSON, useMap
+} from 'react-leaflet';
+import L from 'leaflet';
+
+function FitBoundsToGeoJSON({ geoJson }: { geoJson: any }) {
+  const map = useMap();
+  
+  if (geoJson && geoJson.geometry && geoJson.geometry.coordinates) {
+    const allCoords: number[][] = [];
+    
+    if (geoJson.geometry.type === 'Polygon') {
+      geoJson.geometry.coordinates.forEach((ring: number[][]) => {
+        ring.forEach((coord: number[]) => allCoords.push(coord));
+      });
+    } else if (geoJson.geometry.type === 'MultiPolygon') {
+      geoJson.geometry.coordinates.forEach((polygon: number[][][]) => {
+        polygon.forEach((ring: number[][]) => {
+          ring.forEach((coord: number[]) => allCoords.push(coord));
+        });
+      });
+    }
+    
+    if (allCoords.length > 0) {
+      const lats = allCoords.map((c: number[]) => c[1]);
+      const lngs = allCoords.map((c: number[]) => c[0]);
+      const bounds: [[number, number], [number, number]] = [
+        [Math.min(...lats), Math.min(...lngs)],
+        [Math.max(...lats), Math.max(...lngs)]
+      ];
+      map.fitBounds(bounds, { padding: [20, 20] });
+    }
+  }
+  
+  return null;
+}
 import { 
   Building2, 
   MapPin, 
@@ -1420,6 +1456,103 @@ export default function HubOperations() {
                 </DialogHeader>
                 
                 <div className="space-y-4">
+                  {/* State Map View */}
+                  <div>
+                    <h4 className="font-semibold mb-2 flex items-center gap-2">
+                      <Map className="h-4 w-4" />
+                      State Location
+                    </h4>
+                    <div className="h-56 rounded-lg overflow-hidden border">
+                      {(() => {
+                        const stateCoords = getStateCoords(state.id);
+                        const stateColor = getStateColor(state.id);
+                        const stateGeoJSON = sudanStateBoundaries.features.find(
+                          (f: any) => f.properties.id === state.id
+                        );
+                        const sitesWithGps = stateSites.filter(s => s.gps_latitude && s.gps_longitude);
+                        
+                        return (
+                          <MapContainer
+                            center={stateCoords}
+                            zoom={7}
+                            style={{ height: '100%', width: '100%' }}
+                            scrollWheelZoom={true}
+                          >
+                            <TileLayer
+                              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                            />
+                            {stateGeoJSON && (
+                              <>
+                                <FitBoundsToGeoJSON geoJson={stateGeoJSON} />
+                                <GeoJSON
+                                  data={stateGeoJSON as any}
+                                  style={{
+                                    color: stateColor,
+                                    fillColor: stateColor,
+                                    fillOpacity: 0.2,
+                                    weight: 3,
+                                  }}
+                                />
+                              </>
+                            )}
+                            <Circle
+                              center={stateCoords}
+                              radius={15000}
+                              pathOptions={{
+                                color: stateColor,
+                                fillColor: stateColor,
+                                fillOpacity: 0.4,
+                                weight: 2,
+                              }}
+                            />
+                            <Marker 
+                              position={stateCoords}
+                              icon={L.divIcon({
+                                className: 'custom-state-center-marker',
+                                html: `<div style="background-color: ${stateColor}; width: 20px; height: 20px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.3);"></div>`,
+                                iconSize: [20, 20],
+                                iconAnchor: [10, 10],
+                              })}
+                            >
+                              <Popup>
+                                <div className="text-center">
+                                  <strong>{state.name}</strong>
+                                  <br />
+                                  <span className="text-sm text-muted-foreground">State Capital</span>
+                                </div>
+                              </Popup>
+                            </Marker>
+                            {sitesWithGps.map(site => (
+                              <Marker
+                                key={site.id}
+                                position={[site.gps_latitude!, site.gps_longitude!]}
+                                icon={L.divIcon({
+                                  className: 'custom-site-marker',
+                                  html: `<div style="background-color: #10B981; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; box-shadow: 0 1px 4px rgba(0,0,0,0.3);"></div>`,
+                                  iconSize: [12, 12],
+                                  iconAnchor: [6, 6],
+                                })}
+                              >
+                                <Popup>
+                                  <div>
+                                    <strong>{site.site_name}</strong>
+                                    <br />
+                                    <span className="text-sm">{site.locality_name}</span>
+                                  </div>
+                                </Popup>
+                              </Marker>
+                            ))}
+                          </MapContainer>
+                        );
+                      })()}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                      <MapPin className="h-3 w-3" />
+                      State boundaries shown - {stateSites.filter(s => s.gps_latitude && s.gps_longitude).length} registered sites with GPS displayed
+                    </p>
+                  </div>
+                  
                   <div className="grid grid-cols-3 gap-3 text-center">
                     <div className="p-3 bg-muted/50 rounded-lg">
                       <p className="text-2xl font-bold">{state.localities.length}</p>
