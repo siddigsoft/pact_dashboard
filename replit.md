@@ -48,6 +48,16 @@ The backend utilizes PostgreSQL through Supabase, incorporating Row Level Securi
     - **Database Schema:** `sites_registry` (master site list with GPS), `mmp_site_entries.registry_site_id` (foreign key), `site_visits.registry_site_id` (foreign key)
     - **UI Display:** SiteDetailDialog shows registry linkage status and GPS coordinates from both database column and legacy `additional_data.registry_gps`
     - Key files: `mmpFileUpload.ts` (upload/registration), `sitesRegistryMatcher.ts` (matching logic), `MMP.tsx` (GPS save on visit completion), `SiteDetailDialog.tsx` (display)
+*   **Tracker Preparation Plan System:** Comprehensive planned vs actual site coverage analysis and invoice preparation tool. Features:
+    - **Coverage Tracking:** Compares planned MMP site entries against actual completed site visits with coverage percentages
+    - **Multi-View Analysis:** Overview dashboard with summary cards, detailed site table with expandable rows, breakdowns by State, Hub, and Enumerator
+    - **Financial Tracking:** Shows planned budget, actual costs, variance, enumerator fees, and transport costs
+    - **Smart Data Aggregation:** Only fetches site visits linked to filtered MMP entries via mmp_site_entry_id or registry_site_id; handles multi-visit scenarios by selecting best visit (Completed > In Progress > first)
+    - **Invoice Preparation:** Dialog showing comprehensive cost breakdown (fees, transport, accommodation, meals, logistics) with totals; supports invoice generation workflow
+    - **Export Capabilities:** Excel export with multiple sheets (Summary, Site Details with totals row, By State, By Hub, Enumerator Summary); PDF export with tables and summary statistics
+    - **Save/Load Configurations:** Filter presets saved to `tracker_plan_configs` Supabase table for quick access
+    - **Role Access:** Available to Admin, SuperAdmin, FinancialAdmin, and FOM roles via sidebar "Data & Reports" section
+    - Key files: `TrackerPreparationPlan.tsx` (main page), `tracker.ts` (types), `tracker_plan_configs` (Supabase table)
 
 ## External Dependencies
 

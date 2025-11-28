@@ -69,6 +69,7 @@ const CostSubmission = lazy(() => import('./pages/CostSubmission'));
 const FinancialOperations = lazy(() => import('./pages/FinancialOperations'));
 const SuperAdminManagement = lazy(() => import('./components/superAdmin/SuperAdminManagementPage').then(module => ({ default: module.SuperAdminManagementPage })));
 const HubOperations = lazy(() => import('./pages/HubOperations'));
+const TrackerPreparationPlan = lazy(() => import('./pages/TrackerPreparationPlan'));
 
 // Components (keep these eagerly loaded as they're used immediately)
 import MainLayout from './components/MainLayout';
@@ -197,6 +198,7 @@ const AppRoutes = () => {
   <Route path="/coordinator/sites-for-verification" element={<SitesForVerification />} />
   <Route path="/coordinator/sites" element={<CoordinatorSites />} />
   <Route path="/hub-operations" element={<HubOperations />} />
+        <Route path="/tracker-preparation-plan" element={<TrackerPreparationPlan />} />
       </Route>
 
       {/* Redirects */}

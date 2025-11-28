@@ -27,7 +27,8 @@
     Eye,
     EyeOff,
     GripVertical,
-    Star
+    Star,
+    BarChart3
   } from "lucide-react";
   import { useSiteVisitReminders } from "@/hooks/use-site-visit-reminders";
   import Logo from "../assets/logo.png";
@@ -85,6 +86,7 @@
     TrendingUp,
     DollarSign,
     Settings,
+    BarChart3,
     Star,
     Pin,
     Eye,
@@ -177,6 +179,9 @@
     }
     if (!isHidden('/reports') && ((isAdmin || perms.reports) && !isICT)) {
       dataItems.push({ id: 'reports', title: "Reports", url: "/reports", icon: Calendar, priority: 2, isPinned: isPinned('/reports') });
+    }
+    if (!isHidden('/tracker-preparation-plan') && (isAdmin || isSuperAdmin || isFinancialAdmin || isFOM)) {
+      dataItems.push({ id: 'tracker-plan', title: "Tracker Preparation", url: "/tracker-preparation-plan", icon: BarChart3, priority: 3, isPinned: isPinned('/tracker-preparation-plan') });
     }
     if (dataItems.length) groups.push({ id: 'reports', label: "Data & Reports", order: 5, items: dataItems });
 
