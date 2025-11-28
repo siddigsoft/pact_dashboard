@@ -357,7 +357,15 @@ async function ensureSitesInRegistry(
       }
     }
 
-    console.log(`Sites Registry: ${existingSitesCount} existing, ${newSitesCount} newly created`);
+    // Print detailed summary
+    console.log('='.repeat(60));
+    console.log('[Sites Registry] UPLOAD COMPLETE - SUMMARY');
+    console.log('='.repeat(60));
+    console.log(`[Sites Registry] Total sites in file: ${sites.length}`);
+    console.log(`[Sites Registry] Existing sites linked (no duplicates created): ${existingSitesCount}`);
+    console.log(`[Sites Registry] New sites added to registry: ${newSitesCount}`);
+    console.log(`[Sites Registry] Registry entries reused: ${existingSitesCount > 0 ? 'YES - Sites matched to existing registry' : 'N/A - All new sites'}`);
+    console.log('='.repeat(60));
 
   } catch (error) {
     console.error('Unexpected error in ensureSitesInRegistry:', error);
