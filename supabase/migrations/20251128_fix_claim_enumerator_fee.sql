@@ -125,7 +125,7 @@ BEGIN
   -- All checks passed - claim the site with enumerator fee
   UPDATE mmp_site_entries
   SET 
-    status = 'Assigned',
+    status = 'Accepted',
     claimed_by = p_user_id,
     claimed_at = NOW(),
     accepted_by = p_user_id,
