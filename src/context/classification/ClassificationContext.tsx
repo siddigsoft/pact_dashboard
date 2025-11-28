@@ -336,6 +336,9 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
 
   // Assign Classification - intelligently creates or updates
   const assignClassification = useCallback(async (userId: string, data: ClassificationFormData | CreateClassificationRequest): Promise<UserClassification | null> => {
+    console.log('[Classification] Starting assignment for user:', userId);
+    console.log('[Classification] Form data:', JSON.stringify(data, null, 2));
+    
     try {
       const now = new Date().toISOString();
       
@@ -349,10 +352,13 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
           (!c.effectiveUntil || c.effectiveUntil > now)
       );
 
+      console.log('[Classification] Existing classification:', existingClassification ? existingClassification.id : 'none');
+
       // If there's an existing active classification, deactivate it first
       if (existingClassification) {
         const effectiveFrom = data.effectiveFrom || now;
-        await supabase
+        console.log('[Classification] Deactivating existing classification:', existingClassification.id);
+        const { error: deactivateError } = await supabase
           .from('user_classifications')
           .update({
             is_active: false,
@@ -360,6 +366,10 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
             change_reason: `Replaced by new classification: ${data.changeReason || 'No reason provided'}`,
           })
           .eq('id', existingClassification.id);
+        
+        if (deactivateError) {
+          console.error('[Classification] Failed to deactivate existing:', deactivateError);
+        }
       }
 
       // Create new classification
@@ -381,13 +391,25 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
         is_active: true,
       };
 
+      console.log('[Classification] Insert data:', JSON.stringify(insertData, null, 2));
+
       const { data: result, error } = await supabase
         .from('user_classifications')
         .insert(insertData)
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('[Classification] Supabase insert error:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code,
+        });
+        throw error;
+      }
+
+      console.log('[Classification] Successfully inserted:', result?.id);
 
       // Refresh classifications to get updated data
       await refreshUserClassifications();
@@ -403,7 +425,13 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
 
       return newClassification;
     } catch (error: any) {
-      console.error('Error assigning classification:', error);
+      console.error('[Classification] Error assigning classification:', {
+        message: error.message,
+        details: error.details || 'No details',
+        hint: error.hint || 'No hint',
+        code: error.code || 'No code',
+        stack: error.stack,
+      });
       toast({
         title: 'Error',
         description: error.message || 'Failed to assign classification',
