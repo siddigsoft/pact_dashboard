@@ -52,9 +52,12 @@ export function AcceptSiteButton({
 
   const siteName = site.site_name || site.siteName || 'Site';
   const siteStatus = site.status?.toLowerCase();
+  const isAlreadyAccepted = siteStatus === 'accepted' || siteStatus === 'completed' || siteStatus === 'ongoing';
+  const hasAcceptedBy = !!(site as any).accepted_by;
+  const isDispatchedButClaimed = siteStatus === 'dispatched' && hasAcceptedBy;
 
   const handleInitiateAccept = async () => {
-    if (accepting || accepted || disabled) return;
+    if (accepting || accepted || disabled || isAlreadyAccepted || isDispatchedButClaimed) return;
 
     const breakdown = await calculateFeeForClaim(site.id, userId);
     if (breakdown) {
@@ -129,6 +132,7 @@ export function AcceptSiteButton({
             accepted_at: now,
             updated_at: now,
             enumerator_fee: feeBreakdown.enumeratorFee,
+            transport_fee: feeBreakdown.transportBudget,
             cost: feeBreakdown.totalPayout
           })
           .eq('id', site.id);
@@ -158,7 +162,7 @@ export function AcceptSiteButton({
     }
   };
 
-  if (accepted) {
+  if (accepted || isAlreadyAccepted || isDispatchedButClaimed) {
     return (
       <Button
         variant="outline"
@@ -168,7 +172,7 @@ export function AcceptSiteButton({
         data-testid={`button-accepted-${site.id}`}
       >
         <CheckCircle className="h-4 w-4 mr-2" />
-        {siteStatus === 'dispatched' ? 'Claimed' : 'Accepted'}
+        {isAlreadyAccepted ? 'Accepted' : isDispatchedButClaimed ? 'Claimed' : (siteStatus === 'dispatched' ? 'Claimed' : 'Accepted')}
       </Button>
     );
   }

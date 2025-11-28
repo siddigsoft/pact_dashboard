@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Pencil, Save, X } from 'lucide-react';
-import { ClaimSiteButton } from '@/components/site-visit/ClaimSiteButton';
+import { AcceptSiteButton } from '@/components/site-visit/AcceptSiteButton';
 import { useAppContext } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
 import { calculateEnumeratorFeeForUser } from '@/hooks/use-claim-fee-calculation';
@@ -990,34 +990,19 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
             </div>
 
             {/* Action Buttons */}
-            {isAvailableSite && !isEditing && (
+            {isAvailableSite && !isEditing && currentUserId && (
               <div className="border-t pt-4 flex flex-col sm:flex-row gap-3">
-                {enableFirstClaim && currentUserId ? (
-                  <ClaimSiteButton
-                    siteId={site.id}
-                    siteName={row?.siteName || 'Site'}
-                    userId={currentUserId}
-                    onClaimed={() => {
-                      onClaimed?.();
-                      onOpenChange(false);
-                    }}
-                    size="lg"
-                    className="flex-1"
-                    data-testid={`button-claim-site-${site.id}`}
-                  />
-                ) : onAcceptSite ? (
-                  <Button
-                    onClick={() => {
-                      onAcceptSite(site);
-                      onOpenChange(false);
-                    }}
-                    className="flex-1"
-                    size="lg"
-                    data-testid="button-accept-site"
-                  >
-                    Accept Site
-                  </Button>
-                ) : null}
+                <AcceptSiteButton
+                  site={site}
+                  userId={currentUserId}
+                  onAccepted={() => {
+                    onClaimed?.();
+                    onAcceptSite?.(site);
+                    onOpenChange(false);
+                  }}
+                  size="lg"
+                  className="flex-1 bg-primary hover:bg-primary/90"
+                />
                 {onSendBackToCoordinator && (
                   <Button
                     variant="outline"

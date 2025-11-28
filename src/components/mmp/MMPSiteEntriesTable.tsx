@@ -3,13 +3,10 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
-import { Search, Eye, ChevronLeft, ChevronRight, Hand } from 'lucide-react';
+import { Search, Eye, ChevronLeft, ChevronRight } from 'lucide-react';
 import SiteDetailDialog from './SiteDetailDialog';
-import { ClaimSiteButton } from '@/components/site-visit/ClaimSiteButton';
+import { AcceptSiteButton } from '@/components/site-visit/AcceptSiteButton';
 
 interface MMPSiteEntriesTableProps {
   siteEntries: any[];
@@ -49,12 +46,9 @@ const MMPSiteEntriesTable = ({
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(50); // Show 50 items per page
+  const [itemsPerPage] = useState(50);
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedSite, setSelectedSite] = useState<any | null>(null);
-  // Accept/Reject dialog state
-  const [acceptRejectOpen, setAcceptRejectOpen] = useState(false);
-  const [rejectComments, setRejectComments] = useState('');
 
   // Debounce search query to reduce filtering operations
   useEffect(() => {
@@ -147,29 +141,6 @@ const MMPSiteEntriesTable = ({
   };
 
   const handleView = (site: any) => {
-    // Check if this is a Smart Assigned site that needs cost acknowledgment
-    const isSmartAssignedNeedingAcknowledgment = showAcceptRejectForAssigned && 
-                                                 site.status?.toLowerCase() === 'assigned' && 
-                                                 site.accepted_by === currentUserId &&
-                                                 (!site.cost_acknowledged && !site.additional_data?.cost_acknowledged);
-    
-    if (isSmartAssignedNeedingAcknowledgment && onAcknowledgeCost) {
-      onAcknowledgeCost(site);
-      return;
-    }
-    
-    // Check if this is a Smart Assigned site that needs Accept/Reject dialog
-    const isSmartAssigned = showAcceptRejectForAssigned && 
-                           site.status?.toLowerCase() === 'assigned' && 
-                           site.accepted_by === currentUserId;
-    
-    if (isSmartAssigned && onAcceptSite && onRejectSite) {
-      setSelectedSite(site);
-      setRejectComments('');
-      setAcceptRejectOpen(true);
-      return;
-    }
-
     // Check if this is an accepted site that needs Start Visit
     const isAcceptedSite = showVisitActions && 
                           site.status?.toLowerCase() === 'accepted' && 
@@ -190,7 +161,7 @@ const MMPSiteEntriesTable = ({
       return;
     }
     
-    // Otherwise show regular detail dialog
+    // Show detail dialog for all other cases
     if (onViewSiteDetail) {
       onViewSiteDetail(site);
       return;
@@ -327,13 +298,22 @@ const MMPSiteEntriesTable = ({
 
                       <div className="flex gap-2 sm:flex-col">
                         {showClaimButton && site.status?.toLowerCase() === 'dispatched' && !site.accepted_by && currentUserId && (
-                          <ClaimSiteButton
-                            siteId={site.id}
-                            siteName={row.siteName || 'Site'}
+                          <AcceptSiteButton
+                            site={site}
                             userId={currentUserId}
-                            onClaimed={onSiteClaimed}
+                            onAccepted={onSiteClaimed}
                             size="default"
-                            className="w-full sm:w-auto min-h-[44px] text-base font-semibold shadow-md"
+                            className="w-full sm:w-auto min-h-[44px] text-base font-semibold shadow-md bg-primary hover:bg-primary/90"
+                          />
+                        )}
+                        {showAcceptRejectForAssigned && site.status?.toLowerCase() === 'assigned' && site.accepted_by === currentUserId && currentUserId && (
+                          <AcceptSiteButton
+                            site={site}
+                            userId={currentUserId}
+                            onAccepted={onSiteClaimed}
+                            size="default"
+                            isSmartAssigned={true}
+                            className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700"
                           />
                         )}
                         {showVisitActions ? (
@@ -419,73 +399,6 @@ const MMPSiteEntriesTable = ({
         currentUserId={currentUserId}
       />
 
-      {/* Accept/Reject Dialog for Smart Assigned sites */}
-      <Dialog open={acceptRejectOpen} onOpenChange={setAcceptRejectOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Acknowledge Site Assignment</DialogTitle>
-            <DialogDescription>
-              Please acknowledge this site assignment to move it to your pending visits.
-            </DialogDescription>
-          </DialogHeader>
-          {selectedSite && (() => {
-            const row = normalizeSite(selectedSite);
-            return (
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Site Name</p>
-                    <p className="font-medium">{row.siteName || '—'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">State</p>
-                    <p className="font-medium">{row.state || '—'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Locality</p>
-                    <p className="font-medium">{row.locality || '—'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Activity at Site</p>
-                    <p className="font-medium">{row.siteActivity || '—'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Visit Date</p>
-                    <p className="font-medium">{row.visitDate || '—'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Total Cost</p>
-                    <p className="font-medium">{row.cost ? `$${Number(row.cost).toLocaleString()}` : '—'}</p>
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
-          <DialogFooter className="gap-2">
-            <Button 
-              variant="outline" 
-              onClick={() => {
-                setAcceptRejectOpen(false);
-                setSelectedSite(null);
-                setRejectComments('');
-              }}
-            >
-              Cancel
-            </Button>
-            <Button 
-              onClick={() => {
-                onAcceptSite?.(selectedSite);
-                setAcceptRejectOpen(false);
-                setSelectedSite(null);
-                setRejectComments('');
-              }}
-              className="bg-blue-600 hover:bg-blue-700"
-            >
-              Acknowledge Assignment
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </Card>
   );
 };
