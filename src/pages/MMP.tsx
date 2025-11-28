@@ -1057,27 +1057,18 @@ const MMP = () => {
       const now = new Date().toISOString();
       const siteStatus = site.status?.toLowerCase();
 
-      // Build update object - include acceptance fields if site was 'assigned'
-      // Note: Using additional_data for visit tracking to avoid schema cache issues
+      // Build update object - using direct columns for visit tracking
       const updateData: any = {
         status: 'In Progress',
         updated_at: now,
-        additional_data: {
-          ...(site.additional_data || {}),
-          visit_started_at: now,
-          visit_started_by: currentUser?.id
-        }
+        visit_started_at: now,
+        visit_started_by: currentUser?.id
       };
 
       // If site was 'assigned' (not yet accepted), also set acceptance fields
       if (siteStatus === 'assigned' && !site.accepted_by) {
         updateData.accepted_by = currentUser?.id;
         updateData.accepted_at = now;
-        updateData.additional_data = {
-          ...updateData.additional_data,
-          accepted_at: now,
-          accepted_by: currentUser?.id
-        };
         console.log('[StartVisit] Site was assigned - auto-accepting before starting');
       }
 
@@ -1127,15 +1118,14 @@ const MMP = () => {
       stopLocationTracking(site.id);
 
       // Update site with visit completion time and final location (but don't change status yet)
-      // Note: Using additional_data for visit tracking to avoid schema cache issues
       await supabase
         .from('mmp_site_entries')
         .update({
           updated_at: now,
+          visit_completed_at: now,
+          visit_completed_by: currentUser?.id,
           additional_data: {
             ...(site.additional_data || {}),
-            visit_completed_at: now,
-            visit_completed_by: currentUser?.id,
             final_location: location
           }
         })
@@ -1542,8 +1532,8 @@ const MMP = () => {
       doc.text('Visit Information', 20, 115);
 
       doc.setFontSize(10);
-      const visitStart = site.additional_data?.visit_started_at;
-      const visitEnd = site.additional_data?.visit_completed_at;
+      const visitStart = site.visit_started_at || site.additional_data?.visit_started_at;
+      const visitEnd = site.visit_completed_at || site.additional_data?.visit_completed_at;
       doc.text(`Visit Started: ${visitStart ? new Date(visitStart).toLocaleString() : 'N/A'}`, 20, 130);
       doc.text(`Visit Completed: ${visitEnd ? new Date(visitEnd).toLocaleString() : 'N/A'}`, 20, 140);
       doc.text(`Visit Duration: ${reportData.visitDuration} minutes`, 20, 150);
