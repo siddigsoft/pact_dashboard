@@ -25,9 +25,9 @@ const transformSiteVisitsData = (data: any[]): SiteVisit[] => {
   // Map mmp_site_entries to SiteVisit format
   const transformedData = data?.map(entry => {
     const additionalData = entry.additional_data || {};
-    const enumeratorFee = entry.enumerator_fee || additionalData.enumerator_fee || 20;
-    const transportFee = entry.transport_fee || additionalData.transport_fee || 10;
-    const totalCost = entry.cost || (enumeratorFee + transportFee);
+    const enumeratorFee = Number(entry.enumerator_fee || 0);
+    const transportFee = Number(entry.transport_fee || 0);
+    const totalCost = entry.cost ?? (enumeratorFee + transportFee);
     const fees = {
       total: totalCost,
       currency: 'SDG',
@@ -235,9 +235,9 @@ export const updateSiteVisitInDb = async (id: string, updates: Partial<SiteVisit
   
   // Transform back to camelCase for frontend use
   const ad = updatedData.additional_data || {};
-  const enumeratorFee = updatedData.enumerator_fee || ad.enumerator_fee || 20;
-  const transportFee = updatedData.transport_fee || ad.transport_fee || 10;
-  const totalCost = updatedData.cost || (enumeratorFee + transportFee);
+  const enumeratorFee = Number(updatedData.enumerator_fee || 0);
+  const transportFee = Number(updatedData.transport_fee || 0);
+  const totalCost = updatedData.cost ?? (enumeratorFee + transportFee);
   const fees = {
     total: totalCost,
     currency: 'SDG',

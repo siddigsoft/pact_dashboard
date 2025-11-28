@@ -142,11 +142,11 @@ export const SiteVisitCosts = ({ siteCode, mmpFileId }: SiteVisitCostsProps) => 
     );
   }
 
-  // Extract fees from additional_data if not in main columns
+  // Use only direct columns for fees and cost
   const additionalData = costData.additional_data || {};
-  const enumeratorFee = costData.enumerator_fee ?? additionalData.enumerator_fee ?? 0;
-  const transportFee = costData.transport_fee ?? additionalData.transport_fee ?? 0;
-  const totalCost = costData.cost ?? ((enumeratorFee + transportFee) || 0);
+  const enumeratorFee = Number(costData.enumerator_fee || 0);
+  const transportFee = Number(costData.transport_fee || 0);
+  const totalCost = costData.cost ?? (enumeratorFee + transportFee);
 
   // Format currency (default to SDG)
   const currency = additionalData.currency || 'SDG';

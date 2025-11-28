@@ -10,6 +10,7 @@ import { Pencil, Save, X } from 'lucide-react';
 import { ClaimSiteButton } from '@/components/site-visit/ClaimSiteButton';
 import { useAppContext } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
+import { calculateEnumeratorFeeForUser } from '@/hooks/use-claim-fee-calculation';
 
 interface SiteDetailDialogProps {
   open: boolean;
@@ -43,6 +44,7 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
   const [sendBackComments, setSendBackComments] = useState('');
   const { users } = useAppContext();
   const [acceptedByName, setAcceptedByName] = useState<string | null>(null);
+  const [classificationFee, setClassificationFee] = useState<number | null>(null);
 
   // Normalize site data
   const normalizeSite = (site: any) => {
@@ -77,28 +79,17 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
 
     const comments = site.comments || site.notes || '';
     
-    const enumeratorFee = site.enumerator_fee ?? ad['Enumerator Fee'] ?? ad['enumerator_fee'] ?? 
-      (site.additional_data?.enumerator_fee ? Number(site.additional_data.enumerator_fee) : undefined);
-    const transportFee = site.transport_fee ?? ad['Transport Fee'] ?? ad['transport_fee'] ?? 
-      (site.additional_data?.transport_fee ? Number(site.additional_data.transport_fee) : undefined);
+    const enumeratorFee = site.enumerator_fee;
+    const transportFee = site.transport_fee;
+    const cost = site.cost ?? site.price ?? vd?.cost ?? vd?.price;
     
-    const cost = site.cost ?? site.price ?? vd?.cost ?? vd?.price ?? ad['Cost'] ?? ad['Price'] ?? ad['Amount'];
+    const displayedEnumeratorFee = (enumeratorFee !== undefined && enumeratorFee !== null)
+      ? Number(enumeratorFee)
+      : undefined; // show Pending when not set
+    const displayedTransportFee = (transportFee !== undefined && transportFee !== null) ? Number(transportFee) : undefined;
     
-    let finalEnumeratorFee = enumeratorFee;
-    let finalTransportFee = transportFee;
-    
-    if (cost && (!finalEnumeratorFee || !finalTransportFee)) {
-      if (Number(cost) === 30) {
-        finalEnumeratorFee = finalEnumeratorFee ?? 20;
-        finalTransportFee = finalTransportFee ?? 10;
-      } else if (cost && !finalEnumeratorFee && !finalTransportFee) {
-        finalEnumeratorFee = finalEnumeratorFee ?? (cost ? Number(cost) - 10 : undefined);
-        finalTransportFee = finalTransportFee ?? 10;
-      }
-    }
-    
-    const totalCost = (finalEnumeratorFee && finalTransportFee) 
-      ? Number(finalEnumeratorFee) + Number(finalTransportFee)
+    const totalCost = (displayedEnumeratorFee !== undefined && displayedTransportFee !== undefined)
+      ? displayedEnumeratorFee + displayedTransportFee
       : (cost ? Number(cost) : undefined);
 
     const verifiedBy = site.verified_by || ad['Verified By'] || ad['Verified By:'] || undefined;
@@ -199,7 +190,7 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
       hubOffice, state, locality, siteCode, siteName, cpName, siteActivity, 
       monitoringBy, surveyTool, useMarketDiversion, useWarehouseMonitoring,
       visitDate, comments, 
-      enumeratorFee: finalEnumeratorFee, transportFee: finalTransportFee, cost: totalCost,
+      enumeratorFee: displayedEnumeratorFee, transportFee: displayedTransportFee, cost: totalCost,
       verifiedBy, verifiedAt, verificationNotes, status,
       dispatchedAt, dispatchedBy, acceptedAt, acceptedBy, 
       rejectionComments, rejectedBy, rejectedAt,
@@ -259,6 +250,27 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
       setDraft({ ...row });
     }
   }, [isEditing, row]);
+
+  // Load classification fee for the relevant user if enumerator_fee is not set
+  useEffect(() => {
+    let cancelled = false;
+    const loadClassification = async () => {
+      try {
+        // Prefer accepted_by for the site; otherwise use the viewer's id
+        const userId = (site?.accepted_by as string) || currentUserId;
+        if (!userId) {
+          setClassificationFee(null);
+          return;
+        }
+        const result = await calculateEnumeratorFeeForUser(userId);
+        if (!cancelled) setClassificationFee(result.fee);
+      } catch {
+        if (!cancelled) setClassificationFee(null);
+      }
+    };
+    loadClassification();
+    return () => { cancelled = true; };
+  }, [site?.accepted_by, currentUserId]);
 
   // Reset when dialog closes
   useEffect(() => {

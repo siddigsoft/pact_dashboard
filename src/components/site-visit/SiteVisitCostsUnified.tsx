@@ -129,11 +129,7 @@ export function SiteVisitCostsUnified({
           fees.logistics ?? 
           visitData.logistics ?? 0;
         
-        const enumeratorFee = 
-          mmpEntry?.enumerator_fee ?? 
-          additionalData.enumerator_fee ?? 
-          fees.enumerator_fee ?? 
-          visitData.enumeratorFee ?? 0;
+        const enumeratorFee = Number(mmpEntry?.enumerator_fee || 0);
 
         const totalCost = transportation + accommodation + mealPerDiem + logistics + enumeratorFee;
 

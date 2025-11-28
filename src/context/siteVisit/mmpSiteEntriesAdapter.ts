@@ -161,14 +161,14 @@ const mapStatus = (dbStatus: string): SiteVisit['status'] => {
   const statusMap: Record<string, SiteVisit['status']> = {
     'pending': 'pending',
     'assigned': 'assigned',
-    'in progress': 'ongoing',
-    'ongoing': 'ongoing',
+    'in progress': 'inProgress',
+    'ongoing': 'inProgress',
     'completed': 'completed',
     'cancelled': 'cancelled',
     'canceled': 'canceled',
     'verified': 'permitVerified',
-    'dispatched': 'dispatched',
-    'accepted': 'accepted',
+    'dispatched': 'assigned',
+    'accepted': 'assigned',
   };
   return statusMap[s] || 'pending';
 };

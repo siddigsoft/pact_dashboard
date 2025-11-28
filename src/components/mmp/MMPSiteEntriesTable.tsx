@@ -104,37 +104,12 @@ const MMPSiteEntriesTable = ({
     }
 
     const comments = site.comments || site.notes || '—';
-    const fees = (site.fees || vd?.fees) || {};
-    
-    // Extract enumerator_fee and transport_fee from additional_data or calculate from cost
-    const enumeratorFee = site.enumerator_fee ?? ad['Enumerator Fee'] ?? ad['enumerator_fee'] ?? 
-      (site.additional_data?.enumerator_fee ? Number(site.additional_data.enumerator_fee) : undefined);
-    const transportFee = site.transport_fee ?? ad['Transport Fee'] ?? ad['transport_fee'] ?? 
-      (site.additional_data?.transport_fee ? Number(site.additional_data.transport_fee) : undefined);
-    
-    // If we have separate fees, use them; otherwise try to extract from cost or use cost directly
-    let finalEnumeratorFee = enumeratorFee;
-    let finalTransportFee = transportFee;
-    
-    // If we have cost but not separate fees, and cost is 30 (default), split it
-    const cost = site.cost ?? site.price ?? vd?.cost ?? vd?.price ?? fees.total ?? fees.amount ?? ad['Cost'] ?? ad['Price'] ?? ad['Amount'];
-    if (cost && (!finalEnumeratorFee || !finalTransportFee)) {
-      // If cost is 30 (default), split into 20 + 10
-      if (Number(cost) === 30) {
-        finalEnumeratorFee = finalEnumeratorFee ?? 20;
-        finalTransportFee = finalTransportFee ?? 10;
-      } else if (cost && !finalEnumeratorFee && !finalTransportFee) {
-        // If we have cost but no separate fees, try to infer or use defaults
-        // For now, if cost exists and is not 30, we'll let user set fees manually
-        finalEnumeratorFee = finalEnumeratorFee ?? (cost ? Number(cost) - 10 : undefined);
-        finalTransportFee = finalTransportFee ?? 10;
-      }
-    }
-    
-    // Calculate total cost from fees if both exist, otherwise use cost
-    const totalCost = (finalEnumeratorFee && finalTransportFee) 
-      ? Number(finalEnumeratorFee) + Number(finalTransportFee)
-      : (cost ? Number(cost) : undefined);
+    const enumeratorFee = site.enumerator_fee;
+    const transportFee = site.transport_fee;
+    const cost = site.cost;
+    const totalCost = (enumeratorFee !== undefined && enumeratorFee !== null && transportFee !== undefined && transportFee !== null)
+      ? Number(enumeratorFee) + Number(transportFee)
+      : (cost !== undefined && cost !== null ? Number(cost) : undefined);
     
     // Read from new columns first, then fallback to additional_data for backward compatibility
     const verifiedBy = site.verified_by || ad['Verified By'] || ad['Verified By:'] || undefined;
@@ -163,7 +138,7 @@ const MMPSiteEntriesTable = ({
       hubOffice, state, locality, siteCode, mmpName, siteName, cpName, siteActivity, 
       monitoringBy, surveyTool, useMarketDiversion, useWarehouseMonitoring,
       mainActivity, visitType, visitDate, comments, 
-      enumeratorFee: finalEnumeratorFee, transportFee: finalTransportFee, cost: totalCost,
+      enumeratorFee: enumeratorFee, transportFee: transportFee, cost: totalCost,
       verifiedBy, verifiedAt, verificationNotes, status,
       dispatchedAt, dispatchedBy, acceptedAt, acceptedBy, 
       rejectionComments, rejectedBy, rejectedAt,
