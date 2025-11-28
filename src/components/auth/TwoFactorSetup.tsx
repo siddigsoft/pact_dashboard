@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Shield, ShieldCheck, ShieldOff, Smartphone, Copy, Check, Trash2, Loader2, AlertTriangle } from 'lucide-react';
 import { useMFA, MFAFactor } from '@/hooks/use-mfa';
 import { useToast } from '@/hooks/use-toast';
+import { QRCodeSVG } from 'qrcode.react';
 
 interface TwoFactorSetupProps {
   onSetupComplete?: () => void;
@@ -170,9 +171,13 @@ export function TwoFactorSetup({ onSetupComplete, onDisabled }: TwoFactorSetupPr
             </Alert>
 
             <div className="flex justify-center p-4 bg-white rounded-lg">
-              <div 
-                dangerouslySetInnerHTML={{ __html: enrollmentData.qr_code }}
-                className="[&>svg]:w-48 [&>svg]:h-48"
+              <QRCodeSVG
+                value={enrollmentData.uri}
+                size={192}
+                level="M"
+                includeMargin={true}
+                bgColor="#ffffff"
+                fgColor="#000000"
               />
             </div>
 
