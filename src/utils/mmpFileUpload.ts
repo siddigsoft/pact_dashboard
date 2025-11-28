@@ -772,74 +772,106 @@ export async function uploadMMPFile(
     const normalizedMmpName = mmpName.trim().toLowerCase();
     const normalizedMonth = metadata?.month?.trim().toLowerCase() || '';
     
-    // Check 1: Exact same file name (case-insensitive, excluding archived/deleted)
+    // Status values that indicate an MMP is no longer active (can be re-uploaded)
+    const inactiveStatuses = ['archived', 'deleted', 'cancelled'];
+    
+    console.log('[MMP Duplicate Check] Starting duplicate prevention checks...');
+    console.log('[MMP Duplicate Check] File name:', normalizedFileName);
+    console.log('[MMP Duplicate Check] MMP name:', normalizedMmpName);
+    console.log('[MMP Duplicate Check] Month:', normalizedMonth);
+    console.log('[MMP Duplicate Check] Project ID:', metadata?.projectId);
+    
+    // Check 1: Exact same file name (case-insensitive, excluding archived/deleted by status)
     const { data: sameFileNameMmp, error: sameFileErr } = await supabase
       .from('mmp_files')
-      .select('id,name,status,original_filename,deleted_at,archived_at');
+      .select('id,name,status,original_filename');
     
-    if (!sameFileErr && sameFileNameMmp) {
-      // Filter manually for case-insensitive match, excluding soft-deleted/archived
-      const activeDuplicate = sameFileNameMmp.find(m => 
-        m.original_filename?.trim().toLowerCase() === normalizedFileName &&
-        !m.deleted_at && 
-        !m.archived_at
-      );
+    if (sameFileErr) {
+      console.error('[MMP Duplicate Check] File name query error:', sameFileErr);
+    } else {
+      console.log('[MMP Duplicate Check] Found', sameFileNameMmp?.length || 0, 'existing MMPs to check against');
       
-      if (activeDuplicate) {
-        // Clean up storage file
-        try { await supabase.storage.from('mmp-files').remove([filePath]); } catch {}
-        return {
-          success: false,
-          error: `Duplicate file detected: "${file.name}" has already been uploaded as "${activeDuplicate.name}". Please rename your file or use a different MMP.`,
-        };
-      }
-    }
-
-    // Check 2: Same MMP name exists (case-insensitive, excluding archived/deleted)
-    const { data: sameNameMmp, error: sameNameErr } = await supabase
-      .from('mmp_files')
-      .select('id,name,status,deleted_at,archived_at')
-      .ilike('name', mmpName.trim());
-    
-    if (!sameNameErr && sameNameMmp) {
-      // Filter to exclude soft-deleted/archived
-      const activeDuplicateName = sameNameMmp.find(m => !m.deleted_at && !m.archived_at);
-      
-      if (activeDuplicateName) {
-        // Clean up storage file
-        try { await supabase.storage.from('mmp-files').remove([filePath]); } catch {}
-        return {
-          success: false,
-          error: `Duplicate MMP name: An MMP named "${activeDuplicateName.name}" already exists. Please use a different name.`,
-        };
-      }
-    }
-
-    // Check 3: Same project + month combination (excluding archived/deleted)
-    if (metadata?.projectId && normalizedMonth) {
-      const { data: existingMmps, error: existingErr } = await supabase
-        .from('mmp_files')
-        .select('id,name,status,month,deleted_at,archived_at')
-        .eq('project_id', metadata.projectId);
-      
-      if (!existingErr && existingMmps) {
-        // Filter for matching month (case-insensitive, trimmed) and exclude soft-deleted/archived
-        const activeDuplicateProjectMonth = existingMmps.find(m => 
-          m.month?.trim().toLowerCase() === normalizedMonth &&
-          !m.deleted_at && 
-          !m.archived_at
+      if (sameFileNameMmp) {
+        // Filter manually for case-insensitive match, excluding inactive status
+        const activeDuplicate = sameFileNameMmp.find(m => 
+          m.original_filename?.trim().toLowerCase() === normalizedFileName &&
+          !inactiveStatuses.includes(m.status?.toLowerCase() || '')
         );
         
-        if (activeDuplicateProjectMonth) {
+        if (activeDuplicate) {
+          console.log('[MMP Duplicate Check] BLOCKED: Duplicate file name found:', activeDuplicate.name);
           // Clean up storage file
           try { await supabase.storage.from('mmp-files').remove([filePath]); } catch {}
           return {
             success: false,
-            error: `Duplicate MMP exists for selected Project/Month ("${activeDuplicateProjectMonth.name}"). Upload aborted.`,
+            error: `Duplicate file detected: "${file.name}" has already been uploaded as "${activeDuplicate.name}". Please rename your file or use a different MMP.`,
           };
         }
       }
     }
+
+    // Check 2: Same MMP name exists (case-insensitive, excluding archived/deleted by status)
+    const { data: sameNameMmp, error: sameNameErr } = await supabase
+      .from('mmp_files')
+      .select('id,name,status')
+      .ilike('name', mmpName.trim());
+    
+    if (sameNameErr) {
+      console.error('[MMP Duplicate Check] MMP name query error:', sameNameErr);
+    } else {
+      console.log('[MMP Duplicate Check] Found', sameNameMmp?.length || 0, 'MMPs with similar name');
+      
+      if (sameNameMmp) {
+        // Filter to exclude inactive status
+        const activeDuplicateName = sameNameMmp.find(m => 
+          !inactiveStatuses.includes(m.status?.toLowerCase() || '')
+        );
+        
+        if (activeDuplicateName) {
+          console.log('[MMP Duplicate Check] BLOCKED: Duplicate MMP name found:', activeDuplicateName.name);
+          // Clean up storage file
+          try { await supabase.storage.from('mmp-files').remove([filePath]); } catch {}
+          return {
+            success: false,
+            error: `Duplicate MMP name: An MMP named "${activeDuplicateName.name}" already exists. Please use a different name.`,
+          };
+        }
+      }
+    }
+
+    // Check 3: Same project + month combination (excluding archived/deleted by status)
+    if (metadata?.projectId && normalizedMonth) {
+      const { data: existingMmps, error: existingErr } = await supabase
+        .from('mmp_files')
+        .select('id,name,status,month')
+        .eq('project_id', metadata.projectId);
+      
+      if (existingErr) {
+        console.error('[MMP Duplicate Check] Project+month query error:', existingErr);
+      } else {
+        console.log('[MMP Duplicate Check] Found', existingMmps?.length || 0, 'MMPs for this project');
+        
+        if (existingMmps) {
+          // Filter for matching month (case-insensitive, trimmed) and exclude inactive status
+          const activeDuplicateProjectMonth = existingMmps.find(m => 
+            m.month?.trim().toLowerCase() === normalizedMonth &&
+            !inactiveStatuses.includes(m.status?.toLowerCase() || '')
+          );
+          
+          if (activeDuplicateProjectMonth) {
+            console.log('[MMP Duplicate Check] BLOCKED: Duplicate project+month found:', activeDuplicateProjectMonth.name);
+            // Clean up storage file
+            try { await supabase.storage.from('mmp-files').remove([filePath]); } catch {}
+            return {
+              success: false,
+              error: `Duplicate MMP exists for selected Project/Month ("${activeDuplicateProjectMonth.name}"). Upload aborted.`,
+            };
+          }
+        }
+      }
+    }
+    
+    console.log('[MMP Duplicate Check] All checks passed, proceeding with upload...');
 
     console.log('Inserting MMP record into database:', dbData);
 
