@@ -1055,22 +1055,44 @@ const MMP = () => {
 
       const site = selectedSiteForVisit;
       const now = new Date().toISOString();
+      const siteStatus = site.status?.toLowerCase();
+
+      // Build update object - include acceptance fields if site was 'assigned'
+      const updateData: any = {
+        status: 'In Progress',
+        visit_started_at: now,
+        visit_started_by: currentUser?.id,
+        updated_at: now,
+        additional_data: {
+          ...(site.additional_data || {}),
+          visit_started_at: now,
+          visit_started_by: currentUser?.id
+        }
+      };
+
+      // If site was 'assigned' (not yet accepted), also set acceptance fields
+      if (siteStatus === 'assigned' && !site.accepted_by) {
+        updateData.accepted_by = currentUser?.id;
+        updateData.accepted_at = now;
+        updateData.additional_data = {
+          ...updateData.additional_data,
+          accepted_at: now,
+          accepted_by: currentUser?.id
+        };
+        console.log('[StartVisit] Site was assigned - auto-accepting before starting');
+      }
 
       // Update site status to 'In Progress' and save visit start information
-      await supabase
+      const { error } = await supabase
         .from('mmp_site_entries')
-        .update({
-          status: 'In Progress',
-          visit_started_at: now,
-          visit_started_by: currentUser?.id,
-          updated_at: now,
-          additional_data: {
-            ...(site.additional_data || {}),
-            visit_started_at: now,
-            visit_started_by: currentUser?.id
-          }
-        })
+        .update(updateData)
         .eq('id', site.id);
+
+      if (error) {
+        throw error;
+      }
+
+      console.log('[StartVisit] Visit started successfully for site:', site.id);
 
       toast({
         title: 'Visit Started',

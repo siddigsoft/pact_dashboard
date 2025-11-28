@@ -317,8 +317,11 @@ const MMPSiteEntriesTable = ({
                             className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700"
                           />
                         )}
-                        {/* Show Request Advance button for accepted/ongoing sites with transport budget */}
-                        {(site.status?.toLowerCase() === 'accepted' || site.status?.toLowerCase() === 'ongoing') && 
+                        {/* Show Request Advance button for accepted/ongoing/in-progress sites with transport budget */}
+                        {(site.status?.toLowerCase() === 'accepted' || 
+                          site.status?.toLowerCase() === 'ongoing' || 
+                          site.status?.toLowerCase() === 'in progress' || 
+                          site.status?.toLowerCase() === 'in_progress') && 
                          (site.accepted_by === currentUserId || site.acceptedBy === currentUserId) && 
                          ((site.transport_fee && site.transport_fee > 0) || (site.transportFee && site.transportFee > 0)) && (
                           <RequestDownPaymentButton
@@ -330,12 +333,24 @@ const MMPSiteEntriesTable = ({
                         {showVisitActions ? (
                           <>
                             {(site.status?.toLowerCase() === 'accepted' || site.status?.toLowerCase() === 'assigned') && onStartVisit && (
-                              <Button variant="default" size="sm" onClick={() => handleView(site)} className="bg-blue-600 hover:bg-blue-700">
+                              <Button 
+                                variant="default" 
+                                size="sm" 
+                                onClick={() => onStartVisit(site)} 
+                                className="bg-blue-600 hover:bg-blue-700"
+                                data-testid={`button-start-visit-${site.id}`}
+                              >
                                 <Eye className="h-4 w-4 mr-1" /> Start Visit
                               </Button>
                             )}
-                            {site.status?.toLowerCase() === 'ongoing' && onCompleteVisit && (
-                              <Button variant="default" size="sm" onClick={() => handleView(site)} className="bg-green-600 hover:bg-green-700">
+                            {(site.status?.toLowerCase() === 'ongoing' || site.status?.toLowerCase() === 'in progress' || site.status?.toLowerCase() === 'in_progress') && onCompleteVisit && (
+                              <Button 
+                                variant="default" 
+                                size="sm" 
+                                onClick={() => onCompleteVisit(site)} 
+                                className="bg-green-600 hover:bg-green-700"
+                                data-testid={`button-complete-visit-${site.id}`}
+                              >
                                 Complete Visit
                               </Button>
                             )}
