@@ -115,7 +115,7 @@ export function SiteVisitCostDialog({ open, onOpenChange, siteVisitId, siteName 
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
+        <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto pr-4">
           <Card className="bg-muted/50">
             <CardContent className="p-4">
               <div className="flex items-start gap-2 text-sm text-muted-foreground">
