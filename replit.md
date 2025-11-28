@@ -38,6 +38,14 @@ The backend uses PostgreSQL via Supabase, leveraging Row Level Security (RLS) an
 *   **Tracker Preparation Plan:** Analyzes planned vs. actual site coverage, provides real-time updates via Supabase Realtime, and facilitates invoice preparation with detailed cost breakdowns. Includes multi-view analysis, export capabilities (Excel, PDF), and configurable filter presets.
 *   **Site Visit Details Enhancement:** Unified display of cost breakdowns and a workflow audit trail for each site visit, presented in a streamlined layout.
 
+## Recent Changes
+
+*   **MMP Duplicate Prevention (Nov 2025):** Fixed critical bug in MMP upload where duplicate check was broken because it referenced a non-existent 'hub' column. Implemented three-tier duplicate detection:
+    1. Exact file name matching (case-insensitive)
+    2. MMP name matching (case-insensitive)
+    3. Project + Month combination matching
+    All checks exclude soft-deleted and archived MMPs to allow legitimate re-uploads.
+
 ## External Dependencies
 
 *   **Supabase:** PostgreSQL database, Authentication, Realtime subscriptions, Storage, Row Level Security.
