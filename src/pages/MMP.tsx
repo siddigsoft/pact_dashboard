@@ -1054,35 +1054,27 @@ const MMP = () => {
       setStartingVisit(true);
 
       const site = selectedSiteForVisit;
-      const now = new Date().toISOString();
       const siteStatus = site.status?.toLowerCase();
-
-      // Build update object - using direct columns for visit tracking
-      const updateData: any = {
-        status: 'In Progress',
-        updated_at: now,
-        visit_started_at: now,
-        visit_started_by: currentUser?.id
-      };
-
-      // If site was 'assigned' (not yet accepted), also set acceptance fields
-      if (siteStatus === 'assigned' && !site.accepted_by) {
-        updateData.accepted_by = currentUser?.id;
-        updateData.accepted_at = now;
+      
+      // Determine if we need to auto-accept (site is assigned but not yet accepted)
+      const autoAccept = siteStatus === 'assigned' && !site.accepted_by;
+      
+      if (autoAccept) {
         console.log('[StartVisit] Site was assigned - auto-accepting before starting');
       }
 
-      // Update site status to 'In Progress' and save visit start information
-      const { error } = await supabase
-        .from('mmp_site_entries')
-        .update(updateData)
-        .eq('id', site.id);
+      // Use RPC function to start visit (bypasses PostgREST schema cache issues)
+      const { data, error } = await supabase.rpc('start_site_visit', {
+        p_site_id: site.id,
+        p_user_id: currentUser?.id,
+        p_auto_accept: autoAccept
+      });
 
       if (error) {
         throw error;
       }
 
-      console.log('[StartVisit] Visit started successfully for site:', site.id);
+      console.log('[StartVisit] Visit started successfully for site:', site.id, data);
 
       toast({
         title: 'Visit Started',
@@ -1117,19 +1109,17 @@ const MMP = () => {
       // Stop location tracking
       stopLocationTracking(site.id);
 
-      // Update site with visit completion time and final location (but don't change status yet)
-      await supabase
-        .from('mmp_site_entries')
-        .update({
-          updated_at: now,
-          visit_completed_at: now,
-          visit_completed_by: currentUser?.id,
-          additional_data: {
-            ...(site.additional_data || {}),
-            final_location: location
-          }
-        })
-        .eq('id', site.id);
+      // Update site with visit completion time and final location using RPC (bypasses schema cache issues)
+      const { error: completeError } = await supabase.rpc('complete_site_visit', {
+        p_site_id: site.id,
+        p_user_id: currentUser?.id,
+        p_final_location: location
+      });
+
+      if (completeError) {
+        console.error('Failed to complete visit via RPC:', completeError);
+        throw completeError;
+      }
 
       // Save final location to site_locations table
       await supabase
