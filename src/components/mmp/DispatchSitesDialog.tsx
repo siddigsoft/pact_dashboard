@@ -1028,7 +1028,7 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
                   <div className="text-sm">
                     <span className="text-muted-foreground">Transport Budget per site: </span>
                     <span className="font-bold text-primary">
-                      {(bulkCost.transportation + bulkCost.accommodation + bulkCost.mealAllowance + bulkCost.otherCosts).toFixed(2)} SDG
+                      {(bulkCost.transportation + bulkCost.accommodation + bulkCost.mealAllowance + bulkCost.otherCosts).toLocaleString()} SDG
                     </span>
                   </div>
                   <Button onClick={applyBulkCostToAll} variant="default" data-testid="button-apply-bulk">
@@ -1073,7 +1073,7 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
                         </div>
                         <div className="text-right">
                           <Badge variant="outline" className="text-lg font-bold">
-                            {transportBudget.toFixed(2)} SDG
+                            {transportBudget.toLocaleString()} SDG
                           </Badge>
                           <p className="text-xs text-muted-foreground mt-1">Transport Budget</p>
                         </div>
