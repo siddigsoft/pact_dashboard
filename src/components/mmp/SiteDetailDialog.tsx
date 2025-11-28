@@ -8,6 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Pencil, Save, X } from 'lucide-react';
 import { AcceptSiteButton } from '@/components/site-visit/AcceptSiteButton';
+import { RequestDownPaymentButton } from '@/components/site-visit/RequestDownPaymentButton';
 import { useAppContext } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
 import { calculateEnumeratorFeeForUser } from '@/hooks/use-claim-fee-calculation';
@@ -1019,6 +1020,36 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
                 )}
               </div>
             )}
+
+            {/* Request Down Payment for Accepted Sites */}
+            {(() => {
+              const acceptedBy = site?.accepted_by || site?.acceptedBy || row.acceptedBy;
+              const transportFee = site?.transport_fee || site?.transportFee || row.transportFee || 0;
+              const status = (row.status || site?.status || '').toLowerCase();
+              const isAcceptedOrOngoing = status === 'accepted' || status === 'ongoing';
+              const isOwner = acceptedBy === currentUserId;
+              const hasTransportBudget = transportFee > 0;
+              
+              if (isAcceptedOrOngoing && isOwner && hasTransportBudget && !isEditing) {
+                return (
+                  <div className="border-t pt-4">
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <p className="text-sm font-medium">Need transport advance?</p>
+                        <p className="text-xs text-muted-foreground">
+                          Request up to {transportFee} SDG before your visit
+                        </p>
+                      </div>
+                      <RequestDownPaymentButton
+                        site={site}
+                        size="default"
+                      />
+                    </div>
+                  </div>
+                );
+              }
+              return null;
+            })()}
           </div>
 
           <DialogFooter>

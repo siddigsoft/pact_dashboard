@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Search, Eye, ChevronLeft, ChevronRight } from 'lucide-react';
 import SiteDetailDialog from './SiteDetailDialog';
 import { AcceptSiteButton } from '@/components/site-visit/AcceptSiteButton';
+import { RequestDownPaymentButton } from '@/components/site-visit/RequestDownPaymentButton';
 
 interface MMPSiteEntriesTableProps {
   siteEntries: any[];
@@ -314,6 +315,16 @@ const MMPSiteEntriesTable = ({
                             size="default"
                             isSmartAssigned={true}
                             className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700"
+                          />
+                        )}
+                        {/* Show Request Advance button for accepted/ongoing sites with transport budget */}
+                        {(site.status?.toLowerCase() === 'accepted' || site.status?.toLowerCase() === 'ongoing') && 
+                         (site.accepted_by === currentUserId || site.acceptedBy === currentUserId) && 
+                         ((site.transport_fee && site.transport_fee > 0) || (site.transportFee && site.transportFee > 0)) && (
+                          <RequestDownPaymentButton
+                            site={site}
+                            size="sm"
+                            className="w-full sm:w-auto"
                           />
                         )}
                         {showVisitActions ? (
