@@ -335,6 +335,7 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
   }, [refreshUserClassifications, toast]);
 
   // Assign Classification - intelligently creates or updates
+  // CONSTRAINT: Each user can only have ONE active classification at a time
   const assignClassification = useCallback(async (userId: string, data: ClassificationFormData | CreateClassificationRequest): Promise<UserClassification | null> => {
     console.log('[Classification] Starting assignment for user:', userId);
     console.log('[Classification] Form data:', JSON.stringify(data, null, 2));
@@ -342,21 +343,23 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
     try {
       const now = new Date().toISOString();
       
-      // Check if user has an active classification for the same role scope
-      const existingClassification = userClassifications.find(
+      // Check if user has ANY active classification (one classification per user rule)
+      // This enforces that a user can only have ONE active classification at a time
+      const existingClassifications = userClassifications.filter(
         (c) =>
           c.userId === userId &&
-          c.roleScope === data.roleScope &&
           c.isActive &&
           c.effectiveFrom <= now &&
           (!c.effectiveUntil || c.effectiveUntil > now)
       );
 
-      console.log('[Classification] Existing classification:', existingClassification ? existingClassification.id : 'none');
+      console.log('[Classification] Found existing classifications:', existingClassifications.length);
+      existingClassifications.forEach(c => console.log(`  - ${c.id}: ${c.classificationLevel}/${c.roleScope}`));
 
-      // If there's an existing active classification, deactivate it first
-      if (existingClassification) {
-        const effectiveFrom = data.effectiveFrom || now;
+      // Deactivate ALL existing active classifications for this user
+      // This ensures one user = one classification rule
+      const effectiveFrom = data.effectiveFrom || now;
+      for (const existingClassification of existingClassifications) {
         console.log('[Classification] Deactivating existing classification:', existingClassification.id);
         const { error: deactivateError } = await supabase
           .from('user_classifications')
@@ -374,7 +377,6 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
 
       // Create new classification
       // Handle both ClassificationFormData (has required fields) and CreateClassificationRequest (has optional fields)
-      const effectiveFrom = data.effectiveFrom || now;
       const insertData = {
         user_id: userId,
         classification_level: data.classificationLevel,
@@ -418,8 +420,8 @@ export const ClassificationProvider = ({ children }: { children: ReactNode }) =>
 
       toast({
         title: 'Success',
-        description: existingClassification 
-          ? 'Classification updated successfully' 
+        description: existingClassifications.length > 0
+          ? 'Classification updated successfully (previous classification deactivated)' 
           : 'Classification assigned successfully',
       });
 

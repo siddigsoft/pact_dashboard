@@ -18,7 +18,7 @@ interface DispatchSitesDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   siteEntries: any[];
-  dispatchType: 'state' | 'locality' | 'individual';
+  dispatchType: 'state' | 'locality' | 'individual' | 'open';
   onDispatched?: () => void;
 }
 
@@ -187,6 +187,10 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
 
   // Filter site entries based on selection
   const filteredSiteEntries = useMemo(() => {
+    // 'open' dispatch shows all sites without filtering
+    if (dispatchType === 'open') {
+      return siteEntries;
+    }
     if (dispatchType === 'state' && selectedState) {
       return siteEntries.filter(entry => {
         const state = entry.state || entry.state_name;
@@ -255,6 +259,8 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
       });
       return;
     }
+
+    // 'open' dispatch type doesn't require state/locality/collector selection
 
     // Initialize cost data for selected sites if not already set
     const newCosts = new Map(siteCosts);
@@ -352,9 +358,12 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
 
     setLoading(true);
     try {
+      // For 'open' dispatch, we don't filter by collectors - sites are available to all in matching areas
       const targetCollectors = dispatchType === 'individual' 
         ? [selectedCollector]
-        : filteredCollectors.map(c => c.id);
+        : dispatchType === 'open' 
+          ? [] // Open dispatch: no specific collectors - available to all
+          : filteredCollectors.map(c => c.id);
 
       // For individual dispatch, we need a specific collector
       if (dispatchType === 'individual' && targetCollectors.length === 0) {
@@ -367,9 +376,9 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
         return;
       }
       
-      // For state/locality dispatch, we can proceed even without collectors
+      // For state/locality/open dispatch, we can proceed even without collectors
       // Sites will be available for claiming when collectors are added later
-      const noCollectorsWarning = (dispatchType === 'state' || dispatchType === 'locality') && targetCollectors.length === 0;
+      const noCollectorsWarning = (dispatchType === 'state' || dispatchType === 'locality' || dispatchType === 'open') && targetCollectors.length === 0;
 
       // Get current user
       const { data: { user: authUser } } = await supabase.auth.getUser();
@@ -675,6 +684,12 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
           description: `Dispatched ${successCount} site(s), but ${errorCount} failed. Check console for details.`,
           variant: 'destructive'
         });
+      } else if (dispatchType === 'open') {
+        toast({
+          title: 'Sites Ready for Claim',
+          description: `Successfully dispatched ${successCount} site(s). Data collectors in matching areas can now claim these sites.${skippedCount > 0 ? ` (${skippedCount} skipped)` : ''}`,
+          variant: 'default'
+        });
       } else if (noCollectorsWarning) {
         toast({
           title: 'Sites Dispatched - No Collectors Yet',
@@ -708,23 +723,29 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" data-testid="dialog-dispatch-sites">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            {step === 'select' && `Dispatch Sites ${dispatchType === 'state' ? 'by State' : dispatchType === 'locality' ? 'by Locality' : 'to Data Collector'}`}
+            {step === 'select' && (
+              dispatchType === 'open' ? 'Dispatch Sites for Claim' :
+              dispatchType === 'state' ? 'Dispatch Sites by State' : 
+              dispatchType === 'locality' ? 'Dispatch Sites by Locality' : 
+              'Assign Sites to Data Collector'
+            )}
             {step === 'costs' && (
               <>
                 <DollarSign className="h-5 w-5 text-primary" />
-                Calculate Costs Before Dispatch
+                Set Transport Budget Before Dispatch
               </>
             )}
           </DialogTitle>
           <DialogDescription>
             {step === 'select' && (
               <>
+                {dispatchType === 'open' && 'Select sites to dispatch. Any data collector in the matching area can claim these sites on a first-come, first-served basis.'}
                 {dispatchType === 'state' && 'Select a state to dispatch sites to all data collectors in that state.'}
                 {dispatchType === 'locality' && 'Select a locality to dispatch sites. All data collectors in that locality will see these sites and can claim them.'}
-                {dispatchType === 'individual' && 'Select a data collector to dispatch sites directly to them.'}
+                {dispatchType === 'individual' && 'Select a data collector to assign sites directly to them.'}
               </>
             )}
-            {step === 'costs' && 'Enter transportation costs (required) and optional other costs for each site before dispatch.'}
+            {step === 'costs' && 'Enter transportation costs (required) and optional other costs for each site. Enumerator fee will be calculated when claimed.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -856,6 +877,19 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
                       </div>
                     ))
                   )}
+                </div>
+              </div>
+            )}
+
+            {dispatchType === 'open' && (
+              <div className="flex items-start gap-2 p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 rounded-md">
+                <Users className="h-4 w-4 text-blue-600 dark:text-blue-500 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium text-blue-800 dark:text-blue-200">First-Come, First-Served</p>
+                  <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
+                    Sites will be available for any data collector in the matching state/locality to claim. 
+                    No specific assignment needed - whoever claims first gets the site.
+                  </p>
                 </div>
               </div>
             )}

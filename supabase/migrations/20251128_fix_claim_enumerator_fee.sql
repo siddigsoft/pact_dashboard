@@ -22,8 +22,10 @@ DECLARE
   v_user_name TEXT;
   v_result JSONB;
   v_fee NUMERIC;
-  v_fee_structure RECORD;
-  v_classification RECORD;
+  v_base_fee_cents INTEGER;
+  v_multiplier NUMERIC;
+  v_classification_level classification_level;
+  v_role_scope classification_role_scope;
 BEGIN
   -- Get user name for audit trail
   SELECT COALESCE(full_name, username, email) INTO v_user_name
@@ -32,33 +34,42 @@ BEGIN
 
   -- If enumerator_fee not provided, calculate from classification
   IF p_enumerator_fee IS NULL THEN
-    -- Get user's active classification
-    SELECT classification_level, role_scope 
-    INTO v_classification
-    FROM user_classifications
-    WHERE user_id = p_user_id 
-      AND is_active = true
-      AND effective_from <= NOW()
-      AND (effective_until IS NULL OR effective_until > NOW())
-    ORDER BY effective_from DESC
-    LIMIT 1;
+    -- Prefer provided classification params; otherwise fetch user's active classification
+    IF p_classification_level IS NOT NULL THEN
+      v_classification_level := p_classification_level::classification_level;
+    END IF;
+    IF p_role_scope IS NOT NULL THEN
+      v_role_scope := p_role_scope::classification_role_scope;
+    END IF;
 
-    IF v_classification IS NOT NULL THEN
+    IF v_classification_level IS NULL OR v_role_scope IS NULL THEN
+      SELECT classification_level, role_scope
+      INTO v_classification_level, v_role_scope
+      FROM user_classifications
+      WHERE user_id = p_user_id
+        AND is_active = true
+        AND effective_from <= NOW()
+        AND (effective_until IS NULL OR effective_until > NOW())
+      ORDER BY effective_from DESC
+      LIMIT 1;
+    END IF;
+
+    IF v_classification_level IS NOT NULL AND v_role_scope IS NOT NULL THEN
       -- Get fee structure for this classification
       SELECT site_visit_base_fee_cents, complexity_multiplier
-      INTO v_fee_structure
+      INTO v_base_fee_cents, v_multiplier
       FROM classification_fee_structures
-      WHERE classification_level = v_classification.classification_level
-        AND role_scope = v_classification.role_scope
+      WHERE classification_level = v_classification_level
+        AND role_scope = v_role_scope
         AND is_active = true
         AND valid_from <= NOW()
         AND (valid_until IS NULL OR valid_until > NOW())
       ORDER BY valid_from DESC
       LIMIT 1;
 
-      IF v_fee_structure IS NOT NULL THEN
-        -- Calculate fee: (base_fee_cents * multiplier) / 100 = SDG
-        v_fee := ROUND((v_fee_structure.site_visit_base_fee_cents * v_fee_structure.complexity_multiplier) / 100, 2);
+      IF v_base_fee_cents IS NOT NULL THEN
+        -- Calculate fee: base_fee * multiplier = SDG (fees stored directly in SDG, not cents)
+        v_fee := ROUND(v_base_fee_cents * COALESCE(v_multiplier, 1), 2);
       ELSE
         v_fee := 50; -- Default fee if no structure found
       END IF;
@@ -67,6 +78,13 @@ BEGIN
     END IF;
   ELSE
     v_fee := p_enumerator_fee;
+    -- Keep provided classification info if any
+    IF p_classification_level IS NOT NULL THEN
+      v_classification_level := p_classification_level::classification_level;
+    END IF;
+    IF p_role_scope IS NOT NULL THEN
+      v_role_scope := p_role_scope::classification_role_scope;
+    END IF;
   END IF;
 
   -- Try to lock and claim the site atomically
@@ -122,8 +140,8 @@ BEGIN
         'enumerator_fee', v_fee,
         'transport_budget', COALESCE(v_site.transport_fee, 0),
         'total_payout', COALESCE(v_site.transport_fee, 0) + v_fee,
-        'classification_level', COALESCE(p_classification_level, v_classification.classification_level),
-        'role_scope', COALESCE(p_role_scope, v_classification.role_scope),
+        'classification_level', COALESCE(p_classification_level, (v_classification_level::text)),
+        'role_scope', COALESCE(p_role_scope, (v_role_scope::text)),
         'fee_source', COALESCE(p_fee_source, 'classification'),
         'calculated_at', NOW()::TEXT,
         'calculated_for_user', p_user_id::TEXT
