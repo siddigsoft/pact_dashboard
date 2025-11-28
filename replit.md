@@ -40,11 +40,19 @@ The backend uses PostgreSQL via Supabase, leveraging Row Level Security (RLS) an
 
 ## Recent Changes
 
-*   **MMP Duplicate Prevention (Nov 2025):** Fixed critical bug in MMP upload where duplicate check was broken because it referenced a non-existent 'hub' column. Implemented three-tier duplicate detection:
-    1. Exact file name matching (case-insensitive)
-    2. MMP name matching (case-insensitive)
-    3. Project + Month combination matching
-    All checks exclude soft-deleted and archived MMPs to allow legitimate re-uploads.
+*   **Unified Supabase Client (Nov 2025):** Consolidated all Supabase imports to use a single client instance from `@/integrations/supabase/client`. Previously, some files imported from `@/lib/supabase` creating multiple GoTrueClient instances. All files now use the same client with proper auth configuration (persistSession, autoRefreshToken, detectSessionInUrl).
+
+*   **Sites Registry Duplicate Prevention:** Enhanced logging in `ensureSitesInRegistry()` to clearly show:
+    - How many sites exist in the registry before processing
+    - For each site: whether it's MATCHED to existing or created NEW
+    - Summary showing total sites, existing linked, and new created
+    The three-tier matching system prevents duplicate site entries: exact site code match > name+state+locality match > name+state match.
+
+*   **MMP Duplicate Prevention (Nov 2025):** Refined duplicate detection logic:
+    - Same project + month + file name = BLOCKED (exact duplicate)
+    - Same project + month + different file = ALLOWED (supplementary file)
+    - Same file + different month = ALLOWED (recurring monthly monitoring)
+    This allows reusing the same file template for monthly monitoring cycles.
 
 ## External Dependencies
 
