@@ -740,9 +740,9 @@ export async function uploadMMPFile(
     } catch {}
 
     // Create database entry with parsed data (without site_entries initially)
+    const mmpName = metadata?.name || file.name.replace(/\.[^/.]+$/, "");
     const dbData = {
-      name: metadata?.name || file.name.replace(/\.[^/.]+$/, ""),
-      hub: metadata?.hub,
+      name: mmpName,
       month: metadata?.month,
       uploaded_at: new Date().toISOString(),
       uploaded_by: uploaderDisplay,
@@ -766,22 +766,53 @@ export async function uploadMMPFile(
       ...(metadata?.projectId && { project_id: metadata.projectId })
     };
 
-    // Preflight: prevent duplicate MMP for same project/hub/month
-    if (metadata?.projectId && metadata?.hub && metadata?.month) {
+    // Preflight: prevent duplicate MMP uploads
+    // Check 1: Exact same file name (original_filename) in the system
+    const { data: sameFileNameMmp, error: sameFileErr } = await supabase
+      .from('mmp_files')
+      .select('id,name,status,original_filename')
+      .eq('original_filename', file.name)
+      .limit(1);
+    
+    if (!sameFileErr && sameFileNameMmp && sameFileNameMmp.length > 0) {
+      // Clean up storage file
+      try { await supabase.storage.from('mmp-files').remove([filePath]); } catch {}
+      return {
+        success: false,
+        error: `Duplicate file detected: "${file.name}" has already been uploaded as "${sameFileNameMmp[0].name}". Please rename your file or use a different MMP.`,
+      };
+    }
+
+    // Check 2: Same MMP name exists (case-insensitive)
+    const { data: sameNameMmp, error: sameNameErr } = await supabase
+      .from('mmp_files')
+      .select('id,name,status')
+      .ilike('name', mmpName)
+      .limit(1);
+    
+    if (!sameNameErr && sameNameMmp && sameNameMmp.length > 0) {
+      // Clean up storage file
+      try { await supabase.storage.from('mmp-files').remove([filePath]); } catch {}
+      return {
+        success: false,
+        error: `Duplicate MMP name: An MMP named "${sameNameMmp[0].name}" already exists. Please use a different name.`,
+      };
+    }
+
+    // Check 3: Same project + month combination (if project is selected)
+    if (metadata?.projectId && metadata?.month) {
       const { data: existingMmp, error: existingErr } = await supabase
         .from('mmp_files')
-        .select('id,name,status,deleted_at,archived_at')
+        .select('id,name,status')
         .eq('project_id', metadata.projectId)
-        .eq('hub', metadata.hub)
         .eq('month', metadata.month)
-        .is('deleted_at', null)
         .limit(1);
       if (!existingErr && existingMmp && existingMmp.length > 0) {
         // Clean up storage file
         try { await supabase.storage.from('mmp-files').remove([filePath]); } catch {}
         return {
           success: false,
-          error: `Duplicate MMP exists for selected Project/Hub/Month ("${existingMmp[0].name}"). Upload aborted.`,
+          error: `Duplicate MMP exists for selected Project/Month ("${existingMmp[0].name}"). Upload aborted.`,
         };
       }
     }
