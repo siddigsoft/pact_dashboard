@@ -50,6 +50,7 @@ const Settings = () => {
     appearanceSettings,
     menuPreferences,
     dashboardPreferences,
+    dataVisibilitySettings,
     updateUserSettings,
     updateNotificationSettings,
     updateAppearanceSettings,
@@ -189,7 +190,17 @@ const Settings = () => {
   const handleDataSharingToggle = (checked: boolean) => {
     updateDataVisibilitySettings({
       options: {
+        ...dataVisibilitySettings?.options,
         shareLocationWithTeam: checked
+      }
+    });
+  };
+
+  const handleDisplayMetricsToggle = (checked: boolean) => {
+    updateDataVisibilitySettings({
+      options: {
+        ...dataVisibilitySettings?.options,
+        displayPersonalMetrics: checked
       }
     });
   };
@@ -1150,7 +1161,7 @@ const Settings = () => {
                 </div>
                 <Switch 
                   id="location-sharing" 
-                  checked={!!userSettings?.settings?.shareLocationWithTeam}
+                  checked={!!dataVisibilitySettings?.options?.shareLocationWithTeam}
                   onCheckedChange={handleDataSharingToggle}
                   data-testid="switch-location-sharing"
                 />
@@ -1168,12 +1179,8 @@ const Settings = () => {
                 </div>
                 <Switch 
                   id="display-metrics" 
-                  checked={!!userSettings?.settings?.displayPersonalMetrics}
-                  onCheckedChange={(checked) => {
-                    updateDataVisibilitySettings({
-                      options: { displayPersonalMetrics: checked }
-                    });
-                  }}
+                  checked={!!dataVisibilitySettings?.options?.displayPersonalMetrics}
+                  onCheckedChange={handleDisplayMetricsToggle}
                   data-testid="switch-display-metrics"
                 />
               </div>
@@ -1181,16 +1188,9 @@ const Settings = () => {
               <div className="flex justify-end pt-4 border-t">
                 <Button 
                   onClick={() => {
-                    updateDataVisibilitySettings({
-                      options: {
-                        shareLocationWithTeam: !!userSettings?.settings?.shareLocationWithTeam,
-                        displayPersonalMetrics: !!userSettings?.settings?.displayPersonalMetrics
-                      }
-                    });
                     toast({
                       title: "Settings saved",
                       description: "Your data visibility settings have been updated.",
-                      variant: "success",
                     });
                   }}
                   data-testid="button-save-privacy"

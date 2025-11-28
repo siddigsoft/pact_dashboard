@@ -98,10 +98,25 @@ export function useMFA() {
   const enrollTOTP = useCallback(async (friendlyName?: string) => {
     try {
       setState(prev => ({ ...prev, isLoading: true }));
+      const name = friendlyName || 'Authenticator App';
+      
+      // First, check for existing unverified factors with the same name
+      const { data: existingFactors } = await supabase.auth.mfa.listFactors();
+      if (existingFactors?.totp) {
+        const existingUnverified = existingFactors.totp.find(
+          f => f.friendly_name === name && (f.status as string) === 'unverified'
+        );
+        
+        // If there's an unverified factor with the same name, delete it first
+        if (existingUnverified) {
+          console.log('Removing existing unverified factor:', existingUnverified.id);
+          await supabase.auth.mfa.unenroll({ factorId: existingUnverified.id });
+        }
+      }
       
       const { data, error } = await supabase.auth.mfa.enroll({
         factorType: 'totp',
-        friendlyName: friendlyName || 'Authenticator App',
+        friendlyName: name,
       });
       
       if (error) {
