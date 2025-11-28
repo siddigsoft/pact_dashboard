@@ -433,7 +433,7 @@ const MMP = () => {
   const [loadingSmartAssigned, setLoadingSmartAssigned] = useState(false);
   const [smartAssignedCount, setSmartAssignedCount] = useState(0);
   const [dispatchDialogOpen, setDispatchDialogOpen] = useState(false);
-  const [dispatchType, setDispatchType] = useState<'state' | 'locality' | 'individual'>('state');
+  const [dispatchType, setDispatchType] = useState<'state' | 'locality' | 'individual' | 'open'>('open');
 
   // Load smart assigned site entries only when the tab is active
   useEffect(() => {
@@ -458,8 +458,8 @@ const MMP = () => {
         // Format entries for MMPSiteEntriesTable
         const formattedEntries = smartAssignedEntries.map(entry => {
           const additionalData = entry.additional_data || {};
-          const enumeratorFee = entry.enumerator_fee ?? additionalData.enumerator_fee;
-          const transportFee = entry.transport_fee ?? additionalData.transport_fee;
+          const enumeratorFee = entry.enumerator_fee;
+          const transportFee = entry.transport_fee;
           return {
             ...entry,
             siteName: entry.site_name,
@@ -485,7 +485,7 @@ const MMP = () => {
             dispatched_at: entry.dispatched_at,
             accepted_by: entry.accepted_by,
             accepted_at: entry.accepted_at,
-            cost_acknowledged: entry.cost_acknowledged ?? additionalData.cost_acknowledged,
+            cost_acknowledged: entry.cost_acknowledged,
             updated_at: entry.updated_at,
             additionalData: additionalData
           };
@@ -688,8 +688,8 @@ const MMP = () => {
           // Format entries for display
           const formatEntries = (entries: any[]) => entries.map(entry => {
             const additionalData = entry.additional_data || {};
-            const enumeratorFee = entry.enumerator_fee ?? additionalData.enumerator_fee;
-            const transportFee = entry.transport_fee ?? additionalData.transport_fee;
+            const enumeratorFee = entry.enumerator_fee;
+            const transportFee = entry.transport_fee;
             return {
               ...entry,
               siteName: entry.site_name,
@@ -715,6 +715,7 @@ const MMP = () => {
               dispatched_at: entry.dispatched_at,
               accepted_by: entry.accepted_by,
               accepted_at: entry.accepted_at,
+              cost_acknowledged: entry.cost_acknowledged,
               updated_at: entry.updated_at,
               additionalData: additionalData
             };
@@ -722,11 +723,7 @@ const MMP = () => {
 
           const availableEntries = formatEntries(availableResult.data || []);
           const rawSmartAssigned = formatEntries(smartAssignedResult.data || []);
-          const smartAssignedEntries = rawSmartAssigned.filter(entry => {
-            const additionalData = entry.additional_data || {};
-            const costAcknowledged = entry.cost_acknowledged ?? additionalData.cost_acknowledged;
-            return !costAcknowledged;
-          });
+          const smartAssignedEntries = rawSmartAssigned.filter(entry => !entry.cost_acknowledged);
           const mySitesEntries = formatEntries(mySitesResult.data || []);
 
           console.log('📊 Final state after formatting:');
@@ -890,10 +887,10 @@ const MMP = () => {
               ...entry,
               siteName: entry.site_name,
               siteCode: entry.site_code,
-              enumerator_fee: entry.enumerator_fee ?? additionalData.enumerator_fee,
-              enumeratorFee: entry.enumerator_fee ?? additionalData.enumerator_fee,
-              transport_fee: entry.transport_fee ?? additionalData.transport_fee,
-              transportFee: entry.transport_fee ?? additionalData.transport_fee,
+              enumerator_fee: entry.enumerator_fee,
+              enumeratorFee: entry.enumerator_fee,
+              transport_fee: entry.transport_fee,
+              transportFee: entry.transport_fee,
               additionalData: additionalData
             };
           });
@@ -1142,11 +1139,24 @@ const MMP = () => {
         const acceptedBy = site.accepted_by || site.additional_data?.accepted_by;
         
         if (acceptedBy) {
-          // Get the cost amount from the site entry
-          const additionalData = site.additional_data || {};
-          const enumeratorFee = additionalData.enumerator_fee || site.enumerator_fee || 0;
-          const transportFee = additionalData.transport_fee || site.transport_fee || 0;
-          const directCost = site.cost || 0;
+          // Fetch fresh site data from database to ensure we have the latest fee values
+          const { data: freshSite, error: fetchError } = await supabase
+            .from('mmp_site_entries')
+            .select('enumerator_fee, transport_fee, cost')
+            .eq('id', site.id)
+            .single();
+
+          if (fetchError) {
+            console.error('Failed to fetch fresh site data for wallet payment:', fetchError);
+          }
+
+          // Get the cost amount from fresh database values (prefer) or fallback to site object
+          // Check both snake_case (from DB) and camelCase (from normalized object)
+          const enumeratorFee = freshSite?.enumerator_fee || site.enumerator_fee || site.enumeratorFee || 0;
+          const transportFee = freshSite?.transport_fee || site.transport_fee || site.transportFee || 0;
+          const directCost = freshSite?.cost || site.cost || 0;
+          
+          console.log('💰 Wallet payment calculation:', { enumeratorFee, transportFee, directCost, siteId: site.id });
           
           // Calculate total cost: use direct cost if available, otherwise sum fees
           const totalCost = directCost > 0 
@@ -1154,6 +1164,8 @@ const MMP = () => {
             : (Number(enumeratorFee) + Number(transportFee));
           
           if (totalCost > 0) {
+            console.log(`💵 Processing wallet payment of ${totalCost} SDG for user ${acceptedBy}`);
+            
             // Get or create wallet for the user
             const { data: walletData, error: walletError } = await supabase
               .from('wallets')
@@ -1211,6 +1223,13 @@ const MMP = () => {
             });
 
             console.log(`Payment of ${totalCost} SDG added to wallet for user ${acceptedBy} for site entry ${site.id}`);
+          } else {
+            console.warn(`⚠️ Total cost is 0 for site ${site.id}. Fee might not have been set during claim/accept.`);
+            toast({
+              title: 'Fee Not Set',
+              description: 'The site visit fee was not calculated at claim time. Please contact admin to adjust.',
+              variant: 'default',
+            });
           }
         } else {
           console.warn(`No accepted_by user found for site entry ${site.id}, skipping wallet payment`);
@@ -1437,9 +1456,8 @@ const MMP = () => {
 
           if (!mySitesError && mySitesData) {
             const formatEntries = (entries: any[]) => entries.map(entry => {
-              const additionalData = entry.additional_data || {};
-              const enumeratorFee = entry.enumerator_fee ?? additionalData.enumerator_fee;
-              const transportFee = entry.transport_fee ?? additionalData.transport_fee;
+              const enumeratorFee = entry.enumerator_fee;
+              const transportFee = entry.transport_fee;
               return {
                 ...entry,
                 siteName: entry.site_name,
@@ -1448,7 +1466,6 @@ const MMP = () => {
                 enumeratorFee: enumeratorFee,
                 transport_fee: transportFee,
                 transportFee: transportFee,
-                additionalData: additionalData
               };
             });
 
@@ -2062,8 +2079,8 @@ const MMP = () => {
         // Format entries for display
         const formatEntries = (entries: any[]) => entries.map(entry => {
           const additionalData = entry.additional_data || {};
-          const enumeratorFee = entry.enumerator_fee ?? additionalData.enumerator_fee;
-          const transportFee = entry.transport_fee ?? additionalData.transport_fee;
+          const enumeratorFee = entry.enumerator_fee;
+          const transportFee = entry.transport_fee;
           return {
             ...entry,
             siteName: entry.site_name,
@@ -2097,11 +2114,7 @@ const MMP = () => {
         const availableEntries = formatEntries(availableResult.data || []);
         // Filter smart assigned to exclude cost-acknowledged sites (they move to My Sites)
         const rawSmartAssigned = formatEntries(smartAssignedResult.data || []);
-        const smartAssignedEntries = rawSmartAssigned.filter(entry => {
-          const additionalData = entry.additional_data || {};
-          const costAcknowledged = entry.cost_acknowledged ?? additionalData.cost_acknowledged;
-          return !costAcknowledged; // Only show non-acknowledged sites
-        });
+        const smartAssignedEntries = rawSmartAssigned.filter(entry => !entry.cost_acknowledged);
         const mySitesEntries = formatEntries(mySitesResult.data || []);
 
         // Store all entries for reference
@@ -2177,77 +2190,7 @@ const MMP = () => {
         if (allError) throw allError;
 
         // Process approved and costed entries
-        let processedEntries = approvedCostedEntries || [];
-
-        // Set default fees for verified entries that don't have a cost
-        // Default: Enumerator fees ($20) + Transport fees ($10 minimum) = $30
-        const entriesToUpdate: any[] = [];
-        for (const entry of processedEntries) {
-          const currentCost = entry.cost;
-          const additionalData = entry.additional_data || {};
-          const currentEnumFee = additionalData?.enumerator_fee;
-          const currentTransFee = additionalData?.transport_fee;
-          
-          if (!currentCost || currentCost === 0 || currentCost === null) {
-            entriesToUpdate.push({
-              id: entry.id,
-              cost: 30, // Total: $30
-              additional_data: {
-                ...additionalData,
-                enumerator_fee: 20, // $20 enumerator fee
-                transport_fee: 10 // $10 transport fee (minimum)
-              }
-            });
-          } else if ((!currentEnumFee || currentEnumFee === 0) && (!currentTransFee || currentTransFee === 0)) {
-            // If cost exists but fees don't, set fees based on cost
-            let enumFee = 20;
-            let transFee = 10;
-            if (currentCost === 30) {
-              enumFee = 20;
-              transFee = 10;
-            } else if (currentCost) {
-              enumFee = currentCost - 10;
-              transFee = 10;
-            }
-            entriesToUpdate.push({
-              id: entry.id,
-              additional_data: {
-                ...additionalData,
-                enumerator_fee: enumFee,
-                transport_fee: transFee
-              }
-            });
-          }
-        }
-
-        // Update entries that need default fees
-        if (entriesToUpdate.length > 0) {
-          for (const entryUpdate of entriesToUpdate) {
-            await supabase
-              .from('mmp_site_entries')
-              .update({
-                cost: entryUpdate.cost || (entryUpdate.additional_data.enumerator_fee + entryUpdate.additional_data.transport_fee),
-                enumerator_fee: entryUpdate.additional_data.enumerator_fee,
-                transport_fee: entryUpdate.additional_data.transport_fee,
-                additional_data: entryUpdate.additional_data
-              })
-              .eq('id', entryUpdate.id);
-          }
-          // Update the local entries array with the new fees
-          processedEntries = processedEntries.map(entry => {
-            const update = entriesToUpdate.find(u => u.id === entry.id);
-            if (update) {
-              return {
-                ...entry,
-                cost: update.cost || (update.additional_data.enumerator_fee + update.additional_data.transport_fee),
-                enumerator_fee: update.additional_data.enumerator_fee,
-                transport_fee: update.additional_data.transport_fee,
-                additional_data: update.additional_data
-              };
-            }
-            return entry;
-          });
-        }
+        const processedEntries = approvedCostedEntries || [];
 
         // All entries should already be "Approved and Costed" status, no need to filter by cost
         // But we can ensure they have cost set
@@ -2255,8 +2198,8 @@ const MMP = () => {
         // Format entries for MMPSiteEntriesTable
         const formattedEntries = processedEntries.map(entry => {
           const additionalData = entry.additional_data || {};
-          const enumFee = entry.enumerator_fee ?? additionalData.enumerator_fee;
-          const transFee = entry.transport_fee ?? additionalData.transport_fee;
+          const enumFee = entry.enumerator_fee;
+          const transFee = entry.transport_fee;
           return {
             ...entry,
             siteName: entry.site_name,
@@ -2320,9 +2263,8 @@ const MMP = () => {
         // Format entries for MMPSiteEntriesTable
         const formattedEntries = dispatchedEntries.map(entry => {
           const additionalData = entry.additional_data || {};
-          // Read fees from columns first, fallback to additional_data
-          const enumeratorFee = entry.enumerator_fee ?? additionalData.enumerator_fee;
-          const transportFee = entry.transport_fee ?? additionalData.transport_fee;
+          const enumeratorFee = entry.enumerator_fee;
+          const transportFee = entry.transport_fee;
           return {
             ...entry,
             siteName: entry.site_name,
@@ -2389,9 +2331,8 @@ const MMP = () => {
         // Format entries for MMPSiteEntriesTable
         const formattedEntries = acceptedEntries.map(entry => {
           const additionalData = entry.additional_data || {};
-          // Read fees from columns first, fallback to additional_data
-          const enumeratorFee = entry.enumerator_fee ?? additionalData.enumerator_fee;
-          const transportFee = entry.transport_fee ?? additionalData.transport_fee;
+          const enumeratorFee = entry.enumerator_fee;
+          const transportFee = entry.transport_fee;
           return {
             ...entry,
             siteName: entry.site_name,
@@ -2461,9 +2402,8 @@ const MMP = () => {
         // Format entries for MMPSiteEntriesTable
         const formattedEntries = ongoingEntries.map(entry => {
           const additionalData = entry.additional_data || {};
-          // Read fees from columns first, fallback to additional_data
-          const enumeratorFee = entry.enumerator_fee ?? additionalData.enumerator_fee;
-          const transportFee = entry.transport_fee ?? additionalData.transport_fee;
+          const enumeratorFee = entry.enumerator_fee;
+          const transportFee = entry.transport_fee;
           return {
             ...entry,
             siteName: entry.site_name,
@@ -2532,9 +2472,8 @@ const MMP = () => {
         // Format entries for MMPSiteEntriesTable
         const formattedEntries = completedEntries.map(entry => {
           const additionalData = entry.additional_data || {};
-          // Read fees from columns first, fallback to additional_data
-          const enumeratorFee = entry.enumerator_fee ?? additionalData.enumerator_fee;
-          const transportFee = entry.transport_fee ?? additionalData.transport_fee;
+          const enumeratorFee = entry.enumerator_fee;
+          const transportFee = entry.transport_fee;
           return {
             ...entry,
             siteName: entry.site_name,
@@ -2603,9 +2542,8 @@ const MMP = () => {
         // Format entries for MMPSiteEntriesTable
         const formattedEntries = rejectedEntries.map(entry => {
           const additionalData = entry.additional_data || {};
-          // Read fees from columns first, fallback to additional_data
-          const enumeratorFee = entry.enumerator_fee ?? additionalData.enumerator_fee;
-          const transportFee = entry.transport_fee ?? additionalData.transport_fee;
+          const enumeratorFee = entry.enumerator_fee;
+          const transportFee = entry.transport_fee;
           // Read rejection data from columns first, fallback to additional_data
           const rejectionComments = entry.rejection_comments ?? additionalData.rejection_comments ?? additionalData.rejection_reason;
           const rejectedBy = entry.rejected_by ?? additionalData.rejected_by;
@@ -3182,47 +3120,47 @@ const MMP = () => {
                             }
 
                             // Update all verified sites to 'Approved and Costed' status
-                            // Also ensure they have cost set (default to 30 if not set)
+                            // Build updates without defaulting fees; only use existing column values
                             const updates = verifiedEntries.map(entry => {
-                              const additionalData = entry.additional_data || {};
                               const currentCost = entry.cost;
-                              const enumFee = entry.enumerator_fee ?? additionalData.enumerator_fee ?? 20;
-                              const transFee = entry.transport_fee ?? additionalData.transport_fee ?? 10;
-                              const finalCost = currentCost && currentCost > 0 ? currentCost : (enumFee + transFee);
+                              const enumFee = entry.enumerator_fee;
+                              const transFee = entry.transport_fee;
+                              const bothFeesPresent = (enumFee !== undefined && enumFee !== null) && (transFee !== undefined && transFee !== null);
+                              const finalCost = bothFeesPresent ? Number(enumFee) + Number(transFee) : currentCost;
+
+                              const additional_data = {
+                                ...entry.additional_data,
+                                ...(enumFee !== undefined ? { enumerator_fee: enumFee } : {}),
+                                ...(transFee !== undefined ? { transport_fee: transFee } : {}),
+                                ...(finalCost !== undefined ? { cost: finalCost } : {}),
+                                approved_and_costed_at: new Date().toISOString(),
+                                approved_and_costed_by: currentUser?.username || currentUser?.fullName || currentUser?.email || 'System'
+                              };
 
                               return {
                                 id: entry.id,
                                 status: 'Approved and Costed',
-                                cost: finalCost,
-                                enumerator_fee: enumFee,
-                                transport_fee: transFee,
-                                additional_data: {
-                                  ...additionalData,
-                                  enumerator_fee: enumFee,
-                                  transport_fee: transFee,
-                                  cost: finalCost,
-                                  approved_and_costed_at: new Date().toISOString(),
-                                  approved_and_costed_by: currentUser?.username || currentUser?.fullName || currentUser?.email || 'System'
-                                }
-                              };
+                                ...(finalCost !== undefined ? { cost: finalCost } : {}),
+                                ...(enumFee !== undefined ? { enumerator_fee: enumFee } : {}),
+                                ...(transFee !== undefined ? { transport_fee: transFee } : {}),
+                                additional_data
+                              } as any;
                             });
 
                             // Update in batches to avoid timeout
                             const batchSize = 100;
                             for (let i = 0; i < updates.length; i += batchSize) {
                               const batch = updates.slice(i, i + batchSize);
-                              const updatePromises = batch.map(update => 
-                                supabase
+                              const updatePromises = batch.map(update => {
+                                const payload: any = { status: update.status, additional_data: update.additional_data };
+                                if (update.cost !== undefined) payload.cost = update.cost;
+                                if (update.enumerator_fee !== undefined) payload.enumerator_fee = update.enumerator_fee;
+                                if (update.transport_fee !== undefined) payload.transport_fee = update.transport_fee;
+                                return supabase
                                   .from('mmp_site_entries')
-                                  .update({
-                                    status: update.status,
-                                    cost: update.cost,
-                                    enumerator_fee: update.enumerator_fee,
-                                    transport_fee: update.transport_fee,
-                                    additional_data: update.additional_data
-                                  })
-                                  .eq('id', update.id)
-                              );
+                                  .update(payload)
+                                  .eq('id', update.id);
+                              });
                               await Promise.all(updatePromises);
                             }
 
@@ -3275,17 +3213,27 @@ const MMP = () => {
                       {(isAdmin || isICT) && approvedCostedSiteEntries.length > 0 && (
                         <div className="mb-4 flex flex-wrap gap-2">
                           <Button
+                            variant="default"
+                            size="sm"
+                            onClick={() => {
+                              setDispatchType('open');
+                              setDispatchDialogOpen(true);
+                            }}
+                            data-testid="button-open-dispatch"
+                          >
+                            Dispatch for Claim
+                          </Button>
+                          <Button
                             variant="outline"
                             size="sm"
                             onClick={() => {
                               setDispatchType('state');
                               setDispatchDialogOpen(true);
                             }}
-                            className="bg-blue-50 hover:bg-blue-100"
                             disabled={approvedCostedSiteEntries.length < 2}
                             title={approvedCostedSiteEntries.length < 2 ? 'Bulk dispatch requires at least 2 sites' : ''}
                           >
-                            Bulk Dispatch by State
+                            By State
                           </Button>
                           <Button
                             variant="outline"
@@ -3294,11 +3242,10 @@ const MMP = () => {
                               setDispatchType('locality');
                               setDispatchDialogOpen(true);
                             }}
-                            className="bg-blue-50 hover:bg-blue-100"
                             disabled={approvedCostedSiteEntries.length < 2}
                             title={approvedCostedSiteEntries.length < 2 ? 'Bulk dispatch requires at least 2 sites' : ''}
                           >
-                            Bulk Dispatch by Locality
+                            By Locality
                           </Button>
                           <Button
                             variant="outline"
@@ -3307,9 +3254,8 @@ const MMP = () => {
                               setDispatchType('individual');
                               setDispatchDialogOpen(true);
                             }}
-                            className="bg-blue-50 hover:bg-blue-100"
                           >
-                            Individual Dispatch
+                            Assign to Specific Collector
                           </Button>
                         </div>
                       )}
@@ -3321,8 +3267,8 @@ const MMP = () => {
                           try {
                             for (const site of sites) {
                               // Get fees values
-                              const enumFee = site.enumerator_fee ?? site.enumeratorFee;
-                              const transFee = site.transport_fee ?? site.transportFee;
+                              const enumFee = site.enumerator_fee;
+                              const transFee = site.transport_fee;
                               
                               // Always calculate cost from fees if both are present
                               let calculatedCost: number | undefined;
@@ -3391,9 +3337,6 @@ const MMP = () => {
                               
                               const formattedEntries = approvedCostedEntries.map(entry => {
                                 const additionalData = entry.additional_data || {};
-                                // Read fees from columns first, fallback to additional_data
-                                const enumeratorFee = entry.enumerator_fee ?? additionalData.enumerator_fee;
-                                const transportFee = entry.transport_fee ?? additionalData.transport_fee;
                                 return {
                                   ...entry,
                                   siteName: entry.site_name,
@@ -3407,10 +3350,10 @@ const MMP = () => {
                                   useWarehouseMonitoring: entry.use_warehouse_monitoring,
                                   visitDate: entry.visit_date,
                                   comments: entry.comments,
-                                  enumerator_fee: enumeratorFee,
-                                  enumeratorFee: enumeratorFee,
-                                  transport_fee: transportFee,
-                                  transportFee: transportFee,
+                                  enumerator_fee: entry.enumerator_fee,
+                                  enumeratorFee: entry.enumerator_fee,
+                                  transport_fee: entry.transport_fee,
+                                  transportFee: entry.transport_fee,
                                   cost: entry.cost,
                                   status: entry.status,
                                   verified_by: entry.verified_by,
@@ -3773,8 +3716,8 @@ const MMP = () => {
                                   // Handle updates for enumerator sites
                                   try {
                                     for (const site of updatedSites) {
-                                      const enumFee = site.enumerator_fee ?? site.enumeratorFee;
-                                      const transFee = site.transport_fee ?? site.transportFee;
+                                      const enumFee = site.enumerator_fee;
+                                      const transFee = site.transport_fee;
                                       const calculatedCost = enumFee && transFee ? Number(enumFee) + Number(transFee) : site.cost;
                                       
                                       const existingAdditionalData = site.additionalData || site.additional_data || {};
@@ -3836,10 +3779,10 @@ const MMP = () => {
                                           ...entry,
                                           siteName: entry.site_name,
                                           siteCode: entry.site_code,
-                                          enumerator_fee: entry.enumerator_fee ?? additionalData.enumerator_fee,
-                                          enumeratorFee: entry.enumerator_fee ?? additionalData.enumerator_fee,
-                                          transport_fee: entry.transport_fee ?? additionalData.transport_fee,
-                                          transportFee: entry.transport_fee ?? additionalData.transport_fee,
+                                          enumerator_fee: entry.enumerator_fee,
+                                          enumeratorFee: entry.enumerator_fee,
+                                          transport_fee: entry.transport_fee,
+                                          transportFee: entry.transport_fee,
                                           additionalData: additionalData
                                         };
                                       });
@@ -3951,17 +3894,17 @@ const MMP = () => {
                           editable={true}
                           onAcceptSite={enumeratorSubTab === 'smartAssigned' ? handleAcceptSite : undefined}
                           onAcknowledgeCost={enumeratorSubTab === 'smartAssigned' ? handleCostAcknowledgment : undefined}
-                          onStartVisit={enumeratorSubTab === 'mySites' && (mySitesSubTab === 'pending' || mySitesSubTab === 'ongoing') ? handleStartVisit : undefined}
+                          onStartVisit={handleStartVisit}
                           onCompleteVisit={enumeratorSubTab === 'mySites' && (mySitesSubTab === 'pending' || mySitesSubTab === 'ongoing') ? handleCompleteVisit : undefined}
                           currentUserId={currentUser?.id}
                           showAcceptRejectForAssigned={enumeratorSubTab === 'smartAssigned'}
-                          showVisitActions={enumeratorSubTab === 'mySites' && (mySitesSubTab === 'pending' || mySitesSubTab === 'ongoing')}
+                          showVisitActions={true}
                           onUpdateSites={async (updatedSites) => {
                             // Same update logic as above
                             try {
                               for (const site of updatedSites) {
-                                const enumFee = site.enumerator_fee ?? site.enumeratorFee;
-                                const transFee = site.transport_fee ?? site.transportFee;
+                                const enumFee = site.enumerator_fee;
+                                const transFee = site.transport_fee;
                                 const calculatedCost = enumFee && transFee ? Number(enumFee) + Number(transFee) : site.cost;
                                 
                                 const existingAdditionalData = site.additionalData || site.additional_data || {};
@@ -4042,10 +3985,10 @@ const MMP = () => {
                                   ...entry,
                                   siteName: entry.site_name,
                                   siteCode: entry.site_code,
-                                  enumerator_fee: entry.enumerator_fee ?? additionalData.enumerator_fee,
-                                  enumeratorFee: entry.enumerator_fee ?? additionalData.enumerator_fee,
-                                  transport_fee: entry.transport_fee ?? additionalData.transport_fee,
-                                  transportFee: entry.transport_fee ?? additionalData.transport_fee,
+                                  enumerator_fee: entry.enumerator_fee,
+                                  enumeratorFee: entry.enumerator_fee,
+                                  transport_fee: entry.transport_fee,
+                                  transportFee: entry.transport_fee,
                                   additionalData: additionalData
                                 };
                               });
@@ -4113,8 +4056,8 @@ const MMP = () => {
 
                   const formattedEntries = dispatchedEntries.map(entry => {
                     const additionalData = entry.additional_data || {};
-                    const enumeratorFee = entry.enumerator_fee ?? additionalData.enumerator_fee;
-                    const transportFee = entry.transport_fee ?? additionalData.transport_fee;
+                    const enumeratorFee = entry.enumerator_fee;
+                    const transportFee = entry.transport_fee;
                     return {
                       ...entry,
                       siteName: entry.site_name,
@@ -4159,9 +4102,8 @@ const MMP = () => {
                 if (!error && approvedCostedEntries) {
                   const formattedEntries = approvedCostedEntries.map(entry => {
                     const additionalData = entry.additional_data || {};
-                    // Read fees from columns first, fallback to additional_data
-                    const enumeratorFee = entry.enumerator_fee ?? additionalData.enumerator_fee;
-                    const transportFee = entry.transport_fee ?? additionalData.transport_fee;
+                    const enumeratorFee = entry.enumerator_fee;
+                    const transportFee = entry.transport_fee;
                     return {
                       ...entry,
                       siteName: entry.site_name,
@@ -4283,31 +4225,45 @@ const MMP = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div className="bg-white p-4 rounded-lg border">
                     <p className="text-xs font-medium text-gray-600 mb-2">Data Collector Fee</p>
-                    <p className="text-2xl font-semibold text-gray-900">
-                      ${(selectedSiteForAcknowledgment.enumerator_fee || selectedSiteForAcknowledgment.enumeratorFee || 20).toLocaleString()}
-                    </p>
-                    {(!selectedSiteForAcknowledgment.enumerator_fee && !selectedSiteForAcknowledgment.enumeratorFee) && (
-                      <p className="text-xs text-gray-500 mt-1">(Default Rate)</p>
+                    {selectedSiteForAcknowledgment.enumerator_fee !== undefined && selectedSiteForAcknowledgment.enumerator_fee !== null ? (
+                      <p className="text-2xl font-semibold text-gray-900">
+                        {Number(selectedSiteForAcknowledgment.enumerator_fee).toLocaleString()} SDG
+                      </p>
+                    ) : (
+                      <div>
+                        <p className="text-lg font-semibold text-amber-600">Pending</p>
+                        <p className="text-xs text-gray-500 mt-1">Calculated when claimed</p>
+                      </div>
                     )}
                     <p className="text-xs text-gray-600 mt-2">Payment for completing the site visit</p>
                   </div>
                   <div className="bg-white p-4 rounded-lg border">
                     <p className="text-xs font-medium text-gray-600 mb-2">Transport Fee</p>
-                    <p className="text-2xl font-semibold text-gray-900">
-                      ${(selectedSiteForAcknowledgment.transport_fee || selectedSiteForAcknowledgment.transportFee || 10).toLocaleString()}
-                    </p>
-                    {(!selectedSiteForAcknowledgment.transport_fee && !selectedSiteForAcknowledgment.transportFee) && (
-                      <p className="text-xs text-gray-500 mt-1">(Default Rate)</p>
+                    {selectedSiteForAcknowledgment.transport_fee !== undefined && selectedSiteForAcknowledgment.transport_fee !== null ? (
+                      <p className="text-2xl font-semibold text-gray-900">
+                        {Number(selectedSiteForAcknowledgment.transport_fee).toLocaleString()} SDG
+                      </p>
+                    ) : (
+                      <>
+                        <p className="text-2xl font-semibold text-gray-900">0 SDG</p>
+                        <p className="text-xs text-gray-500 mt-1">(Set at dispatch)</p>
+                      </>
                     )}
                     <p className="text-xs text-gray-600 mt-2">Transportation reimbursement</p>
                   </div>
                   <div className="bg-blue-600 p-4 rounded-lg border border-blue-700">
                     <p className="text-xs font-medium text-blue-100 mb-2">Total Cost</p>
-                    <p className="text-2xl font-bold text-white">
-                      ${(selectedSiteForAcknowledgment.cost || 
-                        ((selectedSiteForAcknowledgment.enumerator_fee || selectedSiteForAcknowledgment.enumeratorFee || 20) + 
-                         (selectedSiteForAcknowledgment.transport_fee || selectedSiteForAcknowledgment.transportFee || 10))).toLocaleString()}
-                    </p>
+                    {selectedSiteForAcknowledgment.enumerator_fee !== undefined && selectedSiteForAcknowledgment.enumerator_fee !== null && selectedSiteForAcknowledgment.transport_fee !== undefined && selectedSiteForAcknowledgment.transport_fee !== null ? (
+                      <p className="text-2xl font-bold text-white">
+                        {(Number(selectedSiteForAcknowledgment.enumerator_fee) + Number(selectedSiteForAcknowledgment.transport_fee)).toLocaleString()} SDG
+                      </p>
+                    ) : selectedSiteForAcknowledgment.cost ? (
+                      <p className="text-2xl font-bold text-white">
+                        {Number(selectedSiteForAcknowledgment.cost).toLocaleString()} SDG
+                      </p>
+                    ) : (
+                      <p className="text-lg font-bold text-blue-100">Pending</p>
+                    )}
                     <p className="text-xs text-blue-100 mt-2">Complete payment upon visit</p>
                   </div>
                 </div>
@@ -4494,8 +4450,8 @@ const MMP = () => {
 
                         const formatEntries = (entries: any[]) => entries.map(entry => {
                           const additionalData = entry.additional_data || {};
-                          const enumeratorFee = entry.enumerator_fee ?? additionalData.enumerator_fee;
-                          const transportFee = entry.transport_fee ?? additionalData.transport_fee;
+                          const enumeratorFee = entry.enumerator_fee;
+                          const transportFee = entry.transport_fee;
                           return {
                             ...entry,
                             siteName: entry.site_name,

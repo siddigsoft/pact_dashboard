@@ -501,13 +501,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         return 50;
       }
 
-      const baseFeeCents = feeStructure.siteVisitBaseFeeCents;
+      // Note: Despite the column name "siteVisitBaseFeeCents", fees are stored directly in SDG
+      // This is a legacy naming convention - the values are already in SDG
+      const baseFeeSDG = feeStructure.siteVisitBaseFeeCents;
       
-      // Transport fees are now paid separately from approved site visits
-      // Fee structures only contain base fees per classification level
-      const adjustedCents = Math.round(baseFeeCents * complexityMultiplier);
-      const totalSDG = adjustedCents / 100;
-
+      // Apply complexity multiplier and round to 2 decimal places
+      const totalSDG = Math.round(baseFeeSDG * complexityMultiplier * 100) / 100;
+      
+      console.log(`📊 Classification fee calculated: ${baseFeeSDG} × ${complexityMultiplier} = ${totalSDG} SDG`);
       return totalSDG;
     } catch (error: any) {
       console.error('Failed to calculate classification fee:', error);
@@ -517,7 +518,40 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const addSiteVisitFeeToWallet = async (userId: string, siteVisitId: string, complexityMultiplier: number = 1.0) => {
     try {
-      const amount = await calculateClassificationFee(userId, complexityMultiplier);
+      // First, try to get stored fees from site_visits table
+      const { data: siteVisit, error: siteVisitError } = await supabase
+        .from('site_visits')
+        .select('enumerator_fee, transport_fee, cost')
+        .eq('id', siteVisitId)
+        .single();
+      
+      let amount: number;
+      let transportAmount: number = 0;
+      let description: string;
+      
+      if (!siteVisitError && siteVisit) {
+        const storedEnumFee = Number(siteVisit.enumerator_fee) || 0;
+        const storedTransportFee = Number(siteVisit.transport_fee) || 0;
+        const storedCost = Number(siteVisit.cost) || 0;
+        
+        // Use stored fees if available
+        if (storedCost > 0 || storedEnumFee > 0) {
+          amount = storedCost > 0 ? storedCost : (storedEnumFee + storedTransportFee);
+          transportAmount = storedTransportFee;
+          description = `Site visit fee: ${storedEnumFee} SDG enumerator + ${storedTransportFee} SDG transport`;
+          console.log(`💰 Using stored fees for site visit ${siteVisitId}: ${amount} SDG`);
+        } else {
+          // Fallback to classification-based calculation
+          amount = await calculateClassificationFee(userId, complexityMultiplier);
+          description = `Site visit fee (${complexityMultiplier}x complexity)`;
+          console.log(`💰 Using calculated fee for site visit ${siteVisitId}: ${amount} SDG`);
+        }
+      } else {
+        // No site visit found, use classification-based calculation
+        amount = await calculateClassificationFee(userId, complexityMultiplier);
+        description = `Site visit fee (${complexityMultiplier}x complexity)`;
+        console.log(`💰 Site visit not found, using calculated fee: ${amount} SDG`);
+      }
 
       const { data: targetWallet, error: walletError } = await supabase
         .from('wallets')
@@ -542,7 +576,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             amount,
             currency: 'SDG',
             site_visit_id: siteVisitId,
-            description: `Site visit fee (${complexityMultiplier}x complexity)`,
+            description,
             balance_before: 0,
             balance_after: amount,
             created_by: currentUser?.id,
@@ -575,7 +609,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         amount,
         currency: 'SDG',
         site_visit_id: siteVisitId,
-        description: `Site visit fee (${complexityMultiplier}x complexity)`,
+        description,
         balance_before: currentBalance,
         balance_after: newBalance,
         created_by: currentUser?.id,
