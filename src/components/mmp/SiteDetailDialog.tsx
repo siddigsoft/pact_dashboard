@@ -789,10 +789,14 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
                       className="mt-2 text-2xl font-semibold"
                       placeholder="Calculated at claim"
                     />
-                    
+
                   ) : (
                     <>
-                      {row.enumeratorFee !== undefined && row.enumeratorFee !== null && Number(row.enumeratorFee) > 0 ? (
+                      {classificationFee !== null && classificationFee > 0 ? (
+                        <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mt-2">
+                          {Number(classificationFee).toLocaleString()} SDG
+                        </p>
+                      ) : row.enumeratorFee !== undefined && row.enumeratorFee !== null && Number(row.enumeratorFee) > 0 ? (
                         <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mt-2">
                           {Number(row.enumeratorFee).toLocaleString()} SDG
                         </p>
@@ -852,7 +856,11 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
                     </p>
                   ) : (
                     <>
-                      {row.enumeratorFee !== undefined && row.enumeratorFee !== null && Number(row.enumeratorFee) > 0 ? (
+                      {classificationFee !== null && classificationFee > 0 ? (
+                        <p className="text-2xl font-bold text-white mt-2">
+                          {(Number(classificationFee) + Number(row.transportFee || 0)).toLocaleString()} SDG
+                        </p>
+                      ) : row.enumeratorFee !== undefined && row.enumeratorFee !== null && Number(row.enumeratorFee) > 0 ? (
                         <p className="text-2xl font-bold text-white mt-2">
                           {(Number(row.enumeratorFee) + Number(row.transportFee || 0)).toLocaleString()} SDG
                         </p>
