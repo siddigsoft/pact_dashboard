@@ -44,6 +44,7 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
   const [sendBackComments, setSendBackComments] = useState('');
   const { users } = useAppContext();
   const [acceptedByName, setAcceptedByName] = useState<string | null>(null);
+  const [dispatchedByName, setDispatchedByName] = useState<string | null>(null);
   const [classificationFee, setClassificationFee] = useState<number | null>(null);
 
   // Normalize site data
@@ -243,6 +244,41 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
     fetchProfile();
     return () => { cancelled = true; };
   }, [row?.acceptedBy, users]);
+
+  useEffect(() => {
+    const id = row?.dispatchedBy as string | undefined;
+    if (!id) {
+      setDispatchedByName(null);
+      return;
+    }
+    const looksLikeUUID = typeof id === 'string' && /[0-9a-fA-F-]{30,}/.test(id);
+    if (!looksLikeUUID) {
+      setDispatchedByName(id);
+      return;
+    }
+    const local = users?.find(u => u.id === id);
+    if (local) {
+      setDispatchedByName(local.fullName || local.name || local.username || local.email || id);
+      return;
+    }
+    let cancelled = false;
+    const fetchProfile = async () => {
+      try {
+        const { data } = await supabase
+          .from('profiles')
+          .select('full_name,username,email')
+          .eq('id', id)
+          .single();
+        if (!cancelled) {
+          setDispatchedByName(data?.full_name || data?.username || data?.email || id);
+        }
+      } catch {
+        if (!cancelled) setDispatchedByName(id);
+      }
+    };
+    fetchProfile();
+    return () => { cancelled = true; };
+  }, [row?.dispatchedBy, users]);
 
   // Initialize draft when entering edit mode
   useEffect(() => {
@@ -893,7 +929,7 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
                 {row.dispatchedBy && (
                   <div>
                     <Label className="text-xs font-medium text-gray-600">Dispatched By</Label>
-                    <p className="font-medium text-gray-900 mt-1">{row.dispatchedBy}</p>
+                    <p className="font-medium text-gray-900 mt-1">{dispatchedByName || row.dispatchedBy}</p>
                   </div>
                 )}
                 {row.dispatchedAt && (
