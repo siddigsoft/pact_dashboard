@@ -122,64 +122,257 @@ async function setWorkflowStageAwaitingPermits(mmpId: string) {
 }
 
 /**
- * Checks for existing site codes in the database
- * @param siteCodes Array of site codes to check
- * @returns Object with duplicate site codes and their details
+ * Site entry for registry processing
  */
-async function checkExistingSiteCodes(siteCodes: string[]): Promise<{
-  duplicates: Array<{ siteCode: string; existingEntry: { id: string; site_name: string; mmp_file_id: string } }>;
-  uniqueCodes: string[];
-}> {
-  if (!siteCodes || siteCodes.length === 0) {
-    return { duplicates: [], uniqueCodes: [] };
-  }
+interface SiteForRegistry {
+  siteCode?: string;
+  siteName?: string;
+  state?: string;
+  locality?: string;
+  hubOffice?: string;
+  mainActivity?: string;
+}
 
-  // Filter out empty/null site codes
-  const validSiteCodes = siteCodes.filter(code => code && code.trim() !== '');
-  
-  if (validSiteCodes.length === 0) {
-    return { duplicates: [], uniqueCodes: [] };
+/**
+ * Result of registry site lookup/creation
+ */
+interface RegistrySiteResult {
+  registrySiteId: string;
+  siteCode: string;
+  isNew: boolean;
+  mmpCount: number;
+}
+
+/**
+ * Normalize string for comparison
+ */
+const normalizeForMatch = (str: string): string => {
+  return (str || '').toLowerCase().trim().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ');
+};
+
+/**
+ * Generate a unique site code if not provided
+ */
+const generateSiteCode = (siteName: string, state: string, locality: string): string => {
+  const prefix = (state || 'XX').substring(0, 2).toUpperCase();
+  const localPrefix = (locality || 'XX').substring(0, 2).toUpperCase();
+  const namePrefix = (siteName || 'SITE').substring(0, 3).toUpperCase();
+  const timestamp = Date.now().toString().slice(-6);
+  return `${prefix}-${localPrefix}-${namePrefix}-${timestamp}`;
+};
+
+/**
+ * Ensures all sites exist in the sites_registry table.
+ * Creates new entries for sites that don't exist.
+ * Returns a map of site identifiers to their registry IDs.
+ */
+async function ensureSitesInRegistry(
+  sites: SiteForRegistry[],
+  userId: string
+): Promise<{
+  siteRegistryMap: Map<string, RegistrySiteResult>;
+  newSitesCount: number;
+  existingSitesCount: number;
+  errors: string[];
+}> {
+  const siteRegistryMap = new Map<string, RegistrySiteResult>();
+  const errors: string[] = [];
+  let newSitesCount = 0;
+  let existingSitesCount = 0;
+
+  if (sites.length === 0) {
+    return { siteRegistryMap, newSitesCount, existingSitesCount, errors };
   }
 
   try {
-    // Query database for existing site codes
-    const { data: existingEntries, error } = await supabase
-      .from('mmp_site_entries')
-      .select('id, site_code, site_name, mmp_file_id')
-      .in('site_code', validSiteCodes);
+    // Fetch all existing registry sites for matching
+    const { data: existingRegistrySites, error: fetchError } = await supabase
+      .from('sites_registry')
+      .select('id, site_code, site_name, state_name, locality_name, mmp_count');
 
-    if (error) {
-      console.error('Error checking existing site codes:', error);
-      // Don't block upload on query error, but log it
-      return { duplicates: [], uniqueCodes: validSiteCodes };
+    if (fetchError) {
+      console.error('Error fetching sites registry:', fetchError);
+      errors.push('Failed to fetch sites registry: ' + fetchError.message);
+      return { siteRegistryMap, newSitesCount, existingSitesCount, errors };
     }
 
-    const existingSiteCodes = new Set((existingEntries || []).map(e => e.site_code));
-    const duplicates: Array<{ siteCode: string; existingEntry: { id: string; site_name: string; mmp_file_id: string } }> = [];
-    const uniqueCodes: string[] = [];
+    const registrySites = existingRegistrySites || [];
+    const sitesToCreate: Array<{
+      siteKey: string;
+      site: SiteForRegistry;
+      generatedCode: string;
+    }> = [];
 
-    // Categorize site codes
-    validSiteCodes.forEach(code => {
-      const existing = (existingEntries || []).find(e => e.site_code === code);
-      if (existing) {
-        duplicates.push({
-          siteCode: code,
-          existingEntry: {
-            id: existing.id,
-            site_name: existing.site_name,
-            mmp_file_id: existing.mmp_file_id
+    // Process each site - check if exists or needs to be created
+    // Track duplicate entries within this upload to count them correctly
+    const duplicateCountsInUpload = new Map<string, number>();
+    
+    for (const site of sites) {
+      const siteCode = site.siteCode?.trim() || '';
+      const siteName = site.siteName?.trim() || '';
+      const state = site.state?.trim() || '';
+      const locality = site.locality?.trim() || '';
+
+      // Create a unique key for this site entry (for mapping back)
+      const siteKey = `${siteCode}|${siteName}|${state}|${locality}`;
+
+      // Track how many times each site appears in this upload
+      const currentCount = duplicateCountsInUpload.get(siteKey) || 0;
+      duplicateCountsInUpload.set(siteKey, currentCount + 1);
+
+      // If we already processed this exact site in this upload, skip re-processing
+      // but the registry_site_id will still be available in the map
+      if (siteRegistryMap.has(siteKey)) {
+        continue;
+      }
+
+      // Try to find existing site in registry
+      let matchedSite = null;
+
+      // 1. Exact site code match (highest priority)
+      if (siteCode) {
+        matchedSite = registrySites.find(
+          reg => normalizeForMatch(reg.site_code) === normalizeForMatch(siteCode)
+        );
+      }
+
+      // 2. Name + State + Locality match
+      if (!matchedSite && siteName && state && locality) {
+        matchedSite = registrySites.find(reg => {
+          const nameMatch = normalizeForMatch(reg.site_name) === normalizeForMatch(siteName);
+          const stateMatch = normalizeForMatch(reg.state_name) === normalizeForMatch(state);
+          const localityMatch = normalizeForMatch(reg.locality_name) === normalizeForMatch(locality);
+          return nameMatch && stateMatch && localityMatch;
+        });
+      }
+
+      // 3. Name + State match (fallback)
+      if (!matchedSite && siteName && state) {
+        matchedSite = registrySites.find(reg => {
+          const nameMatch = normalizeForMatch(reg.site_name) === normalizeForMatch(siteName);
+          const stateMatch = normalizeForMatch(reg.state_name) === normalizeForMatch(state);
+          return nameMatch && stateMatch;
+        });
+      }
+
+      if (matchedSite) {
+        // Site exists - add to map and increment mmp_count later
+        siteRegistryMap.set(siteKey, {
+          registrySiteId: matchedSite.id,
+          siteCode: matchedSite.site_code,
+          isNew: false,
+          mmpCount: (matchedSite.mmp_count || 0) + 1,
+        });
+        existingSitesCount++;
+      } else {
+        // Site doesn't exist - queue for creation
+        const generatedCode = siteCode || generateSiteCode(siteName, state, locality);
+        sitesToCreate.push({ siteKey, site, generatedCode });
+      }
+    }
+
+    // Batch create new sites
+    if (sitesToCreate.length > 0) {
+      const newSiteRows = sitesToCreate.map(({ site, generatedCode }) => ({
+        id: `reg-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
+        site_code: generatedCode,
+        site_name: site.siteName || 'Unknown Site',
+        state_id: '', // Will be populated if we have state lookup
+        state_name: site.state || '',
+        locality_id: '',
+        locality_name: site.locality || '',
+        hub_name: site.hubOffice || null,
+        activity_type: site.mainActivity || 'TPM',
+        status: 'registered',
+        mmp_count: 1,
+        created_by: userId,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }));
+
+      // Insert in batches
+      const BATCH_SIZE = 50;
+      for (let i = 0; i < newSiteRows.length; i += BATCH_SIZE) {
+        const batch = newSiteRows.slice(i, i + BATCH_SIZE);
+        const { data: insertedSites, error: insertError } = await supabase
+          .from('sites_registry')
+          .insert(batch)
+          .select('id, site_code');
+
+        if (insertError) {
+          console.error('Error inserting new registry sites:', insertError);
+          errors.push(`Failed to create ${batch.length} sites in registry: ${insertError.message}`);
+          continue;
+        }
+
+        // Map the inserted sites back to their keys
+        const batchStartIndex = i;
+        (insertedSites || []).forEach((insertedSite, idx) => {
+          const originalIndex = batchStartIndex + idx;
+          if (originalIndex < sitesToCreate.length) {
+            const { siteKey } = sitesToCreate[originalIndex];
+            siteRegistryMap.set(siteKey, {
+              registrySiteId: insertedSite.id,
+              siteCode: insertedSite.site_code,
+              isNew: true,
+              mmpCount: 1,
+            });
+            newSitesCount++;
           }
         });
-      } else {
-        uniqueCodes.push(code);
       }
-    });
+    }
 
-    return { duplicates, uniqueCodes };
+    // Update mmp_count for all sites based on their occurrences in this upload
+    // For existing sites: increment by number of occurrences
+    // For new sites: they already have mmp_count=1, increment by additional occurrences
+    for (const [siteKey, result] of siteRegistryMap.entries()) {
+      const duplicateCount = duplicateCountsInUpload.get(siteKey) || 1;
+      
+      // For existing sites, mmpCount already has +1. If there are duplicates, add more.
+      // For new sites, they start at 1. Add duplicates - 1 if there are any.
+      const additionalCount = result.isNew ? (duplicateCount - 1) : (duplicateCount - 1);
+      
+      if (additionalCount > 0 || !result.isNew) {
+        // Calculate the final count
+        const finalMmpCount = result.isNew 
+          ? (result.mmpCount + additionalCount)  // New: 1 + (duplicateCount - 1) = duplicateCount
+          : (result.mmpCount + additionalCount); // Existing: existing+1 + (duplicateCount - 1) = existing+duplicateCount
+        
+        const { error: updateError } = await supabase
+          .from('sites_registry')
+          .update({ 
+            mmp_count: finalMmpCount,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', result.registrySiteId);
+
+        if (updateError) {
+          console.error('Error updating mmp_count for site:', result.registrySiteId, updateError);
+        }
+      }
+    }
+
+    console.log(`Sites Registry: ${existingSitesCount} existing, ${newSitesCount} newly created`);
+
   } catch (error) {
-    console.error('Unexpected error checking existing site codes:', error);
-    return { duplicates: [], uniqueCodes: validSiteCodes };
+    console.error('Unexpected error in ensureSitesInRegistry:', error);
+    errors.push('Unexpected error processing sites registry');
   }
+
+  return { siteRegistryMap, newSitesCount, existingSitesCount, errors };
+}
+
+/**
+ * Gets the registry site ID for a given site entry
+ */
+function getRegistrySiteId(
+  siteRegistryMap: Map<string, RegistrySiteResult>,
+  entry: SiteForRegistry
+): string | null {
+  const siteKey = `${entry.siteCode?.trim() || ''}|${entry.siteName?.trim() || ''}|${entry.state?.trim() || ''}|${entry.locality?.trim() || ''}`;
+  const result = siteRegistryMap.get(siteKey);
+  return result?.registrySiteId || null;
 }
 
 // Parse file through validateCSV and map rows to MMPSiteEntry while preserving unmapped columns
@@ -459,52 +652,50 @@ export async function uploadMMPFile(
       };
     }
 
-    // Check for duplicate site codes in the database - BLOCKING
-    onProgress?.({ current: 40, total: 100, stage: 'Checking for duplicate site codes' });
-    const siteCodes = entries.map(e => e.siteCode).filter(Boolean) as string[];
-    const { duplicates } = await checkExistingSiteCodes(siteCodes);
+    // Get current user ID for registry operations
+    let currentUserId = 'system';
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user?.id) currentUserId = user.id;
+    } catch {}
+
+    // Ensure all sites exist in Sites Registry (create if new, link if existing)
+    onProgress?.({ current: 40, total: 100, stage: 'Registering sites in Sites Registry' });
     
-    // Block upload if duplicate site codes are found
-    if (duplicates.length > 0) {
-      // Remove uploaded file to avoid orphaned storage object
-      try { await supabase.storage.from('mmp-files').remove([filePath]); } catch {}
-      
-      // Build detailed error message
-      const duplicateDetails = duplicates.map(dup => 
-        `  - "${dup.siteCode}" (Site: ${dup.existingEntry.site_name || 'Unknown'})`
-      ).join('\n');
-      
-      const errorMessage = `Upload blocked: ${duplicates.length} site code(s) already exist in the database:\n${duplicateDetails}\n\nPlease remove or update these site codes before uploading.`;
-      
-      // Create error entries for validation report
-      const duplicateErrors = duplicates.map(dup => ({
-        type: 'error' as const,
-        message: `Site Code "${dup.siteCode}" already exists in database (Site: ${dup.existingEntry.site_name || 'Unknown'})`,
-        row: entries.findIndex(e => e.siteCode === dup.siteCode) + 1,
-        column: 'Site Code',
-        category: 'duplicate_site_code_db'
-      }));
-      
-      // Build CSV report
-      const header = 'type,row,column,category,message\n';
-      const esc = (s: any) => '"' + String(s ?? '').replace(/"/g, '""') + '"';
-      const allErrors = [...rawErrors, ...duplicateErrors];
-      const rows = allErrors.map(e => [e.type, e.row ?? '', e.column ?? '', e.category ?? '', e.message].map(esc).join(','));
-      const report = header + rows.join('\n');
-      
-      toast.error(`Upload blocked: ${duplicates.length} duplicate site code(s) found in database`);
-      
-      return {
-        success: false,
-        error: errorMessage,
-        validationReport: report,
-        validationErrors: allErrors,
-        validationWarnings: rawWarnings,
-      };
+    const sitesForRegistry: SiteForRegistry[] = entries.map(e => ({
+      siteCode: e.siteCode,
+      siteName: e.siteName,
+      state: e.state,
+      locality: e.locality,
+      hubOffice: e.hubOffice,
+      mainActivity: e.mainActivity,
+    }));
+
+    const { 
+      siteRegistryMap, 
+      newSitesCount, 
+      existingSitesCount, 
+      errors: registryErrors 
+    } = await ensureSitesInRegistry(sitesForRegistry, currentUserId);
+
+    // Log registry processing results
+    if (registryErrors.length > 0) {
+      console.warn('Some registry errors occurred (non-blocking):', registryErrors);
     }
 
-    // Validate sites against Sites Registry - NON-BLOCKING (warnings only)
-    onProgress?.({ current: 45, total: 100, stage: 'Validating sites against registry' });
+    // Add informational message about registry processing
+    if (newSitesCount > 0 || existingSitesCount > 0) {
+      const registryInfo: CSVValidationError = {
+        type: 'warning' as const,
+        message: `Sites Registry: ${newSitesCount} new sites registered, ${existingSitesCount} existing sites linked`,
+        category: 'sites_registry_info'
+      };
+      rawWarnings.push(registryInfo);
+      console.log(`Sites Registry processing: ${newSitesCount} new, ${existingSitesCount} existing`);
+    }
+
+    // Also run the validation for GPS matching info (optional enrichment)
+    onProgress?.({ current: 45, total: 100, stage: 'Validating site GPS coordinates' });
     let registryValidation: { 
       matches: SiteMatchResult[]; 
       registeredCount: number; 
@@ -515,13 +706,6 @@ export async function uploadMMPFile(
     } | null = null;
     
     try {
-      // Get current user ID for audit trail
-      let userId = 'system';
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user?.id) userId = user.id;
-      } catch {}
-      
       registryValidation = await validateSitesAgainstRegistry(
         entries.map((e, idx) => ({
           id: e.id || `entry-${idx}`,
@@ -531,35 +715,12 @@ export async function uploadMMPFile(
           locality: e.locality,
         })),
         {
-          userId,
+          userId: currentUserId,
           sourceWorkflow: 'mmp_upload',
         }
       );
-      
-      // Add registry warnings to the warning list (non-blocking)
-      const totalNonAutoAccepted = registryValidation.unregisteredCount + registryValidation.reviewRequiredCount;
-      if (totalNonAutoAccepted > 0) {
-        const registryWarnings: CSVValidationError[] = registryValidation.warnings.slice(0, 10).map((w, idx) => ({
-          type: 'warning' as const,
-          message: w,
-          category: 'sites_registry'
-        }));
-        
-        // Add summary warning if there are more
-        if (registryValidation.warnings.length > 10) {
-          registryWarnings.push({
-            type: 'warning' as const,
-            message: `... and ${registryValidation.warnings.length - 10} more sites require review`,
-            category: 'sites_registry'
-          });
-        }
-        
-        rawWarnings.push(...registryWarnings);
-        
-        console.log(`Sites Registry validation: ${registryValidation.autoAcceptedCount} auto-accepted (>90% confidence), ${registryValidation.reviewRequiredCount} require review, ${registryValidation.unregisteredCount} unregistered`);
-      }
     } catch (registryErr) {
-      console.warn('Sites Registry validation failed (non-blocking):', registryErr);
+      console.warn('Sites Registry GPS validation failed (non-blocking):', registryErr);
     }
 
     // Prepare uploader info (name and role) for persistence
@@ -691,6 +852,14 @@ export async function uploadMMPFile(
         const entryIndex = i + batchIdx;
         const registryMatch = registryValidation?.matches[entryIndex];
         
+        // Get the registry site ID from our ensureSitesInRegistry map
+        const registrySiteId = getRegistrySiteId(siteRegistryMap, {
+          siteCode: entry.siteCode,
+          siteName: entry.siteName,
+          state: entry.state,
+          locality: entry.locality,
+        });
+        
         // Build enhanced registry_linkage structure
         const additionalData: Record<string, any> = {
           ...(entry.additionalData || {}),
@@ -718,6 +887,7 @@ export async function uploadMMPFile(
         
         return {
           mmp_file_id: mmpId,
+          registry_site_id: registrySiteId, // Link to Sites Registry
           site_code: entry.siteCode,
           hub_office: entry.hubOffice,
           state: entry.state,

@@ -120,15 +120,18 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
     const updatedAt = site.updated_at || site.last_modified || undefined;
 
     // Extract GPS coordinates from registry lookup
-    // Prefer registry_linkage (new format) over registry_gps (legacy format)
+    // Priority: 1. registry_site_id column, 2. registry_linkage (new format), 3. registry_gps (legacy format)
     const registryLinkage = ad.registry_linkage || null;
     const registryGps = ad.registry_gps || {};
+    
+    // Check for direct registry_site_id column (new unified approach)
+    const directRegistrySiteId = site.registry_site_id || null;
     
     // Extract from new registry_linkage structure if available
     let registryGpsLatitude: number | undefined;
     let registryGpsLongitude: number | undefined;
     let gpsAccuracyMeters: number | undefined;
-    let registrySiteId: string | undefined;
+    let registrySiteId: string | undefined = directRegistrySiteId || undefined;
     let registrySiteCode: string | undefined;
     let registryMatchType: string | undefined;
     let registryMatchConfidence: number | undefined;
@@ -149,7 +152,8 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
       registryGpsLatitude = registryLinkage.gps?.latitude;
       registryGpsLongitude = registryLinkage.gps?.longitude;
       gpsAccuracyMeters = registryLinkage.gps?.accuracy_meters;
-      registrySiteId = registryLinkage.registry_site_id;
+      // Only use linkage registry_site_id if direct column is not available
+      if (!registrySiteId) registrySiteId = registryLinkage.registry_site_id;
       registrySiteCode = registryLinkage.registry_site_code;
       registryMatchType = registryLinkage.match?.type;
       registryMatchConfidence = registryLinkage.match?.confidence;
@@ -169,7 +173,8 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
       registryGpsLatitude = registryGps.latitude;
       registryGpsLongitude = registryGps.longitude;
       gpsAccuracyMeters = registryGps.accuracy_meters;
-      registrySiteId = registryGps.site_id;
+      // Only use legacy site_id if direct column is not available
+      if (!registrySiteId) registrySiteId = registryGps.site_id;
       registrySiteCode = registryGps.site_code;
       registryMatchType = registryGps.match_type;
       // Convert legacy confidence strings to numeric if needed
