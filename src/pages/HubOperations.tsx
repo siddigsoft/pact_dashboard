@@ -141,13 +141,96 @@ export default function HubOperations() {
 
   const loadSites = async () => {
     try {
-      const { data, error } = await supabase
+      // Load sites from sites_registry (master registry)
+      const { data: registrySites, error: registryError } = await supabase
         .from('sites_registry')
         .select('*')
         .order('created_at', { ascending: false });
       
-      if (error && error.code !== '42P01') throw error;
-      setSites(data || []);
+      if (registryError && registryError.code !== '42P01') {
+        console.error('Error loading registry sites:', registryError);
+      }
+
+      // Load unique sites from MMP entries (sites uploaded via MMP)
+      // First try with registry_site_id, fallback to without it
+      let mmpSites: any[] | null = null;
+      let mmpError: any = null;
+      
+      const { data: mmpSitesWithRegistry, error: mmpErrorWithRegistry } = await supabase
+        .from('mmp_site_entries')
+        .select('id, site_code, site_name, state, locality, hub_office, registry_site_id, created_at')
+        .order('created_at', { ascending: false });
+      
+      if (mmpErrorWithRegistry && mmpErrorWithRegistry.code === '42703') {
+        // Column doesn't exist, try without registry_site_id
+        const { data: mmpSitesBasic, error: mmpErrorBasic } = await supabase
+          .from('mmp_site_entries')
+          .select('id, site_code, site_name, state, locality, hub_office, created_at')
+          .order('created_at', { ascending: false });
+        
+        mmpSites = mmpSitesBasic;
+        mmpError = mmpErrorBasic;
+      } else {
+        mmpSites = mmpSitesWithRegistry;
+        mmpError = mmpErrorWithRegistry;
+      }
+
+      if (mmpError && mmpError.code !== '42P01') {
+        console.error('Error loading MMP sites:', mmpError);
+      }
+
+      // Combine sites: registry sites + unique MMP sites not in registry
+      const combinedSites: SiteRegistry[] = [];
+      const seenSiteKeys = new Set<string>();
+
+      // Add registry sites first (they are the canonical source)
+      for (const site of (registrySites || [])) {
+        const siteKey = `${site.site_code || ''}-${site.site_name}-${site.state_name}-${site.locality_name}`.toLowerCase();
+        seenSiteKeys.add(siteKey);
+        combinedSites.push({
+          ...site,
+          source: 'registry' as const
+        });
+      }
+
+      // Add MMP sites that don't have a registry entry yet
+      for (const mmpSite of (mmpSites || [])) {
+        // Skip if already linked to registry
+        if (mmpSite.registry_site_id) {
+          continue;
+        }
+        
+        const siteKey = `${mmpSite.site_code || ''}-${mmpSite.site_name}-${mmpSite.state}-${mmpSite.locality}`.toLowerCase();
+        if (seenSiteKeys.has(siteKey)) {
+          continue; // Already have this site from registry or earlier MMP entry
+        }
+        seenSiteKeys.add(siteKey);
+
+        // Convert MMP site to SiteRegistry format
+        combinedSites.push({
+          id: mmpSite.id,
+          site_code: mmpSite.site_code || generateSiteCode(mmpSite.state || '', mmpSite.locality || '', mmpSite.site_name || '', 1, 'TPM'),
+          site_name: mmpSite.site_name || '',
+          state_id: mmpSite.state?.toLowerCase().replace(/\s+/g, '-') || '',
+          state_name: mmpSite.state || '',
+          locality_id: mmpSite.locality?.toLowerCase().replace(/\s+/g, '-') || '',
+          locality_name: mmpSite.locality || '',
+          hub_id: '',
+          hub_name: mmpSite.hub_office || '',
+          gps_latitude: null,
+          gps_longitude: null,
+          activity_type: 'TPM',
+          status: 'active',
+          mmp_count: 1,
+          created_at: mmpSite.created_at || new Date().toISOString(),
+          updated_at: mmpSite.created_at || new Date().toISOString(),
+          created_by: '',
+          source: 'mmp' as const
+        });
+      }
+
+      console.log(`Loaded ${combinedSites.length} sites (${registrySites?.length || 0} from registry, ${combinedSites.length - (registrySites?.length || 0)} from MMP)`);
+      setSites(combinedSites);
       localStorage.removeItem('pact_sites_local');
     } catch (err) {
       console.error('Error loading sites from database, using local storage:', err);
@@ -1078,6 +1161,7 @@ export default function HubOperations() {
                         <th className="text-left p-3 font-medium">State</th>
                         <th className="text-left p-3 font-medium">Locality</th>
                         <th className="text-left p-3 font-medium">Type</th>
+                        <th className="text-left p-3 font-medium">Source</th>
                         <th className="text-left p-3 font-medium">Status</th>
                         <th className="text-left p-3 font-medium">Actions</th>
                       </tr>
@@ -1091,6 +1175,11 @@ export default function HubOperations() {
                           <td className="p-3">{site.locality_name}</td>
                           <td className="p-3">
                             <Badge variant="outline">{site.activity_type}</Badge>
+                          </td>
+                          <td className="p-3">
+                            <Badge variant={site.source === 'registry' ? 'default' : 'secondary'}>
+                              {site.source === 'registry' ? 'Registry' : 'MMP'}
+                            </Badge>
                           </td>
                           <td className="p-3">
                             <Badge variant={site.status === 'active' ? 'default' : 'secondary'}>
