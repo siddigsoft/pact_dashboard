@@ -433,7 +433,7 @@ const MMP = () => {
   const [loadingSmartAssigned, setLoadingSmartAssigned] = useState(false);
   const [smartAssignedCount, setSmartAssignedCount] = useState(0);
   const [dispatchDialogOpen, setDispatchDialogOpen] = useState(false);
-  const [dispatchType, setDispatchType] = useState<'state' | 'locality' | 'individual'>('state');
+  const [dispatchType, setDispatchType] = useState<'state' | 'locality' | 'individual' | 'open'>('open');
 
   // Load smart assigned site entries only when the tab is active
   useEffect(() => {
@@ -3190,17 +3190,27 @@ const MMP = () => {
                       {(isAdmin || isICT) && approvedCostedSiteEntries.length > 0 && (
                         <div className="mb-4 flex flex-wrap gap-2">
                           <Button
+                            variant="default"
+                            size="sm"
+                            onClick={() => {
+                              setDispatchType('open');
+                              setDispatchDialogOpen(true);
+                            }}
+                            data-testid="button-open-dispatch"
+                          >
+                            Dispatch for Claim
+                          </Button>
+                          <Button
                             variant="outline"
                             size="sm"
                             onClick={() => {
                               setDispatchType('state');
                               setDispatchDialogOpen(true);
                             }}
-                            className="bg-blue-50 hover:bg-blue-100"
                             disabled={approvedCostedSiteEntries.length < 2}
                             title={approvedCostedSiteEntries.length < 2 ? 'Bulk dispatch requires at least 2 sites' : ''}
                           >
-                            Bulk Dispatch by State
+                            By State
                           </Button>
                           <Button
                             variant="outline"
@@ -3209,11 +3219,10 @@ const MMP = () => {
                               setDispatchType('locality');
                               setDispatchDialogOpen(true);
                             }}
-                            className="bg-blue-50 hover:bg-blue-100"
                             disabled={approvedCostedSiteEntries.length < 2}
                             title={approvedCostedSiteEntries.length < 2 ? 'Bulk dispatch requires at least 2 sites' : ''}
                           >
-                            Bulk Dispatch by Locality
+                            By Locality
                           </Button>
                           <Button
                             variant="outline"
@@ -3222,9 +3231,8 @@ const MMP = () => {
                               setDispatchType('individual');
                               setDispatchDialogOpen(true);
                             }}
-                            className="bg-blue-50 hover:bg-blue-100"
                           >
-                            Individual Dispatch
+                            Assign to Specific Collector
                           </Button>
                         </div>
                       )}
