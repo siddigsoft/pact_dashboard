@@ -539,7 +539,8 @@ export const OperationsZone: React.FC = () => {
                     <TableHead>MMP Name</TableHead>
                     <TableHead className="w-[200px]">Site Name</TableHead>
                     <TableHead>Location</TableHead>
-                    <TableHead>Due Date</TableHead>
+                    <TableHead> Visit Date (coordinator)</TableHead>
+                    <TableHead>Actual Visit Date</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Assigned To</TableHead>
                     <TableHead className="text-right">Action</TableHead>
@@ -547,8 +548,6 @@ export const OperationsZone: React.FC = () => {
                 </TableHeader>
                 <TableBody>
                   {filteredVisits.map((visit) => {
-                    const dueDate = new Date(visit.dueDate);
-                    const isOverdue = dueDate < new Date() && visit.status !== 'completed';
                     
                     return (
                       <TableRow key={visit.id} className="hover:bg-muted/50">
@@ -580,11 +579,27 @@ export const OperationsZone: React.FC = () => {
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-col">
-                            <span className={`text-xs ${isOverdue ? 'text-red-600 dark:text-red-400 font-semibold' : ''}`}>
-                              {format(dueDate, 'MMM dd, yyyy')}
+                            <span className={`text-xs ${!visit.dueDate ? 'text-muted-foreground' : ''}`}>
+                              {visit.dueDate 
+                                ? format(new Date(visit.dueDate), 'MMM dd, yyyy')
+                                : 'Not scheduled yet'
+                              }
                             </span>
-                            {isOverdue && (
-                              <span className="text-[10px] text-red-600 dark:text-red-400">Overdue</span>
+                            {!visit.dueDate && (
+                              <span className="text-[10px] text-muted-foreground">Pending scheduling</span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-col">
+                            <span className={`text-xs ${!visit.completedAt ? 'text-muted-foreground' : ''}`}>
+                              {visit.completedAt 
+                                ? format(new Date(visit.completedAt), 'MMM dd, yyyy')
+                                : 'Not completed yet'
+                              }
+                            </span>
+                            {!visit.completedAt && (
+                              <span className="text-[10px] text-muted-foreground">Visit in progress</span>
                             )}
                           </div>
                         </TableCell>

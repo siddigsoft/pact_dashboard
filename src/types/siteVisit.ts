@@ -99,4 +99,7 @@ export interface SiteVisit {
   // new optional legacy/compat fields to satisfy dashboard lookups
   region?: string;         // some records may have region at top-level
   site_code?: string;      // legacy snake_case field used in older codepaths
+
+  // Coordinator verification date
+  coordinatorVerifiedAt?: string;
 }
