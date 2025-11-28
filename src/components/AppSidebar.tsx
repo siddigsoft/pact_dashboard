@@ -198,6 +198,9 @@
     if (!isHidden('/classifications') && (isAdmin || isFinancialAdmin)) {
       adminItems.push({ id: 'classifications', title: "Classifications", url: "/classifications", icon: Award, priority: 4, isPinned: isPinned('/classifications') });
     }
+    if (!isHidden('/classification-fees') && isAdmin) {
+      adminItems.push({ id: 'classification-fees', title: "Classification Fees", url: "/classification-fees", icon: DollarSign, priority: 5, isPinned: isPinned('/classification-fees') });
+    }
     if (!isHidden('/financial-operations') && perms.financialOperations) {
       adminItems.push({ id: 'financial-ops', title: "Financial Operations", url: "/financial-operations", icon: TrendingUp, priority: 5, isPinned: isPinned('/financial-operations') });
     }
