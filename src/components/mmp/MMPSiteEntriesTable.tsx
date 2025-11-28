@@ -8,6 +8,7 @@ import { Search, Eye, ChevronLeft, ChevronRight } from 'lucide-react';
 import SiteDetailDialog from './SiteDetailDialog';
 import { AcceptSiteButton } from '@/components/site-visit/AcceptSiteButton';
 import { RequestDownPaymentButton } from '@/components/site-visit/RequestDownPaymentButton';
+import { calculateEnumeratorFeeForUser } from '@/hooks/use-claim-fee-calculation';
 
 interface MMPSiteEntriesTableProps {
   siteEntries: any[];
@@ -50,6 +51,7 @@ const MMPSiteEntriesTable = ({
   const [itemsPerPage] = useState(50);
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedSite, setSelectedSite] = useState<any | null>(null);
+  const [calculatedFees, setCalculatedFees] = useState<Record<string, number>>({}); // Map of siteId -> calculatedFee
 
   // Debounce search query to reduce filtering operations
   useEffect(() => {
@@ -60,6 +62,31 @@ const MMPSiteEntriesTable = ({
 
     return () => clearTimeout(timer);
   }, [searchQuery]);
+
+  // Calculate fees for sites with accepted_by users
+  useEffect(() => {
+    const loadFees = async () => {
+      const newFees: Record<string, number> = {};
+      
+      for (const site of siteEntries) {
+        const acceptedBy = site.accepted_by || site.acceptedBy;
+        if (acceptedBy && !calculatedFees[site.id]) {
+          try {
+            const result = await calculateEnumeratorFeeForUser(acceptedBy);
+            newFees[site.id] = result.fee;
+          } catch (err) {
+            console.error('Error calculating fee for site:', site.id, err);
+          }
+        }
+      }
+      
+      if (Object.keys(newFees).length > 0) {
+        setCalculatedFees(prev => ({ ...prev, ...newFees }));
+      }
+    };
+    
+    loadFees();
+  }, [siteEntries]);
 
   // Normalize a row from either MMP siteEntries (camelCase) or mmp_site_entries (snake_case)
   const normalizeSite = (site: any) => {
@@ -275,9 +302,23 @@ const MMPSiteEntriesTable = ({
                           <div>
                             <span className="text-muted-foreground">Total Cost:</span>
                             <p className="font-medium text-green-600">
-                              {row.cost !== undefined && row.cost !== null && String(row.cost) !== '' && String(row.cost) !== '—'
-                                ? `SDG ${Number(row.cost).toLocaleString()}`
-                                : '—'}
+                              {(() => {
+                                const calculatedFee = calculatedFees[site.id];
+                                const transportFee = row.transportFee || 0;
+                                
+                                // Use calculated fee if available
+                                if (calculatedFee !== undefined && calculatedFee > 0) {
+                                  const total = calculatedFee + transportFee;
+                                  return `SDG ${Number(total).toLocaleString()}`;
+                                }
+                                
+                                // Otherwise use stored cost
+                                if (row.cost !== undefined && row.cost !== null && String(row.cost) !== '' && String(row.cost) !== '—') {
+                                  return `SDG ${Number(row.cost).toLocaleString()}`;
+                                }
+                                
+                                return '—';
+                              })()}
                             </p>
                           </div>
                         </div>
