@@ -861,12 +861,12 @@ export default function HubOperations() {
                   data-testid="input-search-sites"
                 />
               </div>
-              <Select value={filterState} onValueChange={setFilterState}>
+              <Select value={filterState || "all"} onValueChange={(val) => setFilterState(val === "all" ? "" : val)}>
                 <SelectTrigger className="w-[150px]" data-testid="select-filter-state">
                   <SelectValue placeholder="All States" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All States</SelectItem>
+                  <SelectItem value="all">All States</SelectItem>
                   {sudanStates.map(s => (
                     <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                   ))}
