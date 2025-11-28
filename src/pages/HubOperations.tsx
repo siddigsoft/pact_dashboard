@@ -23,6 +23,7 @@ import HubCard from '@/components/hub-operations/HubCard';
 import SiteCard from '@/components/hub-operations/SiteCard';
 import LeafletMapContainer from '@/components/map/LeafletMapContainer';
 import SudanMapView from '@/components/hub-operations/SudanMapView';
+import SiteDetailDialog from '@/components/mmp/SiteDetailDialog';
 import { 
   Building2, 
   MapPin, 
@@ -41,7 +42,8 @@ import {
   Map,
   Filter,
   Grid3X3,
-  List
+  List,
+  Eye
 } from 'lucide-react';
 
 export default function HubOperations() {
@@ -64,6 +66,8 @@ export default function HubOperations() {
   const [deleteTarget, setDeleteTarget] = useState<{ type: 'hub' | 'site'; id: string; name: string } | null>(null);
   const [hubDetailOpen, setHubDetailOpen] = useState(false);
   const [selectedHub, setSelectedHub] = useState<ManagedHub | null>(null);
+  const [siteDetailOpen, setSiteDetailOpen] = useState(false);
+  const [selectedSite, setSelectedSite] = useState<SiteRegistry | null>(null);
   
   const [editingHub, setEditingHub] = useState<ManagedHub | null>(null);
   const [editingSite, setEditingSite] = useState<SiteRegistry | null>(null);
@@ -1184,7 +1188,10 @@ export default function HubOperations() {
                     setDeleteTarget({ type: 'site', id: site.id, name: site.site_name });
                     setDeleteDialogOpen(true);
                   }}
-                  onViewDetails={() => {}}
+                  onViewDetails={() => {
+                    setSelectedSite(site);
+                    setSiteDetailOpen(true);
+                  }}
                 />
               ))}
             </div>
@@ -1234,6 +1241,17 @@ export default function HubOperations() {
                           </td>
                           <td className="p-3">
                             <div className="flex gap-1">
+                              <Button 
+                                size="icon" 
+                                variant="ghost" 
+                                onClick={() => {
+                                  setSelectedSite(site);
+                                  setSiteDetailOpen(true);
+                                }}
+                                data-testid={`button-view-site-${site.id}`}
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
                               {canManage && (
                                 <>
                                   <Button size="icon" variant="ghost" onClick={() => {
@@ -1519,6 +1537,40 @@ export default function HubOperations() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Site Detail Dialog */}
+      <SiteDetailDialog
+        open={siteDetailOpen}
+        onOpenChange={setSiteDetailOpen}
+        site={selectedSite}
+        editable={canManage}
+        onUpdateSite={async (updatedSite) => {
+          try {
+            if (selectedSite?.source === 'registry') {
+              const { error } = await supabase
+                .from('sites_registry')
+                .update({
+                  site_name: updatedSite.site_name || updatedSite.siteName,
+                  state_name: updatedSite.state || updatedSite.state_name,
+                  locality_name: updatedSite.locality || updatedSite.locality_name,
+                  gps_latitude: updatedSite.gps_latitude,
+                  gps_longitude: updatedSite.gps_longitude,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', selectedSite.id);
+              
+              if (error) throw error;
+            }
+            await loadSites();
+            toast({ title: 'Site Updated', description: 'Site details have been saved.' });
+            return true;
+          } catch (err) {
+            console.error('Error updating site:', err);
+            toast({ title: 'Error', description: 'Failed to update site.', variant: 'destructive' });
+            return false;
+          }
+        }}
+      />
     </div>
   );
 }
