@@ -338,7 +338,7 @@ const MMPSiteEntriesTable = ({
                         )}
                         {showVisitActions ? (
                           <>
-                            {site.status?.toLowerCase() === 'accepted' && onStartVisit && (
+                            {(site.status?.toLowerCase() === 'accepted' || site.status?.toLowerCase() === 'assigned') && onStartVisit && (
                               <Button variant="default" size="sm" onClick={() => handleView(site)} className="bg-blue-600 hover:bg-blue-700">
                                 <Eye className="h-4 w-4 mr-1" /> Start Visit
                               </Button>
