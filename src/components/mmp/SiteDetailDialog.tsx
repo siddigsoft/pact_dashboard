@@ -789,6 +789,7 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
                       className="mt-2 text-2xl font-semibold"
                       placeholder="Calculated at claim"
                     />
+                    
                   ) : (
                     <>
                       {row.enumeratorFee !== undefined && row.enumeratorFee !== null && Number(row.enumeratorFee) > 0 ? (
