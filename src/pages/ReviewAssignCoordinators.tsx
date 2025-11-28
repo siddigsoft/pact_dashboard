@@ -11,7 +11,6 @@ import { useToast } from '@/hooks/use-toast';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { useAppContext } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
-import { sudanStates } from '@/data/sudanStates';
 
 const ReviewAssignCoordinators: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -33,6 +32,18 @@ const ReviewAssignCoordinators: React.FC = () => {
   const [selectedSiteForView, setSelectedSiteForView] = useState<any>(null);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+
+  // Database data for location dropdowns
+  const [localities, setLocalities] = useState<any[]>([]);
+  const [states, setStates] = useState<any[]>([]);
+  const [hubs, setHubs] = useState<any[]>([]);
+  const [hubStates, setHubStates] = useState<any[]>([]);
+  const [loadingLocations, setLoadingLocations] = useState(true);
+
+  // Filtering state
+  const [selectedHub, setSelectedHub] = useState<string>('');
+  const [selectedState, setSelectedState] = useState<string>('');
+  const [selectedLocality, setSelectedLocality] = useState<string>('');
 
   useEffect(() => {
     if (!id) return;
@@ -100,6 +111,111 @@ const ReviewAssignCoordinators: React.FC = () => {
         } finally {
           setLoadingForwardedStates(false);
         }
+
+        // Step 3: Load hubs, states and localities from database
+        setLoadingLocations(true);
+        try {
+          // Fetch hubs
+          const { data: hubsData, error: hubsError } = await supabase
+            .from('hubs')
+            .select('id, name, description, is_active')
+            .eq('is_active', true)
+            .order('name');
+          
+          if (hubsError) {
+            console.error('Error loading hubs:', hubsError);
+            setHubs([]);
+          } else {
+            setHubs(hubsData || []);
+            console.log(`Loaded ${hubsData?.length || 0} hubs`);
+          }
+
+          // Fetch hub_states for hub-state relationships
+          const { data: hubStatesData, error: hubStatesError } = await supabase
+            .from('hub_states')
+            .select('hub_id, state_id, state_name, state_code')
+            .order('state_name');
+          
+          if (hubStatesError) {
+            console.error('Error loading hub_states:', hubStatesError);
+            setHubStates([]);
+          } else {
+            setHubStates(hubStatesData || []);
+            console.log(`Loaded ${hubStatesData?.length || 0} hub-state relationships`);
+          }
+
+          // Fetch states from hub_states table
+          const { data: statesData, error: statesError } = await supabase
+            .from('hub_states')
+            .select('state_id, state_name, state_code')
+            .order('state_name');
+          
+          if (statesError) {
+            console.error('Error loading states:', statesError);
+            setStates([]);
+          } else {
+            // Convert to State interface format and remove duplicates
+            const uniqueStates: any[] = [];
+            const seenStates = new Set<string>();
+            
+            (statesData || []).forEach(state => {
+              if (!seenStates.has(state.state_id)) {
+                seenStates.add(state.state_id);
+                uniqueStates.push({
+                  id: state.state_id,
+                  name: state.state_name,
+                  code: state.state_code
+                });
+              }
+            });
+            
+            setStates(uniqueStates);
+            console.log(`Loaded ${uniqueStates.length} unique states`);
+          }
+
+          // Fetch localities from sites_registry table
+          const { data: localitiesData, error: localitiesError } = await supabase
+            .from('sites_registry')
+            .select('locality_id, locality_name, state_id')
+            .order('locality_name');
+          
+          if (localitiesError) {
+            console.error('Error loading localities:', localitiesError);
+            setLocalities([]);
+          } else {
+            // Convert to format and remove duplicates
+            const uniqueLocalities: any[] = [];
+            const seen = new Set<string>();
+            
+            (localitiesData || []).forEach(loc => {
+              const key = `${loc.locality_id}-${loc.state_id}`;
+              if (!seen.has(key)) {
+                seen.add(key);
+                uniqueLocalities.push({
+                  id: loc.locality_id,
+                  name: loc.locality_name,
+                  state_id: loc.state_id
+                });
+              }
+            });
+            
+            setLocalities(uniqueLocalities);
+            console.log(`Loaded ${uniqueLocalities.length} unique localities`);
+          }
+        } catch (err) {
+          console.error('Failed to load location data:', err);
+          toast({
+            title: "Warning",
+            description: "Could not load location data. Please refresh the page.",
+            variant: "destructive"
+          });
+          setHubs([]);
+          setHubStates([]);
+          setStates([]);
+          setLocalities([]);
+        } finally {
+          setLoadingLocations(false);
+        }
       } catch (err) {
         console.error('Failed to load MMP data:', err);
         toast({
@@ -115,7 +231,7 @@ const ReviewAssignCoordinators: React.FC = () => {
     loadData();
   }, [id, getMmpById, navigate, toast]);
 
-  if (loading || loadingForwardedStates) {
+  if (loading || loadingForwardedStates || loadingLocations) {
     return (
       <div className="container mx-auto px-4 py-8">
         <div className="text-center">
@@ -148,22 +264,37 @@ const ReviewAssignCoordinators: React.FC = () => {
   let entries: any[] = Array.isArray(mmpFile?.siteEntries) && mmpFile.siteEntries.length > 0 
     ? mmpFile.siteEntries
     : [];
+
+  // Create state name to ID mapping from database data
   const stateNameToId = new Map<string, string>();
-  // Add both full name and name without "State" suffix for better matching
-  for (const s of sudanStates) {
-    const normalizedName = s.name.toLowerCase();
-    stateNameToId.set(normalizedName, s.id);
-    // Also add without "State" suffix (e.g., "Northern" matches "Northern State")
+  states.forEach(state => {
+    const normalizedName = state.name.toLowerCase();
+    stateNameToId.set(normalizedName, state.id);
+    // Also add without "State" suffix for better matching
     if (normalizedName.endsWith(' state')) {
-      stateNameToId.set(normalizedName.replace(/\s+state$/, ''), s.id);
+      stateNameToId.set(normalizedName.replace(/\s+state$/, ''), state.id);
     }
-  }
+  });
+
+  // Create localities by state mapping from database data
   const localitiesByState = new Map<string, Map<string, string>>();
-  for (const s of sudanStates) {
+  states.forEach(state => {
     const map = new Map<string, string>();
-    s.localities.forEach(l => map.set(l.name.toLowerCase(), l.id));
-    localitiesByState.set(s.id, map);
-  }
+    localities
+      .filter(loc => loc.state_id === state.id)
+      .forEach(loc => map.set(loc.name.toLowerCase(), loc.id));
+    localitiesByState.set(state.id, map);
+  });
+
+  // Get filtered states for selected hub
+  const selectedHubObj = hubs.find(h => h.id === selectedHub);
+  const hubStateOptions = selectedHubObj ? hubStates.filter(hs => hs.hub_id === selectedHubObj.id) : [];
+  
+  // Get localities for selected state
+  const selectedStateObj = hubStateOptions.find(s => s.state_id === selectedState);
+  const localityOptions = selectedStateObj ? localities.filter(loc => loc.state_id === selectedStateObj.state_id) : [];
+
+  // Create group map from entries
   const groupMap: Record<string, any[]> = {};
   entries.forEach((e: any) => {
     const sName = String(e.state || '').trim().toLowerCase();
@@ -175,6 +306,40 @@ const ReviewAssignCoordinators: React.FC = () => {
     if (!groupMap[key]) groupMap[key] = [];
     groupMap[key].push(e);
   });
+
+  // Filter groups based on selected filters
+  const filteredGroupMap = Object.entries(groupMap).reduce((acc, [groupKey, groupSites]) => {
+    const [stateId, localityId] = groupKey.split('|');
+    
+    // If no filters selected, show all
+    if (!selectedHub && !selectedState && !selectedLocality) {
+      acc[groupKey] = groupSites;
+      return acc;
+    }
+    
+    // Check if this group matches the selected filters
+    let matches = true;
+    
+    if (selectedHub) {
+      // Check if this state belongs to the selected hub
+      const stateBelongsToHub = hubStates.some(hs => hs.hub_id === selectedHub && hs.state_id === stateId);
+      if (!stateBelongsToHub) matches = false;
+    }
+    
+    if (matches && selectedState) {
+      if (stateId !== selectedState) matches = false;
+    }
+    
+    if (matches && selectedLocality) {
+      if (localityId !== selectedLocality) matches = false;
+    }
+    
+    if (matches) {
+      acc[groupKey] = groupSites;
+    }
+    
+    return acc;
+  }, {} as Record<string, any[]>);
 
   // All coordinators in the system
   const allCoordinators = users.filter(u => u.role === 'coordinator');
@@ -318,15 +483,116 @@ const ReviewAssignCoordinators: React.FC = () => {
               </p>
             </div>
           )}
+
+          {/* Location Filters */}
+          <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+            <h3 className="text-sm font-medium mb-3">Filter Sites by Location</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <Label htmlFor="hub-filter">Hub Office</Label>
+                <Select
+                  value={selectedHub}
+                  onValueChange={(value) => {
+                    setSelectedHub(value);
+                    setSelectedState(''); // Clear dependent filters
+                    setSelectedLocality('');
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="All hubs" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">All hubs</SelectItem>
+                    {hubs.map((hub) => (
+                      <SelectItem key={hub.id} value={hub.id}>
+                        {hub.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              {selectedHub && (
+                <div>
+                  <Label htmlFor="state-filter">State</Label>
+                  <Select
+                    value={selectedState}
+                    onValueChange={(value) => {
+                      setSelectedState(value);
+                      setSelectedLocality(''); // Clear dependent filter
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="All states" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">All states</SelectItem>
+                      {hubStateOptions.map((state) => (
+                        <SelectItem key={state.state_id} value={state.state_id}>
+                          {state.state_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              
+              {selectedState && (
+                <div>
+                  <Label htmlFor="locality-filter">Locality</Label>
+                  <Select
+                    value={selectedLocality}
+                    onValueChange={setSelectedLocality}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="All localities" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">All localities</SelectItem>
+                      {localityOptions.map((locality) => (
+                        <SelectItem key={locality.id} value={locality.id}>
+                          {locality.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+            </div>
+            
+            {(selectedHub || selectedState || selectedLocality) && (
+              <div className="mt-3 flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setSelectedHub('');
+                    setSelectedState('');
+                    setSelectedLocality('');
+                  }}
+                >
+                  Clear Filters
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  Showing {Object.keys(filteredGroupMap).length} of {Object.keys(groupMap).length} site groups
+                </span>
+              </div>
+            )}
+          </div>
+
           <div className="space-y-6">
-            {Object.entries(groupMap).length === 0 ? (
+            {Object.entries(filteredGroupMap).length === 0 ? (
               <div className="text-center text-muted-foreground py-8">
-                {forwardedSiteIds.size > 0 
-                  ? 'All sites have been forwarded. No remaining sites to assign.'
-                  : 'No site groups found for this MMP.'}
+                {Object.keys(groupMap).length === 0 ? (
+                  forwardedSiteIds.size > 0 
+                    ? 'All sites have been forwarded. No remaining sites to assign.'
+                    : 'No site groups found for this MMP.'
+                ) : (
+                  'No sites match the selected filters.'
+                )}
               </div>
             ) : (
-              Object.entries(groupMap).map(([groupKey, groupSites]) => {
+              Object.entries(filteredGroupMap).map(([groupKey, groupSites]) => {
                 const [stateId, localityId] = groupKey.split('|');
                 const isUnassigned = stateId === 'unassigned';
                 const recommended = isUnassigned ? null : getRecommendedCoordinator(stateId, localityId);
@@ -348,10 +614,10 @@ const ReviewAssignCoordinators: React.FC = () => {
                     <div className="flex items-center mb-3 font-medium cursor-pointer select-none" onClick={() => setExpandedGroups(g => ({ ...g, [groupKey]: !g[groupKey] }))}>
                       {expandedGroups[groupKey] ? <ChevronDown className="w-4 h-4 mr-2" /> : <ChevronRight className="w-4 h-4 mr-2" />}
                       {groupSites.length} site(s) in <span className="text-blue-700 ml-1">
-                        {isUnassigned ? 'Unassigned Locations' : `${sudanStates.find(s => s.id === stateId)?.name || stateId}`}
+                        {isUnassigned ? 'Unassigned Locations' : `${states.find(s => s.id === stateId)?.name || stateId}`}
                       </span>
                       {!isUnassigned && localityId && (
-                        <span> / <span className="text-green-700">{sudanStates.find(s => s.id === stateId)?.localities.find(l => l.id === localityId)?.name || localityId}</span></span>
+                        <span> / <span className="text-green-700">{localities.find(l => l.id === localityId)?.name || localityId}</span></span>
                       )}
                       {hasForwardedSites && (
                         <span className="ml-2 text-sm text-green-700 font-normal">
