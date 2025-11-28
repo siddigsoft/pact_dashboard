@@ -50,6 +50,7 @@ interface MMPSiteEntry {
     hub: string;
     month: string;
     project_id: string;
+    workflow?: any;
   };
 }
 
@@ -62,6 +63,7 @@ export const mapMMPSiteEntryToSiteVisit = (entry: MMPSiteEntry): SiteVisit => {
   const assignedBy = (entry as any).additional_data?.assigned_by || entry.dispatched_by;
   const assignedAt = (entry as any).additional_data?.assigned_at || entry.dispatched_at;
   const appStatus = mapStatus(entry.status);
+  const workflow = entry.mmp_files?.workflow as any;
   
   return {
     id: entry.id,
@@ -150,7 +152,9 @@ export const mapMMPSiteEntryToSiteVisit = (entry: MMPSiteEntry): SiteVisit => {
     arrivalRecorded: entry.additional_data?.arrival_recorded || false,
     region: entry.state,
     site_code: entry.site_code,
-  };
+    // Add workflow data
+    coordinatorVerifiedAt: workflow?.coordinatorVerifiedAt,
+  } as SiteVisit;
 };
 
 /**
@@ -161,14 +165,14 @@ const mapStatus = (dbStatus: string): SiteVisit['status'] => {
   const statusMap: Record<string, SiteVisit['status']> = {
     'pending': 'pending',
     'assigned': 'assigned',
-    'in progress': 'ongoing',
-    'ongoing': 'ongoing',
+    'in progress': 'inProgress',
+    'ongoing': 'inProgress',
     'completed': 'completed',
     'cancelled': 'cancelled',
     'canceled': 'canceled',
     'verified': 'permitVerified',
-    'dispatched': 'dispatched',
-    'accepted': 'accepted',
+    'dispatched': 'assigned',
+    'accepted': 'assigned',
   };
   return statusMap[s] || 'pending';
 };
@@ -208,7 +212,8 @@ export const fetchSiteVisitsFromMMPEntries = async (): Promise<SiteVisit[]> => {
         approved_at,
         hub,
         month,
-        project_id
+        project_id,
+        workflow
       )
     `)
     .order('created_at', { ascending: false });
@@ -324,7 +329,8 @@ export const createMMPSiteEntry = async (
         approved_at,
         hub,
         month,
-        project_id
+        project_id,
+        workflow
       )
     `)
     .single();
@@ -439,7 +445,8 @@ export const updateMMPSiteEntry = async (
         approved_at,
         hub,
         month,
-        project_id
+        project_id,
+        workflow
       )
     `)
     .eq('id', id)

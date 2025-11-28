@@ -1204,15 +1204,19 @@ const CoordinatorSites: React.FC = () => {
   const renderSiteCard = (site: SiteVisit, showActions: boolean = true) => (
     <Card 
       key={site.id} 
-      className={`overflow-hidden hover:shadow-md transition-shadow cursor-pointer hover:bg-gray-50 ${
+      className={`overflow-hidden transition-shadow ${
+        showActions 
+          ? 'hover:shadow-md cursor-pointer hover:bg-gray-50' 
+          : 'cursor-default'
+      } ${
         selectedSites.has(site.id) ? 'ring-2 ring-blue-500 bg-blue-50' : ''
       }`}
-      onClick={(e) => {
+      onClick={showActions ? (e) => {
         // Don't open edit dialog if clicking on checkbox
         if ((e.target as HTMLInputElement).type === 'checkbox') return;
         setSelectedSiteForEdit(site);
         setEditDialogOpen(true);
-      }}
+      } : undefined}
     >
       <CardContent className="pt-4">
         <div className="flex items-start gap-3">
