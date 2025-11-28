@@ -256,6 +256,97 @@ export default function HubOperations() {
     }
   };
 
+  const fetchMmpEntryDataForSite = async (site: SiteRegistry): Promise<any> => {
+    try {
+      let mmpEntry = null;
+      
+      if (site.id) {
+        const { data: entryById, error: byIdError } = await supabase
+          .from('mmp_site_entries')
+          .select('*')
+          .eq('registry_site_id', site.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        
+        if (!byIdError && entryById) {
+          mmpEntry = entryById;
+        }
+      }
+      
+      if (!mmpEntry && site.site_code) {
+        const { data: entryByCode, error: byCodeError } = await supabase
+          .from('mmp_site_entries')
+          .select('*')
+          .eq('site_code', site.site_code)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        
+        if (!byCodeError && entryByCode) {
+          mmpEntry = entryByCode;
+        }
+      }
+      
+      if (!mmpEntry && site.site_name && site.state_name) {
+        const { data: entryByName, error: byNameError } = await supabase
+          .from('mmp_site_entries')
+          .select('*')
+          .ilike('site_name', site.site_name)
+          .ilike('state', site.state_name)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        
+        if (!byNameError && entryByName) {
+          mmpEntry = entryByName;
+        }
+      }
+      
+      if (mmpEntry) {
+        return {
+          ...site,
+          hub_office: mmpEntry.hub_office,
+          hubOffice: mmpEntry.hub_office,
+          cp_name: mmpEntry.cp_name,
+          cpName: mmpEntry.cp_name,
+          activity_at_site: mmpEntry.activity_at_site,
+          siteActivity: mmpEntry.activity_at_site,
+          survey_tool: mmpEntry.survey_tool,
+          surveyTool: mmpEntry.survey_tool,
+          monitoring_by: mmpEntry.monitoring_by,
+          monitoringBy: mmpEntry.monitoring_by,
+          main_activity: mmpEntry.main_activity,
+          mainActivity: mmpEntry.main_activity,
+          visit_date: mmpEntry.visit_date,
+          visitDate: mmpEntry.visit_date,
+          visit_type: mmpEntry.visit_type,
+          visitType: mmpEntry.visit_type,
+          use_market_diversion: mmpEntry.use_market_diversion,
+          useMarketDiversion: mmpEntry.use_market_diversion,
+          use_warehouse_monitoring: mmpEntry.use_warehouse_monitoring,
+          useWarehouseMonitoring: mmpEntry.use_warehouse_monitoring,
+          comments: mmpEntry.comments,
+          status: mmpEntry.status,
+          additional_data: mmpEntry.additional_data,
+          additionalData: mmpEntry.additional_data,
+          mmp_entry_id: mmpEntry.id,
+        };
+      }
+      
+      return site;
+    } catch (err) {
+      console.error('Error fetching MMP entry data for site:', err);
+      return site;
+    }
+  };
+
+  const handleViewSiteDetails = async (site: SiteRegistry) => {
+    const enrichedSite = await fetchMmpEntryDataForSite(site);
+    setSelectedSite(enrichedSite);
+    setSiteDetailOpen(true);
+  };
+
   const calculateHubCoordinates = (stateIds: string[]) => {
     const stateCoords: Record<string, { lat: number; lng: number }> = {
       'khartoum': { lat: 15.5007, lng: 32.5599 },
@@ -1188,10 +1279,7 @@ export default function HubOperations() {
                     setDeleteTarget({ type: 'site', id: site.id, name: site.site_name });
                     setDeleteDialogOpen(true);
                   }}
-                  onViewDetails={() => {
-                    setSelectedSite(site);
-                    setSiteDetailOpen(true);
-                  }}
+                  onViewDetails={() => handleViewSiteDetails(site)}
                 />
               ))}
             </div>
@@ -1244,10 +1332,7 @@ export default function HubOperations() {
                               <Button 
                                 size="icon" 
                                 variant="ghost" 
-                                onClick={() => {
-                                  setSelectedSite(site);
-                                  setSiteDetailOpen(true);
-                                }}
+                                onClick={() => handleViewSiteDetails(site)}
                                 data-testid={`button-view-site-${site.id}`}
                               >
                                 <Eye className="h-4 w-4" />
