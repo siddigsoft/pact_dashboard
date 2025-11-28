@@ -378,26 +378,14 @@ export const abyeiPCA = {
 
 /**
  * WFP Hub structure for Sudan operations
- * Based on WFP operational areas
+ * Based on WFP operational areas - Updated to match UI configuration
  */
 export const hubs: Hub[] = [
   {
-    id: 'kassala-hub',
-    name: 'Kassala Hub',
-    states: ['kassala', 'red-sea', 'gedaref'],
-    coordinates: { latitude: 15.45, longitude: 36.4 }
-  },
-  {
-    id: 'kosti-hub',
-    name: 'Kosti Hub',
-    states: ['white-nile', 'sennar', 'blue-nile'],
-    coordinates: { latitude: 13.2, longitude: 32.5 }
-  },
-  {
-    id: 'el-fasher-hub',
-    name: 'El Fasher Hub',
-    states: ['north-darfur', 'south-darfur', 'west-darfur', 'central-darfur', 'east-darfur'],
-    coordinates: { latitude: 13.63, longitude: 25.35 }
+    id: 'country-office',
+    name: 'Country Office (Khartoum)',
+    states: ['khartoum', 'red-sea'],
+    coordinates: { latitude: 15.5007, longitude: 32.5599 }
   },
   {
     id: 'dongola-hub',
@@ -406,10 +394,22 @@ export const hubs: Hub[] = [
     coordinates: { latitude: 19.16, longitude: 30.48 }
   },
   {
-    id: 'country-office',
-    name: 'Country Office (Khartoum)',
-    states: ['khartoum', 'gezira', 'north-kordofan', 'south-kordofan', 'west-kordofan'],
-    coordinates: { latitude: 15.5007, longitude: 32.5599 }
+    id: 'forchana-hub',
+    name: 'Forchana Hub',
+    states: ['west-darfur', 'central-darfur'],
+    coordinates: { latitude: 13.63, longitude: 25.35 }
+  },
+  {
+    id: 'kassala-hub',
+    name: 'Kassala Hub',
+    states: ['kassala', 'gedaref', 'gezira', 'sennar', 'blue-nile'],
+    coordinates: { latitude: 15.45, longitude: 36.4 }
+  },
+  {
+    id: 'kosti-hub',
+    name: 'Kosti Hub',
+    states: ['white-nile', 'north-kordofan', 'south-kordofan', 'west-kordofan', 'north-darfur', 'south-darfur', 'east-darfur'],
+    coordinates: { latitude: 13.2, longitude: 32.5 }
   }
 ];
 

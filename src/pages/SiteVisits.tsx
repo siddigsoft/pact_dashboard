@@ -8,7 +8,7 @@ import { useAppContext } from "@/context/AppContext";
 import { useAuthorization } from "@/hooks/use-authorization";
 import { SiteVisit } from "@/types";
 import { Link } from "react-router-dom";
-import { Plus, ChevronLeft, Search, MapPin, Clock } from "lucide-react";
+import { Plus, ChevronLeft, Search, MapPin, Clock, AlertTriangle } from "lucide-react";
 import { useSiteVisitContext } from "@/context/siteVisit/SiteVisitContext";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { format, isValid } from "date-fns";
@@ -26,6 +26,7 @@ import { useToast } from "@/hooks/use-toast";
 import FloatingMessenger from "@/components/communication/FloatingMessenger";
 import { useMMP } from "@/context/mmp/MMPContext";
 import LeafletMapContainer from '@/components/map/LeafletMapContainer';
+import { sudanStates, getStateName, getLocalityName } from '@/data/sudanStates';
 
 const SiteVisits = () => {
   const { currentUser, hasRole } = useAppContext();
@@ -125,6 +126,69 @@ const SiteVisits = () => {
            role === 'field operations manager';
   }, [currentUser]);
 
+  // Get user's geographic assignment from profile (state and locality)
+  const userGeographicInfo = useMemo(() => {
+    if (!currentUser || !isDataCollector) return null;
+    
+    const userStateId = currentUser.stateId;
+    const userLocalityId = currentUser.localityId;
+    
+    if (!userStateId) {
+      console.warn('Data collector has no state assigned in profile');
+      return { hasGeo: false, stateName: null, localityName: null, stateId: null, localityId: null };
+    }
+    
+    // Get state name from ID
+    const stateName = getStateName(userStateId);
+    
+    // Get locality name from IDs (if locality is assigned)
+    const localityName = userLocalityId ? getLocalityName(userStateId, userLocalityId) : null;
+    
+    console.log('📍 Data Collector Geographic Info:', {
+      userId: currentUser.id,
+      stateId: userStateId,
+      stateName,
+      localityId: userLocalityId,
+      localityName
+    });
+    
+    return { 
+      hasGeo: true, 
+      stateName, 
+      localityName, 
+      stateId: userStateId, 
+      localityId: userLocalityId 
+    };
+  }, [currentUser, isDataCollector]);
+
+  // Helper function to check if a site matches the user's geographic location
+  const siteMatchesUserGeography = (visit: SiteVisit): boolean => {
+    if (!userGeographicInfo?.hasGeo) return false;
+    
+    const visitState = (visit.state || '').toLowerCase().trim();
+    const visitLocality = (visit.locality || '').toLowerCase().trim();
+    const userState = (userGeographicInfo.stateName || '').toLowerCase().trim();
+    const userLocality = (userGeographicInfo.localityName || '').toLowerCase().trim();
+    
+    // Must match state
+    const stateMatches = visitState === userState || 
+                         visitState.includes(userState) || 
+                         userState.includes(visitState);
+    
+    if (!stateMatches) return false;
+    
+    // If user has locality assigned, must also match locality
+    if (userGeographicInfo.localityId && userLocality) {
+      const localityMatches = visitLocality === userLocality || 
+                              visitLocality.includes(userLocality) || 
+                              userLocality.includes(visitLocality);
+      return localityMatches;
+    }
+    
+    // If no locality assigned, only check state
+    return true;
+  };
+
   // Filter for approved MMPs (only for non-FOM users)
   const approvedMMPs = useMemo(() => {
     return !isFOM ? (mmpFiles?.filter(mmp => mmp.status === 'approved') || []) : [];
@@ -134,7 +198,7 @@ const SiteVisits = () => {
     const canViewAll = canViewAllSiteVisits();
     
     // For data collectors, apply special filtering logic:
-    // - "dispatched" status: show ALL dispatched visits (not filtered by user)
+    // - "dispatched" status: show ONLY dispatched visits matching user's state AND locality
     // - "assigned", "accepted", "ongoing", "completed": filter by assignedTo === currentUser.id
     // - Other statuses or "all": filter by assignedTo === currentUser.id
     let filtered: SiteVisit[];
@@ -142,15 +206,25 @@ const SiteVisits = () => {
     if (isDataCollector && currentUser?.id) {
       // Check if we're filtering by a specific status
       if (statusFilter === "dispatched") {
-        // For dispatched status, show ALL dispatched visits regardless of assignedTo
-        filtered = siteVisits.filter(visit => 
-          visit.status?.toLowerCase() === 'dispatched'
-        );
+        // For dispatched status, show ONLY dispatched visits in user's state AND locality
+        filtered = siteVisits.filter(visit => {
+          if (visit.status?.toLowerCase() !== 'dispatched') return false;
+          
+          // Geographic filtering: must match user's state AND locality from profile
+          const matches = siteMatchesUserGeography(visit);
+          if (!matches) {
+            console.log(`🚫 Site "${visit.siteName}" filtered out - does not match user's location (${visit.state}/${visit.locality})`);
+          }
+          return matches;
+        });
+        
+        console.log(`📊 Dispatched sites matching user geography: ${filtered.length} of ${siteVisits.filter(v => v.status?.toLowerCase() === 'dispatched').length}`);
       } else if (statusFilter === "all") {
-        // For "all", show dispatched (all) + assigned/accepted/ongoing/completed (filtered by user)
-        const dispatchedVisits = siteVisits.filter(visit => 
-          visit.status?.toLowerCase() === 'dispatched'
-        );
+        // For "all", show dispatched (geo-filtered) + assigned/accepted/ongoing/completed (filtered by user)
+        const dispatchedVisits = siteVisits.filter(visit => {
+          if (visit.status?.toLowerCase() !== 'dispatched') return false;
+          return siteMatchesUserGeography(visit);
+        });
         const userAssignedVisits = siteVisits.filter(visit => {
           const status = visit.status?.toLowerCase();
           return visit.assignedTo === currentUser.id && 
@@ -606,6 +680,45 @@ const SiteVisits = () => {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
+      {/* Warning banner for data collectors without geographic profile */}
+      {isDataCollector && userGeographicInfo && !userGeographicInfo.hasGeo && (
+        <Card className="border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950" data-testid="alert-no-geographic-profile">
+          <CardContent className="flex items-start gap-4 p-4">
+            <AlertTriangle className="h-6 w-6 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <h3 className="font-semibold text-amber-800 dark:text-amber-200">Geographic Profile Not Configured</h3>
+              <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                Your profile does not have a state and locality assigned. You will not be able to see or claim any dispatched sites until your administrator configures your geographic assignment.
+              </p>
+              <p className="text-sm text-amber-600 dark:text-amber-400 mt-2">
+                Please contact your supervisor or administrator to update your profile with your assigned state and locality.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Geographic info banner for data collectors */}
+      {isDataCollector && userGeographicInfo?.hasGeo && (
+        <Card className="border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950" data-testid="alert-geographic-profile">
+          <CardContent className="flex items-center gap-4 p-4">
+            <MapPin className="h-6 w-6 text-blue-600 dark:text-blue-400 shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm text-blue-700 dark:text-blue-300">
+                <span className="font-semibold">Your assigned area:</span>{' '}
+                {userGeographicInfo.localityName 
+                  ? `${userGeographicInfo.localityName}, ${userGeographicInfo.stateName}`
+                  : userGeographicInfo.stateName
+                }
+              </p>
+              <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                You can only see and claim dispatched sites within your assigned area.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Header - Matching Hub Operations Style */}
       <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
         <div>

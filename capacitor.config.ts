@@ -83,7 +83,12 @@ const config: CapacitorConfig = {
     },
     StatusBar: {
       style: 'dark',
-      backgroundColor: '#1e40af'
+      backgroundColor: '#1e40af',
+      overlaysWebView: false
+    },
+    NavigationBar: {
+      backgroundColor: '#1e40af',
+      color: 'white'
     },
     Geolocation: {
       enableHighAccuracy: true,

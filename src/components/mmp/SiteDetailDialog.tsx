@@ -7,6 +7,9 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Pencil, Save, X } from 'lucide-react';
+import { ClaimSiteButton } from '@/components/site-visit/ClaimSiteButton';
+import { useAppContext } from '@/context/AppContext';
+import { supabase } from '@/integrations/supabase/client';
 
 interface SiteDetailDialogProps {
   open: boolean;
@@ -17,6 +20,8 @@ interface SiteDetailDialogProps {
   onAcceptSite?: (site: any) => void;
   onSendBackToCoordinator?: (site: any, comments: string) => void;
   currentUserId?: string;
+  onClaimed?: () => void;
+  enableFirstClaim?: boolean;
 }
 
 const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
@@ -27,13 +32,17 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
   onUpdateSite,
   onAcceptSite,
   onSendBackToCoordinator,
-  currentUserId
+  currentUserId,
+  onClaimed,
+  enableFirstClaim = false
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState<any>(null);
   const [saving, setSaving] = useState(false);
   const [sendBackOpen, setSendBackOpen] = useState(false);
   const [sendBackComments, setSendBackComments] = useState('');
+  const { users } = useAppContext();
+  const [acceptedByName, setAcceptedByName] = useState<string | null>(null);
 
   // Normalize site data
   const normalizeSite = (site: any) => {
@@ -110,6 +119,82 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
     const createdAt = site.created_at || undefined;
     const updatedAt = site.updated_at || site.last_modified || undefined;
 
+    // Extract GPS coordinates from registry lookup
+    // Priority: 1. registry_site_id column, 2. registry_linkage (new format), 3. registry_gps (legacy format)
+    const registryLinkage = ad.registry_linkage || null;
+    const registryGps = ad.registry_gps || {};
+    
+    // Check for direct registry_site_id column (new unified approach)
+    const directRegistrySiteId = site.registry_site_id || null;
+    
+    // Extract from new registry_linkage structure if available
+    let registryGpsLatitude: number | undefined;
+    let registryGpsLongitude: number | undefined;
+    let gpsAccuracyMeters: number | undefined;
+    let registrySiteId: string | undefined = directRegistrySiteId || undefined;
+    let registrySiteCode: string | undefined;
+    let registryMatchType: string | undefined;
+    let registryMatchConfidence: number | undefined;
+    let matchConfidenceLevel: string | undefined;
+    let matchAutoAccepted: boolean | undefined;
+    let matchRequiresReview: boolean | undefined;
+    let matchCandidatesCount: number | undefined;
+    let matchedAt: string | undefined;
+    let matchedBy: string | undefined;
+    let sourceWorkflow: string | undefined;
+    let unmatchedReason: string | undefined;
+    let unmatchedDetails: string | undefined;
+    let alternativeCandidates: Array<{ registry_site_id: string; site_code: string; site_name: string; confidence: number }> | undefined;
+    let gpsSource: string | undefined;
+    
+    if (registryLinkage) {
+      // New enhanced registry_linkage format
+      registryGpsLatitude = registryLinkage.gps?.latitude;
+      registryGpsLongitude = registryLinkage.gps?.longitude;
+      gpsAccuracyMeters = registryLinkage.gps?.accuracy_meters;
+      // Only use linkage registry_site_id if direct column is not available
+      if (!registrySiteId) registrySiteId = registryLinkage.registry_site_id;
+      registrySiteCode = registryLinkage.registry_site_code;
+      registryMatchType = registryLinkage.match?.type;
+      registryMatchConfidence = registryLinkage.match?.confidence;
+      matchConfidenceLevel = registryLinkage.match?.confidence_level;
+      matchAutoAccepted = registryLinkage.match?.auto_accepted;
+      matchRequiresReview = registryLinkage.match?.requires_review;
+      matchCandidatesCount = registryLinkage.match?.candidates_count;
+      matchedAt = registryLinkage.audit?.matched_at;
+      matchedBy = registryLinkage.audit?.matched_by;
+      sourceWorkflow = registryLinkage.audit?.source_workflow;
+      unmatchedReason = registryLinkage.unmatched?.reason;
+      unmatchedDetails = registryLinkage.unmatched?.details;
+      alternativeCandidates = registryLinkage.alternative_candidates;
+      gpsSource = 'sites_registry';
+    } else if (registryGps) {
+      // Legacy registry_gps format
+      registryGpsLatitude = registryGps.latitude;
+      registryGpsLongitude = registryGps.longitude;
+      gpsAccuracyMeters = registryGps.accuracy_meters;
+      // Only use legacy site_id if direct column is not available
+      if (!registrySiteId) registrySiteId = registryGps.site_id;
+      registrySiteCode = registryGps.site_code;
+      registryMatchType = registryGps.match_type;
+      // Convert legacy confidence strings to numeric if needed
+      const legacyConfidence = registryGps.match_confidence;
+      if (typeof legacyConfidence === 'number') {
+        registryMatchConfidence = legacyConfidence;
+      } else if (legacyConfidence === 'high') {
+        registryMatchConfidence = 1.0;
+      } else if (legacyConfidence === 'medium') {
+        registryMatchConfidence = 0.7;
+      } else if (legacyConfidence === 'low') {
+        registryMatchConfidence = 0.5;
+      }
+      matchedAt = registryGps.matched_at;
+      gpsSource = registryGps.source;
+    }
+    
+    const hasGpsCoordinates = registryGpsLatitude && registryGpsLongitude;
+    const hasRegistryMatch = !!registrySiteId;
+
     return { 
       hubOffice, state, locality, siteCode, siteName, cpName, siteActivity, 
       monitoringBy, surveyTool, useMarketDiversion, useWarehouseMonitoring,
@@ -118,12 +203,55 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
       verifiedBy, verifiedAt, verificationNotes, status,
       dispatchedAt, dispatchedBy, acceptedAt, acceptedBy, 
       rejectionComments, rejectedBy, rejectedAt,
-      createdAt, updatedAt
+      createdAt, updatedAt,
+      // GPS and Registry Matching
+      registryGpsLatitude, registryGpsLongitude, gpsAccuracyMeters,
+      registrySiteId, registrySiteCode,
+      registryMatchType, registryMatchConfidence, matchConfidenceLevel,
+      matchAutoAccepted, matchRequiresReview, matchCandidatesCount,
+      matchedAt, matchedBy, sourceWorkflow,
+      unmatchedReason, unmatchedDetails, alternativeCandidates,
+      gpsSource, hasGpsCoordinates, hasRegistryMatch
     };
   };
 
   const row = normalizeSite(site);
   const isAvailableSite = row?.status?.toLowerCase() === 'dispatched' && !row?.acceptedBy;
+
+  useEffect(() => {
+    const id = row?.acceptedBy as string | undefined;
+    if (!id) {
+      setAcceptedByName(null);
+      return;
+    }
+    const looksLikeUUID = typeof id === 'string' && /[0-9a-fA-F-]{30,}/.test(id);
+    if (!looksLikeUUID) {
+      setAcceptedByName(id);
+      return;
+    }
+    const local = users?.find(u => u.id === id);
+    if (local) {
+      setAcceptedByName(local.fullName || local.name || local.username || local.email || id);
+      return;
+    }
+    let cancelled = false;
+    const fetchProfile = async () => {
+      try {
+        const { data } = await supabase
+          .from('profiles')
+          .select('full_name,username,email')
+          .eq('id', id)
+          .single();
+        if (!cancelled) {
+          setAcceptedByName(data?.full_name || data?.username || data?.email || id);
+        }
+      } catch {
+        if (!cancelled) setAcceptedByName(id);
+      }
+    };
+    fetchProfile();
+    return () => { cancelled = true; };
+  }, [row?.acceptedBy, users]);
 
   // Initialize draft when entering edit mode
   useEffect(() => {
@@ -317,6 +445,134 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
                     <p className="font-medium text-gray-900 mt-1">{row.locality || '—'}</p>
                   )}
                 </div>
+                {/* GPS Coordinates and Registry Match Info */}
+                {(row.hasGpsCoordinates || row.hasRegistryMatch || row.matchRequiresReview || row.unmatchedReason) && (
+                  <div className={`sm:col-span-2 p-3 rounded-md border ${
+                    row.hasGpsCoordinates 
+                      ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
+                      : row.matchRequiresReview
+                      ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800'
+                      : 'bg-gray-50 dark:bg-gray-800/20 border-gray-200 dark:border-gray-700'
+                  }`}>
+                    <div className="flex items-center justify-between">
+                      <Label className={`text-xs font-medium flex items-center gap-1 ${
+                        row.hasGpsCoordinates 
+                          ? 'text-blue-700 dark:text-blue-300'
+                          : row.matchRequiresReview
+                          ? 'text-yellow-700 dark:text-yellow-300'
+                          : 'text-gray-700 dark:text-gray-300'
+                      }`}>
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        {row.hasGpsCoordinates ? 'GPS Coordinates (from Sites Registry)' : 'Registry Match Status'}
+                      </Label>
+                      
+                      {/* Confidence Score Badge */}
+                      {row.registryMatchConfidence !== undefined && (
+                        <Badge className={`${
+                          row.registryMatchConfidence >= 0.9
+                            ? 'bg-green-100 text-green-700 dark:bg-green-800 dark:text-green-200'
+                            : row.registryMatchConfidence >= 0.7
+                            ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-800 dark:text-yellow-200'
+                            : 'bg-red-100 text-red-700 dark:bg-red-800 dark:text-red-200'
+                        }`} variant="secondary">
+                          {Math.round(row.registryMatchConfidence * 100)}% Confidence
+                        </Badge>
+                      )}
+                    </div>
+                    
+                    <div className="flex flex-wrap gap-4 mt-2">
+                      {row.hasGpsCoordinates && (
+                        <>
+                          <div>
+                            <span className="text-xs text-gray-500 dark:text-gray-400">Latitude:</span>
+                            <p className="font-mono text-sm font-medium text-gray-900 dark:text-gray-100">{row.registryGpsLatitude}</p>
+                          </div>
+                          <div>
+                            <span className="text-xs text-gray-500 dark:text-gray-400">Longitude:</span>
+                            <p className="font-mono text-sm font-medium text-gray-900 dark:text-gray-100">{row.registryGpsLongitude}</p>
+                          </div>
+                          {row.gpsAccuracyMeters && (
+                            <div>
+                              <span className="text-xs text-gray-500 dark:text-gray-400">Accuracy:</span>
+                              <p className="font-mono text-sm font-medium text-gray-900 dark:text-gray-100">{row.gpsAccuracyMeters}m</p>
+                            </div>
+                          )}
+                        </>
+                      )}
+                      
+                      {row.registryMatchType && (
+                        <div>
+                          <span className="text-xs text-gray-500 dark:text-gray-400">Match Type:</span>
+                          <Badge className="ml-1 bg-blue-100 text-blue-700 dark:bg-blue-800 dark:text-blue-200" variant="secondary">
+                            {row.registryMatchType === 'exact_code' ? 'Site Code' : 
+                             row.registryMatchType === 'name_location' ? 'Name + Location' :
+                             row.registryMatchType === 'partial' ? 'Partial Match' :
+                             row.registryMatchType === 'fuzzy' ? 'Fuzzy Match' : row.registryMatchType}
+                          </Badge>
+                        </div>
+                      )}
+                      
+                      {row.matchAutoAccepted !== undefined && (
+                        <div>
+                          <span className="text-xs text-gray-500 dark:text-gray-400">Status:</span>
+                          <Badge className={`ml-1 ${
+                            row.matchAutoAccepted 
+                              ? 'bg-green-100 text-green-700 dark:bg-green-800 dark:text-green-200'
+                              : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-800 dark:text-yellow-200'
+                          }`} variant="secondary">
+                            {row.matchAutoAccepted ? 'Auto-Accepted' : 'Pending Review'}
+                          </Badge>
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Unmatched Site Warning */}
+                    {row.unmatchedReason && (
+                      <div className="mt-3 p-2 bg-yellow-100 dark:bg-yellow-900/30 rounded border border-yellow-300 dark:border-yellow-700">
+                        <p className="text-xs font-medium text-yellow-800 dark:text-yellow-200">
+                          {row.unmatchedReason === 'no_registry_entry' && 'Site not found in registry'}
+                          {row.unmatchedReason === 'multiple_matches' && 'Multiple registry matches found'}
+                          {row.unmatchedReason === 'low_confidence' && 'Match confidence below threshold'}
+                        </p>
+                        {row.unmatchedDetails && (
+                          <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-1">{row.unmatchedDetails}</p>
+                        )}
+                      </div>
+                    )}
+                    
+                    {/* Alternative Candidates (for manual selection) */}
+                    {row.alternativeCandidates && row.alternativeCandidates.length > 1 && (
+                      <div className="mt-3 border-t border-gray-200 dark:border-gray-700 pt-2">
+                        <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                          Other potential matches ({row.alternativeCandidates.length}):
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {row.alternativeCandidates.slice(0, 3).map((candidate: any, idx: number) => (
+                            <Badge key={idx} variant="outline" className="text-xs">
+                              {candidate.site_name} ({Math.round(candidate.confidence * 100)}%)
+                            </Badge>
+                          ))}
+                          {row.alternativeCandidates.length > 3 && (
+                            <Badge variant="outline" className="text-xs">
+                              +{row.alternativeCandidates.length - 3} more
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Audit Info */}
+                    {row.matchedAt && (
+                      <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                        Matched on {new Date(row.matchedAt).toLocaleDateString()}
+                        {row.sourceWorkflow && ` via ${row.sourceWorkflow}`}
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div>
                   <Label className="text-xs font-medium text-gray-600">CP Name</Label>
                   {isEditing ? (
@@ -457,16 +713,16 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
             )}
 
             {/* Section 2: Site Cost Details */}
-            <div className="bg-gray-50 p-5 rounded-lg border space-y-4">
+            <div className="bg-gray-50 dark:bg-gray-800 p-5 rounded-lg border space-y-4">
               <div className="flex items-center gap-2 pb-3 border-b">
                 <div className="bg-gray-700 text-white rounded w-6 h-6 flex items-center justify-center font-semibold text-sm">
                   2
                 </div>
-                <h3 className="text-base font-semibold text-gray-900">Site Cost Details</h3>
+                <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">Site Cost Details</h3>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="bg-white p-4 rounded-lg border">
-                  <Label className="text-xs font-medium text-gray-600">Data Collector Fee</Label>
+                <div className="bg-white dark:bg-gray-900 p-4 rounded-lg border">
+                  <Label className="text-xs font-medium text-gray-600 dark:text-gray-400">Data Collector Fee</Label>
                   {isEditing ? (
                     <Input
                       type="number"
@@ -483,30 +739,34 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
                         });
                       }}
                       className="mt-2 text-2xl font-semibold"
-                      placeholder="20"
+                      placeholder="Calculated at claim"
                     />
                   ) : (
                     <>
-                      <p className="text-2xl font-semibold text-gray-900 mt-2">
-                        {row.enumeratorFee !== undefined && row.enumeratorFee !== null && String(row.enumeratorFee) !== ''
-                          ? `$${Number(row.enumeratorFee).toLocaleString()}`
-                          : '$20'}
-                      </p>
-                      {(!row.enumeratorFee || row.enumeratorFee === null || String(row.enumeratorFee) === '') && (
-                        <p className="text-xs text-gray-500 mt-1">(Default Rate)</p>
+                      {row.enumeratorFee !== undefined && row.enumeratorFee !== null && Number(row.enumeratorFee) > 0 ? (
+                        <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mt-2">
+                          {Number(row.enumeratorFee).toLocaleString()} SDG
+                        </p>
+                      ) : (
+                        <div className="mt-2">
+                          <p className="text-lg font-semibold text-amber-600 dark:text-amber-400">
+                            Pending
+                          </p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            Calculated when claimed based on collector classification
+                          </p>
+                        </div>
                       )}
                     </>
                   )}
-                  <p className="text-xs text-gray-600 mt-2">Payment for completing the site visit</p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-2">Payment for completing the site visit</p>
                 </div>
-                <div className="bg-white p-4 rounded-lg border">
-                  <Label className="text-xs font-medium text-gray-600">Transport Fee</Label>
+                <div className="bg-white dark:bg-gray-900 p-4 rounded-lg border">
+                  <Label className="text-xs font-medium text-gray-600 dark:text-gray-400">Transport Budget</Label>
                   {isEditing ? (
                     <Input
                       type="number"
                       step="0.01"
-                      min="10"
-                      max="25"
                       value={draft?.transportFee ?? ''}
                       onChange={(e) => {
                         const val = e.target.value;
@@ -519,43 +779,55 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
                         });
                       }}
                       className="mt-2 text-2xl font-semibold"
-                      placeholder="10"
+                      placeholder="Set at dispatch"
                     />
                   ) : (
                     <>
-                      <p className="text-2xl font-semibold text-gray-900 mt-2">
-                        {row.transportFee !== undefined && row.transportFee !== null && String(row.transportFee) !== ''
-                          ? `$${Number(row.transportFee).toLocaleString()}`
-                          : '$10'}
+                      <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mt-2">
+                        {row.transportFee !== undefined && row.transportFee !== null && Number(row.transportFee) > 0
+                          ? `${Number(row.transportFee).toLocaleString()} SDG`
+                          : '0 SDG'}
                       </p>
-                      {(!row.transportFee || row.transportFee === null || String(row.transportFee) === '') && (
-                        <p className="text-xs text-gray-500 mt-1">(Default Rate)</p>
+                      {(!row.transportFee || row.transportFee === null || Number(row.transportFee) === 0) && (
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">(Set at dispatch)</p>
                       )}
                     </>
                   )}
-                  <p className="text-xs text-gray-600 mt-2">Transportation reimbursement</p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-2">Transportation and logistics</p>
                 </div>
                 <div className="bg-blue-600 p-4 rounded-lg border border-blue-700">
-                  <Label className="text-xs font-medium text-blue-100">Total Cost</Label>
+                  <Label className="text-xs font-medium text-blue-100">Total Payout</Label>
                   {isEditing ? (
                     <p className="text-2xl font-bold text-white mt-2">
-                      ${((Number(draft?.enumeratorFee ?? 0)) + (Number(draft?.transportFee ?? 0))).toLocaleString()}
+                      {((Number(draft?.enumeratorFee ?? 0)) + (Number(draft?.transportFee ?? 0))).toLocaleString()} SDG
                     </p>
                   ) : (
-                    <p className="text-2xl font-bold text-white mt-2">
-                      ${(row.cost !== undefined && row.cost !== null && String(row.cost) !== '' && String(row.cost) !== '—')
-                        ? Number(row.cost).toLocaleString()
-                        : (Number(row.enumeratorFee || 20) + Number(row.transportFee || 10)).toLocaleString()}
-                    </p>
+                    <>
+                      {row.enumeratorFee !== undefined && row.enumeratorFee !== null && Number(row.enumeratorFee) > 0 ? (
+                        <p className="text-2xl font-bold text-white mt-2">
+                          {(Number(row.enumeratorFee) + Number(row.transportFee || 0)).toLocaleString()} SDG
+                        </p>
+                      ) : (
+                        <div className="mt-2">
+                          <p className="text-lg font-bold text-blue-100">
+                            {Number(row.transportFee || 0).toLocaleString()} SDG + Fee
+                          </p>
+                          <p className="text-xs text-blue-200 mt-1">
+                            Collector fee added at claim
+                          </p>
+                        </div>
+                      )}
+                    </>
                   )}
                   <p className="text-xs text-blue-100 mt-2">Complete payment upon visit</p>
                 </div>
               </div>
-              <div className="bg-white p-4 rounded-lg border">
-                <p className="text-sm font-semibold text-gray-900 mb-2">Payment Information</p>
-                <p className="text-sm text-gray-700 leading-relaxed">
-                  Upon successful completion of the site visit, the total cost amount will be credited to your wallet. 
-                  Payment is processed automatically after you submit your visit report with photos and required documentation.
+              <div className="bg-white dark:bg-gray-900 p-4 rounded-lg border">
+                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">Payment Information</p>
+                <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+                  {row.enumeratorFee !== undefined && row.enumeratorFee !== null && Number(row.enumeratorFee) > 0 
+                    ? 'Upon successful completion of the site visit, the total payout will be credited to your wallet. Payment is processed automatically after you submit your visit report with photos and required documentation.'
+                    : 'Your collector fee will be calculated based on your classification level (A, B, or C) when you claim this site. The total payout = Transport Budget + Your Collector Fee.'}
                 </p>
               </div>
             </div>
@@ -621,7 +893,7 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
                 {row.acceptedBy && (
                   <div>
                     <Label className="text-xs font-medium text-gray-600">Accepted By</Label>
-                    <p className="font-medium text-gray-900 mt-1">{row.acceptedBy}</p>
+                    <p className="font-medium text-gray-900 mt-1">{acceptedByName || row.acceptedBy}</p>
                   </div>
                 )}
                 {row.acceptedAt && (
@@ -661,18 +933,34 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
             </div>
 
             {/* Action Buttons */}
-            {isAvailableSite && onAcceptSite && !isEditing && (
+            {isAvailableSite && !isEditing && (
               <div className="border-t pt-4 flex flex-col sm:flex-row gap-3">
-                <Button
-                  onClick={() => {
-                    onAcceptSite(site);
-                    onOpenChange(false);
-                  }}
-                  className="flex-1"
-                  size="lg"
-                >
-                  Accept Site
-                </Button>
+                {enableFirstClaim && currentUserId ? (
+                  <ClaimSiteButton
+                    siteId={site.id}
+                    siteName={row?.siteName || 'Site'}
+                    userId={currentUserId}
+                    onClaimed={() => {
+                      onClaimed?.();
+                      onOpenChange(false);
+                    }}
+                    size="lg"
+                    className="flex-1"
+                    data-testid={`button-claim-site-${site.id}`}
+                  />
+                ) : onAcceptSite ? (
+                  <Button
+                    onClick={() => {
+                      onAcceptSite(site);
+                      onOpenChange(false);
+                    }}
+                    className="flex-1"
+                    size="lg"
+                    data-testid="button-accept-site"
+                  >
+                    Accept Site
+                  </Button>
+                ) : null}
                 {onSendBackToCoordinator && (
                   <Button
                     variant="outline"
@@ -682,6 +970,7 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
                     }}
                     className="flex-1"
                     size="lg"
+                    data-testid="button-send-back"
                   >
                     Send Back to Coordinator
                   </Button>

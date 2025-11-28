@@ -16,7 +16,7 @@ interface UserContextType {
   approveUser: (userId: string) => Promise<boolean>;
   rejectUser: (userId: string) => Promise<boolean>;
   updateUser: (user: User) => Promise<boolean>;
-  updateUserLocation: (latitude: number, longitude: number) => Promise<boolean>;
+  updateUserLocation: (latitude: number, longitude: number, accuracy?: number) => Promise<boolean>;
   updateUserAvailability: (status: 'online' | 'offline' | 'busy') => Promise<boolean>;
   toggleLocationSharing: (isSharing: boolean) => Promise<boolean>;
   refreshUsers: () => Promise<void>;
@@ -283,21 +283,8 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         );
       }
       
-      setAppUsers(prev => 
-        prev.map(user => {
-          if (user.id === currentUser?.id) return user;
-          
-          if (Math.random() > 0.95) {
-            const newAvailability = user.availability === 'online' ? 'offline' : 'online';
-            return {
-              ...user,
-              availability: newAvailability,
-              lastActive: newAvailability === 'online' ? new Date().toISOString() : user.lastActive
-            };
-          }
-          return user;
-        })
-      );
+      // Note: Removed random availability simulation - availability should only change 
+      // when users explicitly update their status or based on real session activity
     }, 60000);
     
     return () => clearInterval(activityInterval);
@@ -322,6 +309,16 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             .map(r => r.role)
             .filter((rr): rr is AppRole => !!rr)
         : [];
+
+      // Fetch user's active classification
+      const { data: classificationData } = await supabase
+        .from('user_classifications')
+        .select('classification_level, role_scope, has_retainer, retainer_amount_cents, retainer_currency, effective_from, effective_until')
+        .eq('user_id', authUser.id)
+        .eq('is_active', true)
+        .order('effective_from', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
       const userProfile = profileData || {
         id: authUser.id,
@@ -383,7 +380,16 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
           rating: 0,
           totalCompletedTasks: 0,
           onTimeCompletion: 0,
-        }
+        },
+        classification: classificationData ? {
+          level: classificationData.classification_level,
+          roleScope: classificationData.role_scope,
+          hasRetainer: classificationData.has_retainer || false,
+          retainerAmountCents: classificationData.retainer_amount_cents || 0,
+          retainerCurrency: classificationData.retainer_currency || 'SDG',
+          effectiveFrom: classificationData.effective_from,
+          effectiveUntil: classificationData.effective_until,
+        } : undefined
       };
 
       setCurrentUser(supabaseUser);
@@ -843,7 +849,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const updateUserLocation = async (latitude: number, longitude: number): Promise<boolean> => {
+  const updateUserLocation = async (latitude: number, longitude: number, accuracy?: number): Promise<boolean> => {
     try {
       if (!currentUser) return false;
 
@@ -852,6 +858,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ...(currentUser.location || {}),
         latitude,
         longitude,
+        accuracy: accuracy !== undefined ? accuracy : (currentUser.location?.accuracy || undefined),
         lastUpdated: now,
         isSharing: true,
       } as NonNullable<User['location']>;
@@ -1081,6 +1088,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     updateUserAvailability,
     toggleLocationSharing,
     refreshUsers,
+    hydrateCurrentUser,
     roles,
     hasRole,
     addRole,

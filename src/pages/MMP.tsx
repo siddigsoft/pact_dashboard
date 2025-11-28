@@ -3,7 +3,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { Upload, ChevronLeft, Trash2 } from 'lucide-react';
+import { Upload, ChevronLeft, Trash2, Hand } from 'lucide-react';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { MMPList } from '@/components/mmp/MMPList';
 import { useToast } from '@/hooks/use-toast';
@@ -24,6 +24,8 @@ import { DispatchSitesDialog } from '@/components/mmp/DispatchSitesDialog';
 import { sudanStates } from '@/data/sudanStates';
 import { VisitReportDialog, VisitReportData } from '@/components/site-visit/VisitReportDialog';
 import { StartVisitDialog } from '@/components/site-visit/StartVisitDialog';
+import { useSiteClaimRealtime } from '@/hooks/use-site-claim-realtime';
+import { saveGPSToRegistryFromSiteEntry } from '@/utils/sitesRegistryMatcher';
 
 // Helper component to convert SiteVisitRow[] to site entries and display using MMPSiteEntriesTable
 const SitesDisplayTable: React.FC<{ 
@@ -527,28 +529,72 @@ const MMP = () => {
   const [rejectComments, setRejectComments] = useState('');
   const [showRejectConfirm, setShowRejectConfirm] = useState(false);
 
-  // Handle accepting a Smart Assigned site
+  // Handle accepting/claiming a site (works for both Smart Assigned and Available Sites)
   const handleAcceptSite = async (site: any) => {
     try {
-      console.log('🔄 Starting site acceptance for site:', site.id, site.site_name);
+      console.log('🔄 Starting site acceptance/claim for site:', site.id, site.site_name);
       
-      const now = new Date().toISOString();
-      const { error } = await supabase
-        .from('mmp_site_entries')
-        .update({
-          status: 'accepted',
-          accepted_by: currentUser?.id,
-          accepted_at: now,
-          updated_at: now
-        })
-        .eq('id', site.id);
+      const isDispatchedSite = site.status?.toLowerCase() === 'dispatched';
+      
+      if (isDispatchedSite && currentUser?.id) {
+        // Use atomic claim RPC for dispatched sites (first-claim system)
+        console.log('📍 Using atomic claim RPC for dispatched site...');
+        const { data: result, error: rpcError } = await supabase.rpc('claim_site_visit', {
+          p_site_id: site.id,
+          p_user_id: currentUser.id
+        });
+        
+        if (rpcError) {
+          console.error('❌ Claim RPC failed:', rpcError);
+          toast({
+            title: 'Claim Failed',
+            description: rpcError.message || 'Could not claim this site. It may have been claimed by another enumerator.',
+            variant: 'destructive'
+          });
+          return;
+        }
+        
+        const claimResult = result as { success: boolean; error?: string; message: string };
+        
+        if (!claimResult.success) {
+          console.error('❌ Claim rejected:', claimResult);
+          let description = claimResult.message;
+          
+          if (claimResult.error === 'ALREADY_CLAIMED') {
+            description = 'Another enumerator claimed this site first. Try a different site.';
+          } else if (claimResult.error === 'CLAIM_IN_PROGRESS') {
+            description = 'Someone else is claiming this site right now. Try again in a moment.';
+          }
+          
+          toast({
+            title: 'Could Not Claim Site',
+            description,
+            variant: 'destructive'
+          });
+          return;
+        }
+        
+        console.log('✅ Site claimed successfully via RPC');
+      } else {
+        // Standard accept for Smart Assigned sites
+        const now = new Date().toISOString();
+        const { error } = await supabase
+          .from('mmp_site_entries')
+          .update({
+            status: 'accepted',
+            accepted_by: currentUser?.id,
+            accepted_at: now,
+            updated_at: now
+          })
+          .eq('id', site.id);
 
-      if (error) {
-        console.error('❌ Database update failed:', error);
-        throw error;
+        if (error) {
+          console.error('❌ Database update failed:', error);
+          throw error;
+        }
+        
+        console.log('✅ Database update successful');
       }
-
-      console.log('✅ Database update successful');
 
       toast({
         title: 'Site Accepted',
@@ -1292,6 +1338,58 @@ const MMP = () => {
       console.log('📄 Generating PDF report...');
       await generateVisitReportPDF(site, reportData, report, photoUrls);
 
+      // Save GPS coordinates to Sites Registry (if coordinates were captured and site has valid ID)
+      const siteEntryId = site.id || site.siteId || site.entry_id;
+      if (siteEntryId && reportData.coordinates && reportData.coordinates.latitude && reportData.coordinates.longitude) {
+        console.log('📍 Saving GPS to Sites Registry for site entry:', siteEntryId);
+        try {
+          const gpsResult = await saveGPSToRegistryFromSiteEntry(
+            siteEntryId,
+            {
+              latitude: reportData.coordinates.latitude,
+              longitude: reportData.coordinates.longitude,
+              accuracy: reportData.coordinates.accuracy,
+            },
+            {
+              userId: currentUser?.id || 'system',
+              sourceType: 'site_visit',
+              overwriteExisting: false, // Don't overwrite if GPS already exists
+            }
+          );
+          if (gpsResult.success) {
+            console.log('✅ GPS saved to Sites Registry');
+            toast({
+              title: 'GPS Coordinates Saved',
+              description: 'Site GPS coordinates have been saved to the Sites Registry.',
+              variant: 'default'
+            });
+          } else {
+            console.warn('⚠️ Failed to save GPS to registry:', gpsResult.error);
+            // Show warning toast but don't fail the visit completion
+            toast({
+              title: 'GPS Save Warning',
+              description: gpsResult.error || 'GPS coordinates could not be saved to the Sites Registry.',
+              variant: 'destructive'
+            });
+          }
+        } catch (gpsError) {
+          console.error('❌ Error saving GPS to registry:', gpsError);
+          // Non-blocking - don't fail the visit completion for GPS errors
+          toast({
+            title: 'GPS Save Error',
+            description: 'An error occurred while saving GPS coordinates. Please contact support if this persists.',
+            variant: 'destructive'
+          });
+        }
+      } else if (reportData.coordinates && reportData.coordinates.latitude && reportData.coordinates.longitude) {
+        console.warn('⚠️ Cannot save GPS: No valid site entry ID available');
+        toast({
+          title: 'GPS Not Saved',
+          description: 'GPS coordinates were captured but could not be linked to the Sites Registry.',
+          variant: 'destructive'
+        });
+      }
+
       // Update site status to 'Completed' and save report info
       console.log('🔄 Updating site status to Completed...');
       const { data: updateData, error: updateError } = await supabase
@@ -1514,6 +1612,29 @@ const MMP = () => {
   // We intentionally DO NOT fallback to checkPermission here to prevent other roles (e.g. FOM)
   // that may have broad permissions from seeing the upload control.
   const canCreate = isAdmin || isICT;
+
+  // Real-time subscription for site claims (Uber-like first-claim system)
+  // When another enumerator claims a site, it will be removed from available sites in real-time
+  const handleSiteClaimedRealtime = React.useCallback((siteId: string, claimedBy: string) => {
+    // Skip if we're the one who claimed it
+    if (claimedBy === currentUser?.id) return;
+    
+    // Remove the claimed site from available sites immediately
+    setEnumeratorSiteEntries(prev => prev.filter(s => s.id !== siteId));
+    setEnumeratorGroupedByStates(prev => {
+      const updated = { ...prev };
+      Object.keys(updated).forEach(key => {
+        updated[key] = updated[key].filter(s => s.id !== siteId);
+        if (updated[key].length === 0) delete updated[key];
+      });
+      return updated;
+    });
+  }, [currentUser?.id]);
+
+  useSiteClaimRealtime({
+    onSiteClaimed: handleSiteClaimedRealtime,
+    enabled: isDataCollector
+  });
 
   // Debug: Log role checks
   useEffect(() => {
@@ -3604,7 +3725,23 @@ const MMP = () => {
                     </CardContent>
                   </Card>
                 ) : enumeratorSubTab === 'availableSites' ? (
-                  <div className="space-y-2">
+                  <div className="space-y-4">
+                    <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border-blue-200 dark:border-blue-800">
+                      <CardContent className="py-4 px-4">
+                        <div className="flex items-start gap-3">
+                          <div className="p-2 bg-blue-100 dark:bg-blue-900/50 rounded-full shrink-0">
+                            <Hand className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                          </div>
+                          <div className="flex-1">
+                            <h3 className="font-semibold text-blue-900 dark:text-blue-100 text-base">First-Come, First-Served</h3>
+                            <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
+                              Tap <span className="font-semibold">"Claim Site"</span> to assign a site to yourself. Be quick - other enumerators can see these sites too!
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    
                     {Object.keys(enumeratorGroupedByStates).length === 0 ? (
                       <Card>
                         <CardContent className="py-8">
@@ -3627,6 +3764,11 @@ const MMP = () => {
                                 editable={true}
                                 onAcceptSite={handleAcceptSite}
                                 onSendBackToCoordinator={handleSendBackToCoordinator}
+                                showClaimButton={true}
+                                currentUserId={currentUser?.id}
+                                onSiteClaimed={() => {
+                                  setEnumeratorSiteEntries(prev => prev.filter(s => !sites.find(site => site.id === s.id && s.accepted_by)));
+                                }}
                                 onUpdateSites={async (updatedSites) => {
                                   // Handle updates for enumerator sites
                                   try {

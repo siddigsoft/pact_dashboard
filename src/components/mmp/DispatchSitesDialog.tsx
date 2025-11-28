@@ -10,8 +10,9 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, DollarSign, AlertCircle, ArrowRight, ArrowLeft, Copy, Users } from 'lucide-react';
+import { Loader2, DollarSign, AlertCircle, ArrowRight, ArrowLeft, Copy, Users, MapPin } from 'lucide-react';
 import { sudanStates } from '@/data/sudanStates';
+import { fetchAllRegistrySites, matchSiteToRegistry, RegistryLinkage } from '@/utils/sitesRegistryMatcher';
 
 interface DispatchSitesDialogProps {
   open: boolean;
@@ -355,47 +356,108 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
         ? [selectedCollector]
         : filteredCollectors.map(c => c.id);
 
-      if (targetCollectors.length === 0) {
+      // For individual dispatch, we need a specific collector
+      if (dispatchType === 'individual' && targetCollectors.length === 0) {
         toast({
-          title: 'No collectors found',
-          description: `No data collectors found for the selected ${dispatchType === 'state' ? 'state' : 'locality'}.`,
+          title: 'No collector selected',
+          description: 'Please select a data collector to assign the sites to.',
           variant: 'destructive'
         });
         setLoading(false);
         return;
       }
+      
+      // For state/locality dispatch, we can proceed even without collectors
+      // Sites will be available for claiming when collectors are added later
+      const noCollectorsWarning = (dispatchType === 'state' || dispatchType === 'locality') && targetCollectors.length === 0;
 
       // Get current user
       const { data: { user: authUser } } = await supabase.auth.getUser();
       const assignedBy = authUser?.id;
 
-      // Step 1: Upsert site_visit_costs records BEFORE dispatch (delete existing + insert new)
+      // Step 0: Fetch Sites Registry to get GPS coordinates
+      console.log('📍 Fetching Sites Registry for GPS coordinates...');
+      const registrySites = await fetchAllRegistrySites();
+      console.log(`📍 Found ${registrySites.length} sites in registry`);
+
+      // Step 1: Store TRANSPORT costs only in mmp_site_entries
+      // IMPORTANT: Enumerator fee is NOT set at dispatch - it's calculated at claim time
+      // based on the claiming data collector's classification level (A, B, or C)
       for (const siteEntry of selectedSiteObjects) {
         const costs = siteCosts.get(siteEntry.id);
         if (costs) {
-          const totalCost = costs.transportation + costs.accommodation + costs.mealAllowance + costs.otherCosts;
+          // Transport budget = transportation + accommodation + meal per diem + other logistics
+          const transportBudget = costs.transportation + costs.accommodation + costs.mealAllowance + costs.otherCosts;
           
-          // Delete any existing cost records for this site to ensure single authoritative record
-          await supabase
-            .from('site_visit_costs')
-            .delete()
-            .eq('mmp_site_entry_id', siteEntry.id);
+          // Look up GPS coordinates from Sites Registry with enhanced matching
+          // Only update registry_linkage if a match is found; preserve existing data if no match
+          const existingRegistryLinkage = siteEntry.additional_data?.registry_linkage || null;
+          const existingRegistryGps = siteEntry.additional_data?.registry_gps || null;
           
-          // Insert fresh cost record
+          const registryMatch = matchSiteToRegistry(
+            {
+              id: siteEntry.id,
+              siteCode: siteEntry.site_code,
+              siteName: siteEntry.site_name || siteEntry.siteName,
+              state: siteEntry.state || siteEntry.state_name,
+              locality: siteEntry.locality || siteEntry.locality_name,
+            },
+            registrySites,
+            {
+              userId: assignedBy || 'system',
+              sourceWorkflow: 'dispatch',
+            }
+          );
+          
+          // Build enhanced registry_linkage - update if auto-accepted, otherwise preserve existing
+          let registryLinkage: RegistryLinkage | null = existingRegistryLinkage;
+          let registryGps: any = existingRegistryGps;
+          
+          if (registryMatch.autoAccepted && registryMatch.matchedRegistry) {
+            // Auto-accepted match (>90% confidence) - update both structures
+            registryLinkage = registryMatch.registryLinkage;
+            registryGps = {
+              latitude: registryMatch.gpsCoordinates?.latitude || null,
+              longitude: registryMatch.gpsCoordinates?.longitude || null,
+              accuracy_meters: registryMatch.gpsCoordinates?.accuracy_meters,
+              source: 'sites_registry',
+              site_id: registryMatch.matchedRegistry.id,
+              site_code: registryMatch.matchedRegistry.site_code,
+              match_type: registryMatch.matchType,
+              match_confidence: registryMatch.matchConfidence,
+              matched_at: registryMatch.registryLinkage.audit.matched_at,
+            };
+          } else if (registryMatch.requiresReview && !existingRegistryLinkage) {
+            // New match requiring review - store for later manual selection
+            registryLinkage = registryMatch.registryLinkage;
+          }
+          
+          // Update mmp_site_entries with transport costs only (enumerator_fee remains null)
           const { error: costError } = await supabase
-            .from('site_visit_costs')
-            .insert({
-              mmp_site_entry_id: siteEntry.id,
-              site_name: costs.siteName,
-              transportation_cost: costs.transportation,
-              accommodation_cost: costs.accommodation,
-              meal_allowance: costs.mealAllowance,
-              other_costs: costs.otherCosts,
-              total_cost: totalCost,
-              cost_status: 'calculated',
-              calculated_by: assignedBy,
-              calculation_notes: costs.calculationNotes || 'Admin-calculated costs before dispatch',
-            });
+            .from('mmp_site_entries')
+            .update({
+              transport_fee: transportBudget,
+              // NOTE: enumerator_fee is NOT set here - it will be calculated at claim time
+              // based on the collector's classification (Level A, B, or C)
+              additional_data: {
+                ...(siteEntry.additional_data || {}),
+                ...(registryLinkage ? { registry_linkage: registryLinkage } : {}),
+                ...(registryGps ? { registry_gps: registryGps } : {}),
+                dispatch_costs: {
+                  transportation_cost: costs.transportation,
+                  accommodation_cost: costs.accommodation,
+                  meal_per_diem: costs.mealAllowance,
+                  other_logistics: costs.otherCosts,
+                  transport_budget_total: transportBudget,
+                  enumerator_fee_status: 'pending_claim',
+                  cost_status: 'transport_only',
+                  calculated_by: assignedBy,
+                  calculated_at: new Date().toISOString(),
+                  calculation_notes: costs.calculationNotes || `Transport budget set at dispatch. Enumerator fee will be calculated at claim time based on collector classification.`,
+                }
+              }
+            })
+            .eq('id', siteEntry.id);
 
           if (costError) {
             console.error('Failed to save cost record:', costError);
@@ -461,7 +523,8 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
 
       for (const siteEntry of selectedSiteObjects) {
         const costs = siteCosts.get(siteEntry.id);
-        const totalCost = costs 
+        // Transport budget only - enumerator fee is calculated at claim time
+        const transportBudget = costs 
           ? costs.transportation + costs.accommodation + costs.mealAllowance + costs.otherCosts
           : 0;
         
@@ -477,8 +540,8 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
             user_id: memberId,
             title: isDirectAssignment ? 'Site Visit Assigned to You' : 'New Site Dispatched in Your Area',
             message: isDirectAssignment 
-              ? `Site "${siteName}" has been assigned to you. Total Budget: ${totalCost} SDG (Transportation: ${costs?.transportation || 0} SDG)`
-              : `Site "${siteName}" in ${siteLocality ? siteLocality + ', ' : ''}${siteState} has been dispatched. Budget: ${totalCost} SDG`,
+              ? `Site "${siteName}" has been assigned to you. Transport Budget: ${transportBudget} SDG. Your fee will be calculated based on your classification when you claim.`
+              : `Site "${siteName}" in ${siteLocality ? siteLocality + ', ' : ''}${siteState} has been dispatched. Transport Budget: ${transportBudget} SDG`,
             type: isDirectAssignment ? 'info' : 'success',
             link: `/mmp?entry=${siteEntry.id}`,
             related_entity_id: siteEntry.id,
@@ -612,6 +675,12 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
           description: `Dispatched ${successCount} site(s), but ${errorCount} failed. Check console for details.`,
           variant: 'destructive'
         });
+      } else if (noCollectorsWarning) {
+        toast({
+          title: 'Sites Dispatched - No Collectors Yet',
+          description: `Successfully dispatched ${successCount} site(s). No data collectors are currently registered in this ${dispatchType === 'state' ? 'state' : 'locality'}. Sites will be available for claiming when collectors are added.`,
+          variant: 'default'
+        });
       } else {
         toast({
           title: 'Sites Dispatched',
@@ -679,9 +748,21 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
                   </SelectContent>
                 </Select>
                 {selectedState && (
-                  <p className="text-sm text-muted-foreground">
-                    {filteredCollectors.length} data collector(s) found in {selectedState}
-                  </p>
+                  filteredCollectors.length > 0 ? (
+                    <p className="text-sm text-muted-foreground">
+                      {filteredCollectors.length} data collector(s) found in {selectedState}
+                    </p>
+                  ) : (
+                    <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 rounded-md">
+                      <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-500 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-medium text-amber-800 dark:text-amber-200">No data collectors in {selectedState}</p>
+                        <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
+                          You can still dispatch sites. They will be available for claiming when collectors are registered in this state.
+                        </p>
+                      </div>
+                    </div>
+                  )
                 )}
               </div>
             )}
@@ -719,9 +800,21 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
                     </SelectContent>
                   </Select>
                   {selectedLocality && (
-                    <p className="text-sm text-muted-foreground">
-                      {filteredCollectors.length} data collector(s) found in {selectedLocality}
-                    </p>
+                    filteredCollectors.length > 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        {filteredCollectors.length} data collector(s) found in {selectedLocality}
+                      </p>
+                    ) : (
+                      <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 rounded-md">
+                        <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-500 flex-shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-sm font-medium text-amber-800 dark:text-amber-200">No data collectors in {selectedLocality}</p>
+                          <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
+                            You can still dispatch sites. They will be available for claiming when collectors are registered in this locality.
+                          </p>
+                        </div>
+                      </div>
+                    )
                   )}
                 </div>
               </>
@@ -899,7 +992,7 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
                 
                 <div className="flex items-center justify-between pt-2 border-t">
                   <div className="text-sm">
-                    <span className="text-muted-foreground">Total per site: </span>
+                    <span className="text-muted-foreground">Transport Budget per site: </span>
                     <span className="font-bold text-primary">
                       {(bulkCost.transportation + bulkCost.accommodation + bulkCost.mealAllowance + bulkCost.otherCosts).toFixed(2)} SDG
                     </span>
@@ -909,6 +1002,15 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
                     Apply to All Sites
                   </Button>
                 </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950">
+              <CardContent className="p-3">
+                <p className="text-sm text-blue-800 dark:text-blue-200">
+                  <strong>Note:</strong> Data Collector Fee will be calculated automatically when a collector claims the site, 
+                  based on their classification level (A, B, or C). The total payout = Transport Budget + Collector Fee.
+                </p>
               </CardContent>
             </Card>
 
@@ -923,7 +1025,7 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
                 const costs = siteCosts.get(siteId);
                 if (!site || !costs) return null;
 
-                const totalCost = costs.transportation + costs.accommodation + costs.mealAllowance + costs.otherCosts;
+                const transportBudget = costs.transportation + costs.accommodation + costs.mealAllowance + costs.otherCosts;
 
                 return (
                   <Card key={siteId} className="hover-elevate">
@@ -935,9 +1037,12 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
                             {site.locality && `${site.locality}, `}{site.state}
                           </p>
                         </div>
-                        <Badge variant="outline" className="text-lg font-bold">
-                          {totalCost.toFixed(2)} SDG
-                        </Badge>
+                        <div className="text-right">
+                          <Badge variant="outline" className="text-lg font-bold">
+                            {transportBudget.toFixed(2)} SDG
+                          </Badge>
+                          <p className="text-xs text-muted-foreground mt-1">Transport Budget</p>
+                        </div>
                       </div>
 
                       <div className="grid grid-cols-2 gap-3">

@@ -108,28 +108,136 @@ const FieldTeamMap: React.FC<FieldTeamMapProps> = ({
     setActiveUsers(usersWithLocation);
   }, [users, selectedFilter, selectedRegion, eligibleCollectors]);
 
-  const createUserIcon = (status: string, isSelected: boolean = false) => {
+  const escapeHtml = (text: string) => {
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  };
+
+  const createUserIcon = (status: string, isSelected: boolean = false, avatar?: string, name?: string) => {
     if (!leafletModule || !isClient) return null;
     
-    let color = 
+    const statusColor = 
       status === 'online' ? '#10b981' : 
       status === 'busy' ? '#f59e0b' : 
       '#6b7280';
     
-    const borderColor = isSelected ? '#3b82f6' : 'white';
-    const borderWidth = isSelected ? 3 : 1.5;
-    const size = isSelected ? 36 : 32;
+    const borderColor = isSelected ? '#3b82f6' : statusColor;
+    const size = isSelected ? 48 : 44;
+    const initials = name ? escapeHtml(name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()) : '?';
+    const safeAvatar = avatar ? escapeHtml(avatar) : '';
+    const pulseAnimation = status === 'online' ? 'animation: pulse 2s infinite;' : '';
     
-    return new leafletModule.Icon({
-      iconUrl: `data:image/svg+xml;base64,${btoa(`
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${color}" width="${size}" height="${size}">
-          <circle cx="12" cy="8" r="3" stroke="${borderColor}" stroke-width="${borderWidth}" fill="white" />
-          <path d="M7 20c0-2.5 2.2-4.5 5-4.5s5 2 5 4.5" stroke="${borderColor}" stroke-width="${borderWidth}" fill="none" stroke-linecap="round" />
-        </svg>
-      `)}`,
+    if (avatar) {
+      return leafletModule.divIcon({
+        className: 'custom-user-marker',
+        html: `
+          <style>
+            @keyframes pulse {
+              0%, 100% { box-shadow: 0 0 0 0 ${statusColor}80; }
+              50% { box-shadow: 0 0 0 6px ${statusColor}00; }
+            }
+          </style>
+          <div style="
+            position: relative;
+            width: ${size}px;
+            height: ${size}px;
+            ${pulseAnimation}
+          ">
+            <div style="
+              position: absolute;
+              top: 0;
+              left: 0;
+              width: ${size}px;
+              height: ${size}px;
+              border-radius: 50%;
+              border: 3px solid ${borderColor};
+              box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+              overflow: hidden;
+              background: white;
+            ">
+              <img 
+                src="${safeAvatar}" 
+                alt="${escapeHtml(name || 'User')}"
+                style="width: 100%; height: 100%; object-fit: cover;"
+                onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+              />
+              <div style="
+                display: none;
+                width: 100%;
+                height: 100%;
+                background: linear-gradient(135deg, ${statusColor}90, ${statusColor});
+                color: white;
+                font-size: 14px;
+                font-weight: bold;
+                align-items: center;
+                justify-content: center;
+              ">${initials}</div>
+            </div>
+            <div style="
+              position: absolute;
+              bottom: -2px;
+              right: -2px;
+              width: 14px;
+              height: 14px;
+              border-radius: 50%;
+              background: ${statusColor};
+              border: 2px solid white;
+              box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+            "></div>
+          </div>
+        `,
+        iconSize: [size, size],
+        iconAnchor: [size / 2, size / 2],
+        popupAnchor: [0, -size / 2],
+      });
+    }
+    
+    // Fallback to initials icon when no avatar
+    return leafletModule.divIcon({
+      className: 'custom-user-marker',
+      html: `
+        <div style="
+          position: relative;
+          width: ${size}px;
+          height: ${size}px;
+        ">
+          <div style="
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: ${size}px;
+            height: ${size}px;
+            border-radius: 50%;
+            border: 3px solid ${borderColor};
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            background: linear-gradient(135deg, ${statusColor}90, ${statusColor});
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 14px;
+            font-weight: bold;
+          ">${initials}</div>
+          <div style="
+            position: absolute;
+            bottom: -2px;
+            right: -2px;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: ${statusColor};
+            border: 2px solid white;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+          "></div>
+        </div>
+      `,
       iconSize: [size, size],
-      iconAnchor: [size/2, size/2],
-      popupAnchor: [0, -size/2]
+      iconAnchor: [size / 2, size / 2],
+      popupAnchor: [0, -size / 2],
     });
   };
 
@@ -412,7 +520,7 @@ const FieldTeamMap: React.FC<FieldTeamMapProps> = ({
             if (!user.location?.latitude || !user.location?.longitude) return null;
             
             const isSelected = user.id === selectedUserId;
-            const userIcon = createUserIcon(user.availability || 'offline', isSelected);
+            const userIcon = createUserIcon(user.availability || 'offline', isSelected, user.avatar, user.name);
             if (!userIcon) return null;
             
             const position: [number, number] = [user.location.latitude, user.location.longitude];

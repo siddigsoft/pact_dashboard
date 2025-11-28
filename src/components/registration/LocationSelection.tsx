@@ -10,9 +10,12 @@ interface LocationSelectionProps {
   setSelectedHub: (value: string) => void;
   selectedState: string;
   setSelectedState: (value: string) => void;
+  selectedLocality?: string;
+  setSelectedLocality?: (value: string) => void;
   availableStates: string[];
   localities: { id: string; name: string; }[];
   showStateSelection?: boolean;
+  localityRequired?: boolean;
 }
 
 const LocationSelection = ({
@@ -20,9 +23,12 @@ const LocationSelection = ({
   setSelectedHub,
   selectedState,
   setSelectedState,
+  selectedLocality,
+  setSelectedLocality,
   availableStates,
   localities,
-  showStateSelection = true
+  showStateSelection = true,
+  localityRequired = false
 }: LocationSelectionProps) => {
   return (
     <div className="rounded-lg border bg-card p-4">
@@ -83,10 +89,16 @@ const LocationSelection = ({
 
         {showStateSelection && selectedState && localities.length > 0 && (
           <div className="space-y-2">
-            <Label>Locality</Label>
-            <Select>
+            <Label>
+              Locality
+              {localityRequired && <span className="text-red-500 ml-1">*</span>}
+            </Label>
+            <Select 
+              value={selectedLocality || ''} 
+              onValueChange={(value) => setSelectedLocality?.(value)}
+            >
               <SelectTrigger>
-                <SelectValue placeholder="Select locality (Optional)" />
+                <SelectValue placeholder={localityRequired ? "Select locality" : "Select locality (Optional)"} />
               </SelectTrigger>
               <SelectContent>
                 {localities.map((locality) => (
@@ -96,6 +108,11 @@ const LocationSelection = ({
                 ))}
               </SelectContent>
             </Select>
+            {localityRequired && (
+              <p className="text-xs text-muted-foreground">
+                Required for site matching and claiming
+              </p>
+            )}
           </div>
         )}
       </div>

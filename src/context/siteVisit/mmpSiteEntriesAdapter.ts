@@ -58,23 +58,27 @@ interface MMPSiteEntry {
  */
 export const mapMMPSiteEntryToSiteVisit = (entry: MMPSiteEntry): SiteVisit => {
   const totalFee = entry.cost || (entry.enumerator_fee || 0) + (entry.transport_fee || 0);
+  const assignedTo = (entry as any).accepted_by || (entry as any).additional_data?.assigned_to || '';
+  const assignedBy = (entry as any).additional_data?.assigned_by || entry.dispatched_by;
+  const assignedAt = (entry as any).additional_data?.assigned_at || entry.dispatched_at;
+  const appStatus = mapStatus(entry.status);
   
   return {
     id: entry.id,
     siteName: entry.site_name || '',
     siteCode: entry.site_code || '',
-    status: mapStatus(entry.status),
+    status: appStatus,
     locality: entry.locality || '',
     state: entry.state || '',
     activity: entry.activity_at_site || entry.main_activity || '',
     priority: 'medium', // Default priority
     dueDate: entry.visit_date || new Date().toISOString(),
-    assignedTo: '', // Will be set when assigned
-    assignedBy: entry.dispatched_by,
-    assignedAt: entry.dispatched_at,
+    assignedTo,
+    assignedBy,
+    assignedAt,
     notes: entry.comments || '',
     attachments: [],
-    completedAt: entry.status === 'Completed' ? entry.updated_at : undefined,
+    completedAt: appStatus === 'completed' ? entry.updated_at : undefined,
     rating: undefined,
     ratingNotes: undefined,
     fees: {
@@ -153,17 +157,20 @@ export const mapMMPSiteEntryToSiteVisit = (entry: MMPSiteEntry): SiteVisit => {
  * Maps database status to application status
  */
 const mapStatus = (dbStatus: string): SiteVisit['status'] => {
+  const s = (dbStatus || '').toLowerCase();
   const statusMap: Record<string, SiteVisit['status']> = {
-    'Pending': 'pending',
-    'Assigned': 'assigned',
-    'In Progress': 'inProgress',
-    'Completed': 'completed',
-    'Cancelled': 'cancelled',
-    'Canceled': 'canceled',
-    'Verified': 'permitVerified',
+    'pending': 'pending',
+    'assigned': 'assigned',
+    'in progress': 'ongoing',
+    'ongoing': 'ongoing',
+    'completed': 'completed',
+    'cancelled': 'cancelled',
+    'canceled': 'canceled',
+    'verified': 'permitVerified',
+    'dispatched': 'dispatched',
+    'accepted': 'accepted',
   };
-  
-  return statusMap[dbStatus] || 'pending';
+  return statusMap[s] || 'pending';
 };
 
 /**

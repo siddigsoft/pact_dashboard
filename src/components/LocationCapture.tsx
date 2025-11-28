@@ -36,16 +36,16 @@ const LocationCapture = () => {
 
     navigator.geolocation.getCurrentPosition(
       async (position) => {
-        const { latitude, longitude } = position.coords;
+        const { latitude, longitude, accuracy } = position.coords;
         
         try {
-          const success = await updateUserLocation(latitude, longitude);
+          const success = await updateUserLocation(latitude, longitude, accuracy);
           
           if (success) {
             setHasLocation(true);
             toast({
               title: 'Location captured',
-              description: `Your location has been saved: ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`,
+              description: `Location saved with accuracy: ±${accuracy.toFixed(1)} meters`,
               variant: 'default',
             });
           } else {
@@ -135,6 +135,13 @@ const LocationCapture = () => {
               Lat: {currentUser.location.latitude.toFixed(6)}, 
               Lng: {currentUser.location.longitude.toFixed(6)}
             </p>
+            {currentUser.location.accuracy !== undefined && (
+              <p className="font-mono text-sm mt-1">
+                <span className={`${currentUser.location.accuracy <= 10 ? 'text-green-600' : currentUser.location.accuracy <= 30 ? 'text-yellow-600' : 'text-orange-600'}`}>
+                  Accuracy: ±{currentUser.location.accuracy.toFixed(1)} meters
+                </span>
+              </p>
+            )}
             {currentUser.location.lastUpdated && (
               <p className="text-xs text-muted-foreground mt-1">
                 Last updated: {new Date(currentUser.location.lastUpdated).toLocaleString()}

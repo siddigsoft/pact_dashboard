@@ -20,17 +20,18 @@ export interface SiteRegistry {
   locality_name: string;
   hub_id?: string;
   hub_name?: string;
-  gps_latitude?: number;
-  gps_longitude?: number;
+  gps_latitude?: number | null;
+  gps_longitude?: number | null;
   gps_captured_by?: string;
   gps_captured_at?: string;
   activity_type?: string;
-  status: 'registered' | 'active' | 'inactive' | 'archived';
+  status: 'registered' | 'active' | 'inactive' | 'archived' | string;
   mmp_count: number;
   last_mmp_date?: string;
   created_at: string;
   created_by: string;
   updated_at?: string;
+  source?: 'registry' | 'mmp';
 }
 
 export interface ProjectScope {

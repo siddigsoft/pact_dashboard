@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { MapContainer, TileLayer, GeoJSON, Marker, Popup, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { sudanStateBoundaries, stateColors, hubColors } from '@/data/sudanGeoJSON';
+import { sudanStateBoundaries, stateColors, hubColors, hubLocations } from '@/data/sudanGeoJSON';
 import { ManagedHub, SiteRegistry } from '@/types/hub-operations';
 import { sudanStates } from '@/data/sudanStates';
 
@@ -93,7 +93,18 @@ export default function SudanMapView({
   height = "500px",
 }: SudanMapViewProps) {
   const getHubForState = (stateId: string) => {
-    return hubs.find(hub => hub.states?.includes(stateId));
+    const hubFromProps = hubs.find(hub => hub.states?.includes(stateId));
+    if (hubFromProps) return hubFromProps;
+    
+    const hubFromLocations = hubLocations.find(hub => hub.states.includes(stateId));
+    if (hubFromLocations) {
+      return {
+        id: hubFromLocations.id,
+        name: hubFromLocations.name,
+        states: hubFromLocations.states,
+      } as ManagedHub;
+    }
+    return undefined;
   };
 
   const stateStyle = (feature: any) => {
@@ -165,11 +176,11 @@ export default function SudanMapView({
       const coords = hub.coordinates;
       if (!coords || (!coords.latitude && !coords.longitude)) {
         const defaultCoords: Record<string, [number, number]> = {
+          'country-office': [15.5007, 32.5599],
+          'dongola-hub': [19.1653, 30.4763],
+          'forchana-hub': [13.6289, 25.3493],
           'kassala-hub': [15.4507, 36.4048],
           'kosti-hub': [13.1629, 32.6635],
-          'el-fasher-hub': [13.6289, 25.3493],
-          'dongola-hub': [19.1653, 30.4763],
-          'country-office': [15.5007, 32.5599],
         };
         return {
           ...hub,

@@ -7,8 +7,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Search, Eye, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Eye, ChevronLeft, ChevronRight, Hand } from 'lucide-react';
 import SiteDetailDialog from './SiteDetailDialog';
+import { ClaimSiteButton } from '@/components/site-visit/ClaimSiteButton';
 
 interface MMPSiteEntriesTableProps {
   siteEntries: any[];
@@ -24,6 +25,8 @@ interface MMPSiteEntriesTableProps {
   onCompleteVisit?: (site: any) => void;
   showVisitActions?: boolean;
   onSendBackToCoordinator?: (site: any, comments: string) => void;
+  showClaimButton?: boolean;
+  onSiteClaimed?: () => void;
 }
 
 const MMPSiteEntriesTable = ({ 
@@ -39,7 +42,9 @@ const MMPSiteEntriesTable = ({
   onStartVisit,
   onCompleteVisit,
   showVisitActions = false,
-  onSendBackToCoordinator
+  onSendBackToCoordinator,
+  showClaimButton = false,
+  onSiteClaimed
 }: MMPSiteEntriesTableProps) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
@@ -346,6 +351,16 @@ const MMPSiteEntriesTable = ({
                       </div>
 
                       <div className="flex gap-2 sm:flex-col">
+                        {showClaimButton && site.status?.toLowerCase() === 'dispatched' && !site.accepted_by && currentUserId && (
+                          <ClaimSiteButton
+                            siteId={site.id}
+                            siteName={row.siteName || 'Site'}
+                            userId={currentUserId}
+                            onClaimed={onSiteClaimed}
+                            size="default"
+                            className="w-full sm:w-auto min-h-[44px] text-base font-semibold shadow-md"
+                          />
+                        )}
                         {showVisitActions ? (
                           <>
                             {site.status?.toLowerCase() === 'accepted' && onStartVisit && (

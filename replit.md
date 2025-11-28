@@ -2,7 +2,7 @@
 
 ## Overview
 
-The PACT (Planning, Approval, Coordination, and Tracking) Workflow Platform is a comprehensive field operations management system designed to streamline Monthly Monitoring Plans (MMPs), site visits, and field team coordination. Built with React and TypeScript, its purpose is to provide robust role-based access control, real-time collaboration, and end-to-end workflow management for field operations. Key capabilities include multi-tier user management, MMP and site visit workflows, real-time location sharing, financial tracking with a new transportation cost and down-payment system, reporting, mobile responsiveness, and a Mission Control Dashboard with role-aware navigation. The platform aims to enhance efficiency, transparency, and accountability in field operations.
+The PACT (Planning, Approval, Coordination, and Tracking) Workflow Platform is a comprehensive field operations management system built with React and TypeScript. Its primary purpose is to streamline Monthly Monitoring Plans (MMPs), site visits, and field team coordination, enhancing efficiency, transparency, and accountability in field operations. Key capabilities include multi-tier user management, robust role-based access control, real-time collaboration, MMP and site visit workflows, real-time location sharing, financial tracking with an advanced transportation cost and down-payment system, reporting, and a mobile-responsive Mission Control Dashboard with role-aware navigation. The platform aims to provide a complete end-to-end workflow management solution for field operations.
 
 ## User Preferences
 
@@ -12,182 +12,59 @@ Preferred communication style: Simple, everyday language.
 
 ### Frontend Architecture
 
-The frontend is built with React 18, TypeScript, React Router DOM v6, Vite, Tailwind CSS v3, and Shadcn UI. It features dual-theme support (light/dark), a custom color palette, responsive design, and a component-based architecture. State management utilizes the React Context API for global state, TanStack Query for server state, and React hooks for local state, complemented by Supabase Realtime for subscriptions. Key design patterns include provider patterns, custom hooks, compound components, and error boundaries. Mobile support is a core focus, with mobile-first CSS, separate mobile/desktop components, touch-friendly UI, and PWA readiness. A comprehensive web-mobile synchronization system ensures seamless data consistency using a shared Supabase database with real-time subscriptions and an offline queue mechanism for mobile.
+The frontend uses React 18, TypeScript, React Router DOM v6, Vite, Tailwind CSS v3, and Shadcn UI. It features a responsive, component-based design with dual-theme support and a custom color palette. State management leverages React Context API for global state, TanStack Query for server state, React hooks for local state, and Supabase Realtime for subscriptions. Mobile support is prioritized with mobile-first CSS, separate mobile/desktop components, touch-friendly UI, and PWA readiness. A web-mobile synchronization system ensures data consistency via a shared Supabase database with real-time subscriptions and an offline queue mechanism.
 
 ### Backend Architecture
 
-The backend leverages PostgreSQL via Supabase, with robust Row Level Security (RLS) and real-time subscriptions. The database schema supports profiles, roles, projects, MMPs, site visits, budgets, wallets, and cost submissions, including detailed audit logs for financial transactions and deletions. Authentication is handled by Supabase Auth, providing email/password login, Google OAuth, session management, role-based access control, and Two-Factor Authentication (2FA) using TOTP. Data flow is managed through context providers, with optimistic updates and Supabase Storage for file management.
-
-### Two-Factor Authentication (2FA)
-
-The platform implements TOTP-based two-factor authentication using Supabase's built-in MFA system:
-
-*   **Key Files:**
-    *   `src/hooks/use-mfa.ts` - Custom hook for MFA operations (enroll, verify, unenroll, status checks)
-    *   `src/components/auth/TwoFactorSetup.tsx` - QR code enrollment and factor management component
-    *   `src/components/auth/TwoFactorChallenge.tsx` - Login verification challenge component
-    *   `src/components/auth/AuthForm.tsx` - Updated login flow with MFA challenge integration
-
-*   **Authentication Flow:**
-    1. User enters email/password and clicks Sign In
-    2. System authenticates credentials via Supabase Auth
-    3. If 2FA is enabled (AAL2 required), the TwoFactorChallenge component is displayed
-    4. User enters 6-digit code from their authenticator app
-    5. Code is verified via Supabase MFA challenge/verify flow with robust AAL2 polling (up to 15 retries with exponential backoff)
-    6. User context is hydrated with retry logic (up to 10 retries) to handle eventual consistency
-    7. Upon successful verification and hydration, user proceeds to the dashboard
-
-*   **Supported Authenticator Apps:**
-    *   Google Authenticator
-    *   Authy
-    *   Microsoft Authenticator
-    *   1Password
-    *   Any TOTP-compatible app
-
-*   **Settings Integration:**
-    *   Users manage 2FA in Settings > Security tab
-    *   Can enable/disable 2FA, view enrolled authenticators, add backup authenticators
-
-### Authorization System
-
-A resource-action based permission model (e.g., `mmp:read`, `site_visits:create`) is implemented with granular permissions (read, create, update, delete, approve, assign, archive) and an admin bypass. Enforcement occurs via client-side UI rendering, route guards, server-side RLS policies, and a defined role hierarchy.
-
-### File Processing
-
-The platform includes an MMP Upload Workflow for CSV files, featuring upload to Supabase Storage, Zod schema validation, row-by-row parsing, database insertion, and rollback on failure. Validation layers include file format, schema, business rule, and cross-reference checks.
-
-### Real-Time Features
-
-Real-time capabilities include a Live Dashboard powered by Supabase Realtime channels for key tables, providing toast notifications and automatic data refresh. Real-time location sharing involves GPS coordinate capture, live updates, privacy controls, and location-based assignment.
-
-### Notification System
-
-The platform features a comprehensive notification system with browser push notification support:
-
-*   **Key Files:**
-    *   `src/context/notifications/NotificationContext.tsx` - Core notification context with Supabase realtime subscriptions
-    *   `src/components/BrowserNotificationListener.tsx` - Browser push notification handler
-    *   `src/context/settings/SettingsContext.tsx` - Notification settings persistence
-
-*   **Notification Settings (persisted to database):**
-    *   `enabled` - Master toggle for all notifications
-    *   `email` - Email notification preference
-    *   `sound` - Sound alerts preference
-    *   `browserPush` - Browser desktop push notifications
-    *   `categories` - Granular category toggles:
-        *   `assignments` - Site visit assignments
-        *   `approvals` - MMP and approval workflow notifications
-        *   `financial` - Budget, payments, and cost notifications
-        *   `team` - Team member status and location updates
-        *   `system` - System alerts and warnings
-
-*   **Browser Push Notifications:**
-    *   Requires user permission (requested when enabling the feature)
-    *   Shows desktop notifications when tab is in background
-    *   Respects category preferences for filtering
-    *   Supports click-to-navigate to notification link
-    *   Optional sound alerts
+The backend utilizes PostgreSQL through Supabase, incorporating Row Level Security (RLS) and real-time subscriptions. The database schema supports profiles, roles, projects, MMPs, site visits, budgets, wallets, and cost submissions, including audit logs for financial transactions and deletions. Supabase Auth handles authentication with email/password, Google OAuth, session management, role-based access control, and TOTP-based Two-Factor Authentication (2FA). Data flow is managed via context providers, optimistic updates, and Supabase Storage for file management.
 
 ### Core Feature Specifications
 
-**Transportation Cost & Down-Payment System:** This system calculates transportation costs before dispatch by admins, manages down-payment requests from enumerators/coordinators via a two-tier approval workflow (supervisor → admin), and tracks all cost adjustments with a complete audit trail. It includes a `super_admin` role with a 3-account limit and a deletion audit log.
-
-**Hub & Field Operations Structure:** A comprehensive geographical management system accessible at `/hub-operations`:
-
-*   **Key Files:**
-    *   `src/pages/HubOperations.tsx` - Main page with tabbed interface (redesigned Nov 2025)
-    *   `src/types/hub-operations.ts` - Type definitions for hubs, sites registry, and project scope
-    *   `src/components/hub-operations/StateMapCard.tsx` - Interactive state map cards with Leaflet
-    *   `src/components/hub-operations/HubCard.tsx` - Hub display card with gradient header
-    *   `src/components/hub-operations/SiteCard.tsx` - Site registry card with status badges
-    *   `supabase/migrations/001_hub_operations_tables.sql` - Database migration for hub tables
-
-*   **Features:**
-    *   **Hub Management:** Create/edit/delete hubs and assign states to each hub
-    *   **States & Localities View:** Hierarchical view of all 18 Sudan states and their localities with interactive Leaflet maps
-    *   **Sites Registry:** Master registry of all sites with unique IDs in format: `{StateCode}-{LocalityCode}-{SiteName}-{0001}-{ActivityType}`
-    *   **Project Scope Linking:** Associate projects with specific hubs and geographical areas
-    *   **Gradient Stat Cards:** Users Management style gradient stat cards for quick overview
-
-*   **UI Design Pattern (Nov 2025):**
-    *   Matches Users Management page layout with gradient stat cards
-    *   Interactive StateMapCard showing state location on Leaflet map
-    *   Card-based layout for hubs, states, and sites
-    *   Tabbed interface with Overview, Hubs, States, and Sites tabs
-    *   Grid/List/Map view toggle for sites
-
-*   **Site ID Format:** `KH-OMD-SITENAME-0001-TPM` where:
-    *   `KH` - State code (2 letters)
-    *   `OMD` - Locality code (3 letters from name)
-    *   `SITENAME` - Site name (up to 6 characters)
-    *   `0001` - Sequence number (4 digits)
-    *   `TPM` - Activity type (TPM, PDM, CFM, FCS, OTHER)
-
-*   **Access Control:** SuperAdmin and Admin roles only
-
-*   **Database Status:** SQL migration available in `supabase/migrations/001_hub_operations_tables.sql`. Run in Supabase SQL Editor to create tables (`hubs`, `sites_registry`, `project_scopes`) with RLS policies. Page handles missing tables gracefully with local fallback data.
-
-**Site Visits Enhancement (Nov 2025):** The Site Visits page has been redesigned to match the Hub Operations and Users Management design pattern:
-
-*   **Key Files:**
-    *   `src/pages/SiteVisits.tsx` - Main page with enhanced header and layout
-    *   `src/components/site-visit/SiteVisitStats.tsx` - Gradient stat cards matching Hub Operations style
-    *   `src/components/site-visit/SiteVisitCard.tsx` - Enhanced site visit card component
-
-*   **Design Improvements:**
-    *   Gradient stat cards (Pending, In Progress, Completed, Scheduled, Overdue)
-    *   Consistent header style with icon and action buttons
-    *   Container layout matching Hub Operations page
-    *   Data collector specific view with Dispatched, Assigned, Accepted, Ongoing, Completed stats
-
-### Sudan Administrative Data
-
-Complete Sudan administrative structure based on official OCHA/WFP COD-AB (Common Operational Dataset - Administrative Boundaries):
-
-*   **Key File:** `src/data/sudanStates.ts`
-*   **Source:** [HDX Dataset](https://data.humdata.org/dataset/cod-ab-sdn) - Last reviewed August 2024
-*   **Structure:**
-    *   **18 States** (Admin Level 1)
-    *   **188 Localities** (Admin Level 2) + Abyei PCA area
-*   **Features:**
-    *   English and Arabic names for all localities
-    *   WFP Hub structure (5 operational hubs)
-    *   Helper functions: `getLocalitiesByState()`, `getStateName()`, `getStateCode()`, `searchLocalities()`
-    *   Locality search supporting both English and Arabic names
-
-### Navigation & User Preferences
-
-A comprehensive user preference system for sidebar navigation and dashboard personalization:
-
-*   **Key Files:**
-    *   `src/types/user-preferences.ts` - Type definitions for menu and dashboard preferences
-    *   `src/components/AppSidebar.tsx` - Workflow-aligned sidebar with 6 logical menu groups
-    *   `src/context/settings/SettingsContext.tsx` - Extended with menu/dashboard preference methods
-    *   `src/pages/Settings.tsx` - Navigation preferences tab in Settings page
-
-*   **Sidebar Menu Groups (Workflow-Aligned):**
-    1. **Overview** - Dashboard, My Wallet, Cost Submission
-    2. **Planning & Setup** - Projects, MMP Management, Hub Operations
-    3. **Field Operations** - Site Visits, Field Team, Field Operation Manager
-    4. **Verification & Review** - Site Verification, Archive
-    5. **Data & Reports** - Data Visibility, Reports
-    6. **Administration** - User/Role Management, Super Admin, Financial Operations, Budget, Settings
-
-*   **Dashboard Zones (Role-Based):**
-    *   `operations` - SuperAdmin/Admin system overview
-    *   `fom` - Field Operations Manager hub & team management
-    *   `team` - Supervisor team activity & compliance
-    *   `planning` - Coordinator site verification, MMP status
-    *   `dataCollector` - Data Collector my sites, wallet, upcoming visits
-    *   `financial` - FinancialAdmin budget, cost approvals
-    *   `ict` - ICT system health, user stats
-
-*   **User Customization Features:**
-    *   Hide/show menu items (persisted in user_settings.settings JSON)
-    *   Pin items to top of menu groups
-    *   Collapse menu groups by default
-    *   Choose default dashboard zone
-    *   Settings > Navigation tab for preference management
+*   **Two-Factor Authentication (2FA):** Implements TOTP-based 2FA using Supabase's MFA system, integrated into the login flow and user settings.
+*   **Authorization System:** Employs a resource-action based permission model (`mmp:read`, `site_visits:create`) with granular permissions and an admin bypass, enforced across UI rendering, route guards, and server-side RLS policies.
+*   **File Processing:** Includes an MMP Upload Workflow for CSV files with Supabase Storage integration, Zod schema validation, row-by-row parsing, and database insertion with rollback capabilities.
+*   **Real-Time Features:** A Live Dashboard uses Supabase Realtime for automatic data refresh and notifications. Real-time location sharing offers GPS coordinate capture, live updates, and privacy controls.
+*   **Notification System:** A comprehensive system with browser push notification support, configurable settings (email, sound, browser push), and granular category toggles (assignments, approvals, financial, team, system).
+*   **Transportation Cost & Down-Payment System:** Manages transportation cost calculation, down-payment requests via a two-tier approval workflow, and tracks all cost adjustments with an audit trail, including a `super_admin` role.
+*   **Hub & Field Operations Structure:** A geographical management system for creating/editing hubs, assigning states, viewing localities, and maintaining a master sites registry with unique IDs. Features interactive Leaflet maps and project scope linking. Access is limited to SuperAdmin and Admin roles.
+*   **Site Visits Enhancement:** Redesigned page with gradient stat cards (Pending, In Progress, Completed, Scheduled, Overdue) and consistent header styles. Includes a data collector-specific view.
+*   **Geographic Filtering for Data Collectors:** Strict geographic-based site visibility ensures data collectors only see dispatched sites matching their profile's state and locality, with visual indicators for configuration status.
+*   **Nearest Available Enumerators:** GPS-based proximity matching showing enumerators sorted by distance from site coordinates using the Haversine formula. Displays distance in km, estimated travel time, and location freshness indicator. Visible to admin/ict/fom roles in Site Visit Detail page.
+*   **First-Claim Dispatch System:** An Uber/Lyft-style site claiming system where dispatched sites can be claimed by any enumerator within matching state and locality on a first-come, first-served basis. Features atomic claiming via PostgreSQL `claim_site_visit` RPC function with `SELECT FOR UPDATE SKIP LOCKED` to prevent race conditions, one-click ClaimSiteButton component with optimistic UI, and Supabase Realtime subscription (`useSiteClaimRealtime` hook) for live site availability updates across all users. Status flow: "Dispatched" (available) → "Assigned" (claimed). Error handling includes specific messages for ALREADY_CLAIMED and CLAIM_IN_PROGRESS scenarios.
+*   **Classification-Based Fee Calculation:** Enumerator/data collector fees are calculated at claim time, not dispatch time. The workflow:
+    - **At Dispatch:** Admin sets transport budget only (transportation, accommodation, meal per diem, logistics). Enumerator fee is NOT set - shows as "Pending" in UI.
+    - **At Claim Time:** The `claim_site_visit` RPC function atomically looks up the collector's classification level (A=Experienced, B=Intermediate, C=Entry-level) and role scope from `user_classifications` table, then retrieves the appropriate fee from `classification_fee_structures` table. Fee structure: Level A=600 SDG, Level B=350 SDG, Level C=200 SDG. If no classification exists, defaults to 50 SDG.
+    - **Atomic Fee Persistence:** The RPC function saves enumerator_fee, total cost, and claim_fee_calculation metadata in a single atomic transaction, preventing race conditions and RLS policy issues.
+    - **Confirmation Dialog:** Before claiming, collectors see a breakdown: Transport Budget + Collector Fee = Total Payout (all in SDG).
+    - **After Claim:** The enumerator_fee and total cost are saved to `mmp_site_entries` atomically during the claim process, with full audit trail in `additional_data.claim_fee_calculation`.
+    - **User Profile Integration:** Classification data is fetched during user hydration and included in `currentUser.classification` with level, roleScope, retainer status, and effective dates. This enables real-time fee calculation without additional API calls.
+    - Key files: `use-claim-fee-calculation.ts` (hook), `ClaimSiteButton.tsx` (UI), `DispatchSitesDialog.tsx` (dispatch), `SiteDetailDialog.tsx` (display), `UserContext.tsx` (classification loading), `20251128_fix_claim_enumerator_fee.sql` (RPC migration).
+*   **Sudan Administrative Data:** Integrated complete Sudan administrative structure (18 states, 188 localities) based on official OCHA/WFP COD-AB, including English/Arabic names and helper functions.
+*   **Navigation & User Preferences:** A comprehensive system for customizing the sidebar navigation (6 workflow-aligned menu groups) and dashboard personalization (role-based zones). Users can hide/show menu items, pin items, collapse groups, and choose a default dashboard zone.
+*   **Unified Site Management System:** A comprehensive site lifecycle management system that eliminates duplicate site entries and enables GPS enrichment over time. The workflow:
+    - **During MMP Upload:** Sites are automatically registered in `sites_registry` via `ensureSitesInRegistry()`. New sites are created; existing sites are matched by site code or name+state+locality and linked via `registry_site_id` foreign key in `mmp_site_entries`. The `mmp_count` field tracks how many MMPs reference each site.
+    - **Duplicate Prevention:** The system checks for existing sites in the registry before creating new ones, preventing duplicate entries across monthly monitoring plans. Same project/hub/month MMPs are blocked from re-upload.
+    - **GPS Enrichment:** After field visits, GPS coordinates captured during site visits are saved to `sites_registry.gps_latitude/gps_longitude` via `saveGPSToRegistryFromSiteEntry()`. User-facing toast notifications provide feedback on GPS save success/failure.
+    - **Data Flow:** Upload MMP → Auto-create/match registry sites → Link entries via registry_site_id → Complete site visit → Save GPS to registry → Reuse enriched sites in future MMPs
+    - **Database Schema:** `sites_registry` (master site list with GPS), `mmp_site_entries.registry_site_id` (foreign key), `site_visits.registry_site_id` (foreign key)
+    - **UI Display:** SiteDetailDialog shows registry linkage status and GPS coordinates from both database column and legacy `additional_data.registry_gps`
+    - Key files: `mmpFileUpload.ts` (upload/registration), `sitesRegistryMatcher.ts` (matching logic), `MMP.tsx` (GPS save on visit completion), `SiteDetailDialog.tsx` (display)
+*   **Tracker Preparation Plan System:** Comprehensive planned vs actual site coverage analysis and invoice preparation tool. Features:
+    - **Coverage Tracking:** Compares planned MMP site entries against actual completed site visits with coverage percentages. All verified MMP entries appear as "Planned" immediately after coordinator verification.
+    - **Real-Time Updates:** Uses Supabase Realtime subscriptions for both `mmp_site_entries` and `site_visits` tables. Completed site visits appear as "Actual" immediately.
+    - **Multi-View Analysis:** Overview dashboard with summary cards, detailed site table with expandable rows, breakdowns by State, Hub, and Enumerator
+    - **Financial Tracking:** Shows planned budget, actual costs, variance, enumerator fees, and transport costs
+    - **Smart Data Aggregation:** Only fetches site visits linked to filtered MMP entries via mmp_site_entry_id or registry_site_id; handles multi-visit scenarios by selecting best visit (Completed > In Progress > first)
+    - **Invoice Preparation:** Dialog showing comprehensive cost breakdown (fees, transport, accommodation, meals, logistics) with totals; supports invoice generation workflow
+    - **Export Capabilities:** Excel export with multiple sheets (Summary, Site Details with totals row, By State, By Hub, Enumerator Summary); PDF export with tables and summary statistics
+    - **Save/Load Configurations:** Filter presets saved to `tracker_plan_configs` Supabase table for quick access
+    - **Role Access:** Available to Admin and ICT roles only via sidebar "Data & Reports" section
+    - Key files: `TrackerPreparationPlan.tsx` (main page), `tracker.ts` (types), `tracker_plan_configs` (Supabase table)
+*   **Site Visit Details Enhancement:** Comprehensive site visit details page with unified data sources. Features:
+    - **Unified Cost Breakdown:** SiteVisitCostsUnified component fetches cost data from both mmp_site_entries and site_visits for consistent display with itemized breakdown (transportation, accommodation, meal per diem, logistics, enumerator fee)
+    - **Workflow Audit Trail:** SiteVisitAuditTrail component shows timeline of site workflow steps (creation, dispatch, claim/assignment, GPS capture, cost acknowledgment, completion) with timestamps and user attribution
+    - **Streamlined Layout:** Cards organized in a responsive 2-column layout with info, dates, and audit trail on the left; costs and nearby enumerators on the right
+    - Key files: `SiteVisitDetail.tsx` (page), `SiteVisitCostsUnified.tsx` (costs), `SiteVisitAuditTrail.tsx` (timeline)
 
 ## External Dependencies
 
@@ -198,27 +75,17 @@ A comprehensive user preference system for sidebar navigation and dashboard pers
 
 ### UI Libraries
 
-*   **Shadcn UI Components:** Radix UI primitives for 50+ customizable components.
-*   **Recharts:** For data visualization (charts and graphs).
-*   **Lucide React:** For consistent iconography.
+*   **Shadcn UI Components:** Radix UI primitives for customizable components.
+*   **Recharts:** For data visualization.
+*   **Lucide React:** For iconography.
 
 ### Development Tools
 
 *   **Build & Dev Environment:** Vite, ESLint, TypeScript compiler, PostCSS with Autoprefixer.
-*   **Form Management:** React Hook Form (state), Zod (schema validation).
-*   **Utilities:** `date-fns`, `uuid`, `clsx`/`class-variance-authority`, `Leaflet` (map components), `jspdf`, `jspdf-autotable`, `xlsx` (export).
+*   **Form Management:** React Hook Form, Zod (schema validation).
+*   **Utilities:** `date-fns`, `uuid`, `clsx`/`class-variance-authority`, `Leaflet` (map components), `jspdf`, `jspdf-autotable`, `xlsx`.
 
 ### Deployment
 
-*   **Hosting:** Replit (development), Vercel (production-ready configuration).
+*   **Hosting:** Replit (development), Vercel (production).
 *   **Mobile Deployment:** Capacitor (iOS/Android builds, native device API access).
-
-## Documentation
-
-Complete user and administrator documentation is available in the `/docs` folder:
-
-*   **USER_MANUAL.md** - Comprehensive A-Z guide for all users covering all features
-*   **QUICK_START_GUIDE.md** - 5-minute getting started guide
-*   **ADMIN_GUIDE.md** - Complete administrator and system configuration guide
-*   **MOBILE_APP_GUIDE.md** - iOS and Android mobile application guide
-*   **BUG_REPORT_AND_ENHANCEMENTS.md** - Current issues and recommended improvements

@@ -57,13 +57,27 @@ export default function SiteCard({
       <CardHeader className="pb-2">
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
               <Badge className={activityStyle} variant="secondary">
                 {site.activity_type || 'TPM'}
               </Badge>
               <Badge className={statusStyle.badge} variant="secondary">
                 {site.status}
               </Badge>
+              {site.source && (
+                <Badge 
+                  variant={site.source === 'registry' ? 'default' : 'outline'}
+                  className={site.source === 'mmp' ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400' : ''}
+                >
+                  {site.source === 'registry' ? 'Registry' : 'MMP'}
+                </Badge>
+              )}
+              {site.gps_latitude && site.gps_longitude && (
+                <Badge variant="outline" className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                  <MapPin className="h-3 w-3 mr-1" />
+                  GPS
+                </Badge>
+              )}
             </div>
             <CardTitle className="text-base font-semibold truncate">
               {site.site_name}

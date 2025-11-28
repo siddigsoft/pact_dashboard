@@ -9,6 +9,7 @@ import { useAppContext } from "@/context/AppContext";
 import { useViewMode } from "@/context/ViewModeContext";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { UpdateDialog } from "@/components/UpdateDialog";
+import { OnlineOfflineToggle } from "@/components/common/OnlineOfflineToggle";
 
 interface MainLayoutContentProps {
   children?: React.ReactNode;
@@ -74,6 +75,7 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
               {children || <Outlet />}
             </div>
             {isMobile && <MobileNavigation />}
+            <OnlineOfflineToggle variant="floating" />
           </SidebarInset>
         </div>
       </SidebarProvider>

@@ -51,6 +51,7 @@ import UpcomingSiteVisitsCard from '../UpcomingSiteVisitsCard';
 import { SiteVisitCostSummary } from '../SiteVisitCostSummary';
 import { DashboardCalendar } from '../DashboardCalendar';
 import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
+import { useUser } from '@/context/user/UserContext';
 import { isAfter, addDays } from 'date-fns';
 
 type MetricCardType = 'total' | 'completed' | 'assigned' | 'pending' | 'overdue' | 'performance' | null;
@@ -66,6 +67,7 @@ interface Filters {
 
 export const OperationsZone: React.FC = () => {
   const { siteVisits } = useSiteVisitContext();
+  const { users } = useUser();
   const [activeTab, setActiveTab] = useState('overview');
   const [selectedCard, setSelectedCard] = useState<MetricCardType>(null);
   const [filters, setFilters] = useState<Filters>({
@@ -600,7 +602,9 @@ export const OperationsZone: React.FC = () => {
                         </TableCell>
                         <TableCell>
                           <span className="text-xs text-muted-foreground">
-                            {visit.assignedTo || 'Unassigned'}
+                            {visit.assignedTo 
+                              ? users.find(u => u.id === visit.assignedTo)?.name || 'Unknown' 
+                              : 'Unassigned'}
                           </span>
                         </TableCell>
                         <TableCell className="text-right">

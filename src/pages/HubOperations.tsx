@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -16,12 +17,49 @@ import { useAppContext } from '@/context/AppContext';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { supabase } from '@/integrations/supabase/client';
 import { sudanStates, getLocalitiesByState, hubs as defaultHubs, getTotalLocalityCount } from '@/data/sudanStates';
+import { sudanStateBoundaries } from '@/data/sudanGeoJSON';
 import { ManagedHub, SiteRegistry, ProjectScope, generateSiteCode } from '@/types/hub-operations';
 import StateMapCard, { getStateCoords, getStateColor } from '@/components/hub-operations/StateMapCard';
 import HubCard from '@/components/hub-operations/HubCard';
 import SiteCard from '@/components/hub-operations/SiteCard';
 import LeafletMapContainer from '@/components/map/LeafletMapContainer';
 import SudanMapView from '@/components/hub-operations/SudanMapView';
+import SiteDetailDialog from '@/components/mmp/SiteDetailDialog';
+import { MapContainer, TileLayer, Circle, Marker, Popup, GeoJSON, useMap
+} from 'react-leaflet';
+import L from 'leaflet';
+
+function FitBoundsToGeoJSON({ geoJson }: { geoJson: any }) {
+  const map = useMap();
+  
+  if (geoJson && geoJson.geometry && geoJson.geometry.coordinates) {
+    const allCoords: number[][] = [];
+    
+    if (geoJson.geometry.type === 'Polygon') {
+      geoJson.geometry.coordinates.forEach((ring: number[][]) => {
+        ring.forEach((coord: number[]) => allCoords.push(coord));
+      });
+    } else if (geoJson.geometry.type === 'MultiPolygon') {
+      geoJson.geometry.coordinates.forEach((polygon: number[][][]) => {
+        polygon.forEach((ring: number[][]) => {
+          ring.forEach((coord: number[]) => allCoords.push(coord));
+        });
+      });
+    }
+    
+    if (allCoords.length > 0) {
+      const lats = allCoords.map((c: number[]) => c[1]);
+      const lngs = allCoords.map((c: number[]) => c[0]);
+      const bounds: [[number, number], [number, number]] = [
+        [Math.min(...lats), Math.min(...lngs)],
+        [Math.max(...lats), Math.max(...lngs)]
+      ];
+      map.fitBounds(bounds, { padding: [20, 20] });
+    }
+  }
+  
+  return null;
+}
 import { 
   Building2, 
   MapPin, 
@@ -40,7 +78,8 @@ import {
   Map,
   Filter,
   Grid3X3,
-  List
+  List,
+  Eye
 } from 'lucide-react';
 
 export default function HubOperations() {
@@ -61,6 +100,10 @@ export default function HubOperations() {
   const [selectedState, setSelectedState] = useState<string | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ type: 'hub' | 'site'; id: string; name: string } | null>(null);
+  const [hubDetailOpen, setHubDetailOpen] = useState(false);
+  const [selectedHub, setSelectedHub] = useState<ManagedHub | null>(null);
+  const [siteDetailOpen, setSiteDetailOpen] = useState(false);
+  const [selectedSite, setSelectedSite] = useState<SiteRegistry | null>(null);
   
   const [editingHub, setEditingHub] = useState<ManagedHub | null>(null);
   const [editingSite, setEditingSite] = useState<SiteRegistry | null>(null);
@@ -138,25 +181,98 @@ export default function HubOperations() {
 
   const loadSites = async () => {
     try {
-      const { data, error } = await supabase
+      // Load sites from sites_registry (master registry)
+      const { data: registrySites, error: registryError } = await supabase
         .from('sites_registry')
         .select('*')
         .order('created_at', { ascending: false });
       
-      if (error && error.code !== '42P01') throw error;
-      setSites(data || []);
+      if (registryError && registryError.code !== '42P01') {
+        console.error('Error loading registry sites:', registryError);
+      }
+
+      // Load unique sites from MMP entries (sites uploaded via MMP)
+      // Try with registry_site_id first, fallback to basic query if column doesn't exist
+      let mmpSites: any[] | null = null;
+      
+      const { data: mmpSitesWithRegistry, error: mmpErrorWithRegistry } = await supabase
+        .from('mmp_site_entries')
+        .select('id, site_code, site_name, state, locality, hub_office, registry_site_id, created_at')
+        .order('created_at', { ascending: false });
+      
+      if (mmpErrorWithRegistry && mmpErrorWithRegistry.code === '42703') {
+        // Column doesn't exist, try without registry_site_id
+        const { data: mmpSitesBasic, error: mmpErrorBasic } = await supabase
+          .from('mmp_site_entries')
+          .select('id, site_code, site_name, state, locality, hub_office, created_at')
+          .order('created_at', { ascending: false });
+        
+        if (mmpErrorBasic && mmpErrorBasic.code !== '42P01') {
+          console.error('Error loading MMP sites:', mmpErrorBasic);
+        }
+        mmpSites = mmpSitesBasic;
+      } else {
+        if (mmpErrorWithRegistry && mmpErrorWithRegistry.code !== '42P01') {
+          console.error('Error loading MMP sites:', mmpErrorWithRegistry);
+        }
+        mmpSites = mmpSitesWithRegistry;
+      }
+
+      // Combine sites: registry sites + unique MMP sites not in registry
+      const combinedSites: SiteRegistry[] = [];
+      const seenSiteKeys = new Set<string>();
+
+      // Add registry sites first (they are the canonical source)
+      for (const site of (registrySites || [])) {
+        const siteKey = `${site.site_code || ''}-${site.site_name}-${site.state_name}-${site.locality_name}`.toLowerCase();
+        seenSiteKeys.add(siteKey);
+        combinedSites.push({
+          ...site,
+          source: 'registry' as const
+        });
+      }
+
+      // Add MMP sites that don't have a registry entry yet
+      for (const mmpSite of (mmpSites || [])) {
+        // Skip if already linked to registry
+        if (mmpSite.registry_site_id) {
+          continue;
+        }
+        
+        const siteKey = `${mmpSite.site_code || ''}-${mmpSite.site_name}-${mmpSite.state}-${mmpSite.locality}`.toLowerCase();
+        if (seenSiteKeys.has(siteKey)) {
+          continue; // Already have this site from registry or earlier MMP entry
+        }
+        seenSiteKeys.add(siteKey);
+
+        // Convert MMP site to SiteRegistry format
+        combinedSites.push({
+          id: mmpSite.id,
+          site_code: mmpSite.site_code || generateSiteCode(mmpSite.state || '', mmpSite.locality || '', mmpSite.site_name || '', 1, 'TPM'),
+          site_name: mmpSite.site_name || '',
+          state_id: mmpSite.state?.toLowerCase().replace(/\s+/g, '-') || '',
+          state_name: mmpSite.state || '',
+          locality_id: mmpSite.locality?.toLowerCase().replace(/\s+/g, '-') || '',
+          locality_name: mmpSite.locality || '',
+          hub_id: '',
+          hub_name: mmpSite.hub_office || '',
+          gps_latitude: null,
+          gps_longitude: null,
+          activity_type: 'TPM',
+          status: 'active',
+          mmp_count: 1,
+          created_at: mmpSite.created_at || new Date().toISOString(),
+          updated_at: mmpSite.created_at || new Date().toISOString(),
+          created_by: '',
+          source: 'mmp' as const
+        });
+      }
+
+      console.log(`Loaded ${combinedSites.length} sites (${registrySites?.length || 0} from registry, ${combinedSites.length - (registrySites?.length || 0)} from MMP)`);
+      setSites(combinedSites);
       localStorage.removeItem('pact_sites_local');
     } catch (err) {
-      console.error('Error loading sites from database, using local storage:', err);
-      const storedSites = localStorage.getItem('pact_sites_local');
-      if (storedSites) {
-        try {
-          setSites(JSON.parse(storedSites));
-          return;
-        } catch (e) {
-          console.error('Error parsing stored sites:', e);
-        }
-      }
+      console.error('Error loading sites from database:', err);
       setSites([]);
     }
   };
@@ -174,6 +290,97 @@ export default function HubOperations() {
       console.error('Error loading project scopes:', err);
       setProjectScopes([]);
     }
+  };
+
+  const fetchMmpEntryDataForSite = async (site: SiteRegistry): Promise<any> => {
+    try {
+      let mmpEntry = null;
+      
+      if (site.id) {
+        const { data: entryById, error: byIdError } = await supabase
+          .from('mmp_site_entries')
+          .select('*')
+          .eq('registry_site_id', site.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        
+        if (!byIdError && entryById) {
+          mmpEntry = entryById;
+        }
+      }
+      
+      if (!mmpEntry && site.site_code) {
+        const { data: entryByCode, error: byCodeError } = await supabase
+          .from('mmp_site_entries')
+          .select('*')
+          .eq('site_code', site.site_code)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        
+        if (!byCodeError && entryByCode) {
+          mmpEntry = entryByCode;
+        }
+      }
+      
+      if (!mmpEntry && site.site_name && site.state_name) {
+        const { data: entryByName, error: byNameError } = await supabase
+          .from('mmp_site_entries')
+          .select('*')
+          .ilike('site_name', site.site_name)
+          .ilike('state', site.state_name)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        
+        if (!byNameError && entryByName) {
+          mmpEntry = entryByName;
+        }
+      }
+      
+      if (mmpEntry) {
+        return {
+          ...site,
+          hub_office: mmpEntry.hub_office,
+          hubOffice: mmpEntry.hub_office,
+          cp_name: mmpEntry.cp_name,
+          cpName: mmpEntry.cp_name,
+          activity_at_site: mmpEntry.activity_at_site,
+          siteActivity: mmpEntry.activity_at_site,
+          survey_tool: mmpEntry.survey_tool,
+          surveyTool: mmpEntry.survey_tool,
+          monitoring_by: mmpEntry.monitoring_by,
+          monitoringBy: mmpEntry.monitoring_by,
+          main_activity: mmpEntry.main_activity,
+          mainActivity: mmpEntry.main_activity,
+          visit_date: mmpEntry.visit_date,
+          visitDate: mmpEntry.visit_date,
+          visit_type: mmpEntry.visit_type,
+          visitType: mmpEntry.visit_type,
+          use_market_diversion: mmpEntry.use_market_diversion,
+          useMarketDiversion: mmpEntry.use_market_diversion,
+          use_warehouse_monitoring: mmpEntry.use_warehouse_monitoring,
+          useWarehouseMonitoring: mmpEntry.use_warehouse_monitoring,
+          comments: mmpEntry.comments,
+          status: mmpEntry.status,
+          additional_data: mmpEntry.additional_data,
+          additionalData: mmpEntry.additional_data,
+          mmp_entry_id: mmpEntry.id,
+        };
+      }
+      
+      return site;
+    } catch (err) {
+      console.error('Error fetching MMP entry data for site:', err);
+      return site;
+    }
+  };
+
+  const handleViewSiteDetails = async (site: SiteRegistry) => {
+    const enrichedSite = await fetchMmpEntryDataForSite(site);
+    setSelectedSite(enrichedSite);
+    setSiteDetailOpen(true);
   };
 
   const calculateHubCoordinates = (stateIds: string[]) => {
@@ -843,6 +1050,9 @@ export default function HubOperations() {
             <TabsTrigger value="sites" data-testid="tab-sites">
               <Navigation className="h-4 w-4 mr-2" />
               Sites
+              {sites.length > 0 && (
+                <Badge variant="secondary" className="ml-2">{sites.length}</Badge>
+              )}
             </TabsTrigger>
           </TabsList>
 
@@ -858,12 +1068,12 @@ export default function HubOperations() {
                   data-testid="input-search-sites"
                 />
               </div>
-              <Select value={filterState} onValueChange={setFilterState}>
+              <Select value={filterState || "all"} onValueChange={(val) => setFilterState(val === "all" ? "" : val)}>
                 <SelectTrigger className="w-[150px]" data-testid="select-filter-state">
                   <SelectValue placeholder="All States" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All States</SelectItem>
+                  <SelectItem value="all">All States</SelectItem>
                   {sudanStates.map(s => (
                     <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                   ))}
@@ -947,7 +1157,10 @@ export default function HubOperations() {
                   setDeleteTarget({ type: 'hub', id: hub.id, name: hub.name });
                   setDeleteDialogOpen(true);
                 }}
-                onViewDetails={() => setActiveTab('hubs')}
+                onViewDetails={() => {
+                  setSelectedHub(hub);
+                  setHubDetailOpen(true);
+                }}
               />
             ))}
           </div>
@@ -970,7 +1183,10 @@ export default function HubOperations() {
                   setDeleteTarget({ type: 'hub', id: hub.id, name: hub.name });
                   setDeleteDialogOpen(true);
                 }}
-                onViewDetails={() => {}}
+                onViewDetails={() => {
+                  setSelectedHub(hub);
+                  setHubDetailOpen(true);
+                }}
               />
             ))}
           </div>
@@ -1021,6 +1237,54 @@ export default function HubOperations() {
 
         {/* Sites Tab */}
         <TabsContent value="sites" className="space-y-4">
+          {/* Sites Summary */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <Card className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-primary/10">
+                  <Navigation className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Total Sites</p>
+                  <p className="text-2xl font-bold">{sites.length}</p>
+                </div>
+              </div>
+            </Card>
+            <Card className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-green-500/10">
+                  <Layers className="h-5 w-5 text-green-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Registry</p>
+                  <p className="text-2xl font-bold">{sites.filter(s => s.source === 'registry').length}</p>
+                </div>
+              </div>
+            </Card>
+            <Card className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-amber-500/10">
+                  <Upload className="h-5 w-5 text-amber-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">From MMP</p>
+                  <p className="text-2xl font-bold">{sites.filter(s => s.source === 'mmp').length}</p>
+                </div>
+              </div>
+            </Card>
+            <Card className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-blue-500/10">
+                  <MapPin className="h-5 w-5 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">With GPS</p>
+                  <p className="text-2xl font-bold">{sites.filter(s => s.gps_latitude && s.gps_longitude).length}</p>
+                </div>
+              </div>
+            </Card>
+          </div>
+
           {viewMode === 'map' && (
             <Card>
               <CardContent className="p-0">
@@ -1051,7 +1315,7 @@ export default function HubOperations() {
                     setDeleteTarget({ type: 'site', id: site.id, name: site.site_name });
                     setDeleteDialogOpen(true);
                   }}
-                  onViewDetails={() => {}}
+                  onViewDetails={() => handleViewSiteDetails(site)}
                 />
               ))}
             </div>
@@ -1069,7 +1333,8 @@ export default function HubOperations() {
                         <th className="text-left p-3 font-medium">State</th>
                         <th className="text-left p-3 font-medium">Locality</th>
                         <th className="text-left p-3 font-medium">Type</th>
-                        <th className="text-left p-3 font-medium">Status</th>
+                        <th className="text-left p-3 font-medium">Source</th>
+                        <th className="text-left p-3 font-medium">GPS</th>
                         <th className="text-left p-3 font-medium">Actions</th>
                       </tr>
                     </thead>
@@ -1084,12 +1349,30 @@ export default function HubOperations() {
                             <Badge variant="outline">{site.activity_type}</Badge>
                           </td>
                           <td className="p-3">
-                            <Badge variant={site.status === 'active' ? 'default' : 'secondary'}>
-                              {site.status}
+                            <Badge variant={site.source === 'registry' ? 'default' : 'secondary'}>
+                              {site.source === 'registry' ? 'Registry' : 'MMP'}
                             </Badge>
                           </td>
                           <td className="p-3">
+                            {site.gps_latitude && site.gps_longitude ? (
+                              <Badge variant="default" className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                                <MapPin className="h-3 w-3 mr-1" />
+                                Yes
+                              </Badge>
+                            ) : (
+                              <Badge variant="secondary">No</Badge>
+                            )}
+                          </td>
+                          <td className="p-3">
                             <div className="flex gap-1">
+                              <Button 
+                                size="icon" 
+                                variant="ghost" 
+                                onClick={() => handleViewSiteDetails(site)}
+                                data-testid={`button-view-site-${site.id}`}
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
                               {canManage && (
                                 <>
                                   <Button size="icon" variant="ghost" onClick={() => {
@@ -1173,6 +1456,103 @@ export default function HubOperations() {
                 </DialogHeader>
                 
                 <div className="space-y-4">
+                  {/* State Map View */}
+                  <div>
+                    <h4 className="font-semibold mb-2 flex items-center gap-2">
+                      <Map className="h-4 w-4" />
+                      State Location
+                    </h4>
+                    <div className="h-56 rounded-lg overflow-hidden border">
+                      {(() => {
+                        const stateCoords = getStateCoords(state.id);
+                        const stateColor = getStateColor(state.id);
+                        const stateGeoJSON = sudanStateBoundaries.features.find(
+                          (f: any) => f.properties.id === state.id
+                        );
+                        const sitesWithGps = stateSites.filter(s => s.gps_latitude && s.gps_longitude);
+                        
+                        return (
+                          <MapContainer
+                            center={stateCoords}
+                            zoom={7}
+                            style={{ height: '100%', width: '100%' }}
+                            scrollWheelZoom={true}
+                          >
+                            <TileLayer
+                              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                            />
+                            {stateGeoJSON && (
+                              <>
+                                <FitBoundsToGeoJSON geoJson={stateGeoJSON} />
+                                <GeoJSON
+                                  data={stateGeoJSON as any}
+                                  style={{
+                                    color: stateColor,
+                                    fillColor: stateColor,
+                                    fillOpacity: 0.2,
+                                    weight: 3,
+                                  }}
+                                />
+                              </>
+                            )}
+                            <Circle
+                              center={stateCoords}
+                              radius={15000}
+                              pathOptions={{
+                                color: stateColor,
+                                fillColor: stateColor,
+                                fillOpacity: 0.4,
+                                weight: 2,
+                              }}
+                            />
+                            <Marker 
+                              position={stateCoords}
+                              icon={L.divIcon({
+                                className: 'custom-state-center-marker',
+                                html: `<div style="background-color: ${stateColor}; width: 20px; height: 20px; border-radius: 50%; border: 3px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.3);"></div>`,
+                                iconSize: [20, 20],
+                                iconAnchor: [10, 10],
+                              })}
+                            >
+                              <Popup>
+                                <div className="text-center">
+                                  <strong>{state.name}</strong>
+                                  <br />
+                                  <span className="text-sm text-muted-foreground">State Capital</span>
+                                </div>
+                              </Popup>
+                            </Marker>
+                            {sitesWithGps.map(site => (
+                              <Marker
+                                key={site.id}
+                                position={[site.gps_latitude!, site.gps_longitude!]}
+                                icon={L.divIcon({
+                                  className: 'custom-site-marker',
+                                  html: `<div style="background-color: #10B981; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white; box-shadow: 0 1px 4px rgba(0,0,0,0.3);"></div>`,
+                                  iconSize: [12, 12],
+                                  iconAnchor: [6, 6],
+                                })}
+                              >
+                                <Popup>
+                                  <div>
+                                    <strong>{site.site_name}</strong>
+                                    <br />
+                                    <span className="text-sm">{site.locality_name}</span>
+                                  </div>
+                                </Popup>
+                              </Marker>
+                            ))}
+                          </MapContainer>
+                        );
+                      })()}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                      <MapPin className="h-3 w-3" />
+                      State boundaries shown - {stateSites.filter(s => s.gps_latitude && s.gps_longitude).length} registered sites with GPS displayed
+                    </p>
+                  </div>
+                  
                   <div className="grid grid-cols-3 gap-3 text-center">
                     <div className="p-3 bg-muted/50 rounded-lg">
                       <p className="text-2xl font-bold">{state.localities.length}</p>
@@ -1235,6 +1615,126 @@ export default function HubOperations() {
         </DialogContent>
       </Dialog>
 
+      {/* Hub Detail Dialog */}
+      <Dialog open={hubDetailOpen} onOpenChange={setHubDetailOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          {selectedHub && (() => {
+            const hubSites = sites.filter(s => s.hub_id === selectedHub.id);
+            const hubStates = selectedHub.states.map(stateId => 
+              sudanStates.find(s => s.id === stateId)
+            ).filter(Boolean);
+            const totalLocalities = hubStates.reduce((acc, state) => 
+              acc + (state?.localities.length || 0), 0
+            );
+            
+            return (
+              <>
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <Building2 className="h-5 w-5" />
+                    {selectedHub.name}
+                  </DialogTitle>
+                  <DialogDescription>
+                    {selectedHub.description || `Covering ${selectedHub.states.length} states`}
+                  </DialogDescription>
+                </DialogHeader>
+                
+                <div className="space-y-4">
+                  <div className="grid grid-cols-3 gap-3 text-center">
+                    <div className="p-3 bg-muted/50 rounded-lg">
+                      <p className="text-2xl font-bold">{selectedHub.states.length}</p>
+                      <p className="text-sm text-muted-foreground">States</p>
+                    </div>
+                    <div className="p-3 bg-muted/50 rounded-lg">
+                      <p className="text-2xl font-bold">{totalLocalities}</p>
+                      <p className="text-sm text-muted-foreground">Localities</p>
+                    </div>
+                    <div className="p-3 bg-muted/50 rounded-lg">
+                      <p className="text-2xl font-bold">{hubSites.length}</p>
+                      <p className="text-sm text-muted-foreground">Sites</p>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <h4 className="font-semibold mb-2">Assigned States ({selectedHub.states.length})</h4>
+                    <ScrollArea className="h-64 border rounded-md">
+                      <Accordion type="multiple" className="w-full">
+                        {hubStates.map(state => state && (
+                          <AccordionItem key={state.id} value={state.id} className="border-b last:border-b-0">
+                            <AccordionTrigger className="px-3 py-2 hover:no-underline" data-testid={`accordion-state-${state.id}`}>
+                              <div className="flex items-center justify-between w-full pr-2">
+                                <div className="flex items-center gap-2">
+                                  <div 
+                                    className="w-3 h-3 rounded-full flex-shrink-0" 
+                                    style={{ backgroundColor: getStateColor(state.id) }}
+                                  />
+                                  <span className="font-medium">{state.name}</span>
+                                  <Badge variant="outline" className="text-xs">{state.code}</Badge>
+                                </div>
+                                <Badge variant="secondary" className="text-xs ml-2">
+                                  {state.localities.length} localities
+                                </Badge>
+                              </div>
+                            </AccordionTrigger>
+                            <AccordionContent className="px-3 pb-3">
+                              <div className="bg-muted/30 rounded-md p-2">
+                                <ScrollArea className="h-40">
+                                  <div className="grid grid-cols-2 gap-1.5">
+                                    {state.localities.map(locality => (
+                                      <div 
+                                        key={locality.id} 
+                                        className="flex items-center gap-1.5 p-1.5 bg-background/60 rounded text-xs"
+                                        data-testid={`locality-${locality.id}`}
+                                      >
+                                        <Globe className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                                        <span className="truncate flex-1">{locality.name}</span>
+                                        {locality.nameAr && (
+                                          <span className="text-muted-foreground text-[10px] truncate max-w-[60px]">
+                                            {locality.nameAr}
+                                          </span>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </ScrollArea>
+                              </div>
+                            </AccordionContent>
+                          </AccordionItem>
+                        ))}
+                      </Accordion>
+                    </ScrollArea>
+                  </div>
+                  
+                  {hubSites.length > 0 && (
+                    <div>
+                      <h4 className="font-semibold mb-2">Registered Sites ({hubSites.length})</h4>
+                      <ScrollArea className="h-32 border rounded-md p-3">
+                        <div className="space-y-2">
+                          {hubSites.map(site => (
+                            <div key={site.id} className="flex items-center justify-between p-2 bg-muted/30 rounded text-sm">
+                              <div className="flex items-center gap-2">
+                                <Navigation className="h-3 w-3 text-muted-foreground" />
+                                <span>{site.site_name}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Badge variant="outline" className="text-xs">{site.activity_type}</Badge>
+                                <Badge variant={site.status === 'active' ? 'default' : 'secondary'} className="text-xs">
+                                  {site.status}
+                                </Badge>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </ScrollArea>
+                    </div>
+                  )}
+                </div>
+              </>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
+
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
@@ -1255,6 +1755,40 @@ export default function HubOperations() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Site Detail Dialog */}
+      <SiteDetailDialog
+        open={siteDetailOpen}
+        onOpenChange={setSiteDetailOpen}
+        site={selectedSite}
+        editable={canManage}
+        onUpdateSite={async (updatedSite) => {
+          try {
+            if (selectedSite?.source === 'registry') {
+              const { error } = await supabase
+                .from('sites_registry')
+                .update({
+                  site_name: updatedSite.site_name || updatedSite.siteName,
+                  state_name: updatedSite.state || updatedSite.state_name,
+                  locality_name: updatedSite.locality || updatedSite.locality_name,
+                  gps_latitude: updatedSite.gps_latitude,
+                  gps_longitude: updatedSite.gps_longitude,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', selectedSite.id);
+              
+              if (error) throw error;
+            }
+            await loadSites();
+            toast({ title: 'Site Updated', description: 'Site details have been saved.' });
+            return true;
+          } catch (err) {
+            console.error('Error updating site:', err);
+            toast({ title: 'Error', description: 'Failed to update site.', variant: 'destructive' });
+            return false;
+          }
+        }}
+      />
     </div>
   );
 }
