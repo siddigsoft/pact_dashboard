@@ -4,6 +4,26 @@ import { SiteRegistry } from '@/types/hub-operations';
 // ============================================================================
 // ENHANCED DATA STRUCTURES FOR SITE MATCHING
 // ============================================================================
+//
+// CONFIDENCE SCORING & AUTO-ACCEPT BEHAVIOR:
+// -------------------------------------------
+// The matching system uses discrete confidence scores:
+//   - exact_code:     1.00 (100%) - Perfect site code match
+//   - name_location:  0.85 (85%)  - Name + State + Locality match
+//   - partial:        0.70 (70%)  - Name + partial location match  
+//   - fuzzy:          0.50 (50%)  - Fuzzy name similarity match
+//   - not_found:      0.00 (0%)   - No match found
+//
+// AUTO-ACCEPT THRESHOLD: 0.90 (90%)
+// This means ONLY exact_code matches (100%) will auto-accept.
+// All other matches require manual review:
+//   - name_location (85%) -> requires_review = true
+//   - partial (70%)       -> requires_review = true  
+//   - fuzzy (50%)         -> requires_review = true
+//
+// This is intentional: only perfect site code matches should be trusted
+// for automatic GPS coordinate enrichment without human verification.
+// ============================================================================
 
 export interface GPSCoordinates {
   latitude: number;
