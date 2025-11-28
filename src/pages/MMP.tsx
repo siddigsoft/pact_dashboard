@@ -1058,10 +1058,9 @@ const MMP = () => {
       const siteStatus = site.status?.toLowerCase();
 
       // Build update object - include acceptance fields if site was 'assigned'
+      // Note: Using additional_data for visit tracking to avoid schema cache issues
       const updateData: any = {
         status: 'In Progress',
-        visit_started_at: now,
-        visit_started_by: currentUser?.id,
         updated_at: now,
         additional_data: {
           ...(site.additional_data || {}),
@@ -1128,11 +1127,10 @@ const MMP = () => {
       stopLocationTracking(site.id);
 
       // Update site with visit completion time and final location (but don't change status yet)
+      // Note: Using additional_data for visit tracking to avoid schema cache issues
       await supabase
         .from('mmp_site_entries')
         .update({
-          visit_completed_at: now,
-          visit_completed_by: currentUser?.id,
           updated_at: now,
           additional_data: {
             ...(site.additional_data || {}),
