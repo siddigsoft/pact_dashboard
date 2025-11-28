@@ -1139,10 +1139,24 @@ const MMP = () => {
         const acceptedBy = site.accepted_by || site.additional_data?.accepted_by;
         
         if (acceptedBy) {
-          // Get the cost amount from the site entry (use columns only)
-          const enumeratorFee = site.enumerator_fee || 0;
-          const transportFee = site.transport_fee || 0;
-          const directCost = site.cost || 0;
+          // Fetch fresh site data from database to ensure we have the latest fee values
+          const { data: freshSite, error: fetchError } = await supabase
+            .from('mmp_site_entries')
+            .select('enumerator_fee, transport_fee, cost')
+            .eq('id', site.id)
+            .single();
+
+          if (fetchError) {
+            console.error('Failed to fetch fresh site data for wallet payment:', fetchError);
+          }
+
+          // Get the cost amount from fresh database values (prefer) or fallback to site object
+          // Check both snake_case (from DB) and camelCase (from normalized object)
+          const enumeratorFee = freshSite?.enumerator_fee || site.enumerator_fee || site.enumeratorFee || 0;
+          const transportFee = freshSite?.transport_fee || site.transport_fee || site.transportFee || 0;
+          const directCost = freshSite?.cost || site.cost || 0;
+          
+          console.log('💰 Wallet payment calculation:', { enumeratorFee, transportFee, directCost, siteId: site.id });
           
           // Calculate total cost: use direct cost if available, otherwise sum fees
           const totalCost = directCost > 0 
@@ -1150,6 +1164,8 @@ const MMP = () => {
             : (Number(enumeratorFee) + Number(transportFee));
           
           if (totalCost > 0) {
+            console.log(`💵 Processing wallet payment of ${totalCost} SDG for user ${acceptedBy}`);
+            
             // Get or create wallet for the user
             const { data: walletData, error: walletError } = await supabase
               .from('wallets')
@@ -1207,6 +1223,13 @@ const MMP = () => {
             });
 
             console.log(`Payment of ${totalCost} SDG added to wallet for user ${acceptedBy} for site entry ${site.id}`);
+          } else {
+            console.warn(`⚠️ Total cost is 0 for site ${site.id}. Fee might not have been set during claim/accept.`);
+            toast({
+              title: 'Fee Not Set',
+              description: 'The site visit fee was not calculated at claim time. Please contact admin to adjust.',
+              variant: 'default',
+            });
           }
         } else {
           console.warn(`No accepted_by user found for site entry ${site.id}, skipping wallet payment`);
