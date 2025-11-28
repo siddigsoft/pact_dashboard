@@ -119,17 +119,76 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
     const createdAt = site.created_at || undefined;
     const updatedAt = site.updated_at || site.last_modified || undefined;
 
-    // Extract GPS coordinates from registry lookup (stored in additional_data.registry_gps)
+    // Extract GPS coordinates from registry lookup
+    // Prefer registry_linkage (new format) over registry_gps (legacy format)
+    const registryLinkage = ad.registry_linkage || null;
     const registryGps = ad.registry_gps || {};
-    const registryGpsLatitude = registryGps.latitude || undefined;
-    const registryGpsLongitude = registryGps.longitude || undefined;
-    const registrySiteId = registryGps.site_id || undefined;
-    const registrySiteCode = registryGps.site_code || undefined;
-    const registryMatchType = registryGps.match_type || undefined;
-    const registryMatchConfidence = registryGps.match_confidence || undefined;
-    const gpsSource = registryGps.source || undefined;
+    
+    // Extract from new registry_linkage structure if available
+    let registryGpsLatitude: number | undefined;
+    let registryGpsLongitude: number | undefined;
+    let gpsAccuracyMeters: number | undefined;
+    let registrySiteId: string | undefined;
+    let registrySiteCode: string | undefined;
+    let registryMatchType: string | undefined;
+    let registryMatchConfidence: number | undefined;
+    let matchConfidenceLevel: string | undefined;
+    let matchAutoAccepted: boolean | undefined;
+    let matchRequiresReview: boolean | undefined;
+    let matchCandidatesCount: number | undefined;
+    let matchedAt: string | undefined;
+    let matchedBy: string | undefined;
+    let sourceWorkflow: string | undefined;
+    let unmatchedReason: string | undefined;
+    let unmatchedDetails: string | undefined;
+    let alternativeCandidates: Array<{ registry_site_id: string; site_code: string; site_name: string; confidence: number }> | undefined;
+    let gpsSource: string | undefined;
+    
+    if (registryLinkage) {
+      // New enhanced registry_linkage format
+      registryGpsLatitude = registryLinkage.gps?.latitude;
+      registryGpsLongitude = registryLinkage.gps?.longitude;
+      gpsAccuracyMeters = registryLinkage.gps?.accuracy_meters;
+      registrySiteId = registryLinkage.registry_site_id;
+      registrySiteCode = registryLinkage.registry_site_code;
+      registryMatchType = registryLinkage.match?.type;
+      registryMatchConfidence = registryLinkage.match?.confidence;
+      matchConfidenceLevel = registryLinkage.match?.confidence_level;
+      matchAutoAccepted = registryLinkage.match?.auto_accepted;
+      matchRequiresReview = registryLinkage.match?.requires_review;
+      matchCandidatesCount = registryLinkage.match?.candidates_count;
+      matchedAt = registryLinkage.audit?.matched_at;
+      matchedBy = registryLinkage.audit?.matched_by;
+      sourceWorkflow = registryLinkage.audit?.source_workflow;
+      unmatchedReason = registryLinkage.unmatched?.reason;
+      unmatchedDetails = registryLinkage.unmatched?.details;
+      alternativeCandidates = registryLinkage.alternative_candidates;
+      gpsSource = 'sites_registry';
+    } else if (registryGps) {
+      // Legacy registry_gps format
+      registryGpsLatitude = registryGps.latitude;
+      registryGpsLongitude = registryGps.longitude;
+      gpsAccuracyMeters = registryGps.accuracy_meters;
+      registrySiteId = registryGps.site_id;
+      registrySiteCode = registryGps.site_code;
+      registryMatchType = registryGps.match_type;
+      // Convert legacy confidence strings to numeric if needed
+      const legacyConfidence = registryGps.match_confidence;
+      if (typeof legacyConfidence === 'number') {
+        registryMatchConfidence = legacyConfidence;
+      } else if (legacyConfidence === 'high') {
+        registryMatchConfidence = 1.0;
+      } else if (legacyConfidence === 'medium') {
+        registryMatchConfidence = 0.7;
+      } else if (legacyConfidence === 'low') {
+        registryMatchConfidence = 0.5;
+      }
+      matchedAt = registryGps.matched_at;
+      gpsSource = registryGps.source;
+    }
     
     const hasGpsCoordinates = registryGpsLatitude && registryGpsLongitude;
+    const hasRegistryMatch = !!registrySiteId;
 
     return { 
       hubOffice, state, locality, siteCode, siteName, cpName, siteActivity, 
@@ -140,8 +199,14 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
       dispatchedAt, dispatchedBy, acceptedAt, acceptedBy, 
       rejectionComments, rejectedBy, rejectedAt,
       createdAt, updatedAt,
-      registryGpsLatitude, registryGpsLongitude, registrySiteId, registrySiteCode,
-      registryMatchType, registryMatchConfidence, gpsSource, hasGpsCoordinates
+      // GPS and Registry Matching
+      registryGpsLatitude, registryGpsLongitude, gpsAccuracyMeters,
+      registrySiteId, registrySiteCode,
+      registryMatchType, registryMatchConfidence, matchConfidenceLevel,
+      matchAutoAccepted, matchRequiresReview, matchCandidatesCount,
+      matchedAt, matchedBy, sourceWorkflow,
+      unmatchedReason, unmatchedDetails, alternativeCandidates,
+      gpsSource, hasGpsCoordinates, hasRegistryMatch
     };
   };
 
@@ -375,35 +440,132 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
                     <p className="font-medium text-gray-900 mt-1">{row.locality || '—'}</p>
                   )}
                 </div>
-                {row.hasGpsCoordinates && (
-                  <div className="sm:col-span-2 bg-blue-50 dark:bg-blue-900/20 p-3 rounded-md border border-blue-200 dark:border-blue-800">
-                    <Label className="text-xs font-medium text-blue-700 dark:text-blue-300 flex items-center gap-1">
-                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                      </svg>
-                      GPS Coordinates (from Sites Registry)
-                    </Label>
+                {/* GPS Coordinates and Registry Match Info */}
+                {(row.hasGpsCoordinates || row.hasRegistryMatch || row.matchRequiresReview || row.unmatchedReason) && (
+                  <div className={`sm:col-span-2 p-3 rounded-md border ${
+                    row.hasGpsCoordinates 
+                      ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
+                      : row.matchRequiresReview
+                      ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800'
+                      : 'bg-gray-50 dark:bg-gray-800/20 border-gray-200 dark:border-gray-700'
+                  }`}>
+                    <div className="flex items-center justify-between">
+                      <Label className={`text-xs font-medium flex items-center gap-1 ${
+                        row.hasGpsCoordinates 
+                          ? 'text-blue-700 dark:text-blue-300'
+                          : row.matchRequiresReview
+                          ? 'text-yellow-700 dark:text-yellow-300'
+                          : 'text-gray-700 dark:text-gray-300'
+                      }`}>
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                        {row.hasGpsCoordinates ? 'GPS Coordinates (from Sites Registry)' : 'Registry Match Status'}
+                      </Label>
+                      
+                      {/* Confidence Score Badge */}
+                      {row.registryMatchConfidence !== undefined && (
+                        <Badge className={`${
+                          row.registryMatchConfidence >= 0.9
+                            ? 'bg-green-100 text-green-700 dark:bg-green-800 dark:text-green-200'
+                            : row.registryMatchConfidence >= 0.7
+                            ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-800 dark:text-yellow-200'
+                            : 'bg-red-100 text-red-700 dark:bg-red-800 dark:text-red-200'
+                        }`} variant="secondary">
+                          {Math.round(row.registryMatchConfidence * 100)}% Confidence
+                        </Badge>
+                      )}
+                    </div>
+                    
                     <div className="flex flex-wrap gap-4 mt-2">
-                      <div>
-                        <span className="text-xs text-gray-500 dark:text-gray-400">Latitude:</span>
-                        <p className="font-mono text-sm font-medium text-gray-900 dark:text-gray-100">{row.registryGpsLatitude}</p>
-                      </div>
-                      <div>
-                        <span className="text-xs text-gray-500 dark:text-gray-400">Longitude:</span>
-                        <p className="font-mono text-sm font-medium text-gray-900 dark:text-gray-100">{row.registryGpsLongitude}</p>
-                      </div>
+                      {row.hasGpsCoordinates && (
+                        <>
+                          <div>
+                            <span className="text-xs text-gray-500 dark:text-gray-400">Latitude:</span>
+                            <p className="font-mono text-sm font-medium text-gray-900 dark:text-gray-100">{row.registryGpsLatitude}</p>
+                          </div>
+                          <div>
+                            <span className="text-xs text-gray-500 dark:text-gray-400">Longitude:</span>
+                            <p className="font-mono text-sm font-medium text-gray-900 dark:text-gray-100">{row.registryGpsLongitude}</p>
+                          </div>
+                          {row.gpsAccuracyMeters && (
+                            <div>
+                              <span className="text-xs text-gray-500 dark:text-gray-400">Accuracy:</span>
+                              <p className="font-mono text-sm font-medium text-gray-900 dark:text-gray-100">{row.gpsAccuracyMeters}m</p>
+                            </div>
+                          )}
+                        </>
+                      )}
+                      
                       {row.registryMatchType && (
                         <div>
-                          <span className="text-xs text-gray-500 dark:text-gray-400">Match:</span>
+                          <span className="text-xs text-gray-500 dark:text-gray-400">Match Type:</span>
                           <Badge className="ml-1 bg-blue-100 text-blue-700 dark:bg-blue-800 dark:text-blue-200" variant="secondary">
                             {row.registryMatchType === 'exact_code' ? 'Site Code' : 
                              row.registryMatchType === 'name_location' ? 'Name + Location' :
-                             row.registryMatchType === 'partial' ? 'Partial Match' : row.registryMatchType}
+                             row.registryMatchType === 'partial' ? 'Partial Match' :
+                             row.registryMatchType === 'fuzzy' ? 'Fuzzy Match' : row.registryMatchType}
+                          </Badge>
+                        </div>
+                      )}
+                      
+                      {row.matchAutoAccepted !== undefined && (
+                        <div>
+                          <span className="text-xs text-gray-500 dark:text-gray-400">Status:</span>
+                          <Badge className={`ml-1 ${
+                            row.matchAutoAccepted 
+                              ? 'bg-green-100 text-green-700 dark:bg-green-800 dark:text-green-200'
+                              : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-800 dark:text-yellow-200'
+                          }`} variant="secondary">
+                            {row.matchAutoAccepted ? 'Auto-Accepted' : 'Pending Review'}
                           </Badge>
                         </div>
                       )}
                     </div>
+                    
+                    {/* Unmatched Site Warning */}
+                    {row.unmatchedReason && (
+                      <div className="mt-3 p-2 bg-yellow-100 dark:bg-yellow-900/30 rounded border border-yellow-300 dark:border-yellow-700">
+                        <p className="text-xs font-medium text-yellow-800 dark:text-yellow-200">
+                          {row.unmatchedReason === 'no_registry_entry' && 'Site not found in registry'}
+                          {row.unmatchedReason === 'multiple_matches' && 'Multiple registry matches found'}
+                          {row.unmatchedReason === 'low_confidence' && 'Match confidence below threshold'}
+                        </p>
+                        {row.unmatchedDetails && (
+                          <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-1">{row.unmatchedDetails}</p>
+                        )}
+                      </div>
+                    )}
+                    
+                    {/* Alternative Candidates (for manual selection) */}
+                    {row.alternativeCandidates && row.alternativeCandidates.length > 1 && (
+                      <div className="mt-3 border-t border-gray-200 dark:border-gray-700 pt-2">
+                        <p className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                          Other potential matches ({row.alternativeCandidates.length}):
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {row.alternativeCandidates.slice(0, 3).map((candidate: any, idx: number) => (
+                            <Badge key={idx} variant="outline" className="text-xs">
+                              {candidate.site_name} ({Math.round(candidate.confidence * 100)}%)
+                            </Badge>
+                          ))}
+                          {row.alternativeCandidates.length > 3 && (
+                            <Badge variant="outline" className="text-xs">
+                              +{row.alternativeCandidates.length - 3} more
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Audit Info */}
+                    {row.matchedAt && (
+                      <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                        Matched on {new Date(row.matchedAt).toLocaleDateString()}
+                        {row.sourceWorkflow && ` via ${row.sourceWorkflow}`}
+                      </div>
+                    )}
                   </div>
                 )}
                 <div>
