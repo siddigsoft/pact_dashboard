@@ -237,7 +237,15 @@ const ClassificationFeeManagement = () => {
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
-            size="sm"
+            onClick={() => navigate('/classifications')}
+            data-testid="button-view-team-classifications"
+          >
+            <Users className="h-4 w-4 mr-2" />
+            View Team Classifications
+          </Button>
+          <Button
+            variant="outline"
+            size="default"
             onClick={loadData}
             disabled={loading}
             data-testid="button-refresh"

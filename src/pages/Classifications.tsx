@@ -340,6 +340,17 @@ const Classifications = () => {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {canEditFees && (
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => navigate('/classification-fees')}
+              data-testid="button-manage-fees"
+            >
+              <DollarSign className="h-4 w-4 mr-2" />
+              Manage Fees
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -360,6 +371,7 @@ const Classifications = () => {
           </Button>
           {canEditFees && (
             <Button
+              variant="outline"
               size="sm"
               onClick={() => {
                 setSelectedFeeStructure(null);
