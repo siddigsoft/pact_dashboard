@@ -28,7 +28,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { SiteVisitCostDialog } from "@/components/wallet/SiteVisitCostDialog";
 import { useAuthorization } from "@/hooks/use-authorization";
-import { SiteVisitCosts } from "@/components/site-visit/SiteVisitCosts";
+import { SiteVisitCostsUnified } from "@/components/site-visit/SiteVisitCostsUnified";
+import { SiteVisitAuditTrail } from "@/components/site-visit/SiteVisitAuditTrail";
 import { NearestEnumeratorsCard } from "@/components/site-visit/NearestEnumeratorsCard";
 
 const SiteVisitDetail = () => {
@@ -199,18 +200,24 @@ const SiteVisitDetail = () => {
             />
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="md:col-span-2 space-y-6">
-              <div className="bg-card rounded-lg p-6 shadow-sm border">
-                <SiteVisitInfo siteVisit={siteVisit} />
-              </div>
-              <div className="bg-card rounded-lg p-6 shadow-sm border">
-                <SiteVisitDates siteVisit={siteVisit} />
-              </div>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 space-y-6">
+              <SiteVisitInfo siteVisit={siteVisit} />
+              
+              <SiteVisitDates siteVisit={siteVisit} />
+              
+              <SiteVisitAuditTrail 
+                siteVisitId={siteVisit.id}
+                siteCode={siteVisit.siteCode}
+              />
             </div>
             
             <div className="space-y-6">
-              {/* Nearest Enumerators Card - shows enumerators sorted by GPS proximity */}
+              <SiteVisitCostsUnified 
+                siteVisitId={siteVisit.id}
+                siteCode={siteVisit.siteCode}
+              />
+              
               {hasAnyRole(['admin', 'ict', 'fom']) && siteVisit.coordinates && (
                 <NearestEnumeratorsCard
                   siteVisit={siteVisit}
@@ -224,12 +231,6 @@ const SiteVisitDetail = () => {
                   }}
                 />
               )}
-              
-              <SiteVisitCosts 
-                siteCode={siteVisit.siteCode}
-                mmpFileId={siteVisit.mmpDetails?.mmpId}
-              />
-                            
             </div>
           </div>
         </div>
