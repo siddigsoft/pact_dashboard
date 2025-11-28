@@ -40,8 +40,6 @@ interface WalletContextType {
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
 function transformWalletFromDB(data: any): Wallet {
-  console.log('[Wallet] Raw wallet data from DB:', data);
-  
   // Parse balances - handle both object and string formats
   let balances = data.balances || { SDG: 0 };
   if (typeof balances === 'string') {
@@ -58,7 +56,7 @@ function transformWalletFromDB(data: any): Wallet {
     balances.SDG = Number(balances.SDG) || 0;
   }
   
-  const wallet = {
+  return {
     id: data.id,
     userId: data.user_id,
     balances: balances,
@@ -67,11 +65,6 @@ function transformWalletFromDB(data: any): Wallet {
     createdAt: data.created_at,
     updatedAt: data.updated_at,
   };
-  
-  console.log('[Wallet] Transformed wallet:', wallet);
-  console.log('[Wallet] SDG Balance:', wallet.balances.SDG);
-  
-  return wallet;
 }
 
 function transformTransactionFromDB(data: any): WalletTransaction {
@@ -143,12 +136,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const refreshWallet = async () => {
-    if (!currentUser?.id) {
-      console.log('[Wallet] No current user, skipping wallet refresh');
-      return;
-    }
-
-    console.log('[Wallet] Refreshing wallet for user:', currentUser.id);
+    if (!currentUser?.id) return;
 
     try {
       const { data, error } = await supabase
@@ -157,32 +145,24 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         .eq('user_id', currentUser.id)
         .single();
 
-      console.log('[Wallet] Query result - data:', data, 'error:', error);
-
       if (error) {
         if (error.code === 'PGRST116') {
-          console.log('[Wallet] No wallet found, creating new wallet...');
           const { data: newWallet, error: createError } = await supabase
             .from('wallets')
             .insert({ user_id: currentUser.id, balances: { SDG: 0 } })
             .select()
             .single();
 
-          if (createError) {
-            console.error('[Wallet] Failed to create wallet:', createError);
-            throw createError;
-          }
-          console.log('[Wallet] New wallet created:', newWallet);
+          if (createError) throw createError;
           setWallet(transformWalletFromDB(newWallet));
         } else {
           throw error;
         }
       } else {
-        console.log('[Wallet] Existing wallet found');
         setWallet(transformWalletFromDB(data));
       }
     } catch (error: any) {
-      console.error('[Wallet] Failed to fetch wallet:', error);
+      console.error('Failed to fetch wallet:', error);
       toast({
         title: 'Error',
         description: 'Failed to load wallet information',

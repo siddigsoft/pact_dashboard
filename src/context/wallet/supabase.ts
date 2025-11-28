@@ -10,8 +10,6 @@ export const adminListWallets = async (params: { search?: string; page?: number;
   const page = params.page || 1;
   const pageSize = params.pageSize || 100;
   
-  console.log('[adminListWallets] Fetching wallets...');
-  
   let q = supabase
     .from('wallets')
     .select('*, profiles:profiles!wallets_user_id_fkey(full_name, username, email)')
@@ -20,50 +18,64 @@ export const adminListWallets = async (params: { search?: string; page?: number;
   
   const { data, error } = await q;
   
-  console.log('[adminListWallets] Query result - data count:', data?.length, 'error:', error);
-  
   if (error) {
-    console.error('[adminListWallets] Error fetching wallets:', error);
+    console.error('Error fetching wallets:', error);
     return [];
   }
   
-  // Log raw wallet data to debug balance issues
-  if (data && data.length > 0) {
-    console.log('[adminListWallets] First wallet raw data:', JSON.stringify(data[0], null, 2));
-  }
-  
   // Get transaction breakdowns for all wallets in parallel
+  // Query by both wallet_id AND user_id to handle legacy transactions
   const walletIds = (data || []).map((w: any) => w.id);
-  console.log('[adminListWallets] Fetching transactions for wallet IDs:', walletIds);
+  const userIds = (data || []).map((w: any) => w.user_id);
   
-  const { data: transactions, error: txError } = await supabase
+  // Build a map of user_id -> wallet_id for fallback matching
+  const userToWalletMap: Record<string, string> = {};
+  (data || []).forEach((w: any) => {
+    userToWalletMap[w.user_id] = w.id;
+  });
+  
+  // Query transactions by wallet_id first
+  const { data: txByWallet } = await supabase
     .from('wallet_transactions')
-    .select('wallet_id, type, amount')
+    .select('wallet_id, user_id, type, amount')
     .in('wallet_id', walletIds);
   
-  console.log('[adminListWallets] Transaction query result:', {
-    count: transactions?.length,
-    error: txError,
-    sample: transactions?.[0]
+  // Also query by user_id for legacy transactions that might not have wallet_id set
+  const { data: txByUser } = await supabase
+    .from('wallet_transactions')
+    .select('wallet_id, user_id, type, amount')
+    .in('user_id', userIds);
+  
+  // Combine and dedupe transactions
+  const seenTxIds = new Set<string>();
+  const allTransactions: any[] = [];
+  
+  [...(txByWallet || []), ...(txByUser || [])].forEach(tx => {
+    const txKey = `${tx.wallet_id || tx.user_id}-${tx.type}-${tx.amount}`;
+    if (!seenTxIds.has(txKey)) {
+      seenTxIds.add(txKey);
+      allTransactions.push(tx);
+    }
   });
   
-  // Group transactions by wallet_id and type
+  // Group transactions by wallet_id (or user_id mapped to wallet_id)
   const transactionsByWallet: Record<string, Record<string, number>> = {};
-  (transactions || []).forEach((tx: any) => {
-    if (!transactionsByWallet[tx.wallet_id]) {
-      transactionsByWallet[tx.wallet_id] = {};
+  allTransactions.forEach((tx: any) => {
+    // Use wallet_id if available, otherwise map user_id to wallet_id
+    const walletId = tx.wallet_id || userToWalletMap[tx.user_id];
+    if (!walletId) return;
+    
+    if (!transactionsByWallet[walletId]) {
+      transactionsByWallet[walletId] = {};
     }
-    if (!transactionsByWallet[tx.wallet_id][tx.type]) {
-      transactionsByWallet[tx.wallet_id][tx.type] = 0;
+    if (!transactionsByWallet[walletId][tx.type]) {
+      transactionsByWallet[walletId][tx.type] = 0;
     }
-    transactionsByWallet[tx.wallet_id][tx.type] += Number(tx.amount || 0);
+    transactionsByWallet[walletId][tx.type] += Number(tx.amount || 0);
   });
-  
-  console.log('[adminListWallets] Transaction breakdown by wallet:', transactionsByWallet);
   
   const rows = (data || []).map((r: any) => {
     const breakdown = transactionsByWallet[r.id] || {};
-    console.log(`[adminListWallets] Wallet ${r.id} breakdown:`, breakdown);
     
     return {
       ...r,
