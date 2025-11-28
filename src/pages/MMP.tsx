@@ -25,6 +25,7 @@ import { sudanStates } from '@/data/sudanStates';
 import { VisitReportDialog, VisitReportData } from '@/components/site-visit/VisitReportDialog';
 import { StartVisitDialog } from '@/components/site-visit/StartVisitDialog';
 import { useSiteClaimRealtime } from '@/hooks/use-site-claim-realtime';
+import { saveGPSToRegistryFromSiteEntry } from '@/utils/sitesRegistryMatcher';
 
 // Helper component to convert SiteVisitRow[] to site entries and display using MMPSiteEntriesTable
 const SitesDisplayTable: React.FC<{ 
@@ -1336,6 +1337,58 @@ const MMP = () => {
       // Generate PDF report
       console.log('📄 Generating PDF report...');
       await generateVisitReportPDF(site, reportData, report, photoUrls);
+
+      // Save GPS coordinates to Sites Registry (if coordinates were captured and site has valid ID)
+      const siteEntryId = site.id || site.siteId || site.entry_id;
+      if (siteEntryId && reportData.coordinates && reportData.coordinates.latitude && reportData.coordinates.longitude) {
+        console.log('📍 Saving GPS to Sites Registry for site entry:', siteEntryId);
+        try {
+          const gpsResult = await saveGPSToRegistryFromSiteEntry(
+            siteEntryId,
+            {
+              latitude: reportData.coordinates.latitude,
+              longitude: reportData.coordinates.longitude,
+              accuracy: reportData.coordinates.accuracy,
+            },
+            {
+              userId: currentUser?.id || 'system',
+              sourceType: 'site_visit',
+              overwriteExisting: false, // Don't overwrite if GPS already exists
+            }
+          );
+          if (gpsResult.success) {
+            console.log('✅ GPS saved to Sites Registry');
+            toast({
+              title: 'GPS Coordinates Saved',
+              description: 'Site GPS coordinates have been saved to the Sites Registry.',
+              variant: 'default'
+            });
+          } else {
+            console.warn('⚠️ Failed to save GPS to registry:', gpsResult.error);
+            // Show warning toast but don't fail the visit completion
+            toast({
+              title: 'GPS Save Warning',
+              description: gpsResult.error || 'GPS coordinates could not be saved to the Sites Registry.',
+              variant: 'destructive'
+            });
+          }
+        } catch (gpsError) {
+          console.error('❌ Error saving GPS to registry:', gpsError);
+          // Non-blocking - don't fail the visit completion for GPS errors
+          toast({
+            title: 'GPS Save Error',
+            description: 'An error occurred while saving GPS coordinates. Please contact support if this persists.',
+            variant: 'destructive'
+          });
+        }
+      } else if (reportData.coordinates && reportData.coordinates.latitude && reportData.coordinates.longitude) {
+        console.warn('⚠️ Cannot save GPS: No valid site entry ID available');
+        toast({
+          title: 'GPS Not Saved',
+          description: 'GPS coordinates were captured but could not be linked to the Sites Registry.',
+          variant: 'destructive'
+        });
+      }
 
       // Update site status to 'Completed' and save report info
       console.log('🔄 Updating site status to Completed...');

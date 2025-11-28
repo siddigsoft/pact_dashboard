@@ -553,3 +553,190 @@ export function buildRegistryLinkageForStorage(
   // Default: return the new linkage
   return matchResult.registryLinkage;
 }
+
+// ============================================================================
+// GPS SAVE TO REGISTRY
+// ============================================================================
+
+export interface GPSSaveResult {
+  success: boolean;
+  registrySiteId?: string;
+  error?: string;
+  previousGps?: GPSCoordinates | null;
+}
+
+/**
+ * Saves GPS coordinates to the Sites Registry after a site visit is completed.
+ * This enriches the master site record with GPS data from field visits.
+ * 
+ * @param registrySiteId - The ID of the site in sites_registry (from mmp_site_entries.registry_site_id)
+ * @param coordinates - GPS coordinates captured during the site visit
+ * @param options - Additional options for the save operation
+ * @returns Result of the GPS save operation
+ */
+export async function saveGPSToRegistry(
+  registrySiteId: string,
+  coordinates: {
+    latitude: number;
+    longitude: number;
+    accuracy?: number;
+  },
+  options: {
+    userId?: string;
+    sourceType?: 'site_visit' | 'manual_entry' | 'device_capture';
+    overwriteExisting?: boolean;
+  } = {}
+): Promise<GPSSaveResult> {
+  const { userId = 'system', sourceType = 'site_visit', overwriteExisting = false } = options;
+
+  if (!registrySiteId) {
+    return {
+      success: false,
+      error: 'No registry site ID provided',
+    };
+  }
+
+  if (!coordinates || typeof coordinates.latitude !== 'number' || typeof coordinates.longitude !== 'number') {
+    return {
+      success: false,
+      error: 'Invalid GPS coordinates provided',
+    };
+  }
+
+  try {
+    // First, check if the site exists and get current GPS data
+    const { data: existingSite, error: fetchError } = await supabase
+      .from('sites_registry')
+      .select('id, site_code, site_name, gps_latitude, gps_longitude')
+      .eq('id', registrySiteId)
+      .single();
+
+    if (fetchError || !existingSite) {
+      console.error('Error fetching site from registry:', fetchError);
+      return {
+        success: false,
+        registrySiteId,
+        error: `Site not found in registry: ${fetchError?.message || 'Unknown error'}`,
+      };
+    }
+
+    // Check if GPS already exists and we shouldn't overwrite
+    const hasExistingGps = existingSite.gps_latitude !== null && existingSite.gps_longitude !== null;
+    if (hasExistingGps && !overwriteExisting) {
+      console.log(`GPS already exists for site ${registrySiteId}, skipping update (overwriteExisting=false)`);
+      return {
+        success: true,
+        registrySiteId,
+        previousGps: {
+          latitude: existingSite.gps_latitude,
+          longitude: existingSite.gps_longitude,
+        },
+      };
+    }
+
+    // Store previous GPS for audit
+    const previousGps: GPSCoordinates | null = hasExistingGps 
+      ? { latitude: existingSite.gps_latitude, longitude: existingSite.gps_longitude }
+      : null;
+
+    // Update the registry site with GPS coordinates
+    const { error: updateError } = await supabase
+      .from('sites_registry')
+      .update({
+        gps_latitude: coordinates.latitude,
+        gps_longitude: coordinates.longitude,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', registrySiteId);
+
+    if (updateError) {
+      console.error('Error saving GPS to registry:', updateError);
+      return {
+        success: false,
+        registrySiteId,
+        error: `Failed to save GPS: ${updateError.message}`,
+        previousGps,
+      };
+    }
+
+    console.log(`GPS saved to registry for site ${registrySiteId}: (${coordinates.latitude}, ${coordinates.longitude})`);
+
+    return {
+      success: true,
+      registrySiteId,
+      previousGps,
+    };
+  } catch (error) {
+    console.error('Unexpected error saving GPS to registry:', error);
+    return {
+      success: false,
+      registrySiteId,
+      error: `Unexpected error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+    };
+  }
+}
+
+/**
+ * Saves GPS coordinates to the Sites Registry using the mmp_site_entry ID.
+ * This is a convenience function that looks up the registry_site_id from mmp_site_entries.
+ * 
+ * @param mmpSiteEntryId - The ID of the site entry in mmp_site_entries
+ * @param coordinates - GPS coordinates captured during the site visit
+ * @param options - Additional options for the save operation
+ * @returns Result of the GPS save operation
+ */
+export async function saveGPSToRegistryFromSiteEntry(
+  mmpSiteEntryId: string,
+  coordinates: {
+    latitude: number;
+    longitude: number;
+    accuracy?: number;
+  },
+  options: {
+    userId?: string;
+    sourceType?: 'site_visit' | 'manual_entry' | 'device_capture';
+    overwriteExisting?: boolean;
+  } = {}
+): Promise<GPSSaveResult> {
+  if (!mmpSiteEntryId) {
+    return {
+      success: false,
+      error: 'No MMP site entry ID provided',
+    };
+  }
+
+  try {
+    // Look up the registry_site_id from mmp_site_entries
+    const { data: siteEntry, error: fetchError } = await supabase
+      .from('mmp_site_entries')
+      .select('registry_site_id')
+      .eq('id', mmpSiteEntryId)
+      .single();
+
+    if (fetchError || !siteEntry) {
+      console.error('Error fetching site entry:', fetchError);
+      return {
+        success: false,
+        error: `Site entry not found: ${fetchError?.message || 'Unknown error'}`,
+      };
+    }
+
+    const registrySiteId = siteEntry.registry_site_id;
+    if (!registrySiteId) {
+      console.warn(`Site entry ${mmpSiteEntryId} has no linked registry site, cannot save GPS`);
+      return {
+        success: false,
+        error: 'Site entry is not linked to Sites Registry',
+      };
+    }
+
+    // Delegate to the main GPS save function
+    return await saveGPSToRegistry(registrySiteId, coordinates, options);
+  } catch (error) {
+    console.error('Unexpected error in saveGPSToRegistryFromSiteEntry:', error);
+    return {
+      success: false,
+      error: `Unexpected error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+    };
+  }
+}
