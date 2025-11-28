@@ -27,13 +27,17 @@ const Dashboard = () => {
   const { dashboardPreferences, getDefaultZoneForRole } = useSettings();
 
   const defaultZone = useMemo((): DashboardZone => {
+    const isDataCollector = roles?.some(r => normalizeRole(r).includes('datacollector'));
+    if (isDataCollector) return 'data-collector';
+
     if (dashboardPreferences?.defaultZone) {
-      const prefZone = dashboardPreferences.defaultZone as DashboardZone;
-      if (['operations', 'fom', 'data-collector', 'team', 'planning', 'compliance', 'performance', 'financial', 'ict'].includes(prefZone)) {
-        return prefZone;
+      const rawPref = dashboardPreferences.defaultZone as unknown as DashboardZoneType;
+      const normalizedPref = (rawPref === 'dataCollector' ? 'data-collector' : rawPref) as DashboardZone;
+      if (['operations', 'fom', 'data-collector', 'team', 'planning', 'compliance', 'performance', 'financial', 'ict'].includes(normalizedPref)) {
+        return normalizedPref;
       }
     }
-    
+
     const isAdmin = roles?.some(r => normalizeRole(r) === 'admin');
     if (isAdmin) return 'operations';
     
@@ -55,13 +59,14 @@ const Dashboard = () => {
     const isICT = roles?.some(r => normalizeRole(r) === 'ict');
     if (isICT) return 'operations';
     
-    const isDataCollector = roles?.some(r => normalizeRole(r).includes('datacollector'));
-    if (isDataCollector) return 'data-collector';
-    
     return 'operations';
   }, [roles, dashboardPreferences?.defaultZone]);
 
   const [activeZone, setActiveZone] = useState<DashboardZone>(defaultZone);
+  
+  useEffect(() => {
+    setActiveZone(defaultZone);
+  }, [defaultZone]);
 
   useEffect(() => {
     showDueReminders();
