@@ -152,13 +152,30 @@ export default function HubOperations() {
       }
 
       // Load unique sites from MMP entries (sites uploaded via MMP)
-      const { data: mmpSites, error: mmpError } = await supabase
+      // Try with registry_site_id first, fallback to basic query if column doesn't exist
+      let mmpSites: any[] | null = null;
+      
+      const { data: mmpSitesWithRegistry, error: mmpErrorWithRegistry } = await supabase
         .from('mmp_site_entries')
         .select('id, site_code, site_name, state, locality, hub_office, registry_site_id, created_at')
         .order('created_at', { ascending: false });
-
-      if (mmpError && mmpError.code !== '42P01') {
-        console.error('Error loading MMP sites:', mmpError);
+      
+      if (mmpErrorWithRegistry && mmpErrorWithRegistry.code === '42703') {
+        // Column doesn't exist, try without registry_site_id
+        const { data: mmpSitesBasic, error: mmpErrorBasic } = await supabase
+          .from('mmp_site_entries')
+          .select('id, site_code, site_name, state, locality, hub_office, created_at')
+          .order('created_at', { ascending: false });
+        
+        if (mmpErrorBasic && mmpErrorBasic.code !== '42P01') {
+          console.error('Error loading MMP sites:', mmpErrorBasic);
+        }
+        mmpSites = mmpSitesBasic;
+      } else {
+        if (mmpErrorWithRegistry && mmpErrorWithRegistry.code !== '42P01') {
+          console.error('Error loading MMP sites:', mmpErrorWithRegistry);
+        }
+        mmpSites = mmpSitesWithRegistry;
       }
 
       // Combine sites: registry sites + unique MMP sites not in registry
