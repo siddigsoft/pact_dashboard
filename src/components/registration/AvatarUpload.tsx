@@ -8,9 +8,11 @@ import { useToast } from "@/hooks/use-toast";
 interface AvatarUploadProps {
   onImageChange: (file: File | null, previewUrl: string | null) => void;
   previewUrl?: string | null;
+  required?: boolean;
+  error?: boolean;
 }
 
-const AvatarUpload = ({ onImageChange, previewUrl }: AvatarUploadProps) => {
+const AvatarUpload = ({ onImageChange, previewUrl, required = false, error = false }: AvatarUploadProps) => {
   const [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(previewUrl || null);
   const [uploading, setUploading] = useState(false);
   const { toast } = useToast();
@@ -57,7 +59,7 @@ const AvatarUpload = ({ onImageChange, previewUrl }: AvatarUploadProps) => {
 
   return (
     <div className="flex flex-col items-center gap-4">
-      <Avatar className="h-24 w-24">
+      <Avatar className={`h-24 w-24 ${error ? 'ring-2 ring-red-500' : ''}`}>
         {localPreviewUrl ? (
           <AvatarImage src={localPreviewUrl} alt="Profile" />
         ) : (
@@ -67,9 +69,9 @@ const AvatarUpload = ({ onImageChange, previewUrl }: AvatarUploadProps) => {
         )}
       </Avatar>
       <div>
-        <Button variant="outline" className="relative" disabled={uploading}>
+        <Button variant="outline" className={`relative ${error ? 'border-red-500 text-red-500 hover:bg-red-50' : ''}`} disabled={uploading}>
           <Upload className="mr-2 h-4 w-4" />
-          Upload Picture
+          {required ? 'Upload Picture *' : 'Upload Picture'}
           <input
             type="file"
             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
