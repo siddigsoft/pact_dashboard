@@ -40,6 +40,12 @@ The backend uses PostgreSQL via Supabase, leveraging Row Level Security (RLS) an
 
 ## Recent Changes
 
+*   **Wallet Balance Display Fix (Nov 2025):** Fixed Admin Wallets page to properly display earnings breakdown:
+    - Enhanced `adminListWallets` to query transactions by both `wallet_id` AND `user_id` for legacy support
+    - Added fallback display: when no transaction breakdown is available, shows "Total Earned" from the wallet's `total_earned` column
+    - Fixed balance parsing to handle both object and string formats for the `balances` JSONB column
+    - Ensured SDG balance is always converted to a number for proper display
+
 *   **Unified Supabase Client (Nov 2025):** Consolidated all Supabase imports to use a single client instance from `@/integrations/supabase/client`. Previously, some files imported from `@/lib/supabase` creating multiple GoTrueClient instances. All files now use the same client with proper auth configuration (persistSession, autoRefreshToken, detectSessionInUrl).
 
 *   **Sites Registry Duplicate Prevention:** Enhanced logging in `ensureSitesInRegistry()` to clearly show:
