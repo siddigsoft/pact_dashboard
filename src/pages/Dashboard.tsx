@@ -27,8 +27,16 @@ const Dashboard = () => {
   const { dashboardPreferences, getDefaultZoneForRole } = useSettings();
 
   const defaultZone = useMemo((): DashboardZone => {
-    const isDataCollector = roles?.some(r => normalizeRole(r).includes('datacollector'));
+    const normalizedCurrentRole = currentUser?.role ? normalizeRole(currentUser.role) : undefined;
+    const isDataCollector = (roles?.some(r => normalizeRole(r).includes('datacollector')))
+      || (!!normalizedCurrentRole && normalizedCurrentRole.includes('datacollector'));
     if (isDataCollector) return 'data-collector';
+
+    const isFOM = (roles?.some(r => {
+      const normalized = normalizeRole(r);
+      return normalized.includes('fom') || normalized.includes('fieldoperationmanager');
+    })) || (!!normalizedCurrentRole && (normalizedCurrentRole.includes('fom') || normalizedCurrentRole.includes('fieldoperationmanager')));
+    if (isFOM) return 'fom';
 
     if (dashboardPreferences?.defaultZone) {
       const rawPref = dashboardPreferences.defaultZone as unknown as DashboardZoneType;
@@ -40,12 +48,6 @@ const Dashboard = () => {
 
     const isAdmin = roles?.some(r => normalizeRole(r) === 'admin');
     if (isAdmin) return 'operations';
-    
-    const isFOM = roles?.some(r => {
-      const normalized = normalizeRole(r);
-      return normalized.includes('fom') || normalized.includes('fieldoperationmanager');
-    });
-    if (isFOM) return 'fom';
 
     const isSupervisor = roles?.some(r => normalizeRole(r).includes('supervisor'));
     if (isSupervisor) return 'team';
@@ -60,7 +62,7 @@ const Dashboard = () => {
     if (isICT) return 'operations';
     
     return 'operations';
-  }, [roles, dashboardPreferences?.defaultZone]);
+  }, [roles, dashboardPreferences?.defaultZone, currentUser?.role]);
 
   const [activeZone, setActiveZone] = useState<DashboardZone>(defaultZone);
   
