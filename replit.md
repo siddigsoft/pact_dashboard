@@ -40,12 +40,12 @@ The backend uses PostgreSQL via Supabase, leveraging Row Level Security (RLS) an
 
 ## Recent Changes
 
-*   **Visit Tracking Columns Added (Nov 2025):** Added dedicated database columns for visit tracking:
+*   **Visit Tracking with RPC Functions (Nov 2025):** Implemented robust visit tracking using PostgreSQL RPC functions:
     - Added `visit_started_at`, `visit_started_by`, `visit_completed_at`, `visit_completed_by` columns to `mmp_site_entries` table
-    - Refreshed PostgREST schema cache via `NOTIFY pgrst, 'reload schema'`
-    - Updated `handleConfirmStartVisit` and `handleCompleteVisit` in MMP.tsx to use direct columns
-    - PDF report generator has fallback support for both direct columns and legacy `additional_data` storage
-    - This resolves the "Could not find column in schema cache" errors
+    - Created `start_site_visit(p_site_id, p_user_id, p_auto_accept)` RPC function that bypasses PostgREST schema cache
+    - Created `complete_site_visit(p_site_id, p_user_id, p_final_location)` RPC function for visit completion
+    - Updated `handleConfirmStartVisit` and `handleCompleteVisit` in MMP.tsx to use RPC functions
+    - This completely resolves the "Could not find column in schema cache" errors by using server-side SQL execution
 
 *   **Wallet Balance Display Fix (Nov 2025):** Fixed Admin Wallets page to properly display earnings breakdown:
     - Enhanced `adminListWallets` to query transactions by both `wallet_id` AND `user_id` for legacy support
