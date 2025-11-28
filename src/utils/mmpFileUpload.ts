@@ -2,6 +2,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { MMPFile, MMPSiteEntry } from '@/types';
 import { toast } from 'sonner';
 import { validateCSV, CSVValidationError } from '@/utils/csvValidator';
+import { validateSitesAgainstRegistry, SiteMatchResult } from '@/utils/sitesRegistryMatcher';
 
 // Transform database record (snake_case) to MMPFile interface (camelCase)
 const transformDBToMMPFile = (dbRecord: any): MMPFile => {
@@ -502,6 +503,51 @@ export async function uploadMMPFile(
       };
     }
 
+    // Validate sites against Sites Registry - NON-BLOCKING (warnings only)
+    onProgress?.({ current: 45, total: 100, stage: 'Validating sites against registry' });
+    let registryValidation: { 
+      matches: SiteMatchResult[]; 
+      registeredCount: number; 
+      unregisteredCount: number; 
+      warnings: string[];
+    } | null = null;
+    
+    try {
+      registryValidation = await validateSitesAgainstRegistry(
+        entries.map((e, idx) => ({
+          id: e.id || `entry-${idx}`,
+          siteCode: e.siteCode,
+          siteName: e.siteName,
+          state: e.state,
+          locality: e.locality,
+        }))
+      );
+      
+      // Add registry warnings to the warning list (non-blocking)
+      if (registryValidation.unregisteredCount > 0) {
+        const registryWarnings: CSVValidationError[] = registryValidation.warnings.slice(0, 10).map((w, idx) => ({
+          type: 'warning' as const,
+          message: w,
+          category: 'sites_registry'
+        }));
+        
+        // Add summary warning if there are more
+        if (registryValidation.warnings.length > 10) {
+          registryWarnings.push({
+            type: 'warning' as const,
+            message: `... and ${registryValidation.warnings.length - 10} more sites not found in registry`,
+            category: 'sites_registry'
+          });
+        }
+        
+        rawWarnings.push(...registryWarnings);
+        
+        console.log(`Sites Registry validation: ${registryValidation.registeredCount} registered, ${registryValidation.unregisteredCount} not in registry`);
+      }
+    } catch (registryErr) {
+      console.warn('Sites Registry validation failed (non-blocking):', registryErr);
+    }
+
     // Prepare uploader info (name and role) for persistence
     let uploaderDisplay = 'Unknown';
     try {
@@ -627,26 +673,47 @@ export async function uploadMMPFile(
       const batch = entries.slice(i, i + BATCH_SIZE);
       const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
 
-      const siteEntriesData = batch.map(entry => ({
-        mmp_file_id: mmpId,
-        site_code: entry.siteCode,
-        hub_office: entry.hubOffice,
-        state: entry.state,
-        locality: entry.locality,
-        site_name: entry.siteName,
-        cp_name: entry.cpName,
-        visit_type: entry.visitType,
-        visit_date: entry.visitDate,
-        main_activity: entry.mainActivity,
-        activity_at_site: entry.siteActivity,
-        monitoring_by: entry.monitoringBy,
-        survey_tool: entry.surveyTool,
-        use_market_diversion: entry.useMarketDiversion,
-        use_warehouse_monitoring: entry.useWarehouseMonitoring,
-        comments: entry.comments,
-        additional_data: entry.additionalData || {},
-        status: entry.status || 'Pending'
-      }));
+      const siteEntriesData = batch.map((entry, batchIdx) => {
+        const entryIndex = i + batchIdx;
+        const registryMatch = registryValidation?.matches[entryIndex];
+        
+        const additionalData = {
+          ...(entry.additionalData || {}),
+          ...(registryMatch?.matchedRegistry ? {
+            registry_gps: {
+              latitude: registryMatch.gpsCoordinates?.latitude || null,
+              longitude: registryMatch.gpsCoordinates?.longitude || null,
+              source: 'sites_registry',
+              site_id: registryMatch.matchedRegistry.id,
+              site_code: registryMatch.matchedRegistry.site_code,
+              match_type: registryMatch.matchType,
+              match_confidence: registryMatch.matchConfidence,
+              matched_at: new Date().toISOString(),
+            },
+          } : {}),
+        };
+        
+        return {
+          mmp_file_id: mmpId,
+          site_code: entry.siteCode,
+          hub_office: entry.hubOffice,
+          state: entry.state,
+          locality: entry.locality,
+          site_name: entry.siteName,
+          cp_name: entry.cpName,
+          visit_type: entry.visitType,
+          visit_date: entry.visitDate,
+          main_activity: entry.mainActivity,
+          activity_at_site: entry.siteActivity,
+          monitoring_by: entry.monitoringBy,
+          survey_tool: entry.surveyTool,
+          use_market_diversion: entry.useMarketDiversion,
+          use_warehouse_monitoring: entry.useWarehouseMonitoring,
+          comments: entry.comments,
+          additional_data: additionalData,
+          status: entry.status || 'Pending'
+        };
+      });
 
       const { error: batchError } = await supabase
         .from('mmp_site_entries')
