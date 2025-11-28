@@ -929,6 +929,9 @@ export default function HubOperations() {
             <TabsTrigger value="sites" data-testid="tab-sites">
               <Navigation className="h-4 w-4 mr-2" />
               Sites
+              {sites.length > 0 && (
+                <Badge variant="secondary" className="ml-2">{sites.length}</Badge>
+              )}
             </TabsTrigger>
           </TabsList>
 
@@ -1113,6 +1116,54 @@ export default function HubOperations() {
 
         {/* Sites Tab */}
         <TabsContent value="sites" className="space-y-4">
+          {/* Sites Summary */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <Card className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-primary/10">
+                  <Navigation className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Total Sites</p>
+                  <p className="text-2xl font-bold">{sites.length}</p>
+                </div>
+              </div>
+            </Card>
+            <Card className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-green-500/10">
+                  <Layers className="h-5 w-5 text-green-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Registry</p>
+                  <p className="text-2xl font-bold">{sites.filter(s => s.source === 'registry').length}</p>
+                </div>
+              </div>
+            </Card>
+            <Card className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-amber-500/10">
+                  <Upload className="h-5 w-5 text-amber-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">From MMP</p>
+                  <p className="text-2xl font-bold">{sites.filter(s => s.source === 'mmp').length}</p>
+                </div>
+              </div>
+            </Card>
+            <Card className="p-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg bg-blue-500/10">
+                  <Filter className="h-5 w-5 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Filtered</p>
+                  <p className="text-2xl font-bold">{filteredSites.length}</p>
+                </div>
+              </div>
+            </Card>
+          </div>
+
           {viewMode === 'map' && (
             <Card>
               <CardContent className="p-0">
