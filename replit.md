@@ -36,7 +36,8 @@ The backend utilizes PostgreSQL through Supabase, incorporating Row Level Securi
     - **At Claim Time:** System looks up the collector's classification level (A=Experienced, B=Intermediate, C=Entry-level) and role scope from `user_classifications` table, then retrieves the appropriate fee from `classification_fee_structures` table. If no classification exists, defaults to 50 SDG.
     - **Confirmation Dialog:** Before claiming, collectors see a breakdown: Transport Budget + Collector Fee = Total Payout (all in SDG).
     - **After Claim:** The enumerator_fee and total cost are saved to `mmp_site_entries` only after successful claim, preserving dispatch metadata.
-    - Key files: `use-claim-fee-calculation.ts` (hook), `ClaimSiteButton.tsx` (UI), `DispatchSitesDialog.tsx` (dispatch), `SiteDetailDialog.tsx` (display).
+    - **User Profile Integration:** Classification data is fetched during user hydration and included in `currentUser.classification` with level, roleScope, retainer status, and effective dates. This enables real-time fee calculation without additional API calls.
+    - Key files: `use-claim-fee-calculation.ts` (hook), `ClaimSiteButton.tsx` (UI), `DispatchSitesDialog.tsx` (dispatch), `SiteDetailDialog.tsx` (display), `UserContext.tsx` (classification loading).
 *   **Sudan Administrative Data:** Integrated complete Sudan administrative structure (18 states, 188 localities) based on official OCHA/WFP COD-AB, including English/Arabic names and helper functions.
 *   **Navigation & User Preferences:** A comprehensive system for customizing the sidebar navigation (6 workflow-aligned menu groups) and dashboard personalization (role-based zones). Users can hide/show menu items, pin items, collapse groups, and choose a default dashboard zone.
 *   **Unified Site Management System:** A comprehensive site lifecycle management system that eliminates duplicate site entries and enables GPS enrichment over time. The workflow:

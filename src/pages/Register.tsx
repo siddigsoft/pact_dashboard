@@ -34,6 +34,7 @@ const Register = () => {
 
   const [selectedHub, setSelectedHub] = useState<string>("");
   const [selectedState, setSelectedState] = useState<string>("");
+  const [selectedLocality, setSelectedLocality] = useState<string>("");
   const [availableStates, setAvailableStates] = useState<string[]>([]);
   const [localities, setLocalities] = useState<{ id: string; name: string; }[]>([]);
 
@@ -48,10 +49,10 @@ const Register = () => {
     const needsLocationValidation = formData.role === 'dataCollector' || formData.role === 'coordinator';
     const needsHubValidation = formData.role === 'supervisor';
 
-    if (needsLocationValidation && (!selectedHub || !selectedState)) {
+    if (needsLocationValidation && (!selectedHub || !selectedState || !selectedLocality)) {
       toast({
         title: "Missing Location",
-        description: "Please select your hub and state",
+        description: "Please select your hub, state, and locality for site matching",
         variant: "destructive"
       });
       return;
@@ -73,6 +74,7 @@ const Register = () => {
         ...formData,
         hubId: selectedHub,
         stateId: selectedState,
+        localityId: selectedLocality,
       });
 
       if (success) {
@@ -154,6 +156,7 @@ const Register = () => {
     if (formData.role === 'dataCollector' || formData.role === 'coordinator') {
       setSelectedHub("");
       setSelectedState("");
+      setSelectedLocality("");
       setAvailableStates([]);
       setLocalities([]);
     }
@@ -165,6 +168,7 @@ const Register = () => {
       if (hub) {
         setAvailableStates(hub.states);
         setSelectedState("");
+        setSelectedLocality("");
         setLocalities([]);
       }
     }
@@ -174,6 +178,7 @@ const Register = () => {
     if (selectedState) {
       const stateLocalities = getLocalitiesByState(selectedState);
       setLocalities(stateLocalities);
+      setSelectedLocality("");
     }
   }, [selectedState]);
 
@@ -217,8 +222,11 @@ const Register = () => {
                       setSelectedHub={setSelectedHub}
                       selectedState={selectedState}
                       setSelectedState={setSelectedState}
+                      selectedLocality={selectedLocality}
+                      setSelectedLocality={setSelectedLocality}
                       availableStates={availableStates}
                       localities={localities}
+                      localityRequired={true}
                     />
                   )}
 

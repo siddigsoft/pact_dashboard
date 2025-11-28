@@ -323,6 +323,16 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             .filter((rr): rr is AppRole => !!rr)
         : [];
 
+      // Fetch user's active classification
+      const { data: classificationData } = await supabase
+        .from('user_classifications')
+        .select('classification_level, role_scope, has_retainer, retainer_amount_cents, retainer_currency, effective_from, effective_until')
+        .eq('user_id', authUser.id)
+        .eq('is_active', true)
+        .order('effective_from', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
       const userProfile = profileData || {
         id: authUser.id,
         full_name: authUser.email?.split('@')[0] || '',
@@ -383,7 +393,16 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
           rating: 0,
           totalCompletedTasks: 0,
           onTimeCompletion: 0,
-        }
+        },
+        classification: classificationData ? {
+          level: classificationData.classification_level,
+          roleScope: classificationData.role_scope,
+          hasRetainer: classificationData.has_retainer || false,
+          retainerAmountCents: classificationData.retainer_amount_cents || 0,
+          retainerCurrency: classificationData.retainer_currency || 'SDG',
+          effectiveFrom: classificationData.effective_from,
+          effectiveUntil: classificationData.effective_until,
+        } : undefined
       };
 
       setCurrentUser(supabaseUser);
@@ -1081,6 +1100,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     updateUserAvailability,
     toggleLocationSharing,
     refreshUsers,
+    hydrateCurrentUser,
     roles,
     hasRole,
     addRole,
