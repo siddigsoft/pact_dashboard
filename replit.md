@@ -39,12 +39,14 @@ The backend utilizes PostgreSQL through Supabase, incorporating Row Level Securi
     - Key files: `use-claim-fee-calculation.ts` (hook), `ClaimSiteButton.tsx` (UI), `DispatchSitesDialog.tsx` (dispatch), `SiteDetailDialog.tsx` (display).
 *   **Sudan Administrative Data:** Integrated complete Sudan administrative structure (18 states, 188 localities) based on official OCHA/WFP COD-AB, including English/Arabic names and helper functions.
 *   **Navigation & User Preferences:** A comprehensive system for customizing the sidebar navigation (6 workflow-aligned menu groups) and dashboard personalization (role-based zones). Users can hide/show menu items, pin items, collapse groups, and choose a default dashboard zone.
-*   **Sites Registry GPS Integration:** Links MMP site entries with the master Sites Registry to enable GPS coordinate lookup. The system:
-    - **During MMP Upload:** Matches uploaded sites to registry entries by exact site code or name+state+locality combination, storing GPS coordinates and match metadata in `additional_data.registry_gps`
-    - **During Dispatch:** Re-validates registry matches and enriches site entries with GPS data if found; preserves existing GPS data if no new match is found
-    - **UI Display:** SiteDetailDialog shows GPS coordinates (latitude/longitude) with match type badge (Site Code, Name + Location, or Partial Match) when available
-    - **Data Structure:** Consistent nested `registry_gps` object with latitude, longitude, source, site_id, site_code, match_type, match_confidence, and matched_at fields
-    - Key files: `sitesRegistryMatcher.ts` (matching logic), `mmpFileUpload.ts` (upload enrichment), `DispatchSitesDialog.tsx` (dispatch enrichment), `SiteDetailDialog.tsx` (display)
+*   **Unified Site Management System:** A comprehensive site lifecycle management system that eliminates duplicate site entries and enables GPS enrichment over time. The workflow:
+    - **During MMP Upload:** Sites are automatically registered in `sites_registry` via `ensureSitesInRegistry()`. New sites are created; existing sites are matched by site code or name+state+locality and linked via `registry_site_id` foreign key in `mmp_site_entries`. The `mmp_count` field tracks how many MMPs reference each site.
+    - **Duplicate Prevention:** The system checks for existing sites in the registry before creating new ones, preventing duplicate entries across monthly monitoring plans. Same project/hub/month MMPs are blocked from re-upload.
+    - **GPS Enrichment:** After field visits, GPS coordinates captured during site visits are saved to `sites_registry.gps_latitude/gps_longitude` via `saveGPSToRegistryFromSiteEntry()`. User-facing toast notifications provide feedback on GPS save success/failure.
+    - **Data Flow:** Upload MMP → Auto-create/match registry sites → Link entries via registry_site_id → Complete site visit → Save GPS to registry → Reuse enriched sites in future MMPs
+    - **Database Schema:** `sites_registry` (master site list with GPS), `mmp_site_entries.registry_site_id` (foreign key), `site_visits.registry_site_id` (foreign key)
+    - **UI Display:** SiteDetailDialog shows registry linkage status and GPS coordinates from both database column and legacy `additional_data.registry_gps`
+    - Key files: `mmpFileUpload.ts` (upload/registration), `sitesRegistryMatcher.ts` (matching logic), `MMP.tsx` (GPS save on visit completion), `SiteDetailDialog.tsx` (display)
 
 ## External Dependencies
 
