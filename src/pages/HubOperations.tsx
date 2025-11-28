@@ -152,28 +152,10 @@ export default function HubOperations() {
       }
 
       // Load unique sites from MMP entries (sites uploaded via MMP)
-      // First try with registry_site_id, fallback to without it
-      let mmpSites: any[] | null = null;
-      let mmpError: any = null;
-      
-      const { data: mmpSitesWithRegistry, error: mmpErrorWithRegistry } = await supabase
+      const { data: mmpSites, error: mmpError } = await supabase
         .from('mmp_site_entries')
         .select('id, site_code, site_name, state, locality, hub_office, registry_site_id, created_at')
         .order('created_at', { ascending: false });
-      
-      if (mmpErrorWithRegistry && mmpErrorWithRegistry.code === '42703') {
-        // Column doesn't exist, try without registry_site_id
-        const { data: mmpSitesBasic, error: mmpErrorBasic } = await supabase
-          .from('mmp_site_entries')
-          .select('id, site_code, site_name, state, locality, hub_office, created_at')
-          .order('created_at', { ascending: false });
-        
-        mmpSites = mmpSitesBasic;
-        mmpError = mmpErrorBasic;
-      } else {
-        mmpSites = mmpSitesWithRegistry;
-        mmpError = mmpErrorWithRegistry;
-      }
 
       if (mmpError && mmpError.code !== '42P01') {
         console.error('Error loading MMP sites:', mmpError);
@@ -233,16 +215,7 @@ export default function HubOperations() {
       setSites(combinedSites);
       localStorage.removeItem('pact_sites_local');
     } catch (err) {
-      console.error('Error loading sites from database, using local storage:', err);
-      const storedSites = localStorage.getItem('pact_sites_local');
-      if (storedSites) {
-        try {
-          setSites(JSON.parse(storedSites));
-          return;
-        } catch (e) {
-          console.error('Error parsing stored sites:', e);
-        }
-      }
+      console.error('Error loading sites from database:', err);
       setSites([]);
     }
   };
@@ -1154,11 +1127,11 @@ export default function HubOperations() {
             <Card className="p-4">
               <div className="flex items-center gap-3">
                 <div className="p-2 rounded-lg bg-blue-500/10">
-                  <Filter className="h-5 w-5 text-blue-600" />
+                  <MapPin className="h-5 w-5 text-blue-600" />
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Filtered</p>
-                  <p className="text-2xl font-bold">{filteredSites.length}</p>
+                  <p className="text-sm text-muted-foreground">With GPS</p>
+                  <p className="text-2xl font-bold">{sites.filter(s => s.gps_latitude && s.gps_longitude).length}</p>
                 </div>
               </div>
             </Card>
@@ -1213,7 +1186,7 @@ export default function HubOperations() {
                         <th className="text-left p-3 font-medium">Locality</th>
                         <th className="text-left p-3 font-medium">Type</th>
                         <th className="text-left p-3 font-medium">Source</th>
-                        <th className="text-left p-3 font-medium">Status</th>
+                        <th className="text-left p-3 font-medium">GPS</th>
                         <th className="text-left p-3 font-medium">Actions</th>
                       </tr>
                     </thead>
@@ -1233,9 +1206,14 @@ export default function HubOperations() {
                             </Badge>
                           </td>
                           <td className="p-3">
-                            <Badge variant={site.status === 'active' ? 'default' : 'secondary'}>
-                              {site.status}
-                            </Badge>
+                            {site.gps_latitude && site.gps_longitude ? (
+                              <Badge variant="default" className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                                <MapPin className="h-3 w-3 mr-1" />
+                                Yes
+                              </Badge>
+                            ) : (
+                              <Badge variant="secondary">No</Badge>
+                            )}
                           </td>
                           <td className="p-3">
                             <div className="flex gap-1">

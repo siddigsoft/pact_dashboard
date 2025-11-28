@@ -72,6 +72,12 @@ export default function SiteCard({
                   {site.source === 'registry' ? 'Registry' : 'MMP'}
                 </Badge>
               )}
+              {site.gps_latitude && site.gps_longitude && (
+                <Badge variant="outline" className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                  <MapPin className="h-3 w-3 mr-1" />
+                  GPS
+                </Badge>
+              )}
             </div>
             <CardTitle className="text-base font-semibold truncate">
               {site.site_name}
