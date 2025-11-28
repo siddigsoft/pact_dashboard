@@ -2,7 +2,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { MMPFile, MMPSiteEntry } from '@/types';
 import { toast } from 'sonner';
 import { validateCSV, CSVValidationError } from '@/utils/csvValidator';
-import { validateSitesAgainstRegistry, SiteMatchResult } from '@/utils/sitesRegistryMatcher';
+import { validateSitesAgainstRegistry, SiteMatchResult, RegistryLinkage } from '@/utils/sitesRegistryMatcher';
 
 // Transform database record (snake_case) to MMPFile interface (camelCase)
 const transformDBToMMPFile = (dbRecord: any): MMPFile => {
@@ -509,10 +509,19 @@ export async function uploadMMPFile(
       matches: SiteMatchResult[]; 
       registeredCount: number; 
       unregisteredCount: number; 
+      reviewRequiredCount: number;
+      autoAcceptedCount: number;
       warnings: string[];
     } | null = null;
     
     try {
+      // Get current user ID for audit trail
+      let userId = 'system';
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user?.id) userId = user.id;
+      } catch {}
+      
       registryValidation = await validateSitesAgainstRegistry(
         entries.map((e, idx) => ({
           id: e.id || `entry-${idx}`,
@@ -520,11 +529,16 @@ export async function uploadMMPFile(
           siteName: e.siteName,
           state: e.state,
           locality: e.locality,
-        }))
+        })),
+        {
+          userId,
+          sourceWorkflow: 'mmp_upload',
+        }
       );
       
       // Add registry warnings to the warning list (non-blocking)
-      if (registryValidation.unregisteredCount > 0) {
+      const totalNonAutoAccepted = registryValidation.unregisteredCount + registryValidation.reviewRequiredCount;
+      if (totalNonAutoAccepted > 0) {
         const registryWarnings: CSVValidationError[] = registryValidation.warnings.slice(0, 10).map((w, idx) => ({
           type: 'warning' as const,
           message: w,
@@ -535,14 +549,14 @@ export async function uploadMMPFile(
         if (registryValidation.warnings.length > 10) {
           registryWarnings.push({
             type: 'warning' as const,
-            message: `... and ${registryValidation.warnings.length - 10} more sites not found in registry`,
+            message: `... and ${registryValidation.warnings.length - 10} more sites require review`,
             category: 'sites_registry'
           });
         }
         
         rawWarnings.push(...registryWarnings);
         
-        console.log(`Sites Registry validation: ${registryValidation.registeredCount} registered, ${registryValidation.unregisteredCount} not in registry`);
+        console.log(`Sites Registry validation: ${registryValidation.autoAcceptedCount} auto-accepted (>90% confidence), ${registryValidation.reviewRequiredCount} require review, ${registryValidation.unregisteredCount} unregistered`);
       }
     } catch (registryErr) {
       console.warn('Sites Registry validation failed (non-blocking):', registryErr);
@@ -677,21 +691,30 @@ export async function uploadMMPFile(
         const entryIndex = i + batchIdx;
         const registryMatch = registryValidation?.matches[entryIndex];
         
-        const additionalData = {
+        // Build enhanced registry_linkage structure
+        const additionalData: Record<string, any> = {
           ...(entry.additionalData || {}),
-          ...(registryMatch?.matchedRegistry ? {
-            registry_gps: {
-              latitude: registryMatch.gpsCoordinates?.latitude || null,
-              longitude: registryMatch.gpsCoordinates?.longitude || null,
+        };
+        
+        // Always include registry_linkage for tracking (whether matched or not)
+        if (registryMatch) {
+          additionalData.registry_linkage = registryMatch.registryLinkage;
+          
+          // Also keep legacy registry_gps for backward compatibility (if auto-accepted)
+          if (registryMatch.autoAccepted && registryMatch.gpsCoordinates) {
+            additionalData.registry_gps = {
+              latitude: registryMatch.gpsCoordinates.latitude,
+              longitude: registryMatch.gpsCoordinates.longitude,
+              accuracy_meters: registryMatch.gpsCoordinates.accuracy_meters,
               source: 'sites_registry',
-              site_id: registryMatch.matchedRegistry.id,
-              site_code: registryMatch.matchedRegistry.site_code,
+              site_id: registryMatch.matchedRegistry?.id,
+              site_code: registryMatch.matchedRegistry?.site_code,
               match_type: registryMatch.matchType,
               match_confidence: registryMatch.matchConfidence,
-              matched_at: new Date().toISOString(),
-            },
-          } : {}),
-        };
+              matched_at: registryMatch.registryLinkage.audit.matched_at,
+            };
+          }
+        }
         
         return {
           mmp_file_id: mmpId,
