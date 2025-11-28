@@ -8,6 +8,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Pencil, Save, X } from 'lucide-react';
 import { ClaimSiteButton } from '@/components/site-visit/ClaimSiteButton';
+import { useAppContext } from '@/context/AppContext';
+import { supabase } from '@/integrations/supabase/client';
 
 interface SiteDetailDialogProps {
   open: boolean;
@@ -39,6 +41,8 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
   const [saving, setSaving] = useState(false);
   const [sendBackOpen, setSendBackOpen] = useState(false);
   const [sendBackComments, setSendBackComments] = useState('');
+  const { users } = useAppContext();
+  const [acceptedByName, setAcceptedByName] = useState<string | null>(null);
 
   // Normalize site data
   const normalizeSite = (site: any) => {
@@ -129,6 +133,41 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
 
   const row = normalizeSite(site);
   const isAvailableSite = row?.status?.toLowerCase() === 'dispatched' && !row?.acceptedBy;
+
+  useEffect(() => {
+    const id = row?.acceptedBy as string | undefined;
+    if (!id) {
+      setAcceptedByName(null);
+      return;
+    }
+    const looksLikeUUID = typeof id === 'string' && /[0-9a-fA-F-]{30,}/.test(id);
+    if (!looksLikeUUID) {
+      setAcceptedByName(id);
+      return;
+    }
+    const local = users?.find(u => u.id === id);
+    if (local) {
+      setAcceptedByName(local.fullName || local.name || local.username || local.email || id);
+      return;
+    }
+    let cancelled = false;
+    const fetchProfile = async () => {
+      try {
+        const { data } = await supabase
+          .from('profiles')
+          .select('full_name,username,email')
+          .eq('id', id)
+          .single();
+        if (!cancelled) {
+          setAcceptedByName(data?.full_name || data?.username || data?.email || id);
+        }
+      } catch {
+        if (!cancelled) setAcceptedByName(id);
+      }
+    };
+    fetchProfile();
+    return () => { cancelled = true; };
+  }, [row?.acceptedBy, users]);
 
   // Initialize draft when entering edit mode
   useEffect(() => {
@@ -642,7 +681,7 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
                 {row.acceptedBy && (
                   <div>
                     <Label className="text-xs font-medium text-gray-600">Accepted By</Label>
-                    <p className="font-medium text-gray-900 mt-1">{row.acceptedBy}</p>
+                    <p className="font-medium text-gray-900 mt-1">{acceptedByName || row.acceptedBy}</p>
                   </div>
                 )}
                 {row.acceptedAt && (
