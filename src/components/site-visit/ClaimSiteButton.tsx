@@ -59,9 +59,15 @@ export function ClaimSiteButton({
     setShowConfirmation(false);
 
     try {
+      // Pass the calculated fee directly to the RPC for atomic update
       const { data, error } = await supabase.rpc('claim_site_visit', {
         p_site_id: siteId,
-        p_user_id: userId
+        p_user_id: userId,
+        p_enumerator_fee: feeBreakdown.enumeratorFee,
+        p_total_cost: feeBreakdown.totalPayout,
+        p_classification_level: feeBreakdown.classificationLevel || null,
+        p_role_scope: feeBreakdown.roleScope || null,
+        p_fee_source: feeBreakdown.feeSource
       });
 
       if (error) {
@@ -74,47 +80,17 @@ export function ClaimSiteButton({
         return;
       }
 
-      const result = data as { success: boolean; error?: string; message: string; site_name?: string };
+      const result = data as { success: boolean; error?: string; message: string; site_name?: string; enumerator_fee?: number; total_payout?: number };
 
       if (result.success) {
-        const { data: currentEntry } = await supabase
-          .from('mmp_site_entries')
-          .select('additional_data')
-          .eq('id', siteId)
-          .single();
-
-        const existingData = currentEntry?.additional_data || {};
-
-        const { error: updateError } = await supabase
-          .from('mmp_site_entries')
-          .update({
-            enumerator_fee: feeBreakdown.enumeratorFee,
-            cost: feeBreakdown.totalPayout,
-            additional_data: {
-              ...existingData,
-              claim_fee_calculation: {
-                transport_budget: feeBreakdown.transportBudget,
-                enumerator_fee: feeBreakdown.enumeratorFee,
-                total_payout: feeBreakdown.totalPayout,
-                classification_level: feeBreakdown.classificationLevel,
-                role_scope: feeBreakdown.roleScope,
-                fee_source: feeBreakdown.feeSource,
-                calculated_at: new Date().toISOString(),
-                calculated_for_user: userId,
-                claimed_at: new Date().toISOString()
-              }
-            }
-          })
-          .eq('id', siteId);
-
-        if (updateError) {
-          console.error('Error updating site with fee after claim:', updateError);
-        }
+        // Fee is now saved atomically by the RPC, no need for separate update
+        const finalFee = result.enumerator_fee ?? feeBreakdown.enumeratorFee;
+        const finalTotal = result.total_payout ?? feeBreakdown.totalPayout;
 
         setClaimed(true);
         toast({
           title: 'Site Claimed!',
-          description: `${result.message} Your fee: ${feeBreakdown.enumeratorFee.toFixed(2)} SDG + Transport: ${feeBreakdown.transportBudget.toFixed(2)} SDG = ${feeBreakdown.totalPayout.toFixed(2)} SDG`,
+          description: `${result.message} Your fee: ${finalFee.toFixed(2)} SDG + Transport: ${feeBreakdown.transportBudget.toFixed(2)} SDG = ${finalTotal.toFixed(2)} SDG`,
           variant: 'default'
         });
         onClaimed?.();
