@@ -283,21 +283,8 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         );
       }
       
-      setAppUsers(prev => 
-        prev.map(user => {
-          if (user.id === currentUser?.id) return user;
-          
-          if (Math.random() > 0.95) {
-            const newAvailability = user.availability === 'online' ? 'offline' : 'online';
-            return {
-              ...user,
-              availability: newAvailability,
-              lastActive: newAvailability === 'online' ? new Date().toISOString() : user.lastActive
-            };
-          }
-          return user;
-        })
-      );
+      // Note: Removed random availability simulation - availability should only change 
+      // when users explicitly update their status or based on real session activity
     }, 60000);
     
     return () => clearInterval(activityInterval);
