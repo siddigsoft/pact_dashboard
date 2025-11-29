@@ -460,11 +460,11 @@ const ReviewAssignCoordinators: React.FC = () => {
       <div className="mb-6">
         <Button
           variant="outline"
-          onClick={() => navigate(`/mmp/${mmpFile.id}`)}
+          onClick={() => navigate('/mmp')}
           className="flex items-center gap-2"
         >
           <ArrowLeft className="h-4 w-4" />
-          Back to MMP Details
+          Back to MMP Management
         </Button>
       </div>
 

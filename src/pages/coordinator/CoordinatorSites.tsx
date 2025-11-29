@@ -3,7 +3,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,10 +12,13 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
 import { useMMP } from '@/context/mmp/MMPContext';
-import { CheckCircle, Clock, FileCheck, XCircle, ArrowLeft, Eye, Edit, Search, ChevronLeft, ChevronRight, Calendar, CheckSquare } from 'lucide-react';
+import { CheckCircle, Clock, FileCheck, XCircle, ArrowLeft, Eye, Edit, Search, ChevronLeft, ChevronRight, Calendar, CheckSquare, MapPin, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
 import { DatePicker } from '@/components/ui/date-picker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useCoordinatorLocalityPermits } from '@/hooks/use-coordinator-permits';
+import { LocalityPermitUpload } from '@/components/LocalityPermitUpload';
+import { LocalityPermitStatus } from '@/types/coordinator-permits';
 
 // Predefined options for dropdowns
 const HUB_OFFICE_OPTIONS = [
@@ -400,8 +403,10 @@ const CoordinatorSites: React.FC = () => {
   const { toast } = useToast();
   const { currentUser } = useAppContext();
   const { updateMMP } = useMMP();
+  const { permits, loading: permitsLoading, uploadPermit, fetchPermits } = useCoordinatorLocalityPermits();
   const [loading, setLoading] = useState(true);
   const [sites, setSites] = useState<SiteVisit[]>([]);
+  const [localitiesData, setLocalitiesData] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState('new');
   const [verifyDialogOpen, setVerifyDialogOpen] = useState(false);
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
@@ -435,6 +440,13 @@ const CoordinatorSites: React.FC = () => {
   const [approvedSitesCount, setApprovedSitesCount] = useState(0);
   const [completedSitesCount, setCompletedSitesCount] = useState(0);
   const [rejectedSitesCount, setRejectedSitesCount] = useState(0);
+
+  // Permit workflow state
+  const [permitQuestionDialogOpen, setPermitQuestionDialogOpen] = useState(false);
+  const [workWithoutPermitDialogOpen, setWorkWithoutPermitDialogOpen] = useState(false);
+  const [selectedLocalityForWorkflow, setSelectedLocalityForWorkflow] = useState<any>(null);
+  const [readOnlyMode, setReadOnlyMode] = useState(false);
+  const [expandedLocalities, setExpandedLocalities] = useState<Set<string>>(new Set());
 
   // Database data for location dropdowns
   const [hubs, setHubs] = useState<Hub[]>([]);
@@ -583,7 +595,7 @@ const CoordinatorSites: React.FC = () => {
     setActivityFilter('all');
     setMonitoringFilter('all');
     setSurveyToolFilter('all');
-  }, [currentUser, activeTab]);
+  }, [currentUser, activeTab, permits]);
 
   const loadSites = async () => {
     if (!currentUser?.id) return;
@@ -631,48 +643,89 @@ const CoordinatorSites: React.FC = () => {
         };
       });
 
+      // Group sites by locality and check permit status
+      const localitiesMap = new Map<string, any>();
+      
+      filtered.forEach((site: any) => {
+        const localityKey = `${site.state}-${site.locality}`;
+        if (!localitiesMap.has(localityKey)) {
+          localitiesMap.set(localityKey, {
+            state: site.state,
+            locality: site.locality,
+            sites: [],
+            hasPermit: false,
+            permitId: null,
+            permitUploadedAt: null
+          });
+        }
+        localitiesMap.get(localityKey).sites.push(site);
+      });
+
+      // Check permit status for each locality
+      const localitiesArray = Array.from(localitiesMap.values()).map(locality => {
+        const permitKey = `${locality.state}-${locality.locality}`;
+        const permit = permits.find(p => p.stateId === locality.state && p.localityId === locality.locality);
+        
+        return {
+          ...locality,
+          hasPermit: !!permit,
+          permitId: permit?.id || null,
+          permitUploadedAt: permit?.uploadedAt || null
+        };
+      });
+
+      // Don't filter localities by permit status - show all localities
+      // const permittedLocalities = localitiesArray.filter(locality => locality.hasPermit);
+      
+      // Flatten sites from all localities (they will be filtered by the workflow)
+      let allSites: SiteVisit[] = [];
+      localitiesArray.forEach(locality => {
+        allSites = allSites.concat(locality.sites);
+      });
+
       // Filter by status based on active tab
       switch (activeTab) {
         case 'new':
-          filtered = filtered.filter((e: any) => 
+          allSites = allSites.filter((e: any) => 
             e.status === 'Pending' || e.status === 'Dispatched' || e.status === 'assigned' || e.status === 'inProgress' || e.status === 'in_progress'
           );
           break;
         case 'verified':
-          filtered = filtered.filter((e: any) => 
+          allSites = allSites.filter((e: any) => 
             e.status?.toLowerCase() === 'verified'
           );
           break;
         case 'approved':
-          filtered = filtered.filter((e: any) => 
+          allSites = allSites.filter((e: any) => 
             e.status?.toLowerCase() === 'approved'
           );
           break;
         case 'completed':
-          filtered = filtered.filter((e: any) => 
+          allSites = allSites.filter((e: any) => 
             e.status?.toLowerCase() === 'completed'
           );
           break;
         case 'rejected':
-          filtered = filtered.filter((e: any) => 
+          allSites = allSites.filter((e: any) => 
             e.status?.toLowerCase() === 'rejected'
           );
           break;
       }
 
       // Sort by assigned_at
-      filtered.sort((a: any, b: any) => {
+      allSites.sort((a: any, b: any) => {
         const aAt = a.assigned_at || a.created_at;
         const bAt = b.assigned_at || b.created_at;
         return new Date(bAt).getTime() - new Date(aAt).getTime();
       });
 
-      setSites(filtered);
+      setSites(allSites);
+      setLocalitiesData(localitiesArray); // Store all localities
       setCurrentPage(1); // Reset pagination when tab changes
       
       // Initialize visit dates state
       const visitDates: { [key: string]: Date | undefined } = {};
-      filtered.forEach((site: any) => {
+      allSites.forEach((site: any) => {
         if (site.visit_date) {
           visitDates[site.id] = new Date(site.visit_date);
         }
@@ -1104,12 +1157,36 @@ const CoordinatorSites: React.FC = () => {
     }
   };
 
-  const handleSelectAllSites = () => {
-    if (selectedSites.size === filteredSites.length) {
-      setSelectedSites(new Set());
+  const handlePermitQuestionResponse = (hasPermit: boolean) => {
+    setPermitQuestionDialogOpen(false);
+
+    if (hasPermit) {
+      // Show permit upload dialog
+      setWorkWithoutPermitDialogOpen(false);
+      // The permit upload component will be shown in a separate dialog
+      // For now, we'll expand the locality to show the upload component
+      if (selectedLocalityForWorkflow) {
+        const localityKey = `${selectedLocalityForWorkflow.state}-${selectedLocalityForWorkflow.locality}`;
+        setExpandedLocalities(prev => new Set([...prev, localityKey]));
+      }
     } else {
-      setSelectedSites(new Set(filteredSites.map(site => site.id)));
+      // No permit - just go back, no access
+      setSelectedLocalityForWorkflow(null);
     }
+  };
+
+
+
+  const handlePermitUploaded = async () => {
+    await fetchPermits();
+    toast({
+      title: 'Permit Uploaded',
+      description: `Permit for ${selectedLocalityForWorkflow?.locality} has been uploaded successfully. You can now access sites in this locality.`,
+    });
+    // Navigate to "New Sites" tab since they now have full access
+    setActiveTab('new');
+    setSelectedLocalityForWorkflow(null);
+    setExpandedLocalities(new Set()); // Clear expanded localities
   };
 
   const handleSiteSelection = (siteId: string) => {
@@ -1196,7 +1273,7 @@ const CoordinatorSites: React.FC = () => {
     >
       <CardContent className="pt-4">
         <div className="flex items-start gap-3">
-          {activeTab === 'new' && (
+          {activeTab === 'new' && !readOnlyMode && (
             <div className="pt-1">
               <input
                 type="checkbox"
@@ -1230,6 +1307,100 @@ const CoordinatorSites: React.FC = () => {
       </CardContent>
     </Card>
   );
+
+  const renderLocalityCard = (localityData: any) => {
+    // Find the locality info from the localities array to get IDs
+    const localityInfo = localities.find(loc => 
+      loc.name === localityData.locality && 
+      loc.state_id === localities.find(s => s.name === localityData.state)?.id
+    );
+
+    const localityPermitStatus: LocalityPermitStatus = {
+      state: localityData.state,
+      locality: localityData.locality,
+      stateId: localityInfo?.state_id || '',
+      localityId: localityInfo?.id || '',
+      hasPermit: localityData.hasPermit,
+      permit: localityData.permitId ? permits.find(p => p.id === localityData.permitId) : undefined,
+      siteCount: localityData.sites.length,
+      sites: localityData.sites
+    };
+
+    const isExpanded = expandedLocalities.has(`${localityData.state}-${localityData.locality}`);
+
+    return (
+      <Card 
+        key={`${localityData.state}-${localityData.locality}`}
+        className="overflow-hidden transition-shadow hover:shadow-md cursor-pointer"
+        onClick={() => {
+          setSelectedLocalityForWorkflow(localityData);
+          setPermitQuestionDialogOpen(true);
+        }}
+      >
+        <CardContent className="pt-4">
+          <div className="flex items-start gap-3">
+            <div className="flex-1">
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <h3 className="font-semibold text-lg">{localityData.locality}</h3>
+                  <p className="text-sm text-muted-foreground">{localityData.state}</p>
+                  <p className="text-sm text-muted-foreground">{localityData.sites.length} site{localityData.sites.length !== 1 ? 's' : ''} assigned</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {localityData.hasPermit ? (
+                    <Badge variant="default" className="bg-green-600">
+                      <CheckCircle className="h-3 w-3 mr-1" />
+                      Permit Uploaded
+                    </Badge>
+                  ) : (
+                    <Badge variant="destructive">
+                      <AlertTriangle className="h-3 w-3 mr-1" />
+                      Permit Required
+                    </Badge>
+                  )}
+                </div>
+              </div>
+              
+              {/* Show sites preview when locality is expanded */}
+              {isExpanded && (
+                <div className="mt-4">
+                  <div className="text-sm text-muted-foreground mb-2">
+                    Sites in this locality:
+                  </div>
+                  <div className="space-y-2 max-h-40 overflow-y-auto">
+                    {localityData.sites.slice(0, 5).map((site: SiteVisit) => (
+                      <div key={site.id} className="flex items-center justify-between p-2 bg-gray-50 rounded text-sm">
+                        <div>
+                          <span className="font-medium">{site.site_name}</span>
+                          <span className="text-muted-foreground ml-2">({site.site_code})</span>
+                        </div>
+                        <Badge variant={
+                          site.status === 'verified' ? 'default' :
+                          site.status === 'approved' ? 'success' :
+                          site.status === 'completed' ? 'success' :
+                          site.status === 'rejected' ? 'destructive' :
+                          'secondary'
+                        } className="text-xs">
+                          {site.status === 'assigned' ? 'New' : 
+                           site.status === 'inProgress' ? 'In Progress' : 
+                           site.status.charAt(0).toUpperCase() + site.status.slice(1)}
+                        </Badge>
+                      </div>
+                    ))}
+                    {localityData.sites.length > 5 && (
+                      <div className="text-xs text-muted-foreground text-center py-1">
+                        ... and {localityData.sites.length - 5} more sites
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
 
   if (loading) {
     return (
@@ -1286,205 +1457,74 @@ const CoordinatorSites: React.FC = () => {
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle>New Sites for Verification</CardTitle>
+                <CardTitle>Localities with Assigned Sites</CardTitle>
                 <div className="relative w-full sm:w-auto max-w-sm">
                   <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input
                     type="search"
-                    placeholder="Search sites..."
+                    placeholder="Search localities..."
                     className="pl-8 w-full sm:w-[300px]"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
                 </div>
               </div>
-              {/* Filter Section */}
-              <div className="mt-4 pt-4 border-t">
-                <div className="flex flex-wrap gap-4 items-end">
-                  <div className="min-w-[150px]">
-                    <Label htmlFor="hub-filter" className="text-sm font-medium">Hub Office</Label>
-                    <Select value={hubFilter} onValueChange={setHubFilter}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="All Hubs" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Hubs</SelectItem>
-                        {hubs.map((hub) => (
-                          <SelectItem key={hub.id} value={hub.name}>
-                            {hub.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
-                  <div className="min-w-[150px]">
-                    <Label htmlFor="state-filter" className="text-sm font-medium">State</Label>
-                    <Select value={stateFilter} onValueChange={setStateFilter}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="All States" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All States</SelectItem>
-                        {Array.from(new Set(sites.map(site => site.state).filter(Boolean))).map((state) => (
-                          <SelectItem key={state} value={state}>
-                            {state}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="min-w-[180px]">
-                    <Label htmlFor="activity-filter" className="text-sm font-medium">Activity at Site</Label>
-                    <Select value={activityFilter} onValueChange={setActivityFilter}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="All Activities" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Activities</SelectItem>
-                        {ACTIVITY_OPTIONS.map((activity) => (
-                          <SelectItem key={activity} value={activity}>
-                            {activity}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="min-w-[150px]">
-                    <Label htmlFor="monitoring-filter" className="text-sm font-medium">Monitoring By</Label>
-                    <Select value={monitoringFilter} onValueChange={setMonitoringFilter}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="All Organizations" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Organizations</SelectItem>
-                        {MONITORING_BY_OPTIONS.map((org) => (
-                          <SelectItem key={org} value={org}>
-                            {org}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="min-w-[150px]">
-                    <Label htmlFor="survey-tool-filter" className="text-sm font-medium">Survey Tool</Label>
-                    <Select value={surveyToolFilter} onValueChange={setSurveyToolFilter}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="All Tools" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Tools</SelectItem>
-                        {Array.from(new Set(sites.map(site => site.survey_tool).filter(Boolean))).map((tool) => (
-                          <SelectItem key={tool} value={tool}>
-                            {tool}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => {
-                      setHubFilter('all');
-                      setStateFilter('all');
-                      setActivityFilter('all');
-                      setMonitoringFilter('all');
-                      setSurveyToolFilter('all');
-                      setSearchQuery('');
-                    }}
-                    className="mb-0"
-                  >
-                    Clear Filters
-                  </Button>
-                </div>
+              <div className="text-sm text-muted-foreground">
+                You can only access sites in localities where you have uploaded the required local permits.
               </div>
             </CardHeader>
             <CardContent>
-              {/* Bulk Actions Bar - only show for new sites tab */}
-              {filteredSites.length > 0 && (
-                <div className="mb-4 p-4 bg-gray-50 rounded-lg border">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={selectedSites.size === filteredSites.length && filteredSites.length > 0}
-                          onChange={handleSelectAllSites}
-                          className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                        />
-                        <Label className="text-sm font-medium">
-                          Select All ({selectedSites.size} of {filteredSites.length} selected)
-                        </Label>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setBulkAssignDateDialogOpen(true)}
-                        disabled={selectedSites.size === 0}
-                        className="flex items-center gap-2"
-                      >
-                        <Calendar className="h-4 w-4" />
-                        Assign Visit Date
-                      </Button>
-                      <Button
-                        variant="default"
-                        size="sm"
-                        onClick={() => setBulkVerifyDialogOpen(true)}
-                        disabled={selectedSites.size === 0}
-                        className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
-                      >
-                        <CheckSquare className="h-4 w-4" />
-                        Verify Selected ({selectedSites.size})
-                      </Button>
-                    </div>
-                  </div>
+              {loading || permitsLoading ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                  <p className="text-muted-foreground">Loading localities...</p>
                 </div>
-              )}
-
-              {filteredSites.length === 0 ? (
+              ) : localitiesData.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
-                  <Clock className="h-12 w-12 mx-auto mb-4 opacity-20" />
-                  <p>{searchQuery ? 'No sites match your search.' : 'No new sites assigned to you for verification.'}</p>
+                  <MapPin className="h-12 w-12 mx-auto mb-4 opacity-20" />
+                  <p>No localities assigned to you.</p>
+                  <p className="text-sm mt-2">Contact your administrator if you believe this is an error.</p>
                 </div>
               ) : (
                 <>
                   <div className="space-y-4">
-                    {paginatedSites.map(site => renderSiteCard(site, true))}
+                    {localitiesData.map(locality => renderLocalityCard(locality))}
                   </div>
-                  {totalPages > 1 && (
-                    <div className="flex items-center justify-between mt-4 pt-4 border-t">
-                      <div className="text-sm text-muted-foreground">
-                        Showing {((currentPage - 1) * itemsPerPage) + 1} - {Math.min(currentPage * itemsPerPage, filteredSites.length)} of {filteredSites.length}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                          disabled={currentPage === 1}
-                        >
-                          <ChevronLeft className="h-4 w-4" />
-                          Previous
-                        </Button>
-                        <div className="text-sm">
-                          Page {currentPage} of {totalPages}
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                          disabled={currentPage === totalPages}
-                        >
-                          Next
-                          <ChevronRight className="h-4 w-4" />
-                        </Button>
+                  
+                  {/* Show sites for expanded localities */}
+                  {expandedLocalities.size > 0 && (
+                    <div className="mt-8">
+                      <h3 className="text-lg font-semibold mb-4">Sites Available for Verification</h3>
+                      <div className="grid gap-4">
+                        {Array.from(expandedLocalities).map(localityKey => {
+                          const [state, locality] = localityKey.split('-');
+                          const localityData = localitiesData.find(loc => 
+                            loc.state === state && loc.locality === locality
+                          );
+                          if (!localityData) return null;
+                          
+                          return localityData.sites
+                            .filter((site: SiteVisit) => {
+                              // Filter by active tab status
+                              switch (activeTab) {
+                                case 'new':
+                                  return site.status === 'Pending' || site.status === 'Dispatched' || 
+                                         site.status === 'assigned' || site.status === 'inProgress' || 
+                                         site.status === 'in_progress';
+                                case 'verified':
+                                  return site.status?.toLowerCase() === 'verified';
+                                case 'approved':
+                                  return site.status?.toLowerCase() === 'approved';
+                                case 'completed':
+                                  return site.status?.toLowerCase() === 'completed';
+                                case 'rejected':
+                                  return site.status?.toLowerCase() === 'rejected';
+                                default:
+                                  return true;
+                              }
+                            })
+                            .map(site => renderSiteCard(site, true));
+                        })}
                       </div>
                     </div>
                   )}
@@ -1508,111 +1548,6 @@ const CoordinatorSites: React.FC = () => {
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
-                </div>
-              </div>
-              {/* Filter Section */}
-              <div className="mt-4 pt-4 border-t">
-                <div className="flex flex-wrap gap-4 items-end">
-                  <div className="min-w-[150px]">
-                    <Label htmlFor="hub-filter" className="text-sm font-medium">Hub Office</Label>
-                    <Select value={hubFilter} onValueChange={setHubFilter}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="All Hubs" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Hubs</SelectItem>
-                        {hubs.map((hub) => (
-                          <SelectItem key={hub.id} value={hub.name}>
-                            {hub.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
-                  <div className="min-w-[150px]">
-                    <Label htmlFor="state-filter" className="text-sm font-medium">State</Label>
-                    <Select value={stateFilter} onValueChange={setStateFilter}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="All States" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All States</SelectItem>
-                        {Array.from(new Set(sites.map(site => site.state).filter(Boolean))).map((state) => (
-                          <SelectItem key={state} value={state}>
-                            {state}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="min-w-[180px]">
-                    <Label htmlFor="activity-filter" className="text-sm font-medium">Activity at Site</Label>
-                    <Select value={activityFilter} onValueChange={setActivityFilter}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="All Activities" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Activities</SelectItem>
-                        {ACTIVITY_OPTIONS.map((activity) => (
-                          <SelectItem key={activity} value={activity}>
-                            {activity}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="min-w-[150px]">
-                    <Label htmlFor="monitoring-filter" className="text-sm font-medium">Monitoring By</Label>
-                    <Select value={monitoringFilter} onValueChange={setMonitoringFilter}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="All Organizations" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Organizations</SelectItem>
-                        {MONITORING_BY_OPTIONS.map((org) => (
-                          <SelectItem key={org} value={org}>
-                            {org}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="min-w-[150px]">
-                    <Label htmlFor="survey-tool-filter" className="text-sm font-medium">Survey Tool</Label>
-                    <Select value={surveyToolFilter} onValueChange={setSurveyToolFilter}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="All Tools" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Tools</SelectItem>
-                        {Array.from(new Set(sites.map(site => site.survey_tool).filter(Boolean))).map((tool) => (
-                          <SelectItem key={tool} value={tool}>
-                            {tool}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => {
-                      setHubFilter('all');
-                      setStateFilter('all');
-                      setActivityFilter('all');
-                      setMonitoringFilter('all');
-                      setSurveyToolFilter('all');
-                      setSearchQuery('');
-                    }}
-                    className="mb-0"
-                  >
-                    Clear Filters
-                  </Button>
                 </div>
               </div>
             </CardHeader>
@@ -1677,111 +1612,6 @@ const CoordinatorSites: React.FC = () => {
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
-                </div>
-              </div>
-              {/* Filter Section */}
-              <div className="mt-4 pt-4 border-t">
-                <div className="flex flex-wrap gap-4 items-end">
-                  <div className="min-w-[150px]">
-                    <Label htmlFor="hub-filter" className="text-sm font-medium">Hub Office</Label>
-                    <Select value={hubFilter} onValueChange={setHubFilter}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="All Hubs" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Hubs</SelectItem>
-                        {hubs.map((hub) => (
-                          <SelectItem key={hub.id} value={hub.name}>
-                            {hub.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
-                  <div className="min-w-[150px]">
-                    <Label htmlFor="state-filter" className="text-sm font-medium">State</Label>
-                    <Select value={stateFilter} onValueChange={setStateFilter}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="All States" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All States</SelectItem>
-                        {Array.from(new Set(sites.map(site => site.state).filter(Boolean))).map((state) => (
-                          <SelectItem key={state} value={state}>
-                            {state}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="min-w-[180px]">
-                    <Label htmlFor="activity-filter" className="text-sm font-medium">Activity at Site</Label>
-                    <Select value={activityFilter} onValueChange={setActivityFilter}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="All Activities" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Activities</SelectItem>
-                        {ACTIVITY_OPTIONS.map((activity) => (
-                          <SelectItem key={activity} value={activity}>
-                            {activity}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="min-w-[150px]">
-                    <Label htmlFor="monitoring-filter" className="text-sm font-medium">Monitoring By</Label>
-                    <Select value={monitoringFilter} onValueChange={setMonitoringFilter}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="All Organizations" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Organizations</SelectItem>
-                        {MONITORING_BY_OPTIONS.map((org) => (
-                          <SelectItem key={org} value={org}>
-                            {org}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="min-w-[150px]">
-                    <Label htmlFor="survey-tool-filter" className="text-sm font-medium">Survey Tool</Label>
-                    <Select value={surveyToolFilter} onValueChange={setSurveyToolFilter}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="All Tools" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Tools</SelectItem>
-                        {Array.from(new Set(sites.map(site => site.survey_tool).filter(Boolean))).map((tool) => (
-                          <SelectItem key={tool} value={tool}>
-                            {tool}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => {
-                      setHubFilter('all');
-                      setStateFilter('all');
-                      setActivityFilter('all');
-                      setMonitoringFilter('all');
-                      setSurveyToolFilter('all');
-                      setSearchQuery('');
-                    }}
-                    className="mb-0"
-                  >
-                    Clear Filters
-                  </Button>
                 </div>
               </div>
             </CardHeader>
@@ -1849,111 +1679,6 @@ const CoordinatorSites: React.FC = () => {
                   />
                 </div>
               </div>
-              {/* Filter Section */}
-              <div className="mt-4 pt-4 border-t">
-                <div className="flex flex-wrap gap-4 items-end">
-                  <div className="min-w-[150px]">
-                    <Label htmlFor="hub-filter" className="text-sm font-medium">Hub Office</Label>
-                    <Select value={hubFilter} onValueChange={setHubFilter}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="All Hubs" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Hubs</SelectItem>
-                        {hubs.map((hub) => (
-                          <SelectItem key={hub.id} value={hub.name}>
-                            {hub.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
-                  <div className="min-w-[150px]">
-                    <Label htmlFor="state-filter" className="text-sm font-medium">State</Label>
-                    <Select value={stateFilter} onValueChange={setStateFilter}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="All States" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All States</SelectItem>
-                        {Array.from(new Set(sites.map(site => site.state).filter(Boolean))).map((state) => (
-                          <SelectItem key={state} value={state}>
-                            {state}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="min-w-[180px]">
-                    <Label htmlFor="activity-filter" className="text-sm font-medium">Activity at Site</Label>
-                    <Select value={activityFilter} onValueChange={setActivityFilter}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="All Activities" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Activities</SelectItem>
-                        {ACTIVITY_OPTIONS.map((activity) => (
-                          <SelectItem key={activity} value={activity}>
-                            {activity}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="min-w-[150px]">
-                    <Label htmlFor="monitoring-filter" className="text-sm font-medium">Monitoring By</Label>
-                    <Select value={monitoringFilter} onValueChange={setMonitoringFilter}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="All Organizations" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Organizations</SelectItem>
-                        {MONITORING_BY_OPTIONS.map((org) => (
-                          <SelectItem key={org} value={org}>
-                            {org}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="min-w-[150px]">
-                    <Label htmlFor="survey-tool-filter" className="text-sm font-medium">Survey Tool</Label>
-                    <Select value={surveyToolFilter} onValueChange={setSurveyToolFilter}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="All Tools" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Tools</SelectItem>
-                        {Array.from(new Set(sites.map(site => site.survey_tool).filter(Boolean))).map((tool) => (
-                          <SelectItem key={tool} value={tool}>
-                            {tool}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => {
-                      setHubFilter('all');
-                      setStateFilter('all');
-                      setActivityFilter('all');
-                      setMonitoringFilter('all');
-                      setSurveyToolFilter('all');
-                      setSearchQuery('');
-                    }}
-                    className="mb-0"
-                  >
-                    Clear Filters
-                  </Button>
-                </div>
-              </div>
             </CardHeader>
             <CardContent>
               {filteredSites.length === 0 ? (
@@ -2017,111 +1742,6 @@ const CoordinatorSites: React.FC = () => {
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
-                </div>
-              </div>
-              {/* Filter Section */}
-              <div className="mt-4 pt-4 border-t">
-                <div className="flex flex-wrap gap-4 items-end">
-                  <div className="min-w-[150px]">
-                    <Label htmlFor="hub-filter" className="text-sm font-medium">Hub Office</Label>
-                    <Select value={hubFilter} onValueChange={setHubFilter}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="All Hubs" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Hubs</SelectItem>
-                        {hubs.map((hub) => (
-                          <SelectItem key={hub.id} value={hub.name}>
-                            {hub.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
-                  <div className="min-w-[150px]">
-                    <Label htmlFor="state-filter" className="text-sm font-medium">State</Label>
-                    <Select value={stateFilter} onValueChange={setStateFilter}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="All States" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All States</SelectItem>
-                        {Array.from(new Set(sites.map(site => site.state).filter(Boolean))).map((state) => (
-                          <SelectItem key={state} value={state}>
-                            {state}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="min-w-[180px]">
-                    <Label htmlFor="activity-filter" className="text-sm font-medium">Activity at Site</Label>
-                    <Select value={activityFilter} onValueChange={setActivityFilter}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="All Activities" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Activities</SelectItem>
-                        {ACTIVITY_OPTIONS.map((activity) => (
-                          <SelectItem key={activity} value={activity}>
-                            {activity}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="min-w-[150px]">
-                    <Label htmlFor="monitoring-filter" className="text-sm font-medium">Monitoring By</Label>
-                    <Select value={monitoringFilter} onValueChange={setMonitoringFilter}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="All Organizations" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Organizations</SelectItem>
-                        {MONITORING_BY_OPTIONS.map((org) => (
-                          <SelectItem key={org} value={org}>
-                            {org}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="min-w-[150px]">
-                    <Label htmlFor="survey-tool-filter" className="text-sm font-medium">Survey Tool</Label>
-                    <Select value={surveyToolFilter} onValueChange={setSurveyToolFilter}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="All Tools" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Tools</SelectItem>
-                        {Array.from(new Set(sites.map(site => site.survey_tool).filter(Boolean))).map((tool) => (
-                          <SelectItem key={tool} value={tool}>
-                            {tool}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => {
-                      setHubFilter('all');
-                      setStateFilter('all');
-                      setActivityFilter('all');
-                      setMonitoringFilter('all');
-                      setSurveyToolFilter('all');
-                      setSearchQuery('');
-                    }}
-                    className="mb-0"
-                  >
-                    Clear Filters
-                  </Button>
                 </div>
               </div>
             </CardHeader>
@@ -2462,48 +2082,83 @@ const CoordinatorSites: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Bulk Verify Dialog */}
-      <Dialog open={bulkVerifyDialogOpen} onOpenChange={setBulkVerifyDialogOpen}>
+      {/* Permit Question Dialog */}
+      <Dialog open={permitQuestionDialogOpen} onOpenChange={setPermitQuestionDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Verify Selected Sites</DialogTitle>
-            <p className="text-sm text-muted-foreground">
-              Mark {selectedSites.size} selected site{selectedSites.size !== 1 ? 's' : ''} as verified.
-            </p>
+            <DialogTitle>Local Permit Required</DialogTitle>
+            <DialogDescription>
+              Do you have the local permit for <strong>{selectedLocalityForWorkflow?.locality}, {selectedLocalityForWorkflow?.state}</strong>?
+            </DialogDescription>
           </DialogHeader>
           <div className="py-4">
-            <p className="mb-4">Are you sure you want to verify all selected sites? This action cannot be undone.</p>
-            <div className="mt-4">
-              <label htmlFor="bulk-verification-notes" className="text-sm font-medium mb-2 block">
-                Verification Notes (Optional)
-              </label>
-              <Textarea
-                id="bulk-verification-notes"
-                placeholder="Add any notes about the bulk verification..."
-                value={bulkVerificationNotes}
-                onChange={(e) => setBulkVerificationNotes(e.target.value)}
-                className="mt-1"
-                rows={4}
-              />
-            </div>
+            <p className="text-sm text-muted-foreground">
+              Local permits are required to work on sites in this locality. If you have the permit, you can upload it now and access the sites.
+              If not, you cannot access sites in this locality.
+            </p>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => {
-              setBulkVerifyDialogOpen(false);
-              setBulkVerificationNotes('');
-            }}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleBulkVerifySites}
-              className="bg-green-600 hover:bg-green-700"
+            <Button 
+              variant="outline" 
+              onClick={() => handlePermitQuestionResponse(false)}
             >
-              <CheckSquare className="h-4 w-4 mr-2" />
-              Verify {selectedSites.size} Site{selectedSites.size !== 1 ? 's' : ''}
+              No, I don't have the permit
+            </Button>
+            <Button 
+              onClick={() => handlePermitQuestionResponse(true)}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              Yes, I have the permit
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+
+
+      {/* Permit Upload Dialog */}
+      {selectedLocalityForWorkflow && (
+        <Dialog open={expandedLocalities.has(`${selectedLocalityForWorkflow.state}-${selectedLocalityForWorkflow.locality}`) && !selectedLocalityForWorkflow.hasPermit} onOpenChange={() => {}}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Upload Local Permit</DialogTitle>
+              <DialogDescription>
+                Upload the local permit for <strong>{selectedLocalityForWorkflow.locality}, {selectedLocalityForWorkflow.state}</strong>
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+              <LocalityPermitUpload
+                locality={{
+                  state: selectedLocalityForWorkflow.state,
+                  locality: selectedLocalityForWorkflow.locality,
+                  stateId: localities.find(loc => loc.name === selectedLocalityForWorkflow.locality)?.state_id || '',
+                  localityId: localities.find(loc => loc.name === selectedLocalityForWorkflow.locality)?.id || '',
+                  hasPermit: selectedLocalityForWorkflow.hasPermit,
+                  permit: selectedLocalityForWorkflow.permitId ? permits.find(p => p.id === selectedLocalityForWorkflow.permitId) : undefined,
+                  siteCount: selectedLocalityForWorkflow.sites.length,
+                  sites: selectedLocalityForWorkflow.sites
+                }}
+                onPermitUploaded={handlePermitUploaded}
+              />
+            </div>
+            <DialogFooter>
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setSelectedLocalityForWorkflow(null);
+                  setExpandedLocalities(prev => {
+                    const newSet = new Set(prev);
+                    newSet.delete(`${selectedLocalityForWorkflow.state}-${selectedLocalityForWorkflow.locality}`);
+                    return newSet;
+                  });
+                }}
+              >
+                Cancel
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
 
     </div>
   );
