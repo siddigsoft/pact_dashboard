@@ -34,7 +34,14 @@ export interface WalletTransaction {
   createdAt: string;
 }
 
-export type WithdrawalStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
+// Two-step withdrawal approval statuses
+export type WithdrawalStatus = 
+  | 'pending'              // Initial state - awaiting supervisor review
+  | 'supervisor_approved'  // Step 1 complete - supervisor approved, awaiting finance
+  | 'processing'           // Finance is processing the payment
+  | 'approved'             // Final state - payment completed
+  | 'rejected'             // Rejected by supervisor or admin
+  | 'cancelled';           // Cancelled by user
 
 export interface WithdrawalRequest {
   id: string;
@@ -44,10 +51,16 @@ export interface WithdrawalRequest {
   currency: string;
   status: WithdrawalStatus;
   requestReason?: string;
+  // Step 1: Supervisor approval
   supervisorId?: string;
   supervisorNotes?: string;
-  approvedAt?: string;
+  approvedAt?: string;        // When supervisor approved (step 1)
   rejectedAt?: string;
+  // Step 2: Admin/Finance processing
+  adminProcessedBy?: string;
+  adminProcessedAt?: string;
+  adminNotes?: string;
+  // Payment details
   paymentMethod?: string;
   paymentDetails?: Record<string, any>;
   createdAt: string;
