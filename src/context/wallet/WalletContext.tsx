@@ -311,14 +311,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       if (walletError) throw walletError;
 
-      const currentBalance = requestWallet.balances[request.currency] || 0;
+      const currentBalance = Number(requestWallet.balances?.[request.currency] ?? 0) || 0;
       if (currentBalance < request.amount) {
         throw new Error('Insufficient wallet balance');
       }
 
       const newBalances = {
         ...requestWallet.balances,
-        [request.currency]: currentBalance - request.amount,
+        [request.currency]: Number((currentBalance - Number(request.amount)).toFixed(2)),
       };
 
       const { error: updateError } = await supabase
@@ -604,8 +604,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         throw walletError;
       }
 
-      const currentBalance = targetWallet.balances.SDG || 0;
-      const newBalance = currentBalance + amount;
+      const currentBalance = Number(targetWallet.balances?.SDG ?? 0) || 0;
+      const newBalance = Number((currentBalance + Number(amount)).toFixed(2));
       const newBalances = { ...targetWallet.balances, SDG: newBalance };
 
       const { error: updateError } = await supabase
@@ -738,8 +738,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         throw walletError;
       }
 
-      const currentBalance = targetWallet.balances[currency] || 0;
-      const newBalance = currentBalance + amount;
+      const currentBalance = Number(targetWallet.balances?.[currency] ?? 0) || 0;
+      const newBalance = Number((currentBalance + Number(amount)).toFixed(2));
       const newBalances = { ...targetWallet.balances, [currency]: newBalance };
 
       const currentTotalEarned = parseFloat(targetWallet.total_earned || 0);
@@ -921,7 +921,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         throw walletError;
       }
 
-      const currentBalance = targetWallet.balances[currency] || 0;
+      const currentBalance = Number(targetWallet.balances?.[currency] ?? 0) || 0;
       const adjustmentAmount = adjustmentType === 'credit' ? amount : -amount;
       const newBalance = currentBalance + adjustmentAmount;
 
