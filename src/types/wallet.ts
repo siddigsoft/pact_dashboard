@@ -10,7 +10,8 @@ export interface Wallet {
 
 // Transaction types allowed by production Supabase database
 export type WalletTransactionType = 
-  | 'site_visit_fee'   // Earnings from completed site visits
+  | 'earning'          // Earnings from completed site visits (current)
+  | 'site_visit_fee'   // Legacy: Earnings from completed site visits
   | 'withdrawal'       // Money withdrawn from wallet (negative)
   | 'adjustment'       // Manual admin adjustments (can be +/-)
   | 'bonus'            // Performance rewards (positive)
