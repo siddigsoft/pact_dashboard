@@ -272,6 +272,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
   Coordinator: [
     { resource: 'site_visits', action: 'read' },
     { resource: 'site_visits', action: 'update' },
+    { resource: 'mmp', action: 'read' },
     { resource: 'reports', action: 'read' }
   ],
   DataCollector: [

@@ -145,8 +145,8 @@
     if (!isHidden('/projects') && (isAdmin || isICT || perms.projects)) {
       planningItems.push({ id: 'projects', title: "Projects", url: "/projects", icon: FolderKanban, priority: 1, isPinned: isPinned('/projects') });
     }
-    if (!isHidden('/mmp') && (isAdmin || isICT || perms.mmp)) {
-      const mmpTitle = isDataCollector ? "My Sites Management" : "MMP Management";
+    if (!isHidden('/mmp') && (isAdmin || isICT || perms.mmp || isCoordinator)) {
+      const mmpTitle = (isDataCollector || isCoordinator) ? "My Sites Management" : "MMP Management";
       planningItems.push({ id: 'mmp-management', title: mmpTitle, url: "/mmp", icon: Database, priority: 2, isPinned: isPinned('/mmp') });
     }
     if (!isHidden('/hub-operations') && (isAdmin || isSuperAdmin)) {
