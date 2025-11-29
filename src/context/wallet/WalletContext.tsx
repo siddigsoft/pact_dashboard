@@ -22,8 +22,12 @@ interface WalletContextType {
   refreshWithdrawalRequests: () => Promise<void>;
   createWithdrawalRequest: (amount: number, reason: string, paymentMethod?: string) => Promise<void>;
   cancelWithdrawalRequest: (requestId: string) => Promise<void>;
+  // Step 1: Supervisor approval (changes status to 'supervisor_approved')
   approveWithdrawalRequest: (requestId: string, notes?: string) => Promise<void>;
   rejectWithdrawalRequest: (requestId: string, notes: string) => Promise<void>;
+  // Step 2: Admin/Finance processing (changes status to 'approved' and releases funds)
+  adminProcessWithdrawal: (requestId: string, notes?: string) => Promise<void>;
+  adminRejectWithdrawal: (requestId: string, notes: string) => Promise<void>;
   getBalance: (currency?: string) => number;
   getSiteVisitCost: (siteVisitId: string) => Promise<SiteVisitCost | null>;
   assignSiteVisitCost: (siteVisitId: string, costs: Partial<SiteVisitCost>) => Promise<void>;
@@ -100,6 +104,9 @@ function transformWithdrawalRequestFromDB(data: any): WithdrawalRequest {
     supervisorNotes: data.supervisor_notes,
     approvedAt: data.approved_at,
     rejectedAt: data.rejected_at,
+    adminProcessedBy: data.admin_processed_by,
+    adminProcessedAt: data.admin_processed_at,
+    adminNotes: data.admin_notes,
     paymentMethod: data.payment_method,
     paymentDetails: data.payment_details,
     createdAt: data.created_at,
@@ -296,12 +303,76 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // Step 1: Supervisor approval - moves request to 'supervisor_approved' status
+  // Funds are NOT released at this stage - only verified by supervisor
   const approveWithdrawalRequest = async (requestId: string, notes?: string) => {
     if (!currentUser?.id) return;
 
     try {
       const request = withdrawalRequests.find(r => r.id === requestId);
       if (!request) throw new Error('Request not found');
+
+      // Verify the request is in pending status
+      if (request.status !== 'pending') {
+        throw new Error('Only pending requests can be approved by supervisor');
+      }
+
+      // Verify wallet has sufficient balance (for validation, funds not released yet)
+      const { data: requestWallet, error: walletError } = await supabase
+        .from('wallets')
+        .select('*')
+        .eq('id', request.walletId)
+        .single();
+
+      if (walletError) throw walletError;
+
+      const currentBalance = requestWallet.balances[request.currency] || 0;
+      if (currentBalance < request.amount) {
+        throw new Error('Insufficient wallet balance');
+      }
+
+      // Update status to 'supervisor_approved' - awaiting finance processing
+      const { error: requestError } = await supabase
+        .from('withdrawal_requests')
+        .update({
+          status: 'supervisor_approved',
+          supervisor_id: currentUser.id,
+          supervisor_notes: notes,
+          approved_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', requestId);
+
+      if (requestError) throw requestError;
+
+      toast({
+        title: 'Withdrawal Approved by Supervisor',
+        description: 'The request has been forwarded to Finance for processing',
+      });
+
+      await refreshWithdrawalRequests();
+    } catch (error: any) {
+      console.error('Failed to approve withdrawal:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to approve withdrawal request',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Step 2: Admin/Finance processing - releases funds and marks as 'approved'
+  const adminProcessWithdrawal = async (requestId: string, notes?: string) => {
+    if (!currentUser?.id) return;
+
+    try {
+      const request = withdrawalRequests.find(r => r.id === requestId);
+      if (!request) throw new Error('Request not found');
+
+      // Verify the request is in supervisor_approved status
+      if (request.status !== 'supervisor_approved') {
+        throw new Error('Only supervisor-approved requests can be processed by Finance');
+      }
 
       const { data: requestWallet, error: walletError } = await supabase
         .from('wallets')
@@ -316,6 +387,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         throw new Error('Insufficient wallet balance');
       }
 
+      // Deduct balance from wallet
       const newBalances = {
         ...requestWallet.balances,
         [request.currency]: currentBalance - request.amount,
@@ -332,14 +404,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       if (updateError) throw updateError;
 
+      // Create withdrawal transaction record
       const { error: transactionError } = await supabase.from('wallet_transactions').insert({
         wallet_id: request.walletId,
         user_id: request.userId,
         type: 'withdrawal',
         amount: -request.amount,
+        amount_cents: Math.round(request.amount * 100),
         currency: request.currency,
         withdrawal_request_id: requestId,
-        description: `Withdrawal approved: ${notes || 'N/A'}`,
+        description: `Withdrawal processed by Finance: ${notes || 'Payment completed'}`,
         balance_before: currentBalance,
         balance_after: currentBalance - request.amount,
         created_by: currentUser.id,
@@ -347,13 +421,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       if (transactionError) throw transactionError;
 
+      // Update request to final 'approved' status with admin details
       const { error: requestError } = await supabase
         .from('withdrawal_requests')
         .update({
           status: 'approved',
-          supervisor_id: currentUser.id,
-          supervisor_notes: notes,
-          approved_at: new Date().toISOString(),
+          admin_processed_by: currentUser.id,
+          admin_processed_at: new Date().toISOString(),
+          admin_notes: notes,
           updated_at: new Date().toISOString(),
         })
         .eq('id', requestId);
@@ -361,16 +436,58 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       if (requestError) throw requestError;
 
       toast({
-        title: 'Withdrawal Approved',
-        description: 'The withdrawal request has been approved and processed',
+        title: 'Withdrawal Processed',
+        description: 'The payment has been completed and funds released',
       });
 
       await Promise.all([refreshWallet(), refreshTransactions(), refreshWithdrawalRequests()]);
     } catch (error: any) {
-      console.error('Failed to approve withdrawal:', error);
+      console.error('Failed to process withdrawal:', error);
       toast({
         title: 'Error',
-        description: error.message || 'Failed to approve withdrawal request',
+        description: error.message || 'Failed to process withdrawal',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Admin/Finance rejection - rejects a supervisor-approved request
+  const adminRejectWithdrawal = async (requestId: string, notes: string) => {
+    if (!currentUser?.id) return;
+
+    try {
+      const request = withdrawalRequests.find(r => r.id === requestId);
+      if (!request) throw new Error('Request not found');
+
+      // Verify the request is in supervisor_approved status
+      if (request.status !== 'supervisor_approved') {
+        throw new Error('Only supervisor-approved requests can be rejected by Finance');
+      }
+
+      const { error } = await supabase
+        .from('withdrawal_requests')
+        .update({
+          status: 'rejected',
+          admin_processed_by: currentUser.id,
+          admin_processed_at: new Date().toISOString(),
+          admin_notes: notes,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', requestId);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Withdrawal Rejected by Finance',
+        description: 'The withdrawal request has been rejected',
+      });
+
+      await refreshWithdrawalRequests();
+    } catch (error: any) {
+      console.error('Failed to reject withdrawal:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to reject withdrawal request',
         variant: 'destructive',
       });
     }
@@ -1074,6 +1191,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         cancelWithdrawalRequest,
         approveWithdrawalRequest,
         rejectWithdrawalRequest,
+        adminProcessWithdrawal,
+        adminRejectWithdrawal,
         getBalance,
         getSiteVisitCost,
         assignSiteVisitCost,
