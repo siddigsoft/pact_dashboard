@@ -62,23 +62,22 @@ const AdminWalletDetail = () => {
           .order('created_at', { ascending: false })
           .limit(200),
         supabase
-          .from('site_visits')
+          .from('mmp_site_entries')
           .select(`
             id,
             site_name,
+            site_code,
             status,
-            assigned_at,
-            completed_at,
-            site_visit_costs (
-              total_cost,
-              transportation_cost,
-              accommodation_cost,
-              meal_allowance,
-              other_costs
-            )
+            state,
+            locality,
+            accepted_at,
+            visit_completed_at,
+            enumerator_fee,
+            transport_fee,
+            cost
           `)
-          .eq('assigned_to', userId)
-          .order('assigned_at', { ascending: false })
+          .eq('accepted_by', userId)
+          .order('accepted_at', { ascending: false })
           .limit(100)
       ]);
 
@@ -210,8 +209,8 @@ const AdminWalletDetail = () => {
 
   // Compute work statistics
   const workStats = useMemo(() => {
-    const completedSites = siteVisits.filter(s => s.status === 'completed').length;
-    const pendingSites = siteVisits.filter(s => s.status === 'assigned').length;
+    const completedSites = siteVisits.filter(s => s.status?.toLowerCase() === 'completed' || s.status?.toLowerCase() === 'verified').length;
+    const pendingSites = siteVisits.filter(s => s.status?.toLowerCase() === 'assigned' || s.status?.toLowerCase() === 'in progress').length;
     const totalSites = siteVisits.length;
     const completionRate = totalSites > 0 ? (completedSites / totalSites) * 100 : 0;
 
@@ -601,9 +600,9 @@ const AdminWalletDetail = () => {
                           <TableCell className="text-blue-100">{site.site_name}</TableCell>
                           <TableCell>
                             <Badge className={
-                              site.status === 'completed' 
+                              site.status?.toLowerCase() === 'completed' || site.status?.toLowerCase() === 'verified'
                                 ? 'bg-green-500/20 text-green-300 border-green-500/30'
-                                : site.status === 'assigned'
+                                : site.status?.toLowerCase() === 'assigned'
                                 ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30'
                                 : 'bg-blue-500/20 text-blue-300 border-blue-500/30'
                             }>
@@ -611,10 +610,10 @@ const AdminWalletDetail = () => {
                             </Badge>
                           </TableCell>
                           <TableCell className="text-blue-200">
-                            {site.assigned_at ? new Date(site.assigned_at).toLocaleDateString() : '-'}
+                            {(site.accepted_at || site.assigned_at) ? new Date(site.accepted_at || site.assigned_at).toLocaleDateString() : '-'}
                           </TableCell>
                           <TableCell className="text-blue-200">
-                            {site.completed_at ? new Date(site.completed_at).toLocaleDateString() : '-'}
+                            {(site.visit_completed_at || site.completed_at) ? new Date(site.visit_completed_at || site.completed_at).toLocaleDateString() : '-'}
                           </TableCell>
                           <TableCell className="text-right">
                             {site.payment ? (
@@ -625,6 +624,10 @@ const AdminWalletDetail = () => {
                                 <div className="text-xs text-blue-300/50">
                                   {new Date(site.payment.date).toLocaleDateString()}
                                 </div>
+                              </div>
+                            ) : site.cost > 0 ? (
+                              <div className="text-green-400 font-semibold">
+                                {currencyFmt(site.cost, currency)}
                               </div>
                             ) : (
                               <span className="text-yellow-400">Pending</span>
