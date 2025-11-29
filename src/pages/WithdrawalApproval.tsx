@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -9,30 +9,52 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useWallet } from '@/context/wallet/WalletContext';
 import { useUser } from '@/context/user/UserContext';
-import { Clock, CheckCircle2, XCircle, User, Calendar, ArrowRight, Send, Info } from 'lucide-react';
+import { Clock, CheckCircle2, XCircle, User, Calendar, ArrowRight, Send, Info, RefreshCw, FileText } from 'lucide-react';
 import { format } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
 import { WithdrawalRequest } from '@/types/wallet';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
+interface SupervisedRequest extends WithdrawalRequest {
+  requesterName?: string;
+  requesterEmail?: string;
+}
+
 export default function WithdrawalApproval() {
-  const { withdrawalRequests, approveWithdrawalRequest, rejectWithdrawalRequest } = useWallet();
+  const { 
+    supervisedWithdrawalRequests, 
+    refreshSupervisedWithdrawalRequests,
+    approveWithdrawalRequest, 
+    rejectWithdrawalRequest,
+    loading 
+  } = useWallet();
   const { users } = useUser();
-  const [selectedRequest, setSelectedRequest] = useState<WithdrawalRequest | null>(null);
+  const [selectedRequest, setSelectedRequest] = useState<SupervisedRequest | null>(null);
   const [dialogType, setDialogType] = useState<'approve' | 'reject' | null>(null);
   const [notes, setNotes] = useState('');
   const [processing, setProcessing] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
-  // Step 1: Supervisor reviews pending requests
-  const pendingRequests = withdrawalRequests.filter(r => r.status === 'pending');
-  // Requests forwarded to Finance (supervisor approved)
-  const forwardedRequests = withdrawalRequests.filter(r => r.status === 'supervisor_approved' || r.status === 'processing');
-  // Final approved (Finance processed)
-  const approvedRequests = withdrawalRequests.filter(r => r.status === 'approved');
-  const rejectedRequests = withdrawalRequests.filter(r => r.status === 'rejected');
+  useEffect(() => {
+    refreshSupervisedWithdrawalRequests();
+  }, []);
 
-  const getUserName = (userId: string) => {
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await refreshSupervisedWithdrawalRequests();
+    setRefreshing(false);
+  };
+
+  const pendingRequests = supervisedWithdrawalRequests.filter(r => r.status === 'pending');
+  const forwardedRequests = supervisedWithdrawalRequests.filter(r => r.status === 'supervisor_approved' || r.status === 'processing');
+  const approvedRequests = supervisedWithdrawalRequests.filter(r => r.status === 'approved');
+  const rejectedRequests = supervisedWithdrawalRequests.filter(r => r.status === 'rejected');
+
+  const getUserName = (userId: string, request?: SupervisedRequest) => {
+    if (request?.requesterName) {
+      return request.requesterName;
+    }
     const user = users.find(u => u.id === userId);
     return user?.name || 'Unknown User';
   };
@@ -53,13 +75,13 @@ export default function WithdrawalApproval() {
     }
   };
 
-  const handleApprove = (request: WithdrawalRequest) => {
+  const handleApprove = (request: SupervisedRequest) => {
     setSelectedRequest(request);
     setDialogType('approve');
     setNotes('');
   };
 
-  const handleReject = (request: WithdrawalRequest) => {
+  const handleReject = (request: SupervisedRequest) => {
     setSelectedRequest(request);
     setDialogType('reject');
     setNotes('');
@@ -75,6 +97,7 @@ export default function WithdrawalApproval() {
       } else if (dialogType === 'reject') {
         await rejectWithdrawalRequest(selectedRequest.id, notes);
       }
+      await refreshSupervisedWithdrawalRequests();
       setDialogType(null);
       setSelectedRequest(null);
       setNotes('');
@@ -100,7 +123,7 @@ export default function WithdrawalApproval() {
     }
   };
 
-  const RequestTable = ({ requests }: { requests: WithdrawalRequest[] }) => (
+  const RequestTable = ({ requests }: { requests: SupervisedRequest[] }) => (
     <Table>
       <TableHeader>
         <TableRow>
@@ -125,7 +148,7 @@ export default function WithdrawalApproval() {
               <TableCell>
                 <div className="flex items-center gap-2">
                   <User className="w-4 h-4 text-muted-foreground" />
-                  <span className="font-medium">{getUserName(request.userId)}</span>
+                  <span className="font-medium">{getUserName(request.userId, request)}</span>
                 </div>
               </TableCell>
               <TableCell>
@@ -189,14 +212,38 @@ export default function WithdrawalApproval() {
     </Table>
   );
 
+  if (loading) {
+    return (
+      <div className="space-y-6 p-6">
+        <Skeleton className="h-10 w-64" />
+        <div className="flex gap-4">
+          <Skeleton className="h-24 w-40" />
+          <Skeleton className="h-24 w-40" />
+        </div>
+        <Skeleton className="h-64 w-full" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 p-6">
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Supervisor Approval</h1>
-            <p className="text-muted-foreground mt-1">Step 1: Review and verify enumerator withdrawal requests</p>
+            <p className="text-muted-foreground mt-1">Step 1: Review and verify withdrawal requests from your team members</p>
           </div>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={handleRefresh} 
+            disabled={refreshing}
+            data-testid="button-refresh-requests"
+          >
+            <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+        </div>
           <div className="flex items-center gap-4 flex-wrap">
             <Card className="bg-gradient-to-br from-yellow-500/5 to-yellow-500/10">
               <CardContent className="p-4">
