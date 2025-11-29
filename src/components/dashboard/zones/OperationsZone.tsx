@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -52,6 +52,8 @@ import { SiteVisitCostSummary } from '../SiteVisitCostSummary';
 import { DashboardCalendar } from '../DashboardCalendar';
 import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
 import { useUser } from '@/context/user/UserContext';
+import { useAuthorization } from '@/hooks/use-authorization';
+import { supabase } from '@/integrations/supabase/client';
 import { isAfter, addDays } from 'date-fns';
 
 type MetricCardType = 'total' | 'completed' | 'assigned' | 'pending' | 'overdue' | 'performance' | null;
@@ -66,10 +68,12 @@ interface Filters {
 }
 
 export const OperationsZone: React.FC = () => {
-  const { siteVisits } = useSiteVisitContext();
-  const { users } = useUser();
+  const { siteVisits: allSiteVisits } = useSiteVisitContext();
+  const { users, currentUser } = useUser();
+  const { hasAnyRole } = useAuthorization();
   const [activeTab, setActiveTab] = useState('overview');
   const [selectedCard, setSelectedCard] = useState<MetricCardType>(null);
+  const [supervisorHubName, setSupervisorHubName] = useState<string | null>(null);
   const [filters, setFilters] = useState<Filters>({
     hub: '',
     state: '',
@@ -78,6 +82,60 @@ export const OperationsZone: React.FC = () => {
     enumerator: '',
     status: ''
   });
+
+  // Check if user is a supervisor (not admin/ict)
+  const isSupervisor = useMemo(() => {
+    if (!currentUser) return false;
+    const role = (currentUser.role || '').toLowerCase();
+    const isAdmin = hasAnyRole(['admin', 'ict', 'super_admin', 'superadmin', 'fom', 'finance', 'financialadmin']);
+    return (hasAnyRole(['supervisor', 'Supervisor', 'hubsupervisor']) || role === 'supervisor' || role === 'hubsupervisor') && !isAdmin;
+  }, [currentUser, hasAnyRole]);
+
+  // Fetch supervisor's hub name
+  useEffect(() => {
+    if (!isSupervisor || !currentUser?.hubId) {
+      setSupervisorHubName(null);
+      return;
+    }
+    const fetchHubName = async () => {
+      const { data } = await supabase
+        .from('hubs')
+        .select('name')
+        .eq('id', currentUser.hubId)
+        .maybeSingle();
+      if (data) {
+        setSupervisorHubName(data.name);
+        console.log(`📊 OperationsZone: Supervisor hub loaded: ${data.name}`);
+      }
+    };
+    fetchHubName();
+  }, [isSupervisor, currentUser?.hubId]);
+
+  // Apply supervisor hub filtering to site visits
+  const siteVisits = useMemo(() => {
+    if (!isSupervisor) {
+      return allSiteVisits;
+    }
+    
+    if (!supervisorHubName) {
+      console.warn('⚠️ OperationsZone: Supervisor has no hub assigned - showing no sites');
+      return [];
+    }
+    
+    const hubName = supervisorHubName.toLowerCase().trim();
+    const filtered = allSiteVisits.filter(visit => {
+      const visitHub = (visit.hub || '').toLowerCase().trim();
+      // Skip sites with no hub assignment
+      if (!visitHub) return false;
+      // Match by hub name
+      return visitHub === hubName || 
+             visitHub.includes(hubName) ||
+             (visitHub.length > 0 && hubName.includes(visitHub));
+    });
+    
+    console.log(`📊 OperationsZone: Filtered to ${filtered.length} sites for hub "${supervisorHubName}"`);
+    return filtered;
+  }, [allSiteVisits, isSupervisor, supervisorHubName]);
 
   const upcomingVisits = siteVisits
     .filter(v => {
@@ -357,7 +415,7 @@ export const OperationsZone: React.FC = () => {
             </TabsList>
 
             <TabsContent value="overview" className="mt-3 space-y-3">
-              <SiteVisitsOverview />
+              <SiteVisitsOverview siteVisits={siteVisits} />
             </TabsContent>
 
             <TabsContent value="upcoming" className="mt-3">
@@ -365,11 +423,11 @@ export const OperationsZone: React.FC = () => {
             </TabsContent>
 
             <TabsContent value="calendar" className="mt-3">
-              <DashboardCalendar />
+              <DashboardCalendar siteVisits={siteVisits} />
             </TabsContent>
 
             <TabsContent value="costs" className="mt-3">
-              <SiteVisitCostSummary />
+              <SiteVisitCostSummary siteVisits={siteVisits} />
             </TabsContent>
           </Tabs>
         </CardContent>
