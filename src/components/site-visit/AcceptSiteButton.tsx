@@ -85,8 +85,8 @@ export function AcceptSiteButton({
         const { data, error } = await supabase.rpc('claim_site_visit', {
           p_site_id: site.id,
           p_user_id: userId,
-          p_enumerator_fee: feeBreakdown.enumeratorFee,
-          p_total_cost: feeBreakdown.totalPayout,
+          p_enumerator_fee: null,
+          p_total_cost: null,
           p_classification_level: feeBreakdown.classificationLevel || null,
           p_role_scope: feeBreakdown.roleScope || null,
           p_fee_source: feeBreakdown.feeSource
