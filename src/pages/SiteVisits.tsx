@@ -293,18 +293,27 @@ const SiteVisits = () => {
           filtered = siteVisits.filter(visit => visit.assignedTo === currentUser.id);
         }
       }
-    } else if (isSupervisor && supervisorHubName) {
-      // For supervisors, filter by their assigned hub (by hub name)
-      filtered = siteVisits.filter(visit => {
-        const visitHub = (visit.hub || '').toLowerCase().trim();
+    } else if (isSupervisor) {
+      // For supervisors, filter by their assigned hub
+      if (supervisorHubName) {
         const hubName = supervisorHubName.toLowerCase().trim();
-        // Match by hub name (exact or partial to handle variations)
-        return visitHub === hubName || 
-               visitHub.includes(hubName) ||
-               hubName.includes(visitHub);
-      });
+        filtered = siteVisits.filter(visit => {
+          const visitHub = (visit.hub || '').toLowerCase().trim();
+          // Skip sites with no hub assignment - supervisors should only see sites from their hub
+          if (!visitHub) return false;
+          // Match by hub name (exact match or contains for variations like "Dongola" vs "Dongola Hub")
+          return visitHub === hubName || 
+                 visitHub.includes(hubName) ||
+                 (visitHub.length > 0 && hubName.includes(visitHub));
+        });
+        console.log(`📊 Supervisor hub filter: showing ${filtered.length} sites from hub "${supervisorHubName}"`);
+      } else {
+        // Supervisor without hub assignment - show no sites until assigned
+        console.warn('⚠️ Supervisor has no hub assigned - cannot show sites');
+        filtered = [];
+      }
     } else {
-      // For non-data collectors, use existing logic
+      // For non-data collectors (admin, FOM, etc.), use existing logic
       filtered = canViewAll
         ? siteVisits
         : siteVisits.filter(visit => visit.assignedTo === currentUser?.id);
