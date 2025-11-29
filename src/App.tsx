@@ -3,6 +3,8 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'r
 import { ThemeProvider } from 'next-themes';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './lib/queryClient';
+import { isSupabaseConfigured } from './integrations/supabase/client';
+import { ConfigurationError } from './components/ConfigurationError';
 
 // Import AppProviders
 import { AppProviders } from './context/AppContext';
@@ -241,6 +243,25 @@ function App() {
       (window as any).debugDatabase = debugDatabase;
     }
   }, []);
+
+  // If Supabase is not configured, show the configuration error screen
+  // This prevents the app from crashing and gives a clear error message
+  if (!isSupabaseConfigured) {
+    return (
+      <ThemeProvider
+        attribute="class"
+        defaultTheme="light"
+        enableSystem={false}
+        disableTransitionOnChange
+      >
+        <ConfigurationError
+          title="Backend Not Configured"
+          description="The database connection is not set up."
+          details="The Supabase environment variables were not included in the build. Please rebuild the APK with proper environment configuration."
+        />
+      </ThemeProvider>
+    );
+  }
 
   return (
     <ThemeProvider
