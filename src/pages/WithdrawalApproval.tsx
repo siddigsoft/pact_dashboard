@@ -207,15 +207,27 @@ export default function WithdrawalApproval() {
     </div>
   );
 
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'pending': return { border: 'border-l-amber-500', avatar: 'border-amber-500/20', avatarBg: 'bg-amber-500/10 text-amber-700 dark:text-amber-400' };
+      case 'supervisor_approved': return { border: 'border-l-blue-500', avatar: 'border-blue-500/20', avatarBg: 'bg-blue-500/10 text-blue-700 dark:text-blue-400' };
+      case 'processing': return { border: 'border-l-purple-500', avatar: 'border-purple-500/20', avatarBg: 'bg-purple-500/10 text-purple-700 dark:text-purple-400' };
+      case 'approved': return { border: 'border-l-emerald-500', avatar: 'border-emerald-500/20', avatarBg: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' };
+      case 'rejected': return { border: 'border-l-red-500', avatar: 'border-red-500/20', avatarBg: 'bg-red-500/10 text-red-700 dark:text-red-400' };
+      default: return { border: 'border-l-muted', avatar: 'border-muted', avatarBg: 'bg-muted' };
+    }
+  };
+
   const RequestCard = ({ request }: { request: SupervisedRequest }) => {
     const userName = getUserName(request.userId, request);
+    const colors = getStatusColor(request.status);
     return (
-      <Card className="group transition-all duration-200 hover:shadow-md border-l-4 border-l-amber-500">
+      <Card className={`group transition-all duration-200 hover:shadow-md border-l-4 ${colors.border}`}>
         <CardContent className="p-4">
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-start gap-3 flex-1 min-w-0">
-              <Avatar className="h-10 w-10 border-2 border-amber-500/20">
-                <AvatarFallback className="bg-amber-500/10 text-amber-700 dark:text-amber-400 text-sm font-medium">
+              <Avatar className={`h-10 w-10 border-2 ${colors.avatar}`}>
+                <AvatarFallback className={`${colors.avatarBg} text-sm font-medium`}>
                   {getInitials(userName)}
                 </AvatarFallback>
               </Avatar>
@@ -252,7 +264,7 @@ export default function WithdrawalApproval() {
               <Button
                 size="sm"
                 onClick={() => handleApprove(request)}
-                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                className="flex-1 bg-emerald-600 text-white"
                 data-testid={`button-approve-${request.id}`}
               >
                 <Send className="w-4 h-4 mr-1.5" />
@@ -262,7 +274,7 @@ export default function WithdrawalApproval() {
                 variant="outline"
                 size="sm"
                 onClick={() => handleReject(request)}
-                className="flex-1 border-red-500/30 text-red-600 hover:bg-red-500/10"
+                className="flex-1 border-red-500/30 text-red-600"
                 data-testid={`button-reject-${request.id}`}
               >
                 <XCircle className="w-4 h-4 mr-1.5" />
@@ -585,7 +597,7 @@ export default function WithdrawalApproval() {
             <Button
               onClick={handleConfirmAction}
               disabled={processing || (dialogType === 'reject' && !notes.trim())}
-              className={dialogType === 'approve' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-red-600 hover:bg-red-700'}
+              className={dialogType === 'approve' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'}
               data-testid="button-confirm-action"
             >
               {processing ? 'Processing...' : dialogType === 'approve' ? 'Forward to Finance' : 'Reject Request'}

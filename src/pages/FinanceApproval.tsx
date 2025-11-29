@@ -245,7 +245,7 @@ export default function FinanceApproval() {
               <Button
                 size="sm"
                 onClick={() => handleProcess(request)}
-                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                className="flex-1 bg-emerald-600 text-white"
                 data-testid={`button-process-${request.id}`}
               >
                 <Banknote className="w-4 h-4 mr-1.5" />
@@ -255,7 +255,7 @@ export default function FinanceApproval() {
                 variant="outline"
                 size="sm"
                 onClick={() => handleReject(request)}
-                className="flex-1 border-red-500/30 text-red-600 hover:bg-red-500/10"
+                className="flex-1 border-red-500/30 text-red-600"
                 data-testid={`button-reject-${request.id}`}
               >
                 <XCircle className="w-4 h-4 mr-1.5" />
@@ -594,7 +594,7 @@ export default function FinanceApproval() {
             <Button
               onClick={handleConfirmAction}
               disabled={processing || (dialogType === 'reject' && !notes.trim())}
-              className={dialogType === 'process' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-red-600 hover:bg-red-700'}
+              className={dialogType === 'process' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'}
               data-testid="button-confirm-action"
             >
               {processing ? 'Processing...' : dialogType === 'process' ? 'Confirm Payment' : 'Reject Request'}
