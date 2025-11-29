@@ -11,15 +11,22 @@ import type {
   WalletStats,
 } from '@/types/wallet';
 
+interface SupervisedWithdrawalRequest extends WithdrawalRequest {
+  requesterName?: string;
+  requesterEmail?: string;
+}
+
 interface WalletContextType {
   wallet: Wallet | null;
   transactions: WalletTransaction[];
   withdrawalRequests: WithdrawalRequest[];
+  supervisedWithdrawalRequests: SupervisedWithdrawalRequest[];
   stats: WalletStats | null;
   loading: boolean;
   refreshWallet: () => Promise<void>;
   refreshTransactions: () => Promise<void>;
   refreshWithdrawalRequests: () => Promise<void>;
+  refreshSupervisedWithdrawalRequests: () => Promise<void>;
   createWithdrawalRequest: (amount: number, reason: string, paymentMethod?: string) => Promise<void>;
   cancelWithdrawalRequest: (requestId: string) => Promise<void>;
   // Step 1: Supervisor approval (changes status to 'supervisor_approved')
@@ -39,6 +46,7 @@ interface WalletContextType {
   listWallets: () => Promise<Wallet[]>;
   adminAdjustBalance: (userId: string, amount: number, currency: string, reason: string, adjustmentType: 'credit' | 'debit') => Promise<void>;
   adminListWithdrawalRequests: () => Promise<WithdrawalRequest[]>;
+  listSupervisedWithdrawalRequests: () => Promise<SupervisedWithdrawalRequest[]>;
   reconcileSiteVisitFee: (siteVisitId: string) => Promise<{ success: boolean; message: string }>;
 }
 
@@ -140,6 +148,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
   const [withdrawalRequests, setWithdrawalRequests] = useState<WithdrawalRequest[]>([]);
+  const [supervisedWithdrawalRequests, setSupervisedWithdrawalRequests] = useState<SupervisedWithdrawalRequest[]>([]);
   const [stats, setStats] = useState<WalletStats | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -1109,6 +1118,91 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const listSupervisedWithdrawalRequests = async (): Promise<SupervisedWithdrawalRequest[]> => {
+    if (!currentUser?.id) return [];
+    
+    try {
+      const userRole = currentUser.role?.toLowerCase();
+      const isSupervisorRole = userRole === 'supervisor' || userRole === 'hubsupervisor' || userRole === 'fom';
+      const isAdmin = userRole === 'admin' || userRole === 'financialadmin';
+      
+      if (!isSupervisorRole && !isAdmin) {
+        return [];
+      }
+
+      if (isAdmin) {
+        const { data, error } = await supabase
+          .from('withdrawal_requests')
+          .select(`
+            *,
+            profiles:profiles!withdrawal_requests_user_id_fkey(full_name, email, hub_id, state_id)
+          `)
+          .order('created_at', { ascending: false })
+          .limit(200);
+
+        if (error) throw error;
+
+        return (data || []).map((item: any) => ({
+          ...transformWithdrawalRequestFromDB(item),
+          requesterName: item.profiles?.full_name || 'Unknown User',
+          requesterEmail: item.profiles?.email,
+        }));
+      }
+
+      const supervisorHubId = currentUser.hubId;
+      const supervisorStateId = currentUser.stateId;
+
+      if (!supervisorHubId && !supervisorStateId) {
+        console.warn('[Wallet] Supervisor has no hub or state assigned');
+        return [];
+      }
+
+      const { data: teamMembers, error: teamError } = await supabase
+        .from('profiles')
+        .select('id, full_name, email')
+        .or(`hub_id.eq.${supervisorHubId || 'none'},state_id.eq.${supervisorStateId || 'none'}`);
+
+      if (teamError) {
+        console.error('Failed to fetch team members:', teamError);
+        return [];
+      }
+
+      const teamMemberIds = (teamMembers || [])
+        .map((m: any) => m.id)
+        .filter((id: string) => id !== currentUser.id);
+
+      if (teamMemberIds.length === 0) {
+        return [];
+      }
+
+      const { data, error } = await supabase
+        .from('withdrawal_requests')
+        .select(`
+          *,
+          profiles:profiles!withdrawal_requests_user_id_fkey(full_name, email)
+        `)
+        .in('user_id', teamMemberIds)
+        .order('created_at', { ascending: false })
+        .limit(200);
+
+      if (error) throw error;
+
+      return (data || []).map((item: any) => ({
+        ...transformWithdrawalRequestFromDB(item),
+        requesterName: item.profiles?.full_name || 'Unknown User',
+        requesterEmail: item.profiles?.email,
+      }));
+    } catch (error: any) {
+      console.error('Failed to list supervised withdrawal requests:', error);
+      return [];
+    }
+  };
+
+  const refreshSupervisedWithdrawalRequests = async () => {
+    const requests = await listSupervisedWithdrawalRequests();
+    setSupervisedWithdrawalRequests(requests);
+  };
+
   useEffect(() => {
     const initWallet = async () => {
       if (!currentUser?.id) {
@@ -1117,7 +1211,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       }
 
       setLoading(true);
-      await Promise.all([refreshWallet(), refreshTransactions(), refreshWithdrawalRequests()]);
+      const initPromises = [refreshWallet(), refreshTransactions(), refreshWithdrawalRequests()];
+      
+      const userRole = currentUser.role?.toLowerCase();
+      const isSupervisorRole = userRole === 'supervisor' || userRole === 'hubsupervisor' || userRole === 'fom';
+      const isAdmin = userRole === 'admin' || userRole === 'financialadmin';
+      
+      if (isSupervisorRole || isAdmin) {
+        initPromises.push(refreshSupervisedWithdrawalRequests());
+      }
+      
+      await Promise.all(initPromises);
       setLoading(false);
     };
 
@@ -1182,11 +1286,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         wallet,
         transactions,
         withdrawalRequests,
+        supervisedWithdrawalRequests,
         stats,
         loading,
         refreshWallet,
         refreshTransactions,
         refreshWithdrawalRequests,
+        refreshSupervisedWithdrawalRequests,
         createWithdrawalRequest,
         cancelWithdrawalRequest,
         approveWithdrawalRequest,
@@ -1204,6 +1310,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         listWallets,
         adminAdjustBalance,
         adminListWithdrawalRequests,
+        listSupervisedWithdrawalRequests,
         reconcileSiteVisitFee,
       }}
     >
