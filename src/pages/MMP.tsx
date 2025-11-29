@@ -1280,11 +1280,12 @@ const MMP = () => {
             await supabase.from('wallet_transactions').insert({
               wallet_id: walletId,
               user_id: acceptedBy,
-              type: 'site_visit_fee',
+              type: 'earning',
               amount: totalCost,
+              amount_cents: Math.round(totalCost * 100),
               currency: 'SDG',
-              site_visit_id: site.id, // Using site entry ID as reference
-              description: `MMP site entry completed: ${site.site_name || site.siteName || 'Site'}`,
+              site_visit_id: site.id,
+              description: `Site visit completed: ${site.site_name || site.siteName || 'Site'}`,
               balance_before: currentBalance,
               balance_after: currentBalance + totalCost,
               created_by: currentUser?.id,

@@ -40,6 +40,13 @@ The backend uses PostgreSQL via Supabase, leveraging Row Level Security (RLS) an
 
 ## Recent Changes
 
+*   **Wallet Transaction Type & Backfill Fix (Nov 2025):** Fixed wallet transactions to use correct database enum and backfilled missing transactions:
+    - Changed transaction type from 'site_visit_fee' to 'earning' (matching database enum `wallet_tx_type`)
+    - Added required `amount_cents` field (amount * 100) to all wallet transaction inserts
+    - Created backfill SQL script to create wallet transactions for completed sites that were missing them
+    - Updated wallet balances to reflect all completed site visits
+    - Queries now check for both 'earning' and 'site_visit_fee' types for backwards compatibility
+
 *   **Wallet Payment Fix for Auto-Accept (Nov 2025):** Fixed wallet payments not being created for sites that went through the "Start Visit" auto-accept flow:
     - Root cause: When "Assigned" sites were started (auto-accepted), fees were not being calculated/set
     - `handleConfirmStartVisit` now calculates and sets fees during auto-accept when they're missing

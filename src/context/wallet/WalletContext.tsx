@@ -589,8 +589,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           await supabase.from('wallet_transactions').insert({
             wallet_id: newWallet.id,
             user_id: userId,
-            type: 'site_visit_fee',
+            type: 'earning',
             amount,
+            amount_cents: Math.round(amount * 100),
             currency: 'SDG',
             site_visit_id: siteVisitId,
             description,
@@ -622,8 +623,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const { error: transactionError } = await supabase.from('wallet_transactions').insert({
         wallet_id: targetWallet.id,
         user_id: userId,
-        type: 'site_visit_fee',
+        type: 'earning',
         amount,
+        amount_cents: Math.round(amount * 100),
         currency: 'SDG',
         site_visit_id: siteVisitId,
         description,
@@ -665,12 +667,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         return { success: false, message: 'Site has no accepted/assigned user' };
       }
 
-      // 2. Check if fee was already added
+      // 2. Check if fee was already added (check for both old 'site_visit_fee' and new 'earning' types)
       const { data: existingTx, error: txError } = await supabase
         .from('wallet_transactions')
         .select('id, amount')
         .eq('site_visit_id', siteVisitId)
-        .eq('type', 'site_visit_fee')
+        .in('type', ['earning', 'site_visit_fee'])
         .maybeSingle();
 
       if (existingTx) {
@@ -725,6 +727,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
             user_id: userId,
             type: 'adjustment',
             amount,
+            amount_cents: Math.round(amount * 100),
             currency,
             description: `Monthly retainer - ${period}`,
             balance_before: 0,
@@ -759,6 +762,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         user_id: userId,
         type: 'adjustment',
         amount,
+        amount_cents: Math.round(amount * 100),
         currency,
         description: `Monthly retainer - ${period}`,
         balance_before: currentBalance,
