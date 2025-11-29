@@ -355,7 +355,7 @@ const ClassificationFeeManagement = () => {
                           useMultiplier 
                             ? (feeStructures.find(f => f.classification_level === level)?.complexity_multiplier || 1.0)
                             : 1.0
-                        ).toFixed(0)} SDG
+                        ).toLocaleString()} SDG
                       </span>
                     </div>
                     {useMultiplier && (

@@ -6,7 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
-import { Pencil, Save, X } from 'lucide-react';
+import { Pencil, Save, X, Play } from 'lucide-react';
 import { AcceptSiteButton } from '@/components/site-visit/AcceptSiteButton';
 import { RequestDownPaymentButton } from '@/components/site-visit/RequestDownPaymentButton';
 import { useAppContext } from '@/context/AppContext';
@@ -24,6 +24,7 @@ interface SiteDetailDialogProps {
   currentUserId?: string;
   onClaimed?: () => void;
   enableFirstClaim?: boolean;
+  onStartVisit?: (site: any) => void;
 }
 
 const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
@@ -36,7 +37,8 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
   onSendBackToCoordinator,
   currentUserId,
   onClaimed,
-  enableFirstClaim = false
+  enableFirstClaim = false,
+  onStartVisit
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState<any>(null);
@@ -1044,12 +1046,47 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
               </div>
             )}
 
-            {/* Request Down Payment for Accepted Sites */}
+            {/* Start Visit Button for Accepted/Assigned Sites */}
+            {(() => {
+              const acceptedBy = site?.accepted_by || site?.acceptedBy || row.acceptedBy;
+              const status = (row.status || site?.status || '').toLowerCase();
+              const isAcceptedOrAssigned = status === 'accepted' || status === 'assigned';
+              const isOwner = acceptedBy === currentUserId || (status === 'assigned' && site?.accepted_by === currentUserId);
+              
+              if (isAcceptedOrAssigned && isOwner && onStartVisit && !isEditing) {
+                return (
+                  <div className="border-t pt-4">
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <p className="text-sm font-medium">Ready to start your visit?</p>
+                        <p className="text-xs text-muted-foreground">
+                          Begin your site visit to track time and location
+                        </p>
+                      </div>
+                      <Button
+                        onClick={() => {
+                          onStartVisit(site);
+                          onOpenChange(false);
+                        }}
+                        className="bg-blue-600 hover:bg-blue-700"
+                        data-testid="button-start-visit-dialog"
+                      >
+                        <Play className="h-4 w-4 mr-2" />
+                        Start Visit
+                      </Button>
+                    </div>
+                  </div>
+                );
+              }
+              return null;
+            })()}
+
+            {/* Request Down Payment for Accepted/Ongoing Sites */}
             {(() => {
               const acceptedBy = site?.accepted_by || site?.acceptedBy || row.acceptedBy;
               const transportFee = site?.transport_fee || site?.transportFee || row.transportFee || 0;
               const status = (row.status || site?.status || '').toLowerCase();
-              const isAcceptedOrOngoing = status === 'accepted' || status === 'ongoing';
+              const isAcceptedOrOngoing = status === 'accepted' || status === 'ongoing' || status === 'in progress' || status === 'in_progress';
               const isOwner = acceptedBy === currentUserId;
               const hasTransportBudget = transportFee > 0;
               

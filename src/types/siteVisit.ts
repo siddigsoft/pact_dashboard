@@ -99,4 +99,13 @@ export interface SiteVisit {
   // new optional legacy/compat fields to satisfy dashboard lookups
   region?: string;         // some records may have region at top-level
   site_code?: string;      // legacy snake_case field used in older codepaths
+  
+  // Fee-related compat fields for down payment and wallet features
+  transport_fee?: number;  // direct transport fee from site_visits table
+  enumerator_fee?: number; // direct enumerator fee from site_visits table
+  transportFee?: number;   // camelCase alias for transport_fee
+  
+  // Acceptance/assignment compat fields for down payment button
+  accepted_by?: string;    // snake_case from mmp_site_entries
+  acceptedBy?: string;     // camelCase alias
 }

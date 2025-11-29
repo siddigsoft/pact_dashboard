@@ -438,6 +438,15 @@ const AdminWallets: React.FC = () => {
                                   </span>
                                 </div>
                               )}
+                              {/* Fallback: show total_earned when no transaction breakdown available */}
+                              {earned > 0 && siteVisitFees === 0 && bonuses === 0 && adjustments === 0 && (
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-muted-foreground">Total Earned:</span>
+                                  <span className="text-sm font-medium text-blue-600 dark:text-blue-400">
+                                    {fmt(earned * 100, currency)}
+                                  </span>
+                                </div>
+                              )}
                               {earned === 0 && <span className="text-sm text-muted-foreground">No earnings yet</span>}
                             </div>
                           </TableCell>

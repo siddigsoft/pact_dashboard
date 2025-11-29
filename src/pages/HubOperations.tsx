@@ -112,6 +112,7 @@ export default function HubOperations() {
   const [filterState, setFilterState] = useState<string>('');
   const [filterHub, setFilterHub] = useState<string>('');
   const [filterActivityType, setFilterActivityType] = useState<string>('');
+  const [siteSourceFilter, setSiteSourceFilter] = useState<'all' | 'registry' | 'mmp' | 'with_gps'>('all');
   
   const [newHub, setNewHub] = useState({
     name: '',
@@ -649,9 +650,19 @@ export default function HubOperations() {
       const matchesState = !filterState || site.state_id === filterState;
       const matchesHub = !filterHub || site.hub_id === filterHub;
       const matchesActivity = !filterActivityType || site.activity_type === filterActivityType;
-      return matchesSearch && matchesState && matchesHub && matchesActivity;
+      
+      let matchesSourceFilter = true;
+      if (siteSourceFilter === 'registry') {
+        matchesSourceFilter = site.source === 'registry';
+      } else if (siteSourceFilter === 'mmp') {
+        matchesSourceFilter = site.source === 'mmp';
+      } else if (siteSourceFilter === 'with_gps') {
+        matchesSourceFilter = !!(site.gps_latitude && site.gps_longitude);
+      }
+      
+      return matchesSearch && matchesState && matchesHub && matchesActivity && matchesSourceFilter;
     });
-  }, [sites, searchTerm, filterState, filterHub, filterActivityType]);
+  }, [sites, searchTerm, filterState, filterHub, filterActivityType, siteSourceFilter]);
 
   const stats = useMemo(() => ({
     totalHubs: hubs.length,
@@ -1237,9 +1248,13 @@ export default function HubOperations() {
 
         {/* Sites Tab */}
         <TabsContent value="sites" className="space-y-4">
-          {/* Sites Summary */}
+          {/* Sites Summary - Clickable Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <Card className="p-4">
+            <Card 
+              className={`p-4 cursor-pointer transition-all hover-elevate ${siteSourceFilter === 'all' ? 'ring-2 ring-primary' : ''}`}
+              onClick={() => setSiteSourceFilter('all')}
+              data-testid="card-total-sites"
+            >
               <div className="flex items-center gap-3">
                 <div className="p-2 rounded-lg bg-primary/10">
                   <Navigation className="h-5 w-5 text-primary" />
@@ -1250,7 +1265,11 @@ export default function HubOperations() {
                 </div>
               </div>
             </Card>
-            <Card className="p-4">
+            <Card 
+              className={`p-4 cursor-pointer transition-all hover-elevate ${siteSourceFilter === 'registry' ? 'ring-2 ring-green-500' : ''}`}
+              onClick={() => setSiteSourceFilter(siteSourceFilter === 'registry' ? 'all' : 'registry')}
+              data-testid="card-registry-sites"
+            >
               <div className="flex items-center gap-3">
                 <div className="p-2 rounded-lg bg-green-500/10">
                   <Layers className="h-5 w-5 text-green-600" />
@@ -1261,7 +1280,11 @@ export default function HubOperations() {
                 </div>
               </div>
             </Card>
-            <Card className="p-4">
+            <Card 
+              className={`p-4 cursor-pointer transition-all hover-elevate ${siteSourceFilter === 'mmp' ? 'ring-2 ring-amber-500' : ''}`}
+              onClick={() => setSiteSourceFilter(siteSourceFilter === 'mmp' ? 'all' : 'mmp')}
+              data-testid="card-mmp-sites"
+            >
               <div className="flex items-center gap-3">
                 <div className="p-2 rounded-lg bg-amber-500/10">
                   <Upload className="h-5 w-5 text-amber-600" />
@@ -1272,7 +1295,11 @@ export default function HubOperations() {
                 </div>
               </div>
             </Card>
-            <Card className="p-4">
+            <Card 
+              className={`p-4 cursor-pointer transition-all hover-elevate ${siteSourceFilter === 'with_gps' ? 'ring-2 ring-blue-500' : ''}`}
+              onClick={() => setSiteSourceFilter(siteSourceFilter === 'with_gps' ? 'all' : 'with_gps')}
+              data-testid="card-gps-sites"
+            >
               <div className="flex items-center gap-3">
                 <div className="p-2 rounded-lg bg-blue-500/10">
                   <MapPin className="h-5 w-5 text-blue-600" />
@@ -1284,6 +1311,25 @@ export default function HubOperations() {
               </div>
             </Card>
           </div>
+
+          {/* Active Filter Indicator */}
+          {siteSourceFilter !== 'all' && (
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary" className="gap-1">
+                <Filter className="h-3 w-3" />
+                Showing: {siteSourceFilter === 'registry' ? 'Registry Sites' : siteSourceFilter === 'mmp' ? 'MMP Sites' : 'Sites with GPS'}
+                ({filteredSites.length} sites)
+              </Badge>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => setSiteSourceFilter('all')}
+                data-testid="button-clear-filter"
+              >
+                Clear Filter
+              </Button>
+            </div>
+          )}
 
           {viewMode === 'map' && (
             <Card>
