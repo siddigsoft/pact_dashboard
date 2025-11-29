@@ -72,6 +72,7 @@ const FinancialOperations = lazy(() => import('./pages/FinancialOperations'));
 const SuperAdminManagement = lazy(() => import('./components/superAdmin/SuperAdminManagementPage').then(module => ({ default: module.SuperAdminManagementPage })));
 const HubOperations = lazy(() => import('./pages/HubOperations'));
 const TrackerPreparationPlan = lazy(() => import('./pages/TrackerPreparationPlan'));
+const NotificationsPage = lazy(() => import('./pages/Notifications'));
 
 // Components (keep these eagerly loaded as they're used immediately)
 import MainLayout from './components/MainLayout';
@@ -168,6 +169,7 @@ const AppRoutes = () => {
         <Route path="/projects/:id/activities/:activityId" element={<ProjectActivityDetail />} />
         <Route path="/projects/:id/team" element={<ProjectTeamManagement />} />
         <Route path="/reports" element={<Reports />} />
+        <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/wallet" element={<WalletPage />} />
         <Route path="/admin/wallets" element={<AdminWallets />} />
