@@ -109,3 +109,25 @@ export const SUPPORTED_CURRENCIES = ['SDG', 'USD', 'EUR', 'GBP', 'SAR', 'AED'] a
 export type SupportedCurrency = typeof SUPPORTED_CURRENCIES[number];
 
 export const DEFAULT_CURRENCY = 'SDG';
+
+/**
+ * WithdrawalRequest with additional metadata for supervisor-facing views
+ * Includes profile data from the requesting user (subordinate)
+ */
+export interface SupervisedWithdrawalRequest extends WithdrawalRequest {
+  requesterName?: string;
+  requesterEmail?: string;
+  requesterHub?: string;
+  requesterState?: string;
+  requesterRole?: string;
+}
+
+/**
+ * WithdrawalRequest with full admin metadata for finance/admin processing
+ * Extends SupervisedWithdrawalRequest to ensure requester metadata persists throughout approval chain
+ */
+export interface AdminWithdrawalRequest extends SupervisedWithdrawalRequest {
+  // Inherits all fields from SupervisedWithdrawalRequest including:
+  // - All base WithdrawalRequest fields
+  // - requesterName, requesterEmail, requesterHub, requesterState, requesterRole
+}

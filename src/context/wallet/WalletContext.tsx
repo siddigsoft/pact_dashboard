@@ -9,12 +9,9 @@ import type {
   WithdrawalRequest,
   SiteVisitCost,
   WalletStats,
+  SupervisedWithdrawalRequest,
+  AdminWithdrawalRequest,
 } from '@/types/wallet';
-
-interface SupervisedWithdrawalRequest extends WithdrawalRequest {
-  requesterName?: string;
-  requesterEmail?: string;
-}
 
 interface WalletContextType {
   wallet: Wallet | null;
@@ -45,7 +42,7 @@ interface WalletContextType {
   addRetainerToWallet: (userId: string, amountCents: number, currency: string, period: string) => Promise<void>;
   listWallets: () => Promise<Wallet[]>;
   adminAdjustBalance: (userId: string, amount: number, currency: string, reason: string, adjustmentType: 'credit' | 'debit') => Promise<void>;
-  adminListWithdrawalRequests: () => Promise<SupervisedWithdrawalRequest[]>;
+  adminListWithdrawalRequests: () => Promise<AdminWithdrawalRequest[]>;
   listSupervisedWithdrawalRequests: () => Promise<SupervisedWithdrawalRequest[]>;
   reconcileSiteVisitFee: (siteVisitId: string) => Promise<{ success: boolean; message: string }>;
 }
@@ -394,7 +391,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           .from('withdrawal_requests')
           .select(`
             *,
-            profiles:profiles!withdrawal_requests_user_id_fkey(full_name, email)
+            profiles:profiles!withdrawal_requests_user_id_fkey(full_name, email, hub_id, state_id, role)
           `)
           .eq('id', requestId)
           .single();
@@ -404,6 +401,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           ...transformWithdrawalRequestFromDB(requestData),
           requesterName: requestData.profiles?.full_name || 'Unknown User',
           requesterEmail: requestData.profiles?.email,
+          requesterHub: requestData.profiles?.hub_id,
+          requesterState: requestData.profiles?.state_id,
+          requesterRole: requestData.profiles?.role,
         };
       }
       
@@ -509,7 +509,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           .from('withdrawal_requests')
           .select(`
             *,
-            profiles:profiles!withdrawal_requests_user_id_fkey(full_name, email)
+            profiles:profiles!withdrawal_requests_user_id_fkey(full_name, email, hub_id, state_id, role)
           `)
           .eq('id', requestId)
           .single();
@@ -519,6 +519,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           ...transformWithdrawalRequestFromDB(requestData),
           requesterName: requestData.profiles?.full_name || 'Unknown User',
           requesterEmail: requestData.profiles?.email,
+          requesterHub: requestData.profiles?.hub_id,
+          requesterState: requestData.profiles?.state_id,
+          requesterRole: requestData.profiles?.role,
         };
       }
       
@@ -1159,23 +1162,26 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const adminListWithdrawalRequests = async (): Promise<SupervisedWithdrawalRequest[]> => {
+  const adminListWithdrawalRequests = async (): Promise<AdminWithdrawalRequest[]> => {
     try {
       const { data, error } = await supabase
         .from('withdrawal_requests')
         .select(`
           *,
-          profiles:profiles!withdrawal_requests_user_id_fkey(full_name, email)
+          profiles:profiles!withdrawal_requests_user_id_fkey(full_name, email, hub_id, state_id, role)
         `)
         .order('created_at', { ascending: false })
         .limit(200);
 
       if (error) throw error;
 
-      return (data || []).map((item: any) => ({
+      return (data || []).map((item: any): AdminWithdrawalRequest => ({
         ...transformWithdrawalRequestFromDB(item),
         requesterName: item.profiles?.full_name || 'Unknown User',
         requesterEmail: item.profiles?.email,
+        requesterHub: item.profiles?.hub_id,
+        requesterState: item.profiles?.state_id,
+        requesterRole: item.profiles?.role,
       }));
     } catch (error: any) {
       console.error('Failed to list withdrawal requests:', error);
@@ -1200,17 +1206,20 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           .from('withdrawal_requests')
           .select(`
             *,
-            profiles:profiles!withdrawal_requests_user_id_fkey(full_name, email, hub_id, state_id)
+            profiles:profiles!withdrawal_requests_user_id_fkey(full_name, email, hub_id, state_id, role)
           `)
           .order('created_at', { ascending: false })
           .limit(200);
 
         if (error) throw error;
 
-        return (data || []).map((item: any) => ({
+        return (data || []).map((item: any): SupervisedWithdrawalRequest => ({
           ...transformWithdrawalRequestFromDB(item),
           requesterName: item.profiles?.full_name || 'Unknown User',
           requesterEmail: item.profiles?.email,
+          requesterHub: item.profiles?.hub_id,
+          requesterState: item.profiles?.state_id,
+          requesterRole: item.profiles?.role,
         }));
       }
 
@@ -1224,7 +1233,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       const { data: teamMembers, error: teamError } = await supabase
         .from('profiles')
-        .select('id, full_name, email')
+        .select('id, full_name, email, hub_id, state_id, role')
         .or(`hub_id.eq.${supervisorHubId || 'none'},state_id.eq.${supervisorStateId || 'none'}`);
 
       if (teamError) {
@@ -1244,7 +1253,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         .from('withdrawal_requests')
         .select(`
           *,
-          profiles:profiles!withdrawal_requests_user_id_fkey(full_name, email)
+          profiles:profiles!withdrawal_requests_user_id_fkey(full_name, email, hub_id, state_id, role)
         `)
         .in('user_id', teamMemberIds)
         .order('created_at', { ascending: false })
@@ -1252,10 +1261,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       if (error) throw error;
 
-      return (data || []).map((item: any) => ({
+      return (data || []).map((item: any): SupervisedWithdrawalRequest => ({
         ...transformWithdrawalRequestFromDB(item),
         requesterName: item.profiles?.full_name || 'Unknown User',
         requesterEmail: item.profiles?.email,
+        requesterHub: item.profiles?.hub_id,
+        requesterState: item.profiles?.state_id,
+        requesterRole: item.profiles?.role,
       }));
     } catch (error: any) {
       console.error('Failed to list supervised withdrawal requests:', error);

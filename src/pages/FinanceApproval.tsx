@@ -11,14 +11,9 @@ import { useWallet } from '@/context/wallet/WalletContext';
 import { useUser } from '@/context/user/UserContext';
 import { Clock, CheckCircle2, XCircle, User, Calendar, Send, Banknote, CreditCard, Info, FileText, RefreshCw } from 'lucide-react';
 import { format } from 'date-fns';
-import { WithdrawalRequest } from '@/types/wallet';
+import { AdminWithdrawalRequest } from '@/types/wallet';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
-
-interface AdminWithdrawalRequest extends WithdrawalRequest {
-  requesterName?: string;
-  requesterEmail?: string;
-}
 
 export default function FinanceApproval() {
   const { adminListWithdrawalRequests, adminProcessWithdrawal, adminRejectWithdrawal } = useWallet();
@@ -82,13 +77,13 @@ export default function FinanceApproval() {
     }
   };
 
-  const handleProcess = (request: WithdrawalRequest) => {
+  const handleProcess = (request: AdminWithdrawalRequest) => {
     setSelectedRequest(request);
     setDialogType('process');
     setNotes('');
   };
 
-  const handleReject = (request: WithdrawalRequest) => {
+  const handleReject = (request: AdminWithdrawalRequest) => {
     setSelectedRequest(request);
     setDialogType('reject');
     setNotes('');
