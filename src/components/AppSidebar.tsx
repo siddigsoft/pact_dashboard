@@ -119,8 +119,8 @@
     const isAdmin = roles.includes('admin' as AppRole) || defaultRole === 'admin';
     const isICT = roles.includes('ict' as AppRole) || defaultRole === 'ict';
     const isFinancialAdmin = roles.includes('financialAdmin' as AppRole) || defaultRole === 'financialAdmin';
-    const isDataCollector = roles.includes('dataCollector' as AppRole) || defaultRole === 'dataCollector';
-    const isCoordinator = roles.includes('coordinator' as AppRole) || defaultRole === 'coordinator';
+    const isDataCollector = roles.includes('DataCollector' as AppRole) || roles.includes('dataCollector' as AppRole) || defaultRole === 'dataCollector' || defaultRole === 'DataCollector';
+    const isCoordinator = roles.includes('Coordinator' as AppRole) || roles.includes('coordinator' as AppRole) || defaultRole === 'coordinator' || defaultRole === 'Coordinator';
     const isFOM = roles.includes('fom' as AppRole) || defaultRole === 'fom';
     const isSupervisor = roles.includes('supervisor' as AppRole) || defaultRole === 'supervisor';
 
@@ -244,7 +244,8 @@
     
     const { checkPermission, hasAnyRole, canManageRoles } = useAuthorization();
     const isAdmin = hasAnyRole(['admin']);
-    const isDataCollector = roles?.includes('dataCollector' as AppRole) || 
+    const isDataCollector = roles?.includes('DataCollector' as AppRole) || 
+                            roles?.includes('dataCollector' as AppRole) || 
                             currentUser?.role?.toLowerCase() === 'datacollector' ||
                             currentUser?.role?.toLowerCase() === 'data collector';
 
