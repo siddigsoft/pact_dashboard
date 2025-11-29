@@ -3009,18 +3009,16 @@ const MMP = () => {
             </Button>
             <div className="min-w-0 flex-1">
               <h1 className="text-xl sm:text-2xl md:text-3xl font-extrabold text-white tracking-tight truncate">
-                {isDataCollector ? 'My Sites Management' : 'MMP Management'}
+                {canClaimSites ? 'My Sites Management' : 'MMP Management'}
               </h1>
               <p className="text-blue-100 dark:text-blue-200/80 font-medium text-xs sm:text-sm md:text-base mt-1 leading-tight">
                 {isAdmin || isICT
                   ? 'Upload, validate, and forward MMPs to Field Operations Managers'
                   : isFOM
                     ? 'Process MMPs, attach permits, and assign sites to coordinators'
-                    : isCoordinator
-                      ? 'Review and verify site assignments'
-                      : isDataCollector
-                        ? 'View and manage your assigned sites.'
-                        : 'Manage your MMP files and site visits'}
+                    : canClaimSites
+                      ? 'View and manage your assigned sites.'
+                      : 'Manage your MMP files and site visits'}
               </p>
             </div>
           </div>
