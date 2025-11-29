@@ -45,7 +45,7 @@ interface WalletContextType {
   addRetainerToWallet: (userId: string, amountCents: number, currency: string, period: string) => Promise<void>;
   listWallets: () => Promise<Wallet[]>;
   adminAdjustBalance: (userId: string, amount: number, currency: string, reason: string, adjustmentType: 'credit' | 'debit') => Promise<void>;
-  adminListWithdrawalRequests: () => Promise<WithdrawalRequest[]>;
+  adminListWithdrawalRequests: () => Promise<SupervisedWithdrawalRequest[]>;
   listSupervisedWithdrawalRequests: () => Promise<SupervisedWithdrawalRequest[]>;
   reconcileSiteVisitFee: (siteVisitId: string) => Promise<{ success: boolean; message: string }>;
 }
@@ -275,7 +275,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         description: 'Your request is pending supervisor approval',
       });
 
-      await refreshWithdrawalRequests();
+      // Refresh both personal and supervised requests (supervisors will see new requests)
+      await Promise.all([refreshWithdrawalRequests(), refreshSupervisedWithdrawalRequests()]);
     } catch (error: any) {
       console.error('Failed to create withdrawal request:', error);
       toast({
@@ -301,7 +302,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         description: 'Your withdrawal request has been cancelled',
       });
 
-      await refreshWithdrawalRequests();
+      // Refresh both personal and supervised requests
+      await Promise.all([refreshWithdrawalRequests(), refreshSupervisedWithdrawalRequests()]);
     } catch (error: any) {
       console.error('Failed to cancel withdrawal request:', error);
       toast({
@@ -318,7 +320,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (!currentUser?.id) return;
 
     try {
-      const request = withdrawalRequests.find(r => r.id === requestId);
+      // Look in both personal and supervised withdrawal requests
+      let request = withdrawalRequests.find(r => r.id === requestId);
+      if (!request) {
+        request = supervisedWithdrawalRequests.find(r => r.id === requestId);
+      }
       if (!request) throw new Error('Request not found');
 
       // Verify the request is in pending status
@@ -359,7 +365,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         description: 'The request has been forwarded to Finance for processing',
       });
 
-      await refreshWithdrawalRequests();
+      // Refresh both personal and supervised withdrawal requests
+      await Promise.all([refreshWithdrawalRequests(), refreshSupervisedWithdrawalRequests()]);
     } catch (error: any) {
       console.error('Failed to approve withdrawal:', error);
       toast({
@@ -375,7 +382,31 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (!currentUser?.id) return;
 
     try {
-      const request = withdrawalRequests.find(r => r.id === requestId);
+      // First try to find in local state, then fetch from database if not found
+      let request = withdrawalRequests.find(r => r.id === requestId);
+      if (!request) {
+        request = supervisedWithdrawalRequests.find(r => r.id === requestId);
+      }
+      
+      // If still not found, fetch directly from database with profile info (for admin list view)
+      if (!request) {
+        const { data: requestData, error: fetchError } = await supabase
+          .from('withdrawal_requests')
+          .select(`
+            *,
+            profiles:profiles!withdrawal_requests_user_id_fkey(full_name, email)
+          `)
+          .eq('id', requestId)
+          .single();
+          
+        if (fetchError) throw new Error('Request not found');
+        request = {
+          ...transformWithdrawalRequestFromDB(requestData),
+          requesterName: requestData.profiles?.full_name || 'Unknown User',
+          requesterEmail: requestData.profiles?.email,
+        };
+      }
+      
       if (!request) throw new Error('Request not found');
 
       // Verify the request is in supervisor_approved status
@@ -449,7 +480,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         description: 'The payment has been completed and funds released',
       });
 
-      await Promise.all([refreshWallet(), refreshTransactions(), refreshWithdrawalRequests()]);
+      // Refresh all relevant data including supervised requests
+      await Promise.all([refreshWallet(), refreshTransactions(), refreshWithdrawalRequests(), refreshSupervisedWithdrawalRequests()]);
     } catch (error: any) {
       console.error('Failed to process withdrawal:', error);
       toast({
@@ -465,7 +497,31 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (!currentUser?.id) return;
 
     try {
-      const request = withdrawalRequests.find(r => r.id === requestId);
+      // First try to find in local state, then fetch from database if not found
+      let request = withdrawalRequests.find(r => r.id === requestId);
+      if (!request) {
+        request = supervisedWithdrawalRequests.find(r => r.id === requestId);
+      }
+      
+      // If still not found, fetch directly from database with profile info (for admin list view)
+      if (!request) {
+        const { data: requestData, error: fetchError } = await supabase
+          .from('withdrawal_requests')
+          .select(`
+            *,
+            profiles:profiles!withdrawal_requests_user_id_fkey(full_name, email)
+          `)
+          .eq('id', requestId)
+          .single();
+          
+        if (fetchError) throw new Error('Request not found');
+        request = {
+          ...transformWithdrawalRequestFromDB(requestData),
+          requesterName: requestData.profiles?.full_name || 'Unknown User',
+          requesterEmail: requestData.profiles?.email,
+        };
+      }
+      
       if (!request) throw new Error('Request not found');
 
       // Verify the request is in supervisor_approved status
@@ -491,7 +547,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         description: 'The withdrawal request has been rejected',
       });
 
-      await refreshWithdrawalRequests();
+      // Refresh all relevant data including supervised requests
+      await Promise.all([refreshWithdrawalRequests(), refreshSupervisedWithdrawalRequests()]);
     } catch (error: any) {
       console.error('Failed to reject withdrawal:', error);
       toast({
@@ -524,7 +581,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         description: 'The withdrawal request has been rejected',
       });
 
-      await refreshWithdrawalRequests();
+      // Refresh both personal and supervised withdrawal requests
+      await Promise.all([refreshWithdrawalRequests(), refreshSupervisedWithdrawalRequests()]);
     } catch (error: any) {
       console.error('Failed to reject withdrawal:', error);
       toast({
@@ -1101,17 +1159,24 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const adminListWithdrawalRequests = async (): Promise<WithdrawalRequest[]> => {
+  const adminListWithdrawalRequests = async (): Promise<SupervisedWithdrawalRequest[]> => {
     try {
       const { data, error } = await supabase
         .from('withdrawal_requests')
-        .select('*')
+        .select(`
+          *,
+          profiles:profiles!withdrawal_requests_user_id_fkey(full_name, email)
+        `)
         .order('created_at', { ascending: false })
         .limit(200);
 
       if (error) throw error;
 
-      return (data || []).map(transformWithdrawalRequestFromDB);
+      return (data || []).map((item: any) => ({
+        ...transformWithdrawalRequestFromDB(item),
+        requesterName: item.profiles?.full_name || 'Unknown User',
+        requesterEmail: item.profiles?.email,
+      }));
     } catch (error: any) {
       console.error('Failed to list withdrawal requests:', error);
       return [];

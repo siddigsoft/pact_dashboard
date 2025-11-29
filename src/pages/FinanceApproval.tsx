@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -9,25 +9,59 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useWallet } from '@/context/wallet/WalletContext';
 import { useUser } from '@/context/user/UserContext';
-import { Clock, CheckCircle2, XCircle, User, Calendar, Send, Banknote, CreditCard, Info, FileText } from 'lucide-react';
+import { Clock, CheckCircle2, XCircle, User, Calendar, Send, Banknote, CreditCard, Info, FileText, RefreshCw } from 'lucide-react';
 import { format } from 'date-fns';
 import { WithdrawalRequest } from '@/types/wallet';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Skeleton } from '@/components/ui/skeleton';
+
+interface AdminWithdrawalRequest extends WithdrawalRequest {
+  requesterName?: string;
+  requesterEmail?: string;
+}
 
 export default function FinanceApproval() {
-  const { withdrawalRequests, adminProcessWithdrawal, adminRejectWithdrawal } = useWallet();
+  const { adminListWithdrawalRequests, adminProcessWithdrawal, adminRejectWithdrawal } = useWallet();
   const { users } = useUser();
-  const [selectedRequest, setSelectedRequest] = useState<WithdrawalRequest | null>(null);
+  const [allRequests, setAllRequests] = useState<AdminWithdrawalRequest[]>([]);
+  const [selectedRequest, setSelectedRequest] = useState<AdminWithdrawalRequest | null>(null);
   const [dialogType, setDialogType] = useState<'process' | 'reject' | null>(null);
   const [notes, setNotes] = useState('');
   const [processing, setProcessing] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const supervisorApprovedRequests = withdrawalRequests.filter(r => r.status === 'supervisor_approved');
-  const processingRequests = withdrawalRequests.filter(r => r.status === 'processing');
-  const completedRequests = withdrawalRequests.filter(r => r.status === 'approved');
-  const rejectedRequests = withdrawalRequests.filter(r => r.status === 'rejected');
+  const fetchAllRequests = async () => {
+    const requests = await adminListWithdrawalRequests();
+    setAllRequests(requests);
+  };
 
-  const getUserName = (userId: string) => {
+  useEffect(() => {
+    const loadData = async () => {
+      setLoading(true);
+      await fetchAllRequests();
+      setLoading(false);
+    };
+    loadData();
+  }, []);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchAllRequests();
+    setRefreshing(false);
+  };
+
+  const supervisorApprovedRequests = allRequests.filter(r => r.status === 'supervisor_approved');
+  const processingRequests = allRequests.filter(r => r.status === 'processing');
+  const completedRequests = allRequests.filter(r => r.status === 'approved');
+  const rejectedRequests = allRequests.filter(r => r.status === 'rejected');
+
+  const getUserName = (userId: string, request?: AdminWithdrawalRequest) => {
+    // Use requesterName from request if available (from profile join)
+    if (request?.requesterName) {
+      return request.requesterName;
+    }
+    // Fallback to users list
     const user = users.find(u => u.id === userId);
     return user?.name || 'Unknown User';
   };
@@ -70,6 +104,8 @@ export default function FinanceApproval() {
       } else if (dialogType === 'reject') {
         await adminRejectWithdrawal(selectedRequest.id, notes);
       }
+      // Refresh the list after action
+      await fetchAllRequests();
       setDialogType(null);
       setSelectedRequest(null);
       setNotes('');
@@ -99,7 +135,7 @@ export default function FinanceApproval() {
     return <CreditCard className="w-4 h-4" />;
   };
 
-  const RequestTable = ({ requests, showActions = false }: { requests: WithdrawalRequest[], showActions?: boolean }) => (
+  const RequestTable = ({ requests, showActions = false }: { requests: AdminWithdrawalRequest[], showActions?: boolean }) => (
     <Table>
       <TableHeader>
         <TableRow>
@@ -126,7 +162,7 @@ export default function FinanceApproval() {
                 <div className="flex items-center gap-2">
                   <User className="w-4 h-4 text-muted-foreground" />
                   <div>
-                    <span className="font-medium">{getUserName(request.userId)}</span>
+                    <span className="font-medium">{getUserName(request.userId, request)}</span>
                     <div className="text-xs text-muted-foreground">
                       Requested: {formatDate(request.createdAt)}
                     </div>
@@ -220,6 +256,19 @@ export default function FinanceApproval() {
     </Table>
   );
 
+  if (loading) {
+    return (
+      <div className="space-y-6 p-6">
+        <Skeleton className="h-10 w-64" />
+        <div className="flex gap-4">
+          <Skeleton className="h-24 w-40" />
+          <Skeleton className="h-24 w-40" />
+        </div>
+        <Skeleton className="h-64 w-full" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 p-6">
       <div className="flex flex-col gap-4">
@@ -228,6 +277,17 @@ export default function FinanceApproval() {
             <h1 className="text-3xl font-bold tracking-tight">Finance Processing</h1>
             <p className="text-muted-foreground mt-1">Step 2: Process approved withdrawal payments</p>
           </div>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={handleRefresh} 
+            disabled={refreshing}
+            data-testid="button-refresh-requests"
+          >
+            <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+        </div>
           <div className="flex items-center gap-4 flex-wrap">
             <Card className="bg-gradient-to-br from-blue-500/5 to-blue-500/10">
               <CardContent className="p-4">
@@ -371,7 +431,7 @@ export default function FinanceApproval() {
                   <div className="grid grid-cols-2 gap-3 text-sm">
                     <div>
                       <span className="text-muted-foreground">Enumerator:</span>
-                      <p className="font-medium">{getUserName(selectedRequest.userId)}</p>
+                      <p className="font-medium">{getUserName(selectedRequest.userId, selectedRequest)}</p>
                     </div>
                     <div>
                       <span className="text-muted-foreground">Amount:</span>
@@ -464,7 +524,7 @@ export default function FinanceApproval() {
                   <div className="grid grid-cols-2 gap-3 text-sm">
                     <div>
                       <span className="text-muted-foreground">Enumerator:</span>
-                      <p className="font-medium">{getUserName(selectedRequest.userId)}</p>
+                      <p className="font-medium">{getUserName(selectedRequest.userId, selectedRequest)}</p>
                     </div>
                     <div>
                       <span className="text-muted-foreground">Amount:</span>
