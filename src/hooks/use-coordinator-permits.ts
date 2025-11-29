@@ -17,16 +17,53 @@ export const useCoordinatorLocalityPermits = () => {
     setError(null);
 
     try {
-      const { data, error } = await supabase
-        .from('coordinator_locality_permits')
-        .select('*')
-        .eq('coordinator_id', currentUser.id)
-        .order('uploaded_at', { ascending: false });
+      const bucket = 'mmp-files';
+      const base = `coordinator-permits/${currentUser.id}`;
 
-      if (error) throw error;
+      const list = async (path: string) => {
+        const { data, error } = await supabase.storage
+          .from(bucket)
+          .list(path, { limit: 100, offset: 0, sortBy: { column: 'name', order: 'asc' } });
+        if (error) {
+          return [] as any[];
+        }
+        return (data || []) as any[];
+      };
 
-      console.log('Fetched permits:', data);
-      setPermits(data || []);
+      const top = await list(base);
+      const stateDirs = (top || []).filter((e: any) => !e.metadata);
+
+      const collected: CoordinatorLocalityPermit[] = [];
+      for (const s of stateDirs) {
+        const stateId = s.name;
+        const locEntries = await list(`${base}/${stateId}`);
+        const localityDirs = (locEntries || []).filter((e: any) => !e.metadata);
+        for (const l of localityDirs) {
+          const localityId = l.name;
+          const fileEntries = await list(`${base}/${stateId}/${localityId}`);
+          const files = (fileEntries || []).filter((e: any) => !!e.metadata);
+          for (const f of files) {
+            const fullPath = `${base}/${stateId}/${localityId}/${f.name}`.replace(/\/+/, '/');
+            const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(fullPath);
+            const uploadedAt = (f as any).created_at || new Date().toISOString();
+            const ts = uploadedAt;
+            collected.push({
+              id: fullPath,
+              coordinatorId: currentUser.id,
+              stateId,
+              localityId,
+              permitFileName: f.name,
+              permitFileUrl: urlData.publicUrl,
+              uploadedAt: ts,
+              verified: false,
+              createdAt: ts,
+              updatedAt: ts,
+            } as CoordinatorLocalityPermit);
+          }
+        }
+      }
+
+      setPermits(collected);
     } catch (err) {
       console.error('Error fetching coordinator permits:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch permits');
@@ -44,9 +81,9 @@ export const useCoordinatorLocalityPermits = () => {
 
   // Get permit for specific locality
   const getPermitForLocality = (stateId: string, localityId: string): CoordinatorLocalityPermit | undefined => {
-    return permits.find(permit =>
-      permit.stateId === stateId && permit.localityId === localityId
-    );
+    const matches = permits.filter(p => p.stateId === stateId && p.localityId === localityId);
+    if (matches.length === 0) return undefined;
+    return matches.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime())[0];
   };
 
   // Upload permit for locality
@@ -76,25 +113,22 @@ export const useCoordinatorLocalityPermits = () => {
         .from('mmp-files')
         .getPublicUrl(filePath);
 
-      // Save permit record
-      const { data, error: insertError } = await supabase
-        .from('coordinator_locality_permits')
-        .insert({
-          coordinator_id: currentUser.id,
-          state_id: stateId,
-          locality_id: localityId,
-          permit_file_name: file.name,
-          permit_file_url: publicUrl,
-        })
-        .select()
-        .single();
+      const uploadedAt = new Date().toISOString();
+      const inserted: CoordinatorLocalityPermit = {
+        id: filePath,
+        coordinatorId: currentUser.id,
+        stateId,
+        localityId,
+        permitFileName: file.name,
+        permitFileUrl: publicUrl,
+        uploadedAt,
+        verified: false,
+        createdAt: uploadedAt,
+        updatedAt: uploadedAt,
+      } as CoordinatorLocalityPermit;
 
-      if (insertError) throw insertError;
-
-      // Update local state
-      setPermits(prev => [data, ...prev]);
-
-      return data;
+      setPermits(prev => [inserted, ...prev]);
+      return inserted;
     } catch (err) {
       console.error('Error uploading permit:', err);
       setError(err instanceof Error ? err.message : 'Failed to upload permit');
@@ -114,22 +148,21 @@ export const useCoordinatorLocalityPermits = () => {
       const permit = permits.find(p => p.id === permitId);
       if (!permit) throw new Error('Permit not found');
 
-      // Delete from storage - extract path from URL
-      // URL format: https://xxx.supabase.co/storage/v1/object/public/mmp-files/coordinator-permits/userId/stateId/localityId/fileName
-      const urlParts = permit.permitFileUrl.split('/');
-      const filePath = urlParts.slice(-5).join('/'); // Get the last 5 parts: coordinator-permits/userId/stateId/localityId/fileName
+      let filePath = '';
+      if (typeof permit.id === 'string' && permit.id.includes('/')) {
+        filePath = permit.id;
+      } else if (permit.permitFileUrl) {
+        const marker = '/object/public/mmp-files/';
+        const idx = permit.permitFileUrl.indexOf(marker);
+        if (idx !== -1) {
+          filePath = permit.permitFileUrl.substring(idx + marker.length);
+        }
+      }
+      if (!filePath) throw new Error('Invalid storage path');
 
       await supabase.storage
         .from('mmp-files')
         .remove([filePath]);
-
-      // Delete from database
-      const { error } = await supabase
-        .from('coordinator_locality_permits')
-        .delete()
-        .eq('id', permitId);
-
-      if (error) throw error;
 
       // Update local state
       setPermits(prev => prev.filter(p => p.id !== permitId));
