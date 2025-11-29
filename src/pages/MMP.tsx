@@ -604,7 +604,7 @@ const MMP = () => {
       });
 
       // Reload enumerator data instead of full page reload
-      if (isDataCollector && currentUser?.id) {
+      if (canClaimSites && currentUser?.id) {
         setLoadingEnumerator(true);
         try {
           console.log('🔄 Reloading enumerator data after site acceptance...');
@@ -865,7 +865,7 @@ const MMP = () => {
 
       // Reload available sites data
       const loadEnumeratorEntries = async () => {
-        if (!isDataCollector || !currentUser?.id) return;
+        if (!canClaimSites || !currentUser?.id) return;
 
         try {
           // Load available sites in the enumerator's state or locality for "Available Sites" tab
@@ -1512,7 +1512,7 @@ const MMP = () => {
       setSubmittingReport(false);
 
       // Reload enumerator data immediately instead of full page reload
-      if (isDataCollector && currentUser?.id) {
+      if (canClaimSites && currentUser?.id) {
         console.log('🔄 Reloading enumerator data after visit completion...');
         try {
           // Load updated my sites data
@@ -1693,6 +1693,8 @@ const MMP = () => {
   const isFOM = hasRole(['Field Operation Manager (FOM)', 'fom', 'field operation manager']);
   const isCoordinator = hasRole(['Coordinator', 'coordinator']);
   const isDataCollector = hasRole(['DataCollector', 'datacollector', 'enumerator', 'Enumerator']);
+  // Coordinators have full data collector capabilities (can claim sites, view transport fees, etc.)
+  const canClaimSites = isDataCollector || isCoordinator;
   const canRead = checkPermission('mmp', 'read') || isAdmin || isFOM || isCoordinator || isICT;
   // Only Admin and ICT accounts should see the Upload button on the MMP management page.
   // We intentionally DO NOT fallback to checkPermission here to prevent other roles (e.g. FOM)
@@ -1719,7 +1721,7 @@ const MMP = () => {
 
   useSiteClaimRealtime({
     onSiteClaimed: handleSiteClaimedRealtime,
-    enabled: isDataCollector
+    enabled: canClaimSites
   });
 
   // Debug: Log role checks
@@ -1733,20 +1735,20 @@ const MMP = () => {
       console.log('🔍 isFOM:', isFOM);
       console.log('🔍 isCoordinator:', isCoordinator);
       console.log('🔍 isDataCollector:', isDataCollector);
+      console.log('🔍 canClaimSites:', canClaimSites);
       console.log('🔍 canCreate:', canCreate);
     }
-  }, [currentUser, isAdmin, isICT, isFOM, isCoordinator, canCreate]);
+  }, [currentUser, isAdmin, isICT, isFOM, isCoordinator, isDataCollector, canClaimSites, canCreate]);
 
   // Set initial active tab based on role
+  // Coordinators should see the enumerator tab (they can claim sites like data collectors)
   useEffect(() => {
-    if (isCoordinator) {
-      setActiveTab('verified');
-    } else if (isDataCollector) {
+    if (canClaimSites) {
       setActiveTab('enumerator');
     } else {
       setActiveTab('new');
     }
-  }, [isCoordinator, isDataCollector]);
+  }, [canClaimSites]);
 
   // Categorize MMPs
   const categorizedMMPs = useMemo(() => {
@@ -2014,10 +2016,10 @@ const MMP = () => {
     loadRejectedCount();
   }, [mmpFiles]); // Reload when MMP files change
 
-  // Load enumerator site entries only when user is DataCollector
+  // Load enumerator site entries when user can claim sites (DataCollector or Coordinator)
   useEffect(() => {
     const loadEnumeratorEntries = async () => {
-      if (!isDataCollector || !currentUser?.id) {
+      if (!canClaimSites || !currentUser?.id) {
         setEnumeratorSiteEntries([]);
         setEnumeratorGroupedByStates({});
         setEnumeratorGroupedByLocality({});
@@ -2236,7 +2238,7 @@ const MMP = () => {
     };
 
     loadEnumeratorEntries();
-  }, [isDataCollector, currentUser?.id, currentUser?.stateId, currentUser?.localityId, mmpFiles]); // Reload when MMP files change or user changes
+  }, [canClaimSites, currentUser?.id, currentUser?.stateId, currentUser?.localityId, mmpFiles]); // Reload when MMP files change or user changes
 
   // Load approved and costed site entries only when the tab is active
   useEffect(() => {
@@ -3007,18 +3009,16 @@ const MMP = () => {
             </Button>
             <div className="min-w-0 flex-1">
               <h1 className="text-xl sm:text-2xl md:text-3xl font-extrabold text-white tracking-tight truncate">
-                {isDataCollector ? 'My Sites Management' : 'MMP Management'}
+                {canClaimSites ? 'My Sites Management' : 'MMP Management'}
               </h1>
               <p className="text-blue-100 dark:text-blue-200/80 font-medium text-xs sm:text-sm md:text-base mt-1 leading-tight">
                 {isAdmin || isICT
                   ? 'Upload, validate, and forward MMPs to Field Operations Managers'
                   : isFOM
                     ? 'Process MMPs, attach permits, and assign sites to coordinators'
-                    : isCoordinator
-                      ? 'Review and verify site assignments'
-                      : isDataCollector
-                        ? 'View and manage your assigned sites.'
-                        : 'Manage your MMP files and site visits'}
+                    : canClaimSites
+                      ? 'View and manage your assigned sites.'
+                      : 'Manage your MMP files and site visits'}
               </p>
             </div>
           </div>
@@ -3038,34 +3038,34 @@ const MMP = () => {
           <div className="text-center text-muted-foreground py-8">Loading MMP files...</div>
         ) : (
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className={`grid w-full mb-6 ${isCoordinator ? 'grid-cols-1' : isDataCollector ? 'grid-cols-1' : 'grid-cols-3'}`}>
-              {isDataCollector && (
+            <TabsList className={`grid w-full mb-6 ${canClaimSites ? 'grid-cols-1' : 'grid-cols-3'}`}>
+              {canClaimSites && (
                 <TabsTrigger value="enumerator" className="flex items-center gap-2 data-[state=active]:bg-blue-200 data-[state=active]:text-blue-900 data-[state=active]:shadow-none">
                   My Assignments
                   <Badge variant="secondary">{enumeratorMySites.length}</Badge>
                 </TabsTrigger>
               )}
-              {!isCoordinator && !isDataCollector && (
+              {!canClaimSites && (
                 <TabsTrigger value="new" className="flex items-center gap-2 data-[state=active]:bg-blue-200 data-[state=active]:text-blue-900 data-[state=active]:shadow-none">
                   New MMPs
                   <Badge variant="secondary">{categorizedMMPs.new.length}</Badge>
                 </TabsTrigger>
               )}
-              {!isCoordinator && !isDataCollector && (
+              {!canClaimSites && (
                 <TabsTrigger value="forwarded" className="flex items-center gap-2 data-[state=active]:bg-blue-200 data-[state=active]:text-blue-900 data-[state=active]:shadow-none">
                   {isFOM ? 'Forwarded Sites' : 'Forwarded MMPs'}
                   <Badge variant="secondary">{categorizedMMPs.forwarded.length}</Badge>
                 </TabsTrigger>
               )}
-              {!isDataCollector && (
+              {!canClaimSites && (
                 <TabsTrigger value="verified" className="flex items-center gap-2 data-[state=active]:bg-blue-200 data-[state=active]:text-blue-900 data-[state=active]:shadow-none">
-                  {isCoordinator ? 'MMPs to Review' : 'Verified Sites'}
+                  Verified Sites
                   <Badge variant="secondary">{categorizedMMPs.verified.length}</Badge>
                 </TabsTrigger>
               )}
             </TabsList>
 
-            {!isCoordinator && (
+            {!canClaimSites && (
               <TabsContent value="new">
                 {isFOM && (
                   <div className="mb-4">
@@ -3086,7 +3086,7 @@ const MMP = () => {
               </TabsContent>
             )}
 
-            {!isCoordinator && (
+            {!canClaimSites && (
               <TabsContent value="forwarded">
                 {(isAdmin || isICT || isFOM) && (
                   <div className="mb-4">
@@ -3646,7 +3646,7 @@ const MMP = () => {
               )}
             </TabsContent>
 
-            {isDataCollector && (
+            {canClaimSites && (
               <TabsContent value="enumerator">
                 <div className="mb-4">
                   <div className="text-sm font-medium text-muted-foreground mb-3">View:</div>
@@ -4455,7 +4455,7 @@ const MMP = () => {
                     await new Promise(resolve => setTimeout(resolve, 500));
                     
                     // Reload all enumerator data using the same logic as the main load function
-                    if (isDataCollector && currentUser?.id) {
+                    if (canClaimSites && currentUser?.id) {
                       try {
                         // Convert user location IDs to names for matching
                         const collectorStateName = currentUser.stateId 

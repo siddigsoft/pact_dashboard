@@ -3,13 +3,13 @@
 	"appName": "PACT Workflow",
 	"webDir": "dist",
 	"server": {
-		"url": "http://localhost:5000",
-		"cleartext": false,
-		"androidScheme": "https",
-		"iosScheme": "https",
 		"allowNavigation": [
-			"https://8061f5ee-0482-4ab7-b0dc-02ca73db7311-00-1mrfz5xd21tdt.riker.replit.dev",
-			"https://*.supabase.co"
+			"https://pact-dashboard-831y.vercel.app",
+			"https://*.vercel.app",
+			"https://*.supabase.co",
+			"https://*.supabase.in",
+			"https://fonts.googleapis.com",
+			"https://fonts.gstatic.com"
 		]
 	},
 	"android": {
@@ -25,7 +25,11 @@
 			"backgroundColor": "#1e40af",
 			"androidScaleType": "CENTER_CROP",
 			"showSpinner": true,
-			"spinnerColor": "#ffffff"
+			"spinnerColor": "#ffffff",
+			"androidSpinnerStyle": "large",
+			"iosSpinnerStyle": "small",
+			"splashFullScreen": true,
+			"splashImmersive": true
 		},
 		"PushNotifications": {
 			"presentationOptions": [
@@ -36,7 +40,38 @@
 		},
 		"LocalNotifications": {
 			"smallIcon": "ic_stat_icon_config_sample",
-			"iconColor": "#1e40af"
+			"iconColor": "#1e40af",
+			"sound": "beep.wav"
+		},
+		"Keyboard": {
+			"resize": "body",
+			"style": "dark",
+			"resizeOnFullScreen": true
+		},
+		"StatusBar": {
+			"style": "dark",
+			"backgroundColor": "#1e40af",
+			"overlaysWebView": false
+		},
+		"NavigationBar": {
+			"backgroundColor": "#1e40af",
+			"color": "white"
+		},
+		"Geolocation": {
+			"enableHighAccuracy": true,
+			"timeout": 10000,
+			"maximumAge": 0
+		},
+		"Camera": {
+			"presentationStyle": "popover",
+			"saveToGallery": true,
+			"quality": 90
+		},
+		"Network": {
+			"connectionType": true
+		},
+		"Filesystem": {
+			"directory": "Documents"
 		}
 	}
 }
