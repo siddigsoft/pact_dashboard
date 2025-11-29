@@ -104,6 +104,7 @@ const WalletPage = () => {
 
   const getTransactionIcon = (type: string) => {
     switch (type) {
+      case 'earning':
       case 'site_visit_fee':
         return <ArrowUpRight className="w-4 h-4 text-green-600" />;
       case 'withdrawal':
@@ -170,7 +171,12 @@ const WalletPage = () => {
 
     // Legacy quick filters
     if (transactionTypeFilter !== 'all' && !searchFilters.type) {
-      filtered = filtered.filter(t => t.type === transactionTypeFilter);
+      // Handle both 'earning' and 'site_visit_fee' types when filtering for site visit fees
+      if (transactionTypeFilter === 'earning') {
+        filtered = filtered.filter(t => t.type === 'earning' || t.type === 'site_visit_fee');
+      } else {
+        filtered = filtered.filter(t => t.type === transactionTypeFilter);
+      }
     }
 
     if (dateRangeFilter !== 'all' && !searchFilters.startDate && !searchFilters.endDate) {
@@ -206,7 +212,7 @@ const WalletPage = () => {
     const monthlyData: Record<string, number> = {};
     
     transactions
-      .filter(t => t.type === 'site_visit_fee')
+      .filter(t => t.type === 'earning' || t.type === 'site_visit_fee')
       .forEach(t => {
         const month = format(new Date(t.createdAt), 'MMM yyyy');
         monthlyData[month] = (monthlyData[month] || 0) + t.amount;
@@ -219,7 +225,7 @@ const WalletPage = () => {
 
   const siteVisitEarnings = useMemo(() => {
     return transactions
-      .filter(t => t.type === 'site_visit_fee' && t.siteVisitId)
+      .filter(t => (t.type === 'earning' || t.type === 'site_visit_fee') && t.siteVisitId)
       .slice(0, 10);
   }, [transactions]);
 
@@ -743,7 +749,7 @@ const WalletPage = () => {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Types</SelectItem>
-                      <SelectItem value="site_visit_fee">Site Visit Fees</SelectItem>
+                      <SelectItem value="earning">Site Visit Fees</SelectItem>
                       <SelectItem value="withdrawal">Withdrawals</SelectItem>
                       <SelectItem value="bonus">Bonuses</SelectItem>
                       <SelectItem value="penalty">Penalties</SelectItem>

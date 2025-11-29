@@ -215,7 +215,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       .reduce((sum, r) => sum + r.amount, 0);
 
     const completedSiteVisits = transactions.filter(
-      t => t.type === 'site_visit_fee'
+      t => t.type === 'earning' || t.type === 'site_visit_fee'
     ).length;
 
     setStats({
