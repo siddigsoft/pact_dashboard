@@ -9,11 +9,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useWallet } from '@/context/wallet/WalletContext';
 import { useUser } from '@/context/user/UserContext';
-import { Clock, CheckCircle2, XCircle, User, Wallet, Calendar, DollarSign, FileText } from 'lucide-react';
+import { Clock, CheckCircle2, XCircle, User, Calendar, ArrowRight, Send, Info } from 'lucide-react';
 import { format } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
 import { WithdrawalRequest } from '@/types/wallet';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 export default function WithdrawalApproval() {
   const { withdrawalRequests, approveWithdrawalRequest, rejectWithdrawalRequest } = useWallet();
@@ -23,7 +24,11 @@ export default function WithdrawalApproval() {
   const [notes, setNotes] = useState('');
   const [processing, setProcessing] = useState(false);
 
+  // Step 1: Supervisor reviews pending requests
   const pendingRequests = withdrawalRequests.filter(r => r.status === 'pending');
+  // Requests forwarded to Finance (supervisor approved)
+  const forwardedRequests = withdrawalRequests.filter(r => r.status === 'supervisor_approved' || r.status === 'processing');
+  // Final approved (Finance processed)
   const approvedRequests = withdrawalRequests.filter(r => r.status === 'approved');
   const rejectedRequests = withdrawalRequests.filter(r => r.status === 'rejected');
 
@@ -81,9 +86,13 @@ export default function WithdrawalApproval() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'pending':
-        return <Badge variant="outline" className="bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/20"><Clock className="w-3 h-3 mr-1" />Pending</Badge>;
+        return <Badge variant="outline" className="bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/20"><Clock className="w-3 h-3 mr-1" />Pending Review</Badge>;
+      case 'supervisor_approved':
+        return <Badge variant="outline" className="bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20"><Send className="w-3 h-3 mr-1" />Awaiting Finance</Badge>;
+      case 'processing':
+        return <Badge variant="outline" className="bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/20"><ArrowRight className="w-3 h-3 mr-1" />Processing</Badge>;
       case 'approved':
-        return <Badge variant="outline" className="bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20"><CheckCircle2 className="w-3 h-3 mr-1" />Approved</Badge>;
+        return <Badge variant="outline" className="bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20"><CheckCircle2 className="w-3 h-3 mr-1" />Completed</Badge>;
       case 'rejected':
         return <Badge variant="outline" className="bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20"><XCircle className="w-3 h-3 mr-1" />Rejected</Badge>;
       default:
@@ -182,37 +191,64 @@ export default function WithdrawalApproval() {
 
   return (
     <div className="space-y-6 p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Withdrawal Approval</h1>
-          <p className="text-muted-foreground mt-1">Review and approve enumerator withdrawal requests</p>
-        </div>
-        <div className="flex items-center gap-4">
-          <Card className="bg-gradient-to-br from-primary/5 to-primary/10">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-primary/10">
-                  <Clock className="w-5 h-5 text-primary" />
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Supervisor Approval</h1>
+            <p className="text-muted-foreground mt-1">Step 1: Review and verify enumerator withdrawal requests</p>
+          </div>
+          <div className="flex items-center gap-4 flex-wrap">
+            <Card className="bg-gradient-to-br from-yellow-500/5 to-yellow-500/10">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-yellow-500/10">
+                    <Clock className="w-5 h-5 text-yellow-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium uppercase tracking-wide text-muted-foreground">Pending</p>
+                    <p className="text-2xl font-bold tabular-nums">{pendingRequests.length}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-medium uppercase tracking-wide text-muted-foreground">Pending</p>
-                  <p className="text-2xl font-bold tabular-nums">{pendingRequests.length}</p>
+              </CardContent>
+            </Card>
+            <Card className="bg-gradient-to-br from-blue-500/5 to-blue-500/10">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-blue-500/10">
+                    <Send className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium uppercase tracking-wide text-muted-foreground">With Finance</p>
+                    <p className="text-2xl font-bold tabular-nums">{forwardedRequests.length}</p>
+                  </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </div>
         </div>
+
+        <Alert className="bg-blue-500/5 border-blue-500/20">
+          <Info className="w-4 h-4 text-blue-600" />
+          <AlertDescription className="text-blue-700 dark:text-blue-400">
+            <strong>Two-Step Approval:</strong> After you approve, requests are forwarded to Finance for payment processing. 
+            Funds are only released after Finance completes the payment.
+          </AlertDescription>
+        </Alert>
       </div>
 
       <Tabs defaultValue="pending" className="space-y-4">
         <TabsList>
           <TabsTrigger value="pending" data-testid="tab-pending">
             <Clock className="w-4 h-4 mr-2" />
-            Pending ({pendingRequests.length})
+            Pending Review ({pendingRequests.length})
+          </TabsTrigger>
+          <TabsTrigger value="forwarded" data-testid="tab-forwarded">
+            <Send className="w-4 h-4 mr-2" />
+            With Finance ({forwardedRequests.length})
           </TabsTrigger>
           <TabsTrigger value="approved" data-testid="tab-approved">
             <CheckCircle2 className="w-4 h-4 mr-2" />
-            Approved ({approvedRequests.length})
+            Completed ({approvedRequests.length})
           </TabsTrigger>
           <TabsTrigger value="rejected" data-testid="tab-rejected">
             <XCircle className="w-4 h-4 mr-2" />
@@ -224,13 +260,28 @@ export default function WithdrawalApproval() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Clock className="w-5 h-5 text-primary" />
-                Pending Requests
+                <Clock className="w-5 h-5 text-yellow-600" />
+                Pending Supervisor Review
               </CardTitle>
-              <CardDescription>Withdrawal requests awaiting your approval</CardDescription>
+              <CardDescription>Withdrawal requests awaiting your verification and approval</CardDescription>
             </CardHeader>
             <CardContent>
               <RequestTable requests={pendingRequests} />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="forwarded">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Send className="w-5 h-5 text-blue-600" />
+                Forwarded to Finance
+              </CardTitle>
+              <CardDescription>Requests you approved that are awaiting Finance processing</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <RequestTable requests={forwardedRequests} />
             </CardContent>
           </Card>
         </TabsContent>
@@ -240,9 +291,9 @@ export default function WithdrawalApproval() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <CheckCircle2 className="w-5 h-5 text-green-600" />
-                Approved Requests
+                Completed Requests
               </CardTitle>
-              <CardDescription>Previously approved withdrawal requests</CardDescription>
+              <CardDescription>Requests that have been fully processed and paid</CardDescription>
             </CardHeader>
             <CardContent>
               <RequestTable requests={approvedRequests} />
@@ -257,7 +308,7 @@ export default function WithdrawalApproval() {
                 <XCircle className="w-5 h-5 text-red-600" />
                 Rejected Requests
               </CardTitle>
-              <CardDescription>Previously rejected withdrawal requests</CardDescription>
+              <CardDescription>Requests rejected by supervisor or finance</CardDescription>
             </CardHeader>
             <CardContent>
               <RequestTable requests={rejectedRequests} />
@@ -273,8 +324,8 @@ export default function WithdrawalApproval() {
             <DialogTitle className="flex items-center gap-2">
               {dialogType === 'approve' ? (
                 <>
-                  <CheckCircle2 className="w-5 h-5 text-green-600" />
-                  Approve Withdrawal Request
+                  <Send className="w-5 h-5 text-blue-600" />
+                  Forward to Finance
                 </>
               ) : (
                 <>
@@ -339,7 +390,7 @@ export default function WithdrawalApproval() {
               variant={dialogType === 'approve' ? 'default' : 'destructive'}
               data-testid="button-confirm-action"
             >
-              {processing ? 'Processing...' : dialogType === 'approve' ? 'Approve' : 'Reject'}
+              {processing ? 'Processing...' : dialogType === 'approve' ? 'Forward to Finance' : 'Reject'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -381,6 +432,12 @@ export default function WithdrawalApproval() {
                     <div>
                       <span className="text-sm font-medium text-muted-foreground">Supervisor Notes:</span>
                       <p className="text-sm mt-1 p-2 bg-muted rounded-md">{selectedRequest.supervisorNotes}</p>
+                    </div>
+                  )}
+                  {selectedRequest.adminNotes && (
+                    <div>
+                      <span className="text-sm font-medium text-muted-foreground">Finance Notes:</span>
+                      <p className="text-sm mt-1 p-2 bg-muted rounded-md">{selectedRequest.adminNotes}</p>
                     </div>
                   )}
                 </div>
