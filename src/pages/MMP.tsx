@@ -152,15 +152,6 @@ const SitesDisplayTable: React.FC<{
               // Use calculated cost if available, otherwise use provided cost
               const finalCost = calculatedCost ?? site.cost;
               
-              // Build additional_data with fees
-              const existingAdditionalData = site.additionalData || site.additional_data || {};
-              const updatedAdditionalData = {
-                ...existingAdditionalData,
-                enumerator_fee: enumFee,
-                transport_fee: transFee,
-                cost: finalCost
-              };
-              
               const updateData: any = {
                 site_name: site.siteName || site.site_name,
                 site_code: site.siteCode || site.site_code,
@@ -181,8 +172,7 @@ const SitesDisplayTable: React.FC<{
                 status: site.status,
                 verification_notes: site.verification_notes || site.verificationNotes,
                 verified_by: site.verified_by || site.verifiedBy,
-                verified_at: site.verified_at || site.verifiedAt,
-                additional_data: updatedAdditionalData // Store fees in additional_data
+                verified_at: site.verified_at || site.verifiedAt
               };
 
               // Remove undefined values
@@ -326,15 +316,6 @@ const VerifiedSitesDisplay: React.FC<{ verifiedSites: SiteVisitRow[] }> = ({ ver
               // Use calculated cost if available, otherwise use provided cost
               const finalCost = calculatedCost ?? site.cost;
               
-              // Build additional_data with fees
-              const existingAdditionalData = site.additionalData || site.additional_data || {};
-              const updatedAdditionalData = {
-                ...existingAdditionalData,
-                enumerator_fee: enumFee,
-                transport_fee: transFee,
-                cost: finalCost
-              };
-              
               const updateData: any = {
                 site_name: site.siteName || site.site_name,
                 site_code: site.siteCode || site.site_code,
@@ -353,8 +334,7 @@ const VerifiedSitesDisplay: React.FC<{ verifiedSites: SiteVisitRow[] }> = ({ ver
                 status: site.status,
                 verification_notes: site.verification_notes || site.verificationNotes,
                 verified_by: site.verified_by || site.verifiedBy,
-                verified_at: site.verified_at || site.verifiedAt,
-                additional_data: updatedAdditionalData // Store fees in additional_data
+                verified_at: site.verified_at || site.verifiedAt
               };
 
               // Remove undefined values
@@ -3348,15 +3328,6 @@ const MMP = () => {
                               // Use calculated cost if available, otherwise use provided cost
                               const finalCost = calculatedCost ?? site.cost;
                               
-                              // Build additional_data with fees
-                              const existingAdditionalData = site.additionalData || site.additional_data || {};
-                              const updatedAdditionalData = {
-                                ...existingAdditionalData,
-                                enumerator_fee: enumFee,
-                                transport_fee: transFee,
-                                cost: finalCost
-                              };
-                              
                               const updateData: any = {
                                 site_name: site.siteName || site.site_name,
                                 site_code: site.siteCode || site.site_code,
@@ -3377,8 +3348,7 @@ const MMP = () => {
                                 status: site.status,
                                 verification_notes: site.verification_notes || site.verificationNotes,
                                 verified_by: site.verified_by || site.verifiedBy,
-                                verified_at: site.verified_at || site.verifiedAt,
-                                additional_data: updatedAdditionalData // Store fees in additional_data for backward compatibility
+                                verified_at: site.verified_at || site.verifiedAt
                               };
 
                               // Remove undefined values
