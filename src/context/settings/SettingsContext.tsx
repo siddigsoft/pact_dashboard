@@ -17,6 +17,12 @@ export type UserSettings = {
   last_updated?: string;
 };
 
+export type QuietHoursSettings = {
+  enabled: boolean;
+  startHour: number;
+  endHour: number;
+};
+
 export type NotificationSettings = {
   enabled: boolean;
   email: boolean;
@@ -29,6 +35,9 @@ export type NotificationSettings = {
     team: boolean;
     system: boolean;
   };
+  quietHours: QuietHoursSettings;
+  frequency: 'instant' | 'hourly' | 'daily';
+  autoDeleteDays: number;
 };
 
 export type AppearanceSettings = {
@@ -105,6 +114,13 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
       team: true,
       system: true,
     },
+    quietHours: {
+      enabled: false,
+      startHour: 22,
+      endHour: 7,
+    },
+    frequency: 'instant',
+    autoDeleteDays: 30,
   };
   
   const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>(defaultNotificationSettings);
@@ -159,6 +175,13 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
                 team: savedPrefs.categories?.team ?? defaultNotificationSettings.categories.team,
                 system: savedPrefs.categories?.system ?? defaultNotificationSettings.categories.system,
               },
+              quietHours: {
+                enabled: savedPrefs.quietHours?.enabled ?? defaultNotificationSettings.quietHours.enabled,
+                startHour: savedPrefs.quietHours?.startHour ?? defaultNotificationSettings.quietHours.startHour,
+                endHour: savedPrefs.quietHours?.endHour ?? defaultNotificationSettings.quietHours.endHour,
+              },
+              frequency: savedPrefs.frequency ?? defaultNotificationSettings.frequency,
+              autoDeleteDays: savedPrefs.autoDeleteDays ?? defaultNotificationSettings.autoDeleteDays,
             });
           }
           if (userData.settings?.menuPreferences) {

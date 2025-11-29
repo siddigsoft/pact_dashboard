@@ -9,6 +9,7 @@ import { useViewMode } from "@/context/ViewModeContext";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { UpdateDialog } from "@/components/UpdateDialog";
 import { OnlineOfflineToggle } from "@/components/common/OnlineOfflineToggle";
+import { NotificationInitializer } from "@/components/NotificationInitializer";
 
 interface MainLayoutContentProps {
   children?: React.ReactNode;
@@ -57,6 +58,7 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
   return (
     <TooltipProvider>
       <UpdateDialog />
+      <NotificationInitializer />
       <SidebarProvider>
         <div className="min-h-screen flex w-full">
           {!isMobile && <AppSidebar />}
