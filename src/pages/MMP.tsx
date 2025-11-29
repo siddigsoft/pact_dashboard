@@ -26,6 +26,7 @@ import { VisitReportDialog, VisitReportData } from '@/components/site-visit/Visi
 import { StartVisitDialog } from '@/components/site-visit/StartVisitDialog';
 import { useSiteClaimRealtime } from '@/hooks/use-site-claim-realtime';
 import { saveGPSToRegistryFromSiteEntry } from '@/utils/sitesRegistryMatcher';
+import { calculateEnumeratorFeeForUser } from '@/hooks/use-claim-fee-calculation';
 
 // Helper component to convert SiteVisitRow[] to site entries and display using MMPSiteEntriesTable
 const SitesDisplayTable: React.FC<{ 
@@ -1065,11 +1066,68 @@ const MMP = () => {
         visit_started_by: currentUser?.id
       };
 
-      // If site was 'assigned' (not yet accepted), also set acceptance fields
+      // If site was 'assigned' (not yet accepted), also set acceptance fields AND ensure fees are set
       if (siteStatus === 'assigned' && !site.accepted_by) {
         updateData.accepted_by = currentUser?.id;
         updateData.accepted_at = now;
         console.log('[StartVisit] Site was assigned - auto-accepting before starting');
+        
+        // Fetch fresh site data from database to get the latest fee values
+        if (currentUser?.id) {
+          try {
+            const { data: freshSiteData } = await supabase
+              .from('mmp_site_entries')
+              .select('transport_fee, enumerator_fee, cost')
+              .eq('id', site.id)
+              .single();
+            
+            // Get fee values from database (with fallback to site object, then default to 0)
+            let dbEnumeratorFee = Number(freshSiteData?.enumerator_fee) || 0;
+            const dbTransportFee = Number(freshSiteData?.transport_fee) || Number(site.transport_fee) || Number(site.transportFee) || 0;
+            let dbCost = Number(freshSiteData?.cost) || 0;
+            
+            console.log('[StartVisit] Current fees from database:', {
+              dbEnumeratorFee,
+              dbTransportFee,
+              dbCost,
+              siteId: site.id
+            });
+            
+            // If enumerator_fee is missing, calculate it based on user classification
+            if (dbEnumeratorFee === 0) {
+              console.log('[StartVisit] Enumerator fee missing - calculating based on user classification...');
+              const feeResult = await calculateEnumeratorFeeForUser(currentUser.id);
+              dbEnumeratorFee = feeResult.fee;
+              
+              console.log('[StartVisit] Calculated enumerator fee:', {
+                fee: dbEnumeratorFee,
+                classificationLevel: feeResult.classificationLevel,
+                source: feeResult.source
+              });
+            }
+            
+            // Always recalculate and set cost to ensure it's correct (enumerator_fee + transport_fee)
+            const calculatedCost = dbEnumeratorFee + dbTransportFee;
+            
+            // Only update if we have valid fees or if cost was missing/incorrect
+            if (dbEnumeratorFee > 0 || dbCost !== calculatedCost) {
+              updateData.enumerator_fee = dbEnumeratorFee;
+              updateData.transport_fee = dbTransportFee;
+              updateData.cost = calculatedCost;
+              
+              console.log('[StartVisit] Fee values set for auto-accept:', {
+                enumeratorFee: dbEnumeratorFee,
+                transportFee: dbTransportFee,
+                totalCost: calculatedCost
+              });
+            } else {
+              console.log('[StartVisit] Existing fees are valid, no changes needed');
+            }
+          } catch (feeError) {
+            console.error('[StartVisit] Failed to process fees for auto-accept:', feeError);
+            // Continue without fees - the wallet payment will show a warning
+          }
+        }
       }
 
       // Update site status to 'In Progress' and save visit start information
