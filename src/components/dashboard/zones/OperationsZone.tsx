@@ -91,6 +91,18 @@ export const OperationsZone: React.FC = () => {
     return (hasAnyRole(['supervisor', 'Supervisor', 'hubsupervisor']) || role === 'supervisor' || role === 'hubsupervisor') && !isAdmin;
   }, [currentUser, hasAnyRole]);
 
+  // Check if user is a coordinator (not admin/ict/supervisor)
+  const isCoordinator = useMemo(() => {
+    if (!currentUser) return false;
+    const role = (currentUser.role || '').toLowerCase();
+    const isAdmin = hasAnyRole(['admin', 'ict', 'super_admin', 'superadmin', 'fom', 'finance', 'financialadmin']);
+    const isSupervisorRole = hasAnyRole(['supervisor', 'Supervisor', 'hubsupervisor']) || role === 'supervisor' || role === 'hubsupervisor';
+    return (hasAnyRole(['coordinator', 'Coordinator']) || role === 'coordinator') && !isAdmin && !isSupervisorRole;
+  }, [currentUser, hasAnyRole]);
+
+  // State for coordinator's state name
+  const [coordinatorStateName, setCoordinatorStateName] = useState<string | null>(null);
+
   // Fetch supervisor's hub name
   useEffect(() => {
     if (!isSupervisor || !currentUser?.hubId) {
@@ -111,31 +123,71 @@ export const OperationsZone: React.FC = () => {
     fetchHubName();
   }, [isSupervisor, currentUser?.hubId]);
 
-  // Apply supervisor hub filtering to site visits
+  // Fetch coordinator's state name
+  useEffect(() => {
+    if (!isCoordinator || !currentUser?.stateId) {
+      setCoordinatorStateName(null);
+      return;
+    }
+    const fetchStateName = async () => {
+      const { data } = await supabase
+        .from('states')
+        .select('name')
+        .eq('id', currentUser.stateId)
+        .maybeSingle();
+      if (data) {
+        setCoordinatorStateName(data.name);
+        console.log(`📊 OperationsZone: Coordinator state loaded: ${data.name}`);
+      }
+    };
+    fetchStateName();
+  }, [isCoordinator, currentUser?.stateId]);
+
+  // Apply supervisor hub filtering or coordinator state filtering to site visits
   const siteVisits = useMemo(() => {
-    if (!isSupervisor) {
-      return allSiteVisits;
+    // Supervisor: filter by hub
+    if (isSupervisor) {
+      if (!supervisorHubName) {
+        console.warn('⚠️ OperationsZone: Supervisor has no hub assigned - showing no sites');
+        return [];
+      }
+      
+      const hubName = supervisorHubName.toLowerCase().trim();
+      const filtered = allSiteVisits.filter(visit => {
+        const visitHub = (visit.hub || '').toLowerCase().trim();
+        if (!visitHub) return false;
+        return visitHub === hubName || 
+               visitHub.includes(hubName) ||
+               (visitHub.length > 0 && hubName.includes(visitHub));
+      });
+      
+      console.log(`📊 OperationsZone: Filtered to ${filtered.length} sites for hub "${supervisorHubName}"`);
+      return filtered;
     }
     
-    if (!supervisorHubName) {
-      console.warn('⚠️ OperationsZone: Supervisor has no hub assigned - showing no sites');
-      return [];
+    // Coordinator: filter by state
+    if (isCoordinator) {
+      if (!coordinatorStateName) {
+        console.warn('⚠️ OperationsZone: Coordinator has no state assigned - showing no sites');
+        return [];
+      }
+      
+      const stateName = coordinatorStateName.toLowerCase().trim();
+      const filtered = allSiteVisits.filter(visit => {
+        const visitState = (visit.state || '').toLowerCase().trim();
+        if (!visitState) return false;
+        return visitState === stateName || 
+               visitState.includes(stateName) ||
+               (visitState.length > 0 && stateName.includes(visitState));
+      });
+      
+      console.log(`📊 OperationsZone: Filtered to ${filtered.length} sites for state "${coordinatorStateName}"`);
+      return filtered;
     }
     
-    const hubName = supervisorHubName.toLowerCase().trim();
-    const filtered = allSiteVisits.filter(visit => {
-      const visitHub = (visit.hub || '').toLowerCase().trim();
-      // Skip sites with no hub assignment
-      if (!visitHub) return false;
-      // Match by hub name
-      return visitHub === hubName || 
-             visitHub.includes(hubName) ||
-             (visitHub.length > 0 && hubName.includes(visitHub));
-    });
-    
-    console.log(`📊 OperationsZone: Filtered to ${filtered.length} sites for hub "${supervisorHubName}"`);
-    return filtered;
-  }, [allSiteVisits, isSupervisor, supervisorHubName]);
+    // Admin/other roles: show all
+    return allSiteVisits;
+  }, [allSiteVisits, isSupervisor, supervisorHubName, isCoordinator, coordinatorStateName]);
 
   const upcomingVisits = siteVisits
     .filter(v => {
@@ -302,6 +354,19 @@ export const OperationsZone: React.FC = () => {
             </p>
           </div>
         </div>
+        {/* Show filter context for supervisors and coordinators */}
+        {isSupervisor && supervisorHubName && (
+          <Badge variant="secondary" className="flex items-center gap-2 px-3 py-1.5 text-sm bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
+            <MapPin className="h-4 w-4" />
+            Hub: {supervisorHubName}
+          </Badge>
+        )}
+        {isCoordinator && coordinatorStateName && (
+          <Badge variant="secondary" className="flex items-center gap-2 px-3 py-1.5 text-sm bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">
+            <MapPin className="h-4 w-4" />
+            State: {coordinatorStateName}
+          </Badge>
+        )}
       </div>
 
       {/* Users Management Style Gradient Metrics Grid */}
