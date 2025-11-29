@@ -28,6 +28,7 @@ export type NotificationSettings = {
   email: boolean;
   sound: boolean;
   browserPush: boolean;
+  vibration: boolean;
   categories: {
     assignments: boolean;
     approvals: boolean;
@@ -37,7 +38,7 @@ export type NotificationSettings = {
   };
   quietHours: QuietHoursSettings;
   frequency: 'instant' | 'hourly' | 'daily';
-  autoDeleteDays: number;
+  autoDeleteDays: number | null;
 };
 
 export type AppearanceSettings = {
@@ -107,6 +108,7 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
     email: false,
     sound: false,
     browserPush: false,
+    vibration: false,
     categories: {
       assignments: true,
       approvals: true,
@@ -168,6 +170,7 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
               email: savedPrefs.email ?? defaultNotificationSettings.email,
               sound: savedPrefs.sound ?? defaultNotificationSettings.sound,
               browserPush: savedPrefs.browserPush ?? defaultNotificationSettings.browserPush,
+              vibration: savedPrefs.vibration ?? defaultNotificationSettings.vibration,
               categories: {
                 assignments: savedPrefs.categories?.assignments ?? defaultNotificationSettings.categories.assignments,
                 approvals: savedPrefs.categories?.approvals ?? defaultNotificationSettings.categories.approvals,
