@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import type { Wallet, WalletTransaction } from '@/types/wallet';
-import { MapPin, TrendingUp, DollarSign, Briefcase, Calendar } from 'lucide-react';
+import { MapPin, TrendingUp, DollarSign, Briefcase, Calendar, CheckCircle, Clock, XCircle } from 'lucide-react';
 
 const currencyFmt = (amount: number, currency: string) => 
   new Intl.NumberFormat(undefined, { 
@@ -143,11 +143,14 @@ const AdminWalletDetail = () => {
         console.error('Failed to load site visits:', sitesResult.error);
       } else if (sitesResult.data) {
         const sitesWithPayments = sitesResult.data.map(site => {
+          // Check for both old 'site_visit_fee' and new 'earning' transaction types
           const payment = txnData.find(
-            t => t.site_visit_id === site.id && t.type === 'site_visit_fee'
+            t => t.site_visit_id === site.id && (t.type === 'earning' || t.type === 'site_visit_fee')
           );
+          const isCompleted = site.status?.toLowerCase() === 'completed' || site.status?.toLowerCase() === 'verified';
           return {
             ...site,
+            isCompleted,
             payment: payment ? {
               amount: parseFloat(payment.amount),
               date: payment.created_at
@@ -219,8 +222,9 @@ const AdminWalletDetail = () => {
 
   // Compute earnings breakdown by source
   const earningsBreakdown = useMemo(() => {
+    // Check for both old 'site_visit_fee' and new 'earning' transaction types
     const siteVisitEarnings = transactions
-      .filter(t => t.type === 'site_visit_fee')
+      .filter(t => t.type === 'earning' || t.type === 'site_visit_fee')
       .reduce((sum, t) => sum + t.amount, 0);
     
     const bonuses = transactions
@@ -240,7 +244,7 @@ const AdminWalletDetail = () => {
 
   const totals = useMemo(() => {
     const earned = transactions
-      .filter(t => ['site_visit_fee', 'bonus', 'adjustment'].includes(t.type))
+      .filter(t => ['earning', 'site_visit_fee', 'bonus', 'adjustment'].includes(t.type))
       .reduce((sum, t) => sum + (t.type === 'adjustment' && t.amount < 0 ? 0 : t.amount), 0);
     
     const withdrawn = transactions
@@ -567,13 +571,53 @@ const AdminWalletDetail = () => {
         </TabsContent>
 
         {/* Sites Visited Tab */}
-        <TabsContent value="sites">
+        <TabsContent value="sites" className="space-y-4">
+          {/* Payment Status Summary */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <Card className="bg-gradient-to-br from-slate-900/80 to-green-900/80 border-green-500/30 backdrop-blur-xl">
+              <CardContent className="p-4 flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-green-300/70 uppercase tracking-wider">Completed & Paid</p>
+                  <p className="text-2xl font-bold text-green-400 mt-1">
+                    {siteVisits.filter(s => s.isCompleted && s.payment).length}
+                  </p>
+                </div>
+                <CheckCircle className="w-8 h-8 text-green-400/50" />
+              </CardContent>
+            </Card>
+            <Card className="bg-gradient-to-br from-slate-900/80 to-yellow-900/80 border-yellow-500/30 backdrop-blur-xl">
+              <CardContent className="p-4 flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-yellow-300/70 uppercase tracking-wider">Completed - Pending Payment</p>
+                  <p className="text-2xl font-bold text-yellow-400 mt-1">
+                    {siteVisits.filter(s => s.isCompleted && !s.payment).length}
+                  </p>
+                </div>
+                <Clock className="w-8 h-8 text-yellow-400/50" />
+              </CardContent>
+            </Card>
+            <Card className="bg-gradient-to-br from-slate-900/80 to-blue-900/80 border-blue-500/30 backdrop-blur-xl">
+              <CardContent className="p-4 flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-blue-300/70 uppercase tracking-wider">In Progress / Assigned</p>
+                  <p className="text-2xl font-bold text-blue-400 mt-1">
+                    {siteVisits.filter(s => !s.isCompleted).length}
+                  </p>
+                </div>
+                <MapPin className="w-8 h-8 text-blue-400/50" />
+              </CardContent>
+            </Card>
+          </div>
+
           <Card className="bg-gradient-to-br from-slate-900/80 to-blue-900/80 border-blue-500/30 backdrop-blur-xl">
             <CardHeader className="p-4 md:p-6">
               <CardTitle className="text-blue-300 flex items-center gap-2 text-base md:text-lg">
                 <MapPin className="w-4 h-4 md:w-5 md:h-5" />
                 Sites Visited ({siteVisits.length})
               </CardTitle>
+              <p className="text-xs text-blue-300/50 mt-1">
+                Only completed/verified sites receive wallet payments
+              </p>
             </CardHeader>
             <CardContent className="p-0 md:p-6">
               <div className="rounded-md border border-blue-500/30 overflow-x-auto smooth-scroll">
@@ -617,20 +661,34 @@ const AdminWalletDetail = () => {
                           </TableCell>
                           <TableCell className="text-right">
                             {site.payment ? (
-                              <div>
-                                <div className="text-green-400 font-semibold">
-                                  {currencyFmt(site.payment.amount, currency)}
-                                </div>
-                                <div className="text-xs text-blue-300/50">
-                                  {new Date(site.payment.date).toLocaleDateString()}
+                              <div className="flex items-center justify-end gap-2">
+                                <div>
+                                  <div className="text-green-400 font-semibold flex items-center gap-1">
+                                    <CheckCircle className="w-3 h-3" />
+                                    {currencyFmt(site.payment.amount, currency)}
+                                  </div>
+                                  <div className="text-xs text-green-300/50">
+                                    Paid {new Date(site.payment.date).toLocaleDateString()}
+                                  </div>
                                 </div>
                               </div>
-                            ) : site.cost > 0 ? (
-                              <div className="text-green-400 font-semibold">
-                                {currencyFmt(site.cost, currency)}
+                            ) : site.isCompleted ? (
+                              <div className="flex items-center justify-end gap-2">
+                                <div>
+                                  <div className="text-yellow-400 font-semibold flex items-center gap-1">
+                                    <Clock className="w-3 h-3" />
+                                    {site.cost > 0 ? currencyFmt(site.cost, currency) : 'Awaiting'}
+                                  </div>
+                                  <div className="text-xs text-yellow-300/50">
+                                    Payment pending
+                                  </div>
+                                </div>
                               </div>
                             ) : (
-                              <span className="text-yellow-400">Pending</span>
+                              <div className="flex items-center justify-end gap-1 text-blue-300/50 text-sm">
+                                <XCircle className="w-3 h-3" />
+                                Not eligible
+                              </div>
                             )}
                           </TableCell>
                         </TableRow>
