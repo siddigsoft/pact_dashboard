@@ -112,3 +112,14 @@ The backend uses PostgreSQL via Supabase, leveraging Row Level Security (RLS) an
 *   **Replit:** Development environment.
 *   **Vercel:** Production hosting.
 *   **Capacitor:** Mobile deployment (iOS/Android builds, native API access).
+
+## Documentation
+
+Comprehensive user documentation is available in the `docs/` directory:
+
+*   **USER_MANUAL.md:** Complete platform guide with all features documented (1500+ lines)
+*   **PAGE_REFERENCE_GUIDE.md:** URL-by-URL reference for all 60+ pages with access levels and usage instructions
+*   **QUICK_START_CARDS.md:** Role-specific quick start guides for all user types (Data Collector, Coordinator, Supervisor, Finance, FOM, Admin, Super Admin, ICT, Reviewer)
+*   **RBAC_GUIDE.md:** Role-based access control documentation
+*   **PAYMENT_SYSTEM_GUIDE.md:** Wallet and payment system documentation
+*   **APK_GENERATION_STEP_BY_STEP.md:** Mobile app build instructions
