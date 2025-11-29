@@ -1,9 +1,15 @@
 import React from 'react';
 import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { SiteVisit } from '@/types/siteVisit';
 
-export const SiteVisitCostSummary = () => {
-  const { siteVisits } = useSiteVisitContext();
+interface SiteVisitCostSummaryProps {
+  siteVisits?: SiteVisit[];
+}
+
+export const SiteVisitCostSummary: React.FC<SiteVisitCostSummaryProps> = ({ siteVisits: propSiteVisits }) => {
+  const { siteVisits: contextSiteVisits } = useSiteVisitContext();
+  const siteVisits = propSiteVisits || contextSiteVisits;
   // Sum up costs
   const totalCost = (siteVisits || []).reduce((sum, v) => sum + (v.fees?.total || 0), 0);
   const completedCost = (siteVisits || []).filter(v => v.status === 'completed').reduce((sum, v) => sum + (v.fees?.total || 0), 0);

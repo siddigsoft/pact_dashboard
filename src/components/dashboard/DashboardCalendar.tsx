@@ -8,9 +8,15 @@ import { CalendarClock, MapPin } from 'lucide-react';
 import { format, isSameDay } from 'date-fns';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
+import { SiteVisit } from '@/types/siteVisit';
 
-export const DashboardCalendar = () => {
-  const { siteVisits } = useSiteVisitContext();
+interface DashboardCalendarProps {
+  siteVisits?: SiteVisit[];
+}
+
+export const DashboardCalendar: React.FC<DashboardCalendarProps> = ({ siteVisits: propSiteVisits }) => {
+  const { siteVisits: contextSiteVisits } = useSiteVisitContext();
+  const siteVisits = propSiteVisits || contextSiteVisits;
   const [date, setDate] = React.useState<Date>(new Date());
   const navigate = useNavigate();
 

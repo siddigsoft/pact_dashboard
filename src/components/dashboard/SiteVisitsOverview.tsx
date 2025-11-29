@@ -15,14 +15,17 @@ import {
 import { format } from 'date-fns';
 import { Clock, CheckCircle, UserCheck, DollarSign, Loader2 } from "lucide-react";
 import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
+import { SiteVisit } from '@/types/siteVisit';
 
 interface SiteVisitsOverviewProps {
   currentUserId?: string;
   isAdmin?: boolean;
+  siteVisits?: SiteVisit[];
 }
 
-const SiteVisitsOverview: React.FC<SiteVisitsOverviewProps> = ({ currentUserId, isAdmin = false }) => {
-  const { siteVisits, loading } = useSiteVisitContext();
+const SiteVisitsOverview: React.FC<SiteVisitsOverviewProps> = ({ currentUserId, isAdmin = false, siteVisits: propSiteVisits }) => {
+  const { siteVisits: contextSiteVisits, loading } = useSiteVisitContext();
+  const siteVisits = propSiteVisits || contextSiteVisits;
 
   const { pendingVisits, assignedVisits, completedVisits, totalCount, completionRate } = useMemo(() => {
     const filteredVisits = isAdmin ? siteVisits : siteVisits.filter(visit => visit.assignedTo === currentUserId);
