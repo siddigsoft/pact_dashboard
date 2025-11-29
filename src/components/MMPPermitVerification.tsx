@@ -7,16 +7,12 @@ import { MMPPermitsData, MMPStatePermitDocument } from '@/types/mmp/permits';
 import { MMPPermitFileUpload } from './MMPPermitFileUpload';
 import { PermitVerificationCard } from './permits/PermitVerificationCard';
 import { Progress } from '@/components/ui/progress';
-import { Upload, FileCheck, Send, Eye } from 'lucide-react';
+import { Upload, FileCheck, Send, Eye, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { useAppContext } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
 import { sudanStates } from '@/data/sudanStates';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
 import { useState as useReactState } from 'react';
-import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 interface MMPPermitVerificationProps {
@@ -33,15 +29,7 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
   const { toast } = useToast();
   const { updateMMP } = useMMP();
   const { currentUser } = useAppContext();
-  const [forwardLoading, setForwardLoading] = useState(false);
   const [hasForwarded, setHasForwarded] = useState(false);
-  // Modal state for review/assignment
-  const [showAssignModal, setShowAssignModal] = useReactState(false);
-  const [assignmentMap, setAssignmentMap] = useReactState({} as Record<string, string>); // key: groupKey, value: coordinatorId
-  const [selectedSites, setSelectedSites] = useReactState({} as Record<string, Set<string>>); // key: groupKey, value: Set of site ids
-  const [batchLoading, setBatchLoading] = useReactState({} as Record<string, boolean>); // key: groupKey, value: loading state
-  const [batchForwarded, setBatchForwarded] = useReactState({} as Record<string, boolean>); // key: groupKey, value: forwarded state
-  const [expandedGroups, setExpandedGroups] = useReactState({} as Record<string, boolean>); // key: groupKey, value: expanded/collapsed
   const { users } = useAppContext();
   const navigate = useNavigate();
 
@@ -506,84 +494,7 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
     }
   };
 
-  // Show modal instead of forwarding directly
-  const forwardEntriesToCoordinators = async () => {
-    setShowAssignModal(true);
-  };
 
-  // Forward a single batch (group) to the selected coordinator
-  const handleForwardBatch = async (groupKey: string) => {
-    setBatchLoading(b => ({ ...b, [groupKey]: true }));
-    try {
-      const mmpId = mmpFile?.id || mmpFile?.mmpId;
-      const coordinatorId = assignmentMap[groupKey];
-      const siteIds = Array.from(selectedSites[groupKey] || []);
-      if (!coordinatorId || siteIds.length === 0) {
-        toast({ title: 'Select sites and coordinator', description: 'Please select at least one site and a coordinator.', variant: 'destructive' });
-        setBatchLoading(b => ({ ...b, [groupKey]: false }));
-        return;
-      }
-
-      // Get the site entries for the selected sites
-      const selectedSiteEntries = groupMap[groupKey]?.filter((site: any) => siteIds.includes(site.id)) || [];
-
-      // Update mmp_site_entries to assign to coordinator (keep status as Pending)
-      const updatePromises = selectedSiteEntries.map(async (siteEntry: any) => {
-        const existingAdditionalData = siteEntry.additional_data || {};
-        
-        // Update the mmp_site_entry in the database (assign to coordinator, keep status as Pending)
-        const { data, error } = await supabase
-          .from('mmp_site_entries')
-          .update({
-            status: 'Pending',
-            dispatched_by: currentUser?.id || null,
-            dispatched_at: new Date().toISOString(),
-            additional_data: {
-              ...existingAdditionalData,
-              assigned_to: coordinatorId,
-              assigned_by: currentUser?.id || null,
-              assigned_at: new Date().toISOString(),
-              notes: `Forwarded from MMP ${mmpFile?.name || mmpFile?.mmpId} for CP verification`,
-            }
-          })
-          .eq('id', siteEntry.id)
-          .select()
-          .single();
-
-        if (error) {
-          console.error('Error updating site entry:', error);
-          throw error;
-        }
-
-        return data;
-      });
-
-      // Wait for all site entries to be updated
-      await Promise.all(updatePromises);
-
-      // Send notification to coordinator
-      await supabase.from('notifications').insert([
-        {
-          user_id: coordinatorId,
-          title: 'Sites forwarded for CP verification',
-          message: `${mmpFile?.name || 'MMP'}: ${siteIds.length} site(s) have been forwarded for your CP review`,
-          type: 'info',
-          link: `/coordinator/sites`,
-          related_entity_id: mmpId,
-          related_entity_type: 'mmpFile',
-        }
-      ]);
-
-      toast({ title: 'Batch Forwarded', description: `Sites were forwarded to ${allCoordinators.find(c => c.id === coordinatorId)?.fullName || 'Coordinator'}.`, variant: 'default' });
-      setBatchLoading(b => ({ ...b, [groupKey]: false }));
-      setBatchForwarded(f => ({ ...f, [groupKey]: true }));
-      setSelectedSites(s => ({ ...s, [groupKey]: new Set() }));
-    } catch (e) {
-      console.warn('Batch forward failed:', e);
-      toast({ title: 'Forwarding failed', description: 'Could not forward to coordinator. Please try again.', variant: 'destructive' });
-      setBatchLoading(b => ({ ...b, [groupKey]: false }));
-    }
-  };
 
   const calculateProgress = () => {
     const allPermits = [...permits, ...localPermits];
@@ -597,43 +508,10 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
   const allPermitsList = [...permits, ...localPermits];
   const allVerified = allPermitsList.length > 0 && allPermitsList.every(p => p.status === 'verified');
 
-  // --- Modal assignment logic ---
-  // Prepare site groups and coordinators for modal
-  let entries: any[] = Array.isArray(mmpFile?.siteEntries) && mmpFile.siteEntries.length > 0 ? mmpFile.siteEntries : [];
-  const stateNameToId = new Map<string, string>();
-  // Add both full name and name without "State" suffix for better matching
-  for (const s of sudanStates) {
-    const normalizedName = s.name.toLowerCase();
-    stateNameToId.set(normalizedName, s.id);
-    // Also add without "State" suffix (e.g., "Northern" matches "Northern State")
-    if (normalizedName.endsWith(' state')) {
-      stateNameToId.set(normalizedName.replace(/\s+state$/, ''), s.id);
-    }
-  }
-  const localitiesByState = new Map<string, Map<string, string>>();
-  for (const s of sudanStates) {
-    const map = new Map<string, string>();
-    s.localities.forEach(l => map.set(l.name.toLowerCase(), l.id));
-    localitiesByState.set(s.id, map);
-  }
-  const groupMap: Record<string, any[]> = {};
-  entries.forEach((e: any) => {
-    const sName = String(e.state || '').trim().toLowerCase();
-    const stateId = stateNameToId.get(sName);
-    if (!stateId) return;
-    const locName = String(e.locality || '').trim().toLowerCase();
-    const locMap = localitiesByState.get(stateId);
-    const localityId = locName && locMap ? (locMap.get(locName) || '') : '';
-    const key = `${stateId}|${localityId}`;
-    if (!groupMap[key]) groupMap[key] = [];
-    groupMap[key].push(e);
-  });
-  // All coordinators in the system
-  const allCoordinators = users.filter(u => u.role === 'coordinator');
-  // Helper to get recommended coordinator for a group
-  function getRecommendedCoordinator(stateId: string, localityId: string) {
-    return allCoordinators.find(c => c.stateId === stateId && (c.localityId === localityId || !localityId));
-  }
+  // Check if both federal and state permits are uploaded
+  const hasFederalPermit = permits.some(p => p.permitType === 'federal');
+  const hasStatePermit = permits.some(p => p.permitType === 'state');
+  const canReviewOrForward = allVerified && hasFederalPermit && hasStatePermit && !hasForwarded;
 
   return (
     <div className="space-y-8">
@@ -659,6 +537,89 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
             bucket="mmp-files"
             pathPrefix={`permits/${mmpFile?.id || mmpFile?.mmpId || 'unknown'}`}
           />
+        </CardContent>
+      </Card>
+
+      {/* Permit Status Warnings */}
+      <Card className="border-orange-200 bg-orange-50">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-orange-800">
+            <AlertTriangle className="h-5 w-5" />
+            Permit Status Overview
+          </CardTitle>
+          <CardDescription className="text-orange-700">
+            Check what permits you have uploaded and what is still required
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            {/* Federal Permit Status */}
+            <div className="flex items-center justify-between p-3 rounded-lg border">
+              <div className="flex items-center gap-3">
+                {hasFederalPermit ? (
+                  <CheckCircle2 className="h-5 w-5 text-green-600" />
+                ) : (
+                  <AlertTriangle className="h-5 w-5 text-orange-600" />
+                )}
+                <div>
+                  <div className="font-medium text-gray-900">Federal Permit</div>
+                  <div className="text-sm text-gray-600">
+                    {hasFederalPermit ? "Uploaded and ready" : "Not uploaded yet"}
+                  </div>
+                </div>
+              </div>
+              <div className="text-sm font-medium">
+                {hasFederalPermit ? (
+                  <span className="text-green-600">✓ Complete</span>
+                ) : (
+                  <span className="text-orange-600">⚠ Required</span>
+                )}
+              </div>
+            </div>
+
+            {/* State Permit Status */}
+            <div className="flex items-center justify-between p-3 rounded-lg border">
+              <div className="flex items-center gap-3">
+                {hasStatePermit ? (
+                  <CheckCircle2 className="h-5 w-5 text-green-600" />
+                ) : (
+                  <AlertTriangle className="h-5 w-5 text-orange-600" />
+                )}
+                <div>
+                  <div className="font-medium text-gray-900">State Permit</div>
+                  <div className="text-sm text-gray-600">
+                    {hasStatePermit ? "Uploaded and ready" : "Not uploaded yet"}
+                  </div>
+                </div>
+              </div>
+              <div className="text-sm font-medium">
+                {hasStatePermit ? (
+                  <span className="text-green-600">✓ Complete</span>
+                ) : (
+                  <span className="text-orange-600">⚠ Required</span>
+                )}
+              </div>
+            </div>
+
+            {/* Summary Message */}
+            <div className="mt-4 p-3 bg-white rounded-lg border">
+              <div className="text-sm">
+                {hasFederalPermit && hasStatePermit ? (
+                  <div className="text-green-700 font-medium">
+                    ✓ Both federal and state permits uploaded. You can now review and assign coordinators.
+                  </div>
+                ) : !hasFederalPermit && !hasStatePermit ? (
+                  <div className="text-orange-700 font-medium">
+                    ⚠ No permits uploaded yet. Upload both federal and state permits to proceed.
+                  </div>
+                ) : (
+                  <div className="text-orange-700 font-medium">
+                    ⚠ Missing {hasFederalPermit ? "state" : "federal"} permit. Upload the remaining permit to proceed.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
@@ -765,109 +726,31 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
               <div className="text-muted-foreground">Local</div>
             </div>
           </div>
-          <div className="mt-6 flex justify-end">
-            {allVerified && !hasForwarded ? (
-              <Button onClick={() => navigate(`/mmp/${mmpFile.id}`)} disabled={forwardLoading}>
-                <Eye className="h-4 w-4 mr-2" />
-                Review MMP
-              </Button>
-            ) : null}
+          <div className="mt-6 flex justify-end gap-2">
+            {canReviewOrForward ? (
+              <>
+                <Button onClick={() => navigate(`/mmp/${mmpFile.id}/review-assign-coordinators`)}>
+                  <Send className="h-4 w-4 mr-2" />
+                  Review & Assign Coordinators
+                </Button>
+                <Button onClick={() => navigate(`/mmp/${mmpFile.id}`)}>
+                  <Eye className="h-4 w-4 mr-2" />
+                  Review MMP
+                </Button>
+              </>
+            ) : (
+              <div className="text-sm text-muted-foreground text-center w-full">
+                {!hasFederalPermit && !hasStatePermit && "Upload federal and state permits to enable review and forwarding"}
+                {hasFederalPermit && !hasStatePermit && "Upload state permit to enable review and forwarding"}
+                {!hasFederalPermit && hasStatePermit && "Upload federal permit to enable review and forwarding"}
+                {hasFederalPermit && hasStatePermit && !allVerified && "Verify all permits to enable review and forwarding"}
+                {hasForwarded && "Sites have already been forwarded"}
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
 
-      {/* Assignment Modal - Usable, simple batch forwarding */}
-      <Dialog open={showAssignModal} onOpenChange={setShowAssignModal}>
-        <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Review & Assign Coordinators</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-6 overflow-y-auto flex-1 pr-2" style={{ maxHeight: '60vh' }}>
-            {Object.entries(groupMap).length === 0 ? (
-              <div className="text-center text-muted-foreground">No site groups found.</div>
-            ) : (
-              Object.entries(groupMap).map(([groupKey, groupSites]) => {
-                const [stateId, localityId] = groupKey.split('|');
-                const recommended = getRecommendedCoordinator(stateId, localityId);
-                const selectedId = assignmentMap[groupKey] || recommended?.id || '';
-                // Initialize selectedSites for this group if not set
-                if (!selectedSites[groupKey]) {
-                  setSelectedSites(s => ({ ...s, [groupKey]: new Set(groupSites.map((site: any) => site.id)) }));
-                }
-                return (
-                  <div key={groupKey} className="border rounded p-3 bg-white">
-                    <div className="flex items-center mb-2 font-medium cursor-pointer select-none" onClick={() => setExpandedGroups(g => ({ ...g, [groupKey]: !g[groupKey] }))}>
-                      {expandedGroups[groupKey] ? <ChevronDown className="w-4 h-4 mr-1" /> : <ChevronRight className="w-4 h-4 mr-1" />}
-                      {groupSites.length} site(s) in <span className="text-blue-700 ml-1">{sudanStates.find(s => s.id === stateId)?.name || stateId}</span>
-                      {localityId && (
-                        <span> / <span className="text-green-700">{sudanStates.find(s => s.id === stateId)?.localities.find(l => l.id === localityId)?.name || localityId}</span></span>
-                      )}
-                    </div>
-                    <div className="mb-2 text-sm text-muted-foreground">
-                      Recommended: {recommended ? `${recommended.fullName || recommended.name || recommended.email}` : 'None'}
-                    </div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <Select value={selectedId} onValueChange={val => setAssignmentMap(a => ({ ...a, [groupKey]: val }))}>
-                        <SelectTrigger className="max-w-md">
-                          <SelectValue placeholder="Select coordinator..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {allCoordinators.map(c => (
-                            <SelectItem key={c.id} value={c.id}>
-                              {c.fullName || c.name || c.email}
-                              {recommended?.id === c.id ? ' (Recommended)' : ''}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Button
-                        size="sm"
-                        onClick={() => handleForwardBatch(groupKey)}
-                        disabled={batchLoading[groupKey] || batchForwarded[groupKey] || !assignmentMap[groupKey] || !(selectedSites[groupKey]?.size > 0)}
-                        variant={batchForwarded[groupKey] ? 'secondary' : 'default'}
-                        className="ml-2"
-                      >
-                        {batchForwarded[groupKey]
-                          ? 'Forwarded'
-                          : batchLoading[groupKey]
-                            ? 'Forwarding...'
-                            : 'Forward Selected'}
-                      </Button>
-                    </div>
-                    {expandedGroups[groupKey] && (
-                      <div className="mt-3 mb-2">
-                        <div className="font-medium text-xs mb-1">Select sites to forward:</div>
-                        <div className="max-h-40 overflow-y-auto border rounded p-2 bg-gray-50">
-                          <div className="space-y-2">
-                            {groupSites.map((site: any) => (
-                              <label key={site.id} className="flex items-center gap-2 cursor-pointer hover:bg-white p-1 rounded">
-                                <Checkbox
-                                  checked={selectedSites[groupKey]?.has(site.id) || false}
-                                  onCheckedChange={checked => {
-                                    setSelectedSites(s => {
-                                      const set = new Set(s[groupKey] || []);
-                                      if (checked) set.add(site.id); else set.delete(site.id);
-                                      return { ...s, [groupKey]: set };
-                                    });
-                                  }}
-                                />
-                                <span className="text-sm">{site.siteName || site.name || site.id}</span>
-                              </label>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowAssignModal(false)} disabled={forwardLoading}>Close</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };
