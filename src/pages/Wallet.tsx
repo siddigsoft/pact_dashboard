@@ -359,9 +359,17 @@ const WalletPage = () => {
                       placeholder="Enter amount"
                       data-testid="input-withdrawal-amount"
                     />
-                    <p className="text-sm text-muted-foreground">
+                    <p className={`text-sm ${parseFloat(withdrawalAmount || '0') > currentBalance ? 'text-red-500' : 'text-muted-foreground'}`}>
                       Available balance: {formatCurrency(currentBalance)}
+                      {parseFloat(withdrawalAmount || '0') > currentBalance && (
+                        <span className="ml-2 font-medium">(Insufficient funds)</span>
+                      )}
                     </p>
+                    {currentBalance === 0 && (
+                      <p className="text-sm text-amber-500 mt-1">
+                        You need earnings in your wallet before you can request a withdrawal.
+                      </p>
+                    )}
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor="reason">Reason</Label>
@@ -396,7 +404,7 @@ const WalletPage = () => {
                   <button
                     type="button"
                     onClick={handleWithdrawalRequest}
-                    disabled={!withdrawalAmount || parseFloat(withdrawalAmount) <= 0}
+                    disabled={!withdrawalAmount || parseFloat(withdrawalAmount) <= 0 || parseFloat(withdrawalAmount) > currentBalance}
                     className="px-4 py-2 rounded-md bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white border border-purple-400/50 shadow-[0_0_15px_rgba(168,85,247,0.3)] disabled:opacity-50 disabled:cursor-not-allowed transition focus:outline-none focus:ring-2 focus:ring-purple-400/70 focus:ring-offset-2 focus:ring-offset-slate-950"
                     data-testid="button-submit-withdrawal"
                   >
