@@ -226,6 +226,40 @@ const Settings = () => {
     });
   };
 
+  const handleQuietHoursToggle = (enabled: boolean) => {
+    updateNotificationSettings({
+      ...notificationSettings,
+      quietHours: {
+        ...notificationSettings.quietHours,
+        enabled
+      }
+    });
+  };
+
+  const handleQuietHoursChange = (field: 'startHour' | 'endHour', value: number) => {
+    updateNotificationSettings({
+      ...notificationSettings,
+      quietHours: {
+        ...notificationSettings.quietHours,
+        [field]: value
+      }
+    });
+  };
+
+  const handleFrequencyChange = (frequency: 'instant' | 'hourly' | 'daily') => {
+    updateNotificationSettings({
+      ...notificationSettings,
+      frequency
+    });
+  };
+
+  const handleAutoDeleteChange = (days: number) => {
+    updateNotificationSettings({
+      ...notificationSettings,
+      autoDeleteDays: days
+    });
+  };
+
   const handleDarkModeToggle = (checked: boolean) => {
     updateAppearanceSettings({
       ...appearanceSettings,
@@ -936,6 +970,126 @@ const Settings = () => {
                       disabled={!notificationSettings.enabled}
                       data-testid="switch-cat-system"
                     />
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t">
+                <h4 className="text-sm font-semibold mb-3">Quiet Hours</h4>
+                <p className="text-xs text-muted-foreground mb-4">
+                  Pause non-urgent notifications during specified hours
+                </p>
+                
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="quiet-hours" className="text-sm font-medium">Enable Quiet Hours</Label>
+                      <p className="text-xs text-muted-foreground">Silence notifications during set times</p>
+                    </div>
+                    <Switch 
+                      id="quiet-hours"
+                      checked={notificationSettings.quietHours?.enabled ?? false}
+                      onCheckedChange={handleQuietHoursToggle}
+                      disabled={!notificationSettings.enabled}
+                      data-testid="switch-quiet-hours"
+                    />
+                  </div>
+                  
+                  {notificationSettings.quietHours?.enabled && (
+                    <div className="grid grid-cols-2 gap-4 p-3 bg-muted/20 rounded-lg">
+                      <div className="space-y-2">
+                        <Label htmlFor="quiet-start" className="text-sm">Start Time</Label>
+                        <Select
+                          value={String(notificationSettings.quietHours?.startHour ?? 22)}
+                          onValueChange={(val) => handleQuietHoursChange('startHour', parseInt(val))}
+                          disabled={!notificationSettings.enabled}
+                        >
+                          <SelectTrigger id="quiet-start" data-testid="select-quiet-start">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Array.from({ length: 24 }, (_, i) => (
+                              <SelectItem key={i} value={String(i)}>
+                                {i === 0 ? '12:00 AM' : i < 12 ? `${i}:00 AM` : i === 12 ? '12:00 PM' : `${i - 12}:00 PM`}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="quiet-end" className="text-sm">End Time</Label>
+                        <Select
+                          value={String(notificationSettings.quietHours?.endHour ?? 7)}
+                          onValueChange={(val) => handleQuietHoursChange('endHour', parseInt(val))}
+                          disabled={!notificationSettings.enabled}
+                        >
+                          <SelectTrigger id="quiet-end" data-testid="select-quiet-end">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Array.from({ length: 24 }, (_, i) => (
+                              <SelectItem key={i} value={String(i)}>
+                                {i === 0 ? '12:00 AM' : i < 12 ? `${i}:00 AM` : i === 12 ? '12:00 PM' : `${i - 12}:00 PM`}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="pt-4 border-t">
+                <h4 className="text-sm font-semibold mb-3">Delivery Settings</h4>
+                <p className="text-xs text-muted-foreground mb-4">
+                  Control how and when notifications are delivered
+                </p>
+                
+                <div className="space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-3 bg-muted/30 rounded-lg">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="frequency" className="text-sm font-medium">Delivery Frequency</Label>
+                      <p className="text-xs text-muted-foreground">How often to receive notifications</p>
+                    </div>
+                    <Select
+                      value={notificationSettings.frequency ?? 'instant'}
+                      onValueChange={(val) => handleFrequencyChange(val as 'instant' | 'hourly' | 'daily')}
+                      disabled={!notificationSettings.enabled}
+                    >
+                      <SelectTrigger id="frequency" className="w-32" data-testid="select-frequency">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="instant">Instant</SelectItem>
+                        <SelectItem value="hourly">Hourly Digest</SelectItem>
+                        <SelectItem value="daily">Daily Digest</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-3 bg-muted/30 rounded-lg">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="auto-delete" className="text-sm font-medium">Auto-Delete Read Notifications</Label>
+                      <p className="text-xs text-muted-foreground">Automatically remove old read notifications</p>
+                    </div>
+                    <Select
+                      value={String(notificationSettings.autoDeleteDays ?? 30)}
+                      onValueChange={(val) => handleAutoDeleteChange(parseInt(val))}
+                      disabled={!notificationSettings.enabled}
+                    >
+                      <SelectTrigger id="auto-delete" className="w-32" data-testid="select-auto-delete">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="7">After 7 days</SelectItem>
+                        <SelectItem value="14">After 14 days</SelectItem>
+                        <SelectItem value="30">After 30 days</SelectItem>
+                        <SelectItem value="60">After 60 days</SelectItem>
+                        <SelectItem value="90">After 90 days</SelectItem>
+                        <SelectItem value="0">Never</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
               </div>
