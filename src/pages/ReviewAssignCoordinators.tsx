@@ -502,7 +502,6 @@ const ReviewAssignCoordinators: React.FC = () => {
                     <SelectValue placeholder="All hubs" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All hubs</SelectItem>
                     {hubs.map((hub) => (
                       <SelectItem key={hub.id} value={hub.id}>
                         {hub.name}
@@ -526,7 +525,6 @@ const ReviewAssignCoordinators: React.FC = () => {
                       <SelectValue placeholder="All states" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">All states</SelectItem>
                       {hubStateOptions.map((state) => (
                         <SelectItem key={state.state_id} value={state.state_id}>
                           {state.state_name}
@@ -548,7 +546,6 @@ const ReviewAssignCoordinators: React.FC = () => {
                       <SelectValue placeholder="All localities" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">All localities</SelectItem>
                       {localityOptions.map((locality) => (
                         <SelectItem key={locality.id} value={locality.id}>
                           {locality.name}
