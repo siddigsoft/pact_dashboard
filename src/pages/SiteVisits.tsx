@@ -116,6 +116,19 @@ const SiteVisits = () => {
     return role === 'datacollector' || role === 'data collector';
   }, [currentUser]);
 
+  // Check if user is a coordinator
+  const isCoordinator = useMemo(() => {
+    if (!currentUser) return false;
+    const role = (currentUser.role || '').toLowerCase();
+    return role === 'coordinator';
+  }, [currentUser]);
+
+  // Check if user is a field worker who can claim sites (data collector OR coordinator)
+  // Coordinators can monitor and claim sites within their locality just like data collectors
+  const isFieldWorker = useMemo(() => {
+    return isDataCollector || isCoordinator;
+  }, [isDataCollector, isCoordinator]);
+
   // Check if user is FOM (Field Operations Manager)
   const isFOM = useMemo(() => {
     if (!currentUser) return false;
@@ -127,14 +140,16 @@ const SiteVisits = () => {
   }, [currentUser]);
 
   // Get user's geographic assignment from profile (state and locality)
+  // Works for both data collectors and coordinators who can claim sites within their locality
   const userGeographicInfo = useMemo(() => {
-    if (!currentUser || !isDataCollector) return null;
+    if (!currentUser || !isFieldWorker) return null;
     
     const userStateId = currentUser.stateId;
     const userLocalityId = currentUser.localityId;
     
     if (!userStateId) {
-      console.warn('Data collector has no state assigned in profile');
+      const roleType = isCoordinator ? 'Coordinator' : 'Data collector';
+      console.warn(`${roleType} has no state assigned in profile`);
       return { hasGeo: false, stateName: null, localityName: null, stateId: null, localityId: null };
     }
     
@@ -144,7 +159,8 @@ const SiteVisits = () => {
     // Get locality name from IDs (if locality is assigned)
     const localityName = userLocalityId ? getLocalityName(userStateId, userLocalityId) : null;
     
-    console.log('📍 Data Collector Geographic Info:', {
+    const roleType = isCoordinator ? 'Coordinator' : 'Data Collector';
+    console.log(`📍 ${roleType} Geographic Info:`, {
       userId: currentUser.id,
       stateId: userStateId,
       stateName,
@@ -159,7 +175,7 @@ const SiteVisits = () => {
       stateId: userStateId, 
       localityId: userLocalityId 
     };
-  }, [currentUser, isDataCollector]);
+  }, [currentUser, isFieldWorker, isCoordinator]);
 
   // Helper function to check if a site matches the user's geographic location
   const siteMatchesUserGeography = (visit: SiteVisit): boolean => {
@@ -197,13 +213,13 @@ const SiteVisits = () => {
   useEffect(() => {
     const canViewAll = canViewAllSiteVisits();
     
-    // For data collectors, apply special filtering logic:
+    // For field workers (data collectors and coordinators), apply special filtering logic:
     // - "dispatched" status: show ONLY dispatched visits matching user's state AND locality
     // - "assigned", "accepted", "ongoing", "completed": filter by assignedTo === currentUser.id
     // - Other statuses or "all": filter by assignedTo === currentUser.id
     let filtered: SiteVisit[];
     
-    if (isDataCollector && currentUser?.id) {
+    if (isFieldWorker && currentUser?.id) {
       // Check if we're filtering by a specific status
       if (statusFilter === "dispatched") {
         // For dispatched status, show ONLY dispatched visits in user's state AND locality
@@ -261,17 +277,17 @@ const SiteVisits = () => {
           visit.status === 'assigned' || visit.status === 'permitVerified'
         );
       } else if (statusFilter === "dispatched") {
-        // For dispatched status, only apply filter if user is NOT a data collector
-        // (data collectors already have all dispatched visits from above)
-        if (!isDataCollector) {
+        // For dispatched status, only apply filter if user is NOT a field worker
+        // (field workers already have all dispatched visits from above)
+        if (!isFieldWorker) {
           filtered = filtered.filter(visit => visit.status?.toLowerCase() === 'dispatched');
         }
       } else {
         // For other statuses, only apply filter if:
-        // - User is NOT a data collector, OR
-        // - User is a data collector but the status is not one we already filtered (assigned, accepted, ongoing, completed)
+        // - User is NOT a field worker, OR
+        // - User is a field worker but the status is not one we already filtered (assigned, accepted, ongoing, completed)
         const statusesAlreadyFiltered = ['assigned', 'accepted', 'ongoing', 'completed'];
-        if (!isDataCollector || !statusesAlreadyFiltered.includes(statusFilter.toLowerCase())) {
+        if (!isFieldWorker || !statusesAlreadyFiltered.includes(statusFilter.toLowerCase())) {
           filtered = filtered.filter(visit => visit.status?.toLowerCase() === statusFilter.toLowerCase());
         }
       }
@@ -321,17 +337,17 @@ const SiteVisits = () => {
     setFilteredVisits(filtered);
     
     if (view === 'map' && filtered.length > 0) {
-      // For data collectors viewing dispatched, select first dispatched visit
+      // For field workers viewing dispatched, select first dispatched visit
       // Otherwise, select first pending visit
       let selected: SiteVisit | undefined;
-      if (isDataCollector && statusFilter === 'dispatched') {
+      if (isFieldWorker && statusFilter === 'dispatched') {
         selected = filtered.find(v => v.status?.toLowerCase() === 'dispatched');
       } else {
         selected = filtered.find(v => v.status === 'pending');
       }
       setSelectedVisit(selected || null);
     }
-  }, [currentUser, siteVisits, statusFilter, searchTerm, sortBy, view, hubParam, regionParam, monthParam, isDataCollector, canViewAllSiteVisits]);
+  }, [currentUser, siteVisits, statusFilter, searchTerm, sortBy, view, hubParam, regionParam, monthParam, isFieldWorker, canViewAllSiteVisits]);
 
   const handleRemoveFilter = (filterType: string) => {
     setActiveFilters(prev => ({
@@ -480,15 +496,15 @@ const SiteVisits = () => {
           ) : (
             <div className="space-y-4">
               <h3 className="text-lg font-medium">
-                {isDataCollector && statusFilter === 'dispatched' 
+                {isFieldWorker && statusFilter === 'dispatched' 
                   ? 'Select a dispatched site visit to accept' 
                   : 'Select a site visit to assign'}
               </h3>
               <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
                 {filteredVisits
                   .filter(visit => {
-                    // For data collectors viewing dispatched, show dispatched visits
-                    if (isDataCollector && statusFilter === 'dispatched') {
+                    // For field workers viewing dispatched, show dispatched visits
+                    if (isFieldWorker && statusFilter === 'dispatched') {
                       return visit.status?.toLowerCase() === 'dispatched';
                     }
                     // Otherwise, show pending visits
@@ -515,14 +531,14 @@ const SiteVisits = () => {
                   ))}
                 
                 {filteredVisits.filter(visit => {
-                  if (isDataCollector && statusFilter === 'dispatched') {
+                  if (isFieldWorker && statusFilter === 'dispatched') {
                     return visit.status?.toLowerCase() === 'dispatched';
                   }
                   return visit.status === 'pending';
                 }).length === 0 && (
                   <div className="col-span-full flex items-center justify-center p-8 bg-muted/20 rounded-lg">
                     <p className="text-muted-foreground">
-                      {isDataCollector && statusFilter === 'dispatched'
+                      {isFieldWorker && statusFilter === 'dispatched'
                         ? 'No dispatched site visits available'
                         : 'No pending site visits to assign'}
                     </p>
@@ -680,8 +696,8 @@ const SiteVisits = () => {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
-      {/* Warning banner for data collectors without geographic profile */}
-      {isDataCollector && userGeographicInfo && !userGeographicInfo.hasGeo && (
+      {/* Warning banner for field workers without geographic profile */}
+      {isFieldWorker && userGeographicInfo && !userGeographicInfo.hasGeo && (
         <Card className="border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950" data-testid="alert-no-geographic-profile">
           <CardContent className="flex items-start gap-4 p-4">
             <AlertTriangle className="h-6 w-6 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
@@ -698,8 +714,8 @@ const SiteVisits = () => {
         </Card>
       )}
 
-      {/* Geographic info banner for data collectors */}
-      {isDataCollector && userGeographicInfo?.hasGeo && (
+      {/* Geographic info banner for field workers (data collectors and coordinators) */}
+      {isFieldWorker && userGeographicInfo?.hasGeo && (
         <Card className="border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950" data-testid="alert-geographic-profile">
           <CardContent className="flex items-center gap-4 p-4">
             <MapPin className="h-6 w-6 text-blue-600 dark:text-blue-400 shrink-0" />
@@ -727,7 +743,7 @@ const SiteVisits = () => {
             Site Visits
           </h1>
           <p className="text-muted-foreground mt-1">
-            {isDataCollector 
+            {isFieldWorker 
               ? "View and manage your assigned site visits" 
               : "Manage and track all site visits across all projects"}
           </p>
@@ -742,7 +758,7 @@ const SiteVisits = () => {
             <ChevronLeft className="h-4 w-4 mr-2" />
             Dashboard
           </Button>
-          {!isDataCollector && (checkPermission('site_visits', 'create') || hasAnyRole(['admin'])) && (
+          {!isFieldWorker && (checkPermission('site_visits', 'create') || hasAnyRole(['admin'])) && (
             <Button 
               size="sm"
               asChild
@@ -759,10 +775,10 @@ const SiteVisits = () => {
 
       <SiteVisitStats 
         visits={(() => {
-          // For data collectors, show:
+          // For field workers (data collectors and coordinators), show:
           // - All dispatched visits (for dispatched stat)
           // - Their assigned/accepted/ongoing/completed visits (for other stats)
-          if (isDataCollector && currentUser?.id) {
+          if (isFieldWorker && currentUser?.id) {
             const dispatchedVisits = siteVisits.filter(visit => 
               visit.status?.toLowerCase() === 'dispatched'
             );
@@ -781,11 +797,11 @@ const SiteVisits = () => {
             : siteVisits.filter(visit => visit.assignedTo === currentUser?.id);
         })()}
         onStatusClick={handleStatusClick}
-        isDataCollector={isDataCollector}
+        isDataCollector={isFieldWorker}
       />
 
-      {/* Hide MMP section for data collectors - they don't create visits from MMPs */}
-      {!isDataCollector && (
+      {/* Hide MMP section for field workers - they don't create visits from MMPs */}
+      {!isFieldWorker && (
         <ApprovedMMPList 
           mmps={approvedMMPs} // Pass the filtered MMP files
           onSelectMMP={(mmp) => navigate(`/site-visits/create/mmp/${mmp.id}`)}
@@ -836,7 +852,7 @@ const SiteVisits = () => {
                 : statusFilter === 'overdue' 
                 ? 'overdue' 
                 : statusFilter} visits
-              {isDataCollector && currentUser?.id && (
+              {isFieldWorker && currentUser?.id && (
                 <span className="text-xs text-muted-foreground ml-2">
                   {statusFilter.toLowerCase() === 'dispatched' 
                     ? '(All dispatched sites)' 
