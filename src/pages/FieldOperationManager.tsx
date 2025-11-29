@@ -923,14 +923,14 @@ const FieldOperationManagerPage = () => {
           .contains('workflow', { forwardedToFomIds: [currentUser.id] })
           .order('created_at', { ascending: false });
         if (error) {
-          console.warn('Failed to fetch forwarded MMPs with join:', error);
+          // Fallback query without join - don't log RLS errors
           const { data: fbData, error: fbErr } = await supabase
             .from('mmp_files')
             .select('*')
             .contains('workflow', { forwardedToFomIds: [currentUser.id] })
             .order('created_at', { ascending: false });
           if (fbErr) {
-            console.warn('Fallback forwarded fetch failed:', fbErr);
+            // Silently fail - user may not have access to this data
             setForwardedMmpFiles([]);
           } else {
             const mappedFb = (fbData || []).map((mmp: any) => ({

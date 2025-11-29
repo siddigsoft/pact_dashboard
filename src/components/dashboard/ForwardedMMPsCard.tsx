@@ -38,14 +38,19 @@ const ForwardedMMPsCard: React.FC = () => {
           .limit(10);
         if (!cancelled) {
           if (error) {
-            // Fallback without join
-            const { data: fbData } = await supabase
+            // Fallback query without join - don't log RLS errors
+            const { data: fbData, error: fbError } = await supabase
               .from('mmp_files')
               .select('*')
               .contains('workflow', { forwardedToFomIds: [currentUser.id] })
               .order('created_at', { ascending: false })
               .limit(10);
-            setItems((fbData || []) as any);
+            if (fbError) {
+              // Silently fail - user may not have access to this data
+              setItems([]);
+            } else {
+              setItems((fbData || []) as any);
+            }
           } else {
             setItems((data || []) as any);
           }
