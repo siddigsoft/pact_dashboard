@@ -40,6 +40,28 @@ The backend uses PostgreSQL via Supabase, leveraging Row Level Security (RLS) an
 
 ## Recent Changes
 
+*   **Wallet Transaction Type & Backfill Fix (Nov 2025):** Fixed wallet transactions to use correct database enum and backfilled missing transactions:
+    - Changed transaction type from 'site_visit_fee' to 'earning' (matching database enum `wallet_tx_type`)
+    - Added required `amount_cents` field (amount * 100) to all wallet transaction inserts
+    - Created backfill SQL script to create wallet transactions for completed sites that were missing them
+    - Updated wallet balances to reflect all completed site visits
+    - Queries now check for both 'earning' and 'site_visit_fee' types for backwards compatibility
+
+*   **Wallet Payment Fix for Auto-Accept (Nov 2025):** Fixed wallet payments not being created for sites that went through the "Start Visit" auto-accept flow:
+    - Root cause: When "Assigned" sites were started (auto-accepted), fees were not being calculated/set
+    - `handleConfirmStartVisit` now calculates and sets fees during auto-accept when they're missing
+    - Preserves existing fees set by operations team (doesn't overwrite non-zero values)
+    - Ensures `cost = enumerator_fee + transport_fee` is always calculated correctly
+    - Defaults `transport_fee` to 0 when null to prevent NaN
+    - `handleCompleteVisit` can now create wallet transactions with valid fee data
+
+*   **AdminWalletDetail Query Fix (Nov 2025):** Fixed the Admin Wallets detail page to use correct data source:
+    - Changed from querying non-existent `site_visits` + `site_visit_costs` join to querying `mmp_site_entries` directly
+    - Uses correct field mappings: `enumerator_fee`, `transport_fee`, `cost`, `accepted_at`, `visit_completed_at`
+    - Fixed case-sensitive status comparisons (e.g., 'Completed' vs 'completed')
+    - Added fallback to show site cost when no payment transaction exists yet
+    - Resolves "Could not find a relationship between 'site_visits' and 'site_visit_costs'" error
+
 *   **Visit Tracking Columns Added (Nov 2025):** Added dedicated database columns for visit tracking:
     - Added `visit_started_at`, `visit_started_by`, `visit_completed_at`, `visit_completed_by` columns to `mmp_site_entries` table
     - Refreshed PostgREST schema cache via `NOTIFY pgrst, 'reload schema'`

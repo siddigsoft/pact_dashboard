@@ -28,7 +28,9 @@
     EyeOff,
     GripVertical,
     Star,
-    BarChart3
+    BarChart3,
+    Banknote,
+    ClipboardCheck
   } from "lucide-react";
   import { useSiteVisitReminders } from "@/hooks/use-site-visit-reminders";
   import Logo from "../assets/logo.png";
@@ -143,8 +145,8 @@
     if (!isHidden('/projects') && (isAdmin || isICT || perms.projects)) {
       planningItems.push({ id: 'projects', title: "Projects", url: "/projects", icon: FolderKanban, priority: 1, isPinned: isPinned('/projects') });
     }
-    if (!isHidden('/mmp') && (isAdmin || isICT || perms.mmp)) {
-      const mmpTitle = isDataCollector ? "My Sites Management" : "MMP Management";
+    if (!isHidden('/mmp') && (isAdmin || isICT || perms.mmp || isCoordinator)) {
+      const mmpTitle = (isDataCollector || isCoordinator) ? "My Sites Management" : "MMP Management";
       planningItems.push({ id: 'mmp-management', title: mmpTitle, url: "/mmp", icon: Database, priority: 2, isPinned: isPinned('/mmp') });
     }
     if (!isHidden('/hub-operations') && (isAdmin || isSuperAdmin)) {
@@ -210,8 +212,14 @@
     if (!isHidden('/admin/wallets') && (isAdmin || isFinancialAdmin)) {
       adminItems.push({ id: 'wallets', title: "Wallets", url: "/admin/wallets", icon: CreditCard, priority: 7, isPinned: isPinned('/admin/wallets') });
     }
+    if (!isHidden('/withdrawal-approval') && (isAdmin || isFinancialAdmin || isSupervisor || isFOM)) {
+      adminItems.push({ id: 'withdrawal-approval', title: "Supervisor Approval", url: "/withdrawal-approval", icon: ClipboardCheck, priority: 8, isPinned: isPinned('/withdrawal-approval') });
+    }
+    if (!isHidden('/finance-approval') && (isAdmin || isFinancialAdmin)) {
+      adminItems.push({ id: 'finance-approval', title: "Finance Approval", url: "/finance-approval", icon: Banknote, priority: 9, isPinned: isPinned('/finance-approval') });
+    }
     if (!isHidden('/settings') && ((isAdmin || perms.settings) && !isDataCollector)) {
-      adminItems.push({ id: 'settings', title: "Settings", url: "/settings", icon: Settings, priority: 8, isPinned: isPinned('/settings') });
+      adminItems.push({ id: 'settings', title: "Settings", url: "/settings", icon: Settings, priority: 10, isPinned: isPinned('/settings') });
     }
     if (adminItems.length) groups.push({ id: 'admin', label: "Administration", order: 6, items: adminItems });
 
