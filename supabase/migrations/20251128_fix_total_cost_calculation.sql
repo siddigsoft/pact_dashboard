@@ -1,8 +1,9 @@
--- Fix: Update claim_site_visit to accept and persist classification-based enumerator fee
--- Previously the fee was not set during claim, causing display issues
+-- Fix: Ensure total cost uses provided p_total_cost parameter
+-- This patch ensures that when claim_site_visit RPC is called with a calculated total cost,
+-- that exact value is stored in the cost field instead of recalculating it
 
--- Drop existing function and recreate with new parameters
-DROP FUNCTION IF EXISTS claim_site_visit(UUID, UUID);
+-- Drop existing function and recreate with corrected cost calculation
+DROP FUNCTION IF EXISTS claim_site_visit(UUID, UUID, NUMERIC, NUMERIC, TEXT, TEXT, TEXT);
 
 CREATE OR REPLACE FUNCTION claim_site_visit(
   p_site_id UUID,
@@ -62,9 +63,9 @@ BEGIN
       WHERE classification_level = v_classification_level
         AND role_scope = v_role_scope
         AND is_active = true
-        AND valid_from <= NOW()
-        AND (valid_until IS NULL OR valid_until > NOW())
-      ORDER BY valid_from DESC
+        AND effective_from <= NOW()
+        AND (effective_until IS NULL OR effective_until > NOW())
+      ORDER BY effective_from DESC
       LIMIT 1;
 
       IF v_base_fee_cents IS NOT NULL THEN
@@ -123,6 +124,7 @@ BEGIN
   END IF;
 
   -- All checks passed - claim the site with enumerator fee
+  -- IMPORTANT: Use p_total_cost if provided, otherwise calculate from transport_fee + enumerator_fee
   UPDATE mmp_site_entries
   SET 
     status = 'Assigned',
@@ -166,7 +168,7 @@ BEGIN
     'message', 'Site claimed successfully! You are now assigned to this site.',
     'site_name', v_site.site_name,
     'enumerator_fee', v_fee,
-    'total_payout', COALESCE(v_site.transport_fee, 0) + v_fee
+    'total_payout', COALESCE(p_total_cost, COALESCE(v_site.transport_fee, 0) + v_fee)
   );
 
 EXCEPTION
@@ -188,4 +190,4 @@ BEGIN
 END $$;
 
 -- Add comment for documentation
-COMMENT ON FUNCTION claim_site_visit IS 'Atomically claim a dispatched site for a user with classification-based fee calculation. Uses row-level locking to prevent race conditions in first-come, first-served claiming.';
+COMMENT ON FUNCTION claim_site_visit IS 'Atomically claim a dispatched site for a user with classification-based fee calculation. Uses row-level locking to prevent race conditions. Stores the provided p_total_cost in the cost field to ensure calculated fees are persisted accurately.';

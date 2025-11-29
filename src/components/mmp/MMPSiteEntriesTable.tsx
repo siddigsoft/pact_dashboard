@@ -304,7 +304,7 @@ const MMPSiteEntriesTable = ({
                             <p className="font-medium text-green-600">
                               {(() => {
                                 const calculatedFee = calculatedFees[site.id];
-                                const transportFee = row.transportFee || 0;
+                                const transportFee = Number(row.transportFee || 0);
                                 
                                 // Use calculated fee if available
                                 if (calculatedFee !== undefined && calculatedFee > 0) {
