@@ -159,7 +159,7 @@
     if (!isHidden('/field-team') && ((isAdmin || perms.fieldTeam) && !isICT)) {
       fieldOpsItems.push({ id: 'field-team', title: "Field Team", url: "/field-team", icon: Activity, priority: 2, isPinned: isPinned('/field-team') });
     }
-    if (!isHidden('/field-operation-manager') && (isAdmin || isFOM || perms.fieldOpManager)) {
+    if (!isHidden('/field-operation-manager') && (isAdmin || isFOM || perms.fieldOpManager) && !isCoordinator) {
       fieldOpsItems.push({ id: 'field-op-manager', title: "Field Operation Manager", url: "/field-operation-manager", icon: MapPin, priority: 3, isPinned: isPinned('/field-operation-manager') });
     }
     if (fieldOpsItems.length) groups.push({ id: 'field-ops', label: "Field Operations", order: 3, items: fieldOpsItems });

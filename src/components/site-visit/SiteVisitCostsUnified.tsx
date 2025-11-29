@@ -105,7 +105,9 @@ export function SiteVisitCostsUnified({
         const visitData = siteVisit?.visit_data || {};
         const fees = siteVisit?.fees || {};
 
+        // Transportation: check site_visits.transport_fee first (direct column), then fallbacks
         const transportation = 
+          (siteVisit?.transport_fee != null ? Number(siteVisit.transport_fee) : null) ??
           mmpEntry?.transportation ?? 
           additionalData.transportation ?? 
           fees.transportation ?? 
@@ -129,9 +131,15 @@ export function SiteVisitCostsUnified({
           fees.logistics ?? 
           visitData.logistics ?? 0;
         
-        const enumeratorFee = Number(mmpEntry?.enumerator_fee || 0);
+        // Enumerator fee: check site_visits.enumerator_fee first (direct column), then mmp_entry
+        const enumeratorFee = 
+          (siteVisit?.enumerator_fee != null ? Number(siteVisit.enumerator_fee) : null) ??
+          (mmpEntry?.enumerator_fee != null ? Number(mmpEntry.enumerator_fee) : null) ?? 0;
 
-        const totalCost = transportation + accommodation + mealPerDiem + logistics + enumeratorFee;
+        // Total cost: use site_visits.cost if available, otherwise calculate
+        const totalCost = 
+          (siteVisit?.cost != null ? Number(siteVisit.cost) : null) ?? 
+          (transportation + accommodation + mealPerDiem + logistics + enumeratorFee);
 
         setCostData({
           transportation,

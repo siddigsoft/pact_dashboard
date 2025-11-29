@@ -62,7 +62,7 @@ export const FinancialZone: React.FC = () => {
                 <DollarSign className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">$0</div>
+                <div className="text-2xl font-bold">0 SDG</div>
                 <p className="text-xs text-muted-foreground">Allocated this quarter</p>
               </CardContent>
             </Card>
@@ -72,7 +72,7 @@ export const FinancialZone: React.FC = () => {
                 <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">$0</div>
+                <div className="text-2xl font-bold">0 SDG</div>
                 <p className="text-xs text-muted-foreground">Total expenditure</p>
               </CardContent>
             </Card>

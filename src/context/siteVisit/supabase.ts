@@ -11,10 +11,162 @@ import {
 } from './mmpSiteEntriesAdapter';
 
 /**
- * Fetches site visits from mmp_site_entries table
+ * Fetches site visits from mmp_site_entries table, with fallback to site_visits table
  */
 export const fetchSiteVisits = async (): Promise<SiteVisit[]> => {
-  return await fetchSiteVisitsFromMMPEntries();
+  // Try mmp_site_entries first (primary source)
+  const mmpEntries = await fetchSiteVisitsFromMMPEntries();
+  
+  // Also fetch from site_visits table to include directly-created visits
+  const siteVisitsData = await fetchFromSiteVisitsTable();
+  
+  // Merge both sources, avoiding duplicates by ID
+  const allIds = new Set(mmpEntries.map(e => e.id));
+  const uniqueSiteVisits = siteVisitsData.filter(sv => !allIds.has(sv.id));
+  
+  return [...mmpEntries, ...uniqueSiteVisits];
+};
+
+/**
+ * Fetches site visits directly from site_visits table
+ */
+export const fetchFromSiteVisitsTable = async (): Promise<SiteVisit[]> => {
+  const { data, error } = await supabase
+    .from('site_visits')
+    .select('*')
+    .order('created_at', { ascending: false });
+  
+  if (error) {
+    console.error('Error fetching site_visits:', error);
+    return [];
+  }
+  
+  return (data || []).map(transformSiteVisitToApp);
+};
+
+/**
+ * Transform site_visits table record to SiteVisit format
+ * site_visits schema: id, mmp_id, site_name, site_code, visit_date, assigned_to,
+ * status, location (jsonb: lat, lng, address), notes, rating, photos (jsonb),
+ * created_at, updated_at, registry_site_id, enumerator_fee, transport_fee, cost,
+ * mmp_site_entry_id, accepted_at, completed_by
+ */
+const transformSiteVisitToApp = (entry: any): SiteVisit => {
+  const enumeratorFee = Number(entry.enumerator_fee || 0);
+  const transportFee = Number(entry.transport_fee || 0);
+  const totalCost = Number(entry.cost) || (enumeratorFee + transportFee);
+  const location = entry.location || {};
+  
+  // Extract region/state from location address if available
+  const addressParts = (location.address || '').split(',').map((s: string) => s.trim());
+  const inferredRegion = addressParts.length > 1 ? addressParts[addressParts.length - 1] : (addressParts[0] || '');
+  const inferredLocality = addressParts.length > 1 ? addressParts[0] : '';
+  
+  return {
+    id: entry.id,
+    siteName: entry.site_name || '',
+    siteCode: entry.site_code || '',
+    status: mapSiteVisitStatus(entry.status),
+    locality: inferredLocality,
+    state: inferredRegion,
+    activity: entry.notes || '',
+    priority: 'medium',
+    dueDate: entry.visit_date ? new Date(entry.visit_date).toISOString() : new Date().toISOString(),
+    assignedTo: entry.assigned_to || '',
+    assignedBy: entry.completed_by || entry.assigned_to || '',
+    assignedAt: entry.accepted_at || entry.created_at,
+    notes: entry.notes || '',
+    attachments: entry.photos || [],
+    completedAt: entry.status === 'completed' ? entry.updated_at : undefined,
+    rating: entry.rating,
+    ratingNotes: undefined,
+    fees: {
+      total: totalCost,
+      currency: 'SDG',
+      distanceFee: 0,
+      complexityFee: 0,
+      urgencyFee: 0,
+      baseAmount: enumeratorFee,
+      baseFee: enumeratorFee,
+      transportation: transportFee,
+    },
+    scheduledDate: entry.visit_date ? new Date(entry.visit_date).toISOString() : undefined,
+    description: entry.notes || '',
+    tasks: [],
+    permitDetails: {
+      federal: false,
+      state: false,
+      locality: false,
+    },
+    location: {
+      address: location.address || entry.site_name || '',
+      latitude: location.lat || 0,
+      longitude: location.lng || 0,
+      region: inferredRegion,
+    },
+    coordinates: {
+      latitude: location.lat || 0,
+      longitude: location.lng || 0,
+    },
+    mmpDetails: {
+      mmpId: entry.mmp_id || '',
+      projectId: '',
+      projectName: '',
+      uploadedBy: '',
+      uploadedAt: '',
+      region: inferredRegion,
+    },
+    complexity: 'medium',
+    visitType: 'regular',
+    visitTypeRaw: undefined,
+    mainActivity: '',
+    projectActivities: [],
+    hub: '',
+    cpName: '',
+    team: {},
+    resources: [],
+    risks: '',
+    estimatedDuration: '',
+    visitHistory: [],
+    monitoringType: undefined,
+    createdAt: entry.created_at,
+    projectName: '',
+    startTime: undefined,
+    hubOffice: '',
+    siteActivity: '',
+    monitoringBy: '',
+    surveyTool: '',
+    useMarketDiversion: false,
+    useWarehouseMonitoring: false,
+    region: inferredRegion,
+    site_code: entry.site_code,
+    // Expose transport_fee at the root level for RequestDownPaymentButton
+    transport_fee: transportFee,
+    transportFee: transportFee,
+    enumerator_fee: enumeratorFee,
+    accepted_by: entry.assigned_to,
+    acceptedBy: entry.assigned_to,
+  };
+};
+
+/**
+ * Map site_visits status to app status
+ */
+const mapSiteVisitStatus = (status: string): SiteVisit['status'] => {
+  const s = (status || '').toLowerCase();
+  const statusMap: Record<string, SiteVisit['status']> = {
+    'pending': 'pending',
+    'assigned': 'assigned',
+    'in progress': 'inProgress',
+    'ongoing': 'inProgress',
+    'completed': 'completed',
+    'cancelled': 'cancelled',
+    'canceled': 'canceled',
+    'verified': 'permitVerified',
+    'dispatched': 'assigned',
+    'accepted': 'assigned',
+  };
+  return statusMap[s] || 'pending';
 };
 
 /**

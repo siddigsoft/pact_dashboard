@@ -233,7 +233,7 @@ export function DownPaymentRequestDialog({
               <div className="flex justify-between items-center p-3 bg-muted/50 rounded-md">
                 <span className="font-medium">Total Installments:</span>
                 <span className="font-bold text-lg">
-                  {installments.reduce((sum, inst) => sum + inst.amount, 0).toFixed(2)} SDG
+                  {installments.reduce((sum, inst) => sum + inst.amount, 0).toLocaleString()} SDG
                 </span>
               </div>
             </div>

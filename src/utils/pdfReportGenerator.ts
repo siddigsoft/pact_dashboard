@@ -255,7 +255,7 @@ export const generateSiteVisitsPDF = async (
     { label: 'Total Visits', value: visits.length },
     { label: 'Completed', value: completed },
     { label: 'Pending', value: pending },
-    { label: 'Total Fees', value: `$${totalFees.toLocaleString()}` }
+    { label: 'Total Fees', value: `${totalFees.toLocaleString()} SDG` }
   ];
 
   const columns = [
@@ -299,9 +299,9 @@ export const generateProjectBudgetPDF = async (
 
   const summary = [
     { label: 'Total Projects', value: projects.length },
-    { label: 'Total Budget', value: `$${totalBudget.toLocaleString()}` },
-    { label: 'Allocated', value: `$${totalAllocated.toLocaleString()}` },
-    { label: 'Remaining', value: `$${totalRemaining.toLocaleString()}` }
+    { label: 'Total Budget', value: `${totalBudget.toLocaleString()} SDG` },
+    { label: 'Allocated', value: `${totalAllocated.toLocaleString()} SDG` },
+    { label: 'Remaining', value: `${totalRemaining.toLocaleString()} SDG` }
   ];
 
   const columns = [

@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/context/user/UserContext';
 import { useClassification } from '@/context/classification/ClassificationContext';
@@ -35,15 +35,32 @@ interface WalletContextType {
   listWallets: () => Promise<Wallet[]>;
   adminAdjustBalance: (userId: string, amount: number, currency: string, reason: string, adjustmentType: 'credit' | 'debit') => Promise<void>;
   adminListWithdrawalRequests: () => Promise<WithdrawalRequest[]>;
+  reconcileSiteVisitFee: (siteVisitId: string) => Promise<{ success: boolean; message: string }>;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
 
 function transformWalletFromDB(data: any): Wallet {
+  // Parse balances - handle both object and string formats
+  let balances = data.balances || { SDG: 0 };
+  if (typeof balances === 'string') {
+    try {
+      balances = JSON.parse(balances);
+    } catch (e) {
+      console.error('[Wallet] Failed to parse balances string:', e);
+      balances = { SDG: 0 };
+    }
+  }
+  
+  // Ensure SDG balance is a number
+  if (balances.SDG !== undefined) {
+    balances.SDG = Number(balances.SDG) || 0;
+  }
+  
   return {
     id: data.id,
     userId: data.user_id,
-    balances: data.balances || { SDG: 0 },
+    balances: balances,
     totalEarned: parseFloat(data.total_earned || 0),
     totalWithdrawn: parseFloat(data.total_withdrawn || 0),
     createdAt: data.created_at,
@@ -627,6 +644,57 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const reconcileSiteVisitFee = async (siteVisitId: string): Promise<{ success: boolean; message: string }> => {
+    try {
+      // 1. Get the site visit details
+      const { data: siteVisit, error: siteVisitError } = await supabase
+        .from('site_visits')
+        .select('id, site_name, status, assigned_to, enumerator_fee, transport_fee, cost')
+        .eq('id', siteVisitId)
+        .single();
+
+      if (siteVisitError || !siteVisit) {
+        return { success: false, message: `Site visit not found: ${siteVisitError?.message || 'Unknown error'}` };
+      }
+
+      if (siteVisit.status !== 'completed') {
+        return { success: false, message: `Site visit is not completed. Current status: ${siteVisit.status}` };
+      }
+
+      if (!siteVisit.assigned_to) {
+        return { success: false, message: 'Site visit has no assigned user' };
+      }
+
+      // 2. Check if fee was already added
+      const { data: existingTx, error: txError } = await supabase
+        .from('wallet_transactions')
+        .select('id, amount')
+        .eq('site_visit_id', siteVisitId)
+        .eq('type', 'site_visit_fee')
+        .maybeSingle();
+
+      if (existingTx) {
+        return { success: false, message: `Fee already recorded: ${existingTx.amount} SDG (Transaction: ${existingTx.id})` };
+      }
+
+      // 3. Add the fee to wallet
+      const cost = Number(siteVisit.cost) || Number(siteVisit.enumerator_fee) + Number(siteVisit.transport_fee) || 0;
+      
+      if (cost <= 0) {
+        return { success: false, message: 'Site visit has no fee assigned (cost is 0)' };
+      }
+
+      console.log(`[Wallet Reconciliation] Adding fee of ${cost} SDG for site visit ${siteVisitId} to user ${siteVisit.assigned_to}`);
+
+      await addSiteVisitFeeToWallet(siteVisit.assigned_to, siteVisitId, 1.0);
+
+      return { success: true, message: `Successfully added ${cost} SDG to wallet for site visit "${siteVisit.site_name}"` };
+    } catch (error: any) {
+      console.error('[Wallet Reconciliation] Error:', error);
+      return { success: false, message: `Failed to reconcile: ${error.message}` };
+    }
+  };
+
   const addRetainerToWallet = async (
     userId: string,
     amountCents: number,
@@ -1013,6 +1081,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         listWallets,
         adminAdjustBalance,
         adminListWithdrawalRequests,
+        reconcileSiteVisitFee,
       }}
     >
       {children}

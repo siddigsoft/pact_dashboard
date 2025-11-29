@@ -146,7 +146,7 @@ export function AcceptSiteButton({
       setAccepted(true);
       toast({
         title: isDispatchedSite ? 'Site Claimed!' : 'Site Accepted!',
-        description: `Your fee: ${feeBreakdown.enumeratorFee.toFixed(2)} SDG + Transport: ${feeBreakdown.transportBudget.toFixed(2)} SDG = ${feeBreakdown.totalPayout.toFixed(2)} SDG`,
+        description: `Your fee: ${feeBreakdown.enumeratorFee.toLocaleString()} SDG + Transport: ${feeBreakdown.transportBudget.toLocaleString()} SDG = ${feeBreakdown.totalPayout.toLocaleString()} SDG`,
         variant: 'default'
       });
       onAccepted?.();
@@ -268,7 +268,7 @@ export function AcceptSiteButton({
                   <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg">
                     <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
                     <p className="text-sm text-amber-800 dark:text-amber-200">
-                      No classification found. Using default rate of {feeBreakdown.enumeratorFee.toFixed(2)} SDG.
+                      No classification found. Using default rate of {feeBreakdown.enumeratorFee.toLocaleString()} SDG.
                       Contact your supervisor to get classified for accurate rates.
                     </p>
                   </div>
@@ -280,7 +280,7 @@ export function AcceptSiteButton({
                       <Car className="h-4 w-4 text-muted-foreground" />
                       <span className="text-sm">Transport Budget</span>
                     </div>
-                    <span className="font-medium">{feeBreakdown.transportBudget.toFixed(2)} SDG</span>
+                    <span className="font-medium">{feeBreakdown.transportBudget.toLocaleString()} SDG</span>
                   </div>
 
                   <div className="flex items-center justify-between py-2 border-b">
@@ -288,7 +288,7 @@ export function AcceptSiteButton({
                       <User className="h-4 w-4 text-muted-foreground" />
                       <span className="text-sm">Your Collector Fee</span>
                     </div>
-                    <span className="font-medium">{feeBreakdown.enumeratorFee.toFixed(2)} SDG</span>
+                    <span className="font-medium">{feeBreakdown.enumeratorFee.toLocaleString()} SDG</span>
                   </div>
 
                   <div className="flex items-center justify-between py-3 bg-primary/10 rounded-lg px-3">
@@ -296,7 +296,7 @@ export function AcceptSiteButton({
                       <Wallet className="h-5 w-5 text-primary" />
                       <span className="font-semibold">Total Payout</span>
                     </div>
-                    <span className="text-xl font-bold text-primary">{feeBreakdown.totalPayout.toFixed(2)} SDG</span>
+                    <span className="text-xl font-bold text-primary">{feeBreakdown.totalPayout.toLocaleString()} SDG</span>
                   </div>
                 </div>
 

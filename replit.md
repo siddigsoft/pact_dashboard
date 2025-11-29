@@ -38,6 +38,42 @@ The backend uses PostgreSQL via Supabase, leveraging Row Level Security (RLS) an
 *   **Tracker Preparation Plan:** Analyzes planned vs. actual site coverage, provides real-time updates via Supabase Realtime, and facilitates invoice preparation with detailed cost breakdowns. Includes multi-view analysis, export capabilities (Excel, PDF), and configurable filter presets.
 *   **Site Visit Details Enhancement:** Unified display of cost breakdowns and a workflow audit trail for each site visit, presented in a streamlined layout.
 
+## Recent Changes
+
+*   **Visit Tracking Columns Added (Nov 2025):** Added dedicated database columns for visit tracking:
+    - Added `visit_started_at`, `visit_started_by`, `visit_completed_at`, `visit_completed_by` columns to `mmp_site_entries` table
+    - Refreshed PostgREST schema cache via `NOTIFY pgrst, 'reload schema'`
+    - Updated `handleConfirmStartVisit` and `handleCompleteVisit` in MMP.tsx to use direct columns
+    - PDF report generator has fallback support for both direct columns and legacy `additional_data` storage
+    - This resolves the "Could not find column in schema cache" errors
+
+*   **Wallet Balance Display Fix (Nov 2025):** Fixed Admin Wallets page to properly display earnings breakdown:
+    - Enhanced `adminListWallets` to query transactions by both `wallet_id` AND `user_id` for legacy support
+    - Added fallback display: when no transaction breakdown is available, shows "Total Earned" from the wallet's `total_earned` column
+    - Fixed balance parsing to handle both object and string formats for the `balances` JSONB column
+    - Ensured SDG balance is always converted to a number for proper display
+
+*   **Unified Supabase Client (Nov 2025):** Consolidated all Supabase imports to use a single client instance from `@/integrations/supabase/client`. Previously, some files imported from `@/lib/supabase` creating multiple GoTrueClient instances. All files now use the same client with proper auth configuration (persistSession, autoRefreshToken, detectSessionInUrl).
+
+*   **Sites Registry Duplicate Prevention:** Enhanced logging in `ensureSitesInRegistry()` to clearly show:
+    - How many sites exist in the registry before processing
+    - For each site: whether it's MATCHED to existing or created NEW
+    - Summary showing total sites, existing linked, and new created
+    The three-tier matching system prevents duplicate site entries: exact site code match > name+state+locality match > name+state match.
+
+*   **MMP Duplicate Prevention (Nov 2025):** Refined duplicate detection logic:
+    - Same project + month + file name = BLOCKED (exact duplicate)
+    - Same project + month + different file = ALLOWED (supplementary file)
+    - Same file + different month = ALLOWED (recurring monthly monitoring)
+    This allows reusing the same file template for monthly monitoring cycles.
+
+*   **Same-Site-Same-Month Prevention (Nov 2025):** Added validation to prevent duplicate site entries within the same month:
+    - Before upload, checks if any sites in the file already exist in other MMPs for the same month
+    - Matches by site_code (primary) or site_name + state + locality (secondary)
+    - Blocks upload if duplicates found, showing which sites are already scheduled
+    - Error message lists up to 5 duplicate sites with their existing MMP names
+    This ensures each site can only be monitored once per monthly period.
+
 ## External Dependencies
 
 *   **Supabase:** PostgreSQL database, Authentication, Realtime subscriptions, Storage, Row Level Security.
