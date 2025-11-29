@@ -40,6 +40,14 @@ The backend uses PostgreSQL via Supabase, leveraging Row Level Security (RLS) an
 
 ## Recent Changes
 
+*   **Wallet Payment Fix for Auto-Accept (Nov 2025):** Fixed wallet payments not being created for sites that went through the "Start Visit" auto-accept flow:
+    - Root cause: When "Assigned" sites were started (auto-accepted), fees were not being calculated/set
+    - `handleConfirmStartVisit` now calculates and sets fees during auto-accept when they're missing
+    - Preserves existing fees set by operations team (doesn't overwrite non-zero values)
+    - Ensures `cost = enumerator_fee + transport_fee` is always calculated correctly
+    - Defaults `transport_fee` to 0 when null to prevent NaN
+    - `handleCompleteVisit` can now create wallet transactions with valid fee data
+
 *   **Visit Tracking Columns Added (Nov 2025):** Added dedicated database columns for visit tracking:
     - Added `visit_started_at`, `visit_started_by`, `visit_completed_at`, `visit_completed_by` columns to `mmp_site_entries` table
     - Refreshed PostgREST schema cache via `NOTIFY pgrst, 'reload schema'`
