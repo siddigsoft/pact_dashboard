@@ -6,8 +6,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
-import { Pencil, Save, X } from 'lucide-react';
-import { ClaimSiteButton } from '@/components/site-visit/ClaimSiteButton';
+import { Pencil, Save, X, Play } from 'lucide-react';
+import { AcceptSiteButton } from '@/components/site-visit/AcceptSiteButton';
+import { RequestDownPaymentButton } from '@/components/site-visit/RequestDownPaymentButton';
 import { useAppContext } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
 import { calculateEnumeratorFeeForUser } from '@/hooks/use-claim-fee-calculation';
@@ -23,6 +24,7 @@ interface SiteDetailDialogProps {
   currentUserId?: string;
   onClaimed?: () => void;
   enableFirstClaim?: boolean;
+  onStartVisit?: (site: any) => void;
 }
 
 const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
@@ -35,7 +37,8 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
   onSendBackToCoordinator,
   currentUserId,
   onClaimed,
-  enableFirstClaim = false
+  enableFirstClaim = false,
+  onStartVisit
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState<any>(null);
@@ -283,9 +286,18 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
   // Initialize draft when entering edit mode
   useEffect(() => {
     if (isEditing && row && !draft) {
-      setDraft({ ...row });
+      const newDraft = { ...row };
+      // Use calculated fee if available, otherwise use stored fee
+      if (classificationFee !== null && classificationFee > 0) {
+        newDraft.enumeratorFee = classificationFee;
+        newDraft.cost = classificationFee + (row.transportFee || 0);
+      } else if (row.enumeratorFee !== undefined && row.enumeratorFee !== null && Number(row.enumeratorFee) > 0) {
+        // Ensure cost is properly calculated from stored fees
+        newDraft.cost = Number(row.enumeratorFee) + (Number(row.transportFee) || 0);
+      }
+      setDraft(newDraft);
     }
-  }, [isEditing, row]);
+  }, [isEditing, row, classificationFee]);
 
   // Load classification fee for the relevant user if enumerator_fee is not set
   useEffect(() => {
@@ -786,12 +798,28 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
                           return newDraft;
                         });
                       }}
+                      onBlur={() => {
+                        // When user finishes editing, use calculated fee if available
+                        if (classificationFee !== null && classificationFee > 0 && !draft?.enumeratorFee) {
+                          setDraft((d: any) => {
+                            const newDraft = { ...d, enumeratorFee: classificationFee };
+                            const transFee = Number(d?.transportFee ?? row.transportFee ?? 0);
+                            newDraft.cost = classificationFee + transFee;
+                            return newDraft;
+                          });
+                        }
+                      }}
                       className="mt-2 text-2xl font-semibold"
                       placeholder="Calculated at claim"
                     />
+
                   ) : (
                     <>
-                      {row.enumeratorFee !== undefined && row.enumeratorFee !== null && Number(row.enumeratorFee) > 0 ? (
+                      {classificationFee !== null && classificationFee > 0 ? (
+                        <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mt-2">
+                          {Number(classificationFee).toLocaleString()} SDG
+                        </p>
+                      ) : row.enumeratorFee !== undefined && row.enumeratorFee !== null && Number(row.enumeratorFee) > 0 ? (
                         <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mt-2">
                           {Number(row.enumeratorFee).toLocaleString()} SDG
                         </p>
@@ -820,7 +848,10 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
                         const val = e.target.value;
                         setDraft((d: any) => {
                           const newDraft = { ...d, transportFee: val };
-                          const enumFee = Number(d?.enumeratorFee ?? row.enumeratorFee ?? 0);
+                          // Use calculated fee if available, otherwise use stored or draft fee
+                          const enumFee = classificationFee !== null && classificationFee > 0 
+                            ? classificationFee 
+                            : Number(d?.enumeratorFee ?? row.enumeratorFee ?? 0);
                           const transFee = Number(val) || 0;
                           newDraft.cost = enumFee + transFee;
                           return newDraft;
@@ -847,11 +878,15 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
                   <Label className="text-xs font-medium text-blue-100">Total Payout</Label>
                   {isEditing ? (
                     <p className="text-2xl font-bold text-white mt-2">
-                      {((Number(draft?.enumeratorFee ?? 0)) + (Number(draft?.transportFee ?? 0))).toLocaleString()} SDG
+                      {((classificationFee !== null && classificationFee > 0 ? classificationFee : Number(draft?.enumeratorFee ?? 0)) + (Number(draft?.transportFee ?? 0))).toLocaleString()} SDG
                     </p>
                   ) : (
                     <>
-                      {row.enumeratorFee !== undefined && row.enumeratorFee !== null && Number(row.enumeratorFee) > 0 ? (
+                      {classificationFee !== null && classificationFee > 0 ? (
+                        <p className="text-2xl font-bold text-white mt-2">
+                          {(Number(classificationFee) + Number(row.transportFee || 0)).toLocaleString()} SDG
+                        </p>
+                      ) : row.enumeratorFee !== undefined && row.enumeratorFee !== null && Number(row.enumeratorFee) > 0 ? (
                         <p className="text-2xl font-bold text-white mt-2">
                           {(Number(row.enumeratorFee) + Number(row.transportFee || 0)).toLocaleString()} SDG
                         </p>
@@ -981,34 +1016,19 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
             </div>
 
             {/* Action Buttons */}
-            {isAvailableSite && !isEditing && (
+            {isAvailableSite && !isEditing && currentUserId && (
               <div className="border-t pt-4 flex flex-col sm:flex-row gap-3">
-                {enableFirstClaim && currentUserId ? (
-                  <ClaimSiteButton
-                    siteId={site.id}
-                    siteName={row?.siteName || 'Site'}
-                    userId={currentUserId}
-                    onClaimed={() => {
-                      onClaimed?.();
-                      onOpenChange(false);
-                    }}
-                    size="lg"
-                    className="flex-1"
-                    data-testid={`button-claim-site-${site.id}`}
-                  />
-                ) : onAcceptSite ? (
-                  <Button
-                    onClick={() => {
-                      onAcceptSite(site);
-                      onOpenChange(false);
-                    }}
-                    className="flex-1"
-                    size="lg"
-                    data-testid="button-accept-site"
-                  >
-                    Accept Site
-                  </Button>
-                ) : null}
+                <AcceptSiteButton
+                  site={site}
+                  userId={currentUserId}
+                  onAccepted={() => {
+                    onClaimed?.();
+                    onAcceptSite?.(site);
+                    onOpenChange(false);
+                  }}
+                  size="lg"
+                  className="flex-1 bg-primary hover:bg-primary/90"
+                />
                 {onSendBackToCoordinator && (
                   <Button
                     variant="outline"
@@ -1025,6 +1045,71 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
                 )}
               </div>
             )}
+
+            {/* Start Visit Button for Accepted/Assigned Sites */}
+            {(() => {
+              const acceptedBy = site?.accepted_by || site?.acceptedBy || row.acceptedBy;
+              const status = (row.status || site?.status || '').toLowerCase();
+              const isAcceptedOrAssigned = status === 'accepted' || status === 'assigned';
+              const isOwner = acceptedBy === currentUserId || (status === 'assigned' && site?.accepted_by === currentUserId);
+              
+              if (isAcceptedOrAssigned && isOwner && onStartVisit && !isEditing) {
+                return (
+                  <div className="border-t pt-4">
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <p className="text-sm font-medium">Ready to start your visit?</p>
+                        <p className="text-xs text-muted-foreground">
+                          Begin your site visit to track time and location
+                        </p>
+                      </div>
+                      <Button
+                        onClick={() => {
+                          onStartVisit(site);
+                          onOpenChange(false);
+                        }}
+                        className="bg-blue-600 hover:bg-blue-700"
+                        data-testid="button-start-visit-dialog"
+                      >
+                        <Play className="h-4 w-4 mr-2" />
+                        Start Visit
+                      </Button>
+                    </div>
+                  </div>
+                );
+              }
+              return null;
+            })()}
+
+            {/* Request Down Payment for Accepted/Ongoing Sites */}
+            {(() => {
+              const acceptedBy = site?.accepted_by || site?.acceptedBy || row.acceptedBy;
+              const transportFee = site?.transport_fee || site?.transportFee || row.transportFee || 0;
+              const status = (row.status || site?.status || '').toLowerCase();
+              const isAcceptedOrOngoing = status === 'accepted' || status === 'ongoing' || status === 'in progress' || status === 'in_progress';
+              const isOwner = acceptedBy === currentUserId;
+              const hasTransportBudget = transportFee > 0;
+              
+              if (isAcceptedOrOngoing && isOwner && hasTransportBudget && !isEditing) {
+                return (
+                  <div className="border-t pt-4">
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <p className="text-sm font-medium">Need transport advance?</p>
+                        <p className="text-xs text-muted-foreground">
+                          Request up to {transportFee} SDG before your visit
+                        </p>
+                      </div>
+                      <RequestDownPaymentButton
+                        site={site}
+                        size="default"
+                      />
+                    </div>
+                  </div>
+                );
+              }
+              return null;
+            })()}
           </div>
 
           <DialogFooter>

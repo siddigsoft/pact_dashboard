@@ -28,7 +28,9 @@
     EyeOff,
     GripVertical,
     Star,
-    BarChart3
+    BarChart3,
+    Banknote,
+    ClipboardCheck
   } from "lucide-react";
   import { useSiteVisitReminders } from "@/hooks/use-site-visit-reminders";
   import Logo from "../assets/logo.png";
@@ -143,8 +145,8 @@
     if (!isHidden('/projects') && (isAdmin || isICT || perms.projects)) {
       planningItems.push({ id: 'projects', title: "Projects", url: "/projects", icon: FolderKanban, priority: 1, isPinned: isPinned('/projects') });
     }
-    if (!isHidden('/mmp') && (isAdmin || isICT || perms.mmp)) {
-      const mmpTitle = isDataCollector ? "My Sites Management" : "MMP Management";
+    if (!isHidden('/mmp') && (isAdmin || isICT || perms.mmp || isCoordinator)) {
+      const mmpTitle = (isDataCollector || isCoordinator) ? "My Sites Management" : "MMP Management";
       planningItems.push({ id: 'mmp-management', title: mmpTitle, url: "/mmp", icon: Database, priority: 2, isPinned: isPinned('/mmp') });
     }
     if (!isHidden('/hub-operations') && (isAdmin || isSuperAdmin)) {
@@ -159,7 +161,7 @@
     if (!isHidden('/field-team') && ((isAdmin || perms.fieldTeam) && !isICT)) {
       fieldOpsItems.push({ id: 'field-team', title: "Field Team", url: "/field-team", icon: Activity, priority: 2, isPinned: isPinned('/field-team') });
     }
-    if (!isHidden('/field-operation-manager') && (isAdmin || isFOM || perms.fieldOpManager)) {
+    if (!isHidden('/field-operation-manager') && (isAdmin || isFOM || perms.fieldOpManager) && !isCoordinator) {
       fieldOpsItems.push({ id: 'field-op-manager', title: "Field Operation Manager", url: "/field-operation-manager", icon: MapPin, priority: 3, isPinned: isPinned('/field-operation-manager') });
     }
     if (fieldOpsItems.length) groups.push({ id: 'field-ops', label: "Field Operations", order: 3, items: fieldOpsItems });
@@ -198,6 +200,9 @@
     if (!isHidden('/classifications') && (isAdmin || isFinancialAdmin)) {
       adminItems.push({ id: 'classifications', title: "Classifications", url: "/classifications", icon: Award, priority: 4, isPinned: isPinned('/classifications') });
     }
+    if (!isHidden('/classification-fees') && isAdmin) {
+      adminItems.push({ id: 'classification-fees', title: "Classification Fees", url: "/classification-fees", icon: DollarSign, priority: 5, isPinned: isPinned('/classification-fees') });
+    }
     if (!isHidden('/financial-operations') && perms.financialOperations) {
       adminItems.push({ id: 'financial-ops', title: "Financial Operations", url: "/financial-operations", icon: TrendingUp, priority: 5, isPinned: isPinned('/financial-operations') });
     }
@@ -207,8 +212,14 @@
     if (!isHidden('/admin/wallets') && (isAdmin || isFinancialAdmin)) {
       adminItems.push({ id: 'wallets', title: "Wallets", url: "/admin/wallets", icon: CreditCard, priority: 7, isPinned: isPinned('/admin/wallets') });
     }
+    if (!isHidden('/withdrawal-approval') && (isAdmin || isFinancialAdmin || isSupervisor || isFOM)) {
+      adminItems.push({ id: 'withdrawal-approval', title: "Supervisor Approval", url: "/withdrawal-approval", icon: ClipboardCheck, priority: 8, isPinned: isPinned('/withdrawal-approval') });
+    }
+    if (!isHidden('/finance-approval') && (isAdmin || isFinancialAdmin)) {
+      adminItems.push({ id: 'finance-approval', title: "Finance Approval", url: "/finance-approval", icon: Banknote, priority: 9, isPinned: isPinned('/finance-approval') });
+    }
     if (!isHidden('/settings') && ((isAdmin || perms.settings) && !isDataCollector)) {
-      adminItems.push({ id: 'settings', title: "Settings", url: "/settings", icon: Settings, priority: 8, isPinned: isPinned('/settings') });
+      adminItems.push({ id: 'settings', title: "Settings", url: "/settings", icon: Settings, priority: 10, isPinned: isPinned('/settings') });
     }
     if (adminItems.length) groups.push({ id: 'admin', label: "Administration", order: 6, items: adminItems });
 

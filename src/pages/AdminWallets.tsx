@@ -48,7 +48,7 @@ const AdminWallets: React.FC = () => {
 
     const { data, error } = await supabase
       .from('wallet_transactions')
-      .select('*, site_visits!wallet_transactions_site_visit_id_fkey(id, site_name, site_code, locality, state, completed_at)')
+      .select('*, mmp_site_entries!wallet_transactions_site_visit_id_fkey(id, site_name, site_code, locality, state, completed_at)')
       .eq('wallet_id', walletId)
       .order('created_at', { ascending: false });
 
@@ -438,6 +438,15 @@ const AdminWallets: React.FC = () => {
                                   </span>
                                 </div>
                               )}
+                              {/* Fallback: show total_earned when no transaction breakdown available */}
+                              {earned > 0 && siteVisitFees === 0 && bonuses === 0 && adjustments === 0 && (
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-muted-foreground">Total Earned:</span>
+                                  <span className="text-sm font-medium text-blue-600 dark:text-blue-400">
+                                    {fmt(earned * 100, currency)}
+                                  </span>
+                                </div>
+                              )}
                               {earned === 0 && <span className="text-sm text-muted-foreground">No earnings yet</span>}
                             </div>
                           </TableCell>
@@ -519,20 +528,20 @@ const AdminWallets: React.FC = () => {
                                             <Badge variant="outline" className="capitalize">
                                               {tx.type.replace(/_/g, ' ')}
                                             </Badge>
-                                            {tx.site_visits && (
+                                            {tx.mmp_site_entries && (
                                               <div className="flex items-center gap-1 text-xs text-muted-foreground">
                                                 <MapPin className="w-3 h-3" />
-                                                <span>{tx.site_visits.site_name} - {tx.site_visits.locality}, {tx.site_visits.state}</span>
+                                                <span>{tx.mmp_site_entries.site_name} - {tx.mmp_site_entries.locality}, {tx.mmp_site_entries.state}</span>
                                               </div>
                                             )}
                                           </div>
                                           <p className="text-sm text-muted-foreground">
                                             {tx.description || 'No description'}
                                           </p>
-                                          {tx.site_visits?.completed_at && (
+                                          {tx.mmp_site_entries?.completed_at && (
                                             <div className="flex items-center gap-1 text-xs text-muted-foreground">
                                               <Calendar className="w-3 h-3" />
-                                              <span>{format(new Date(tx.site_visits.completed_at), 'MMM dd, yyyy')}</span>
+                                              <span>{format(new Date(tx.mmp_site_entries.completed_at), 'MMM dd, yyyy')}</span>
                                             </div>
                                           )}
                                           <p className="text-xs text-muted-foreground">

@@ -3,13 +3,12 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
-import { Search, Eye, ChevronLeft, ChevronRight, Hand } from 'lucide-react';
+import { Search, Eye, ChevronLeft, ChevronRight } from 'lucide-react';
 import SiteDetailDialog from './SiteDetailDialog';
-import { ClaimSiteButton } from '@/components/site-visit/ClaimSiteButton';
+import { AcceptSiteButton } from '@/components/site-visit/AcceptSiteButton';
+import { RequestDownPaymentButton } from '@/components/site-visit/RequestDownPaymentButton';
+import { calculateEnumeratorFeeForUser } from '@/hooks/use-claim-fee-calculation';
 
 interface MMPSiteEntriesTableProps {
   siteEntries: any[];
@@ -49,12 +48,10 @@ const MMPSiteEntriesTable = ({
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(50); // Show 50 items per page
+  const [itemsPerPage] = useState(50);
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedSite, setSelectedSite] = useState<any | null>(null);
-  // Accept/Reject dialog state
-  const [acceptRejectOpen, setAcceptRejectOpen] = useState(false);
-  const [rejectComments, setRejectComments] = useState('');
+  const [calculatedFees, setCalculatedFees] = useState<Record<string, number>>({}); // Map of siteId -> calculatedFee
 
   // Debounce search query to reduce filtering operations
   useEffect(() => {
@@ -65,6 +62,31 @@ const MMPSiteEntriesTable = ({
 
     return () => clearTimeout(timer);
   }, [searchQuery]);
+
+  // Calculate fees for sites with accepted_by users
+  useEffect(() => {
+    const loadFees = async () => {
+      const newFees: Record<string, number> = {};
+      
+      for (const site of siteEntries) {
+        const acceptedBy = site.accepted_by || site.acceptedBy;
+        if (acceptedBy && !calculatedFees[site.id]) {
+          try {
+            const result = await calculateEnumeratorFeeForUser(acceptedBy);
+            newFees[site.id] = result.fee;
+          } catch (err) {
+            console.error('Error calculating fee for site:', site.id, err);
+          }
+        }
+      }
+      
+      if (Object.keys(newFees).length > 0) {
+        setCalculatedFees(prev => ({ ...prev, ...newFees }));
+      }
+    };
+    
+    loadFees();
+  }, [siteEntries]);
 
   // Normalize a row from either MMP siteEntries (camelCase) or mmp_site_entries (snake_case)
   const normalizeSite = (site: any) => {
@@ -147,29 +169,6 @@ const MMPSiteEntriesTable = ({
   };
 
   const handleView = (site: any) => {
-    // Check if this is a Smart Assigned site that needs cost acknowledgment
-    const isSmartAssignedNeedingAcknowledgment = showAcceptRejectForAssigned && 
-                                                 site.status?.toLowerCase() === 'assigned' && 
-                                                 site.accepted_by === currentUserId &&
-                                                 (!site.cost_acknowledged && !site.additional_data?.cost_acknowledged);
-    
-    if (isSmartAssignedNeedingAcknowledgment && onAcknowledgeCost) {
-      onAcknowledgeCost(site);
-      return;
-    }
-    
-    // Check if this is a Smart Assigned site that needs Accept/Reject dialog
-    const isSmartAssigned = showAcceptRejectForAssigned && 
-                           site.status?.toLowerCase() === 'assigned' && 
-                           site.accepted_by === currentUserId;
-    
-    if (isSmartAssigned && onAcceptSite && onRejectSite) {
-      setSelectedSite(site);
-      setRejectComments('');
-      setAcceptRejectOpen(true);
-      return;
-    }
-
     // Check if this is an accepted site that needs Start Visit
     const isAcceptedSite = showVisitActions && 
                           site.status?.toLowerCase() === 'accepted' && 
@@ -190,7 +189,7 @@ const MMPSiteEntriesTable = ({
       return;
     }
     
-    // Otherwise show regular detail dialog
+    // Show detail dialog for all other cases
     if (onViewSiteDetail) {
       onViewSiteDetail(site);
       return;
@@ -303,9 +302,23 @@ const MMPSiteEntriesTable = ({
                           <div>
                             <span className="text-muted-foreground">Total Cost:</span>
                             <p className="font-medium text-green-600">
-                              {row.cost !== undefined && row.cost !== null && String(row.cost) !== '' && String(row.cost) !== '—'
-                                ? `$${Number(row.cost).toLocaleString()}`
-                                : '—'}
+                              {(() => {
+                                const calculatedFee = calculatedFees[site.id];
+                                const transportFee = Number(row.transportFee || 0);
+                                
+                                // Use calculated fee if available
+                                if (calculatedFee !== undefined && calculatedFee > 0) {
+                                  const total = calculatedFee + transportFee;
+                                  return `SDG ${Number(total).toLocaleString()}`;
+                                }
+                                
+                                // Otherwise use stored cost
+                                if (row.cost !== undefined && row.cost !== null && String(row.cost) !== '' && String(row.cost) !== '—') {
+                                  return `SDG ${Number(row.cost).toLocaleString()}`;
+                                }
+                                
+                                return '—';
+                              })()}
                             </p>
                           </div>
                         </div>
@@ -327,24 +340,58 @@ const MMPSiteEntriesTable = ({
 
                       <div className="flex gap-2 sm:flex-col">
                         {showClaimButton && site.status?.toLowerCase() === 'dispatched' && !site.accepted_by && currentUserId && (
-                          <ClaimSiteButton
-                            siteId={site.id}
-                            siteName={row.siteName || 'Site'}
+                          <AcceptSiteButton
+                            site={site}
                             userId={currentUserId}
-                            onClaimed={onSiteClaimed}
+                            onAccepted={onSiteClaimed}
                             size="default"
-                            className="w-full sm:w-auto min-h-[44px] text-base font-semibold shadow-md"
+                            className="w-full sm:w-auto min-h-[44px] text-base font-semibold shadow-md bg-primary hover:bg-primary/90"
+                          />
+                        )}
+                        {showAcceptRejectForAssigned && site.status?.toLowerCase() === 'assigned' && site.accepted_by === currentUserId && currentUserId && (
+                          <AcceptSiteButton
+                            site={site}
+                            userId={currentUserId}
+                            onAccepted={onSiteClaimed}
+                            size="default"
+                            isSmartAssigned={true}
+                            className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700"
+                          />
+                        )}
+                        {/* Show Request Advance button for accepted/ongoing/in-progress sites with transport budget */}
+                        {(site.status?.toLowerCase() === 'accepted' || 
+                          site.status?.toLowerCase() === 'ongoing' || 
+                          site.status?.toLowerCase() === 'in progress' || 
+                          site.status?.toLowerCase() === 'in_progress') && 
+                         (site.accepted_by === currentUserId || site.acceptedBy === currentUserId) && 
+                         ((site.transport_fee && site.transport_fee > 0) || (site.transportFee && site.transportFee > 0)) && (
+                          <RequestDownPaymentButton
+                            site={site}
+                            size="sm"
+                            className="w-full sm:w-auto"
                           />
                         )}
                         {showVisitActions ? (
                           <>
-                            {site.status?.toLowerCase() === 'accepted' && onStartVisit && (
-                              <Button variant="default" size="sm" onClick={() => handleView(site)} className="bg-blue-600 hover:bg-blue-700">
+                            {(site.status?.toLowerCase() === 'accepted' || site.status?.toLowerCase() === 'assigned') && onStartVisit && (
+                              <Button 
+                                variant="default" 
+                                size="sm" 
+                                onClick={() => onStartVisit(site)} 
+                                className="bg-blue-600 hover:bg-blue-700"
+                                data-testid={`button-start-visit-${site.id}`}
+                              >
                                 <Eye className="h-4 w-4 mr-1" /> Start Visit
                               </Button>
                             )}
-                            {site.status?.toLowerCase() === 'ongoing' && onCompleteVisit && (
-                              <Button variant="default" size="sm" onClick={() => handleView(site)} className="bg-green-600 hover:bg-green-700">
+                            {(site.status?.toLowerCase() === 'ongoing' || site.status?.toLowerCase() === 'in progress' || site.status?.toLowerCase() === 'in_progress') && onCompleteVisit && (
+                              <Button 
+                                variant="default" 
+                                size="sm" 
+                                onClick={() => onCompleteVisit(site)} 
+                                className="bg-green-600 hover:bg-green-700"
+                                data-testid={`button-complete-visit-${site.id}`}
+                              >
                                 Complete Visit
                               </Button>
                             )}
@@ -417,75 +464,9 @@ const MMPSiteEntriesTable = ({
         onAcceptSite={onAcceptSite}
         onSendBackToCoordinator={onSendBackToCoordinator}
         currentUserId={currentUserId}
+        onStartVisit={onStartVisit}
       />
 
-      {/* Accept/Reject Dialog for Smart Assigned sites */}
-      <Dialog open={acceptRejectOpen} onOpenChange={setAcceptRejectOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Acknowledge Site Assignment</DialogTitle>
-            <DialogDescription>
-              Please acknowledge this site assignment to move it to your pending visits.
-            </DialogDescription>
-          </DialogHeader>
-          {selectedSite && (() => {
-            const row = normalizeSite(selectedSite);
-            return (
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Site Name</p>
-                    <p className="font-medium">{row.siteName || '—'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">State</p>
-                    <p className="font-medium">{row.state || '—'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Locality</p>
-                    <p className="font-medium">{row.locality || '—'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Activity at Site</p>
-                    <p className="font-medium">{row.siteActivity || '—'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Visit Date</p>
-                    <p className="font-medium">{row.visitDate || '—'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Total Cost</p>
-                    <p className="font-medium">{row.cost ? `$${Number(row.cost).toLocaleString()}` : '—'}</p>
-                  </div>
-                </div>
-              </div>
-            );
-          })()}
-          <DialogFooter className="gap-2">
-            <Button 
-              variant="outline" 
-              onClick={() => {
-                setAcceptRejectOpen(false);
-                setSelectedSite(null);
-                setRejectComments('');
-              }}
-            >
-              Cancel
-            </Button>
-            <Button 
-              onClick={() => {
-                onAcceptSite?.(selectedSite);
-                setAcceptRejectOpen(false);
-                setSelectedSite(null);
-                setRejectComments('');
-              }}
-              className="bg-blue-600 hover:bg-blue-700"
-            >
-              Acknowledge Assignment
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </Card>
   );
 };

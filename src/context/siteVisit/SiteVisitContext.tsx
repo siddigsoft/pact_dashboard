@@ -570,8 +570,16 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       
       const complexityMultiplier = complexityMap[siteVisit.complexity] ?? 1.0;
       
+      console.log(`[Wallet] Processing fee for site visit ${siteVisitId}:`, {
+        assignedUserId,
+        siteName: siteVisit.siteName,
+        complexity: siteVisit.complexity,
+        complexityMultiplier,
+      });
+      
       try {
         await addSiteVisitFeeToWallet(assignedUserId, siteVisitId, complexityMultiplier);
+        console.log(`[Wallet] Successfully added fee for site visit ${siteVisitId}`);
 
         addNotification({
           userId: assignedUserId,
@@ -581,8 +589,14 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           relatedEntityId: siteVisitId,
           relatedEntityType: "siteVisit",
         });
-      } catch (walletErr) {
-        console.error('Failed to add wallet payment:', walletErr);
+      } catch (walletErr: any) {
+        console.error('[Wallet] Failed to add wallet payment:', {
+          error: walletErr,
+          message: walletErr?.message,
+          code: walletErr?.code,
+          siteVisitId,
+          userId: assignedUserId,
+        });
         console.warn('Wallet payment failed, but site visit is still marked as completed');
         
         toast({

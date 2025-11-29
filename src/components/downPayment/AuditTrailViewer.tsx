@@ -159,12 +159,12 @@ export function AuditTrailViewer() {
                         <div className="grid grid-cols-2 gap-4 text-sm">
                           <div>
                             <Label className="text-xs text-muted-foreground">Previous Total</Label>
-                            <p className="font-medium">{adjustment.previousTotalCost?.toFixed(2)} SDG</p>
+                            <p className="font-medium">{(adjustment.previousTotalCost || 0).toLocaleString()} SDG</p>
                           </div>
                           <div>
                             <Label className="text-xs text-muted-foreground">New Total</Label>
                             <p className="font-medium text-primary">
-                              {adjustment.newTotalCost?.toFixed(2)} SDG
+                              {(adjustment.newTotalCost || 0).toLocaleString()} SDG
                             </p>
                           </div>
                           <div className="col-span-2">
@@ -177,7 +177,7 @@ export function AuditTrailViewer() {
                               }`}
                             >
                               {((adjustment.newTotalCost || 0) - (adjustment.previousTotalCost || 0)) > 0 ? '+' : ''}
-                              {((adjustment.newTotalCost || 0) - (adjustment.previousTotalCost || 0)).toFixed(2)} SDG
+                              {((adjustment.newTotalCost || 0) - (adjustment.previousTotalCost || 0)).toLocaleString()} SDG
                             </p>
                           </div>
                         </div>

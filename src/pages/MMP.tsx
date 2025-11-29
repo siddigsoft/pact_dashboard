@@ -26,6 +26,7 @@ import { VisitReportDialog, VisitReportData } from '@/components/site-visit/Visi
 import { StartVisitDialog } from '@/components/site-visit/StartVisitDialog';
 import { useSiteClaimRealtime } from '@/hooks/use-site-claim-realtime';
 import { saveGPSToRegistryFromSiteEntry } from '@/utils/sitesRegistryMatcher';
+import { calculateEnumeratorFeeForUser } from '@/hooks/use-claim-fee-calculation';
 
 // Helper component to convert SiteVisitRow[] to site entries and display using MMPSiteEntriesTable
 const SitesDisplayTable: React.FC<{ 
@@ -433,7 +434,7 @@ const MMP = () => {
   const [loadingSmartAssigned, setLoadingSmartAssigned] = useState(false);
   const [smartAssignedCount, setSmartAssignedCount] = useState(0);
   const [dispatchDialogOpen, setDispatchDialogOpen] = useState(false);
-  const [dispatchType, setDispatchType] = useState<'state' | 'locality' | 'individual'>('state');
+  const [dispatchType, setDispatchType] = useState<'state' | 'locality' | 'individual' | 'open'>('open');
 
   // Load smart assigned site entries only when the tab is active
   useEffect(() => {
@@ -1055,22 +1056,91 @@ const MMP = () => {
 
       const site = selectedSiteForVisit;
       const now = new Date().toISOString();
+      const siteStatus = site.status?.toLowerCase();
+
+      // Build update object - using direct columns for visit tracking
+      const updateData: any = {
+        status: 'In Progress',
+        updated_at: now,
+        visit_started_at: now,
+        visit_started_by: currentUser?.id
+      };
+
+      // If site was 'assigned' (not yet accepted), also set acceptance fields AND ensure fees are set
+      if (siteStatus === 'assigned' && !site.accepted_by) {
+        updateData.accepted_by = currentUser?.id;
+        updateData.accepted_at = now;
+        console.log('[StartVisit] Site was assigned - auto-accepting before starting');
+        
+        // Fetch fresh site data from database to get the latest fee values
+        if (currentUser?.id) {
+          try {
+            const { data: freshSiteData } = await supabase
+              .from('mmp_site_entries')
+              .select('transport_fee, enumerator_fee, cost')
+              .eq('id', site.id)
+              .single();
+            
+            // Get fee values from database (with fallback to site object, then default to 0)
+            let dbEnumeratorFee = Number(freshSiteData?.enumerator_fee) || 0;
+            const dbTransportFee = Number(freshSiteData?.transport_fee) || Number(site.transport_fee) || Number(site.transportFee) || 0;
+            let dbCost = Number(freshSiteData?.cost) || 0;
+            
+            console.log('[StartVisit] Current fees from database:', {
+              dbEnumeratorFee,
+              dbTransportFee,
+              dbCost,
+              siteId: site.id
+            });
+            
+            // If enumerator_fee is missing, calculate it based on user classification
+            if (dbEnumeratorFee === 0) {
+              console.log('[StartVisit] Enumerator fee missing - calculating based on user classification...');
+              const feeResult = await calculateEnumeratorFeeForUser(currentUser.id);
+              dbEnumeratorFee = feeResult.fee;
+              
+              console.log('[StartVisit] Calculated enumerator fee:', {
+                fee: dbEnumeratorFee,
+                classificationLevel: feeResult.classificationLevel,
+                source: feeResult.source
+              });
+            }
+            
+            // Always recalculate and set cost to ensure it's correct (enumerator_fee + transport_fee)
+            const calculatedCost = dbEnumeratorFee + dbTransportFee;
+            
+            // Only update if we have valid fees or if cost was missing/incorrect
+            if (dbEnumeratorFee > 0 || dbCost !== calculatedCost) {
+              updateData.enumerator_fee = dbEnumeratorFee;
+              updateData.transport_fee = dbTransportFee;
+              updateData.cost = calculatedCost;
+              
+              console.log('[StartVisit] Fee values set for auto-accept:', {
+                enumeratorFee: dbEnumeratorFee,
+                transportFee: dbTransportFee,
+                totalCost: calculatedCost
+              });
+            } else {
+              console.log('[StartVisit] Existing fees are valid, no changes needed');
+            }
+          } catch (feeError) {
+            console.error('[StartVisit] Failed to process fees for auto-accept:', feeError);
+            // Continue without fees - the wallet payment will show a warning
+          }
+        }
+      }
 
       // Update site status to 'In Progress' and save visit start information
-      await supabase
+      const { error } = await supabase
         .from('mmp_site_entries')
-        .update({
-          status: 'In Progress',
-          visit_started_at: now,
-          visit_started_by: currentUser?.id,
-          updated_at: now,
-          additional_data: {
-            ...(site.additional_data || {}),
-            visit_started_at: now,
-            visit_started_by: currentUser?.id
-          }
-        })
+        .update(updateData)
         .eq('id', site.id);
+
+      if (error) {
+        throw error;
+      }
+
+      console.log('[StartVisit] Visit started successfully for site:', site.id);
 
       toast({
         title: 'Visit Started',
@@ -1109,13 +1179,11 @@ const MMP = () => {
       await supabase
         .from('mmp_site_entries')
         .update({
+          updated_at: now,
           visit_completed_at: now,
           visit_completed_by: currentUser?.id,
-          updated_at: now,
           additional_data: {
             ...(site.additional_data || {}),
-            visit_completed_at: now,
-            visit_completed_by: currentUser?.id,
             final_location: location
           }
         })
@@ -1139,10 +1207,24 @@ const MMP = () => {
         const acceptedBy = site.accepted_by || site.additional_data?.accepted_by;
         
         if (acceptedBy) {
-          // Get the cost amount from the site entry (use columns only)
-          const enumeratorFee = site.enumerator_fee || 0;
-          const transportFee = site.transport_fee || 0;
-          const directCost = site.cost || 0;
+          // Fetch fresh site data from database to ensure we have the latest fee values
+          const { data: freshSite, error: fetchError } = await supabase
+            .from('mmp_site_entries')
+            .select('enumerator_fee, transport_fee, cost')
+            .eq('id', site.id)
+            .single();
+
+          if (fetchError) {
+            console.error('Failed to fetch fresh site data for wallet payment:', fetchError);
+          }
+
+          // Get the cost amount from fresh database values (prefer) or fallback to site object
+          // Check both snake_case (from DB) and camelCase (from normalized object)
+          const enumeratorFee = freshSite?.enumerator_fee || site.enumerator_fee || site.enumeratorFee || 0;
+          const transportFee = freshSite?.transport_fee || site.transport_fee || site.transportFee || 0;
+          const directCost = freshSite?.cost || site.cost || 0;
+          
+          console.log('💰 Wallet payment calculation:', { enumeratorFee, transportFee, directCost, siteId: site.id });
           
           // Calculate total cost: use direct cost if available, otherwise sum fees
           const totalCost = directCost > 0 
@@ -1150,6 +1232,8 @@ const MMP = () => {
             : (Number(enumeratorFee) + Number(transportFee));
           
           if (totalCost > 0) {
+            console.log(`💵 Processing wallet payment of ${totalCost} SDG for user ${acceptedBy}`);
+            
             // Get or create wallet for the user
             const { data: walletData, error: walletError } = await supabase
               .from('wallets')
@@ -1196,17 +1280,25 @@ const MMP = () => {
             await supabase.from('wallet_transactions').insert({
               wallet_id: walletId,
               user_id: acceptedBy,
-              type: 'site_visit_fee',
+              type: 'earning',
               amount: totalCost,
+              amount_cents: Math.round(totalCost * 100),
               currency: 'SDG',
-              site_visit_id: site.id, // Using site entry ID as reference
-              description: `MMP site entry completed: ${site.site_name || site.siteName || 'Site'}`,
+              site_visit_id: site.id,
+              description: `Site visit completed: ${site.site_name || site.siteName || 'Site'}`,
               balance_before: currentBalance,
               balance_after: currentBalance + totalCost,
               created_by: currentUser?.id,
             });
 
             console.log(`Payment of ${totalCost} SDG added to wallet for user ${acceptedBy} for site entry ${site.id}`);
+          } else {
+            console.warn(`⚠️ Total cost is 0 for site ${site.id}. Fee might not have been set during claim/accept.`);
+            toast({
+              title: 'Fee Not Set',
+              description: 'The site visit fee was not calculated at claim time. Please contact admin to adjust.',
+              variant: 'default',
+            });
           }
         } else {
           console.warn(`No accepted_by user found for site entry ${site.id}, skipping wallet payment`);
@@ -1499,8 +1591,8 @@ const MMP = () => {
       doc.text('Visit Information', 20, 115);
 
       doc.setFontSize(10);
-      const visitStart = site.additional_data?.visit_started_at;
-      const visitEnd = site.additional_data?.visit_completed_at;
+      const visitStart = site.visit_started_at || site.additional_data?.visit_started_at;
+      const visitEnd = site.visit_completed_at || site.additional_data?.visit_completed_at;
       doc.text(`Visit Started: ${visitStart ? new Date(visitStart).toLocaleString() : 'N/A'}`, 20, 130);
       doc.text(`Visit Completed: ${visitEnd ? new Date(visitEnd).toLocaleString() : 'N/A'}`, 20, 140);
       doc.text(`Visit Duration: ${reportData.visitDuration} minutes`, 20, 150);
@@ -3190,17 +3282,27 @@ const MMP = () => {
                       {(isAdmin || isICT) && approvedCostedSiteEntries.length > 0 && (
                         <div className="mb-4 flex flex-wrap gap-2">
                           <Button
+                            variant="default"
+                            size="sm"
+                            onClick={() => {
+                              setDispatchType('open');
+                              setDispatchDialogOpen(true);
+                            }}
+                            data-testid="button-open-dispatch"
+                          >
+                            Dispatch for Claim
+                          </Button>
+                          <Button
                             variant="outline"
                             size="sm"
                             onClick={() => {
                               setDispatchType('state');
                               setDispatchDialogOpen(true);
                             }}
-                            className="bg-blue-50 hover:bg-blue-100"
                             disabled={approvedCostedSiteEntries.length < 2}
                             title={approvedCostedSiteEntries.length < 2 ? 'Bulk dispatch requires at least 2 sites' : ''}
                           >
-                            Bulk Dispatch by State
+                            By State
                           </Button>
                           <Button
                             variant="outline"
@@ -3209,11 +3311,10 @@ const MMP = () => {
                               setDispatchType('locality');
                               setDispatchDialogOpen(true);
                             }}
-                            className="bg-blue-50 hover:bg-blue-100"
                             disabled={approvedCostedSiteEntries.length < 2}
                             title={approvedCostedSiteEntries.length < 2 ? 'Bulk dispatch requires at least 2 sites' : ''}
                           >
-                            Bulk Dispatch by Locality
+                            By Locality
                           </Button>
                           <Button
                             variant="outline"
@@ -3222,9 +3323,8 @@ const MMP = () => {
                               setDispatchType('individual');
                               setDispatchDialogOpen(true);
                             }}
-                            className="bg-blue-50 hover:bg-blue-100"
                           >
-                            Individual Dispatch
+                            Assign to Specific Collector
                           </Button>
                         </div>
                       )}
@@ -3863,11 +3963,11 @@ const MMP = () => {
                           editable={true}
                           onAcceptSite={enumeratorSubTab === 'smartAssigned' ? handleAcceptSite : undefined}
                           onAcknowledgeCost={enumeratorSubTab === 'smartAssigned' ? handleCostAcknowledgment : undefined}
-                          onStartVisit={enumeratorSubTab === 'mySites' && (mySitesSubTab === 'pending' || mySitesSubTab === 'ongoing') ? handleStartVisit : undefined}
+                          onStartVisit={handleStartVisit}
                           onCompleteVisit={enumeratorSubTab === 'mySites' && (mySitesSubTab === 'pending' || mySitesSubTab === 'ongoing') ? handleCompleteVisit : undefined}
                           currentUserId={currentUser?.id}
                           showAcceptRejectForAssigned={enumeratorSubTab === 'smartAssigned'}
-                          showVisitActions={enumeratorSubTab === 'mySites' && (mySitesSubTab === 'pending' || mySitesSubTab === 'ongoing')}
+                          showVisitActions={true}
                           onUpdateSites={async (updatedSites) => {
                             // Same update logic as above
                             try {

@@ -68,8 +68,8 @@ BEGIN
       LIMIT 1;
 
       IF v_base_fee_cents IS NOT NULL THEN
-        -- Calculate fee: (base_fee_cents * multiplier) / 100 = SDG
-        v_fee := ROUND((v_base_fee_cents * COALESCE(v_multiplier, 1)) / 100, 2);
+        -- Calculate fee: base_fee * multiplier = SDG (fees stored directly in SDG, not cents)
+        v_fee := ROUND(v_base_fee_cents * COALESCE(v_multiplier, 1), 2);
       ELSE
         v_fee := 50; -- Default fee if no structure found
       END IF;
@@ -131,7 +131,7 @@ BEGIN
     accepted_by = p_user_id,
     accepted_at = NOW(),
     enumerator_fee = v_fee,
-    cost = COALESCE(v_site.transport_fee, 0) + v_fee,
+    cost = COALESCE(p_total_cost, COALESCE(v_site.transport_fee, 0) + v_fee),
     additional_data = COALESCE(additional_data, '{}'::jsonb) || jsonb_build_object(
       'claimed_by', v_user_name,
       'claimed_at', NOW()::TEXT,
@@ -139,7 +139,7 @@ BEGIN
       'claim_fee_calculation', jsonb_build_object(
         'enumerator_fee', v_fee,
         'transport_budget', COALESCE(v_site.transport_fee, 0),
-        'total_payout', COALESCE(v_site.transport_fee, 0) + v_fee,
+        'total_payout', COALESCE(p_total_cost, COALESCE(v_site.transport_fee, 0) + v_fee),
         'classification_level', COALESCE(p_classification_level, (v_classification_level::text)),
         'role_scope', COALESCE(p_role_scope, (v_role_scope::text)),
         'fee_source', COALESCE(p_fee_source, 'classification'),

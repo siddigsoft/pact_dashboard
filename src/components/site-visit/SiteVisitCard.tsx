@@ -107,7 +107,7 @@ export default function SiteVisitCard({ visit, showActions = true }: SiteVisitCa
             {visit.fees?.total && (
               <div className="flex items-center gap-1 text-sm font-medium">
                 <DollarSign className="h-3 w-3" />
-                {visit.fees.total}
+                {`SDG ${Number(visit.fees.total).toLocaleString()}`}
               </div>
             )}
           </div>

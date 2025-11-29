@@ -135,7 +135,7 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
                       </p>
                       <div className="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
                         <span>
-                          Uploaded {format(new Date(mmp.uploadedAt), 'MMM d, yyyy')}
+                          Uploaded {format(new Date(mmp.uploadedAt), 'MMM d, yyyy \'at\' h:mm a')}
                         </span>
                         <span>•</span>
                         <span>by {mmp.uploadedBy || 'Unknown'}</span>

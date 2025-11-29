@@ -5,7 +5,7 @@ import {
   Home, Map, FileText, Users, MessageSquare, Receipt, 
   DollarSign, Wallet, FolderOpen, BarChart, Calendar,
   Settings, Archive, MoreHorizontal, X, Sparkles, CreditCard,
-  CheckCircle, TrendingUp, MapPin
+  CheckCircle, TrendingUp, MapPin, Banknote
 } from 'lucide-react';
 import { useChat } from '@/context/chat/ChatContextSupabase';
 import { useAppContext } from '@/context/AppContext';
@@ -50,7 +50,8 @@ const MobileNavigation = () => {
     { icon: TrendingUp, label: 'Financial Ops', path: '/financial-operations', roles: ['Admin' as AppRole, 'FinancialAdmin' as AppRole, 'Field Operation Manager (FOM)' as AppRole] },
     { icon: Wallet, label: 'Wallet', path: '/wallet', roles: [] },
     { icon: CreditCard, label: 'Admin Wallets', path: '/admin/wallets', roles: ['Admin' as AppRole, 'FinancialAdmin' as AppRole] },
-    { icon: CheckCircle, label: 'Withdrawals', path: '/withdrawal-approval', roles: ['Admin' as AppRole, 'FinancialAdmin' as AppRole, 'Field Operation Manager (FOM)' as AppRole] },
+    { icon: CheckCircle, label: 'Supervisor Approval', path: '/withdrawal-approval', roles: ['Admin' as AppRole, 'FinancialAdmin' as AppRole, 'Field Operation Manager (FOM)' as AppRole, 'Supervisor' as AppRole] },
+    { icon: Banknote, label: 'Finance Approval', path: '/finance-approval', roles: ['Admin' as AppRole, 'FinancialAdmin' as AppRole] },
     { icon: DollarSign, label: 'Budget', path: '/budget', roles: ['Admin' as AppRole, 'FinancialAdmin' as AppRole, 'Field Operation Manager (FOM)' as AppRole] },
     { icon: FolderOpen, label: 'Projects', path: '/projects', roles: [] },
     { icon: BarChart, label: 'Reports', path: '/reports', roles: ['Admin' as AppRole, 'Supervisor' as AppRole, 'Field Operation Manager (FOM)' as AppRole, 'FinancialAdmin' as AppRole] },

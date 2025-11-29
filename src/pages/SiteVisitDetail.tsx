@@ -10,7 +10,7 @@ import AssignCollectorButton from "@/components/site-visit/AssignCollectorButton
 import { useSiteVisitContext } from "@/context/siteVisit/SiteVisitContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { MapPin, Users, Navigation, ArrowRight, BarChart3, Trash2, DollarSign } from "lucide-react";
+import { MapPin, Users, Navigation, ArrowRight, BarChart3, Trash2, DollarSign, RefreshCw } from "lucide-react";
 import { useUser } from "@/context/user/UserContext";
 import { Badge } from "@/components/ui/badge";
 import { calculateDistance } from "@/utils/collectorUtils";
@@ -31,6 +31,7 @@ import { useAuthorization } from "@/hooks/use-authorization";
 import { SiteVisitCostsUnified } from "@/components/site-visit/SiteVisitCostsUnified";
 import { SiteVisitAuditTrail } from "@/components/site-visit/SiteVisitAuditTrail";
 import { NearestEnumeratorsCard } from "@/components/site-visit/NearestEnumeratorsCard";
+import { useWallet } from "@/context/wallet/WalletContext";
 
 const SiteVisitDetail = () => {
   const navigate = useNavigate();
@@ -43,7 +44,9 @@ const SiteVisitDetail = () => {
   const [showMap, setShowMap] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
   const [costDialogOpen, setCostDialogOpen] = useState(false);
+  const [isReconciling, setIsReconciling] = useState(false);
   const { hasAnyRole } = useAuthorization();
+  const { reconcileSiteVisitFee } = useWallet();
   
   useEffect(() => {
     const fetchSiteVisit = () => {
@@ -84,6 +87,28 @@ const SiteVisitDetail = () => {
       }
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  const handleReconcileFee = async () => {
+    if (!siteVisit) return;
+    try {
+      setIsReconciling(true);
+      const result = await reconcileSiteVisitFee(siteVisit.id);
+      
+      toast({
+        title: result.success ? "Fee Reconciled" : "Reconciliation Failed",
+        description: result.message,
+        variant: result.success ? "default" : "destructive",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to reconcile fee",
+        variant: "destructive",
+      });
+    } finally {
+      setIsReconciling(false);
     }
   };
 
@@ -150,6 +175,20 @@ const SiteVisitDetail = () => {
               >
                 <DollarSign className="h-4 w-4" />
                 Assign Cost
+              </Button>
+            )}
+
+            {hasAnyRole(['admin', 'ict']) && siteVisit.status === "completed" && (
+              <Button 
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={handleReconcileFee}
+                disabled={isReconciling}
+                data-testid="button-reconcile-fee"
+              >
+                <RefreshCw className={`h-4 w-4 ${isReconciling ? 'animate-spin' : ''}`} />
+                {isReconciling ? 'Processing...' : 'Reconcile Fee'}
               </Button>
             )}
 

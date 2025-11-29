@@ -62,9 +62,11 @@ const WalletPage = lazy(() => import('./pages/Wallet'));
 const AdminWallets = lazy(() => import('./pages/AdminWallets'));
 const AdminWalletDetail = lazy(() => import('./pages/AdminWalletDetail'));
 const WithdrawalApproval = lazy(() => import('./pages/WithdrawalApproval'));
+const FinanceApproval = lazy(() => import('./pages/FinanceApproval'));
 const WalletReports = lazy(() => import('./pages/WalletReports'));
 const BudgetPage = lazy(() => import('./pages/Budget'));
 const Classifications = lazy(() => import('./pages/Classifications'));
+const ClassificationFeeManagement = lazy(() => import('./pages/ClassificationFeeManagement'));
 const CostSubmission = lazy(() => import('./pages/CostSubmission'));
 const FinancialOperations = lazy(() => import('./pages/FinancialOperations'));
 const SuperAdminManagement = lazy(() => import('./components/superAdmin/SuperAdminManagementPage').then(module => ({ default: module.SuperAdminManagementPage })));
@@ -171,6 +173,7 @@ const AppRoutes = () => {
         <Route path="/admin/wallets" element={<AdminWallets />} />
         <Route path="/admin/wallets/:userId" element={<AdminWalletDetail />} />
         <Route path="/withdrawal-approval" element={<WithdrawalApproval />} />
+        <Route path="/finance-approval" element={<FinanceApproval />} />
         <Route path="/wallet-reports" element={<WalletReports />} />
         <Route path="/budget" element={<BudgetPage />} />
         <Route path="/cost-submission" element={<CostSubmission />} />
@@ -184,6 +187,7 @@ const AppRoutes = () => {
         <Route path="/users" element={<Users />} />
         <Route path="/users/:id" element={<UserDetail />} />
         <Route path="/classifications" element={<Classifications />} />
+        <Route path="/classification-fees" element={<ClassificationFeeManagement />} />
         <Route path="/map" element={<AdvancedMap />} />
         <Route path="/advanced-map" element={<Navigate to="/map" replace />} />
         <Route path="/audit-compliance" element={<AuditCompliance />} />
