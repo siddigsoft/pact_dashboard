@@ -133,70 +133,74 @@ const Navbar = () => {
 					)}
 				</div>
 
-				<div className="ml-auto flex items-center space-x-2">
-					{/* Theme Toggle */}
-					<Button
-						variant="ghost"
-						size="icon"
-						onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-						className="mr-2"
-					>
-						{theme === 'dark' ? <SunIcon className="h-5 w-5" /> : <MoonIcon className="h-5 w-5" />}
-						<span className="sr-only">Toggle theme</span>
-					</Button>
+        <div className="ml-auto flex items-center space-x-2">
+          {/* Theme Toggle */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            className="mr-2"
+          >
+            {theme === 'dark' ? <SunIcon className="h-5 w-5" /> : <MoonIcon className="h-5 w-5" />}
+            <span className="sr-only">Toggle theme</span>
+          </Button>
 
-					{/* Chat */}
-					<ChatNotificationIndicator />
+          {/* Chat */}
+          <ChatNotificationIndicator />
 
-					{/* Notifications */}
-					<DropdownMenu>
-						<DropdownMenuTrigger asChild>
-							<Button variant="ghost" size="icon" className="relative">
-								<Bell className="h-5 w-5" />
-								{getUnreadNotificationsCount() > 0 && (
-									<span className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full h-5 w-5 flex items-center justify-center text-xs">
-										{getUnreadNotificationsCount() > 9 ? '9+' : getUnreadNotificationsCount()}
-									</span>
-								)}
-								<span className="sr-only">Notifications</span>
-							</Button>
-						</DropdownMenuTrigger>
-						<NotificationDropdown onClose={() => {}} />
-					</DropdownMenu>
+          {/* Notifications */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="relative">
+                <Bell className="h-5 w-5" />
+                {getUnreadNotificationsCount() > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full h-5 w-5 flex items-center justify-center text-xs">
+                    {getUnreadNotificationsCount() > 9 ? '9+' : getUnreadNotificationsCount()}
+                  </span>
+                )}
+                <span className="sr-only">Notifications</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <NotificationDropdown onClose={() => {}} />
+          </DropdownMenu>
 
-					{/* User Menu */}
-					<DropdownMenu>
-						<DropdownMenuTrigger asChild>
-							<Button variant="ghost" size="sm" className="relative h-9 flex items-center gap-2 px-2">
-								<Avatar className="h-8 w-8">
-									<AvatarImage src={currentUser?.avatar || undefined} alt="User" />
-									<AvatarFallback className="bg-purple-100 text-purple-500">
-										{currentUser?.name?.charAt(0) || 'U'}
-									</AvatarFallback>
-								</Avatar>
-								<span className="font-medium text-sm hidden md:inline-block">
-									{currentUser?.name || 'User'}
-								</span>
-							</Button>
-						</DropdownMenuTrigger>
-						<DropdownMenuContent align="end" className="w-56">
-							<DropdownMenuLabel>My Account</DropdownMenuLabel>
-							<DropdownMenuSeparator />
-							<DropdownMenuItem onClick={() => navigate(`/users/${currentUser?.id}`)}>
-								<UserIcon className="w-4 h-4 mr-2" />
-								Profile
-							</DropdownMenuItem>
-							<DropdownMenuSeparator />
-							<DropdownMenuItem onClick={handleLogout}>
-								<LogOut className="w-4 h-4 mr-2" />
-								Log out
-							</DropdownMenuItem>
-						</DropdownMenuContent>
-					</DropdownMenu>
-				</div>
-			</div>
-		</div>
-	);
+          {/* User Menu */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="relative h-9 flex items-center gap-2 px-2">
+                <Avatar className="h-8 w-8">
+                  <AvatarImage src={currentUser?.avatar || undefined} alt="User" />
+                  <AvatarFallback className="bg-purple-100 text-purple-500">
+                    {currentUser?.name?.charAt(0) || 'U'}
+                  </AvatarFallback>
+                </Avatar>
+                <span className="font-medium text-sm hidden md:inline-block">
+                  {currentUser?.name || 'User'}
+                </span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel>My Account</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => navigate(`/users/${currentUser?.id}`)}>
+                <UserIcon className="w-4 h-4 mr-2" />
+                Profile
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate('/settings')}>
+                <Settings className="w-4 h-4 mr-2" />
+                Settings
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleLogout}>
+                <LogOut className="w-4 h-4 mr-2" />
+                Log out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 export default Navbar;
