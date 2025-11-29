@@ -14,17 +14,9 @@ import {
  * Fetches site visits from mmp_site_entries table, with fallback to site_visits table
  */
 export const fetchSiteVisits = async (): Promise<SiteVisit[]> => {
-  // Try mmp_site_entries first (primary source)
+  // Primary and only source: mmp_site_entries
   const mmpEntries = await fetchSiteVisitsFromMMPEntries();
-  
-  // Also fetch from site_visits table to include directly-created visits
-  const siteVisitsData = await fetchFromSiteVisitsTable();
-  
-  // Merge both sources, avoiding duplicates by ID
-  const allIds = new Set(mmpEntries.map(e => e.id));
-  const uniqueSiteVisits = siteVisitsData.filter(sv => !allIds.has(sv.id));
-  
-  return [...mmpEntries, ...uniqueSiteVisits];
+  return mmpEntries;
 };
 
 /**

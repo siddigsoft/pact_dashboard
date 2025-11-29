@@ -603,7 +603,7 @@ const SiteVisits = () => {
                   {(visit.priority ? visit.priority.charAt(0).toUpperCase() + visit.priority.slice(1) : 'Unknown')} Priority
                 </div>
                 <div className="font-medium">
-                  ${visit.fees?.total || 'N/A'}
+                  {visit.fees?.total ? `SDG ${Number(visit.fees.total).toLocaleString()}` : 'N/A'}
                 </div>
               </div>
             </CardContent>

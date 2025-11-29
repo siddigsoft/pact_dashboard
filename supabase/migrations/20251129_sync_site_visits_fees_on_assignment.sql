@@ -15,9 +15,16 @@ DECLARE
   v_source TEXT;
   v_calc_at TEXT;
   v_calc_user TEXT;
+  v_has_site_visits BOOLEAN;
 BEGIN
   -- Only act when the site has been taken
   IF (LOWER(COALESCE(NEW.status,'')) IN ('assigned','accepted')) AND NEW.accepted_by IS NOT NULL THEN
+    -- Check if site_visits table exists; if not, skip
+    SELECT to_regclass('public.site_visits') IS NOT NULL INTO v_has_site_visits;
+    IF NOT v_has_site_visits THEN
+      RETURN NEW;
+    END IF;
+
     v_calc := COALESCE(NEW.additional_data->'claim_fee_calculation', '{}'::jsonb);
 
     v_enum := COALESCE(NEW.enumerator_fee, (v_calc->>'enumerator_fee')::numeric, 0);
@@ -30,24 +37,26 @@ BEGIN
     v_calc_at := COALESCE(v_calc->>'calculated_at', NOW()::text);
     v_calc_user := COALESCE(v_calc->>'calculated_for_user', NEW.accepted_by);
 
-    -- Update site_visits if exists for this mmp_site_entry
-    UPDATE public.site_visits sv
-    SET
-      enumerator_fee = v_enum,
-      transport_fee = v_trans,
-      cost = v_total,
-      fees = COALESCE(sv.fees, '{}'::jsonb) || jsonb_build_object(
-        'enumerator_fee', v_enum,
-        'transport_budget', v_trans,
-        'total_payout', v_total,
-        'classification_level', v_level,
-        'role_scope', v_scope,
-        'fee_source', v_source,
-        'calculated_at', v_calc_at,
-        'calculated_for_user', v_calc_user,
-        'currency', 'SDG'
-      )
-    WHERE sv.mmp_site_entry_id = NEW.id;
+    -- Update site_visits if it exists for this mmp_site_entry (dynamic to avoid hard dependency)
+    EXECUTE $$
+      UPDATE public.site_visits sv
+      SET
+        enumerator_fee = $1,
+        transport_fee = $2,
+        cost = $3,
+        fees = COALESCE(sv.fees, '{}'::jsonb) || jsonb_build_object(
+          'enumerator_fee', $1,
+          'transport_budget', $2,
+          'total_payout', $3,
+          'classification_level', $4,
+          'role_scope', $5,
+          'fee_source', $6,
+          'calculated_at', $7,
+          'calculated_for_user', $8,
+          'currency', 'SDG'
+        )
+      WHERE sv.mmp_site_entry_id = $9
+    $$ USING v_enum, v_trans, v_total, v_level, v_scope, v_source, v_calc_at, v_calc_user, NEW.id;
   END IF;
 
   RETURN NEW;

@@ -535,10 +535,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const addSiteVisitFeeToWallet = async (userId: string, siteVisitId: string, complexityMultiplier: number = 1.0) => {
     try {
-      // First, try to get stored fees from site_visits table
-      const { data: siteVisit, error: siteVisitError } = await supabase
-        .from('site_visits')
-        .select('enumerator_fee, transport_fee, cost')
+      // Fetch from mmp_site_entries (siteVisitId is the mmp_site_entries.id)
+      const { data: entry, error: entryError } = await supabase
+        .from('mmp_site_entries')
+        .select('site_name, status, accepted_by, enumerator_fee, transport_fee, cost')
         .eq('id', siteVisitId)
         .single();
       
@@ -546,28 +546,28 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       let transportAmount: number = 0;
       let description: string;
       
-      if (!siteVisitError && siteVisit) {
-        const storedEnumFee = Number(siteVisit.enumerator_fee) || 0;
-        const storedTransportFee = Number(siteVisit.transport_fee) || 0;
-        const storedCost = Number(siteVisit.cost) || 0;
+      if (!entryError && entry) {
+        const storedEnumFee = Number(entry.enumerator_fee) || 0;
+        const storedTransportFee = Number(entry.transport_fee) || 0;
+        const storedCost = Number(entry.cost) || 0;
         
         // Use stored fees if available
         if (storedCost > 0 || storedEnumFee > 0) {
           amount = storedCost > 0 ? storedCost : (storedEnumFee + storedTransportFee);
           transportAmount = storedTransportFee;
           description = `Site visit fee: ${storedEnumFee} SDG enumerator + ${storedTransportFee} SDG transport`;
-          console.log(`💰 Using stored fees for site visit ${siteVisitId}: ${amount} SDG`);
+          console.log(`💰 Using stored fees for site entry ${siteVisitId}: ${amount} SDG`);
         } else {
           // Fallback to classification-based calculation
           amount = await calculateClassificationFee(userId, complexityMultiplier);
           description = `Site visit fee (${complexityMultiplier}x complexity)`;
-          console.log(`💰 Using calculated fee for site visit ${siteVisitId}: ${amount} SDG`);
+          console.log(`💰 Using calculated fee for site entry ${siteVisitId}: ${amount} SDG`);
         }
       } else {
         // No site visit found, use classification-based calculation
         amount = await calculateClassificationFee(userId, complexityMultiplier);
         description = `Site visit fee (${complexityMultiplier}x complexity)`;
-        console.log(`💰 Site visit not found, using calculated fee: ${amount} SDG`);
+        console.log(`💰 Site entry not found, using calculated fee: ${amount} SDG`);
       }
 
       const { data: targetWallet, error: walletError } = await supabase
@@ -646,23 +646,23 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const reconcileSiteVisitFee = async (siteVisitId: string): Promise<{ success: boolean; message: string }> => {
     try {
-      // 1. Get the site visit details
-      const { data: siteVisit, error: siteVisitError } = await supabase
-        .from('site_visits')
-        .select('id, site_name, status, assigned_to, enumerator_fee, transport_fee, cost')
+      // 1. Get the site entry details (siteVisitId is mmp_site_entries.id)
+      const { data: entry, error: entryError } = await supabase
+        .from('mmp_site_entries')
+        .select('id, site_name, status, accepted_by, enumerator_fee, transport_fee, cost')
         .eq('id', siteVisitId)
         .single();
 
-      if (siteVisitError || !siteVisit) {
-        return { success: false, message: `Site visit not found: ${siteVisitError?.message || 'Unknown error'}` };
+      if (entryError || !entry) {
+        return { success: false, message: `Site entry not found: ${entryError?.message || 'Unknown error'}` };
       }
 
-      if (siteVisit.status !== 'completed') {
-        return { success: false, message: `Site visit is not completed. Current status: ${siteVisit.status}` };
+      if ((entry.status || '').toLowerCase() !== 'completed') {
+        return { success: false, message: `Site is not completed. Current status: ${entry.status}` };
       }
 
-      if (!siteVisit.assigned_to) {
-        return { success: false, message: 'Site visit has no assigned user' };
+      if (!entry.accepted_by) {
+        return { success: false, message: 'Site has no accepted/assigned user' };
       }
 
       // 2. Check if fee was already added
@@ -678,17 +678,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       }
 
       // 3. Add the fee to wallet
-      const cost = Number(siteVisit.cost) || Number(siteVisit.enumerator_fee) + Number(siteVisit.transport_fee) || 0;
+      const cost = Number(entry.cost) || (Number(entry.enumerator_fee) + Number(entry.transport_fee)) || 0;
       
       if (cost <= 0) {
-        return { success: false, message: 'Site visit has no fee assigned (cost is 0)' };
+        return { success: false, message: 'Site has no fee assigned (cost is 0)' };
       }
 
-      console.log(`[Wallet Reconciliation] Adding fee of ${cost} SDG for site visit ${siteVisitId} to user ${siteVisit.assigned_to}`);
+      console.log(`[Wallet Reconciliation] Adding fee of ${cost} SDG for site entry ${siteVisitId} to user ${entry.accepted_by}`);
 
-      await addSiteVisitFeeToWallet(siteVisit.assigned_to, siteVisitId, 1.0);
+      await addSiteVisitFeeToWallet(entry.accepted_by, siteVisitId, 1.0);
 
-      return { success: true, message: `Successfully added ${cost} SDG to wallet for site visit "${siteVisit.site_name}"` };
+      return { success: true, message: `Successfully added ${cost} SDG to wallet for site "${entry.site_name}"` };
     } catch (error: any) {
       console.error('[Wallet Reconciliation] Error:', error);
       return { success: false, message: `Failed to reconcile: ${error.message}` };
