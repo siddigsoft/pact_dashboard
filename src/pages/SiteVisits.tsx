@@ -8,7 +8,7 @@ import { useAppContext } from "@/context/AppContext";
 import { useAuthorization } from "@/hooks/use-authorization";
 import { SiteVisit } from "@/types";
 import { Link } from "react-router-dom";
-import { Plus, ChevronLeft, Search, MapPin, Clock, AlertTriangle } from "lucide-react";
+import { Plus, ChevronLeft, Search, MapPin, Clock, AlertTriangle, Building2 } from "lucide-react";
 import { useSiteVisitContext } from "@/context/siteVisit/SiteVisitContext";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { format, isValid } from "date-fns";
@@ -27,6 +27,7 @@ import FloatingMessenger from "@/components/communication/FloatingMessenger";
 import { useMMP } from "@/context/mmp/MMPContext";
 import LeafletMapContainer from '@/components/map/LeafletMapContainer';
 import { sudanStates, getStateName, getLocalityName } from '@/data/sudanStates';
+import { supabase } from '@/integrations/supabase/client';
 
 const SiteVisits = () => {
   const { currentUser, hasRole } = useAppContext();
@@ -138,6 +139,37 @@ const SiteVisits = () => {
            role === 'field operation manager (fom)' ||
            role === 'field operations manager';
   }, [currentUser]);
+
+  // Check if user is a supervisor (not admin/ict)
+  const isSupervisor = useMemo(() => {
+    if (!currentUser) return false;
+    const role = (currentUser.role || '').toLowerCase();
+    const isAdmin = hasAnyRole(['admin', 'ict']);
+    return (hasAnyRole(['supervisor', 'Supervisor']) || role === 'supervisor') && !isAdmin;
+  }, [currentUser]);
+
+  // Get supervisor's hub ID for filtering
+  const supervisorHubId = currentUser?.hubId;
+  
+  // State for supervisor's hub name (fetched from database)
+  const [supervisorHubName, setSupervisorHubName] = useState<string | null>(null);
+
+  // Fetch hub name for supervisor
+  useEffect(() => {
+    if (!isSupervisor || !supervisorHubId) {
+      setSupervisorHubName(null);
+      return;
+    }
+    const fetchHubName = async () => {
+      const { data } = await supabase
+        .from('hubs')
+        .select('name')
+        .eq('id', supervisorHubId)
+        .maybeSingle();
+      if (data) setSupervisorHubName(data.name);
+    };
+    fetchHubName();
+  }, [isSupervisor, supervisorHubId]);
 
   // Get user's geographic assignment from profile (state and locality)
   // Works for both data collectors and coordinators who can claim sites within their locality
@@ -261,6 +293,16 @@ const SiteVisits = () => {
           filtered = siteVisits.filter(visit => visit.assignedTo === currentUser.id);
         }
       }
+    } else if (isSupervisor && supervisorHubName) {
+      // For supervisors, filter by their assigned hub (by hub name)
+      filtered = siteVisits.filter(visit => {
+        const visitHub = (visit.hub || '').toLowerCase().trim();
+        const hubName = supervisorHubName.toLowerCase().trim();
+        // Match by hub name (exact or partial to handle variations)
+        return visitHub === hubName || 
+               visitHub.includes(hubName) ||
+               hubName.includes(visitHub);
+      });
     } else {
       // For non-data collectors, use existing logic
       filtered = canViewAll
@@ -347,7 +389,7 @@ const SiteVisits = () => {
       }
       setSelectedVisit(selected || null);
     }
-  }, [currentUser, siteVisits, statusFilter, searchTerm, sortBy, view, hubParam, regionParam, monthParam, isFieldWorker, canViewAllSiteVisits]);
+  }, [currentUser, siteVisits, statusFilter, searchTerm, sortBy, view, hubParam, regionParam, monthParam, isFieldWorker, canViewAllSiteVisits, isSupervisor, supervisorHubName]);
 
   const handleRemoveFilter = (filterType: string) => {
     setActiveFilters(prev => ({

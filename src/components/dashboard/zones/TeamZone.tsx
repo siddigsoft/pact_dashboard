@@ -1,6 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Users, MapPin, MessageSquare, UserCircle, LayoutGrid, Table as TableIcon } from 'lucide-react';
+import { Users, MapPin, MessageSquare, UserCircle, LayoutGrid, Table as TableIcon, Building2 } from 'lucide-react';
 import { TeamCommunication } from '../TeamCommunication';
 import TeamLocationMap from '../TeamLocationMap';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,28 +13,66 @@ import { TeamMemberCard } from '../TeamMemberCard';
 import { TeamMemberTable } from '../TeamMemberTable';
 import { TeamMemberDetailModal } from '../TeamMemberDetailModal';
 import { User } from '@/types/user';
+import { useAppContext } from '@/context/AppContext';
+import { supabase } from '@/integrations/supabase/client';
 
 export const TeamZone: React.FC = () => {
   const [activeTab, setActiveTab] = useState('overview');
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
   const [selectedMember, setSelectedMember] = useState<User | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [hubName, setHubName] = useState<string | null>(null);
   
   const navigate = useNavigate();
   const { users } = useUser();
   const { siteVisits } = useSiteVisitContext();
+  const { currentUser, roles } = useAppContext();
+
+  // Check if current user is a supervisor (not admin/ict)
+  const isSupervisor = useMemo(() => {
+    if (!roles) return false;
+    const normalizedRoles = roles.map(r => r.toLowerCase());
+    const isAdmin = normalizedRoles.includes('admin') || normalizedRoles.includes('ict');
+    return normalizedRoles.includes('supervisor') && !isAdmin;
+  }, [roles]);
+
+  // Get supervisor's hub ID for filtering
+  const supervisorHubId = currentUser?.hubId;
+
+  // Fetch hub name for supervisor
+  useEffect(() => {
+    if (!isSupervisor || !supervisorHubId) {
+      setHubName(null);
+      return;
+    }
+    const fetchHubName = async () => {
+      const { data } = await supabase
+        .from('hubs')
+        .select('name')
+        .eq('id', supervisorHubId)
+        .maybeSingle();
+      if (data) setHubName(data.name);
+    };
+    fetchHubName();
+  }, [isSupervisor, supervisorHubId]);
 
   // Filter and sort team members who can be assigned to site visits (coordinators and data collectors only)
+  // For supervisors: only show team members in their hub
   // Sort: Online first, then by last login (most recent first)
   const assignableTeamMembers = useMemo(() => {
     if (!users) return [];
     
-    const filtered = users.filter(user => 
+    let filtered = users.filter(user => 
       user.roles?.some(role => {
         const normalizedRole = role.toLowerCase();
         return normalizedRole === 'coordinator' || normalizedRole === 'datacollector';
       })
     );
+
+    // If supervisor, filter to only show team members in their hub
+    if (isSupervisor && supervisorHubId) {
+      filtered = filtered.filter(user => user.hubId === supervisorHubId);
+    }
     
     // Sort by online status first, then by last login
     return filtered.sort((a, b) => {
@@ -51,7 +89,7 @@ export const TeamZone: React.FC = () => {
       
       return bLastLogin - aLastLogin;
     });
-  }, [users]);
+  }, [users, isSupervisor, supervisorHubId]);
 
   const activeFieldTeam = assignableTeamMembers.length;
 
@@ -117,10 +155,18 @@ export const TeamZone: React.FC = () => {
             </div>
             <div>
               <h2 className="text-xl font-bold">Team Coordination</h2>
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Field team locations and communication</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">
+                {isSupervisor && hubName ? `${hubName} Hub - ` : ''}Field team locations and communication
+              </p>
             </div>
           </div>
-          <div className="flex gap-2 items-center">
+          <div className="flex gap-2 items-center flex-wrap">
+            {isSupervisor && hubName && (
+              <Badge variant="outline" className="gap-1.5 text-xs h-7 bg-blue-500/10 border-blue-500/30 text-blue-700 dark:text-blue-300">
+                <Building2 className="h-3 w-3" />
+                {hubName}
+              </Badge>
+            )}
             <Badge variant="secondary" className="gap-2 text-xs h-7">
               <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
               {onlineMembers}/{activeFieldTeam} Online

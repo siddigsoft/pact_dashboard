@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -9,16 +9,21 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useWallet } from '@/context/wallet/WalletContext';
 import { useUser } from '@/context/user/UserContext';
-import { Clock, CheckCircle2, XCircle, User, Calendar, ArrowRight, Send, Info, RefreshCw, FileText } from 'lucide-react';
+import { useAppContext } from '@/context/AppContext';
+import { Clock, CheckCircle2, XCircle, User, Calendar, ArrowRight, Send, Info, RefreshCw, FileText, Building2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
 import { WithdrawalRequest } from '@/types/wallet';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { supabase } from '@/integrations/supabase/client';
 
 interface SupervisedRequest extends WithdrawalRequest {
   requesterName?: string;
   requesterEmail?: string;
+  requesterHub?: string;
+  requesterState?: string;
+  requesterRole?: string;
 }
 
 export default function WithdrawalApproval() {
@@ -30,11 +35,47 @@ export default function WithdrawalApproval() {
     loading 
   } = useWallet();
   const { users } = useUser();
+  const { currentUser } = useAppContext();
   const [selectedRequest, setSelectedRequest] = useState<SupervisedRequest | null>(null);
   const [dialogType, setDialogType] = useState<'approve' | 'reject' | null>(null);
   const [notes, setNotes] = useState('');
   const [processing, setProcessing] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [hubName, setHubName] = useState<string | null>(null);
+
+  // Check if current user is a supervisor (not admin/ict/financialAdmin)
+  // Use case-insensitive role comparison for robustness
+  const isSupervisor = useMemo(() => {
+    if (!currentUser) return false;
+    const role = (currentUser.role || '').toLowerCase();
+    // Admin roles that should see all requests without hub filtering
+    // Includes all roles that have system-wide visibility
+    const adminRoles = ['admin', 'ict', 'financialadmin', 'finance', 'fom', 'super_admin', 'superadmin'];
+    const isAdmin = adminRoles.includes(role);
+    // Supervisor role check (case-insensitive)
+    const isSupervisorRole = role === 'supervisor' || role === 'hubsupervisor';
+    return isSupervisorRole && !isAdmin;
+  }, [currentUser?.role]);
+
+  // Get supervisor's hub ID
+  const supervisorHubId = currentUser?.hubId;
+
+  // Fetch hub name for supervisor
+  useEffect(() => {
+    if (!isSupervisor || !supervisorHubId) {
+      setHubName(null);
+      return;
+    }
+    const fetchHubName = async () => {
+      const { data } = await supabase
+        .from('hubs')
+        .select('name')
+        .eq('id', supervisorHubId)
+        .maybeSingle();
+      if (data) setHubName(data.name);
+    };
+    fetchHubName();
+  }, [isSupervisor, supervisorHubId]);
 
   useEffect(() => {
     refreshSupervisedWithdrawalRequests();
@@ -46,10 +87,26 @@ export default function WithdrawalApproval() {
     setRefreshing(false);
   };
 
-  const pendingRequests = supervisedWithdrawalRequests.filter(r => r.status === 'pending');
-  const forwardedRequests = supervisedWithdrawalRequests.filter(r => r.status === 'supervisor_approved' || r.status === 'processing');
-  const approvedRequests = supervisedWithdrawalRequests.filter(r => r.status === 'approved');
-  const rejectedRequests = supervisedWithdrawalRequests.filter(r => r.status === 'rejected');
+  // Filter requests by supervisor's hub if applicable
+  // For supervisors: only show requests from users in their hub
+  // For admins and other roles: show all requests (no filtering)
+  const filteredRequests = useMemo(() => {
+    // If not a supervisor or no hub assigned, show all requests
+    if (!isSupervisor || !supervisorHubId) {
+      return supervisedWithdrawalRequests as SupervisedRequest[];
+    }
+    // Supervisors only see requests from users in their hub
+    // Filter by requesterHub matching supervisor's hubId (both are UUIDs)
+    // If requesterHub is undefined, exclude the request for data integrity
+    return (supervisedWithdrawalRequests as SupervisedRequest[]).filter(r => 
+      r.requesterHub && r.requesterHub === supervisorHubId
+    );
+  }, [supervisedWithdrawalRequests, isSupervisor, supervisorHubId]);
+
+  const pendingRequests = filteredRequests.filter(r => r.status === 'pending');
+  const forwardedRequests = filteredRequests.filter(r => r.status === 'supervisor_approved' || r.status === 'processing');
+  const approvedRequests = filteredRequests.filter(r => r.status === 'approved');
+  const rejectedRequests = filteredRequests.filter(r => r.status === 'rejected');
 
   const getUserName = (userId: string, request?: SupervisedRequest) => {
     if (request?.requesterName) {
@@ -230,7 +287,15 @@ export default function WithdrawalApproval() {
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Supervisor Approval</h1>
+            <div className="flex items-center gap-3 flex-wrap">
+              <h1 className="text-3xl font-bold tracking-tight">Supervisor Approval</h1>
+              {isSupervisor && hubName && (
+                <Badge variant="outline" className="flex items-center gap-1">
+                  <Building2 className="w-3 h-3" />
+                  {hubName}
+                </Badge>
+              )}
+            </div>
             <p className="text-muted-foreground mt-1">Step 1: Review and verify withdrawal requests from your team members</p>
           </div>
           <Button 
