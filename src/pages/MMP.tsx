@@ -1860,7 +1860,7 @@ const MMP = () => {
         const { count, error } = await supabase
           .from('mmp_site_entries')
           .select('*', { count: 'exact', head: true })
-          .or('status.ilike.Approved and Costed,status.ilike.Approved and costed');
+          .or('status.ilike.%Approved and Costed%,status.ilike.%approved%costed%');
 
         if (error) throw error;
         setApprovedCostedCount(count || 0);
@@ -1950,11 +1950,11 @@ const MMP = () => {
     const loadOngoingCount = async () => {
       try {
         // Use database count instead of loading all entries
-        // Count entries with status = 'inprogress' or 'in_progress' (case-insensitive)
+        // Count entries with status = 'inprogress' or 'in_progress' or 'ongoing' (case-insensitive)
         const { count, error } = await supabase
           .from('mmp_site_entries')
           .select('*', { count: 'exact', head: true })
-          .or('status.ilike.inprogress,status.ilike.in_progress');
+          .or('status.ilike.%inprogress%,status.ilike.%in_progress%,status.ilike.%ongoing%');
 
         if (error) throw error;
 
@@ -2252,7 +2252,7 @@ const MMP = () => {
         const { data: approvedCostedEntries, error: allError } = await supabase
           .from('mmp_site_entries')
           .select('*')
-          .or('status.ilike.Approved and Costed,status.ilike.Approved and costed')
+          .or('status.ilike.%Approved and Costed%,status.ilike.%approved%costed%')
           .order('created_at', { ascending: false })
           .limit(1000); // Limit to 1000 entries for performance
 
@@ -2457,12 +2457,12 @@ const MMP = () => {
 
       setLoadingOngoing(true);
       try {
-        // Use database-level filtering: entries with status = 'inprogress' or 'in_progress'
+        // Use database-level filtering: entries with status = 'inprogress' or 'in_progress' or 'ongoing'
         // Use .or() to match either status value (case-insensitive)
         const { data: ongoingEntries, error: allError } = await supabase
           .from('mmp_site_entries')
           .select('*')
-          .or('status.ilike.inprogress,status.ilike.in_progress')
+          .or('status.ilike.%inprogress%,status.ilike.%in_progress%,status.ilike.%ongoing%')
           .order('updated_at', { ascending: false })
           .limit(1000); // Limit to 1000 entries for performance
 
@@ -3398,7 +3398,7 @@ const MMP = () => {
                             const { data: approvedCostedEntries, error } = await supabase
                               .from('mmp_site_entries')
                               .select('*')
-                              .or('status.ilike.Approved and Costed,status.ilike.Approved and costed')
+                              .or('status.ilike.%Approved and Costed%,status.ilike.%approved%costed%')
                               .order('created_at', { ascending: false })
                               .limit(1000);
 
@@ -4164,7 +4164,7 @@ const MMP = () => {
                 const { data: approvedCostedEntries, error } = await supabase
                   .from('mmp_site_entries')
                   .select('*')
-                  .or('status.ilike.Approved and Costed,status.ilike.Approved and costed')
+                  .or('status.ilike.%Approved and Costed%,status.ilike.%approved%costed%')
                   .order('created_at', { ascending: false })
                   .limit(1000);
 

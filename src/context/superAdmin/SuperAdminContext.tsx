@@ -93,9 +93,9 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
         .select('*')
         .eq('user_id', userId)
         .eq('is_active', true)
-        .single();
+        .maybeSingle();
 
-      if (error && error.code !== 'PGRST116') throw error;
+      if (error) throw error;
       return !!data;
     } catch (error) {
       console.error('Failed to check super-admin status:', error);
