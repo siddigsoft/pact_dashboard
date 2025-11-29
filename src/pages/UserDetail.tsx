@@ -9,7 +9,7 @@ import { ArrowLeft, MapPin, Mail, Phone, Award, Calendar, Edit, UserCheck, UserX
 import { BankakAccountForm, BankakAccountFormValues } from "@/components/BankakAccountForm";
 import { User } from "@/types";
 import { AppRole } from "@/types/roles";
-import { sudanStates, getLocalitiesByState } from "@/data/sudanStates";
+import { sudanStates, getLocalitiesByState, getHubNameForState } from "@/data/sudanStates";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
@@ -66,6 +66,7 @@ const UserDetail: React.FC = () => {
   const canManageClassifications = canManageFinances();
   const userClassification = user ? getUserClassification(user.id) : undefined;
   const classificationHistory = user ? getClassificationHistory(user.id) : [];
+  const [hubDisplayName, setHubDisplayName] = useState<string | null>(null);
 
   useEffect(() => {
     if (id) {
@@ -85,6 +86,27 @@ const UserDetail: React.FC = () => {
       }
     }
   }, [id, users, navigate, toast]);
+
+  useEffect(() => {
+    const fetchHubName = async () => {
+      if (user?.hubId) {
+        const { data } = await supabase
+          .from('hubs')
+          .select('name')
+          .eq('id', user.hubId)
+          .maybeSingle();
+        setHubDisplayName(data?.name ?? user.hubId);
+        return;
+      }
+      if (user?.stateId) {
+        const derived = getHubNameForState(user.stateId);
+        setHubDisplayName(derived ?? null);
+        return;
+      }
+      setHubDisplayName(null);
+    };
+    fetchHubName();
+  }, [user?.hubId, user?.stateId]);
 
   const handleBankAccountSubmit = (values: BankakAccountFormValues) => {
     if (!user) return;
@@ -151,12 +173,17 @@ const UserDetail: React.FC = () => {
   };
 
   const getUserLocation = (user: User) => {
-    if (!user.stateId) return "Not specified";
-    const state = sudanStates.find(s => s.id === user.stateId);
-    if (!state) return "Unknown state";
-    if (!user.localityId) return state.name;
-    const locality = getLocalitiesByState(user.stateId).find(l => l.id === user.localityId);
-    return locality ? `${state.name}, ${locality.name}` : state.name;
+    const parts: string[] = [];
+    if (hubDisplayName) parts.push(hubDisplayName);
+    if (user.stateId) {
+      const state = sudanStates.find(s => s.id === user.stateId);
+      if (state?.name) parts.push(state.name);
+    }
+    if (user.stateId && user.localityId) {
+      const locality = getLocalitiesByState(user.stateId).find(l => l.id === user.localityId);
+      if (locality?.name) parts.push(locality.name);
+    }
+    return parts.length ? parts.join(", ") : "Not set";
   };
 
   const getInitials = (name: string) => {
@@ -527,6 +554,18 @@ const UserDetail: React.FC = () => {
                     <Badge variant={user.isApproved ? "default" : "destructive"}>
                       {user.isApproved ? 'Active' : 'Pending Approval'}
                     </Badge>
+                  </div>
+                  <div>
+                    <h3 className="font-medium text-sm text-muted-foreground">Hub</h3>
+                    <p className="font-semibold">{hubDisplayName || user.hubId || 'Not set'}</p>
+                  </div>
+                  <div>
+                    <h3 className="font-medium text-sm text-muted-foreground">State</h3>
+                    <p className="font-semibold">{user.stateId ? (sudanStates.find(s => s.id === user.stateId)?.name || user.stateId) : 'Not set'}</p>
+                  </div>
+                  <div>
+                    <h3 className="font-medium text-sm text-muted-foreground">Locality</h3>
+                    <p className="font-semibold">{user.stateId && user.localityId ? (getLocalitiesByState(user.stateId).find(l => l.id === user.localityId)?.name || user.localityId) : 'Not set'}</p>
                   </div>
                 </div>
               </TabsContent>
