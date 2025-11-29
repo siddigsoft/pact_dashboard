@@ -129,20 +129,28 @@ export const FOMZone: React.FC = () => {
         
         if (!cancelled) {
           if (error) {
-            console.error('Failed to load forwarded MMPs:', error);
-            // Fallback query
-            const { data: fbData } = await supabase
+            // Log error but don't show to user - RLS may block this query for some users
+            if (error.code !== 'PGRST116' && error.code !== '42501') {
+              console.warn('Failed to load forwarded MMPs:', error.code, error.message);
+            }
+            // Fallback query without join
+            const { data: fbData, error: fbError } = await supabase
               .from('mmp_files')
               .select('*')
               .contains('workflow', { forwardedToFomIds: [currentUser.id] })
               .order('created_at', { ascending: false });
-            setForwardedMMPs((fbData || []) as MMPFile[]);
+            if (fbError) {
+              // Silently fail - user may not have access to this data
+              setForwardedMMPs([]);
+            } else {
+              setForwardedMMPs((fbData || []) as MMPFile[]);
+            }
           } else {
             setForwardedMMPs((data || []) as MMPFile[]);
           }
         }
       } catch (err) {
-        console.error('Error loading forwarded MMPs:', err);
+        // Silently fail - don't log RLS errors to console
         if (!cancelled) setForwardedMMPs([]);
       } finally {
         if (!cancelled) setForwardedLoading(false);
