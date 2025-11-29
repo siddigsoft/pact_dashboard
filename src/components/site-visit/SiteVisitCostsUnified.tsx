@@ -58,13 +58,20 @@ export function SiteVisitCostsUnified({
         setError(null);
 
         let mmpEntry: any = null;
-        let siteVisit: any = null;
 
         if (mmpSiteEntryId) {
           const { data } = await supabase
             .from('mmp_site_entries')
             .select('*')
             .eq('id', mmpSiteEntryId)
+            .single();
+          mmpEntry = data;
+        } else if (siteVisitId) {
+          // Treat siteVisitId as the mmp_site_entries.id in this setup
+          const { data } = await supabase
+            .from('mmp_site_entries')
+            .select('*')
+            .eq('id', siteVisitId)
             .single();
           mmpEntry = data;
         } else if (siteCode) {
@@ -78,68 +85,33 @@ export function SiteVisitCostsUnified({
           mmpEntry = data;
         }
 
-        if (siteVisitId) {
-          const { data } = await supabase
-            .from('site_visits')
-            .select('*')
-            .eq('id', siteVisitId)
-            .single();
-          siteVisit = data;
-
-          if (!mmpEntry && siteVisit?.mmp_site_entry_id) {
-            const { data: entryData } = await supabase
-              .from('mmp_site_entries')
-              .select('*')
-              .eq('id', siteVisit.mmp_site_entry_id)
-              .single();
-            mmpEntry = entryData;
-          }
-        }
-
-        if (!mmpEntry && !siteVisit) {
+        if (!mmpEntry) {
           setCostData(null);
           return;
         }
 
         const additionalData = mmpEntry?.additional_data || {};
-        const visitData = siteVisit?.visit_data || {};
-        const fees = siteVisit?.fees || {};
 
-        // Transportation: check site_visits.transport_fee first (direct column), then fallbacks
-        const transportation = 
-          (siteVisit?.transport_fee != null ? Number(siteVisit.transport_fee) : null) ??
-          mmpEntry?.transportation ?? 
-          additionalData.transportation ?? 
-          fees.transportation ?? 
-          visitData.transportation ?? 0;
-        
-        const accommodation = 
-          mmpEntry?.accommodation ?? 
-          additionalData.accommodation ?? 
-          fees.accommodation ?? 
-          visitData.accommodation ?? 0;
-        
-        const mealPerDiem = 
-          mmpEntry?.meal_per_diem ?? 
-          additionalData.meal_per_diem ?? 
-          fees.meal_per_diem ?? 
-          visitData.mealPerDiem ?? 0;
-        
-        const logistics = 
-          mmpEntry?.logistics ?? 
-          additionalData.logistics ?? 
-          fees.logistics ?? 
-          visitData.logistics ?? 0;
-        
-        // Enumerator fee: check site_visits.enumerator_fee first (direct column), then mmp_entry
-        const enumeratorFee = 
-          (siteVisit?.enumerator_fee != null ? Number(siteVisit.enumerator_fee) : null) ??
-          (mmpEntry?.enumerator_fee != null ? Number(mmpEntry.enumerator_fee) : null) ?? 0;
+        // Transportation from mmp_site_entries direct column or additional_data
+        const transportation =
+          (mmpEntry?.transport_fee != null ? Number(mmpEntry.transport_fee) : null) ??
+          additionalData.transportation ?? 0;
 
-        // Total cost: use site_visits.cost if available, otherwise calculate
-        const totalCost = 
-          (siteVisit?.cost != null ? Number(siteVisit.cost) : null) ?? 
-          (transportation + accommodation + mealPerDiem + logistics + enumeratorFee);
+        const accommodation =
+          additionalData.accommodation ?? 0;
+
+        const mealPerDiem =
+          additionalData.meal_per_diem ?? 0;
+
+        const logistics =
+          additionalData.logistics ?? 0;
+
+        const enumeratorFee =
+          (mmpEntry?.enumerator_fee != null ? Number(mmpEntry.enumerator_fee) : 0);
+
+        const totalCost =
+          (mmpEntry?.cost != null ? Number(mmpEntry.cost) : null) ??
+          (Number(transportation || 0) + Number(accommodation || 0) + Number(mealPerDiem || 0) + Number(logistics || 0) + Number(enumeratorFee || 0));
 
         setCostData({
           transportation,
@@ -149,15 +121,15 @@ export function SiteVisitCostsUnified({
           enumeratorFee,
           totalCost,
           currency: 'SDG',
-          source: mmpEntry && siteVisit ? 'combined' : (mmpEntry ? 'mmp_entry' : 'site_visit'),
+          source: 'mmp_entry',
           dispatchedAt: mmpEntry?.dispatched_at,
           dispatchedBy: mmpEntry?.dispatched_by,
-          claimedAt: mmpEntry?.claimed_at || siteVisit?.assigned_at,
-          claimedBy: mmpEntry?.claimed_by || siteVisit?.assigned_to,
+          claimedAt: mmpEntry?.claimed_at,
+          claimedBy: mmpEntry?.claimed_by || mmpEntry?.accepted_by,
           costAcknowledged: mmpEntry?.cost_acknowledged,
           costAcknowledgedAt: mmpEntry?.cost_acknowledged_at,
           costAcknowledgedBy: mmpEntry?.cost_acknowledged_by,
-          status: siteVisit?.status || mmpEntry?.status
+          status: mmpEntry?.status
         });
 
       } catch (err: any) {

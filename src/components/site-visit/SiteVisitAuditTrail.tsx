@@ -62,13 +62,20 @@ export function SiteVisitAuditTrail({
         const steps: AuditStep[] = [];
         
         let mmpEntry: any = null;
-        let siteVisit: any = null;
 
         if (mmpSiteEntryId) {
           const { data } = await supabase
             .from('mmp_site_entries')
             .select('*')
             .eq('id', mmpSiteEntryId)
+            .single();
+          mmpEntry = data;
+        } else if (siteVisitId) {
+          // Treat siteVisitId as the mmp_site_entries.id in this setup
+          const { data } = await supabase
+            .from('mmp_site_entries')
+            .select('*')
+            .eq('id', siteVisitId)
             .single();
           mmpEntry = data;
         } else if (siteCode) {
@@ -80,24 +87,6 @@ export function SiteVisitAuditTrail({
             .limit(1)
             .maybeSingle();
           mmpEntry = data;
-        }
-
-        if (siteVisitId) {
-          const { data } = await supabase
-            .from('site_visits')
-            .select('*')
-            .eq('id', siteVisitId)
-            .single();
-          siteVisit = data;
-
-          if (!mmpEntry && siteVisit?.mmp_site_entry_id) {
-            const { data: entryData } = await supabase
-              .from('mmp_site_entries')
-              .select('*')
-              .eq('id', siteVisit.mmp_site_entry_id)
-              .single();
-            mmpEntry = entryData;
-          }
         }
 
         if (mmpEntry?.created_at) {
@@ -139,9 +128,9 @@ export function SiteVisitAuditTrail({
           });
         }
 
-        if (mmpEntry?.claimed_at || siteVisit?.assigned_at) {
-          const claimedAt = mmpEntry?.claimed_at || siteVisit?.assigned_at;
-          const claimedBy = mmpEntry?.claimed_by || siteVisit?.assigned_to;
+        if (mmpEntry?.claimed_at || mmpEntry?.accepted_at) {
+          const claimedAt = mmpEntry?.claimed_at || mmpEntry?.accepted_at;
+          const claimedBy = mmpEntry?.claimed_by || mmpEntry?.accepted_by;
           steps.push({
             id: 'claimed',
             action: 'Site Claimed/Assigned',
@@ -153,23 +142,24 @@ export function SiteVisitAuditTrail({
             color: 'text-indigo-600 bg-indigo-100 dark:bg-indigo-900/30',
             status: 'completed',
             details: {
-              enumeratorFee: mmpEntry?.enumerator_fee || siteVisit?.fees?.enumerator_fee
+              enumeratorFee: mmpEntry?.enumerator_fee
             }
           });
         }
 
-        if (siteVisit?.coordinates?.latitude && siteVisit?.coordinates?.longitude) {
+        const coords = (mmpEntry?.additional_data && mmpEntry.additional_data.location) || null;
+        if (coords?.latitude && coords?.longitude) {
           steps.push({
             id: 'gps_captured',
             action: 'GPS Captured',
             description: 'Location coordinates were recorded during field visit',
-            timestamp: siteVisit.updated_at || siteVisit.created_at,
+            timestamp: mmpEntry.updated_at || mmpEntry.created_at,
             icon: MapPin,
             color: 'text-green-600 bg-green-100 dark:bg-green-900/30',
             status: 'completed',
             details: {
-              latitude: siteVisit.coordinates.latitude,
-              longitude: siteVisit.coordinates.longitude
+              latitude: coords.latitude,
+              longitude: coords.longitude
             }
           });
         }
@@ -188,39 +178,39 @@ export function SiteVisitAuditTrail({
           });
         }
 
-        if (siteVisit?.status === 'Completed' && siteVisit?.completed_at) {
+        if ((mmpEntry?.status || '').toLowerCase() === 'completed' && mmpEntry?.completed_at) {
           steps.push({
             id: 'completed',
             action: 'Visit Completed',
             description: 'Field visit was successfully completed',
-            timestamp: siteVisit.completed_at,
+            timestamp: mmpEntry.completed_at,
             icon: CheckCircle2,
             color: 'text-green-600 bg-green-100 dark:bg-green-900/30',
             status: 'completed'
           });
-        } else if (siteVisit?.status === 'Cancelled') {
+        } else if ((mmpEntry?.status || '').toLowerCase() === 'cancelled') {
           steps.push({
             id: 'cancelled',
             action: 'Visit Cancelled',
             description: 'The site visit was cancelled',
-            timestamp: siteVisit.updated_at,
+            timestamp: mmpEntry.updated_at,
             icon: XCircle,
             color: 'text-red-600 bg-red-100 dark:bg-red-900/30',
             status: 'completed'
           });
-        } else if (siteVisit?.status === 'In Progress') {
+        } else if ((mmpEntry?.status || '').toLowerCase() === 'in progress' || (mmpEntry?.status || '').toLowerCase() === 'ongoing') {
           steps.push({
             id: 'in_progress',
             action: 'In Progress',
             description: 'Field visit is currently in progress',
-            timestamp: siteVisit.updated_at || siteVisit.created_at,
+            timestamp: mmpEntry.updated_at || mmpEntry.created_at,
             icon: Clock,
             color: 'text-amber-600 bg-amber-100 dark:bg-amber-900/30',
             status: 'current'
           });
         }
 
-        const currentStatus = siteVisit?.status || mmpEntry?.status;
+        const currentStatus = mmpEntry?.status;
         if (currentStatus && !['Completed', 'Cancelled'].includes(currentStatus)) {
           const pendingSteps = [];
           
