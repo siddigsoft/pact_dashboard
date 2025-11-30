@@ -1407,7 +1407,78 @@ Two-tier approval process:
 
 Both levels must approve before payment is processed.
 
-## 12.4 Financial Reports
+## 12.4 Finance Processing Page
+
+The Finance Processing page (/finance-approval) provides comprehensive withdrawal management:
+
+### Dashboard Overview
+- **Ready to Pay**: Supervisor-approved requests pending finance processing
+- **Processing**: Requests currently being processed
+- **Paid Out**: Completed payments
+- **Rejected**: Declined requests
+
+### Wallet Balance Display
+
+Each withdrawal request displays:
+
+| Information | Description |
+|-------------|-------------|
+| **Requested Amount** | The amount the user wants to withdraw |
+| **Wallet Balance** | User's current available balance |
+| **Balance Status** | Green (sufficient) or Red (insufficient) |
+| **Shortfall Amount** | How much more is needed (if insufficient) |
+
+### Insufficient Balance Warnings
+
+When a user requests more than their wallet balance:
+- Request card highlighted with red background
+- Warning badge shows "Insufficient Balance"
+- Detailed alert shows exact shortfall amount
+- Hover tooltip provides additional context
+
+**Example:**
+```
+Requested: SDG 200,000
+Balance:   SDG 130,110
+Shortfall: SDG 69,890 (insufficient!)
+```
+
+### Processing Payments
+
+1. View request with wallet balance displayed
+2. Check if balance is sufficient (green indicator)
+3. Click **"Process Payment"**
+4. Optionally add transaction reference
+5. Optionally attach receipt/screenshot
+6. Confirm payment
+
+### Receipt Attachment Feature
+
+Finance can attach transaction receipts when processing:
+- Supports image files (JPG, PNG, etc.)
+- Maximum file size: 5MB
+- Drag-and-drop or click to upload
+- Preview before submitting
+- Receipt URL saved in audit trail
+
+### Batch Processing
+
+For multiple ready payments:
+1. Select requests using checkboxes
+2. Click **"Batch Process"**
+3. Enter batch reference number
+4. Add notes
+5. Process all selected at once
+
+### Urgency Indicators
+
+Visual indicators show how long requests have been waiting:
+- **New**: Less than 24 hours
+- **1+ day**: 24-48 hours (amber warning)
+- **2+ days**: 48-72 hours (orange warning)
+- **3+ days**: Over 72 hours (red critical)
+
+## 12.5 Financial Reports
 
 Generate financial reports:
 
@@ -1855,7 +1926,10 @@ For hub supervisors to see withdrawal requests:
 │           ↓                                                        │
 │  TIER 2: Admin/Finance Processing                                   │
 │   • Admin sees all supervisor-approved requests                     │
+│   • **Wallet balance displayed for each user**                      │
+│   • **Insufficient balance warnings shown before processing**       │
 │   • Verifies balance and processes payment                          │
+│   • Can attach transaction receipt/screenshot                       │
 │   • Deducts from wallet balance                                     │
 │           ↓                                                        │
 │  ┌─────────────────────────────────────────────────────────────┐   │
