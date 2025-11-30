@@ -1,10 +1,7 @@
 package com.pact.workflow;
 
 import android.os.Bundle;
-import android.view.View;
-import android.view.WindowManager;
 import androidx.core.view.WindowCompat;
-import androidx.core.view.WindowInsetsControllerCompat;
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
@@ -16,15 +13,8 @@ public class MainActivity extends BridgeActivity {
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         
         // Make status bar and navigation bar transparent
+        // Let the Capacitor StatusBar plugin handle icon appearance based on theme
         getWindow().setStatusBarColor(android.graphics.Color.TRANSPARENT);
         getWindow().setNavigationBarColor(android.graphics.Color.TRANSPARENT);
-        
-        // Set light status bar icons (dark icons on light background)
-        WindowInsetsControllerCompat windowInsetsController = 
-            WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
-        if (windowInsetsController != null) {
-            windowInsetsController.setAppearanceLightStatusBars(true);
-            windowInsetsController.setAppearanceLightNavigationBars(true);
-        }
     }
 }
