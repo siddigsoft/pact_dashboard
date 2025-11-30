@@ -13,20 +13,25 @@
 6. [Projects Management](#6-projects-management)
 7. [Monthly Monitoring Plans (MMPs)](#7-monthly-monitoring-plans-mmps)
 8. [Site Visits](#8-site-visits)
-9. [Field Team Management](#9-field-team-management)
-10. [Financial Operations](#10-financial-operations)
-11. [Budget Management](#11-budget-management)
-12. [Wallet System](#12-wallet-system)
-13. [Cost Submission & Approvals](#13-cost-submission--approvals)
-14. [Reports & Analytics](#14-reports--analytics)
-15. [Communication Features](#15-communication-features)
-16. [Maps & Location Services](#16-maps--location-services)
-17. [Archive Management](#17-archive-management)
-18. [Calendar & Scheduling](#18-calendar--scheduling)
-19. [Settings & Preferences](#19-settings--preferences)
-20. [Mobile App Guide](#20-mobile-app-guide)
-21. [Troubleshooting](#21-troubleshooting)
-22. [Glossary](#22-glossary)
+9. [First-Claim Dispatch System](#9-first-claim-dispatch-system)
+10. [Classification & Fee Structure](#10-classification--fee-structure)
+11. [Field Team Management](#11-field-team-management)
+12. [Financial Operations](#12-financial-operations)
+13. [Budget Management](#13-budget-management)
+14. [Wallet System](#14-wallet-system)
+15. [Cost Submission & Approvals](#15-cost-submission--approvals)
+16. [Tracker Preparation Plan](#16-tracker-preparation-plan)
+17. [Reports & Analytics](#17-reports--analytics)
+18. [Communication Features](#18-communication-features)
+19. [Maps & Location Services](#19-maps--location-services)
+20. [Sites Registry](#20-sites-registry)
+21. [Archive Management](#21-archive-management)
+22. [Calendar & Scheduling](#22-calendar--scheduling)
+23. [Settings & Preferences](#23-settings--preferences)
+24. [Notification System](#24-notification-system)
+25. [Mobile Application](#25-mobile-application)
+26. [Troubleshooting](#26-troubleshooting)
+27. [Glossary](#27-glossary)
 
 ---
 
@@ -42,6 +47,7 @@
 - Financial tracking and approvals
 - Real-time location sharing
 - Role-based access control
+- Mobile field operations with offline support
 
 ## 1.2 Key Benefits
 
@@ -51,8 +57,10 @@
 | **Real-Time Visibility** | Track field team locations and site visit progress instantly |
 | **Financial Control** | Manage budgets, track expenses, and approve payments |
 | **Role-Based Security** | Ensure users only access what they need |
-| **Mobile-Ready** | Access the platform from any device, anywhere |
+| **Mobile-Ready** | Native Android app with offline capabilities |
 | **Data Integrity** | Complete audit trails for all operations |
+| **Smart Dispatch** | Uber/Lyft-style site claiming for field teams |
+| **Classification Fees** | Automatic fee calculation based on enumerator level |
 
 ## 1.3 System Requirements
 
@@ -63,8 +71,10 @@
 - Safari - Version 14+
 
 ### Mobile Requirements
+- Android 8.0 (API 26) or later
 - iOS 13.0 or later
-- Android 8.0 or later
+- Minimum 2GB RAM recommended
+- GPS/Location services enabled
 
 ---
 
@@ -91,7 +101,8 @@
 2. Enter your registered email address
 3. Enter your password
 4. Click **"Sign In"**
-5. You will be redirected to your personalized dashboard
+5. If 2FA is enabled, enter the verification code
+6. You will be redirected to your personalized dashboard
 
 ## 2.3 Forgot Password
 
@@ -110,6 +121,7 @@ After your first login, complete these steps:
 2. **Set Preferences**: Configure notifications and display settings
 3. **Review Permissions**: Understand what actions you can perform
 4. **Enable Location**: Allow location access for field operations (if applicable)
+5. **Install Mobile App**: Download the Android app for field work
 
 ---
 
@@ -121,15 +133,18 @@ The Mission Control Dashboard is your central hub for all operations.
 
 The dashboard is organized into distinct zones based on your role:
 
+### Operations Center
+- Total Operations count
+- Completed Visits with completion rate
+- Active Operations in progress
+- Pending Queue awaiting assignment
+- Overdue Alerts
+- Performance Score
+
 ### Planning Zone
 - View upcoming site visits
 - Track MMP progress
 - See pending assignments
-
-### Operations Zone
-- Monitor active field operations
-- View real-time team status
-- Track completion rates
 
 ### Performance Zone
 - Key performance indicators (KPIs)
@@ -164,14 +179,17 @@ The notification bell displays:
 - Approval requests
 - System alerts
 - Message notifications
+- Site claim updates
 
 Click on any notification to view details or take action.
 
-## 3.4 View Mode Toggle
+## 3.4 Live Mode Toggle
 
-Switch between:
-- **Desktop View**: Full-featured interface with all panels
-- **Mobile View**: Optimized layout for smaller screens
+Toggle **"Live"** mode to enable:
+- Real-time data updates
+- Automatic refresh
+- Live location tracking
+- Instant notifications
 
 ---
 
@@ -188,7 +206,7 @@ Switch between:
 | **Financial Admin** | Manages financial operations | Budget management, payment approvals, wallet operations |
 | **Supervisor** | Supervises field teams | Team monitoring, site visit review |
 | **Coordinator** | Coordinates field activities | Site visit management |
-| **Data Collector** | Collects field data | Site visit execution |
+| **Data Collector** | Collects field data | Site visit execution, site claiming |
 | **Reviewer** | Reviews submissions | Read-only access to verify data |
 
 ### Super Admin Exclusive Capabilities
@@ -202,31 +220,44 @@ Super Admin is the highest role in the system with these exclusive permissions:
 - **All Wallet Management**: Full control over all user wallets
 - **Complete Permission Bypass**: All permission checks automatically pass
 
-## 4.2 Viewing Users
+## 4.2 User Classifications
+
+Users can be assigned classification levels that affect their fee rates:
+
+| Classification | Level | Description |
+|---------------|-------|-------------|
+| **Classification A** | Senior | Highest fee tier, experienced enumerators |
+| **Classification B** | Standard | Mid-level fee tier |
+| **Classification C** | Junior | Entry-level fee tier |
+
+## 4.3 Viewing Users
 
 1. Navigate to **Users** from the sidebar
 2. View the list of all users in the system
 3. Use filters to find specific users:
    - By role
    - By status (active/inactive)
+   - By classification
    - By name or email
 
-## 4.3 User Details
+## 4.4 User Details
 
 Click on any user to view:
 - Profile information
 - Assigned roles
+- Classification level
 - Activity history
 - Performance metrics
 - Wallet balance (if applicable)
 
-## 4.4 Managing User Status
+## 4.5 Managing User Status
 
 Administrators can:
 - Activate/deactivate user accounts
 - Reset user passwords
 - Update user information
 - Assign/remove roles
+- Change classification level
 
 ---
 
@@ -372,11 +403,12 @@ MMPs are structured plans that define:
 ### Preparing Your CSV File
 
 Your CSV file should include:
-- Site ID
+- Site Code (unique identifier)
 - Site Name
-- Location (coordinates)
+- State
+- Locality
+- Location (coordinates - optional)
 - Planned Visit Date
-- Assigned Coordinator
 - Classification
 - Special Requirements
 
@@ -398,7 +430,16 @@ The system validates:
 - Data types
 - Date formats
 - Coordinate validity
+- Duplicate site detection (same site in same month)
 - User references
+
+### Duplicate Prevention
+
+The system prevents:
+- **Same file + same project + same month**: Blocked as exact duplicate
+- **Same site in same month across MMPs**: Shows which sites already exist
+- **Allows**: Same file for different months (monthly recurring)
+- **Allows**: Different files for same project/month (supplementary data)
 
 ## 7.3 MMP Workflow Stages
 
@@ -450,16 +491,18 @@ After approval, forward to Field Operations:
 4. Add any notes
 5. Click **"Forward"**
 
-## 7.7 Assigning Coordinators
+## 7.7 Dispatching Sites
 
-Field Operation Managers assign coordinators:
+Field Operation Managers dispatch sites to collectors:
 
 1. Open the MMP
-2. Click **"Assign Coordinators"**
-3. View available coordinators
-4. Select coordinators for each site
-5. Review assignments
-6. Click **"Dispatch"**
+2. Select sites to dispatch
+3. Choose dispatch mode:
+   - **Open**: Available to all collectors
+   - **State**: Available to collectors in specific states
+   - **Locality**: Available to collectors in specific localities
+   - **Individual**: Assigned to specific collectors
+4. Click **"Dispatch"**
 
 ---
 
@@ -492,15 +535,17 @@ Field Operation Managers assign coordinators:
 ## 8.2 Site Visit Status Flow
 
 ```
-Pending → Assigned → In Progress → Completed → Verified
-                          ↓
-                     Cancelled
+Dispatched → Claimed → Accepted → In Progress → Completed → Verified
+                                        ↓
+                                   Cancelled
 ```
 
 | Status | Description |
 |--------|-------------|
-| **Pending** | Created but not assigned |
-| **Assigned** | Collector assigned, awaiting start |
+| **Dispatched** | Available for claiming |
+| **Claimed** | Collector has claimed the site |
+| **Accepted** | Claim approved, ready to start |
+| **Assigned** | Directly assigned by operations |
 | **In Progress** | Visit actively being conducted |
 | **Completed** | Data collection finished |
 | **Verified** | Supervisor has verified data |
@@ -510,11 +555,11 @@ Pending → Assigned → In Progress → Completed → Verified
 
 For Data Collectors:
 
-1. View your assigned visits on the dashboard
+1. View your assigned/claimed visits on the dashboard
 2. Click on a visit to open details
-3. Click **"Start Visit"**
+3. Click **"Start Visit"** to begin
 4. Capture required data:
-   - GPS location
+   - GPS location (automatic)
    - Photos
    - Form responses
    - Face verification (if required)
@@ -538,8 +583,8 @@ Generate visit reports:
 1. Open the site visit
 2. Click **"Generate Report"**
 3. Select report format:
-   - PDF
-   - Excel
+   - PDF (detailed report with photos)
+   - Excel (data export)
 4. Download the report
 
 ## 8.6 Editing Site Visits
@@ -553,9 +598,124 @@ Note: Some fields may be locked based on visit status.
 
 ---
 
-# 9. Field Team Management
+# 9. First-Claim Dispatch System
 
-## 9.1 Team Overview
+## 9.1 Overview
+
+The First-Claim Dispatch System works like Uber/Lyft - sites are made available and field collectors can claim them on a first-come, first-served basis.
+
+## 9.2 Dispatch Modes
+
+| Mode | Description | Who Can Claim |
+|------|-------------|---------------|
+| **Open** | Available to all qualified collectors | Any active data collector |
+| **State** | Limited to collectors in specific states | Collectors assigned to those states |
+| **Locality** | Limited to collectors in specific localities | Collectors in matching state + locality |
+| **Individual** | Direct assignment to specific person | Only the assigned collector |
+
+## 9.3 How Claiming Works
+
+### For Data Collectors
+
+1. Open the **Site Visits** or **My Sites** page
+2. View available dispatched sites in your area
+3. Click **"Claim"** on a site you want to visit
+4. The system instantly reserves the site for you
+5. Wait for acceptance (or auto-accept if enabled)
+6. Once accepted, the site appears in your assignments
+
+### Claim Protection
+
+- Uses atomic database operations to prevent race conditions
+- Only one collector can claim each site
+- Claims are processed in order received
+- Failed claims show immediate feedback
+
+## 9.4 Fee Calculation at Claim Time
+
+When you claim a site:
+
+1. Your classification level (A, B, or C) is checked
+2. The fee structure for your classification is applied
+3. Enumerator fee and transport fee are calculated
+4. Fees are locked in at claim time
+5. Upon completion, fees are credited to your wallet
+
+## 9.5 For Operations Team
+
+### Setting Up Dispatch
+
+1. Go to the MMP detail page
+2. Select sites to dispatch
+3. Choose dispatch mode and criteria
+4. Set any special requirements
+5. Click **"Dispatch Selected"**
+
+### Monitoring Claims
+
+1. View real-time claim status on MMP page
+2. See who claimed each site
+3. Approve or reject claims (if manual approval enabled)
+4. Reassign unclaimed sites as needed
+
+---
+
+# 10. Classification & Fee Structure
+
+## 10.1 User Classifications
+
+Enumerators are classified into tiers that determine their payment rates:
+
+| Level | Classification | Description |
+|-------|---------------|-------------|
+| A | Senior | Experienced field workers with proven track record |
+| B | Standard | Regular field workers with adequate experience |
+| C | Junior | New or less experienced field workers |
+
+## 10.2 Fee Structure
+
+Each classification has associated fee rates:
+
+| Fee Type | Description |
+|----------|-------------|
+| **Enumerator Fee** | Base payment for completing a site visit |
+| **Transport Fee** | Reimbursement for travel costs |
+| **Total Cost** | Enumerator Fee + Transport Fee |
+
+## 10.3 Managing Classification Fees
+
+Administrators can configure fee rates:
+
+1. Go to **Administration** > **Classification Fees**
+2. View current fee structure for each classification
+3. Click **"Edit"** to modify rates
+4. Enter new fee amounts
+5. Click **"Save Changes"**
+
+### Fee Configuration Example
+
+| Classification | Enumerator Fee (SDG) | Transport Fee (SDG) |
+|---------------|---------------------|---------------------|
+| A | 5,000 | 2,000 |
+| B | 3,500 | 1,500 |
+| C | 2,500 | 1,000 |
+
+## 10.4 Fee Application
+
+Fees are applied when:
+- A collector claims and accepts a site (claim flow)
+- A site is directly assigned to a collector (assignment flow)
+- Operations team manually sets fees
+
+Fees are paid to wallet when:
+- Site visit is marked as **Completed**
+- Creates wallet transaction with full audit trail
+
+---
+
+# 11. Field Team Management
+
+## 11.1 Team Overview
 
 Access from **Field Team** in the sidebar:
 
@@ -563,8 +723,9 @@ Access from **Field Team** in the sidebar:
 - See current status (online/offline)
 - Track real-time locations
 - Monitor workload distribution
+- View classification levels
 
-## 9.2 Team Member Status
+## 11.2 Team Member Status
 
 | Status | Indicator | Meaning |
 |--------|-----------|---------|
@@ -572,7 +733,7 @@ Access from **Field Team** in the sidebar:
 | **Active** | Orange dot | Has recent activity |
 | **Offline** | Gray dot | Not recently active |
 
-## 9.3 Location Tracking
+## 11.3 Location Tracking
 
 Real-time location features:
 
@@ -591,7 +752,27 @@ Real-time location features:
    - Manual toggle
 4. Click **"Save"**
 
-## 9.4 Team Assignment
+## 11.4 Nearest Enumerators
+
+The system can find the nearest available enumerators to any site:
+
+1. Open a site visit or MMP site entry
+2. Click **"Find Nearest Enumerators"**
+3. View list sorted by distance (using GPS coordinates)
+4. See each enumerator's:
+   - Distance from site
+   - Current status
+   - Workload
+   - Classification level
+5. Click to assign directly
+
+### How Distance is Calculated
+
+Uses the Haversine formula to calculate accurate distances between:
+- Site GPS coordinates
+- Enumerator's last known location
+
+## 11.5 Team Assignment
 
 Assign team members to sites:
 
@@ -601,10 +782,11 @@ Assign team members to sites:
    - Current workload
    - Proximity to site
    - Skill match
+   - Classification level
 4. Select collector(s)
 5. Confirm assignment
 
-## 9.5 Smart Assignment
+## 11.6 Smart Assignment
 
 The system suggests optimal assignments based on:
 - Geographic proximity
@@ -612,139 +794,90 @@ The system suggests optimal assignments based on:
 - Past performance
 - Skill requirements
 - Availability
+- Classification match
 
 ---
 
-# 10. Financial Operations
+# 12. Financial Operations
 
-## 10.1 Financial Dashboard
+## 12.1 Financial Dashboard
 
 Access from **Finance** or **Financial Operations**:
 
 - **Overview**: Total budgets, expenses, pending approvals
-- **Transactions**: All financial activities
-- **Pending Approvals**: Awaiting your action
-- **Reports**: Financial summaries
+- **Cash Flow**: Income vs expenses tracking
+- **Pending Approvals**: Items awaiting review
+- **Recent Transactions**: Latest financial activity
 
-## 10.2 Transportation Costs
+## 12.2 Transaction Types
 
-Before dispatching collectors:
+| Type | Description |
+|------|-------------|
+| **Down Payment** | Advance payment for field expenses |
+| **Site Visit Fee** | Payment for completed site visits |
+| **Transport Cost** | Travel expense reimbursement |
+| **Adjustment** | Manual balance corrections |
+| **Withdrawal** | Cash out from wallet |
 
-1. Admin calculates transportation costs
-2. Based on:
-   - Distance to site
-   - Transportation mode
-   - Number of visits
-3. Costs attached to site visits
-4. Tracked through completion
+## 12.3 Approval Workflow
 
-## 10.3 Down Payment System
+Two-tier approval process:
 
-### Requesting Down Payment
+1. **Supervisor Approval**: First level review
+2. **Finance Approval**: Final authorization
 
-1. Go to **Cost Submission**
-2. Click **"Request Down Payment"**
-3. Enter details:
-   - Amount requested
-   - Purpose
-   - Associated site visit
-   - Supporting documents
-4. Submit for approval
+Both levels must approve before payment is processed.
 
-### Approval Workflow
+## 12.4 Financial Reports
 
-1. **Tier 1 - Supervisor Review**
-   - Supervisor reviews request
-   - Approves or requests changes
+Generate financial reports:
 
-2. **Tier 2 - Admin Approval**
-   - Admin verifies request
-   - Approves final payment
-
-### Tracking Status
-
-| Status | Meaning |
-|--------|---------|
-| **Pending** | Awaiting first review |
-| **Supervisor Approved** | Passed to admin |
-| **Approved** | Ready for payment |
-| **Rejected** | Request denied |
-| **Paid** | Payment completed |
-
-## 10.4 Cost Adjustments
-
-For changes to approved costs:
-
-1. Open the cost submission
-2. Click **"Request Adjustment"**
-3. Enter adjustment details:
-   - New amount
-   - Reason for change
-4. Submit for re-approval
-
-## 10.5 Audit Trail
-
-All financial actions are logged:
-- Who made the action
-- When it occurred
-- What changed
-- Previous values
+1. Go to **Finance** > **Reports**
+2. Select report type:
+   - Expense Summary
+   - Payment History
+   - Budget Utilization
+   - Wallet Transactions
+3. Set date range
+4. Choose format (PDF/Excel)
+5. Download
 
 ---
 
-# 11. Budget Management
+# 13. Budget Management
 
-## 11.1 Creating Budgets
+## 13.1 Creating Budgets
 
-### Project Budget
+1. Navigate to **Budget**
+2. Click **"Create Budget"**
+3. Enter details:
+   - Budget Name
+   - Project (optional)
+   - Total Amount
+   - Start/End Date
+   - Categories
+4. Click **"Create"**
 
-1. Go to **Budget**
-2. Click **"Create Project Budget"**
-3. Fill in details:
-   - Project selection
-   - Total amount
-   - Period (start/end dates)
-   - Category allocations
-4. Submit for approval
+## 13.2 Budget Categories
 
-### MMP Budget
-
-1. Click **"Create MMP Budget"**
-2. Select project and MMP
-3. Define budget parameters
-4. Submit
-
-## 11.2 Budget Categories
-
-Standard categories:
-- Transportation
-- Accommodation
-- Equipment
+Pre-defined categories:
 - Personnel
+- Transportation
+- Equipment
+- Communications
 - Contingency
-- Miscellaneous
 
-## 11.3 Budget Status
+## 13.3 Budget Tracking
 
-| Status | Description |
-|--------|-------------|
-| **Draft** | Being prepared |
-| **Submitted** | Awaiting approval |
-| **Approved** | Ready for use |
-| **Active** | Currently in use |
-| **Exceeded** | Over budget limit |
-| **Closed** | No longer active |
+Monitor budget usage:
 
-## 11.4 Budget Monitoring
+- **Allocated**: Total budget amount
+- **Spent**: Amount used
+- **Committed**: Pending expenses
+- **Available**: Remaining balance
+- **Utilization %**: Percentage used
 
-Real-time tracking:
-- Total allocated
-- Amount spent
-- Remaining balance
-- Burn rate
-- Projected end date
-
-## 11.5 Budget Alerts
+## 13.4 Budget Alerts
 
 Configure alerts for:
 - 50% utilization
@@ -752,426 +885,374 @@ Configure alerts for:
 - 90% utilization
 - Over budget
 
-## 11.6 Top-Up Requests
-
-When additional funds needed:
-
-1. Open the budget
-2. Click **"Request Top-Up"**
-3. Enter:
-   - Additional amount
-   - Justification
-4. Submit for approval
-
 ---
 
-# 12. Wallet System
+# 14. Wallet System
 
-## 12.1 Personal Wallet
+## 14.1 Understanding Wallets
 
-Every field team member has a wallet:
+Each field user has a digital wallet for:
+- Receiving site visit payments
+- Tracking earnings history
+- Managing withdrawals
+- Viewing transaction history
 
-- **View Balance**: Current available funds
-- **Transaction History**: All credits and debits
-- **Pending**: Awaiting transactions
-- **Withdrawal**: Request fund withdrawal
+## 14.2 Wallet Dashboard
 
-## 12.2 Wallet Transactions
+View on your wallet page:
 
-| Type | Description |
-|------|-------------|
-| **Credit** | Funds added to wallet |
-| **Debit** | Funds removed from wallet |
-| **Transfer** | Between wallets |
-| **Withdrawal** | Cash out request |
-| **Adjustment** | Admin corrections |
+| Metric | Description |
+|--------|-------------|
+| **Current Balance** | Available funds (SDG) |
+| **Total Earned** | Lifetime earnings |
+| **Pending** | Awaiting approval |
+| **This Month** | Current month earnings |
 
-## 12.3 Withdrawal Requests
+## 14.3 Earning Payments
 
-1. Go to **Wallet**
-2. Click **"Request Withdrawal"**
-3. Enter withdrawal amount
-4. Select bank account
-5. Submit request
+Payments are credited when:
+1. You complete a site visit
+2. The system calculates fees based on your classification
+3. Transaction is created in your wallet
+4. Balance is updated immediately
 
-### Withdrawal Status
+### Payment Breakdown
 
-- **Pending**: Awaiting processing
-- **Approved**: Ready for payment
-- **Processing**: Being transferred
-- **Completed**: Successfully paid
-- **Rejected**: Request denied
+Each earning shows:
+- Enumerator fee amount
+- Transport fee amount
+- Total payment
+- Site visit reference
+- Date/time of completion
 
-## 12.4 Admin Wallet Management
+## 14.4 Transaction History
+
+View all wallet transactions:
+- Filter by type (earning, withdrawal, adjustment)
+- Filter by date range
+- Export to Excel
+- View transaction details
+
+## 14.5 Admin Wallet Management
 
 Administrators can:
-
-1. View all user wallets
-2. Adjust balances
-3. Process withdrawals
-4. Generate wallet reports
-
-Access via **Admin** > **Wallets**
-
-## 12.5 Bank Account Management
-
-Add bank accounts:
-
-1. Go to **Settings** > **Bank Accounts**
-2. Click **"Add Account"**
-3. Enter details:
-   - Bank Name
-   - Account Number
-   - Account Name
-   - Branch
-4. Verify account
-5. Save
+- View all user wallets
+- See earnings breakdown
+- Process withdrawals
+- Make adjustments
+- Generate wallet reports
 
 ---
 
-# 13. Cost Submission & Approvals
+# 15. Cost Submission & Approvals
 
-## 13.1 Submitting Costs
+## 15.1 Submitting Costs
 
-After completing a site visit:
+Field users can submit expenses:
 
-1. Go to **Cost Submission**
-2. Click **"Submit Cost"**
-3. Select the site visit
-4. Enter expenses:
+1. Go to **Finance** > **Submit Cost**
+2. Select cost type:
    - Transportation
-   - Meals
-   - Accommodation
-   - Other costs
-5. Upload receipts
-6. Submit for approval
+   - Down Payment Request
+   - Other Expenses
+3. Enter details:
+   - Amount
+   - Description
+   - Supporting documents
+4. Submit for approval
 
-## 13.2 Supporting Documents
+## 15.2 Approval Process
 
-Required documents:
-- Receipts (photos or scans)
-- Transport tickets
-- Fuel receipts
-- Invoices
+```
+Submitted → Supervisor Review → Finance Review → Approved/Rejected
+```
 
-Document requirements:
-- Clear and legible
-- Dated
-- Showing amounts
-- Matching claimed costs
+### For Supervisors
 
-## 13.3 Approval Process
+1. Go to **Supervisor Approval**
+2. Review pending submissions
+3. Check documentation
+4. Approve or reject with comments
 
-1. **Submission**: Collector submits costs
-2. **Supervisor Review**: Verifies claims
-3. **Admin Approval**: Final authorization
-4. **Payment Processing**: Funds disbursed
-5. **Confirmation**: Both parties notified
+### For Finance
 
-## 13.4 Cost History
+1. Go to **Finance Approval**
+2. Review supervisor-approved items
+3. Verify budget availability
+4. Final approve or reject
 
-View all past submissions:
-- Filter by status
-- Filter by date range
-- Filter by project
-- Export to Excel
+## 15.3 Tracking Submissions
 
-## 13.5 Dispute Resolution
-
-If a cost is rejected:
-
-1. View rejection reason
-2. Click **"Appeal"**
-3. Provide additional information
-4. Resubmit for review
+View submission status:
+- **Pending**: Awaiting review
+- **Supervisor Approved**: First level passed
+- **Approved**: Fully approved
+- **Rejected**: Not approved (see reason)
+- **Paid**: Payment processed
 
 ---
 
-# 14. Reports & Analytics
+# 16. Tracker Preparation Plan
 
-## 14.1 Available Reports
+## 16.1 Overview
 
-| Report Type | Description |
-|-------------|-------------|
-| **Site Visit Summary** | Overview of all visits |
-| **MMP Progress** | MMP completion status |
+The Tracker Preparation Plan provides comprehensive analysis of planned vs. actual site coverage, helping with invoice preparation and cost tracking.
+
+## 16.2 Accessing Tracker
+
+1. Navigate to **Tracker Preparation** from sidebar
+2. Or access from MMP detail page via **"Tracker Plan"** button
+
+## 16.3 Analysis Views
+
+### Summary View
+- Total planned sites
+- Completed sites
+- Completion percentage
+- Total costs incurred
+
+### Site-by-Site View
+- Individual site status
+- Enumerator assigned
+- Fees calculated
+- Completion date
+
+### Cost Breakdown
+- Enumerator fees total
+- Transport fees total
+- Combined costs
+- By classification level
+
+## 16.4 Real-Time Updates
+
+The tracker updates in real-time via Supabase Realtime:
+- Site completions appear instantly
+- Cost calculations update automatically
+- Status changes reflect immediately
+
+## 16.5 Export Capabilities
+
+Export tracker data:
+
+| Format | Contents |
+|--------|----------|
+| **Excel** | Full data with calculations |
+| **PDF** | Formatted report for printing |
+
+## 16.6 Filter Presets
+
+Save commonly used filter combinations:
+- By project
+- By date range
+- By status
+- By state/locality
+
+---
+
+# 17. Reports & Analytics
+
+## 17.1 Available Reports
+
+| Report | Description |
+|--------|-------------|
+| **Operations Summary** | Overview of all field operations |
+| **Site Visit Report** | Detailed site visit data |
+| **Financial Summary** | Budget and expense overview |
 | **Team Performance** | Individual and team metrics |
-| **Financial Summary** | Budget utilization |
-| **Compliance Report** | Audit and verification status |
-| **Wallet Report** | Transaction summaries |
+| **Completion Analysis** | Planned vs actual completion |
+| **Geographic Coverage** | Map-based coverage analysis |
 
-## 14.2 Generating Reports
+## 17.2 Generating Reports
 
-1. Go to **Reports**
+1. Go to **Reports** from sidebar
 2. Select report type
-3. Set parameters:
+3. Configure parameters:
    - Date range
-   - Project filter
-   - Team filter
+   - Projects
+   - States/localities
+   - Status filters
 4. Click **"Generate"**
 5. View or download
 
-## 14.3 Export Formats
-
-- **PDF**: Formatted document
-- **Excel**: Spreadsheet data
-- **CSV**: Raw data export
-
-## 14.4 Scheduled Reports
+## 17.3 Scheduled Reports
 
 Set up automatic reports:
 
-1. Configure report parameters
+1. Create report configuration
 2. Set schedule (daily, weekly, monthly)
-3. Add recipients
-4. Enable notifications
+3. Choose recipients
+4. Reports are emailed automatically
 
-## 14.5 Custom Reports
+## 17.4 Dashboard Analytics
 
-Build custom reports:
-
-1. Select data sources
-2. Choose columns
-3. Apply filters
-4. Set grouping
-5. Save template
-
-## 14.6 Dashboard Analytics
-
-Real-time metrics:
-- Completion rates
-- Average visit duration
-- Cost per visit
-- Team utilization
-- Geographic coverage
+Interactive charts showing:
+- Completion trends
+- Geographic distribution
+- Team workload
+- Budget utilization
+- Performance metrics
 
 ---
 
-# 15. Communication Features
+# 18. Communication Features
 
-## 15.1 In-App Messaging
+## 18.1 In-App Notifications
 
-### Starting a Conversation
+Receive notifications for:
+- New assignments
+- Approval requests
+- Status changes
+- System alerts
+- Team messages
 
-1. Go to **Chat**
-2. Click **"New Message"**
-3. Select recipient(s)
-4. Type your message
-5. Send
+## 18.2 Notification Center
 
-### Group Chats
+Access via bell icon:
+- View all notifications
+- Mark as read/unread
+- Filter by type
+- Clear notifications
 
-Create team discussions:
+## 18.3 Push Notifications
 
-1. Click **"New Group"**
-2. Name the group
-3. Add members
-4. Set purpose/description
-5. Create
+Configure push notifications for mobile:
+- Assignment alerts
+- Approval requests
+- Completion confirmations
+- Urgent messages
 
-## 15.2 Message Features
+## 18.4 Team Messaging
 
-- **Text Messages**: Standard text communication
-- **File Sharing**: Attach documents and images
-- **Read Receipts**: Know when messages are read
-- **Message Search**: Find past conversations
-
-## 15.3 Notification System
-
-Configure notifications:
-
-1. Go to **Settings** > **Notifications**
-2. Toggle notification types:
-   - Assignment notifications
-   - Approval requests
-   - Message alerts
-   - System updates
-3. Set delivery method:
-   - In-app
-   - Email
-   - Push (mobile)
-
-## 15.4 Assignment Alerts
-
-When assigned to a site visit:
-
-1. Popup notification appears
-2. View assignment details
-3. Accept or request reassignment
-4. Access navigation to site
-
-## 15.5 Floating Messenger
-
-Quick access to messages:
-
-1. Click the chat icon in bottom corner
-2. View recent conversations
-3. Send quick replies
-4. Minimize to continue working
+Send messages to team members:
+1. Open team member profile
+2. Click **"Message"**
+3. Type message
+4. Send
 
 ---
 
-# 16. Maps & Location Services
+# 19. Maps & Location Services
 
-## 16.1 Advanced Map Features
+## 19.1 Interactive Maps
 
-Access from **Map** in the sidebar:
+Map features include:
+- Site locations with status markers
+- Team member locations
+- Clustering for dense areas
+- Satellite/terrain views
 
-- **Site Locations**: All monitoring sites
-- **Team Positions**: Real-time team locations
-- **Visit Status**: Color-coded by progress
-- **Clustering**: Groups nearby points
+## 19.2 Map Markers
 
-## 16.2 Map Controls
-
-| Control | Function |
-|---------|----------|
-| **Zoom** | Increase/decrease detail |
-| **Pan** | Move around the map |
-| **Layers** | Toggle map types |
-| **Filter** | Show/hide categories |
-| **Search** | Find specific locations |
-
-## 16.3 Location Markers
-
-Marker colors indicate status:
-
-| Color | Status |
-|-------|--------|
+| Color | Meaning |
+|-------|---------|
+| Blue | Pending/planned |
 | Green | Completed |
-| Blue | In Progress |
-| Yellow | Assigned |
-| Red | Overdue |
-| Gray | Pending |
+| Orange | In progress |
+| Red | Overdue/urgent |
+| Gray | Cancelled |
 
-## 16.4 Team Location Map
-
-View team members on map:
-
-- Profile photos as markers
-- Status ring (green/orange/gray)
-- Click for details
-- Navigate to member
-
-## 16.5 GPS Capture
+## 19.3 Location Capture
 
 During site visits:
+1. GPS automatically captured
+2. Accuracy indicator shown
+3. Manual adjustment if needed
+4. Location saved with visit data
 
-1. System requests location permission
-2. GPS coordinates captured automatically
-3. Accuracy indicator shown
-4. Manual override available
+## 19.4 Geofencing
 
-## 16.6 Offline Maps
-
-For areas with poor connectivity:
-
-1. Download map region
-2. Access offline during visits
-3. Sync when connected
+Optional geofencing features:
+- Verify collector is at site location
+- Alert if outside expected area
+- Log location verification
 
 ---
 
-# 17. Archive Management
+# 20. Sites Registry
 
-## 17.1 What Gets Archived
+## 20.1 Understanding the Registry
+
+The Sites Registry is a master database of all monitoring sites, preventing duplicates and enabling GPS enrichment over time.
+
+## 20.2 Site Matching
+
+When uploading MMPs, the system uses three-tier matching:
+
+1. **Exact Code Match**: Site code matches existing registry entry
+2. **Name + State + Locality**: Same name in same location
+3. **Name + State**: Same name in same state
+
+If matched, the existing site is linked. If not, a new registry entry is created.
+
+## 20.3 GPS Enrichment
+
+Sites can be enriched with GPS coordinates:
+- From field visits (automatic capture)
+- Manual entry by coordinators
+- Bulk import from external sources
+
+## 20.4 Viewing Registry
+
+1. Go to **Hub Operations** > **Sites Registry**
+2. View all registered sites
+3. Filter by state, locality, or project
+4. See GPS coverage status
+
+## 20.5 Managing Sites
+
+Administrators can:
+- Add new sites manually
+- Edit site information
+- Merge duplicate entries
+- Update GPS coordinates
+- Archive inactive sites
+
+---
+
+# 21. Archive Management
+
+## 21.1 What Gets Archived
 
 - Completed MMPs
-- Finished site visits
-- Closed projects
-- Old documents
-- Historical records
+- Finished projects
+- Historical site visits
+- Closed budgets
 
-## 17.2 Accessing Archives
+## 21.2 Accessing Archives
 
-1. Go to **Archive**
-2. Select category:
-   - MMPs
-   - Site Visits
-   - Documents
-3. Use filters:
-   - Date range
-   - Project
-   - Status
+1. Navigate to **Archive**
+2. Select category (MMPs, Projects, etc.)
+3. Use search and filters
 4. View archived items
 
-## 17.3 Archive Search
+## 21.3 Archive Features
 
-Find archived items:
-
-1. Enter search terms
-2. Select search scope
-3. Apply date filters
-4. Review results
-
-## 17.4 Restoring Items
-
-To unarchive:
-
-1. Find the archived item
-2. Click **"Restore"**
-3. Confirm restoration
-4. Item returns to active status
-
-## 17.5 Archive Statistics
-
-View archive metrics:
-- Total archived items
-- Archive by category
-- Storage utilization
-- Archive trends
-
-## 17.6 Calendar View
-
-Browse archives by date:
-
-1. Switch to calendar view
-2. Navigate to date
-3. View items archived that day
-4. Click to access details
+- **View Only**: No modifications allowed
+- **Full History**: Complete audit trail preserved
+- **Export**: Download archived data
+- **Restore**: Super Admins can restore if needed
 
 ---
 
-# 18. Calendar & Scheduling
+# 22. Calendar & Scheduling
 
-## 18.1 Calendar Views
+## 22.1 Calendar View
 
-| View | Description |
-|------|-------------|
-| **Month** | Full month overview |
-| **Week** | 7-day detailed view |
-| **Day** | Single day schedule |
-| **Agenda** | List of upcoming events |
+Access the calendar to see:
+- Scheduled site visits
+- MMP deadlines
+- Team availability
+- Project milestones
 
-## 18.2 Event Types
-
-- **Site Visits**: Scheduled monitoring
-- **Deadlines**: MMP and project deadlines
-- **Meetings**: Team meetings
-- **Reminders**: Personal reminders
-
-## 18.3 Creating Events
+## 22.2 Creating Events
 
 1. Click on a date
 2. Select event type
-3. Fill in details:
-   - Title
-   - Date/Time
-   - Description
-   - Participants
-4. Save event
+3. Fill in details
+4. Set reminders
+5. Save
 
-## 18.4 Deadline Tracking
-
-Automatic deadline display:
-- MMP submission deadlines
-- Visit completion dates
-- Budget closure dates
-- Report due dates
-
-## 18.5 Reminders
-
-Set reminders:
+## 22.3 Reminders
 
 1. Open any item
 2. Click **"Set Reminder"**
@@ -1181,9 +1262,9 @@ Set reminders:
 
 ---
 
-# 19. Settings & Preferences
+# 23. Settings & Preferences
 
-## 19.1 Profile Settings
+## 23.1 Profile Settings
 
 Update your profile:
 
@@ -1196,7 +1277,7 @@ Update your profile:
    - Bio
 4. Save changes
 
-## 19.2 Security Settings
+## 23.2 Security Settings
 
 Manage account security:
 
@@ -1205,7 +1286,7 @@ Manage account security:
 - **Session Management**: View active sessions
 - **Login History**: See recent logins
 
-### 19.2.1 Two-Factor Authentication (2FA)
+### 23.2.1 Two-Factor Authentication (2FA)
 
 Two-factor authentication adds an extra layer of security to your account by requiring both your password and a verification code from your mobile device.
 
@@ -1276,18 +1357,7 @@ The following apps are compatible with PACT 2FA:
 | **QR code not scanning** | Use the manual secret key entry option |
 | **App not showing codes** | Check that you added the correct account in your authenticator app |
 
-## 19.3 Notification Preferences
-
-Configure how you receive alerts:
-
-| Category | Options |
-|----------|---------|
-| **Assignments** | In-app, Email, Push |
-| **Approvals** | In-app, Email, Push |
-| **Messages** | In-app, Email, Push |
-| **System** | In-app, Email |
-
-## 19.4 Display Settings
+## 23.3 Display Settings
 
 Customize your view:
 
@@ -1296,7 +1366,7 @@ Customize your view:
 - **Timezone**: Your local timezone
 - **Date Format**: Preferred date display
 
-## 19.5 Location Settings
+## 23.4 Location Settings
 
 Control location sharing:
 
@@ -1305,7 +1375,7 @@ Control location sharing:
 - View location history
 - Privacy controls
 
-## 19.6 Data Management
+## 23.5 Data Management
 
 - **Export Data**: Download your data
 - **Clear Cache**: Free up storage
@@ -1313,84 +1383,305 @@ Control location sharing:
 
 ---
 
-# 20. Mobile App Guide
+# 24. Notification System
 
-## 20.1 Installation
+## 24.1 Notification Settings
 
-### iOS
-1. Open App Store
-2. Search "PACT Workflow"
-3. Tap "Install"
-4. Open and login
+The notification settings provide granular control over how you receive alerts, featuring a WhatsApp-style interface with animated toggles.
 
-### Android
-1. Open Google Play Store
-2. Search "PACT Workflow"
-3. Tap "Install"
-4. Open and login
+### Accessing Settings
 
-## 20.2 Mobile-Specific Features
+1. Go to **Settings** from sidebar
+2. Click **"Notifications"** tab
+3. View notification preferences organized by category
 
-| Feature | Description |
+### Notification Categories
+
+| Category | Description |
+|----------|-------------|
+| **Site Visits** | Assignment, completion, and update notifications |
+| **Approvals** | Pending approval requests and status changes |
+| **Financial** | Payment, wallet, and budget notifications |
+| **Team** | Team member updates and location sharing |
+| **System** | Platform updates and maintenance alerts |
+
+## 24.2 Notification Channels
+
+Configure how you receive each notification type:
+
+| Channel | Description |
 |---------|-------------|
-| **Offline Mode** | Work without internet |
-| **GPS Capture** | Automatic location |
-| **Camera Integration** | Photo capture |
-| **Push Notifications** | Instant alerts |
-| **Touch ID/Face ID** | Biometric login |
+| **In-App** | Notifications appear in the notification center |
+| **Push** | Mobile push notifications (requires app permission) |
+| **Email** | Email notifications (configurable frequency) |
 
-## 20.3 Granting Permissions
+## 24.3 Push Notifications
 
-On first use, grant permissions:
+### Enabling Push Notifications
 
-1. **Location**: Required for GPS capture
-   - Enable "While Using App" or "Always"
-2. **Camera**: For photo capture
-   - Enable access
-3. **Notifications**: For alerts
-   - Enable push notifications
-4. **Storage**: For offline files
-   - Grant access
+1. Go to **Settings** > **Notifications**
+2. Find **"Push Notifications"** section
+3. Toggle on to enable
+4. Grant browser/app permission when prompted
 
-## 20.4 Offline Functionality
+### Push Notification Features
 
-When offline:
+- **Rich Notifications**: Include images and action buttons
+- **Vibration Patterns**: Different patterns for priority levels
+- **Background Delivery**: Receive while app is closed
+- **Action Buttons**: Quick actions directly from notification
 
-1. View cached data
-2. Complete site visits
-3. Capture photos and GPS
-4. Queue submissions
-5. Auto-sync when online
+## 24.4 Quiet Hours
 
-## 20.5 Mobile Navigation
+Set times when notifications are muted:
 
-Bottom navigation bar includes:
-- **Home**: Dashboard
-- **Visits**: Site visits
-- **Map**: Location view
-- **Messages**: Chat
-- **Profile**: Settings
-
-## 20.6 Quick Actions
-
-From home screen:
-- Start Visit (button)
-- Check In (location)
-- Capture Photo
-- View Notifications
-
-## 20.7 Mobile Tips
-
-- **Swipe**: Navigate between items
-- **Pull down**: Refresh data
-- **Long press**: Access options
-- **Pinch**: Zoom on maps
+1. Enable **"Quiet Hours"**
+2. Set start time (e.g., 10:00 PM)
+3. Set end time (e.g., 7:00 AM)
+4. Choose which notifications can still come through
 
 ---
 
-# 21. Troubleshooting
+# 25. Mobile Application
 
-## 21.1 Common Issues
+## 25.1 Overview
+
+The PACT mobile application is a native Android app built with Capacitor, providing full access to field operations features with offline support.
+
+### Key Mobile Features
+
+| Feature | Description |
+|---------|-------------|
+| **Offline Mode** | Work without internet connection |
+| **GPS Capture** | Automatic location tracking |
+| **Camera Integration** | Photo capture for site visits |
+| **Push Notifications** | Instant alerts even when app is closed |
+| **Edge-to-Edge Display** | Full-screen immersive experience |
+| **Dark Mode Support** | Automatic theme switching |
+
+## 25.2 Installation
+
+### Android APK Installation
+
+#### Option 1: Direct APK Download
+1. Download the APK file from your organization
+2. On your Android device, go to **Settings** > **Security**
+3. Enable **"Install from Unknown Sources"** or **"Install unknown apps"**
+4. Open the downloaded APK file
+5. Tap **"Install"**
+6. Open the app and login
+
+#### Option 2: Build from Source
+
+**Prerequisites:**
+- Java JDK 17 or later
+- Android SDK (API 26+)
+- VS Code or Android Studio
+
+**Building in VS Code:**
+
+1. Download the project from Replit
+2. Open terminal in VS Code
+3. Navigate to android folder:
+   ```bash
+   cd android
+   ```
+4. Build the APK:
+   
+   **Windows:**
+   ```cmd
+   gradlew.bat assembleDebug
+   ```
+   
+   **Mac/Linux:**
+   ```bash
+   chmod +x gradlew
+   ./gradlew assembleDebug
+   ```
+5. Find APK at:
+   ```
+   android/app/build/outputs/apk/debug/app-debug.apk
+   ```
+
+**Building in Android Studio:**
+
+1. Open Android Studio
+2. Select **"Open an Existing Project"**
+3. Navigate to the `android` folder
+4. Wait for Gradle sync to complete
+5. Go to **Build** > **Build Bundle(s) / APK(s)** > **Build APK(s)**
+6. Click **"locate"** to find the APK
+
+### iOS Installation
+
+1. Open App Store (when available)
+2. Search "PACT Workflow"
+3. Tap "Install"
+4. Open and login
+
+## 25.3 Granting Permissions
+
+On first use, grant these permissions:
+
+| Permission | Purpose | Recommended Setting |
+|------------|---------|---------------------|
+| **Location** | GPS capture for site visits | "While Using App" or "Always" |
+| **Camera** | Photo capture during visits | Allow |
+| **Notifications** | Push alerts for assignments | Allow |
+| **Storage** | Offline data and file uploads | Allow |
+
+## 25.4 Mobile Navigation
+
+The app features bottom navigation:
+
+| Tab | Contents |
+|-----|----------|
+| **Dashboard** | Operations overview, quick stats |
+| **Sites** | Your assigned and available sites |
+| **Map** | Interactive location view |
+| **Notifications** | All alerts and messages |
+| **Menu** | Full navigation, settings, profile |
+
+## 25.5 Edge-to-Edge Display
+
+The app uses modern edge-to-edge display:
+- Content extends behind status bar
+- Safe area padding prevents overlap
+- Navigation buttons don't block content
+- Immersive full-screen experience
+
+### Screen Fit Features
+
+- **Status Bar**: Transparent with theme-aware icons
+- **Navigation Bar**: Transparent with content padding
+- **Safe Areas**: Automatic padding for notches and buttons
+- **Responsive**: Adapts to all screen sizes
+
+## 25.6 Conducting Visits on Mobile
+
+### Starting a Visit
+
+1. Open the **Sites** tab
+2. Find your assigned site
+3. Tap on the site to view details
+4. Tap **"Start Visit"**
+5. GPS location is automatically captured
+6. Complete required data entry
+
+### Capturing Data
+
+- **Photos**: Tap camera icon to take photos
+- **GPS**: Automatic, shows accuracy indicator
+- **Forms**: Fill in required fields
+- **Notes**: Add observations
+
+### Completing a Visit
+
+1. Review all captured data
+2. Tap **"Complete Visit"**
+3. Data syncs to server (or queues if offline)
+4. Payment is processed to your wallet
+
+## 25.7 Offline Functionality
+
+When offline, you can:
+
+| Action | Available Offline |
+|--------|-------------------|
+| View cached site data | Yes |
+| Start and complete visits | Yes |
+| Capture photos and GPS | Yes |
+| Submit visit data | Queued |
+| View pending work | Yes |
+| Sync when online | Automatic |
+
+### Sync Status Indicators
+
+| Indicator | Meaning |
+|-----------|---------|
+| Green check | Synced |
+| Orange clock | Pending sync |
+| Red X | Sync failed (retry) |
+
+### Offline Queue
+
+Pending items are stored locally and automatically sync when connectivity returns:
+
+1. Data is encrypted on device
+2. Queued in order of submission
+3. Auto-syncs when online
+4. Shows sync progress
+
+## 25.8 Mobile Notifications
+
+### Push Notification Types
+
+| Type | Priority | Sound |
+|------|----------|-------|
+| **Urgent Assignment** | High | Alert tone |
+| **New Assignment** | Normal | Notification sound |
+| **Approval Request** | Normal | Notification sound |
+| **Status Update** | Low | Silent |
+| **System Alert** | High | Alert tone |
+
+### Notification Actions
+
+Tap notification to:
+- Open relevant screen
+- Quick action buttons (Accept, Reject)
+- View full details
+
+### Managing Notifications
+
+1. Go to **Menu** > **Settings** > **Notifications**
+2. Toggle categories on/off
+3. Set quiet hours
+4. Configure per-category preferences
+
+## 25.9 Troubleshooting Mobile App
+
+### App Won't Start
+
+1. Force close and reopen
+2. Clear app cache (Settings > Apps > PACT > Clear Cache)
+3. Ensure sufficient storage space
+4. Reinstall if persistent
+
+### Location Not Working
+
+1. Check device location is enabled
+2. Verify app has location permission
+3. Try outdoor location
+4. Check GPS accuracy setting
+
+### Data Not Syncing
+
+1. Check internet connection
+2. Pull down to refresh
+3. Check sync status in settings
+4. Force sync from settings
+
+### White Screen Issue
+
+If app shows white screen:
+1. Wait 10-15 seconds for initial load
+2. Check internet connectivity
+3. Reinstall app with latest APK
+4. Contact IT support
+
+### Battery Optimization
+
+If notifications aren't received:
+1. Go to device Settings > Apps > PACT
+2. Disable **"Battery Optimization"**
+3. Enable **"Background Activity"**
+4. Keep app in recent apps
+
+---
+
+# 26. Troubleshooting
+
+## 26.1 Common Issues
 
 ### Cannot Login
 
@@ -1398,7 +1689,8 @@ From home screen:
 2. Verify password (case-sensitive)
 3. Clear browser cache
 4. Try password reset
-5. Contact administrator
+5. Check if 2FA is enabled
+6. Contact administrator
 
 ### Location Not Working
 
@@ -1430,9 +1722,17 @@ From home screen:
 2. Verify file size limit
 3. Check required columns
 4. Fix validation errors
-5. Try smaller batches
+5. Check for duplicate sites
+6. Try smaller batches
 
-## 21.2 Error Messages
+### Wallet Not Updating
+
+1. Refresh the page
+2. Check if visit is marked completed
+3. Verify fee was calculated
+4. Contact finance team
+
+## 26.2 Error Messages
 
 | Error | Meaning | Solution |
 |-------|---------|----------|
@@ -1441,8 +1741,10 @@ From home screen:
 | "Network Error" | Connection lost | Check internet |
 | "Validation Failed" | Invalid data | Fix highlighted fields |
 | "Server Error" | System issue | Try again later |
+| "Site Already Claimed" | Another user claimed first | Try different site |
+| "Duplicate Site" | Site exists in this month | Check existing MMPs |
 
-## 21.3 Getting Help
+## 26.3 Getting Help
 
 1. **In-App Help**: Click ? icon
 2. **User Guide**: This document
@@ -1450,7 +1752,7 @@ From home screen:
 4. **Email**: support@pact-platform.com
 5. **Phone**: Emergency support line
 
-## 21.4 Reporting Bugs
+## 26.4 Reporting Bugs
 
 To report an issue:
 
@@ -1458,11 +1760,12 @@ To report an issue:
 2. Take screenshots if possible
 3. Note error messages
 4. Record date and time
-5. Submit via support channel
+5. Include device/browser info
+6. Submit via support channel
 
 ---
 
-# 22. Glossary
+# 27. Glossary
 
 | Term | Definition |
 |------|------------|
@@ -1470,22 +1773,27 @@ To report an issue:
 | **Site Visit** | A scheduled or ad-hoc visit to a monitoring location |
 | **Coordinator** | Field team member who coordinates site visits |
 | **Data Collector** | Field team member who collects data at sites |
+| **Enumerator** | Field worker who conducts site visits (same as Data Collector) |
 | **FOM** | Field Operation Manager - Manages field operations |
 | **RLS** | Row Level Security - Database access control |
 | **Down Payment** | Advance payment for field expenses |
-| **Dispatch** | Sending field teams to assigned sites |
+| **Dispatch** | Making sites available for claiming/assignment |
+| **Claim** | Reserving a dispatched site for yourself |
 | **Verification** | Process of validating data accuracy |
 | **Archive** | Historical storage for completed items |
 | **Wallet** | Digital account for managing field payments |
 | **Permit** | Authorization document for site access |
 | **GPS** | Global Positioning System - Location tracking |
 | **KPI** | Key Performance Indicator - Success metrics |
-| **Classification** | Categorization of sites or users |
+| **Classification** | Categorization of enumerators (A, B, C levels) |
 | **Audit Trail** | Record of all system actions |
 | **Real-time** | Instant updates without delay |
 | **Sync** | Synchronize data between devices |
 | **Offline Mode** | Functionality without internet |
 | **Push Notification** | Alert sent to mobile device |
+| **Safe Area** | Screen padding for notches/navigation |
+| **Edge-to-Edge** | Full-screen display mode |
+| **APK** | Android Package - Android app installer file |
 
 ---
 
@@ -1511,6 +1819,7 @@ To report an issue:
 | Orange | Attention Required |
 | Red | Overdue/Error/Offline |
 | Gray | Inactive/Archived |
+| Purple | Claimed/Reserved |
 
 ## Role Quick Reference
 
@@ -1520,13 +1829,26 @@ To report an issue:
 | Upload MMP | Admin, ICT, FOM |
 | Approve costs | Financial Admin, Admin |
 | Assign visits | Admin, FOM, Supervisor |
+| Claim sites | Data Collector |
 | Collect data | Data Collector |
 | Manage budgets | Financial Admin, Admin |
+| Configure fees | Admin |
+| Manage wallets | Admin, Super Admin |
+
+## Mobile Quick Actions
+
+| Gesture | Action |
+|---------|--------|
+| Swipe left/right | Navigate between items |
+| Pull down | Refresh data |
+| Long press | Access options menu |
+| Pinch | Zoom on maps |
+| Double tap | Quick zoom |
 
 ---
 
-**Document Version**: 1.0  
-**Last Updated**: November 2024  
+**Document Version**: 2.0  
+**Last Updated**: November 2025  
 **PACT Workflow Platform**
 
 For the latest updates and additional resources, visit the Help section in the application.
