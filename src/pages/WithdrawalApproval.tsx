@@ -7,9 +7,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useWallet } from '@/context/wallet/WalletContext';
 import { useUser } from '@/context/user/UserContext';
 import { useAppContext } from '@/context/AppContext';
+import { useToast } from '@/hooks/use-toast';
 import { 
   Clock, 
   CheckCircle2, 
@@ -25,15 +27,20 @@ import {
   Wallet,
   TrendingUp,
   Shield,
-  AlertTriangle
+  AlertTriangle,
+  Zap,
+  Timer,
+  CheckCheck,
+  Flame
 } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, differenceInHours, differenceInDays } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
 import { WithdrawalRequest } from '@/types/wallet';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { supabase } from '@/integrations/supabase/client';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface SupervisedRequest extends WithdrawalRequest {
   requesterName?: string;
@@ -53,12 +60,81 @@ export default function WithdrawalApproval() {
   } = useWallet();
   const { users } = useUser();
   const { currentUser } = useAppContext();
+  const { toast } = useToast();
   const [selectedRequest, setSelectedRequest] = useState<SupervisedRequest | null>(null);
-  const [dialogType, setDialogType] = useState<'approve' | 'reject' | null>(null);
+  const [dialogType, setDialogType] = useState<'approve' | 'reject' | 'batch_approve' | null>(null);
   const [notes, setNotes] = useState('');
   const [processing, setProcessing] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [hubName, setHubName] = useState<string | null>(null);
+  const [selectedRequestIds, setSelectedRequestIds] = useState<Set<string>>(new Set());
+  
+  const getRequestUrgency = (createdAt: string) => {
+    const hoursAgo = differenceInHours(new Date(), new Date(createdAt));
+    const daysAgo = differenceInDays(new Date(), new Date(createdAt));
+    
+    if (hoursAgo < 24) {
+      return { level: 'normal', label: 'New', color: 'text-muted-foreground', bgColor: '', icon: null };
+    } else if (hoursAgo < 48) {
+      return { level: 'medium', label: '1+ day', color: 'text-amber-600 dark:text-amber-400', bgColor: 'bg-amber-500/10', icon: Timer };
+    } else if (hoursAgo < 72) {
+      return { level: 'high', label: '2+ days', color: 'text-orange-600 dark:text-orange-400', bgColor: 'bg-orange-500/10', icon: AlertTriangle };
+    } else {
+      return { level: 'critical', label: `${daysAgo}+ days`, color: 'text-red-600 dark:text-red-400', bgColor: 'bg-red-500/10', icon: Flame };
+    }
+  };
+  
+  const toggleRequestSelection = (requestId: string) => {
+    setSelectedRequestIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(requestId)) {
+        newSet.delete(requestId);
+      } else {
+        newSet.add(requestId);
+      }
+      return newSet;
+    });
+  };
+  
+  const toggleAllPendingSelection = () => {
+    if (selectedRequestIds.size === pendingRequests.length) {
+      setSelectedRequestIds(new Set());
+    } else {
+      setSelectedRequestIds(new Set(pendingRequests.map(r => r.id)));
+    }
+  };
+  
+  const handleBatchApprove = async () => {
+    if (selectedRequestIds.size === 0) return;
+    
+    setProcessing(true);
+    let successCount = 0;
+    let failCount = 0;
+    
+    try {
+      for (const requestId of selectedRequestIds) {
+        try {
+          await approveWithdrawalRequest(requestId, notes || 'Batch approved by supervisor');
+          successCount++;
+        } catch (error) {
+          failCount++;
+        }
+      }
+      
+      toast({
+        title: 'Batch Approval Complete',
+        description: `${successCount} request(s) approved${failCount > 0 ? `, ${failCount} failed` : ''}`,
+        variant: failCount > 0 ? 'destructive' : 'default',
+      });
+      
+      await refreshSupervisedWithdrawalRequests();
+      setSelectedRequestIds(new Set());
+      setDialogType(null);
+      setNotes('');
+    } finally {
+      setProcessing(false);
+    }
+  };
 
   const isSupervisor = useMemo(() => {
     if (!currentUser) return false;
@@ -218,14 +294,70 @@ export default function WithdrawalApproval() {
     }
   };
 
-  const RequestCard = ({ request }: { request: SupervisedRequest }) => {
+  const WorkflowTimeline = ({ request }: { request: SupervisedRequest }) => {
+    const steps = [
+      { key: 'submitted', label: 'Submitted', done: true },
+      { key: 'supervisor', label: 'Supervisor', done: request.status !== 'pending' },
+      { key: 'finance', label: 'Finance', done: request.status === 'processing' || request.status === 'approved' },
+      { key: 'complete', label: 'Complete', done: request.status === 'approved' },
+    ];
+    
+    const rejectedStep = request.status === 'rejected' 
+      ? ((request as any).adminNotes ? 2 : 1)
+      : -1;
+    
+    return (
+      <div className="flex items-center gap-1 text-xs">
+        {steps.map((step, idx) => (
+          <div key={step.key} className="flex items-center">
+            <div className={`w-2 h-2 rounded-full ${
+              rejectedStep === idx 
+                ? 'bg-red-500' 
+                : step.done 
+                  ? 'bg-emerald-500' 
+                  : 'bg-muted-foreground/30'
+            }`} />
+            {idx < steps.length - 1 && (
+              <div className={`w-4 h-0.5 ${
+                step.done && steps[idx + 1]?.done 
+                  ? 'bg-emerald-500' 
+                  : 'bg-muted-foreground/30'
+              }`} />
+            )}
+          </div>
+        ))}
+        <span className="ml-1 text-muted-foreground">{
+          request.status === 'rejected' ? 'Rejected' :
+          request.status === 'approved' ? 'Completed' :
+          request.status === 'processing' ? 'Processing' :
+          request.status === 'supervisor_approved' ? 'With Finance' :
+          'Pending'
+        }</span>
+      </div>
+    );
+  };
+
+  const RequestCard = ({ request, showSelection = false }: { request: SupervisedRequest, showSelection?: boolean }) => {
     const userName = getUserName(request.userId, request);
     const colors = getStatusColor(request.status);
+    const urgency = request.status === 'pending' ? getRequestUrgency(request.createdAt) : null;
+    const UrgencyIcon = urgency?.icon;
+    
     return (
-      <Card className={`group transition-all duration-200 hover:shadow-md border-l-4 ${colors.border}`}>
+      <Card className={`group transition-all duration-200 hover:shadow-md border-l-4 ${colors.border} ${
+        selectedRequestIds.has(request.id) ? 'ring-2 ring-primary ring-offset-2' : ''
+      }`}>
         <CardContent className="p-4">
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-start gap-3 flex-1 min-w-0">
+              {showSelection && request.status === 'pending' && (
+                <Checkbox
+                  checked={selectedRequestIds.has(request.id)}
+                  onCheckedChange={() => toggleRequestSelection(request.id)}
+                  className="mt-1"
+                  data-testid={`checkbox-select-${request.id}`}
+                />
+              )}
               <Avatar className={`h-10 w-10 border-2 ${colors.avatar}`}>
                 <AvatarFallback className={`${colors.avatarBg} text-sm font-medium`}>
                   {getInitials(userName)}
@@ -235,6 +367,19 @@ export default function WithdrawalApproval() {
                 <div className="flex items-center gap-2 flex-wrap">
                   <h4 className="font-semibold text-foreground truncate">{userName}</h4>
                   {getStatusBadge(request.status)}
+                  {urgency && urgency.level !== 'normal' && UrgencyIcon && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Badge variant="outline" className={`${urgency.bgColor} ${urgency.color} border-0 gap-1`}>
+                          <UrgencyIcon className="w-3 h-3" />
+                          {urgency.label}
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Request waiting for {urgency.label}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
                 </div>
                 <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground">
                   <span className="flex items-center gap-1">
@@ -242,6 +387,9 @@ export default function WithdrawalApproval() {
                     {formatDate(request.createdAt)}
                   </span>
                   <span>{formatTime(request.createdAt)}</span>
+                </div>
+                <div className="mt-2">
+                  <WorkflowTimeline request={request} />
                 </div>
                 {request.requestReason && (
                   <p className="text-sm text-muted-foreground mt-2 line-clamp-2 italic">
@@ -467,11 +615,41 @@ export default function WithdrawalApproval() {
               />
             </Card>
           ) : (
-            <div className="grid gap-3">
-              {pendingRequests.map((request) => (
-                <RequestCard key={request.id} request={request} />
-              ))}
-            </div>
+            <>
+              {pendingRequests.length > 1 && (
+                <div className="flex items-center justify-between gap-4 p-3 bg-muted/50 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <Checkbox
+                      checked={selectedRequestIds.size === pendingRequests.length}
+                      onCheckedChange={toggleAllPendingSelection}
+                      data-testid="checkbox-select-all"
+                    />
+                    <span className="text-sm font-medium">
+                      {selectedRequestIds.size > 0 
+                        ? `${selectedRequestIds.size} selected`
+                        : 'Select all'
+                      }
+                    </span>
+                  </div>
+                  {selectedRequestIds.size > 0 && (
+                    <Button
+                      size="sm"
+                      onClick={() => setDialogType('batch_approve')}
+                      className="bg-emerald-600 text-white"
+                      data-testid="button-batch-approve"
+                    >
+                      <CheckCheck className="w-4 h-4 mr-1.5" />
+                      Approve Selected ({selectedRequestIds.size})
+                    </Button>
+                  )}
+                </div>
+              )}
+              <div className="grid gap-3">
+                {pendingRequests.map((request) => (
+                  <RequestCard key={request.id} request={request} showSelection={pendingRequests.length > 1} />
+                ))}
+              </div>
+            </>
           )}
         </TabsContent>
 
@@ -530,7 +708,7 @@ export default function WithdrawalApproval() {
         </TabsContent>
       </Tabs>
 
-      <Dialog open={dialogType !== null} onOpenChange={() => setDialogType(null)}>
+      <Dialog open={dialogType !== null && dialogType !== 'batch_approve'} onOpenChange={() => setDialogType(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -601,6 +779,67 @@ export default function WithdrawalApproval() {
               data-testid="button-confirm-action"
             >
               {processing ? 'Processing...' : dialogType === 'approve' ? 'Forward to Finance' : 'Reject Request'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      <Dialog open={dialogType === 'batch_approve'} onOpenChange={() => setDialogType(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <div className="p-2 rounded-full bg-emerald-500/10">
+                <CheckCheck className="w-5 h-5 text-emerald-600" />
+              </div>
+              Batch Approval
+            </DialogTitle>
+            <DialogDescription>
+              <div className="mt-4 p-4 rounded-lg bg-muted/50 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Requests Selected</span>
+                  <span className="font-bold text-foreground tabular-nums">{selectedRequestIds.size}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Total Amount</span>
+                  <span className="font-bold text-foreground tabular-nums">
+                    {formatCurrency(
+                      pendingRequests
+                        .filter(r => selectedRequestIds.has(r.id))
+                        .reduce((sum, r) => sum + r.amount, 0),
+                      'SDG'
+                    )}
+                  </span>
+                </div>
+              </div>
+              <p className="mt-4 text-sm">
+                All selected requests will be forwarded to Finance for payment processing.
+              </p>
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2">
+            <Label htmlFor="batch-notes">Notes (Optional)</Label>
+            <Textarea
+              id="batch-notes"
+              placeholder="Add optional notes for Finance team..."
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={2}
+              data-testid="input-batch-notes"
+            />
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setDialogType(null)} disabled={processing}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleBatchApprove}
+              disabled={processing}
+              className="bg-emerald-600 text-white"
+              data-testid="button-confirm-batch"
+            >
+              {processing ? 'Processing...' : `Approve ${selectedRequestIds.size} Requests`}
             </Button>
           </DialogFooter>
         </DialogContent>
