@@ -1525,49 +1525,310 @@ Administrators can:
 
 # 15. Cost Submission & Approvals
 
-## 15.1 Submitting Costs
+This section covers the three main financial workflows in PACT:
+1. **Cost Submission** - Post-visit expense reimbursement
+2. **Down Payment (Advance)** - Pre-travel advance payments
+3. **Final Payment** - Automatic wallet credit on visit completion
 
-Field users can submit expenses:
+---
 
-1. Go to **Finance** > **Submit Cost**
-2. Select cost type:
-   - Transportation
-   - Down Payment Request
-   - Other Expenses
-3. Enter details:
-   - Amount
-   - Description
-   - Supporting documents
-4. Submit for approval
+## 15.1 Cost Submission Workflow (Post-Visit Reimbursement)
 
-## 15.2 Approval Process
+Cost submission is for requesting reimbursement of ACTUAL expenses incurred AFTER completing a site visit.
+
+### When to Use Cost Submission
+
+| Use Case | Example |
+|----------|---------|
+| Unexpected transportation costs | Bus broke down, had to take taxi |
+| Accommodation expenses | Required overnight stay |
+| Meal allowances | Extended field work |
+| Other incidental costs | Parking, phone calls, supplies |
+
+### Cost Submission Process
 
 ```
-Submitted → Supervisor Review → Finance Review → Approved/Rejected
+┌─────────────────────────────────────────────────────────────────────┐
+│                    COST SUBMISSION WORKFLOW                         │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  1. Data Collector completes site visit                            │
+│           ↓                                                        │
+│  2. Opens Finance > Submit Cost                                     │
+│           ↓                                                        │
+│  3. Selects the completed site visit                               │
+│           ↓                                                        │
+│  4. Enters ACTUAL costs incurred:                                  │
+│      • Transportation Cost (in cents)                              │
+│      • Accommodation Cost (in cents)                               │
+│      • Meal Allowance (in cents)                                   │
+│      • Other Costs (in cents)                                      │
+│           ↓                                                        │
+│  5. Provides details for each cost category                        │
+│           ↓                                                        │
+│  6. Uploads supporting documents (receipts, photos)                │
+│           ↓                                                        │
+│  7. Submits for approval                                           │
+│           ↓                                                        │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │         STATUS: Pending Approval                             │   │
+│  └─────────────────────────────────────────────────────────────┘   │
+│           ↓                                                        │
+│  8. Supervisor/Admin reviews submission                            │
+│           ↓                                                        │
+│  9. Approves or Rejects with notes                                 │
+│           ↓                                                        │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │      STATUS: Approved → Payment Processed to Wallet          │   │
+│  └─────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
-### For Supervisors
+### Step-by-Step Instructions
 
-1. Go to **Supervisor Approval**
-2. Review pending submissions
-3. Check documentation
-4. Approve or reject with comments
+1. Navigate to **Finance** > **Submit Cost**
+2. Select your completed site visit from the dropdown
+3. Enter costs in **cents** (e.g., 5000 = 50.00 SDG):
 
-### For Finance
+| Field | Description | Example |
+|-------|-------------|---------|
+| Transportation Cost | Bus, taxi, fuel expenses | 5000 (= 50.00 SDG) |
+| Accommodation Cost | Hotel, lodging expenses | 10000 (= 100.00 SDG) |
+| Meal Allowance | Food and beverage costs | 3000 (= 30.00 SDG) |
+| Other Costs | Parking, phone, supplies | 1500 (= 15.00 SDG) |
 
-1. Go to **Finance Approval**
-2. Review supervisor-approved items
-3. Verify budget availability
-4. Final approve or reject
+4. Add details explaining each expense
+5. Upload supporting documents (receipts)
+6. Click **"Submit Costs for Approval"**
 
-## 15.3 Tracking Submissions
+### Required Documents
 
-View submission status:
-- **Pending**: Awaiting review
-- **Supervisor Approved**: First level passed
-- **Approved**: Fully approved
-- **Rejected**: Not approved (see reason)
-- **Paid**: Payment processed
+| Cost Type | Recommended Documents |
+|-----------|----------------------|
+| Transportation | Bus/taxi receipts, fuel receipts |
+| Accommodation | Hotel invoice, booking confirmation |
+| Meals | Restaurant receipts |
+| Other | Relevant receipts or photos |
+
+---
+
+## 15.2 Down Payment (Advance) System
+
+Down payment is for requesting advance funds BEFORE traveling to a site visit.
+
+### Two-Tier Approval Process
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│               DOWN PAYMENT / ADVANCE REQUEST WORKFLOW               │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  Data Collector/Coordinator                                         │
+│           ↓                                                        │
+│  Creates Down Payment Request:                                      │
+│   • Site Name                                                       │
+│   • Total Transportation Budget                                     │
+│   • Requested Amount                                                │
+│   • Payment Type (Full Advance or Installments)                     │
+│   • Justification                                                   │
+│   • Supporting Documents                                            │
+│           ↓                                                        │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │         STATUS: pending_supervisor                           │   │
+│  └─────────────────────────────────────────────────────────────┘   │
+│           ↓                                                        │
+│  TIER 1: Hub Supervisor Review                                      │
+│   ├── Approve → Status becomes "pending_admin"                      │
+│   └── Reject → Request ends (with rejection reason)                 │
+│           ↓                                                        │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │         STATUS: pending_admin                                │   │
+│  └─────────────────────────────────────────────────────────────┘   │
+│           ↓                                                        │
+│  TIER 2: Admin/Finance Review                                       │
+│   ├── Approve → Status becomes "approved"                           │
+│   └── Reject → Request ends (with rejection reason)                 │
+│           ↓                                                        │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │         STATUS: approved → Ready for Payment                 │   │
+│  └─────────────────────────────────────────────────────────────┘   │
+│           ↓                                                        │
+│  Finance processes payment to wallet                                │
+│           ↓                                                        │
+│  Final Status: partially_paid → fully_paid                          │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Payment Types
+
+| Type | Description | Use Case |
+|------|-------------|----------|
+| **Full Advance** | Single payment before travel | Short trips, known costs |
+| **Installments** | Multiple payments at stages | Long trips, uncertain costs |
+
+### Installment Stages
+
+For installment payments, funds can be released at:
+- Before Travel (initial advance)
+- After Completion (remaining balance)
+- Custom stages as defined
+
+### Down Payment Statuses
+
+| Status | Meaning |
+|--------|---------|
+| `pending_supervisor` | Awaiting hub supervisor approval |
+| `pending_admin` | Supervisor approved, awaiting admin |
+| `approved` | Both tiers approved, awaiting payment |
+| `rejected` | Rejected by supervisor or admin |
+| `partially_paid` | Some installments paid |
+| `fully_paid` | All installments paid |
+| `cancelled` | Cancelled by requester |
+
+---
+
+## 15.3 Final Payment (Automatic Wallet Credit)
+
+When a site visit is completed, payment is automatically credited to the data collector's wallet.
+
+### Automatic Payment Process
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    AUTOMATIC WALLET PAYMENT                         │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  1. Data Collector clicks "Complete Visit"                          │
+│           ↓                                                        │
+│  2. System captures final GPS location                              │
+│           ↓                                                        │
+│  3. System fetches fee data from database:                          │
+│      • enumerator_fee (based on A/B/C classification)               │
+│      • transport_fee (fixed rate per site)                          │
+│           ↓                                                        │
+│  4. Total calculated: enumerator_fee + transport_fee                │
+│           ↓                                                        │
+│  5. System gets/creates wallet for the collector                    │
+│           ↓                                                        │
+│  6. Creates wallet transaction:                                     │
+│      {                                                              │
+│        type: "earning",                                             │
+│        amount: totalCost,                                           │
+│        amount_cents: totalCost × 100,                               │
+│        description: "Site visit: [code] - [name]"                   │
+│      }                                                              │
+│           ↓                                                        │
+│  7. Updates wallet balance:                                         │
+│      new_balance = current_balance + totalCost                      │
+│      total_earned = total_earned + totalCost                        │
+│           ↓                                                        │
+│  8. Site status → "Completed"                                       │
+│           ↓                                                        │
+│  9. Push notification sent to collector                             │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Fee Calculation
+
+| Component | Source | Example |
+|-----------|--------|---------|
+| Enumerator Fee | Classification level (A/B/C) | 150 SDG (Class A) |
+| Transport Fee | Site-specific allocation | 50 SDG |
+| **Total** | Sum of above | **200 SDG** |
+
+### Classification Fee Rates
+
+| Classification | Level | Typical Rate |
+|---------------|-------|--------------|
+| Class A | Senior | Highest tier |
+| Class B | Standard | Mid tier |
+| Class C | Junior | Entry tier |
+
+*Rates are configured in Admin > Classification Fee Management*
+
+---
+
+## 15.4 Supervisor Withdrawal Request Permissions
+
+### Important: Hub/State Assignment Required
+
+For supervisors to see and approve withdrawal requests from their team members, **both conditions must be met**:
+
+1. **Supervisor must have `hub_id` OR `state_id` assigned** in their profile
+2. **Team members must have matching `hub_id` or `state_id`** assigned
+
+### Why Supervisors May Not See Requests
+
+| Issue | Cause | Solution |
+|-------|-------|----------|
+| No requests visible | Supervisor has no hub/state assigned | Assign hub_id or state_id in User Management |
+| Missing team members | Team members have no hub/state | Assign matching hub/state to team members |
+| Wrong team visible | Mismatched assignments | Verify hub/state matches between supervisor and team |
+
+### Setting Up Hub/State Assignments
+
+1. Go to **User Management**
+2. Select the supervisor user
+3. Edit profile and set:
+   - **Hub ID**: Links to a hub office
+   - **State ID**: Links to a geographic state
+4. Repeat for all team members who should report to this supervisor
+
+### Role Requirements for Approvals
+
+| Role | Can Approve Withdrawals | Sees Requests From |
+|------|------------------------|-------------------|
+| Supervisor | Yes (Tier 1) | Team members with matching hub/state |
+| Hub Supervisor | Yes (Tier 1) | Hub members |
+| FOM | Yes (Tier 1) | State/region members |
+| Admin | Yes (Tier 2) | All users |
+| Financial Admin | Yes (Tier 2) | All users |
+
+---
+
+## 15.5 Withdrawal Request Workflow
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    WITHDRAWAL REQUEST WORKFLOW                      │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  Data Collector requests withdrawal from wallet                     │
+│           ↓                                                        │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │         STATUS: pending                                      │   │
+│  └─────────────────────────────────────────────────────────────┘   │
+│           ↓                                                        │
+│  TIER 1: Supervisor Approval                                        │
+│   • Supervisor with matching hub/state sees request                 │
+│   • Reviews amount and reason                                       │
+│   • Approves or Rejects                                             │
+│           ↓                                                        │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │         STATUS: supervisor_approved                          │   │
+│  └─────────────────────────────────────────────────────────────┘   │
+│           ↓                                                        │
+│  TIER 2: Admin/Finance Processing                                   │
+│   • Admin sees all supervisor-approved requests                     │
+│   • Verifies balance and processes payment                          │
+│   • Deducts from wallet balance                                     │
+│           ↓                                                        │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │    STATUS: approved (funds released, balance deducted)       │   │
+│  └─────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 15.6 Financial System Summary
+
+| System | Purpose | Timing | Approval |
+|--------|---------|--------|----------|
+| **Cost Submission** | Reimburse actual expenses | After visit | Admin review |
+| **Down Payment** | Advance before travel | Before visit | Supervisor → Admin |
+| **Final Payment** | Automatic site visit fee | On completion | Automatic |
+| **Withdrawal** | Cash out from wallet | Anytime | Supervisor → Admin |
 
 ---
 
