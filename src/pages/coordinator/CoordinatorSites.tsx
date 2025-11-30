@@ -595,7 +595,7 @@ const CoordinatorSites: React.FC = () => {
     setActivityFilter('all');
     setMonitoringFilter('all');
     setSurveyToolFilter('all');
-  }, [currentUser, activeTab, permits]);
+  }, [currentUser, activeTab, permits, hubStates, localities]);
 
   const loadSites = async () => {
     if (!currentUser?.id) return;
@@ -661,11 +661,19 @@ const CoordinatorSites: React.FC = () => {
         localitiesMap.get(localityKey).sites.push(site);
       });
 
-      // Check permit status for each locality
+      // Check permit status for each locality using proper IDs
       const localitiesArray = Array.from(localitiesMap.values()).map(locality => {
-        const permitKey = `${locality.state}-${locality.locality}`;
-        const permit = permits.find(p => p.stateId === locality.state && p.localityId === locality.locality);
-        
+        // Resolve stateId from state name
+        const resolvedStateId = hubStates.find(hs => hs.state_name === locality.state)?.state_id;
+        // Resolve localityId from locality name + stateId
+        const resolvedLocalityId = resolvedStateId
+          ? localities.find(l => l.name === locality.locality && l.state_id === resolvedStateId)?.id
+          : undefined;
+
+        const permit = resolvedStateId && resolvedLocalityId
+          ? permits.find(p => p.stateId === resolvedStateId && p.localityId === resolvedLocalityId)
+          : undefined;
+
         return {
           ...locality,
           hasPermit: !!permit,
@@ -1310,10 +1318,10 @@ const CoordinatorSites: React.FC = () => {
 
   const renderLocalityCard = (localityData: any) => {
     // Find the locality info from the localities array to get IDs
-    const localityInfo = localities.find(loc => 
-      loc.name === localityData.locality && 
-      loc.state_id === localities.find(s => s.name === localityData.state)?.id
-    );
+    const stateIdForName = hubStates.find(s => s.state_name === localityData.state)?.state_id;
+    const localityInfo = stateIdForName
+      ? localities.find(loc => loc.name === localityData.locality && loc.state_id === stateIdForName)
+      : undefined;
 
     const localityPermitStatus: LocalityPermitStatus = {
       state: localityData.state,
@@ -2127,19 +2135,27 @@ const CoordinatorSites: React.FC = () => {
               </DialogDescription>
             </DialogHeader>
             <div className="py-4">
-              <LocalityPermitUpload
-                locality={{
-                  state: selectedLocalityForWorkflow.state,
-                  locality: selectedLocalityForWorkflow.locality,
-                  stateId: localities.find(loc => loc.name === selectedLocalityForWorkflow.locality)?.state_id || '',
-                  localityId: localities.find(loc => loc.name === selectedLocalityForWorkflow.locality)?.id || '',
-                  hasPermit: selectedLocalityForWorkflow.hasPermit,
-                  permit: selectedLocalityForWorkflow.permitId ? permits.find(p => p.id === selectedLocalityForWorkflow.permitId) : undefined,
-                  siteCount: selectedLocalityForWorkflow.sites.length,
-                  sites: selectedLocalityForWorkflow.sites
-                }}
-                onPermitUploaded={handlePermitUploaded}
-              />
+              {(() => {
+                const selectedStateId = hubStates.find(hs => hs.state_name === selectedLocalityForWorkflow.state)?.state_id;
+                const selectedLocalityInfo = selectedStateId
+                  ? localities.find(loc => loc.name === selectedLocalityForWorkflow.locality && loc.state_id === selectedStateId)
+                  : undefined;
+                return (
+                  <LocalityPermitUpload
+                    locality={{
+                      state: selectedLocalityForWorkflow.state,
+                      locality: selectedLocalityForWorkflow.locality,
+                      stateId: selectedLocalityInfo?.state_id || '',
+                      localityId: selectedLocalityInfo?.id || '',
+                      hasPermit: selectedLocalityForWorkflow.hasPermit,
+                      permit: selectedLocalityForWorkflow.permitId ? permits.find(p => p.id === selectedLocalityForWorkflow.permitId) : undefined,
+                      siteCount: selectedLocalityForWorkflow.sites.length,
+                      sites: selectedLocalityForWorkflow.sites
+                    }}
+                    onPermitUploaded={handlePermitUploaded}
+                  />
+                );
+              })()}
             </div>
             <DialogFooter>
               <Button 

@@ -197,6 +197,23 @@ export const useCoordinatorLocalityPermits = () => {
 export const useLocalityPermitStatus = (siteVisits: any[]) => {
   const { currentUser } = useAppContext();
   const { permits, hasPermitForLocality, getPermitForLocality } = useCoordinatorLocalityPermits();
+  const [hubStates, setHubStates] = React.useState<Array<{ state_id: string; state_name: string }>>([]);
+  const [registryLocalities, setRegistryLocalities] = React.useState<Array<{ locality_id: string; locality_name: string; state_id: string }>>([]);
+
+  React.useEffect(() => {
+    const fetchLocationMappings = async () => {
+      try {
+        const [{ data: hs }, { data: locs }] = await Promise.all([
+          supabase.from('hub_states').select('state_id, state_name'),
+          supabase.from('sites_registry').select('locality_id, locality_name, state_id')
+        ]);
+        setHubStates(hs || []);
+        setRegistryLocalities(locs || []);
+      } catch (e) {
+      }
+    };
+    fetchLocationMappings();
+  }, []);
 
   const localitiesWithPermitStatus: LocalityPermitStatus[] = React.useMemo(() => {
     console.log('useLocalityPermitStatus Debug:', {
@@ -222,14 +239,16 @@ export const useLocalityPermitStatus = (siteVisits: any[]) => {
       .filter(site => site.assignedTo === currentUser.id)
       .forEach(site => {
         const key = `${site.state}-${site.locality}`;
-        const stateId = site.stateId || site.state; // Use stateId if available, fallback to state
-        const localityId = site.localityId || site.locality; // Use localityId if available, fallback to locality
+        const resolvedStateId = site.stateId || hubStates.find(hs => hs.state_name === site.state)?.state_id || '';
+        const resolvedLocalityId = site.localityId || (
+          resolvedStateId ? (registryLocalities.find(l => l.locality_name === site.locality && l.state_id === resolvedStateId)?.locality_id || '') : ''
+        );
 
         console.log('Processing site:', {
           siteId: site.id,
           key,
-          stateId,
-          localityId,
+          stateId: resolvedStateId,
+          localityId: resolvedLocalityId,
           assignedTo: site.assignedTo,
           currentUserId: currentUser.id
         });
@@ -238,10 +257,10 @@ export const useLocalityPermitStatus = (siteVisits: any[]) => {
           localityMap.set(key, {
             state: site.state,
             locality: site.locality,
-            stateId,
-            localityId,
-            hasPermit: hasPermitForLocality(stateId, localityId),
-            permit: getPermitForLocality(stateId, localityId),
+            stateId: resolvedStateId,
+            localityId: resolvedLocalityId,
+            hasPermit: !!(resolvedStateId && resolvedLocalityId && hasPermitForLocality(resolvedStateId, resolvedLocalityId)),
+            permit: resolvedStateId && resolvedLocalityId ? getPermitForLocality(resolvedStateId, resolvedLocalityId) : undefined,
             siteCount: 0,
             sites: [],
           });
@@ -261,7 +280,7 @@ export const useLocalityPermitStatus = (siteVisits: any[]) => {
     })));
 
     return result;
-  }, [siteVisits, currentUser?.id, permits]);
+  }, [siteVisits, currentUser?.id, permits, hubStates, registryLocalities]);
 
   return {
     localitiesWithPermitStatus,
