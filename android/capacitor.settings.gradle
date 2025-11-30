@@ -19,6 +19,9 @@ project(':capacitor-network').projectDir = new File('../node_modules/@capacitor/
 
 include ':capacitor-push-notifications'
 project(':capacitor-push-notifications').projectDir = new File('../node_modules/@capacitor/push-notifications/android')
+<<<<<<< HEAD
+=======
 
 include ':capacitor-status-bar'
 project(':capacitor-status-bar').projectDir = new File('../node_modules/@capacitor/status-bar/android')
+>>>>>>> 66fbd83a9c086834cbcb9ffed7b17376ad3a720d
