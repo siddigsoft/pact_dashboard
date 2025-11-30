@@ -40,6 +40,17 @@ The backend uses PostgreSQL via Supabase, leveraging Row Level Security (RLS) an
 
 ## Recent Changes
 
+*   **Supervisor Cost Submission Visibility (Nov 2025):** Enhanced the cost submission workflow to provide supervisors and admins full visibility into team submissions with approval capabilities:
+    - CostSubmission page now detects supervisor role (hubSupervisor, supervisor) alongside admin role
+    - Hub supervisors see submissions from team members within their hub (filtered by hub_id or state_id)
+    - Admins see all submissions across the organization
+    - Added "Supervisor View" badge for supervisor users and "Admin View" badge for admin users
+    - CostSubmissionHistory component now shows submitter name for supervisors and admins
+    - Added Approve/Reject action buttons for pending/under_review submissions
+    - Approval and rejection dialogs with notes capture for audit trail
+    - Connected to useReviewSubmission mutation from CostSubmissionContext
+    - Empty state messaging adapted based on user role (team vs personal view)
+
 *   **Location Accuracy Display Enhancement (Nov 2025):** Added GPS accuracy display across all team location views:
     - TeamMemberCard: Shows accuracy with color-coded indicator (green ≤10m=Excellent, yellow ≤30m=Good, orange >30m=Fair)
     - TeamMemberDetailModal: Displays accuracy badge with coordinates and last update time
