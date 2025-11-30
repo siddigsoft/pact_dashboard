@@ -9,16 +9,14 @@ android {
 
 apply from: "../capacitor-cordova-android-plugins/cordova.variables.gradle"
 dependencies {
+    implementation project(':capacitor-app')
     implementation project(':capacitor-camera')
     implementation project(':capacitor-device')
     implementation project(':capacitor-filesystem')
     implementation project(':capacitor-geolocation')
     implementation project(':capacitor-network')
     implementation project(':capacitor-push-notifications')
-<<<<<<< HEAD
-=======
     implementation project(':capacitor-status-bar')
->>>>>>> 66fbd83a9c086834cbcb9ffed7b17376ad3a720d
 
 }
 
