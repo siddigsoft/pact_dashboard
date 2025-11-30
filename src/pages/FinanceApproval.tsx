@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -11,6 +11,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useWallet } from '@/context/wallet/WalletContext';
 import { useUser } from '@/context/user/UserContext';
 import { useToast } from '@/hooks/use-toast';
+import { useWithdrawalRealtime } from '@/hooks/useWithdrawalRealtime';
 import { 
   Clock, 
   CheckCircle2, 
@@ -57,6 +58,16 @@ export default function FinanceApproval() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedRequestIds, setSelectedRequestIds] = useState<Set<string>>(new Set());
+
+  const fetchAllRequests = useCallback(async () => {
+    const requests = await adminListWithdrawalRequests();
+    setAllRequests(requests);
+  }, [adminListWithdrawalRequests]);
+
+  useWithdrawalRealtime({
+    role: 'finance',
+    onUpdate: fetchAllRequests,
+  });
   
   const getRequestUrgency = (createdAt: string, supervisorApprovedAt?: string) => {
     const referenceDate = supervisorApprovedAt || createdAt;
@@ -98,21 +109,20 @@ export default function FinanceApproval() {
     if (selectedRequestIds.size === 0) return;
     
     setProcessing(true);
-    let successCount = 0;
-    let failCount = 0;
     
     try {
-      for (const requestId of selectedRequestIds) {
-        try {
-          const batchNotes = transactionRef 
-            ? `${notes || 'Batch processed'} | Ref: ${transactionRef}`
-            : notes || 'Batch processed by finance';
-          await adminProcessWithdrawal(requestId, batchNotes);
-          successCount++;
-        } catch (error) {
-          failCount++;
-        }
-      }
+      const batchNotes = transactionRef 
+        ? `${notes || 'Batch processed'} | Ref: ${transactionRef}`
+        : notes || 'Batch processed by finance';
+      
+      const results = await Promise.allSettled(
+        Array.from(selectedRequestIds).map(requestId => 
+          adminProcessWithdrawal(requestId, batchNotes)
+        )
+      );
+      
+      const successCount = results.filter(r => r.status === 'fulfilled').length;
+      const failCount = results.filter(r => r.status === 'rejected').length;
       
       toast({
         title: 'Batch Processing Complete',
@@ -130,11 +140,6 @@ export default function FinanceApproval() {
     }
   };
 
-  const fetchAllRequests = async () => {
-    const requests = await adminListWithdrawalRequests();
-    setAllRequests(requests);
-  };
-
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
@@ -142,7 +147,7 @@ export default function FinanceApproval() {
       setLoading(false);
     };
     loadData();
-  }, []);
+  }, [fetchAllRequests]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -319,7 +324,7 @@ export default function FinanceApproval() {
   const RequestCard = ({ request, showActions = false, showSelection = false }: { request: AdminWithdrawalRequest, showActions?: boolean, showSelection?: boolean }) => {
     const userName = getUserName(request.userId, request);
     const supervisorName = request.supervisorId ? getUserName(request.supervisorId) : null;
-    const urgency = request.status === 'supervisor_approved' ? getRequestUrgency(request.createdAt, request.supervisorApprovedAt) : null;
+    const urgency = request.status === 'supervisor_approved' ? getRequestUrgency(request.createdAt, request.approvedAt) : null;
     const UrgencyIcon = urgency?.icon;
     
     return (
@@ -458,8 +463,10 @@ export default function FinanceApproval() {
     );
   }
 
+  const hasMobileSelection = selectedRequestIds.size > 0;
+
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+    <div className={`p-6 space-y-6 max-w-7xl mx-auto ${hasMobileSelection ? 'pb-24 sm:pb-6' : ''}`}>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
@@ -881,6 +888,47 @@ export default function FinanceApproval() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {selectedRequestIds.size > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 p-4 bg-background/95 backdrop-blur-sm border-t shadow-lg sm:hidden" data-testid="mobile-action-bar">
+          <div className="flex items-center justify-between gap-3 max-w-lg mx-auto">
+            <div className="flex items-center gap-2">
+              <div className="flex items-center justify-center w-8 h-8 rounded-full bg-emerald-500/10">
+                <span className="text-sm font-bold text-emerald-600">{selectedRequestIds.size}</span>
+              </div>
+              <div className="text-sm">
+                <p className="font-medium">Selected</p>
+                <p className="text-xs text-muted-foreground">
+                  {formatCurrency(
+                    supervisorApprovedRequests
+                      .filter(r => selectedRequestIds.has(r.id))
+                      .reduce((sum, r) => sum + r.amount, 0)
+                  )}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setSelectedRequestIds(new Set())}
+                data-testid="button-mobile-clear-selection"
+              >
+                Clear
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => setDialogType('batch_process')}
+                className="bg-emerald-600 text-white"
+                data-testid="button-mobile-batch-process"
+              >
+                <Banknote className="w-4 h-4 mr-1.5" />
+                Process
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
