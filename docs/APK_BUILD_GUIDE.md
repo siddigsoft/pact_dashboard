@@ -11,7 +11,14 @@ Complete guide for building, signing, and distributing the PACT Workflow Platfor
 - Capacitor CLI (`npm install -g @capacitor/cli`)
 
 ### Environment Variables
+
+**IMPORTANT: These MUST be set before running `npm run build`**
+
 ```bash
+# Required for app to connect to Supabase (MUST be set before build!)
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+
 # Required for signed builds
 ANDROID_KEYSTORE_PATH=/path/to/your-keystore.jks
 ANDROID_KEYSTORE_PASSWORD=your_keystore_password
@@ -19,12 +26,22 @@ ANDROID_KEYSTORE_ALIAS=your_key_alias
 ANDROID_KEYSTORE_ALIAS_PASSWORD=your_key_password
 ```
 
+**Where to get Supabase credentials:**
+1. Go to your Supabase project dashboard
+2. Navigate to Settings > API
+3. Copy the "Project URL" for VITE_SUPABASE_URL
+4. Copy the "anon public" key for VITE_SUPABASE_ANON_KEY
+
 ---
 
 ## Quick Build Commands
 
 ### Development APK (Debug)
 ```bash
+# Set Supabase environment variables (required!)
+export VITE_SUPABASE_URL=https://your-project.supabase.co
+export VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+
 # Build web assets
 npm run build
 
@@ -39,6 +56,10 @@ Output: `android/app/build/outputs/apk/debug/app-debug.apk`
 
 ### Production APK (Release)
 ```bash
+# Set Supabase environment variables (required!)
+export VITE_SUPABASE_URL=https://your-project.supabase.co
+export VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+
 # Build optimized web assets
 npm run build
 
@@ -196,6 +217,31 @@ npx cap run android
 
 ## Troubleshooting
 
+### "Backend Not Configured" Error in APK
+If you see "Backend Not Configured" or "Supabase environment variables not included" after installing the APK:
+
+**Cause:** The VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY were not set during the build.
+
+**Fix:**
+```bash
+# 1. Set the environment variables
+export VITE_SUPABASE_URL=https://your-project.supabase.co
+export VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+
+# 2. Rebuild the web assets
+npm run build
+
+# 3. Re-sync and rebuild APK
+npx cap sync android
+cd android && ./gradlew assembleDebug  # or assembleRelease
+```
+
+**Tip:** Create a `.env` file in the project root with these values so they're always available:
+```
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+```
+
 ### Build Fails with Gradle Error
 ```bash
 # Clear Gradle cache
@@ -264,6 +310,9 @@ jobs:
         run: npm ci
       
       - name: Build web assets
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         run: npm run build
       
       - name: Sync Capacitor
