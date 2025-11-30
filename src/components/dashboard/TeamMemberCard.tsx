@@ -128,11 +128,24 @@ export const TeamMemberCard: React.FC<TeamMemberCardProps> = ({ user, workload, 
           </div>
         </div>
 
-        {/* Location Badge */}
-        {user.location?.isSharing && user.location?.address && (
-          <div className="flex items-center gap-1 mb-2 px-2 py-1 bg-blue-500/5 border border-blue-500/10 rounded text-[10px] text-blue-600 dark:text-blue-400">
-            <MapPin className="h-3 w-3" />
-            <span className="truncate">{user.location.address}</span>
+        {/* Location Badge with Accuracy */}
+        {user.location?.isSharing && user.location?.latitude && user.location?.longitude && (
+          <div className="flex items-center gap-1 mb-2 px-2 py-1 bg-blue-500/5 border border-blue-500/10 rounded text-[10px]">
+            <MapPin className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+            {user.location.address ? (
+              <span className="truncate text-blue-600 dark:text-blue-400">{user.location.address}</span>
+            ) : (
+              <span className="text-muted-foreground">Location shared</span>
+            )}
+            {user.location.accuracy !== undefined && (
+              <span className={`ml-1 ${
+                user.location.accuracy <= 10 ? 'text-green-600 dark:text-green-400' : 
+                user.location.accuracy <= 30 ? 'text-yellow-600 dark:text-yellow-400' : 
+                'text-orange-600 dark:text-orange-400'
+              }`}>
+                ({'\u00B1'}{user.location.accuracy.toFixed(0)}m)
+              </span>
+            )}
           </div>
         )}
 
