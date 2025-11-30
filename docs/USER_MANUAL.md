@@ -1748,41 +1748,86 @@ When a site visit is completed, payment is automatically credited to the data co
 
 ---
 
-## 15.4 Supervisor Withdrawal Request Permissions
+## 15.4 Hub Supervisor Model & Withdrawal Permissions
 
-### Important: Hub/State Assignment Required
+### Understanding Hub-Based Supervision
 
-For supervisors to see and approve withdrawal requests from their team members, **both conditions must be met**:
+PACT uses a **hub-based supervision model** where each hub manages MULTIPLE states:
 
-1. **Supervisor must have `hub_id` OR `state_id` assigned** in their profile
-2. **Team members must have matching `hub_id` or `state_id`** assigned
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    HUB-BASED SUPERVISION MODEL                      │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  ┌─────────────────┐     ┌─────────────────┐     ┌─────────────┐   │
+│  │   KOSTI HUB     │     │  KASSALA HUB    │     │ OTHER HUBS  │   │
+│  │   (7+ States)   │     │   (5 States)    │     │  (varies)   │   │
+│  └────────┬────────┘     └────────┬────────┘     └──────┬──────┘   │
+│           │                       │                      │          │
+│     ┌─────┼─────┐           ┌─────┼─────┐          ┌─────┼─────┐   │
+│     │     │     │           │     │     │          │     │     │   │
+│     ▼     ▼     ▼           ▼     ▼     ▼          ▼     ▼     ▼   │
+│  State  State State      State State State      State State State  │
+│    1      2     3          1     2     3          1     2     3    │
+│    .      .     .          .     .                .     .          │
+│    .      .     .          .     .                .     .          │
+│  State  State State      State State                               │
+│    5      6     7          4     5                                 │
+│                                                                     │
+│  Hub Supervisor sees ALL team members across ALL states in hub     │
+└─────────────────────────────────────────────────────────────────────┘
+```
 
-### Why Supervisors May Not See Requests
+### Hub Examples
+
+| Hub | States Covered | Hub Supervisor Visibility |
+|-----|----------------|---------------------------|
+| **Kosti Hub** | 7+ states | Sees all team members in all 7+ states |
+| **Kassala Hub** | 5 states | Sees all team members in all 5 states |
+| **Other Hubs** | Varies | Sees all team members in assigned states |
+
+### Important: Hub Supervisors Are NOT State-Dependent
+
+- Hub Supervisors are assigned a **hub_id** (NOT state_id)
+- They see ALL team members across ALL states within their hub
+- Team members need matching **hub_id** to appear in supervisor's view
+- This is HUB-level supervision, not state-level
+
+### Configuration Requirements
+
+For hub supervisors to see withdrawal requests:
+
+| Who | Required Assignment | Purpose |
+|-----|---------------------|---------|
+| Hub Supervisor | `hub_id` | Links to their hub (e.g., Kosti, Kassala) |
+| Team Members | `hub_id` (same as supervisor) | Links them to supervisor's hub |
+
+### Why Hub Supervisors May Not See Requests
 
 | Issue | Cause | Solution |
 |-------|-------|----------|
-| No requests visible | Supervisor has no hub/state assigned | Assign hub_id or state_id in User Management |
-| Missing team members | Team members have no hub/state | Assign matching hub/state to team members |
-| Wrong team visible | Mismatched assignments | Verify hub/state matches between supervisor and team |
+| No requests visible | Supervisor has no hub_id assigned | Assign hub_id in User Management |
+| Missing team members | Team members have no hub_id | Assign matching hub_id to team members |
+| Wrong team visible | Mismatched hub assignments | Verify hub_id matches between supervisor and team |
 
-### Setting Up Hub/State Assignments
+### Setting Up Hub Assignments
 
 1. Go to **User Management**
-2. Select the supervisor user
+2. Select the Hub Supervisor user
 3. Edit profile and set:
-   - **Hub ID**: Links to a hub office
-   - **State ID**: Links to a geographic state
-4. Repeat for all team members who should report to this supervisor
+   - **Hub ID**: Links to their hub office (Kosti, Kassala, etc.)
+4. For each team member in that hub:
+   - Edit profile and set same **Hub ID**
+   - Team members can have any state within the hub
+5. Hub Supervisor will now see ALL team members across ALL states in their hub
 
 ### Role Requirements for Approvals
 
-| Role | Can Approve Withdrawals | Sees Requests From |
-|------|------------------------|-------------------|
-| Supervisor | Yes (Tier 1) | Team members with matching hub/state |
-| Hub Supervisor | Yes (Tier 1) | Hub members |
-| FOM | Yes (Tier 1) | State/region members |
-| Admin | Yes (Tier 2) | All users |
-| Financial Admin | Yes (Tier 2) | All users |
+| Role | Assignment | Sees Requests From |
+|------|------------|-------------------|
+| **Hub Supervisor** | hub_id | ALL team members across ALL states in hub |
+| Admin | (none needed) | All users system-wide |
+| Financial Admin | (none needed) | All users system-wide |
 
 ---
 

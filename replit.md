@@ -26,7 +26,7 @@ The backend uses PostgreSQL via Supabase, leveraging Row Level Security (RLS) an
 *   **Real-Time Capabilities:** Live Dashboard with automatic data refresh and notifications via Supabase Realtime, and real-time GPS location sharing with privacy controls.
 *   **Notification System:** Comprehensive browser push notifications with configurable settings and granular category toggles.
 *   **Financial Management:** Advanced transportation cost and down-payment system with a two-tier approval workflow and audit trails. Includes a `super_admin` role for oversight.
-*   **Hub & Field Operations Structure:** Geographical management for hubs, states, and localities, with a master sites registry and interactive Leaflet maps.
+*   **Hub & Field Operations Structure:** Geographical management for hubs, states, and localities, with a master sites registry and interactive Leaflet maps. **Hub-Based Supervision Model**: Each hub manages MULTIPLE states (e.g., Kosti Hub = 7+ states, Kassala Hub = 5 states). Hub Supervisors are assigned `hub_id` (NOT state_id) and see ALL team members across ALL states in their hub.
 *   **Site Visits Enhancement:** Redesigned interface with gradient stat cards and a data collector-specific view.
 *   **Geographic Filtering:** Ensures data collectors only view dispatched sites within their assigned state and locality.
 *   **Nearest Available Enumerators:** GPS-based proximity matching using the Haversine formula to show enumerators sorted by distance from site coordinates.
@@ -39,6 +39,13 @@ The backend uses PostgreSQL via Supabase, leveraging Row Level Security (RLS) an
 *   **Site Visit Details Enhancement:** Unified display of cost breakdowns and a workflow audit trail for each site visit, presented in a streamlined layout.
 
 ## Recent Changes
+
+*   **Hub-Based Supervision Documentation (Nov 2025):** Added comprehensive financial workflow documentation to USER_MANUAL.md:
+    - Cost Submission Workflow: Post-visit expense reimbursement process with visual flowcharts
+    - Down Payment System: Two-tier approval (Supervisor → Admin) for pre-travel advances
+    - Final Payment: Automatic wallet credit on site visit completion (enumerator_fee + transport_fee)
+    - Hub Supervisor Model: Clarified that hub supervisors manage MULTIPLE states (Kosti = 7+ states, Kassala = 5 states)
+    - Withdrawal Permissions: Hub supervisors need `hub_id` assigned to see team members across all states in their hub
 
 *   **Wallet Transaction Type & Backfill Fix (Nov 2025):** Fixed wallet transactions to use correct database enum and backfilled missing transactions:
     - Changed transaction type from 'site_visit_fee' to 'earning' (matching database enum `wallet_tx_type`)
