@@ -28,6 +28,8 @@ import { useSiteClaimRealtime } from '@/hooks/use-site-claim-realtime';
 import { saveGPSToRegistryFromSiteEntry } from '@/utils/sitesRegistryMatcher';
 import { calculateEnumeratorFeeForUser } from '@/hooks/use-claim-fee-calculation';
 
+import { useWallet } from '@/context/wallet/WalletContext';
+
 // Helper component to convert SiteVisitRow[] to site entries and display using MMPSiteEntriesTable
 const SitesDisplayTable: React.FC<{ 
   siteRows: SiteVisitRow[]; 
@@ -368,6 +370,7 @@ const MMP = () => {
   const { mmpFiles, loading, updateMMP } = useMMP();
   const { checkPermission, hasAnyRole, currentUser } = useAuthorization();
   const { toast } = useToast();
+  const { reconcileSiteVisitFee } = useWallet();
   const [activeTab, setActiveTab] = useState('new');
   // Subcategory state for Forwarded MMPs (Admin/ICT only)
   const [forwardedSubTab, setForwardedSubTab] = useState<'pending' | 'verified'>('pending');
@@ -1479,6 +1482,22 @@ const MMP = () => {
         throw updateError;
       }
       console.log('✅ Site status updated to Completed:', updateData);
+
+      try {
+        console.log('💰 Reconciling wallet for completed site:', site.id);
+        const result = await reconcileSiteVisitFee(site.id);
+        if (result.success) {
+          toast({
+            title: 'Payment Added',
+            description: result.message,
+            variant: 'default'
+          });
+        } else {
+          console.warn('[Wallet] ' + result.message);
+        }
+      } catch (walletErr) {
+        console.error('Wallet reconciliation error:', walletErr);
+      }
 
       toast({
         title: 'Visit Report Submitted',
