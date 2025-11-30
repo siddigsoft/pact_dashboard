@@ -239,6 +239,15 @@ export function ClaimSiteButton({
                 </>
               ) : (
                 <>
+                  {feeBreakdown.classificationLevel && (
+                    <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                      <span className="text-sm font-medium">Your Classification</span>
+                      <Badge className={CLASSIFICATION_COLORS[feeBreakdown.classificationLevel]}>
+                        {CLASSIFICATION_LABELS[feeBreakdown.classificationLevel]}
+                      </Badge>
+                    </div>
+                  )}
+
                   <div className="flex flex-col items-center justify-center py-6 space-y-4">
                     <div className="p-4 bg-primary/10 rounded-full">
                       <Banknote className="h-10 w-10 text-primary" />
