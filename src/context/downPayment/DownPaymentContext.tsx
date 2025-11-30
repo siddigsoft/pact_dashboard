@@ -163,14 +163,38 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         return false;
       }
 
+      let hubId = request.hubId;
+      const hubName = request.hubName;
+      
+      if (!hubId && hubName) {
+        const hubNameLower = hubName.toLowerCase();
+        if (hubNameLower.includes('dongola')) {
+          hubId = 'dongola-hub';
+        } else if (hubNameLower.includes('kassala')) {
+          hubId = 'kassala-hub';
+        } else if (hubNameLower.includes('kosti')) {
+          hubId = 'kosti-hub';
+        } else if (hubNameLower.includes('forchana')) {
+          hubId = 'forchana-hub';
+        } else if (hubNameLower.includes('khartoum') || hubNameLower.includes('country')) {
+          hubId = 'country-office';
+        }
+        console.log('[DownPayment] Derived hubId from hubName:', { hubName, hubId });
+      }
+      
+      if (!hubId && currentUser?.hubId) {
+        hubId = currentUser.hubId;
+        console.log('[DownPayment] Using currentUser hubId:', hubId);
+      }
+
       const { error } = await supabase.from('down_payment_requests').insert({
         site_visit_id: request.siteVisitId,
         mmp_site_entry_id: request.mmpSiteEntryId,
         site_name: request.siteName,
         requested_by: request.requestedBy,
         requester_role: request.requesterRole,
-        hub_id: request.hubId,
-        hub_name: request.hubName,
+        hub_id: hubId,
+        hub_name: hubName,
         total_transportation_budget: request.totalTransportationBudget,
         requested_amount: request.requestedAmount,
         payment_type: request.paymentType,
