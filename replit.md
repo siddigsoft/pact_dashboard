@@ -40,6 +40,14 @@ The backend uses PostgreSQL via Supabase, leveraging Row Level Security (RLS) an
 
 ## Recent Changes
 
+*   **Location Accuracy Display Enhancement (Nov 2025):** Added GPS accuracy display across all team location views:
+    - TeamMemberCard: Shows accuracy with color-coded indicator (green ≤10m=Excellent, yellow ≤30m=Good, orange >30m=Fair)
+    - TeamMemberDetailModal: Displays accuracy badge with coordinates and last update time
+    - TeamLocationMap: Map marker popups now show GPS accuracy with quality label
+    - TeamMemberLocation: Added accuracy display next to coordinates
+    - DashboardLocationSharingCard: Already had accuracy display, now consistent across all components
+    - Accuracy data is captured from `navigator.geolocation` and stored in `user.location.accuracy`
+
 *   **Hub-Based Supervision Documentation (Nov 2025):** Added comprehensive financial workflow documentation to USER_MANUAL.md:
     - Cost Submission Workflow: Post-visit expense reimbursement process with visual flowcharts
     - Down Payment System: Two-tier approval (Supervisor → Admin) for pre-travel advances
