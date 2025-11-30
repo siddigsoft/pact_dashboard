@@ -6,32 +6,33 @@
 # Table of Contents
 
 1. [Introduction](#1-introduction)
-2. [Getting Started](#2-getting-started)
-3. [Dashboard Overview](#3-dashboard-overview)
-4. [User Management](#4-user-management)
-5. [Role-Based Access Control](#5-role-based-access-control)
-6. [Projects Management](#6-projects-management)
-7. [Monthly Monitoring Plans (MMPs)](#7-monthly-monitoring-plans-mmps)
-8. [Site Visits](#8-site-visits)
-9. [First-Claim Dispatch System](#9-first-claim-dispatch-system)
-10. [Classification & Fee Structure](#10-classification--fee-structure)
-11. [Field Team Management](#11-field-team-management)
-12. [Financial Operations](#12-financial-operations)
-13. [Budget Management](#13-budget-management)
-14. [Wallet System](#14-wallet-system)
-15. [Cost Submission & Approvals](#15-cost-submission--approvals)
-16. [Tracker Preparation Plan](#16-tracker-preparation-plan)
-17. [Reports & Analytics](#17-reports--analytics)
-18. [Communication Features](#18-communication-features)
-19. [Maps & Location Services](#19-maps--location-services)
-20. [Sites Registry](#20-sites-registry)
-21. [Archive Management](#21-archive-management)
-22. [Calendar & Scheduling](#22-calendar--scheduling)
-23. [Settings & Preferences](#23-settings--preferences)
-24. [Notification System](#24-notification-system)
-25. [Mobile Application](#25-mobile-application)
-26. [Troubleshooting](#26-troubleshooting)
-27. [Glossary](#27-glossary)
+2. [Complete System Workflow A to Z](#2-complete-system-workflow-a-to-z)
+3. [Getting Started](#3-getting-started)
+4. [Dashboard Overview](#4-dashboard-overview)
+5. [User Management](#5-user-management)
+6. [Role-Based Access Control](#6-role-based-access-control)
+7. [Projects Management](#7-projects-management)
+8. [Monthly Monitoring Plans (MMPs)](#8-monthly-monitoring-plans-mmps)
+9. [Site Visits](#9-site-visits)
+10. [First-Claim Dispatch System](#10-first-claim-dispatch-system)
+11. [Classification & Fee Structure](#11-classification--fee-structure)
+12. [Field Team Management](#12-field-team-management)
+13. [Financial Operations](#13-financial-operations)
+14. [Budget Management](#14-budget-management)
+15. [Wallet System](#15-wallet-system)
+16. [Cost Submission & Approvals](#16-cost-submission--approvals)
+17. [Tracker Preparation Plan](#17-tracker-preparation-plan)
+18. [Reports & Analytics](#18-reports--analytics)
+19. [Communication Features](#19-communication-features)
+20. [Maps & Location Services](#20-maps--location-services)
+21. [Sites Registry](#21-sites-registry)
+22. [Archive Management](#22-archive-management)
+23. [Calendar & Scheduling](#23-calendar--scheduling)
+24. [Settings & Preferences](#24-settings--preferences)
+25. [Notification System](#25-notification-system)
+26. [Mobile Application](#26-mobile-application)
+27. [Troubleshooting](#27-troubleshooting)
+28. [Glossary](#28-glossary)
 
 ---
 
@@ -78,7 +79,585 @@
 
 ---
 
-# 2. Getting Started
+# 2. Complete System Workflow A to Z
+
+This section provides a comprehensive overview of the entire PACT system workflow, from initial setup to final payment processing.
+
+## 2.1 Visual Workflow Overview
+
+```
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                           PACT SYSTEM WORKFLOW                                   │
+└─────────────────────────────────────────────────────────────────────────────────┘
+
+PHASE 1: SETUP & PLANNING
+┌──────────────┐    ┌──────────────┐    ┌──────────────┐    ┌──────────────┐
+│   System     │───▶│    User      │───▶│   Project    │───▶│   Budget     │
+│   Setup      │    │   Onboarding │    │   Creation   │    │  Allocation  │
+└──────────────┘    └──────────────┘    └──────────────┘    └──────────────┘
+      │                    │                   │                   │
+      ▼                    ▼                   ▼                   ▼
+   Admin/ICT          Roles &             Activities &         Finance
+   configures       Classifications        Team Setup         configures
+
+PHASE 2: MMP LIFECYCLE
+┌──────────────┐    ┌──────────────┐    ┌──────────────┐    ┌──────────────┐
+│     MMP      │───▶│     MMP      │───▶│     MMP      │───▶│  Forward to  │
+│    Upload    │    │    Review    │    │   Approval   │    │     FOM      │
+└──────────────┘    └──────────────┘    └──────────────┘    └──────────────┘
+      │                    │                   │                   │
+      ▼                    ▼                   ▼                   ▼
+   CSV file          Validation &         ICT/Admin            Ready for
+   parsed           verification          approves            field ops
+
+PHASE 3: DISPATCH & CLAIMING
+┌──────────────┐    ┌──────────────┐    ┌──────────────┐    ┌──────────────┐
+│    Site      │───▶│   Dispatch   │───▶│    Site      │───▶│    Claim     │
+│  Assignment  │    │    Modes     │    │   Claiming   │    │  Acceptance  │
+└──────────────┘    └──────────────┘    └──────────────┘    └──────────────┘
+      │                    │                   │                   │
+      ▼                    ▼                   ▼                   ▼
+   FOM selects      Open/State/        Collectors         Fee calculated
+    sites          Locality/Ind         claim sites       at acceptance
+
+PHASE 4: FIELD OPERATIONS
+┌──────────────┐    ┌──────────────┐    ┌──────────────┐    ┌──────────────┐
+│    Start     │───▶│    Data      │───▶│   Complete   │───▶│   Visit      │
+│    Visit     │    │  Collection  │    │    Visit     │    │ Verification │
+└──────────────┘    └──────────────┘    └──────────────┘    └──────────────┘
+      │                    │                   │                   │
+      ▼                    ▼                   ▼                   ▼
+   GPS auto-         Photos,            Mark done,          Supervisor
+   captured         forms, data         sync data           reviews
+
+PHASE 5: FINANCIAL PROCESSING
+┌──────────────┐    ┌──────────────┐    ┌──────────────┐    ┌──────────────┐
+│   Wallet     │───▶│   Payment    │───▶│   Tracker    │───▶│   Archive    │
+│   Credit     │    │   Reports    │    │   Analysis   │    │   & Close    │
+└──────────────┘    └──────────────┘    └──────────────┘    └──────────────┘
+      │                    │                   │                   │
+      ▼                    ▼                   ▼                   ▼
+   Auto payment       Invoice          Cost analysis       Historical
+   on completion     generation         & exports           record
+```
+
+## 2.2 Phase 1: System Setup & Planning
+
+### Step A: System Configuration (Admin/ICT)
+
+| Step | Action | Who | Details |
+|------|--------|-----|---------|
+| A1 | Configure Roles | Admin | Create custom roles with specific permissions |
+| A2 | Set Classification Fees | Admin | Define fee structure for A, B, C levels |
+| A3 | Configure Hubs | Admin | Set up geographical hub structure |
+| A4 | System Settings | ICT | Configure system-wide preferences |
+
+**Detailed Actions:**
+
+1. **Role Configuration**
+   - Navigate to Administration > Role Management
+   - Create roles: FOM, Supervisor, Coordinator, Data Collector
+   - Assign permissions to each role
+   - Save and publish roles
+
+2. **Classification Fee Setup**
+   - Go to Administration > Classification Fees
+   - Set enumerator fees for each classification (A, B, C)
+   - Set transport fees for each classification
+   - Save fee structure
+
+3. **Hub & Geographic Setup**
+   - Configure states (18 Sudan states)
+   - Configure localities (188 localities)
+   - Set up hub assignments
+
+### Step B: User Onboarding
+
+| Step | Action | Who | Details |
+|------|--------|-----|---------|
+| B1 | User Registration | User | Create account via registration form |
+| B2 | Email Verification | User | Confirm email address |
+| B3 | Role Assignment | Admin | Assign appropriate roles |
+| B4 | Classification | Admin | Set classification level (A/B/C) for field staff |
+| B5 | State/Locality | Admin | Assign geographic coverage |
+| B6 | Profile Setup | User | Complete profile, enable 2FA |
+
+**User Classification Matrix:**
+
+| Classification | Experience | Fee Level | Typical Assignment |
+|---------------|------------|-----------|-------------------|
+| A (Senior) | 2+ years | Highest | Complex sites |
+| B (Standard) | 1-2 years | Medium | Regular sites |
+| C (Junior) | < 1 year | Entry | Training sites |
+
+### Step C: Project Creation
+
+| Step | Action | Who | Details |
+|------|--------|-----|---------|
+| C1 | Create Project | Admin/ICT | Enter project details |
+| C2 | Set Timeline | Admin | Define start/end dates |
+| C3 | Assign Manager | Admin | Select project manager |
+| C4 | Create Activities | PM | Define project activities |
+| C5 | Build Team | PM | Add team members |
+
+### Step D: Budget Allocation
+
+| Step | Action | Who | Details |
+|------|--------|-----|---------|
+| D1 | Create Budget | Finance | Set total budget amount |
+| D2 | Link to Project | Finance | Associate with project |
+| D3 | Set Categories | Finance | Personnel, Transport, Equipment |
+| D4 | Configure Alerts | Finance | Set utilization thresholds |
+
+---
+
+## 2.3 Phase 2: MMP Lifecycle
+
+### Step E: MMP Preparation & Upload
+
+| Step | Action | Who | Details |
+|------|--------|-----|---------|
+| E1 | Prepare CSV | Coordinator | Create site list with required columns |
+| E2 | Upload File | ICT/Admin | Select project, month, upload file |
+| E3 | Validation | System | Auto-validate data, check duplicates |
+| E4 | Error Resolution | Uploader | Fix any validation errors |
+| E5 | Submit | Uploader | Submit MMP for review |
+
+**CSV File Requirements:**
+
+```csv
+site_code,site_name,state,locality,planned_date,classification
+SITE001,Al-Fashir Central,North Darfur,Al Fashir,2025-12-15,A
+SITE002,Nyala Market,South Darfur,Nyala,2025-12-16,B
+```
+
+**Required Columns:**
+- site_code (unique identifier)
+- site_name
+- state
+- locality
+- planned_date (YYYY-MM-DD)
+- classification (optional)
+
+**Validation Checks:**
+- File format is CSV
+- All required columns present
+- Valid state/locality names
+- No duplicate sites in same month
+- Valid date formats
+
+### Step F: MMP Review & Approval
+
+| Step | Action | Who | Details |
+|------|--------|-----|---------|
+| F1 | Initial Review | Reviewer | Check data accuracy |
+| F2 | Verification | Reviewer | Verify site information |
+| F3 | Permit Check | Reviewer | Ensure permits uploaded |
+| F4 | Approval | ICT/Admin | Approve MMP |
+| F5 | Forward to FOM | Admin | Send to Field Operations |
+
+**MMP Status Flow:**
+
+```
+Draft → Submitted → Under Review → Approved → Forwarded to FOM
+                         ↓
+                    Rejected (with comments)
+```
+
+### Step G: Permit Management (if required)
+
+| Step | Action | Who | Details |
+|------|--------|-----|---------|
+| G1 | Upload Permit | Coordinator | Upload permit document |
+| G2 | Enter Details | Coordinator | Permit number, dates, authority |
+| G3 | Verification | Reviewer | Verify permit validity |
+| G4 | Link to Sites | System | Associate permit with sites |
+
+---
+
+## 2.4 Phase 3: Dispatch & Site Claiming
+
+### Step H: Site Dispatch
+
+| Step | Action | Who | Details |
+|------|--------|-----|---------|
+| H1 | Select Sites | FOM | Choose sites to dispatch |
+| H2 | Choose Mode | FOM | Select dispatch mode |
+| H3 | Set Criteria | FOM | Define who can claim |
+| H4 | Execute Dispatch | FOM | Make sites available |
+| H5 | Notify Collectors | System | Send push notifications |
+
+**Dispatch Modes Explained:**
+
+| Mode | Who Can Claim | Best For |
+|------|---------------|----------|
+| **Open** | All active data collectors | General assignments |
+| **State** | Collectors assigned to specific states | Regional work |
+| **Locality** | Collectors in matching state + locality | Local work |
+| **Individual** | Only the specified collector | Direct assignment |
+
+### Step I: Site Claiming (First-Claim System)
+
+| Step | Action | Who | Details |
+|------|--------|-----|---------|
+| I1 | View Available | Collector | See dispatched sites in their area |
+| I2 | Select Site | Collector | Choose site to claim |
+| I3 | Claim Site | Collector | Click "Claim" button |
+| I4 | Atomic Lock | System | Instantly reserve site |
+| I5 | Calculate Fee | System | Determine fee based on classification |
+| I6 | Confirm Claim | System | Show success confirmation |
+
+**Claim Protection:**
+- Uses atomic database transaction (PostgreSQL RPC)
+- Only ONE collector can claim each site
+- Failed claims show immediate feedback
+- No race conditions possible
+
+### Step J: Claim Acceptance & Fee Calculation
+
+| Step | Action | Who | Details |
+|------|--------|-----|---------|
+| J1 | Review Claim | FOM/System | Verify claim is valid |
+| J2 | Accept Claim | FOM/Auto | Approve the claim |
+| J3 | Calculate Fees | System | Based on collector's classification |
+| J4 | Lock Fees | System | Store fees with site entry |
+| J5 | Notify Collector | System | Confirm assignment |
+
+**Fee Calculation Example:**
+
+| Classification | Enumerator Fee | Transport Fee | Total |
+|---------------|----------------|---------------|-------|
+| A (Senior) | 5,000 SDG | 2,000 SDG | 7,000 SDG |
+| B (Standard) | 3,500 SDG | 1,500 SDG | 5,000 SDG |
+| C (Junior) | 2,500 SDG | 1,000 SDG | 3,500 SDG |
+
+---
+
+## 2.5 Phase 4: Field Operations
+
+### Step K: Starting a Site Visit
+
+| Step | Action | Who | Details |
+|------|--------|-----|---------|
+| K1 | Open Assignment | Collector | View site details on mobile |
+| K2 | Travel to Site | Collector | Navigate to location |
+| K3 | Arrive at Site | Collector | GPS auto-detected |
+| K4 | Start Visit | Collector | Click "Start Visit" |
+| K5 | Record Start Time | System | Log visit_started_at |
+| K6 | Enable Tracking | System | Begin location tracking |
+
+**Mobile App Actions:**
+1. Open PACT app
+2. Navigate to "My Sites" or "Assigned"
+3. Select the site
+4. Click "Start Visit"
+5. Allow GPS access if prompted
+
+### Step L: Data Collection
+
+| Step | Action | Who | Details |
+|------|--------|-----|---------|
+| L1 | GPS Capture | Auto | Record current location |
+| L2 | Take Photos | Collector | Capture required images |
+| L3 | Fill Forms | Collector | Complete data entry forms |
+| L4 | Face Verification | Collector | If required, verify identity |
+| L5 | Add Notes | Collector | Record observations |
+| L6 | Local Save | System | Store data locally (offline support) |
+
+**Offline Capability:**
+- All data saved locally first
+- Works without internet connection
+- Queued for sync when online
+- Progress preserved if app closes
+
+### Step M: Completing a Site Visit
+
+| Step | Action | Who | Details |
+|------|--------|-----|---------|
+| M1 | Review Data | Collector | Check all required fields |
+| M2 | Complete Visit | Collector | Click "Complete Visit" |
+| M3 | Record End Time | System | Log visit_completed_at |
+| M4 | Sync Data | System | Upload to server |
+| M5 | Calculate Payment | System | Prepare wallet transaction |
+| M6 | Create Transaction | System | Credit collector's wallet |
+| M7 | Update Status | System | Mark site as "Completed" |
+
+**Completion Requirements:**
+- GPS location captured
+- All required photos taken
+- All form fields completed
+- Data synced to server
+
+### Step N: Visit Verification
+
+| Step | Action | Who | Details |
+|------|--------|-----|---------|
+| N1 | Review Submission | Supervisor | Check collected data |
+| N2 | Verify Location | Supervisor | Confirm GPS accuracy |
+| N3 | Review Photos | Supervisor | Check image quality |
+| N4 | Check Data | Supervisor | Validate form responses |
+| N5 | Approve/Reject | Supervisor | Mark as verified or request redo |
+
+---
+
+## 2.6 Phase 5: Financial Processing
+
+### Step O: Wallet Credit (Automatic)
+
+| Step | Action | Who | Details |
+|------|--------|-----|---------|
+| O1 | Trigger Payment | System | On visit completion |
+| O2 | Get Fee Data | System | Retrieve stored fees |
+| O3 | Create Transaction | System | Type: "earning" |
+| O4 | Update Balance | System | Credit wallet |
+| O5 | Record Audit | System | Full audit trail |
+| O6 | Notify Collector | System | Push notification |
+
+**Wallet Transaction Fields:**
+```
+{
+  wallet_id: "uuid",
+  user_id: "uuid",
+  type: "earning",
+  amount: 5000,
+  amount_cents: 500000,
+  currency: "SDG",
+  description: "Site visit: SITE001 - Al-Fashir Central",
+  metadata: {
+    site_entry_id: "uuid",
+    enumerator_fee: 3500,
+    transport_fee: 1500,
+    site_code: "SITE001"
+  }
+}
+```
+
+### Step P: Cost Submission & Approval (Manual Expenses)
+
+| Step | Action | Who | Details |
+|------|--------|-----|---------|
+| P1 | Submit Cost | Collector | Enter expense details |
+| P2 | Attach Receipt | Collector | Upload documentation |
+| P3 | Supervisor Review | Supervisor | First-level approval |
+| P4 | Finance Review | Finance | Final approval |
+| P5 | Process Payment | Finance | Approve disbursement |
+
+**Two-Tier Approval:**
+```
+Submitted → Supervisor Approved → Finance Approved → Paid
+                    ↓                    ↓
+                Rejected            Rejected
+```
+
+### Step Q: Tracker & Invoice Preparation
+
+| Step | Action | Who | Details |
+|------|--------|-----|---------|
+| Q1 | Access Tracker | Finance/FOM | Open Tracker Preparation Plan |
+| Q2 | Select Period | User | Choose date range |
+| Q3 | View Analysis | User | See planned vs actual |
+| Q4 | Review Costs | User | Check cost breakdown |
+| Q5 | Export Data | User | Download Excel/PDF |
+| Q6 | Generate Invoice | Finance | Prepare payment documentation |
+
+**Tracker Analysis Views:**
+- Summary: Total sites, completion %, costs
+- Site-by-Site: Individual site details
+- By Classification: Fees by enumerator level
+- By State/Locality: Geographic breakdown
+
+### Step R: Reporting & Analytics
+
+| Step | Action | Who | Details |
+|------|--------|-----|---------|
+| R1 | Generate Reports | Any User | Select report type |
+| R2 | Set Parameters | User | Date range, filters |
+| R3 | View Dashboard | User | Interactive charts |
+| R4 | Export Reports | User | PDF/Excel download |
+| R5 | Schedule Reports | Admin | Auto-email reports |
+
+### Step S: Archive & Closure
+
+| Step | Action | Who | Details |
+|------|--------|-----|---------|
+| S1 | Review Completion | FOM | Verify all sites done |
+| S2 | Generate Final Report | Admin | Complete MMP report |
+| S3 | Archive MMP | Admin | Move to historical storage |
+| S4 | Close Project | Admin | If project complete |
+| S5 | Maintain Records | System | Preserve audit trail |
+
+---
+
+## 2.7 Complete Workflow Checklist
+
+### Pre-Field Work
+
+- [ ] System configured (roles, fees, hubs)
+- [ ] Users registered and classified
+- [ ] Project created with budget
+- [ ] MMP uploaded and validated
+- [ ] MMP reviewed and approved
+- [ ] MMP forwarded to FOM
+- [ ] Sites dispatched to collectors
+
+### During Field Work
+
+- [ ] Collectors received notifications
+- [ ] Sites claimed by collectors
+- [ ] Claims accepted, fees calculated
+- [ ] Site visits started
+- [ ] Data collected (GPS, photos, forms)
+- [ ] Site visits completed
+- [ ] Data synced to server
+
+### Post-Field Work
+
+- [ ] Visits verified by supervisors
+- [ ] Wallets credited automatically
+- [ ] Additional costs submitted
+- [ ] Costs approved (two-tier)
+- [ ] Tracker analysis completed
+- [ ] Reports generated
+- [ ] MMP archived
+
+---
+
+## 2.8 Role Responsibilities Matrix
+
+| Phase | Admin | ICT | FOM | Finance | Supervisor | Coordinator | Data Collector |
+|-------|-------|-----|-----|---------|------------|-------------|----------------|
+| **Setup** | Config | Config | - | Budget | - | - | Register |
+| **MMP Upload** | Approve | Upload | - | - | - | Prepare | - |
+| **Review** | Approve | Review | - | - | - | - | - |
+| **Dispatch** | - | - | Execute | - | - | - | - |
+| **Claiming** | - | - | Monitor | - | - | - | Claim |
+| **Field Work** | - | - | Monitor | - | Monitor | Coordinate | Execute |
+| **Verification** | - | - | Review | - | Verify | - | - |
+| **Payment** | Override | - | - | Approve | - | - | Receive |
+| **Reporting** | All | All | Ops | Finance | Team | Team | Own |
+| **Archive** | Execute | Execute | - | - | - | - | - |
+
+---
+
+## 2.9 Key System Integrations
+
+### Real-Time Updates (Supabase Realtime)
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   Mobile    │◄───▶│  Supabase   │◄───▶│    Web      │
+│    App      │     │  Realtime   │     │   Portal    │
+└─────────────┘     └─────────────┘     └─────────────┘
+                           │
+                           ▼
+                    ┌─────────────┐
+                    │  PostgreSQL │
+                    │   Database  │
+                    └─────────────┘
+```
+
+- Site status changes update instantly
+- Claim notifications in real-time
+- Dashboard refreshes automatically
+- Location sharing updates live
+
+### Offline-First Architecture
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   User      │────▶│   Local     │────▶│   Server    │
+│   Action    │     │   Storage   │     │   Sync      │
+└─────────────┘     └─────────────┘     └─────────────┘
+                           │
+                           ▼
+                    ┌─────────────┐
+                    │   Queue     │
+                    │  (Offline)  │
+                    └─────────────┘
+```
+
+- All actions saved locally first
+- Background sync when online
+- Conflict resolution built-in
+- Data integrity guaranteed
+
+---
+
+## 2.10 Summary: The Complete Journey
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│                        THE PACT JOURNEY                               │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  START                                                               │
+│    │                                                                 │
+│    ▼                                                                 │
+│  [A] Admin sets up system ──────────────────────────────────────┐   │
+│    │                                                             │   │
+│    ▼                                                             │   │
+│  [B] Users register and get classified (A/B/C)                   │   │
+│    │                                                             │   │
+│    ▼                                                             │   │
+│  [C] Project created with activities and team                    │   │
+│    │                                                             │   │
+│    ▼                                                             │   │
+│  [D] Budget allocated to project                                 │   │
+│    │                                                             │   │
+│    ▼                                                             │   │
+│  [E] MMP uploaded from CSV with site list                        │   │
+│    │                                                             │   │
+│    ▼                                                             │   │
+│  [F] MMP reviewed, verified, and approved                        │   │
+│    │                                                             │   │
+│    ▼                                                             │   │
+│  [G] Permits uploaded and verified (if needed)                   │   │
+│    │                                                             │   │
+│    ▼                                                             │   │
+│  [H] Sites dispatched by FOM (Open/State/Locality/Individual)    │   │
+│    │                                                             │   │
+│    ▼                                                             │   │
+│  [I] Collectors claim sites (first-come, first-served)           │   │
+│    │                                                             │   │
+│    ▼                                                             │   │
+│  [J] Claims accepted, fees calculated based on classification    │   │
+│    │                                                             │   │
+│    ▼                                                             │   │
+│  [K] Collector travels to site, starts visit                     │   │
+│    │                                                             │   │
+│    ▼                                                             │   │
+│  [L] Data collected: GPS, photos, forms                          │   │
+│    │                                                             │   │
+│    ▼                                                             │   │
+│  [M] Visit completed, data synced                                │   │
+│    │                                                             │   │
+│    ▼                                                             │   │
+│  [N] Supervisor verifies visit quality                           │   │
+│    │                                                             │   │
+│    ▼                                                             │   │
+│  [O] Wallet credited automatically with fees ◄──────────────────┘   │
+│    │                                                                 │
+│    ▼                                                                 │
+│  [P] Additional costs submitted and approved (if any)               │
+│    │                                                                 │
+│    ▼                                                                 │
+│  [Q] Tracker analysis and invoice preparation                       │
+│    │                                                                 │
+│    ▼                                                                 │
+│  [R] Reports generated for stakeholders                             │
+│    │                                                                 │
+│    ▼                                                                 │
+│  [S] MMP archived, project closed                                   │
+│    │                                                                 │
+│    ▼                                                                 │
+│  END ───────────────────────────────────────────────────────────────│
+│                                                                      │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+# 3. Getting Started
 
 ## 2.1 Account Registration
 
