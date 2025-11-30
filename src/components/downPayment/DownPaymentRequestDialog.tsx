@@ -65,6 +65,16 @@ export function DownPaymentRequestDialog({
       return;
     }
 
+    if (requestedAmount <= 0) {
+      alert('Requested amount must be greater than zero');
+      return;
+    }
+
+    if (requestedAmount > transportationBudget) {
+      alert(`Requested amount (${requestedAmount.toLocaleString()} SDG) cannot exceed transportation budget (${transportationBudget.toLocaleString()} SDG)`);
+      return;
+    }
+
     if (paymentType === 'installments') {
       const total = installments.reduce((sum, inst) => sum + inst.amount, 0);
       if (total !== requestedAmount) {
@@ -134,11 +144,23 @@ export function DownPaymentRequestDialog({
               value={requestedAmount}
               onChange={(e) => setRequestedAmount(parseFloat(e.target.value) || 0)}
               max={transportationBudget}
+              min={0}
+              className={requestedAmount > transportationBudget ? 'border-destructive focus-visible:ring-destructive' : ''}
               data-testid="input-requested-amount"
             />
-            <p className="text-sm text-muted-foreground">
-              Maximum: {transportationBudget} SDG (total transportation budget)
-            </p>
+            {requestedAmount > transportationBudget ? (
+              <p className="text-sm text-destructive font-medium">
+                Amount exceeds budget by {(requestedAmount - transportationBudget).toLocaleString()} SDG
+              </p>
+            ) : requestedAmount <= 0 ? (
+              <p className="text-sm text-destructive font-medium">
+                Amount must be greater than zero
+              </p>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Maximum: {transportationBudget.toLocaleString()} SDG (total transportation budget)
+              </p>
+            )}
           </div>
 
           <div className="space-y-3">
@@ -256,7 +278,11 @@ export function DownPaymentRequestDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)} data-testid="button-cancel">
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={submitting} data-testid="button-submit-request">
+          <Button 
+            onClick={handleSubmit} 
+            disabled={submitting || requestedAmount <= 0 || requestedAmount > transportationBudget} 
+            data-testid="button-submit-request"
+          >
             {submitting ? 'Submitting...' : 'Submit Request'}
           </Button>
         </DialogFooter>

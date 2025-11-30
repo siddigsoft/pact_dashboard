@@ -125,6 +125,24 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
 
   const createRequest = async (request: CreateDownPaymentRequest): Promise<boolean> => {
     try {
+      if (request.requestedAmount <= 0) {
+        toast({
+          title: 'Invalid Amount',
+          description: 'Requested amount must be greater than zero',
+          variant: 'destructive',
+        });
+        return false;
+      }
+
+      if (request.requestedAmount > request.totalTransportationBudget) {
+        toast({
+          title: 'Amount Exceeds Budget',
+          description: `Requested amount (${request.requestedAmount.toLocaleString()} SDG) cannot exceed transportation budget (${request.totalTransportationBudget.toLocaleString()} SDG)`,
+          variant: 'destructive',
+        });
+        return false;
+      }
+
       const { error } = await supabase.from('down_payment_requests').insert({
         site_visit_id: request.siteVisitId,
         mmp_site_entry_id: request.mmpSiteEntryId,
