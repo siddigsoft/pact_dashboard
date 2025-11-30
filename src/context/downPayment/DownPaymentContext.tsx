@@ -88,24 +88,44 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
 
     try {
       setLoading(true);
+      const userRole = currentUser.role?.toLowerCase();
+      
+      // Debug logging for troubleshooting
+      console.log('[DownPayment] Fetching requests for user:', {
+        userId: currentUser.id,
+        role: userRole,
+        hubId: currentUser.hubId
+      });
+
       let query = supabase.from('down_payment_requests').select('*');
 
-      if (currentUser.role === 'dataCollector' || currentUser.role === 'datacollector' || currentUser.role === 'coordinator') {
+      if (userRole === 'datacollector' || userRole === 'coordinator') {
         // Data collectors and coordinators only see their own requests
         query = query.eq('requested_by', currentUser.id);
-      } else if (currentUser.role === 'supervisor' || currentUser.role === 'hubSupervisor') {
+      } else if (userRole === 'supervisor' || userRole === 'hubsupervisor') {
         /**
          * HUB-BASED SUPERVISION: Hub supervisors manage MULTIPLE states within their hub.
          * Examples: Kosti Hub = 7 states, Kassala Hub = 5 states
          * Supervisors see their own requests + all requests from their hub
          * Hub supervisors need hub_id assigned (NOT state_id) to see all team requests
          */
-        query = query.or(`requested_by.eq.${currentUser.id},hub_id.eq.${currentUser.hubId || 'none'}`);
+        if (currentUser.hubId) {
+          query = query.or(`requested_by.eq.${currentUser.id},hub_id.eq.${currentUser.hubId}`);
+        } else {
+          // If supervisor doesn't have hubId, try matching by hub name or just show own requests
+          console.warn('[DownPayment] Supervisor has no hubId set - showing only own requests');
+          query = query.eq('requested_by', currentUser.id);
+        }
+      } else if (userRole === 'admin' || userRole === 'financialadmin') {
+        // Admins see all requests - no filter applied
+        console.log('[DownPayment] Admin user - fetching all requests');
       }
 
       const { data, error } = await query.order('created_at', { ascending: false });
 
       if (error) throw error;
+      
+      console.log('[DownPayment] Fetched requests:', data?.length || 0);
       setRequests((data || []).map(transformFromDB));
     } catch (error: any) {
       console.error('Failed to fetch down-payment requests:', error);
