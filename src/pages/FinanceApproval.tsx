@@ -65,11 +65,42 @@ export default function FinanceApproval() {
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
   const [uploadingReceipt, setUploadingReceipt] = useState(false);
+  const [userWalletBalances, setUserWalletBalances] = useState<Record<string, { balance: number; currency: string }>>({});
+
+  const fetchUserWalletBalances = useCallback(async (userIds: string[]) => {
+    if (userIds.length === 0) return;
+    
+    try {
+      const { data: wallets, error } = await supabase
+        .from('wallets')
+        .select('user_id, balances')
+        .in('user_id', userIds);
+      
+      if (error) {
+        console.error('Error fetching wallet balances:', error);
+        return;
+      }
+      
+      const balanceMap: Record<string, { balance: number; currency: string }> = {};
+      wallets?.forEach(wallet => {
+        const balances = wallet.balances as Record<string, number> || {};
+        const sdgBalance = balances['SDG'] || 0;
+        balanceMap[wallet.user_id] = { balance: sdgBalance, currency: 'SDG' };
+      });
+      
+      setUserWalletBalances(balanceMap);
+    } catch (err) {
+      console.error('Error fetching wallet balances:', err);
+    }
+  }, []);
 
   const fetchAllRequests = useCallback(async () => {
     const requests = await adminListWithdrawalRequests();
     setAllRequests(requests);
-  }, [adminListWithdrawalRequests]);
+    
+    const userIds = [...new Set(requests.map(r => r.userId))];
+    await fetchUserWalletBalances(userIds);
+  }, [adminListWithdrawalRequests, fetchUserWalletBalances]);
 
   useWithdrawalRealtime({
     role: 'finance',
@@ -425,13 +456,17 @@ export default function FinanceApproval() {
     const urgency = request.status === 'supervisor_approved' ? getRequestUrgency(request.createdAt, request.approvedAt) : null;
     const UrgencyIcon = urgency?.icon;
     
+    const walletInfo = userWalletBalances[request.userId];
+    const walletBalance = walletInfo?.balance ?? 0;
+    const hasInsufficientBalance = request.status === 'supervisor_approved' && walletBalance < request.amount;
+    
     return (
       <Card className={`group transition-all duration-200 hover:shadow-md ${
         request.status === 'supervisor_approved' ? 'border-l-4 border-l-blue-500' :
         request.status === 'processing' ? 'border-l-4 border-l-purple-500' :
         request.status === 'approved' ? 'border-l-4 border-l-emerald-500' :
         request.status === 'rejected' ? 'border-l-4 border-l-red-500' : ''
-      } ${selectedRequestIds.has(request.id) ? 'ring-2 ring-primary ring-offset-2' : ''}`}>
+      } ${selectedRequestIds.has(request.id) ? 'ring-2 ring-primary ring-offset-2' : ''} ${hasInsufficientBalance ? 'bg-red-50/50 dark:bg-red-950/20' : ''}`}>
         <CardContent className="p-5">
           <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
             <div className="flex items-start gap-3 flex-1 min-w-0">
@@ -496,9 +531,40 @@ export default function FinanceApproval() {
               <p className="text-2xl font-bold tabular-nums text-foreground">
                 {formatCurrency(request.amount, request.currency)}
               </p>
+              {request.status === 'supervisor_approved' && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className={`flex items-center gap-1.5 text-sm px-2 py-1 rounded-md ${
+                      hasInsufficientBalance 
+                        ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400' 
+                        : 'bg-muted/50 text-muted-foreground'
+                    }`}>
+                      <Wallet className="w-3.5 h-3.5" />
+                      <span className="font-medium">Balance: {formatCurrency(walletBalance, request.currency)}</span>
+                      {hasInsufficientBalance && <AlertTriangle className="w-3.5 h-3.5" />}
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {hasInsufficientBalance 
+                      ? `Insufficient funds! Shortfall: ${formatCurrency(request.amount - walletBalance, request.currency)}`
+                      : `User has sufficient funds. After withdrawal: ${formatCurrency(walletBalance - request.amount, request.currency)}`
+                    }
+                  </TooltipContent>
+                </Tooltip>
+              )}
               <PaymentDetails details={request.paymentDetails} />
             </div>
           </div>
+          
+          {hasInsufficientBalance && (
+            <Alert variant="destructive" className="mt-4 py-2">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription className="text-sm">
+                <strong>Insufficient wallet balance!</strong> User has {formatCurrency(walletBalance, request.currency)} but requested {formatCurrency(request.amount, request.currency)}. 
+                Shortfall: {formatCurrency(request.amount - walletBalance, request.currency)}
+              </AlertDescription>
+            </Alert>
+          )}
 
           {showActions && request.status === 'supervisor_approved' && (
             <div className="flex items-center gap-2 mt-4 pt-4 border-t">
