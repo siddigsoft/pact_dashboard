@@ -91,8 +91,15 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
       let query = supabase.from('down_payment_requests').select('*');
 
       if (currentUser.role === 'dataCollector' || currentUser.role === 'datacollector' || currentUser.role === 'coordinator') {
+        // Data collectors and coordinators only see their own requests
         query = query.eq('requested_by', currentUser.id);
       } else if (currentUser.role === 'supervisor' || currentUser.role === 'hubSupervisor') {
+        /**
+         * HUB-BASED SUPERVISION: Hub supervisors manage MULTIPLE states within their hub.
+         * Examples: Kosti Hub = 7 states, Kassala Hub = 5 states
+         * Supervisors see their own requests + all requests from their hub
+         * Hub supervisors need hub_id assigned (NOT state_id) to see all team requests
+         */
         query = query.or(`requested_by.eq.${currentUser.id},hub_id.eq.${currentUser.hubId || 'none'}`);
       }
 

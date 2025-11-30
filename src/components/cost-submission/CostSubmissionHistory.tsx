@@ -3,9 +3,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Textarea } from "@/components/ui/textarea";
 import { SiteVisitCostSubmission } from "@/types/cost-submission";
 import { format } from "date-fns";
-import { Eye, FileText, DollarSign, Clock, CheckCircle, XCircle, AlertCircle, Ban } from "lucide-react";
+import { Eye, FileText, DollarSign, Clock, CheckCircle, XCircle, AlertCircle, Ban, User, ThumbsUp, ThumbsDown } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -13,14 +14,99 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogFooter,
 } from "@/components/ui/dialog";
+import { useAppContext } from "@/context/AppContext";
+import { useUser } from "@/context/user/UserContext";
+import { useCostSubmissionContext } from "@/context/costApproval/CostSubmissionContext";
+import { useToast } from "@/hooks/use-toast";
+import { AppRole } from "@/types";
 
 interface CostSubmissionHistoryProps {
   submissions: SiteVisitCostSubmission[];
 }
 
 const CostSubmissionHistory = ({ submissions }: CostSubmissionHistoryProps) => {
+  const { currentUser, roles } = useAppContext();
+  const { users } = useUser();
+  const context = useCostSubmissionContext();
+  const { mutate: reviewSubmission, isPending: isReviewing } = context.useReviewSubmission();
+  const { toast } = useToast();
+  
   const [selectedSubmission, setSelectedSubmission] = useState<SiteVisitCostSubmission | null>(null);
+  const [showApproveDialog, setShowApproveDialog] = useState(false);
+  const [showRejectDialog, setShowRejectDialog] = useState(false);
+  const [approvalNotes, setApprovalNotes] = useState('');
+  const [rejectionNotes, setRejectionNotes] = useState('');
+  
+  // Check if user can approve/review submissions
+  const isAdmin = roles?.includes('admin' as AppRole) || currentUser?.role === 'admin';
+  const isSupervisor = roles?.includes('hubSupervisor' as AppRole) || 
+                       roles?.includes('supervisor' as AppRole) ||
+                       currentUser?.role === 'hubSupervisor' || 
+                       currentUser?.role === 'supervisor';
+  const canApprove = isAdmin || isSupervisor;
+  
+  // Get submitter name from users list
+  const getSubmitterName = (submitterId: string) => {
+    const user = users.find(u => u.id === submitterId);
+    return user?.name || 'Unknown User';
+  };
+  
+  const handleApprove = async (submission: SiteVisitCostSubmission) => {
+    try {
+      await reviewSubmission({
+        submissionId: submission.id,
+        action: 'approve',
+        approvalNotes,
+      });
+      toast({
+        title: "Submission Approved",
+        description: "The cost submission has been approved successfully.",
+      });
+      setShowApproveDialog(false);
+      setApprovalNotes('');
+      setSelectedSubmission(null);
+    } catch (error) {
+      toast({
+        title: "Approval Failed",
+        description: "Failed to approve the submission. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+  
+  const handleReject = async (submission: SiteVisitCostSubmission) => {
+    if (!rejectionNotes.trim()) {
+      toast({
+        title: "Rejection Notes Required",
+        description: "Please provide a reason for rejection.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    try {
+      await reviewSubmission({
+        submissionId: submission.id,
+        action: 'reject',
+        reviewerNotes: rejectionNotes,
+      });
+      toast({
+        title: "Submission Rejected",
+        description: "The cost submission has been rejected.",
+      });
+      setShowRejectDialog(false);
+      setRejectionNotes('');
+      setSelectedSubmission(null);
+    } catch (error) {
+      toast({
+        title: "Rejection Failed",
+        description: "Failed to reject the submission. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
 
   const getStatusBadge = (status: string) => {
     const statusConfig: Record<string, { variant: any; icon: any; label: string }> = {
@@ -88,7 +174,10 @@ const CostSubmissionHistory = ({ submissions }: CostSubmissionHistoryProps) => {
             <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
             <h3 className="text-lg font-semibold mb-2">No Submissions Yet</h3>
             <p className="text-muted-foreground">
-              You haven't submitted any cost submissions yet. Go to the Submit Costs tab to create your first submission.
+              {canApprove 
+                ? "No cost submissions from team members yet."
+                : "You haven't submitted any cost submissions yet. Go to the Submit Costs tab to create your first submission."
+              }
             </p>
           </div>
         </CardContent>
@@ -106,9 +195,16 @@ const CostSubmissionHistory = ({ submissions }: CostSubmissionHistoryProps) => {
                 <CardTitle className="text-base">
                   Cost Submission #{submission.id.slice(0, 8)}
                 </CardTitle>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Submitted on {formatDate(submission.submittedAt)}
-                </p>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
+                  {canApprove && (
+                    <span className="flex items-center gap-1">
+                      <User className="h-3 w-3" />
+                      <span className="font-medium">{getSubmitterName(submission.submittedBy)}</span>
+                      <span className="mx-1">-</span>
+                    </span>
+                  )}
+                  <span>Submitted on {formatDate(submission.submittedAt)}</span>
+                </div>
               </div>
               {getStatusBadge(submission.status)}
             </div>
@@ -185,7 +281,39 @@ const CostSubmissionHistory = ({ submissions }: CostSubmissionHistoryProps) => {
               )}
 
               {/* Actions */}
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
+                {/* Approve/Reject actions for supervisors and admins on pending submissions */}
+                {canApprove && (submission.status === 'pending' || submission.status === 'under_review') && (
+                  <>
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setSelectedSubmission(submission);
+                        setShowApproveDialog(true);
+                      }}
+                      disabled={isReviewing}
+                      className="bg-emerald-600 text-white"
+                      data-testid={`button-approve-${submission.id}`}
+                    >
+                      <ThumbsUp className="h-4 w-4 mr-2" />
+                      Approve
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => {
+                        setSelectedSubmission(submission);
+                        setShowRejectDialog(true);
+                      }}
+                      disabled={isReviewing}
+                      data-testid={`button-reject-${submission.id}`}
+                    >
+                      <ThumbsDown className="h-4 w-4 mr-2" />
+                      Reject
+                    </Button>
+                  </>
+                )}
+                
                 <Dialog>
                   <DialogTrigger asChild>
                     <Button
@@ -347,6 +475,104 @@ const CostSubmissionHistory = ({ submissions }: CostSubmissionHistoryProps) => {
           </CardContent>
         </Card>
       ))}
+      
+      {/* Approve Dialog */}
+      <Dialog open={showApproveDialog} onOpenChange={setShowApproveDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Approve Cost Submission</DialogTitle>
+            <DialogDescription>
+              You are about to approve this cost submission for{' '}
+              {selectedSubmission && (
+                <span className="font-semibold">
+                  {formatCurrency(selectedSubmission.totalCostCents, selectedSubmission.currency)}
+                </span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <label className="text-sm font-medium text-muted-foreground mb-2 block">
+                Approval Notes (Optional)
+              </label>
+              <Textarea
+                placeholder="Add any notes about this approval..."
+                value={approvalNotes}
+                onChange={(e) => setApprovalNotes(e.target.value)}
+                className="min-h-[100px]"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowApproveDialog(false);
+                setApprovalNotes('');
+                setSelectedSubmission(null);
+              }}
+              data-testid="button-cancel-approve"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => selectedSubmission && handleApprove(selectedSubmission)}
+              disabled={isReviewing}
+              className="bg-emerald-600 text-white"
+              data-testid="button-confirm-approve"
+            >
+              {isReviewing ? 'Approving...' : 'Approve Submission'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Reject Dialog */}
+      <Dialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reject Cost Submission</DialogTitle>
+            <DialogDescription>
+              Please provide a reason for rejecting this submission.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <label className="text-sm font-medium text-muted-foreground mb-2 block">
+                Rejection Reason <span className="text-red-500">*</span>
+              </label>
+              <Textarea
+                placeholder="Explain why this submission is being rejected..."
+                value={rejectionNotes}
+                onChange={(e) => setRejectionNotes(e.target.value)}
+                className="min-h-[100px]"
+                required
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowRejectDialog(false);
+                setRejectionNotes('');
+                setSelectedSubmission(null);
+              }}
+              data-testid="button-cancel-reject"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => selectedSubmission && handleReject(selectedSubmission)}
+              disabled={isReviewing || !rejectionNotes.trim()}
+              data-testid="button-confirm-reject"
+            >
+              {isReviewing ? 'Rejecting...' : 'Reject Submission'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

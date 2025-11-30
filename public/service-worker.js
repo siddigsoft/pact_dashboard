@@ -1,5 +1,24 @@
-const CACHE_NAME = 'pact-v2';
+const CACHE_NAME = 'pact-v3';
 const OFFLINE_URL = '/offline.html';
+
+const STATIC_CACHE = 'pact-static-v1';
+const API_CACHE = 'pact-api-v1';
+
+const STATIC_ASSETS = [
+  '/',
+  '/offline.html',
+  '/manifest.json',
+  '/pact-logo.png',
+  '/icons/icon-192x192.png',
+  '/icons/icon-72x72.png',
+  '/notification.mp3'
+];
+
+const API_CACHE_URLS = [
+  '/rest/v1/mmp_site_entries',
+  '/rest/v1/profiles',
+  '/rest/v1/projects',
+];
 
 const NOTIFICATION_SOUNDS = {
   default: '/notification.mp3',
@@ -16,28 +35,36 @@ const VIBRATION_PATTERNS = {
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll([
-        '/',
-        '/offline.html',
-        '/icons/icon-192x192.png',
-        '/icons/icon-72x72.png',
-        '/notification.mp3'
-      ]).catch((err) => {
-        console.log('Cache addAll failed:', err);
-      });
-    })
+    Promise.all([
+      caches.open(CACHE_NAME).then((cache) => {
+        return cache.addAll([
+          '/offline.html',
+          '/notification.mp3'
+        ]).catch((err) => {
+          console.log('[SW] Core cache failed:', err);
+        });
+      }),
+      caches.open(STATIC_CACHE).then((cache) => {
+        return cache.addAll(STATIC_ASSETS).catch((err) => {
+          console.log('[SW] Static cache failed:', err);
+        });
+      })
+    ])
   );
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
+  const validCaches = [CACHE_NAME, STATIC_CACHE, API_CACHE];
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames
-          .filter((name) => name !== CACHE_NAME)
-          .map((name) => caches.delete(name))
+          .filter((name) => !validCaches.includes(name))
+          .map((name) => {
+            console.log('[SW] Deleting old cache:', name);
+            return caches.delete(name);
+          })
       );
     })
   );
@@ -225,6 +252,8 @@ self.addEventListener('message', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+  const url = new URL(event.request.url);
+
   if (event.request.mode === 'navigate') {
     event.respondWith(
       fetch(event.request).catch(() => {
@@ -242,7 +271,70 @@ self.addEventListener('fetch', (event) => {
     );
     return;
   }
+
+  const isApiRequest = API_CACHE_URLS.some(apiUrl => url.pathname.includes(apiUrl));
+  if (isApiRequest && event.request.method === 'GET') {
+    event.respondWith(staleWhileRevalidate(event.request, API_CACHE));
+    return;
+  }
+
+  const isStaticAsset = STATIC_ASSETS.some(asset => url.pathname === asset) ||
+    url.pathname.match(/\.(js|css|png|jpg|jpeg|svg|woff2?)$/);
+  if (isStaticAsset) {
+    event.respondWith(cacheFirst(event.request, STATIC_CACHE));
+    return;
+  }
 });
+
+async function staleWhileRevalidate(request, cacheName) {
+  const cache = await caches.open(cacheName);
+  const cachedResponse = await cache.match(request);
+
+  const fetchPromise = fetch(request).then((networkResponse) => {
+    if (networkResponse.ok) {
+      cache.put(request, networkResponse.clone());
+    }
+    return networkResponse;
+  }).catch((error) => {
+    console.log('[SW] Network fetch failed, using cache:', error);
+    return null;
+  });
+
+  if (cachedResponse) {
+    fetchPromise.catch(() => {});
+    return cachedResponse;
+  }
+
+  const networkResponse = await fetchPromise;
+  if (networkResponse) {
+    return networkResponse;
+  }
+
+  return new Response(JSON.stringify({ error: 'Offline', cached: false }), {
+    status: 503,
+    headers: { 'Content-Type': 'application/json' }
+  });
+}
+
+async function cacheFirst(request, cacheName) {
+  const cache = await caches.open(cacheName);
+  const cachedResponse = await cache.match(request);
+
+  if (cachedResponse) {
+    return cachedResponse;
+  }
+
+  try {
+    const networkResponse = await fetch(request);
+    if (networkResponse.ok) {
+      cache.put(request, networkResponse.clone());
+    }
+    return networkResponse;
+  } catch (error) {
+    console.log('[SW] Cache-first fetch failed:', error);
+    return new Response('Offline', { status: 503 });
+  }
+}
 
 self.addEventListener('sync', (event) => {
   if (event.tag === 'sync-notifications') {

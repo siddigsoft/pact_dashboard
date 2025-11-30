@@ -1,13 +1,17 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useWallet } from '@/context/wallet/WalletContext';
 import { useUser } from '@/context/user/UserContext';
+import { useToast } from '@/hooks/use-toast';
+import { useWithdrawalRealtime } from '@/hooks/useWithdrawalRealtime';
 import { 
   Clock, 
   CheckCircle2, 
@@ -25,29 +29,115 @@ import {
   DollarSign,
   TrendingUp,
   Building2,
-  AlertCircle
+  AlertCircle,
+  Timer,
+  Flame,
+  AlertTriangle,
+  CheckCheck,
+  Hash,
+  Receipt
 } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, differenceInHours, differenceInDays } from 'date-fns';
 import { AdminWithdrawalRequest } from '@/types/wallet';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 export default function FinanceApproval() {
   const { adminListWithdrawalRequests, adminProcessWithdrawal, adminRejectWithdrawal } = useWallet();
   const { users } = useUser();
+  const { toast } = useToast();
   const [allRequests, setAllRequests] = useState<AdminWithdrawalRequest[]>([]);
   const [selectedRequest, setSelectedRequest] = useState<AdminWithdrawalRequest | null>(null);
-  const [dialogType, setDialogType] = useState<'process' | 'reject' | null>(null);
+  const [dialogType, setDialogType] = useState<'process' | 'reject' | 'batch_process' | null>(null);
   const [notes, setNotes] = useState('');
+  const [transactionRef, setTransactionRef] = useState('');
   const [processing, setProcessing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedRequestIds, setSelectedRequestIds] = useState<Set<string>>(new Set());
 
-  const fetchAllRequests = async () => {
+  const fetchAllRequests = useCallback(async () => {
     const requests = await adminListWithdrawalRequests();
     setAllRequests(requests);
+  }, [adminListWithdrawalRequests]);
+
+  useWithdrawalRealtime({
+    role: 'finance',
+    onUpdate: fetchAllRequests,
+  });
+  
+  const getRequestUrgency = (createdAt: string, supervisorApprovedAt?: string) => {
+    const referenceDate = supervisorApprovedAt || createdAt;
+    const hoursAgo = differenceInHours(new Date(), new Date(referenceDate));
+    const daysAgo = differenceInDays(new Date(), new Date(referenceDate));
+    
+    if (hoursAgo < 24) {
+      return { level: 'normal', label: 'New', color: 'text-muted-foreground', bgColor: '', icon: null };
+    } else if (hoursAgo < 48) {
+      return { level: 'medium', label: '1+ day', color: 'text-amber-600 dark:text-amber-400', bgColor: 'bg-amber-500/10', icon: Timer };
+    } else if (hoursAgo < 72) {
+      return { level: 'high', label: '2+ days', color: 'text-orange-600 dark:text-orange-400', bgColor: 'bg-orange-500/10', icon: AlertTriangle };
+    } else {
+      return { level: 'critical', label: `${daysAgo}+ days`, color: 'text-red-600 dark:text-red-400', bgColor: 'bg-red-500/10', icon: Flame };
+    }
+  };
+  
+  const toggleRequestSelection = (requestId: string) => {
+    setSelectedRequestIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(requestId)) {
+        newSet.delete(requestId);
+      } else {
+        newSet.add(requestId);
+      }
+      return newSet;
+    });
+  };
+  
+  const toggleAllSelection = () => {
+    if (selectedRequestIds.size === supervisorApprovedRequests.length) {
+      setSelectedRequestIds(new Set());
+    } else {
+      setSelectedRequestIds(new Set(supervisorApprovedRequests.map(r => r.id)));
+    }
+  };
+  
+  const handleBatchProcess = async () => {
+    if (selectedRequestIds.size === 0) return;
+    
+    setProcessing(true);
+    
+    try {
+      const batchNotes = transactionRef 
+        ? `${notes || 'Batch processed'} | Ref: ${transactionRef}`
+        : notes || 'Batch processed by finance';
+      
+      const results = await Promise.allSettled(
+        Array.from(selectedRequestIds).map(requestId => 
+          adminProcessWithdrawal(requestId, batchNotes)
+        )
+      );
+      
+      const successCount = results.filter(r => r.status === 'fulfilled').length;
+      const failCount = results.filter(r => r.status === 'rejected').length;
+      
+      toast({
+        title: 'Batch Processing Complete',
+        description: `${successCount} payment(s) processed${failCount > 0 ? `, ${failCount} failed` : ''}`,
+        variant: failCount > 0 ? 'destructive' : 'default',
+      });
+      
+      await fetchAllRequests();
+      setSelectedRequestIds(new Set());
+      setDialogType(null);
+      setNotes('');
+      setTransactionRef('');
+    } finally {
+      setProcessing(false);
+    }
   };
 
   useEffect(() => {
@@ -57,7 +147,7 @@ export default function FinanceApproval() {
       setLoading(false);
     };
     loadData();
-  }, []);
+  }, [fetchAllRequests]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -113,12 +203,14 @@ export default function FinanceApproval() {
     setSelectedRequest(request);
     setDialogType('process');
     setNotes('');
+    setTransactionRef('');
   };
 
   const handleReject = (request: AdminWithdrawalRequest) => {
     setSelectedRequest(request);
     setDialogType('reject');
     setNotes('');
+    setTransactionRef('');
   };
 
   const handleConfirmAction = async () => {
@@ -127,7 +219,10 @@ export default function FinanceApproval() {
     setProcessing(true);
     try {
       if (dialogType === 'process') {
-        await adminProcessWithdrawal(selectedRequest.id, notes);
+        const auditNotes = transactionRef 
+          ? `${notes || 'Payment processed'}${notes ? ' | ' : ''}Ref: ${transactionRef}`
+          : notes;
+        await adminProcessWithdrawal(selectedRequest.id, auditNotes);
       } else if (dialogType === 'reject') {
         await adminRejectWithdrawal(selectedRequest.id, notes);
       }
@@ -135,6 +230,7 @@ export default function FinanceApproval() {
       setDialogType(null);
       setSelectedRequest(null);
       setNotes('');
+      setTransactionRef('');
     } finally {
       setProcessing(false);
     }
@@ -183,9 +279,53 @@ export default function FinanceApproval() {
     );
   };
 
-  const RequestCard = ({ request, showActions = false }: { request: AdminWithdrawalRequest, showActions?: boolean }) => {
+  const WorkflowTimeline = ({ request }: { request: AdminWithdrawalRequest }) => {
+    const steps = [
+      { key: 'submitted', label: 'Submitted', done: true },
+      { key: 'supervisor', label: 'Supervisor', done: request.status !== 'pending' },
+      { key: 'finance', label: 'Finance', done: request.status === 'processing' || request.status === 'approved' },
+      { key: 'complete', label: 'Complete', done: request.status === 'approved' },
+    ];
+    
+    const rejectedStep = request.status === 'rejected' ? 
+      (request.adminNotes ? 2 : 1) : -1;
+    
+    return (
+      <div className="flex items-center gap-1 text-xs mt-2">
+        {steps.map((step, idx) => (
+          <div key={step.key} className="flex items-center">
+            <div className={`w-2 h-2 rounded-full ${
+              rejectedStep === idx 
+                ? 'bg-red-500' 
+                : step.done 
+                  ? 'bg-emerald-500' 
+                  : 'bg-muted-foreground/30'
+            }`} />
+            {idx < steps.length - 1 && (
+              <div className={`w-4 h-0.5 ${
+                step.done && steps[idx + 1]?.done 
+                  ? 'bg-emerald-500' 
+                  : 'bg-muted-foreground/30'
+              }`} />
+            )}
+          </div>
+        ))}
+        <span className="ml-1 text-muted-foreground">{
+          request.status === 'rejected' ? 'Rejected' :
+          request.status === 'approved' ? 'Completed' :
+          request.status === 'processing' ? 'Processing' :
+          request.status === 'supervisor_approved' ? 'Ready to Pay' :
+          'With Supervisor'
+        }</span>
+      </div>
+    );
+  };
+
+  const RequestCard = ({ request, showActions = false, showSelection = false }: { request: AdminWithdrawalRequest, showActions?: boolean, showSelection?: boolean }) => {
     const userName = getUserName(request.userId, request);
     const supervisorName = request.supervisorId ? getUserName(request.supervisorId) : null;
+    const urgency = request.status === 'supervisor_approved' ? getRequestUrgency(request.createdAt, request.approvedAt) : null;
+    const UrgencyIcon = urgency?.icon;
     
     return (
       <Card className={`group transition-all duration-200 hover:shadow-md ${
@@ -193,10 +333,18 @@ export default function FinanceApproval() {
         request.status === 'processing' ? 'border-l-4 border-l-purple-500' :
         request.status === 'approved' ? 'border-l-4 border-l-emerald-500' :
         request.status === 'rejected' ? 'border-l-4 border-l-red-500' : ''
-      }`}>
+      } ${selectedRequestIds.has(request.id) ? 'ring-2 ring-primary ring-offset-2' : ''}`}>
         <CardContent className="p-5">
           <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
             <div className="flex items-start gap-3 flex-1 min-w-0">
+              {showSelection && request.status === 'supervisor_approved' && (
+                <Checkbox
+                  checked={selectedRequestIds.has(request.id)}
+                  onCheckedChange={() => toggleRequestSelection(request.id)}
+                  className="mt-1"
+                  data-testid={`checkbox-select-${request.id}`}
+                />
+              )}
               <Avatar className="h-11 w-11 border-2 border-blue-500/20">
                 <AvatarFallback className="bg-blue-500/10 text-blue-700 dark:text-blue-400 text-sm font-medium">
                   {getInitials(userName)}
@@ -206,6 +354,19 @@ export default function FinanceApproval() {
                 <div className="flex items-center gap-2 flex-wrap">
                   <h4 className="font-semibold text-foreground">{userName}</h4>
                   {getStatusBadge(request.status)}
+                  {urgency && urgency.level !== 'normal' && UrgencyIcon && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Badge variant="outline" className={`${urgency.bgColor} ${urgency.color} border-0 gap-1`}>
+                          <UrgencyIcon className="w-3 h-3" />
+                          {urgency.label}
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Waiting for payment for {urgency.label}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
                 </div>
                 <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground flex-wrap">
                   <span className="flex items-center gap-1">
@@ -217,6 +378,7 @@ export default function FinanceApproval() {
                     <span className="capitalize">{request.paymentMethod}</span>
                   </span>
                 </div>
+                <WorkflowTimeline request={request} />
                 {supervisorName && (
                   <div className="mt-2 flex items-center gap-1.5 text-sm">
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
@@ -301,8 +463,10 @@ export default function FinanceApproval() {
     );
   }
 
+  const hasMobileSelection = selectedRequestIds.size > 0;
+
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+    <div className={`p-6 space-y-6 max-w-7xl mx-auto ${hasMobileSelection ? 'pb-24 sm:pb-6' : ''}`}>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
@@ -452,11 +616,41 @@ export default function FinanceApproval() {
               />
             </Card>
           ) : (
-            <div className="grid gap-3">
-              {supervisorApprovedRequests.map((request) => (
-                <RequestCard key={request.id} request={request} showActions={true} />
-              ))}
-            </div>
+            <>
+              {supervisorApprovedRequests.length > 1 && (
+                <div className="flex items-center justify-between gap-4 p-3 bg-muted/50 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <Checkbox
+                      checked={selectedRequestIds.size === supervisorApprovedRequests.length}
+                      onCheckedChange={toggleAllSelection}
+                      data-testid="checkbox-select-all"
+                    />
+                    <span className="text-sm font-medium">
+                      {selectedRequestIds.size > 0 
+                        ? `${selectedRequestIds.size} selected`
+                        : 'Select all'
+                      }
+                    </span>
+                  </div>
+                  {selectedRequestIds.size > 0 && (
+                    <Button
+                      size="sm"
+                      onClick={() => setDialogType('batch_process')}
+                      className="bg-emerald-600 text-white"
+                      data-testid="button-batch-process"
+                    >
+                      <CheckCheck className="w-4 h-4 mr-1.5" />
+                      Process Selected ({selectedRequestIds.size})
+                    </Button>
+                  )}
+                </div>
+              )}
+              <div className="grid gap-3">
+                {supervisorApprovedRequests.map((request) => (
+                  <RequestCard key={request.id} request={request} showActions={true} showSelection={supervisorApprovedRequests.length > 1} />
+                ))}
+              </div>
+            </>
           )}
         </TabsContent>
 
@@ -515,7 +709,7 @@ export default function FinanceApproval() {
         </TabsContent>
       </Tabs>
 
-      <Dialog open={dialogType !== null} onOpenChange={() => setDialogType(null)}>
+      <Dialog open={dialogType !== null && dialogType !== 'batch_process'} onOpenChange={() => setDialogType(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -572,17 +766,34 @@ export default function FinanceApproval() {
             </DialogDescription>
           </DialogHeader>
 
+          {dialogType === 'process' && (
+            <div className="space-y-2">
+              <Label htmlFor="transaction-ref" className="flex items-center gap-1.5">
+                <Hash className="w-3.5 h-3.5" />
+                Transaction Reference
+              </Label>
+              <Input
+                id="transaction-ref"
+                placeholder="e.g., TXN-2024-001234"
+                value={transactionRef}
+                onChange={(e) => setTransactionRef(e.target.value)}
+                data-testid="input-transaction-ref"
+              />
+              <p className="text-xs text-muted-foreground">Bank reference or payment transaction ID for audit trail</p>
+            </div>
+          )}
+
           <div className="space-y-2">
             <Label htmlFor="notes">
-              {dialogType === 'process' ? 'Payment Reference / Notes' : 'Rejection Reason'} 
+              {dialogType === 'process' ? 'Additional Notes' : 'Rejection Reason'} 
               {dialogType === 'reject' && <span className="text-destructive">*</span>}
             </Label>
             <Textarea
               id="notes"
-              placeholder={dialogType === 'process' ? 'Enter transaction reference or payment notes...' : 'Explain the reason for rejection...'}
+              placeholder={dialogType === 'process' ? 'Optional payment notes...' : 'Explain the reason for rejection...'}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              rows={3}
+              rows={2}
               data-testid="input-finance-notes"
             />
           </div>
@@ -602,6 +813,122 @@ export default function FinanceApproval() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      
+      <Dialog open={dialogType === 'batch_process'} onOpenChange={() => setDialogType(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <div className="p-2 rounded-full bg-emerald-500/10">
+                <CheckCheck className="w-5 h-5 text-emerald-600" />
+              </div>
+              Batch Payment Processing
+            </DialogTitle>
+            <DialogDescription>
+              <div className="mt-4 p-4 rounded-lg bg-muted/50 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Payments Selected</span>
+                  <span className="font-bold text-foreground tabular-nums">{selectedRequestIds.size}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Total Amount</span>
+                  <span className="font-bold text-foreground tabular-nums text-lg">
+                    {formatCurrency(
+                      supervisorApprovedRequests
+                        .filter(r => selectedRequestIds.has(r.id))
+                        .reduce((sum, r) => sum + r.amount, 0),
+                      'SDG'
+                    )}
+                  </span>
+                </div>
+              </div>
+              <p className="mt-4 text-sm">
+                All selected requests will be processed and marked as paid.
+              </p>
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2">
+            <Label htmlFor="batch-ref" className="flex items-center gap-1.5">
+              <Hash className="w-3.5 h-3.5" />
+              Batch Transaction Reference
+            </Label>
+            <Input
+              id="batch-ref"
+              placeholder="e.g., BATCH-2024-001234"
+              value={transactionRef}
+              onChange={(e) => setTransactionRef(e.target.value)}
+              data-testid="input-batch-transaction-ref"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="batch-notes">Notes (Optional)</Label>
+            <Textarea
+              id="batch-notes"
+              placeholder="Add optional payment notes..."
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={2}
+              data-testid="input-batch-notes"
+            />
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setDialogType(null)} disabled={processing}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleBatchProcess}
+              disabled={processing}
+              className="bg-emerald-600 text-white"
+              data-testid="button-confirm-batch"
+            >
+              {processing ? 'Processing...' : `Process ${selectedRequestIds.size} Payments`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {selectedRequestIds.size > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 p-4 bg-background/95 backdrop-blur-sm border-t shadow-lg sm:hidden" data-testid="mobile-action-bar">
+          <div className="flex items-center justify-between gap-3 max-w-lg mx-auto">
+            <div className="flex items-center gap-2">
+              <div className="flex items-center justify-center w-8 h-8 rounded-full bg-emerald-500/10">
+                <span className="text-sm font-bold text-emerald-600">{selectedRequestIds.size}</span>
+              </div>
+              <div className="text-sm">
+                <p className="font-medium">Selected</p>
+                <p className="text-xs text-muted-foreground">
+                  {formatCurrency(
+                    supervisorApprovedRequests
+                      .filter(r => selectedRequestIds.has(r.id))
+                      .reduce((sum, r) => sum + r.amount, 0)
+                  )}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setSelectedRequestIds(new Set())}
+                data-testid="button-mobile-clear-selection"
+              >
+                Clear
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => setDialogType('batch_process')}
+                className="bg-emerald-600 text-white"
+                data-testid="button-mobile-batch-process"
+              >
+                <Banknote className="w-4 h-4 mr-1.5" />
+                Process
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

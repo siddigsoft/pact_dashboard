@@ -22,9 +22,12 @@
 	{
 		"pkg": "@capacitor/push-notifications",
 		"classpath": "com.capacitorjs.plugins.pushnotifications.PushNotificationsPlugin"
+<<<<<<< HEAD
+=======
 	},
 	{
 		"pkg": "@capacitor/status-bar",
 		"classpath": "com.capacitorjs.plugins.statusbar.StatusBarPlugin"
+>>>>>>> 66fbd83a9c086834cbcb9ffed7b17376ad3a720d
 	}
 ]
