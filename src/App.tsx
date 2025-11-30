@@ -65,6 +65,7 @@ const AdminWallets = lazy(() => import('./pages/AdminWallets'));
 const AdminWalletDetail = lazy(() => import('./pages/AdminWalletDetail'));
 const WithdrawalApproval = lazy(() => import('./pages/WithdrawalApproval'));
 const FinanceApproval = lazy(() => import('./pages/FinanceApproval'));
+const DownPaymentApproval = lazy(() => import('./pages/DownPaymentApproval'));
 const WalletReports = lazy(() => import('./pages/WalletReports'));
 const BudgetPage = lazy(() => import('./pages/Budget'));
 const Classifications = lazy(() => import('./pages/Classifications'));
@@ -178,6 +179,7 @@ const AppRoutes = () => {
         <Route path="/admin/wallets/:userId" element={<AdminWalletDetail />} />
         <Route path="/withdrawal-approval" element={<WithdrawalApproval />} />
         <Route path="/finance-approval" element={<FinanceApproval />} />
+        <Route path="/down-payment-approval" element={<DownPaymentApproval />} />
         <Route path="/wallet-reports" element={<WalletReports />} />
         <Route path="/budget" element={<BudgetPage />} />
         <Route path="/cost-submission" element={<CostSubmission />} />
