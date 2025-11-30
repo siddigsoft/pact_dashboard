@@ -153,7 +153,9 @@ export function AcceptSiteButton({
       setAccepted(true);
       toast({
         title: isDispatchedSite ? 'Site Claimed!' : 'Site Accepted!',
-        description: `Your fee: ${feeBreakdown.enumeratorFee.toLocaleString()} SDG + Transport: ${feeBreakdown.transportBudget.toLocaleString()} SDG = ${feeBreakdown.totalPayout.toLocaleString()} SDG`,
+        description: isFieldWorker
+          ? `Total payout: ${feeBreakdown.totalPayout.toLocaleString()} SDG`
+          : `Your fee: ${feeBreakdown.enumeratorFee.toLocaleString()} SDG + Transport: ${feeBreakdown.transportBudget.toLocaleString()} SDG = ${feeBreakdown.totalPayout.toLocaleString()} SDG`,
         variant: 'default'
       });
       onAccepted?.();

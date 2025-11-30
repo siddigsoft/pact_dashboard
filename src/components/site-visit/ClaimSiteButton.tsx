@@ -98,7 +98,9 @@ export function ClaimSiteButton({
         setClaimed(true);
         toast({
           title: 'Site Claimed!',
-          description: `${result.message} Your fee: ${finalFee.toLocaleString()} SDG + Transport: ${feeBreakdown.transportBudget.toLocaleString()} SDG = ${finalTotal.toLocaleString()} SDG`,
+          description: isFieldWorker 
+            ? `${result.message} Total payout: ${finalTotal.toLocaleString()} SDG`
+            : `${result.message} Your fee: ${finalFee.toLocaleString()} SDG + Transport: ${feeBreakdown.transportBudget.toLocaleString()} SDG = ${finalTotal.toLocaleString()} SDG`,
           variant: 'default'
         });
         onClaimed?.();
