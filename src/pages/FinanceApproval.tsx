@@ -35,8 +35,12 @@ import {
   AlertTriangle,
   CheckCheck,
   Hash,
-  Receipt
+  Receipt,
+  Upload,
+  Image,
+  X
 } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 import { format, differenceInHours, differenceInDays } from 'date-fns';
 import { AdminWithdrawalRequest } from '@/types/wallet';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -58,6 +62,9 @@ export default function FinanceApproval() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedRequestIds, setSelectedRequestIds] = useState<Set<string>>(new Set());
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
+  const [uploadingReceipt, setUploadingReceipt] = useState(false);
 
   const fetchAllRequests = useCallback(async () => {
     const requests = await adminListWithdrawalRequests();
@@ -204,6 +211,8 @@ export default function FinanceApproval() {
     setDialogType('process');
     setNotes('');
     setTransactionRef('');
+    setReceiptFile(null);
+    setReceiptPreview(null);
   };
 
   const handleReject = (request: AdminWithdrawalRequest) => {
@@ -211,6 +220,81 @@ export default function FinanceApproval() {
     setDialogType('reject');
     setNotes('');
     setTransactionRef('');
+    setReceiptFile(null);
+    setReceiptPreview(null);
+  };
+
+  const handleReceiptFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        toast({
+          title: 'File too large',
+          description: 'Please select an image smaller than 5MB',
+          variant: 'destructive',
+        });
+        return;
+      }
+      
+      if (!file.type.startsWith('image/')) {
+        toast({
+          title: 'Invalid file type',
+          description: 'Please select an image file (JPG, PNG, etc.)',
+          variant: 'destructive',
+        });
+        return;
+      }
+      
+      setReceiptFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setReceiptPreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const removeReceiptFile = () => {
+    setReceiptFile(null);
+    setReceiptPreview(null);
+  };
+
+  const uploadReceiptToStorage = async (requestId: string): Promise<string | null> => {
+    if (!receiptFile) return null;
+    
+    try {
+      setUploadingReceipt(true);
+      const fileExt = receiptFile.name.split('.').pop();
+      const fileName = `receipts/${requestId}_${Date.now()}.${fileExt}`;
+      
+      const { data, error } = await supabase.storage
+        .from('documents')
+        .upload(fileName, receiptFile, {
+          cacheControl: '3600',
+          upsert: false,
+        });
+      
+      if (error) {
+        console.error('Failed to upload receipt:', error);
+        toast({
+          title: 'Upload failed',
+          description: 'Could not upload receipt. Payment will proceed without attachment.',
+          variant: 'destructive',
+        });
+        return null;
+      }
+      
+      const { data: urlData } = supabase.storage
+        .from('documents')
+        .getPublicUrl(fileName);
+      
+      return urlData.publicUrl;
+    } catch (err) {
+      console.error('Receipt upload error:', err);
+      return null;
+    } finally {
+      setUploadingReceipt(false);
+    }
   };
 
   const handleConfirmAction = async () => {
@@ -219,9 +303,21 @@ export default function FinanceApproval() {
     setProcessing(true);
     try {
       if (dialogType === 'process') {
-        const auditNotes = transactionRef 
+        let receiptUrl = null;
+        if (receiptFile) {
+          receiptUrl = await uploadReceiptToStorage(selectedRequest.id);
+        }
+        
+        let auditNotes = transactionRef 
           ? `${notes || 'Payment processed'}${notes ? ' | ' : ''}Ref: ${transactionRef}`
           : notes;
+        
+        if (receiptUrl) {
+          auditNotes = auditNotes 
+            ? `${auditNotes} | Receipt: ${receiptUrl}`
+            : `Receipt: ${receiptUrl}`;
+        }
+        
         await adminProcessWithdrawal(selectedRequest.id, auditNotes);
       } else if (dialogType === 'reject') {
         await adminRejectWithdrawal(selectedRequest.id, notes);
@@ -231,6 +327,8 @@ export default function FinanceApproval() {
       setSelectedRequest(null);
       setNotes('');
       setTransactionRef('');
+      setReceiptFile(null);
+      setReceiptPreview(null);
     } finally {
       setProcessing(false);
     }
@@ -767,19 +865,74 @@ export default function FinanceApproval() {
           </DialogHeader>
 
           {dialogType === 'process' && (
-            <div className="space-y-2">
-              <Label htmlFor="transaction-ref" className="flex items-center gap-1.5">
-                <Hash className="w-3.5 h-3.5" />
-                Transaction Reference
-              </Label>
-              <Input
-                id="transaction-ref"
-                placeholder="e.g., TXN-2024-001234"
-                value={transactionRef}
-                onChange={(e) => setTransactionRef(e.target.value)}
-                data-testid="input-transaction-ref"
-              />
-              <p className="text-xs text-muted-foreground">Bank reference or payment transaction ID for audit trail</p>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="transaction-ref" className="flex items-center gap-1.5">
+                  <Hash className="w-3.5 h-3.5" />
+                  Transaction Reference
+                </Label>
+                <Input
+                  id="transaction-ref"
+                  placeholder="e.g., TXN-2024-001234"
+                  value={transactionRef}
+                  onChange={(e) => setTransactionRef(e.target.value)}
+                  data-testid="input-transaction-ref"
+                />
+                <p className="text-xs text-muted-foreground">Bank reference or payment transaction ID for audit trail</p>
+              </div>
+              
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1.5">
+                  <Receipt className="w-3.5 h-3.5" />
+                  Receipt / Transaction Screenshot
+                </Label>
+                
+                {receiptPreview ? (
+                  <div className="relative border rounded-lg overflow-hidden">
+                    <img 
+                      src={receiptPreview} 
+                      alt="Receipt preview" 
+                      className="w-full max-h-40 object-contain bg-muted/30"
+                    />
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="icon"
+                      className="absolute top-2 right-2 h-7 w-7"
+                      onClick={removeReceiptFile}
+                      data-testid="button-remove-receipt"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                    <div className="p-2 bg-muted/50 text-xs text-muted-foreground flex items-center gap-1.5">
+                      <Image className="w-3.5 h-3.5" />
+                      {receiptFile?.name}
+                    </div>
+                  </div>
+                ) : (
+                  <label 
+                    htmlFor="receipt-upload"
+                    className="flex flex-col items-center justify-center w-full h-24 border-2 border-dashed rounded-lg cursor-pointer bg-muted/30 hover:bg-muted/50 transition-colors"
+                  >
+                    <div className="flex flex-col items-center justify-center pt-2 pb-3">
+                      <Upload className="w-6 h-6 mb-1 text-muted-foreground" />
+                      <p className="text-sm text-muted-foreground">
+                        <span className="font-medium">Click to upload</span> receipt
+                      </p>
+                      <p className="text-xs text-muted-foreground">PNG, JPG up to 5MB</p>
+                    </div>
+                    <input 
+                      id="receipt-upload" 
+                      type="file" 
+                      className="hidden" 
+                      accept="image/*"
+                      onChange={handleReceiptFileChange}
+                      data-testid="input-receipt-upload"
+                    />
+                  </label>
+                )}
+                <p className="text-xs text-muted-foreground">Optional: Attach bank transfer receipt or transaction screenshot for records</p>
+              </div>
             </div>
           )}
 
@@ -799,16 +952,16 @@ export default function FinanceApproval() {
           </div>
 
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setDialogType(null)} disabled={processing}>
+            <Button variant="outline" onClick={() => setDialogType(null)} disabled={processing || uploadingReceipt}>
               Cancel
             </Button>
             <Button
               onClick={handleConfirmAction}
-              disabled={processing || (dialogType === 'reject' && !notes.trim())}
+              disabled={processing || uploadingReceipt || (dialogType === 'reject' && !notes.trim())}
               className={dialogType === 'process' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'}
               data-testid="button-confirm-action"
             >
-              {processing ? 'Processing...' : dialogType === 'process' ? 'Confirm Payment' : 'Reject Request'}
+              {uploadingReceipt ? 'Uploading Receipt...' : processing ? 'Processing...' : dialogType === 'process' ? 'Confirm Payment' : 'Reject Request'}
             </Button>
           </DialogFooter>
         </DialogContent>
