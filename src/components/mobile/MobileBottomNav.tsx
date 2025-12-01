@@ -161,7 +161,20 @@ export function MobileBottomNav({ notificationCount = 0, className }: MobileBott
                   <Button 
                     variant="outline" 
                     className="w-full"
-                    onClick={() => handleNavigation('/profile')}
+                    onClick={() => {
+                      // Get current user ID from localStorage or context
+                      const storedUser = localStorage.getItem('PACTCurrentUser');
+                      if (storedUser) {
+                        try {
+                          const user = JSON.parse(storedUser);
+                          if (user.id) {
+                            handleNavigation(`/users/${user.id}`);
+                          }
+                        } catch (e) {
+                          console.error('Error parsing user:', e);
+                        }
+                      }
+                    }}
                     data-testid="nav-profile"
                   >
                     View Profile

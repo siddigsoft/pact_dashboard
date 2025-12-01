@@ -112,7 +112,7 @@ const MobileAppHeader = ({
           variant="ghost" 
           size="icon" 
           className="rounded-full h-9 w-9 p-1 border border-white/30" 
-          onClick={() => navigate('/profile')}
+          onClick={() => currentUser?.id && navigate(`/users/${currentUser.id}`)}
         >
           <Avatar className="h-full w-full">
             <AvatarImage src={currentUser?.avatar} alt={currentUser?.name || ''} />
