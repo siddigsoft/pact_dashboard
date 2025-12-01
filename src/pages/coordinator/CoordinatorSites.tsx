@@ -12,7 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
 import { useMMP } from '@/context/mmp/MMPContext';
-import { CheckCircle, Clock, FileCheck, XCircle, ArrowLeft, Eye, Edit, Search, ChevronLeft, ChevronRight, Calendar, CheckSquare, MapPin, AlertTriangle } from 'lucide-react';
+import { CheckCircle, Clock, FileCheck, XCircle, ArrowLeft, Eye, Edit, Search, ChevronLeft, ChevronRight, Calendar, CheckSquare, MapPin, AlertTriangle, ChevronUp, ChevronDown } from 'lucide-react';
 import { format } from 'date-fns';
 import { DatePicker } from '@/components/ui/date-picker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -318,62 +318,96 @@ const SiteEditForm: React.FC<SiteEditFormProps> = ({ site, onSave, onCancel, hub
       </div>
 
       <DialogFooter>
-        <Button type="button" variant="outline" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button 
-          type="button" 
-          variant="outline"
-          onClick={() => {
-            // Validate that visit date is required
-            if (!visitDate) {
-              toast({
-                title: 'Validation Error',
-                description: 'Visit date is required. Please select a visit date before saving.',
-                variant: 'destructive'
-              });
-              return;
-            }
-            const updatedSite = {
-              ...formData,
-              visit_date: visitDate ? visitDate.toISOString().split('T')[0] : null,
-              // Use custom values if "Other" was selected
-              hub_office: formData.hub_office,
-              monitoring_by: formData.monitoring_by,
-              survey_tool: formData.survey_tool === 'Other' ? customValues.survey_tool : formData.survey_tool,
-            };
-            onSave(updatedSite, false);
-          }}
-        >
-          Save
-        </Button>
-        <Button 
-          type="button"
-          onClick={() => {
-            // Validate that visit date is required
-            if (!visitDate) {
-              toast({
-                title: 'Validation Error',
-                description: 'Visit date is required. Please select a visit date before saving.',
-                variant: 'destructive'
-              });
-              return;
-            }
-            const updatedSite = {
-              ...formData,
-              visit_date: visitDate ? visitDate.toISOString().split('T')[0] : null,
-              // Use custom values if "Other" was selected
-              hub_office: formData.hub_office,
-              monitoring_by: formData.monitoring_by,
-              survey_tool: formData.survey_tool === 'Other' ? customValues.survey_tool : formData.survey_tool,
-            };
-            onSave(updatedSite, true);
-          }}
-          className="bg-green-600 hover:bg-green-700"
-        >
-          <CheckCircle className="h-4 w-4 mr-2" />
-          Verify
-        </Button>
+        {site.status?.toLowerCase() === 'permits_attached' ? (
+          // For sites with permits attached, only show Verify button
+          <Button 
+            type="button"
+            onClick={() => {
+              // Validate that visit date is required
+              if (!visitDate) {
+                toast({
+                  title: 'Validation Error',
+                  description: 'Visit date is required. Please select a visit date before verifying.',
+                  variant: 'destructive'
+                });
+                return;
+              }
+              const updatedSite = {
+                ...formData,
+                visit_date: visitDate ? visitDate.toISOString().split('T')[0] : null,
+                // Use custom values if "Other" was selected
+                hub_office: formData.hub_office,
+                monitoring_by: formData.monitoring_by,
+                survey_tool: formData.survey_tool === 'Other' ? customValues.survey_tool : formData.survey_tool,
+              };
+              onSave(updatedSite, true);
+            }}
+            className="bg-green-600 hover:bg-green-700"
+          >
+            <CheckCircle className="h-4 w-4 mr-2" />
+            Verify Site
+          </Button>
+        ) : (
+          // For other sites, show both Save and Verify buttons
+          <>
+            <Button type="button" variant="outline" onClick={onCancel}>
+              Cancel
+            </Button>
+            <Button 
+              type="button" 
+              variant="outline"
+              onClick={() => {
+                // Validate that visit date is required
+                if (!visitDate) {
+                  toast({
+                    title: 'Validation Error',
+                    description: 'Visit date is required. Please select a visit date before saving.',
+                    variant: 'destructive'
+                  });
+                  return;
+                }
+                const updatedSite = {
+                  ...formData,
+                  visit_date: visitDate ? visitDate.toISOString().split('T')[0] : null,
+                  // Use custom values if "Other" was selected
+                  hub_office: formData.hub_office,
+                  monitoring_by: formData.monitoring_by,
+                  survey_tool: formData.survey_tool === 'Other' ? customValues.survey_tool : formData.survey_tool,
+                };
+                onSave(updatedSite, false);
+              }}
+            >
+              Save
+            </Button>
+            <Button 
+              type="button"
+              onClick={() => {
+                // Validate that visit date is required
+                if (!visitDate) {
+                  toast({
+                    title: 'Validation Error',
+                    description: 'Visit date is required. Please select a visit date before verifying.',
+                    variant: 'destructive'
+                  });
+                  return;
+                }
+                const updatedSite = {
+                  ...formData,
+                  visit_date: visitDate ? visitDate.toISOString().split('T')[0] : null,
+                  // Use custom values if "Other" was selected
+                  hub_office: formData.hub_office,
+                  monitoring_by: formData.monitoring_by,
+                  survey_tool: formData.survey_tool === 'Other' ? customValues.survey_tool : formData.survey_tool,
+                };
+                onSave(updatedSite, true);
+              }}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              <CheckCircle className="h-4 w-4 mr-2" />
+              Verify
+            </Button>
+          </>
+        )}
       </DialogFooter>
     </div>
   );
@@ -448,11 +482,22 @@ const CoordinatorSites: React.FC = () => {
   const [workWithoutPermitDialogOpen, setWorkWithoutPermitDialogOpen] = useState(false);
   const [selectedLocalityForWorkflow, setSelectedLocalityForWorkflow] = useState<any>(null);
   const [readOnlyMode, setReadOnlyMode] = useState(false);
+  const [expandedStates, setExpandedStates] = useState<Set<string>>(new Set());
   const [expandedLocalities, setExpandedLocalities] = useState<Set<string>>(new Set());
 
   // State permit workflow state
   const [statePermitQuestionDialogOpen, setStatePermitQuestionDialogOpen] = useState(false);
   const [selectedStateForWorkflow, setSelectedStateForWorkflow] = useState<any>(null);
+
+  // Locality permit upload dialog state
+  const [localityPermitUploadDialogOpen, setLocalityPermitUploadDialogOpen] = useState(false);
+
+  // Individual site verification without permit dialog state
+  const [siteWithoutPermitDialogOpen, setSiteWithoutPermitDialogOpen] = useState(false);
+  const [selectedSiteForWithoutPermit, setSelectedSiteForWithoutPermit] = useState<SiteVisit | null>(null);
+
+  // Sub-tab state for new sites categorization
+  const [newSitesSubTab, setNewSitesSubTab] = useState('state_required');
 
   // Database data for location dropdowns
   const [hubs, setHubs] = useState<Hub[]>([]);
@@ -653,13 +698,27 @@ const CoordinatorSites: React.FC = () => {
         };
       });
 
-      // Group sites by locality and check permit status
-      const localitiesMap = new Map<string, any>();
+      // Group sites by state first, then by locality within each state
+      const statesMap = new Map<string, any>();
       
       filtered.forEach((site: any) => {
-        const localityKey = `${site.state}-${site.locality}`;
-        if (!localitiesMap.has(localityKey)) {
-          localitiesMap.set(localityKey, {
+        const stateKey = site.state;
+        if (!statesMap.has(stateKey)) {
+          statesMap.set(stateKey, {
+            state: site.state,
+            localities: new Map(),
+            totalSites: 0,
+            hasStatePermit: false,
+            statePermitUploadedAt: null,
+            statePermitVerified: false
+          });
+        }
+        
+        const stateData = statesMap.get(stateKey);
+        const localityKey = site.locality;
+        
+        if (!stateData.localities.has(localityKey)) {
+          stateData.localities.set(localityKey, {
             state: site.state,
             locality: site.locality,
             sites: [],
@@ -668,69 +727,83 @@ const CoordinatorSites: React.FC = () => {
             permitUploadedAt: null
           });
         }
-        localitiesMap.get(localityKey).sites.push(site);
+        
+        stateData.localities.get(localityKey).sites.push(site);
+        stateData.totalSites++;
       });
 
-      // Check permit status for each locality using proper IDs
-      const localitiesArray = Array.from(localitiesMap.values()).map(locality => {
-        // Resolve stateId from state name
-        const resolvedStateId = hubStates.find(hs => hs.state_name === locality.state)?.state_id;
-        // Resolve localityId from locality name + stateId
-        const resolvedLocalityId = resolvedStateId
-          ? localities.find(l => l.name === locality.locality && l.state_id === resolvedStateId)?.id
-          : undefined;
+      // Check permit status for each locality within states
+      const statesArray = await Promise.all(Array.from(statesMap.values()).map(async (stateData: any) => {
+        // Check state permit status for this state
+        let statePermitVerified = false;
+        let statePermitUploadedAt = null;
+        
+        // Get MMP file ID from the first site in this state
+        const mmpFileId = stateData.localities.values().next().value?.sites?.[0]?.mmp_file_id;
+        
+        if (mmpFileId) {
+          // Check if state permit is uploaded and verified for this specific state
+          try {
+            const { data: mmpData, error } = await supabase
+              .from('mmp_files')
+              .select('permits_data')
+              .eq('id', mmpFileId)
+              .single();
+              
+            if (!error && mmpData?.permits_data) {
+              const permitsData = mmpData.permits_data as any;
+              // Check if this specific state's permit is verified
+              if (permitsData.statePermits) {
+                const statePermit = permitsData.statePermits.find((sp: any) => 
+                  sp.state === stateData.state && sp.verified === true
+                );
+                if (statePermit) {
+                  statePermitVerified = true;
+                  statePermitUploadedAt = statePermit.uploadedAt;
+                }
+              }
+            }
+          } catch (err) {
+            console.warn('Failed to check state permit for state:', stateData.state, err);
+          }
+        }
 
-        const permit = resolvedStateId && resolvedLocalityId
-          ? permits.find(p => p.stateId === resolvedStateId && p.localityId === resolvedLocalityId)
-          : undefined;
+        // Convert localities map to array and check local permits
+        const localitiesArray = Array.from(stateData.localities.values()).map((locality: any) => {
+          // Resolve stateId from state name
+          const resolvedStateId = hubStates.find(hs => hs.state_name === locality.state)?.state_id;
+          // Resolve localityId from locality name + stateId
+          const resolvedLocalityId = resolvedStateId
+            ? localities.find(l => l.name === locality.locality && l.state_id === resolvedStateId)?.id
+            : undefined;
+
+          const permit = resolvedStateId && resolvedLocalityId
+            ? permits.find(p => p.stateId === resolvedStateId && p.localityId === resolvedLocalityId)
+            : undefined;
+
+          return {
+            ...locality,
+            hasPermit: !!permit,
+            permitId: permit?.id || null,
+            permitUploadedAt: permit?.uploadedAt || null
+          };
+        });
 
         return {
-          ...locality,
-          hasPermit: !!permit,
-          permitId: permit?.id || null,
-          permitUploadedAt: permit?.uploadedAt || null
+          ...stateData,
+          localities: localitiesArray,
+          hasStatePermit: statePermitVerified,
+          statePermitUploadedAt: statePermitUploadedAt,
+          statePermitVerified: statePermitVerified
         };
-      });
+      }));
 
-      // Check state permit status for the MMP file
-      // Get the MMP file ID from the first site to check state permits
-      const mmpFileId = filtered.length > 0 ? filtered[0].mmp_file_id : null;
-      let hasStatePermits = false;
-      
-      if (mmpFileId) {
-        // Check if the MMP file has state permits uploaded by FOM
-        // We need to query the mmp_permits_data or check the MMP file directly
-        try {
-          const { data: mmpData, error } = await supabase
-            .from('mmp_files')
-            .select('permits_data')
-            .eq('id', mmpFileId)
-            .single();
-            
-          if (!error && mmpData?.permits_data) {
-            const permitsData = mmpData.permits_data as any;
-            // Check if state permits are marked as verified/uploaded
-            hasStatePermits = permitsData.state === true || 
-                             (permitsData.statePermits && permitsData.statePermits.some((sp: any) => sp.verified));
-          }
-        } catch (err) {
-          console.warn('Failed to check state permits for MMP:', err);
-          hasStatePermits = false;
-        }
-      }
-
-      // Add state permit status to localities
-      localitiesArray.forEach(locality => {
-        locality.hasStatePermits = hasStatePermits;
-      });
-
-      // Don't filter localities by permit status - show all localities
-      // const permittedLocalities = localitiesArray.filter(locality => locality.hasPermit);
-      
-      // Flatten sites from all localities (they will be filtered by the workflow)
+      // Flatten sites from all states and localities (they will be filtered by the workflow)
       let allSites: SiteVisit[] = [];
-      localitiesArray.forEach(locality => {
-        allSites = allSites.concat(locality.sites);
+      statesArray.forEach(stateData => {
+        stateData.localities.forEach((locality: any) => {
+          allSites = allSites.concat(locality.sites);
+        });
       });
 
       // Filter by status based on active tab
@@ -775,7 +848,7 @@ const CoordinatorSites: React.FC = () => {
       });
 
       setSites(allSites);
-      setLocalitiesData(localitiesArray); // Store all localities
+      setLocalitiesData(statesArray); // Store states data instead of localities
       setCurrentPage(1); // Reset pagination when tab changes
       
       // Initialize visit dates state
@@ -1216,14 +1289,8 @@ const CoordinatorSites: React.FC = () => {
     setPermitQuestionDialogOpen(false);
 
     if (hasPermit) {
-      // Show permit upload dialog
-      setWorkWithoutPermitDialogOpen(false);
-      // The permit upload component will be shown in a separate dialog
-      // For now, we'll expand the locality to show the upload component
-      if (selectedLocalityForWorkflow) {
-        const localityKey = `${selectedLocalityForWorkflow.state}-${selectedLocalityForWorkflow.locality}`;
-        setExpandedLocalities(prev => new Set([...prev, localityKey]));
-      }
+      // Show locality permit upload dialog
+      setLocalityPermitUploadDialogOpen(true);
     } else {
       // No permit - just go back, no access
       setSelectedLocalityForWorkflow(null);
@@ -1259,7 +1326,65 @@ const CoordinatorSites: React.FC = () => {
     // Navigate to "Permits Attached" tab since they now have full access
     setActiveTab('permits_attached');
     setSelectedLocalityForWorkflow(null);
-    setExpandedLocalities(new Set()); // Clear expanded localities
+    setExpandedStates(new Set()); // Clear expanded states
+  };
+
+  const handleSiteWithoutPermitResponse = async (proceedWithoutPermit: boolean) => {
+    setSiteWithoutPermitDialogOpen(false);
+
+    if (proceedWithoutPermit && selectedSiteForWithoutPermit) {
+      // Update site status to 'permits_attached'
+      try {
+        const { error } = await supabase
+          .from('mmp_site_entries')
+          .update({ status: 'permits_attached' })
+          .eq('id', selectedSiteForWithoutPermit.id);
+
+        if (error) throw error;
+
+        toast({
+          title: 'Site Status Updated',
+          description: `${selectedSiteForWithoutPermit.site_name} has been moved to "Permits Attached" and is ready for verification.`,
+        });
+
+        // Reload sites and badge counts
+        loadSites();
+        // Reload badge counts
+        if (currentUser?.id) {
+          const userId = currentUser.id;
+          const { data: allEntries } = await supabase
+            .from('mmp_site_entries')
+            .select('id, status, additional_data');
+          
+          const userEntries = (allEntries || []).filter((entry: any) => {
+            const ad = entry.additional_data || {};
+            return ad.assigned_to === userId;
+          });
+          
+          const permitsAttachedCount = { count: userEntries.filter((e: any) => 
+            e.status?.toLowerCase() === 'permits_attached'
+          ).length };
+          
+          setPermitsAttachedCount(permitsAttachedCount.count || 0);
+        }
+
+        // Navigate to "Permits Attached" tab
+        setActiveTab('permits_attached');
+      } catch (error) {
+        console.error('Error updating site status:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to update site status. Please try again.',
+          variant: 'destructive'
+        });
+      }
+    } else if (!proceedWithoutPermit && selectedSiteForWithoutPermit) {
+      // Just open the edit dialog as normal
+      setSelectedSiteForEdit(selectedSiteForWithoutPermit);
+      setEditDialogOpen(true);
+    }
+
+    setSelectedSiteForWithoutPermit(null);
   };
 
   const handleSiteSelection = (siteId: string) => {
@@ -1381,41 +1506,31 @@ const CoordinatorSites: React.FC = () => {
     </Card>
   );
 
-  const renderLocalityCard = (localityData: any) => {
-    // Find the locality info from the localities array to get IDs
-    const stateIdForName = hubStates.find(s => s.state_name === localityData.state)?.state_id;
-    const localityInfo = stateIdForName
-      ? localities.find(loc => loc.name === localityData.locality && loc.state_id === stateIdForName)
-      : undefined;
-
-    const localityPermitStatus: LocalityPermitStatus = {
-      state: localityData.state,
-      locality: localityData.locality,
-      stateId: localityInfo?.state_id || '',
-      localityId: localityInfo?.id || '',
-      hasPermit: localityData.hasPermit,
-      permit: localityData.permitId ? permits.find(p => p.id === localityData.permitId) : undefined,
-      siteCount: localityData.sites.length,
-      sites: localityData.sites
-    };
-
-    const isExpanded = expandedLocalities.has(`${localityData.state}-${localityData.locality}`);
+  const renderStateCard = (stateData: any) => {
+    const isExpanded = expandedStates.has(stateData.state);
 
     return (
       <Card 
-        key={`${localityData.state}-${localityData.locality}`}
+        key={stateData.state}
         className="overflow-hidden transition-shadow hover:shadow-md cursor-pointer"
         onClick={() => {
-          // First check if state permits are uploaded by FOM
-          if (!localityData.hasStatePermits) {
-            setSelectedStateForWorkflow(localityData);
+          // Check if state permits are uploaded by FOM
+          if (!stateData.hasStatePermit) {
+            setSelectedStateForWorkflow(stateData);
             setStatePermitQuestionDialogOpen(true);
             return;
           }
           
-          // If state permits exist, proceed with local permit check
-          setSelectedLocalityForWorkflow(localityData);
-          setPermitQuestionDialogOpen(true);
+          // If state permits exist, expand to show localities
+          setExpandedStates(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(stateData.state)) {
+              newSet.delete(stateData.state);
+            } else {
+              newSet.add(stateData.state);
+            }
+            return newSet;
+          });
         }}
       >
         <CardContent className="pt-4">
@@ -1423,56 +1538,166 @@ const CoordinatorSites: React.FC = () => {
             <div className="flex-1">
               <div className="flex items-center justify-between">
                 <div className="flex-1">
-                  <h3 className="font-semibold text-lg">{localityData.locality}</h3>
-                  <p className="text-sm text-muted-foreground">{localityData.state}</p>
-                  <p className="text-sm text-muted-foreground">{localityData.sites.length} site{localityData.sites.length !== 1 ? 's' : ''} assigned</p>
+                  <h3 className="font-semibold text-lg">{stateData.state}</h3>
+                  <p className="text-sm text-muted-foreground">{stateData.localities.length} localit{stateData.localities.length !== 1 ? 'ies' : 'y'}</p>
+                  <p className="text-sm text-muted-foreground">{stateData.totalSites} site{stateData.totalSites !== 1 ? 's' : ''} assigned</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  {localityData.hasPermit ? (
+                  {stateData.hasStatePermit ? (
                     <Badge variant="default" className="bg-green-600">
                       <CheckCircle className="h-3 w-3 mr-1" />
-                      Permit Uploaded
+                      State Permit Verified
                     </Badge>
                   ) : (
                     <Badge variant="destructive">
                       <AlertTriangle className="h-3 w-3 mr-1" />
-                      Permit Required
+                      State Permit Required
                     </Badge>
                   )}
                 </div>
               </div>
               
-              {/* Show sites preview when locality is expanded */}
+              {/* Show localities when state is expanded */}
+              {isExpanded && stateData.hasStatePermit && (
+                <div className="mt-4">
+                  <div className="text-sm text-muted-foreground mb-2">
+                    Localities in this state:
+                  </div>
+                  <div className="space-y-2">
+                    {stateData.localities.map((locality: any) => (
+                      <div 
+                        key={`${locality.state}-${locality.locality}`}
+                        className="flex items-center justify-between p-3 bg-gray-50 rounded cursor-pointer hover:bg-gray-100"
+                        onClick={(e) => {
+                          e.stopPropagation(); // Prevent state card click
+                          setSelectedLocalityForWorkflow(locality);
+                          setPermitQuestionDialogOpen(true);
+                        }}
+                      >
+                        <div>
+                          <span className="font-medium">{locality.locality}</span>
+                          <span className="text-muted-foreground ml-2">({locality.sites.length} sites)</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {locality.hasPermit ? (
+                            <Badge variant="default" className="bg-green-600 text-xs">
+                              <CheckCircle className="h-2 w-2 mr-1" />
+                              Local Permit
+                            </Badge>
+                          ) : (
+                            <Badge variant="destructive" className="text-xs">
+                              <AlertTriangle className="h-2 w-2 mr-1" />
+                              Local Permit Required
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
+
+  const renderLocalityCard = (localityData: any) => {
+    const localityKey = `${localityData.state}-${localityData.locality}`;
+    const isExpanded = expandedLocalities.has(localityKey);
+
+    return (
+      <Card 
+        key={localityKey}
+        className="overflow-hidden transition-shadow hover:shadow-md"
+      >
+        <CardContent className="pt-4">
+          <div className="flex items-start gap-3">
+            <div className="flex-1">
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <h3 className="font-semibold text-lg">{localityData.locality}</h3>
+                  <p className="text-sm text-muted-foreground">{localityData.stateName}</p>
+                  <p className="text-sm text-muted-foreground">{localityData.sites.length} site{localityData.sites.length !== 1 ? 's' : ''} assigned</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Badge variant="destructive">
+                    <AlertTriangle className="h-3 w-3 mr-1" />
+                    Local Permit Required
+                  </Badge>
+                </div>
+              </div>
+              
+              {/* Action buttons */}
+              <div className="flex items-center gap-2 mt-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setSelectedLocalityForWorkflow(localityData);
+                    setPermitQuestionDialogOpen(true);
+                  }}
+                  className="flex items-center gap-2"
+                >
+                  <FileCheck className="h-4 w-4" />
+                  Upload Permit
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setExpandedLocalities(prev => {
+                      const newSet = new Set(prev);
+                      if (newSet.has(localityKey)) {
+                        newSet.delete(localityKey);
+                      } else {
+                        newSet.add(localityKey);
+                      }
+                      return newSet;
+                    });
+                  }}
+                  className="flex items-center gap-2"
+                >
+                  {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  {isExpanded ? 'Hide Sites' : 'View Sites'}
+                </Button>
+              </div>
+              
+              {/* Show sites when locality is expanded */}
               {isExpanded && (
                 <div className="mt-4">
                   <div className="text-sm text-muted-foreground mb-2">
                     Sites in this locality:
                   </div>
-                  <div className="space-y-2 max-h-40 overflow-y-auto">
-                    {localityData.sites.slice(0, 5).map((site: SiteVisit) => (
-                      <div key={site.id} className="flex items-center justify-between p-2 bg-gray-50 rounded text-sm">
-                        <div>
-                          <span className="font-medium">{site.site_name}</span>
-                          <span className="text-muted-foreground ml-2">({site.site_code})</span>
+                  <div className="space-y-2">
+                    {localityData.sites
+                      .filter((site: SiteVisit) => {
+                        // Filter by active tab status - only show sites that need verification
+                        return site.status === 'Pending' || site.status === 'Dispatched' || 
+                               site.status === 'assigned' || site.status === 'inProgress' || 
+                               site.status === 'in_progress';
+                      })
+                      .map((site: SiteVisit) => (
+                        <div 
+                          key={site.id}
+                          className="flex items-center justify-between p-3 bg-gray-50 rounded cursor-pointer hover:bg-gray-100"
+                          onClick={() => {
+                            setSelectedSiteForWithoutPermit(site);
+                            setSiteWithoutPermitDialogOpen(true);
+                          }}
+                        >
+                          <div>
+                            <span className="font-medium">{site.site_name}</span>
+                            <span className="text-muted-foreground ml-2">({site.site_code})</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="secondary" className="text-xs">
+                              Needs Verification
+                            </Badge>
+                          </div>
                         </div>
-                        <Badge variant={
-                          site.status === 'verified' ? 'default' :
-                          site.status === 'approved' ? 'success' :
-                          site.status === 'completed' ? 'success' :
-                          site.status === 'rejected' ? 'destructive' :
-                          'secondary'
-                        } className="text-xs">
-                          {site.status === 'assigned' ? 'New' : 
-                           site.status === 'inProgress' ? 'In Progress' : 
-                           site.status.charAt(0).toUpperCase() + site.status.slice(1)}
-                        </Badge>
-                      </div>
-                    ))}
-                    {localityData.sites.length > 5 && (
-                      <div className="text-xs text-muted-foreground text-center py-1">
-                        ... and {localityData.sites.length - 5} more sites
-                      </div>
-                    )}
+                      ))}
                   </div>
                 </div>
               )}
@@ -1539,85 +1764,124 @@ const CoordinatorSites: React.FC = () => {
         </TabsList>
 
         <TabsContent value="new" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Localities with Assigned Sites</CardTitle>
-                <div className="relative w-full sm:w-auto max-w-sm">
-                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    type="search"
-                    placeholder="Search localities..."
-                    className="pl-8 w-full sm:w-[300px]"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
-                </div>
-              </div>
-              <div className="text-sm text-muted-foreground">
-                You can only access sites in localities where you have uploaded the required permits.
-                State permits are required first, followed by local permits for each locality.
-              </div>
-            </CardHeader>
-            <CardContent>
-              {loading || permitsLoading ? (
-                <div className="text-center py-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                  <p className="text-muted-foreground">Loading localities...</p>
-                </div>
-              ) : localitiesData.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <MapPin className="h-12 w-12 mx-auto mb-4 opacity-20" />
-                  <p>No localities assigned to you.</p>
-                  <p className="text-sm mt-2">Contact your administrator if you believe this is an error.</p>
-                </div>
-              ) : (
-                <>
-                  <div className="space-y-4">
-                    {localitiesData.map(locality => renderLocalityCard(locality))}
-                  </div>
-                  
-                  {/* Show sites for expanded localities */}
-                  {expandedLocalities.size > 0 && (
-                    <div className="mt-8">
-                      <h3 className="text-lg font-semibold mb-4">Sites Available for Verification</h3>
-                      <div className="grid gap-4">
-                        {Array.from(expandedLocalities).map(localityKey => {
-                          const [state, locality] = localityKey.split('-');
-                          const localityData = localitiesData.find(loc => 
-                            loc.state === state && loc.locality === locality
-                          );
-                          if (!localityData) return null;
-                          
-                          return localityData.sites
-                            .filter((site: SiteVisit) => {
-                              // Filter by active tab status
-                              switch (activeTab) {
-                                case 'new':
-                                  return site.status === 'Pending' || site.status === 'Dispatched' || 
-                                         site.status === 'assigned' || site.status === 'inProgress' || 
-                                         site.status === 'in_progress';
-                                case 'verified':
-                                  return site.status?.toLowerCase() === 'verified';
-                                case 'approved':
-                                  return site.status?.toLowerCase() === 'approved';
-                                case 'completed':
-                                  return site.status?.toLowerCase() === 'completed';
-                                case 'rejected':
-                                  return site.status?.toLowerCase() === 'rejected';
-                                default:
-                                  return true;
-                              }
-                            })
-                            .map(site => renderSiteCard(site, true));
-                        })}
-                      </div>
+          <Tabs value={newSitesSubTab} onValueChange={setNewSitesSubTab} className="space-y-4">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="state_required" className="flex items-center justify-center gap-2">
+                <AlertTriangle className="h-4 w-4" />
+                State Permit Required
+              </TabsTrigger>
+              <TabsTrigger value="local_required" className="flex items-center justify-center gap-2">
+                <MapPin className="h-4 w-4" />
+                Local Permit Required
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="state_required" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle>States Requiring State Permits</CardTitle>
+                    <div className="relative w-full sm:w-auto max-w-sm">
+                      <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        type="search"
+                        placeholder="Search states..."
+                        className="pl-8 w-full sm:w-[300px]"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                      />
                     </div>
-                  )}
-                </>
-              )}
-            </CardContent>
-          </Card>
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    These states require state permits to be uploaded by the FOM before you can access local permits.
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {loading || permitsLoading ? (
+                    <div className="text-center py-8">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                      <p className="text-muted-foreground">Loading states...</p>
+                    </div>
+                  ) : (() => {
+                    const stateRequiredStates = localitiesData.filter((state: any) => !state.hasStatePermit);
+                    const filteredStates = stateRequiredStates.filter((state: any) => 
+                      state.state.toLowerCase().includes(debouncedSearchQuery.toLowerCase())
+                    );
+                    
+                    return filteredStates.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <CheckCircle className="h-12 w-12 mx-auto mb-4 opacity-20" />
+                        <p>{searchQuery ? 'No states match your search.' : 'All states have state permits uploaded.'}</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {filteredStates.map(state => renderStateCard(state))}
+                      </div>
+                    );
+                  })()}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="local_required" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle>Localities Requiring Local Permits</CardTitle>
+                    <div className="relative w-full sm:w-auto max-w-sm">
+                      <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        type="search"
+                        placeholder="Search localities..."
+                        className="pl-8 w-full sm:w-[300px]"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    These localities have verified state permits. You can now upload local permits for these localities.
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {loading || permitsLoading ? (
+                    <div className="text-center py-8">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                      <p className="text-muted-foreground">Loading localities...</p>
+                    </div>
+                  ) : (() => {
+                    // Get all localities from states that have state permits
+                    const localRequiredLocalities = localitiesData
+                      .filter((state: any) => state.hasStatePermit)
+                      .flatMap((state: any) => 
+                        state.localities.map((locality: any) => ({
+                          ...locality,
+                          stateName: state.state
+                        }))
+                      )
+                      .filter((locality: any) => !locality.hasPermit); // Only show localities without local permits
+                    
+                    const filteredLocalities = localRequiredLocalities.filter((locality: any) => 
+                      locality.locality.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+                      locality.stateName.toLowerCase().includes(debouncedSearchQuery.toLowerCase())
+                    );
+                    
+                    return filteredLocalities.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <AlertTriangle className="h-12 w-12 mx-auto mb-4 opacity-20" />
+                        <p>{searchQuery ? 'No localities match your search.' : 'No localities available for local permit upload.'}</p>
+                        <p className="text-sm mt-2">State permits must be uploaded first, and localities without local permits will appear here.</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {filteredLocalities.map(locality => renderLocalityCard(locality))}
+                      </div>
+                    );
+                  })()}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
         </TabsContent>
 
         <TabsContent value="permits_attached" className="space-y-4">
@@ -2294,8 +2558,8 @@ const CoordinatorSites: React.FC = () => {
                 setStatePermitQuestionDialogOpen(false);
                 // Show state permit upload dialog
                 if (selectedStateForWorkflow) {
-                  const stateKey = `state-${selectedStateForWorkflow.state}`;
-                  setExpandedLocalities(prev => new Set([...prev, stateKey]));
+                  const stateKey = selectedStateForWorkflow.state;
+                  setExpandedStates(prev => new Set([...prev, stateKey]));
                 }
               }}
               className="bg-blue-600 hover:bg-blue-700"
@@ -2310,7 +2574,7 @@ const CoordinatorSites: React.FC = () => {
 
       {/* State Permit Upload Dialog */}
       {selectedStateForWorkflow && (
-        <Dialog open={expandedLocalities.has(`state-${selectedStateForWorkflow.state}`)} onOpenChange={() => {}}>
+        <Dialog open={expandedStates.has(selectedStateForWorkflow.state)} onOpenChange={() => {}}>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>Upload State Permit</DialogTitle>
@@ -2324,10 +2588,16 @@ const CoordinatorSites: React.FC = () => {
                 mmpFileId={selectedStateForWorkflow.sites?.[0]?.mmp_file_id}
                 userType="coordinator"
                 onPermitUploaded={() => {
+                  // After state permit is uploaded, reload sites data to update state categorization
+                  loadSites();
+                  
+                  // Switch to local permit required tab since state permit is now uploaded
+                  setNewSitesSubTab('local_required');
+                  
                   // After state permit is uploaded, redirect to local permit upload
-                  setExpandedLocalities(prev => {
+                  setExpandedStates(prev => {
                     const newSet = new Set(prev);
-                    newSet.delete(`state-${selectedStateForWorkflow.state}`);
+                    newSet.delete(selectedStateForWorkflow.state);
                     return newSet;
                   });
                   
@@ -2343,9 +2613,9 @@ const CoordinatorSites: React.FC = () => {
                 variant="outline" 
                 onClick={() => {
                   setSelectedStateForWorkflow(null);
-                  setExpandedLocalities(prev => {
+                  setExpandedStates(prev => {
                     const newSet = new Set(prev);
-                    newSet.delete(`state-${selectedStateForWorkflow.state}`);
+                    newSet.delete(selectedStateForWorkflow.state);
                     return newSet;
                   });
                 }}
@@ -2356,6 +2626,71 @@ const CoordinatorSites: React.FC = () => {
           </DialogContent>
         </Dialog>
       )}
+
+      {/* Locality Permit Upload Dialog */}
+      {selectedLocalityForWorkflow && (
+        <Dialog open={localityPermitUploadDialogOpen} onOpenChange={setLocalityPermitUploadDialogOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Upload Local Permit</DialogTitle>
+              <DialogDescription>
+                Upload the local permit for <strong>{selectedLocalityForWorkflow.locality}, {selectedLocalityForWorkflow.state}</strong>
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+              <LocalityPermitUpload
+                state={selectedLocalityForWorkflow.state}
+                locality={selectedLocalityForWorkflow.locality}
+                mmpFileId={selectedLocalityForWorkflow.sites?.[0]?.mmp_file_id}
+                onPermitUploaded={handlePermitUploaded}
+              />
+            </div>
+            <DialogFooter>
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setLocalityPermitUploadDialogOpen(false);
+                  setSelectedLocalityForWorkflow(null);
+                }}
+              >
+                Cancel
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Site Without Permit Dialog */}
+      <Dialog open={siteWithoutPermitDialogOpen} onOpenChange={setSiteWithoutPermitDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Proceed Without Local Permit</DialogTitle>
+            <DialogDescription>
+              Can you continue to complete <strong>{selectedSiteForWithoutPermit?.site_name}</strong> without a local permit?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm text-muted-foreground">
+              If you can proceed without the local permit, this site will be moved to "Permits Attached" and you can verify it immediately.
+              If you cannot proceed without the permit, the site will remain in this locality and wait for the local permit to be uploaded.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => handleSiteWithoutPermitResponse(false)}
+            >
+              No, wait for permit
+            </Button>
+            <Button 
+              onClick={() => handleSiteWithoutPermitResponse(true)}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              Yes, proceed without permit
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
     </div>
   );

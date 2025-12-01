@@ -2,26 +2,30 @@ import React, { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Upload, FileText, AlertTriangle, CheckCircle2, X } from 'lucide-react';
-import { useCoordinatorLocalityPermits } from '@/hooks/use-coordinator-permits';
+import { Upload, FileText, AlertTriangle, CheckCircle2, X, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { LocalityPermitStatus } from '@/types/coordinator-permits';
+import { supabase } from '@/integrations/supabase/client';
 
 interface LocalityPermitUploadProps {
-  locality: LocalityPermitStatus;
+  state: string;
+  locality: string;
+  mmpFileId: string;
   onPermitUploaded: () => void;
   onCancel?: () => void;
 }
 
 export const LocalityPermitUpload: React.FC<LocalityPermitUploadProps> = ({
+  state,
   locality,
+  mmpFileId,
   onPermitUploaded,
   onCancel
 }) => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { uploadPermit } = useCoordinatorLocalityPermits();
   const { toast } = useToast();
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -49,6 +53,10 @@ export const LocalityPermitUpload: React.FC<LocalityPermitUploadProps> = ({
       }
 
       setSelectedFile(file);
+      // Create preview URL for the selected file
+      const url = URL.createObjectURL(file);
+      setPreviewUrl(url);
+      setShowPreview(true);
     }
   };
 
@@ -57,26 +65,69 @@ export const LocalityPermitUpload: React.FC<LocalityPermitUploadProps> = ({
 
     setUploading(true);
     try {
-      const result = await uploadPermit(locality.stateId, locality.localityId, selectedFile);
+      // Upload file to Supabase storage
+      const fileName = `locality-permit-${state}-${locality}-${Date.now()}-${selectedFile.name}`;
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('mmp-permits')
+        .upload(fileName, selectedFile);
 
-      if (result) {
-        toast({
-          title: "Permit uploaded successfully",
-          description: `Local permit for ${locality.locality} has been uploaded. You can now access the sites in this locality.`,
-        });
-        onPermitUploaded();
-      } else {
-        toast({
-          title: "Upload failed",
-          description: "Failed to upload the permit. Please try again.",
-          variant: "destructive",
-        });
+      if (uploadError) {
+        throw uploadError;
       }
+
+      // Get the public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('mmp-permits')
+        .getPublicUrl(fileName);
+
+      // Update MMP file's permits_data to mark locality permit as uploaded
+      const { data: mmpData, error: fetchError } = await supabase
+        .from('mmp_files')
+        .select('permits_data')
+        .eq('id', mmpFileId)
+        .single();
+
+      if (fetchError) {
+        throw fetchError;
+      }
+
+      const currentPermitsData = mmpData?.permits_data || {};
+      const updatedPermitsData = {
+        ...currentPermitsData,
+        locality: true, // Mark locality permit as uploaded
+        localityPermits: [
+          ...(currentPermitsData.localityPermits || []),
+          {
+            state: state,
+            locality: locality,
+            fileName: selectedFile.name,
+            fileUrl: publicUrl,
+            uploadedAt: new Date().toISOString(),
+            uploadedBy: 'coordinator',
+            verified: false
+          }
+        ]
+      };
+
+      const { error: updateError } = await supabase
+        .from('mmp_files')
+        .update({ permits_data: updatedPermitsData })
+        .eq('id', mmpFileId);
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      toast({
+        title: "Local permit uploaded successfully",
+        description: `Local permit for ${locality}, ${state} has been uploaded. Sites in this locality are now ready for verification.`,
+      });
+      onPermitUploaded();
     } catch (error) {
       console.error('Upload error:', error);
       toast({
         title: "Upload failed",
-        description: "An error occurred while uploading the permit.",
+        description: "An error occurred while uploading the local permit.",
         variant: "destructive",
       });
     } finally {
@@ -86,15 +137,24 @@ export const LocalityPermitUpload: React.FC<LocalityPermitUploadProps> = ({
 
   const clearFile = () => {
     setSelectedFile(null);
+    setShowPreview(false);
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+      setPreviewUrl('');
+    }
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
   };
 
+  const togglePreview = () => {
+    setShowPreview(!showPreview);
+  };
+
   return (
-    <Card className="border-orange-300 bg-orange-50">
+    <Card className="border-green-300 bg-green-50">
       <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-orange-800">
+        <CardTitle className="flex items-center gap-2 text-green-800">
           <AlertTriangle className="h-5 w-5" />
           Local Permit Required
         </CardTitle>
@@ -103,8 +163,7 @@ export const LocalityPermitUpload: React.FC<LocalityPermitUploadProps> = ({
         <Alert>
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription>
-            You need to upload a local permit for <strong>{locality.locality}</strong> in <strong>{locality.state}</strong>
-            before you can access the {locality.siteCount} site{locality.siteCount !== 1 ? 's' : ''} assigned to you in this locality.
+            Upload the local permit for <strong>{locality}, {state}</strong> to verify all sites in this locality at once.
           </AlertDescription>
         </Alert>
 
@@ -112,15 +171,60 @@ export const LocalityPermitUpload: React.FC<LocalityPermitUploadProps> = ({
           <div className="text-sm text-gray-600">
             <strong>Requirements:</strong>
             <ul className="list-disc list-inside mt-1 space-y-1">
-              <li>Valid local environmental permit for {locality.locality}</li>
+              <li>Valid local environmental permit for {locality}, {state}</li>
               <li>PDF or image format (JPG, PNG)</li>
               <li>Maximum file size: 10MB</li>
             </ul>
           </div>
 
+          {/* Preview Section */}
+          {selectedFile && previewUrl && (
+            <div className="border border-gray-300 rounded-lg p-4 bg-white">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-sm font-medium text-gray-700">Preview</h4>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={togglePreview}
+                  className="text-green-600 hover:text-green-800"
+                >
+                  {showPreview ? (
+                    <>
+                      <EyeOff className="h-4 w-4 mr-1" />
+                      Hide Preview
+                    </>
+                  ) : (
+                    <>
+                      <Eye className="h-4 w-4 mr-1" />
+                      Show Preview
+                    </>
+                  )}
+                </Button>
+              </div>
+
+              {showPreview && (
+                <div className="border border-gray-200 rounded-lg overflow-hidden bg-gray-50">
+                  {selectedFile.type === 'application/pdf' ? (
+                    <iframe
+                      src={previewUrl}
+                      className="w-full h-96 border-0"
+                      title="PDF Preview"
+                    />
+                  ) : (
+                    <img
+                      src={previewUrl}
+                      alt="Permit Preview"
+                      className="w-full h-auto max-h-96 object-contain"
+                    />
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {!selectedFile ? (
-            <div className="border-2 border-dashed border-orange-300 rounded-lg p-6 text-center">
-              <Upload className="h-8 w-8 text-orange-500 mx-auto mb-2" />
+            <div className="border-2 border-dashed border-green-300 rounded-lg p-6 text-center">
+              <Upload className="h-8 w-8 text-green-500 mx-auto mb-2" />
               <p className="text-sm text-gray-600 mb-3">
                 Click to select your local permit file
               </p>
@@ -130,12 +234,12 @@ export const LocalityPermitUpload: React.FC<LocalityPermitUploadProps> = ({
                 accept=".pdf,.jpg,.jpeg,.png"
                 onChange={handleFileSelect}
                 className="hidden"
-                id="permit-file-input"
+                id="locality-permit-file-input"
               />
               <Button
                 variant="outline"
                 onClick={() => fileInputRef.current?.click()}
-                className="border-orange-300 text-orange-700 hover:bg-orange-100"
+                className="border-green-300 text-green-700 hover:bg-green-100"
               >
                 <FileText className="h-4 w-4 mr-2" />
                 Select File
@@ -170,7 +274,7 @@ export const LocalityPermitUpload: React.FC<LocalityPermitUploadProps> = ({
           <Button
             onClick={handleUpload}
             disabled={!selectedFile || uploading}
-            className="flex-1 bg-orange-600 hover:bg-orange-700"
+            className="flex-1 bg-green-600 hover:bg-green-700"
           >
             {uploading ? (
               <>
@@ -179,8 +283,8 @@ export const LocalityPermitUpload: React.FC<LocalityPermitUploadProps> = ({
               </>
             ) : (
               <>
-                <Upload className="h-4 w-4 mr-2" />
-                Upload Permit
+                <CheckCircle2 className="h-4 w-4 mr-2" />
+                Upload Local Permit
               </>
             )}
           </Button>
