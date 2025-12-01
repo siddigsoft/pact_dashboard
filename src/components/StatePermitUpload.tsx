@@ -28,6 +28,15 @@ export const StatePermitUpload: React.FC<StatePermitUploadProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
+  // Sanitize folder segment for storage path safety
+  const sanitizeSegment = (s: string) =>
+    (s || '')
+      .toString()
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/gi, '-')
+      .replace(/^-+|-+$/g, '');
+
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
@@ -66,11 +75,12 @@ export const StatePermitUpload: React.FC<StatePermitUploadProps> = ({
     setUploading(true);
     try {
       // Upload file to Supabase storage
-      const fileName = `state-permit-${state}-${Date.now()}-${selectedFile.name}`;
-      const filePath = `permits/${mmpFileId}/state/${state}/${fileName}`;
+      const stateSegment = sanitizeSegment(state);
+      const fileName = `state-permit-${stateSegment}-${Date.now()}-${selectedFile.name}`;
+      const filePath = `permits/${mmpFileId}/state/${stateSegment}/${fileName}`;
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('mmp-files')
-        .upload(filePath, selectedFile);
+        .upload(filePath, selectedFile, { upsert: true, contentType: selectedFile.type || undefined });
 
       if (uploadError) {
         throw uploadError;
@@ -124,10 +134,11 @@ export const StatePermitUpload: React.FC<StatePermitUploadProps> = ({
       });
       onPermitUploaded();
     } catch (error) {
+      const errMsg = (error as any)?.message || JSON.stringify(error);
       console.error('Upload error:', error);
       toast({
         title: "Upload failed",
-        description: "An error occurred while uploading the state permit.",
+        description: errMsg || "An error occurred while uploading the state permit.",
         variant: "destructive",
       });
     } finally {
