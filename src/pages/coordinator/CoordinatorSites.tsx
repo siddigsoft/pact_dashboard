@@ -2612,7 +2612,7 @@ const CoordinatorSites: React.FC = () => {
             <div className="py-4">
               <StatePermitUpload
                 state={selectedStateForWorkflow.state}
-                mmpFileId={selectedStateForWorkflow.sites?.[0]?.mmp_file_id}
+                mmpFileId={selectedStateForWorkflow.localities?.[0]?.sites?.[0]?.mmp_file_id}
                 userType="coordinator"
                 onPermitUploaded={() => {
                   // After state permit is uploaded, reload sites data to update state categorization
