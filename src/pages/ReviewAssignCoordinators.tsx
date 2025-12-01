@@ -4,13 +4,14 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { ChevronDown, ChevronRight, ArrowLeft, Eye, Pencil } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { useAppContext } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
+import { StatePermitUpload } from '@/components/StatePermitUpload';
 
 const ReviewAssignCoordinators: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -32,6 +33,11 @@ const ReviewAssignCoordinators: React.FC = () => {
   const [selectedSiteForView, setSelectedSiteForView] = useState<any>(null);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+
+  // State permit attachment state - per group
+  const [attachStatePermitMap, setAttachStatePermitMap] = useState<Record<string, boolean>>({});
+  const [statePermitDialogOpen, setStatePermitDialogOpen] = useState(false);
+  const [statePermitDialogGroup, setStatePermitDialogGroup] = useState<string>('');
 
   // Database data for location dropdowns
   const [localities, setLocalities] = useState<any[]>([]);
@@ -415,7 +421,7 @@ const ReviewAssignCoordinators: React.FC = () => {
         {
           user_id: coordinatorId,
           title: 'Sites forwarded for CP verification',
-          message: `${mmpFile?.name || 'MMP'}: ${siteIds.length} site(s) have been forwarded for your CP review`,
+          message: `${mmpFile?.name || 'MMP'}: ${siteIds.length} site(s) have been forwarded for your CP review${attachStatePermitMap[groupKey] ? ' (State permit attached)' : ''}`,
           type: 'info',
           link: `/coordinator/sites`,
           related_entity_id: mmpId,
@@ -428,7 +434,7 @@ const ReviewAssignCoordinators: React.FC = () => {
         notifications.push({
           user_id: supervisorId,
           title: 'Sites assigned to coordinator for verification',
-          message: `${mmpFile?.name || 'MMP'}: ${siteIds.length} site(s) have been assigned to ${allCoordinators.find(c => c.id === coordinatorId)?.fullName || 'Coordinator'} for CP verification`,
+          message: `${mmpFile?.name || 'MMP'}: ${siteIds.length} site(s) have been assigned to ${allCoordinators.find(c => c.id === coordinatorId)?.fullName || 'Coordinator'} for CP verification${attachStatePermitMap[groupKey] ? ' (State permit attached)' : ''}`,
           type: 'info',
           link: `/supervisor/sites`,
           related_entity_id: mmpId,
@@ -438,7 +444,7 @@ const ReviewAssignCoordinators: React.FC = () => {
 
       await supabase.from('notifications').insert(notifications);
 
-      toast({ title: 'Batch Forwarded', description: `Sites were forwarded to ${allCoordinators.find(c => c.id === coordinatorId)?.fullName || 'Coordinator'}${supervisorId ? ` and notified ${allSupervisors.find(s => s.id === supervisorId)?.fullName || 'Supervisor'}` : ''}.`, variant: 'default' });
+      toast({ title: 'Batch Forwarded', description: `Sites were forwarded to ${allCoordinators.find(c => c.id === coordinatorId)?.fullName || 'Coordinator'}${attachStatePermitMap[groupKey] ? ' with state permit attached' : ''}${supervisorId ? ` and notified ${allSupervisors.find(s => s.id === supervisorId)?.fullName || 'Supervisor'}` : ''}.`, variant: 'default' });
       
       // Mark sites as forwarded to prevent re-forwarding
       const newForwarded = new Set(forwardedSiteIds);
@@ -666,6 +672,39 @@ const ReviewAssignCoordinators: React.FC = () => {
                               </SelectContent>
                             </Select>
                           </div>
+                          
+                          {/* State Permit Attachment Option */}
+                          <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                            <Checkbox
+                              id={`attach-state-permit-${groupKey}`}
+                              checked={attachStatePermitMap[groupKey] || false}
+                              onCheckedChange={(checked) => setAttachStatePermitMap(prev => ({ ...prev, [groupKey]: checked as boolean }))}
+                            />
+                            <div className="flex-1">
+                              <Label 
+                                htmlFor={`attach-state-permit-${groupKey}`}
+                                className="text-sm font-medium text-blue-900 cursor-pointer"
+                              >
+                                Attach State Permit
+                              </Label>
+                              <p className="text-xs text-blue-700 mt-1">
+                                Upload a state permit for {states.find(s => s.id === stateId)?.name || stateId} before forwarding sites to coordinators
+                              </p>
+                            </div>
+                            {attachStatePermitMap[groupKey] && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setStatePermitDialogGroup(groupKey);
+                                  setStatePermitDialogOpen(true);
+                                }}
+                                className="border-blue-300 text-blue-700 hover:bg-blue-100"
+                              >
+                                Upload Permit
+                              </Button>
+                            )}
+                          </div>
                           <Button
                             size="sm"
                             onClick={() => handleForwardBatch(groupKey)}
@@ -674,7 +713,9 @@ const ReviewAssignCoordinators: React.FC = () => {
                           >
                             {batchLoading[groupKey]
                               ? 'Forwarding...'
-                              : 'Forward Selected'}
+                              : attachStatePermitMap[groupKey] 
+                                ? 'Forward with State Permit'
+                                : 'Forward Selected'}
                           </Button>
                         </div>
                       </>
@@ -888,6 +929,41 @@ const ReviewAssignCoordinators: React.FC = () => {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* State Permit Upload Dialog */}
+      <Dialog open={statePermitDialogOpen} onOpenChange={setStatePermitDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Upload State Permit</DialogTitle>
+            <DialogDescription>
+              Upload a state permit that will be attached to the MMP file before forwarding sites to coordinators.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <StatePermitUpload
+              state={states.find(s => s.id === statePermitDialogGroup.split('|')[0])?.name || 'Unknown State'}
+              mmpFileId={mmpFile?.id}
+              userType="fom"
+              onPermitUploaded={() => {
+                setStatePermitDialogOpen(false);
+                setStatePermitDialogGroup('');
+                toast({
+                  title: "State permit uploaded",
+                  description: "The state permit has been uploaded and will be attached when forwarding sites.",
+                });
+              }}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setStatePermitDialogOpen(false);
+              setStatePermitDialogGroup('');
+            }}>
+              Cancel
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
