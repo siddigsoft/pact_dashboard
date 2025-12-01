@@ -84,7 +84,7 @@ export const StatePermitUpload: React.FC<StatePermitUploadProps> = ({
       // Update MMP file's permits_data to mark state permit as uploaded
       const { data: mmpData, error: fetchError } = await supabase
         .from('mmp_files')
-        .select('permits_data')
+        .select('permits')
         .eq('id', mmpFileId)
         .single();
 
@@ -92,7 +92,7 @@ export const StatePermitUpload: React.FC<StatePermitUploadProps> = ({
         throw fetchError;
       }
 
-      const currentPermitsData = mmpData?.permits_data || {};
+      const currentPermitsData = mmpData?.permits || {};
       const updatedPermitsData = {
         ...currentPermitsData,
         state: true, // Mark state permit as uploaded
@@ -111,7 +111,7 @@ export const StatePermitUpload: React.FC<StatePermitUploadProps> = ({
 
       const { error: updateError } = await supabase
         .from('mmp_files')
-        .update({ permits_data: updatedPermitsData })
+        .update({ permits: updatedPermitsData })
         .eq('id', mmpFileId);
 
       if (updateError) {

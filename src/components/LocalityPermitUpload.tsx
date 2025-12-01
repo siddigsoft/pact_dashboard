@@ -84,7 +84,7 @@ export const LocalityPermitUpload: React.FC<LocalityPermitUploadProps> = ({
       // Update MMP file's permits_data to mark locality permit as uploaded
       const { data: mmpData, error: fetchError } = await supabase
         .from('mmp_files')
-        .select('permits_data')
+        .select('permits')
         .eq('id', mmpFileId)
         .single();
 
@@ -92,7 +92,7 @@ export const LocalityPermitUpload: React.FC<LocalityPermitUploadProps> = ({
         throw fetchError;
       }
 
-      const currentPermitsData = mmpData?.permits_data || {};
+      const currentPermitsData = mmpData?.permits || {};
       const updatedPermitsData = {
         ...currentPermitsData,
         locality: true, // Mark locality permit as uploaded
@@ -112,7 +112,7 @@ export const LocalityPermitUpload: React.FC<LocalityPermitUploadProps> = ({
 
       const { error: updateError } = await supabase
         .from('mmp_files')
-        .update({ permits_data: updatedPermitsData })
+        .update({ permits: updatedPermitsData })
         .eq('id', mmpFileId);
 
       if (updateError) {

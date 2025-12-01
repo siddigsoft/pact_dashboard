@@ -746,12 +746,12 @@ const CoordinatorSites: React.FC = () => {
           try {
             const { data: mmpData, error } = await supabase
               .from('mmp_files')
-              .select('permits_data')
+              .select('permits')
               .eq('id', mmpFileId)
               .single();
-              
-            if (!error && mmpData?.permits_data) {
-              const permitsData = mmpData.permits_data as any;
+
+            if (!error && mmpData?.permits) {
+              const permitsData = mmpData.permits as any;
               // Check if this specific state's permit is verified
               if (permitsData.statePermits) {
                 const statePermit = permitsData.statePermits.find((sp: any) => 
