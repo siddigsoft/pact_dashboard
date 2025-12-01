@@ -372,12 +372,149 @@ API 34 (Android 14)
 
 ### Required Permissions
 - Internet access
-- Location (fine and background)
+- Location (fine, coarse, and background)
 - Camera
-- Storage (media images)
+- Storage (media images, video, audio for Android 13+)
 - Push notifications
+- Local notifications
 - Vibration
 - Network state
+- Foreground service (location)
+
+---
+
+## Mobile Features
+
+### GPS Tracking
+- Real-time location tracking for field staff
+- Background GPS updates for site visit verification
+- Accuracy indicators (green/yellow/red)
+- Automatic location sync when online
+
+### Offline Support
+- IndexedDB-based local storage
+- Automatic background sync when network restored
+- Queue management for pending operations
+- Visual indicators for sync status
+
+### Push Notifications
+- Site visit reminders
+- Approval alerts (supervisor and finance)
+- Wallet balance updates
+- MMP upload confirmations
+- Deep link navigation from notifications
+
+### Geofencing
+- Site proximity detection (100m radius)
+- Automatic alerts when near assigned sites
+- Dwell time notifications
+- Haversine formula for distance calculations
+
+### Bottom Navigation
+- Dashboard / Home
+- Sites / MMP
+- Wallet
+- Notifications
+- More menu (MMPs, Team, Reports, Settings)
+
+### Error Handling
+- Retry buttons with attempt count
+- Diagnostic logs for troubleshooting
+- Automatic recovery on network restore
+- Copy-able error reports
+
+### Adaptive UI
+- Responsive layout for all screen sizes
+- Touch-friendly 44px+ tap targets
+- Pull-to-refresh on lists
+- Android back button handling
+- Safe area insets for notches
+
+---
+
+## Deep Links
+
+The app supports deep linking via custom URL scheme and HTTPS:
+
+### Custom Scheme
+```
+pact://app/dashboard
+pact://app/mmp
+pact://app/wallet
+pact://app/notifications
+pact://app/site-visits/{id}
+pact://app/approval/{id}
+```
+
+### HTTPS Links
+```
+https://pact-dashboard-831y.vercel.app/dashboard
+https://pact-dashboard-831y.vercel.app/mmp
+```
+
+---
+
+## Performance Optimizations
+
+### Bundle Size
+- Tree shaking enabled
+- Code splitting by route
+- Lazy loading for heavy components
+- Image compression before upload
+
+### Battery
+- Location updates throttled to 30-second intervals
+- Network requests batched when possible
+- Geofencing uses passive location provider
+- Background sync respects doze mode
+
+### Memory
+- Virtual scrolling for long lists
+- Image caching with size limits
+- Automatic cache cleanup (expired items)
+- Efficient IndexedDB transactions
+
+---
+
+## Testing Checklist
+
+Before each release:
+
+### Core Functionality
+- [ ] Login/logout works correctly
+- [ ] Dashboard loads with user data
+- [ ] MMP list displays assigned sites
+- [ ] Site visit start/complete flow works
+- [ ] Wallet balance displays correctly
+- [ ] Notifications appear and navigate
+
+### Offline Mode
+- [ ] App works without network
+- [ ] Site visits can be started offline
+- [ ] Data syncs when network restores
+- [ ] Pending count shows accurately
+- [ ] No data loss during sync
+
+### GPS Features
+- [ ] Current location displays on map
+- [ ] Location permission prompt appears
+- [ ] Background tracking works
+- [ ] Accuracy indicator is correct
+- [ ] Site proximity alerts work
+
+### Push Notifications
+- [ ] Registration succeeds
+- [ ] Notifications appear when received
+- [ ] Tapping notification navigates correctly
+- [ ] Badge count updates
+- [ ] Sound plays on notification
+
+### UI/UX
+- [ ] Bottom navigation works
+- [ ] Pull-to-refresh functions
+- [ ] Android back button works
+- [ ] Theme switching (dark/light)
+- [ ] All screens responsive
 
 ---
 
