@@ -468,8 +468,6 @@ const CoordinatorSites: React.FC = () => {
   const [activityFilter, setActivityFilter] = useState<string>('all');
   const [monitoringFilter, setMonitoringFilter] = useState<string>('all');
   const [surveyToolFilter, setSurveyToolFilter] = useState<string>('all');
-  // With State Permit filter chip
-  const [withStatePermitOnly, setWithStatePermitOnly] = useState<boolean>(false);
   
   // Badge counts - loaded separately for performance
   const [newSitesCount, setNewSitesCount] = useState(0);
@@ -1449,12 +1447,8 @@ const CoordinatorSites: React.FC = () => {
       filtered = filtered.filter(site => site.survey_tool === surveyToolFilter);
     }
 
-    if (withStatePermitOnly) {
-      filtered = filtered.filter(site => site.additional_data?.state_permit_attached === true);
-    }
-
     return filtered;
-  }, [sites, debouncedSearchQuery, hubFilter, stateFilter, activityFilter, monitoringFilter, surveyToolFilter, withStatePermitOnly]);
+  }, [sites, debouncedSearchQuery, hubFilter, stateFilter, activityFilter, monitoringFilter, surveyToolFilter]);
 
   // Paginate filtered results
   const paginatedSites = useMemo(() => {
@@ -1750,17 +1744,6 @@ const CoordinatorSites: React.FC = () => {
           Back
         </Button>
       </div>
-      {/* Global filter chips */}
-      <div className="mb-4 flex items-center gap-2">
-        <Button
-          variant={withStatePermitOnly ? 'default' : 'outline'}
-          size="sm"
-          onClick={() => setWithStatePermitOnly(prev => !prev)}
-          className={withStatePermitOnly ? 'bg-blue-600 text-white' : ''}
-        >
-          With State Permit
-        </Button>
-      </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="grid w-full grid-cols-6 gap-2">
@@ -1793,11 +1776,11 @@ const CoordinatorSites: React.FC = () => {
         <TabsContent value="new" className="space-y-4">
           <Tabs value={newSitesSubTab} onValueChange={setNewSitesSubTab} className="space-y-4">
             <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="state_required" className="flex items-center justify-center gap-2">
+              <TabsTrigger value="state_required" className="flex items-center justify-center gap-2 rounded-md py-2 px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-100 data-[state=active]:text-blue-800 data-[state=active]:shadow-sm">
                 <AlertTriangle className="h-4 w-4" />
                 State Permit Required
               </TabsTrigger>
-              <TabsTrigger value="local_required" className="flex items-center justify-center gap-2">
+              <TabsTrigger value="local_required" className="flex items-center justify-center gap-2 rounded-md py-2 px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-100 data-[state=active]:text-blue-800 data-[state=active]:shadow-sm">
                 <MapPin className="h-4 w-4" />
                 Local Permit Required
               </TabsTrigger>
