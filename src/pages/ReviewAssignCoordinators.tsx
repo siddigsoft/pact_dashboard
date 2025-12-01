@@ -30,6 +30,7 @@ const ReviewAssignCoordinators: React.FC = () => {
   const [batchForwarded, setBatchForwarded] = useState({} as Record<string, boolean>);
   const [expandedGroups, setExpandedGroups] = useState({} as Record<string, boolean>);
   const [forwardedSiteIds, setForwardedSiteIds] = useState<Set<string>>(new Set());
+  const [statePermitSiteIds, setStatePermitSiteIds] = useState<Set<string>>(new Set());
   const [selectedSiteForView, setSelectedSiteForView] = useState<any>(null);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -50,6 +51,7 @@ const ReviewAssignCoordinators: React.FC = () => {
   const [selectedHub, setSelectedHub] = useState<string>('');
   const [selectedState, setSelectedState] = useState<string>('');
   const [selectedLocality, setSelectedLocality] = useState<string>('');
+  const [withStatePermitOnly, setWithStatePermitOnly] = useState<boolean>(false);
 
   useEffect(() => {
     if (!id) return;
@@ -92,18 +94,24 @@ const ReviewAssignCoordinators: React.FC = () => {
             // Find sites that have been forwarded
             // Check both new forwarded_at column and legacy dispatched_at/additional_data
             const forwarded = new Set<string>();
+            const statePermitIds = new Set<string>();
             (siteEntries || []).forEach((entry: any) => {
               const hasForwardedAt = !!entry.forwarded_at;
               const hasDispatchedAt = !!entry.dispatched_at;
               const hasAssignedTo = !!(entry.additional_data?.assigned_to);
+              const hasStatePermit = !!(entry.additional_data?.state_permit_attached);
               
               // Site is forwarded if any of these conditions are true
               if (hasForwardedAt || hasDispatchedAt || hasAssignedTo) {
                 forwarded.add(entry.id);
               }
+              if (hasStatePermit) {
+                statePermitIds.add(entry.id);
+              }
             });
             
             setForwardedSiteIds(forwarded);
+            setStatePermitSiteIds(statePermitIds);
             console.log(`Loaded ${forwarded.size} forwarded site(s) out of ${siteEntries?.length || 0} total`);
           }
         } catch (err) {
@@ -318,8 +326,14 @@ const ReviewAssignCoordinators: React.FC = () => {
     const [stateId, localityId] = groupKey.split('|');
     
     // If no filters selected, show all
+    // Note: apply state-permit filter after basic filters
     if (!selectedHub && !selectedState && !selectedLocality) {
-      acc[groupKey] = groupSites;
+      let matchesAll = true;
+      if (withStatePermitOnly) {
+        const groupHasStatePermit = (attachStatePermitMap[groupKey] === true) || groupSites.some((s: any) => statePermitSiteIds.has(s.id));
+        if (!groupHasStatePermit) matchesAll = false;
+      }
+      if (matchesAll) acc[groupKey] = groupSites;
       return acc;
     }
     
@@ -338,6 +352,11 @@ const ReviewAssignCoordinators: React.FC = () => {
     
     if (matches && selectedLocality) {
       if (localityId !== selectedLocality) matches = false;
+    }
+    
+    if (matches && withStatePermitOnly) {
+      const groupHasStatePermit = (attachStatePermitMap[groupKey] === true) || groupSites.some((s: any) => statePermitSiteIds.has(s.id));
+      if (!groupHasStatePermit) matches = false;
     }
     
     if (matches) {
@@ -366,6 +385,7 @@ const ReviewAssignCoordinators: React.FC = () => {
       const coordinatorId = assignmentMap[groupKey];
       const supervisorId = supervisorMap[groupKey];
       const siteIds = Array.from(selectedSites[groupKey] || []);
+      const [stateId] = groupKey.split('|');
       if (!coordinatorId || siteIds.length === 0) {
         toast({ title: 'Select sites and coordinator', description: 'Please select at least one site and a coordinator.', variant: 'destructive' });
         setBatchLoading(b => ({ ...b, [groupKey]: false }));
@@ -399,6 +419,11 @@ const ReviewAssignCoordinators: React.FC = () => {
               assigned_at: forwardedAt,
               supervisor_id: supervisorId || null,
               notes: `Forwarded from MMP ${mmpFile?.name || mmpFile?.mmpId} for CP verification`,
+              ...(attachStatePermitMap[groupKey] ? {
+                state_permit_attached: true,
+                state_permit_state_id: stateId,
+                state_permit_attached_at: forwardedAt,
+              } : {})
             }
           })
           .eq('id', siteEntry.id)
@@ -572,6 +597,7 @@ const ReviewAssignCoordinators: React.FC = () => {
                     setSelectedHub('');
                     setSelectedState('');
                     setSelectedLocality('');
+                    setWithStatePermitOnly(false);
                   }}
                 >
                   Clear Filters
@@ -581,6 +607,18 @@ const ReviewAssignCoordinators: React.FC = () => {
                 </span>
               </div>
             )}
+          </div>
+
+          {/* Filter chips */}
+          <div className="mb-4 flex items-center gap-2">
+            <Button
+              variant={withStatePermitOnly ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setWithStatePermitOnly(prev => !prev)}
+              className={withStatePermitOnly ? 'bg-blue-600 text-white' : ''}
+            >
+              With State Permit
+            </Button>
           </div>
 
           <div className="space-y-6">

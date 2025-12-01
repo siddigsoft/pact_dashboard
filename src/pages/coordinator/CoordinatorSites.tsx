@@ -468,6 +468,8 @@ const CoordinatorSites: React.FC = () => {
   const [activityFilter, setActivityFilter] = useState<string>('all');
   const [monitoringFilter, setMonitoringFilter] = useState<string>('all');
   const [surveyToolFilter, setSurveyToolFilter] = useState<string>('all');
+  // With State Permit filter chip
+  const [withStatePermitOnly, setWithStatePermitOnly] = useState<boolean>(false);
   
   // Badge counts - loaded separately for performance
   const [newSitesCount, setNewSitesCount] = useState(0);
@@ -734,15 +736,15 @@ const CoordinatorSites: React.FC = () => {
 
       // Check permit status for each locality within states
       const statesArray = await Promise.all(Array.from(statesMap.values()).map(async (stateData: any) => {
-        // Check state permit status for this state
+        // Determine state permit presence (uploaded or verified)
         let statePermitVerified = false;
-        let statePermitUploadedAt = null;
-        
+        let statePermitUploaded = false;
+        let statePermitUploadedAt: any = null;
+
         // Get MMP file ID from the first site in this state
         const mmpFileId = stateData.localities.values().next().value?.sites?.[0]?.mmp_file_id;
-        
+
         if (mmpFileId) {
-          // Check if state permit is uploaded and verified for this specific state
           try {
             const { data: mmpData, error } = await supabase
               .from('mmp_files')
@@ -752,14 +754,12 @@ const CoordinatorSites: React.FC = () => {
 
             if (!error && mmpData?.permits) {
               const permitsData = mmpData.permits as any;
-              // Check if this specific state's permit is verified
               if (permitsData.statePermits) {
-                const statePermit = permitsData.statePermits.find((sp: any) => 
-                  sp.state === stateData.state && sp.verified === true
-                );
-                if (statePermit) {
-                  statePermitVerified = true;
-                  statePermitUploadedAt = statePermit.uploadedAt;
+                const sp = permitsData.statePermits.find((sp: any) => sp.state === stateData.state);
+                if (sp) {
+                  statePermitUploaded = true; // uploaded by FOM or coordinator
+                  statePermitVerified = !!sp.verified;
+                  statePermitUploadedAt = sp.uploadedAt || null;
                 }
               }
             }
@@ -789,10 +789,19 @@ const CoordinatorSites: React.FC = () => {
           };
         });
 
+        // Also consider site-level flag added when forwarding with state permit
+        let anySiteHasStatePermitFlag = false;
+        try {
+          const allSitesInState = localitiesArray.flatMap((loc: any) => loc.sites || []);
+          anySiteHasStatePermitFlag = allSitesInState.some((s: any) => s?.additional_data?.state_permit_attached === true);
+        } catch {}
+
+        const hasStatePermit = statePermitUploaded || anySiteHasStatePermitFlag;
+
         return {
           ...stateData,
           localities: localitiesArray,
-          hasStatePermit: statePermitVerified,
+          hasStatePermit,
           statePermitUploadedAt: statePermitUploadedAt,
           statePermitVerified: statePermitVerified
         };
@@ -1440,8 +1449,12 @@ const CoordinatorSites: React.FC = () => {
       filtered = filtered.filter(site => site.survey_tool === surveyToolFilter);
     }
 
+    if (withStatePermitOnly) {
+      filtered = filtered.filter(site => site.additional_data?.state_permit_attached === true);
+    }
+
     return filtered;
-  }, [sites, debouncedSearchQuery, hubFilter, stateFilter, activityFilter, monitoringFilter, surveyToolFilter]);
+  }, [sites, debouncedSearchQuery, hubFilter, stateFilter, activityFilter, monitoringFilter, surveyToolFilter, withStatePermitOnly]);
 
   // Paginate filtered results
   const paginatedSites = useMemo(() => {
@@ -1544,9 +1557,12 @@ const CoordinatorSites: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   {stateData.hasStatePermit ? (
-                    <Badge variant="default" className="bg-green-600">
+                    <Badge
+                      variant="default"
+                      className={stateData.statePermitVerified ? 'bg-green-600' : 'bg-blue-600'}
+                    >
                       <CheckCircle className="h-3 w-3 mr-1" />
-                      State Permit Verified
+                      {stateData.statePermitVerified ? 'State Permit Verified' : 'State Permit Uploaded'}
                     </Badge>
                   ) : (
                     <Badge variant="destructive">
@@ -1732,6 +1748,17 @@ const CoordinatorSites: React.FC = () => {
         >
           <ArrowLeft className="h-4 w-4" />
           Back
+        </Button>
+      </div>
+      {/* Global filter chips */}
+      <div className="mb-4 flex items-center gap-2">
+        <Button
+          variant={withStatePermitOnly ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => setWithStatePermitOnly(prev => !prev)}
+          className={withStatePermitOnly ? 'bg-blue-600 text-white' : ''}
+        >
+          With State Permit
         </Button>
       </div>
 
