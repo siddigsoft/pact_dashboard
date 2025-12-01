@@ -67,9 +67,10 @@ export const StatePermitUpload: React.FC<StatePermitUploadProps> = ({
     try {
       // Upload file to Supabase storage
       const fileName = `state-permit-${state}-${Date.now()}-${selectedFile.name}`;
+      const filePath = `permits/${mmpFileId}/state/${state}/${fileName}`;
       const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('mmp-permits')
-        .upload(fileName, selectedFile);
+        .from('mmp-files')
+        .upload(filePath, selectedFile);
 
       if (uploadError) {
         throw uploadError;
@@ -77,8 +78,8 @@ export const StatePermitUpload: React.FC<StatePermitUploadProps> = ({
 
       // Get the public URL
       const { data: { publicUrl } } = supabase.storage
-        .from('mmp-permits')
-        .getPublicUrl(fileName);
+        .from('mmp-files')
+        .getPublicUrl(filePath);
 
       // Update MMP file's permits_data to mark state permit as uploaded
       const { data: mmpData, error: fetchError } = await supabase
