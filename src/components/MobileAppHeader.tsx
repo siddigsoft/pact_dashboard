@@ -1,13 +1,21 @@
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Menu, Bell } from 'lucide-react';
+import { Menu, Bell, Settings, LogOut, UserIcon } from 'lucide-react';
 import { useUser } from '@/context/user/UserContext';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from '@/components/ui/badge';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { useAppContext } from '@/context/AppContext';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
@@ -28,12 +36,17 @@ const MobileAppHeader = ({
 }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { currentUser } = useUser();
+  const { currentUser, logout } = useUser();
   const { currentUser: appUser, roles } = useAppContext();
   const { checkPermission, hasAnyRole, canManageRoles } = useAuthorization();
   const { isSuperAdmin } = useSuperAdmin();
   const { userSettings } = useSettings();
   const [open, setOpen] = useState(false);
+
+  const handleLogout = useCallback(async () => {
+    await logout();
+    navigate('/auth');
+  }, [logout, navigate]);
   
   const getInitials = (name: string) => {
     return name
@@ -76,7 +89,7 @@ const MobileAppHeader = ({
 
   return (
     <>
-    <header className="px-4 h-16 flex items-center justify-between bg-gradient-to-r from-blue-600 to-purple-600 shadow-md">
+    <header className="px-4 h-16 flex items-center justify-between bg-gradient-to-r from-blue-600 to-purple-600 shadow-md relative z-50">
       <div className="flex items-center gap-2">
         <Button 
           variant="ghost" 
@@ -108,17 +121,35 @@ const MobileAppHeader = ({
           </Button>
         )}
         
-        <Button 
-          variant="ghost" 
-          size="icon" 
-          className="rounded-full h-9 w-9 p-1 border border-white/30" 
-          onClick={() => currentUser?.id && navigate(`/users/${currentUser.id}`)}
-        >
-          <Avatar className="h-full w-full">
-            <AvatarImage src={currentUser?.avatar} alt={currentUser?.name || ''} />
-            <AvatarFallback className="bg-gradient-to-br from-blue-500 to-blue-700 text-white">{currentUser?.name ? getInitials(currentUser.name) : "FO"}</AvatarFallback>
-          </Avatar>
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button 
+              className="rounded-full h-9 w-9 p-1 border border-white/30 hover:bg-white/10 cursor-pointer transition-colors"
+            >
+              <Avatar className="h-full w-full">
+                <AvatarImage src={currentUser?.avatar} alt={currentUser?.name || ''} />
+                <AvatarFallback className="bg-gradient-to-br from-blue-500 to-blue-700 text-white">{currentUser?.name ? getInitials(currentUser.name) : "FO"}</AvatarFallback>
+              </Avatar>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56 z-[9999]">
+            <DropdownMenuLabel className="text-base font-semibold">My Account</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => currentUser?.id && navigate(`/users/${currentUser.id}`)}>
+              <UserIcon className="w-4 h-4 mr-2" />
+              <span>Profile</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => navigate('/settings')}>
+              <Settings className="w-4 h-4 mr-2" />
+              <span>Settings</span>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={handleLogout}>
+              <LogOut className="w-4 h-4 mr-2" />
+              <span>Log out</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </header>
 
