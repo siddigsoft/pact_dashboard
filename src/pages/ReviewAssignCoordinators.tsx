@@ -979,7 +979,7 @@ const ReviewAssignCoordinators: React.FC = () => {
               Upload a state permit that will be attached to the MMP file before forwarding sites to coordinators.
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
+          <div className="py-4 max-h-96 overflow-y-auto">
             <StatePermitUpload
               state={states.find(s => s.id === statePermitDialogGroup.split('|')[0])?.name || 'Unknown State'}
               mmpFileId={mmpFile?.id}

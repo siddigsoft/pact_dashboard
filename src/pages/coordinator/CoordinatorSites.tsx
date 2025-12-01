@@ -2609,7 +2609,7 @@ const CoordinatorSites: React.FC = () => {
                 Upload the state permit for <strong>{selectedStateForWorkflow.state}</strong>
               </DialogDescription>
             </DialogHeader>
-            <div className="py-4">
+            <div className="py-4 max-h-96 overflow-y-auto">
               <StatePermitUpload
                 state={selectedStateForWorkflow.state}
                 mmpFileId={selectedStateForWorkflow.localities?.[0]?.sites?.[0]?.mmp_file_id}
@@ -2664,7 +2664,7 @@ const CoordinatorSites: React.FC = () => {
                 Upload the local permit for <strong>{selectedLocalityForWorkflow.locality}, {selectedLocalityForWorkflow.state}</strong>
               </DialogDescription>
             </DialogHeader>
-            <div className="py-4">
+            <div className="py-4 max-h-96 overflow-y-auto">
               <LocalityPermitUpload
                 state={selectedLocalityForWorkflow.state}
                 locality={selectedLocalityForWorkflow.locality}

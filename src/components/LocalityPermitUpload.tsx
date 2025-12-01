@@ -5,6 +5,10 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Upload, FileText, AlertTriangle, CheckCircle2, X, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { DatePicker } from '@/components/ui/date-picker';
 
 interface LocalityPermitUploadProps {
   state: string;
@@ -25,6 +29,9 @@ export const LocalityPermitUpload: React.FC<LocalityPermitUploadProps> = ({
   const [uploading, setUploading] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string>('');
+  const [issueDate, setIssueDate] = useState<Date | undefined>(undefined);
+  const [expiryDate, setExpiryDate] = useState<Date | undefined>(undefined);
+  const [comments, setComments] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
@@ -72,6 +79,35 @@ export const LocalityPermitUpload: React.FC<LocalityPermitUploadProps> = ({
   const handleUpload = async () => {
     if (!selectedFile) return;
 
+    // Validate mandatory fields
+    if (!issueDate) {
+      toast({
+        title: "Issue date required",
+        description: "Please select the permit issue date.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!expiryDate) {
+      toast({
+        title: "Expiry date required",
+        description: "Please select the permit expiry date.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Validate that expiry date is after issue date
+    if (expiryDate <= issueDate) {
+      toast({
+        title: "Invalid dates",
+        description: "Expiry date must be after the issue date.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setUploading(true);
     try {
       // Upload file to Supabase storage
@@ -116,7 +152,10 @@ export const LocalityPermitUpload: React.FC<LocalityPermitUploadProps> = ({
             fileUrl: publicUrl,
             uploadedAt: new Date().toISOString(),
             uploadedBy: 'coordinator',
-            verified: false
+            verified: false,
+            issueDate: issueDate.toISOString().split('T')[0], // Format as YYYY-MM-DD
+            expiryDate: expiryDate.toISOString().split('T')[0], // Format as YYYY-MM-DD
+            comments: comments || null
           }
         ]
       };
@@ -151,6 +190,9 @@ export const LocalityPermitUpload: React.FC<LocalityPermitUploadProps> = ({
   const clearFile = () => {
     setSelectedFile(null);
     setShowPreview(false);
+    setIssueDate(undefined);
+    setExpiryDate(undefined);
+    setComments('');
     if (previewUrl) {
       URL.revokeObjectURL(previewUrl);
       setPreviewUrl('');
@@ -165,17 +207,17 @@ export const LocalityPermitUpload: React.FC<LocalityPermitUploadProps> = ({
   };
 
   return (
-    <Card className="border-green-300 bg-green-50">
+    <Card className="border-blue-200 bg-gradient-to-br from-blue-50/30 to-slate-50/50 shadow-sm">
       <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-green-800">
-          <AlertTriangle className="h-5 w-5" />
+        <CardTitle className="flex items-center gap-2 text-blue-800">
+          <AlertTriangle className="h-5 w-5 text-orange-600" />
           Local Permit Required
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <Alert>
-          <AlertTriangle className="h-4 w-4" />
-          <AlertDescription>
+        <Alert className="border-orange-200 bg-orange-50">
+          <AlertTriangle className="h-4 w-4 text-orange-600" />
+          <AlertDescription className="text-orange-800">
             Upload the local permit for <strong>{locality}, {state}</strong> to verify all sites in this locality at once.
           </AlertDescription>
         </Alert>
@@ -199,7 +241,7 @@ export const LocalityPermitUpload: React.FC<LocalityPermitUploadProps> = ({
                   variant="ghost"
                   size="sm"
                   onClick={togglePreview}
-                  className="text-green-600 hover:text-green-800"
+                  className="text-blue-600 hover:text-blue-800 hover:bg-blue-100"
                 >
                   {showPreview ? (
                     <>
@@ -236,9 +278,9 @@ export const LocalityPermitUpload: React.FC<LocalityPermitUploadProps> = ({
           )}
 
           {!selectedFile ? (
-            <div className="border-2 border-dashed border-green-300 rounded-lg p-6 text-center">
-              <Upload className="h-8 w-8 text-green-500 mx-auto mb-2" />
-              <p className="text-sm text-gray-600 mb-3">
+            <div className="border-2 border-dashed border-blue-300 rounded-lg p-6 text-center bg-gradient-to-br from-blue-50/50 to-white">
+              <Upload className="h-8 w-8 text-blue-500 mx-auto mb-2" />
+              <p className="text-sm text-blue-700 mb-3">
                 Click to select your local permit file
               </p>
               <input
@@ -252,20 +294,20 @@ export const LocalityPermitUpload: React.FC<LocalityPermitUploadProps> = ({
               <Button
                 variant="outline"
                 onClick={() => fileInputRef.current?.click()}
-                className="border-green-300 text-green-700 hover:bg-green-100"
+                className="border-blue-300 text-blue-700 hover:bg-blue-50 hover:border-blue-400"
               >
                 <FileText className="h-4 w-4 mr-2" />
                 Select File
               </Button>
             </div>
           ) : (
-            <div className="border border-green-300 bg-green-50 rounded-lg p-4">
+            <div className="border border-emerald-300 bg-emerald-50/50 rounded-lg p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <CheckCircle2 className="h-5 w-5 text-green-600" />
+                  <CheckCircle2 className="h-5 w-5 text-emerald-600" />
                   <div>
-                    <p className="font-medium text-green-800">{selectedFile.name}</p>
-                    <p className="text-sm text-green-600">
+                    <p className="font-medium text-emerald-800">{selectedFile.name}</p>
+                    <p className="text-sm text-emerald-600">
                       {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
                     </p>
                   </div>
@@ -283,11 +325,53 @@ export const LocalityPermitUpload: React.FC<LocalityPermitUploadProps> = ({
           )}
         </div>
 
+        {/* Permit Details Form */}
+        <div className="space-y-4 mt-6">
+          <h4 className="text-sm font-medium text-gray-700">Permit Details</h4>
+          
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">
+                Issue Date <span className="text-red-500">*</span>
+              </Label>
+              <DatePicker
+                date={issueDate}
+                onSelect={setIssueDate}
+                className="w-full"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">
+                Expiry Date <span className="text-red-500">*</span>
+              </Label>
+              <DatePicker
+                date={expiryDate}
+                onSelect={setExpiryDate}
+                className="w-full"
+              />
+            </div>
+          </div>
+          
+          <div className="space-y-2">
+            <Label htmlFor="permit-comments" className="text-sm font-medium">
+              Comments (Optional)
+            </Label>
+            <Textarea
+              id="permit-comments"
+              value={comments}
+              onChange={(e) => setComments(e.target.value)}
+              placeholder="Add any additional comments about this permit..."
+              className="w-full min-h-[80px]"
+            />
+          </div>
+        </div>
+
         <div className="flex gap-3 pt-2">
           <Button
             onClick={handleUpload}
-            disabled={!selectedFile || uploading}
-            className="flex-1 bg-green-600 hover:bg-green-700"
+            disabled={!selectedFile || uploading || !issueDate || !expiryDate}
+            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
           >
             {uploading ? (
               <>
