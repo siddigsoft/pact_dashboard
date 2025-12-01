@@ -18,6 +18,7 @@ import { DatePicker } from '@/components/ui/date-picker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useCoordinatorLocalityPermits } from '@/hooks/use-coordinator-permits';
 import { LocalityPermitUpload } from '@/components/LocalityPermitUpload';
+import { StatePermitUpload } from '@/components/StatePermitUpload';
 import { LocalityPermitStatus } from '@/types/coordinator-permits';
 
 // Predefined options for dropdowns
@@ -436,6 +437,7 @@ const CoordinatorSites: React.FC = () => {
   
   // Badge counts - loaded separately for performance
   const [newSitesCount, setNewSitesCount] = useState(0);
+  const [permitsAttachedCount, setPermitsAttachedCount] = useState(0);
   const [verifiedSitesCount, setVerifiedSitesCount] = useState(0);
   const [approvedSitesCount, setApprovedSitesCount] = useState(0);
   const [completedSitesCount, setCompletedSitesCount] = useState(0);
@@ -447,6 +449,10 @@ const CoordinatorSites: React.FC = () => {
   const [selectedLocalityForWorkflow, setSelectedLocalityForWorkflow] = useState<any>(null);
   const [readOnlyMode, setReadOnlyMode] = useState(false);
   const [expandedLocalities, setExpandedLocalities] = useState<Set<string>>(new Set());
+
+  // State permit workflow state
+  const [statePermitQuestionDialogOpen, setStatePermitQuestionDialogOpen] = useState(false);
+  const [selectedStateForWorkflow, setSelectedStateForWorkflow] = useState<any>(null);
 
   // Database data for location dropdowns
   const [hubs, setHubs] = useState<Hub[]>([]);
@@ -557,6 +563,9 @@ const CoordinatorSites: React.FC = () => {
         const newCount = { count: userEntries.filter((e: any) => 
           e.status === 'Pending' || e.status === 'Dispatched' || e.status === 'assigned' || e.status === 'inProgress' || e.status === 'in_progress'
         ).length };
+        const permitsAttachedCount = { count: userEntries.filter((e: any) => 
+          e.status?.toLowerCase() === 'permits_attached'
+        ).length };
         const verifiedCount = { count: userEntries.filter((e: any) => 
           e.status?.toLowerCase() === 'verified'
         ).length };
@@ -571,6 +580,7 @@ const CoordinatorSites: React.FC = () => {
         ).length };
 
         setNewSitesCount(newCount.count || 0);
+        setPermitsAttachedCount(permitsAttachedCount.count || 0);
         setVerifiedSitesCount(verifiedCount.count || 0);
         setApprovedSitesCount(approvedCount.count || 0);
         setCompletedSitesCount(completedCount.count || 0);
@@ -682,6 +692,38 @@ const CoordinatorSites: React.FC = () => {
         };
       });
 
+      // Check state permit status for the MMP file
+      // Get the MMP file ID from the first site to check state permits
+      const mmpFileId = filtered.length > 0 ? filtered[0].mmp_file_id : null;
+      let hasStatePermits = false;
+      
+      if (mmpFileId) {
+        // Check if the MMP file has state permits uploaded by FOM
+        // We need to query the mmp_permits_data or check the MMP file directly
+        try {
+          const { data: mmpData, error } = await supabase
+            .from('mmp_files')
+            .select('permits_data')
+            .eq('id', mmpFileId)
+            .single();
+            
+          if (!error && mmpData?.permits_data) {
+            const permitsData = mmpData.permits_data as any;
+            // Check if state permits are marked as verified/uploaded
+            hasStatePermits = permitsData.state === true || 
+                             (permitsData.statePermits && permitsData.statePermits.some((sp: any) => sp.verified));
+          }
+        } catch (err) {
+          console.warn('Failed to check state permits for MMP:', err);
+          hasStatePermits = false;
+        }
+      }
+
+      // Add state permit status to localities
+      localitiesArray.forEach(locality => {
+        locality.hasStatePermits = hasStatePermits;
+      });
+
       // Don't filter localities by permit status - show all localities
       // const permittedLocalities = localitiesArray.filter(locality => locality.hasPermit);
       
@@ -696,6 +738,11 @@ const CoordinatorSites: React.FC = () => {
         case 'new':
           allSites = allSites.filter((e: any) => 
             e.status === 'Pending' || e.status === 'Dispatched' || e.status === 'assigned' || e.status === 'inProgress' || e.status === 'in_progress'
+          );
+          break;
+        case 'permits_attached':
+          allSites = allSites.filter((e: any) => 
+            e.status?.toLowerCase() === 'permits_attached'
           );
           break;
         case 'verified':
@@ -1187,12 +1234,30 @@ const CoordinatorSites: React.FC = () => {
 
   const handlePermitUploaded = async () => {
     await fetchPermits();
+    
+    // Update all sites in this locality to 'permits_attached' status
+    if (selectedLocalityForWorkflow) {
+      try {
+        const { error } = await supabase
+          .from('mmp_site_entries')
+          .update({ status: 'permits_attached' })
+          .eq('state', selectedLocalityForWorkflow.state)
+          .eq('locality', selectedLocalityForWorkflow.locality);
+
+        if (error) {
+          console.warn('Failed to update site statuses to permits_attached:', error);
+        }
+      } catch (updateError) {
+        console.warn('Error updating site statuses:', updateError);
+      }
+    }
+    
     toast({
       title: 'Permit Uploaded',
-      description: `Permit for ${selectedLocalityForWorkflow?.locality} has been uploaded successfully. You can now access sites in this locality.`,
+      description: `Permit for ${selectedLocalityForWorkflow?.locality} has been uploaded successfully. Sites in this locality are now ready for verification.`,
     });
-    // Navigate to "New Sites" tab since they now have full access
-    setActiveTab('new');
+    // Navigate to "Permits Attached" tab since they now have full access
+    setActiveTab('permits_attached');
     setSelectedLocalityForWorkflow(null);
     setExpandedLocalities(new Set()); // Clear expanded localities
   };
@@ -1341,6 +1406,14 @@ const CoordinatorSites: React.FC = () => {
         key={`${localityData.state}-${localityData.locality}`}
         className="overflow-hidden transition-shadow hover:shadow-md cursor-pointer"
         onClick={() => {
+          // First check if state permits are uploaded by FOM
+          if (!localityData.hasStatePermits) {
+            setSelectedStateForWorkflow(localityData);
+            setStatePermitQuestionDialogOpen(true);
+            return;
+          }
+          
+          // If state permits exist, proceed with local permit check
           setSelectedLocalityForWorkflow(localityData);
           setPermitQuestionDialogOpen(true);
         }}
@@ -1438,10 +1511,14 @@ const CoordinatorSites: React.FC = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5 gap-2">
+        <TabsList className="grid w-full grid-cols-6 gap-2">
           <TabsTrigger value="new" className="flex items-center justify-center gap-2 rounded-md py-2 px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm">
             <span>New Sites</span>
             <Badge variant="secondary">{newSitesCount}</Badge>
+          </TabsTrigger>
+          <TabsTrigger value="permits_attached" className="flex items-center justify-center gap-2 rounded-md py-2 px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm">
+            <span>Permits Attached</span>
+            <Badge variant="secondary">{permitsAttachedCount}</Badge>
           </TabsTrigger>
           <TabsTrigger value="verified" className="flex items-center justify-center gap-2 rounded-md py-2 px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm">
             <span>Verified</span>
@@ -1478,7 +1555,8 @@ const CoordinatorSites: React.FC = () => {
                 </div>
               </div>
               <div className="text-sm text-muted-foreground">
-                You can only access sites in localities where you have uploaded the required local permits.
+                You can only access sites in localities where you have uploaded the required permits.
+                State permits are required first, followed by local permits for each locality.
               </div>
             </CardHeader>
             <CardContent>
@@ -1533,6 +1611,70 @@ const CoordinatorSites: React.FC = () => {
                             })
                             .map(site => renderSiteCard(site, true));
                         })}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="permits_attached" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>Sites with Permits Attached</CardTitle>
+                <div className="relative w-full sm:w-auto max-w-sm">
+                  <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="search"
+                    placeholder="Search sites..."
+                    className="pl-8 w-full sm:w-[300px]"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {filteredSites.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <FileCheck className="h-12 w-12 mx-auto mb-4 opacity-20" />
+                  <p>{searchQuery ? 'No sites match your search.' : 'No sites with permits attached yet.'}</p>
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-4">
+                    {paginatedSites.map(site => renderSiteCard(site, true))}
+                  </div>
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                      <div className="text-sm text-muted-foreground">
+                        Showing {((currentPage - 1) * itemsPerPage) + 1} - {Math.min(currentPage * itemsPerPage, filteredSites.length)} of {filteredSites.length}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                          disabled={currentPage === 1}
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                          Previous
+                        </Button>
+                        <div className="text-sm">
+                          Page {currentPage} of {totalPages}
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                          disabled={currentPage === totalPages}
+                        >
+                          Next
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
                       </div>
                     </div>
                   )}
@@ -2122,49 +2264,88 @@ const CoordinatorSites: React.FC = () => {
         </DialogContent>
       </Dialog>
 
+      {/* State Permit Question Dialog */}
+      <Dialog open={statePermitQuestionDialogOpen} onOpenChange={setStatePermitQuestionDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>State Permit Required</DialogTitle>
+            <DialogDescription>
+              State permits for <strong>{selectedStateForWorkflow?.state}</strong> have not been uploaded by the FOM.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm text-muted-foreground">
+              State permits are required before you can access local permits. You need to upload the state permit first.
+              Do you have the state permit for this state?
+            </p>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setStatePermitQuestionDialogOpen(false);
+                setSelectedStateForWorkflow(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={() => {
+                setStatePermitQuestionDialogOpen(false);
+                // Show state permit upload dialog
+                if (selectedStateForWorkflow) {
+                  const stateKey = `state-${selectedStateForWorkflow.state}`;
+                  setExpandedLocalities(prev => new Set([...prev, stateKey]));
+                }
+              }}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              Yes, upload state permit
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
 
-      {/* Permit Upload Dialog */}
-      {selectedLocalityForWorkflow && (
-        <Dialog open={expandedLocalities.has(`${selectedLocalityForWorkflow.state}-${selectedLocalityForWorkflow.locality}`) && !selectedLocalityForWorkflow.hasPermit} onOpenChange={() => {}}>
+
+      {/* State Permit Upload Dialog */}
+      {selectedStateForWorkflow && (
+        <Dialog open={expandedLocalities.has(`state-${selectedStateForWorkflow.state}`)} onOpenChange={() => {}}>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Upload Local Permit</DialogTitle>
+              <DialogTitle>Upload State Permit</DialogTitle>
               <DialogDescription>
-                Upload the local permit for <strong>{selectedLocalityForWorkflow.locality}, {selectedLocalityForWorkflow.state}</strong>
+                Upload the state permit for <strong>{selectedStateForWorkflow.state}</strong>
               </DialogDescription>
             </DialogHeader>
             <div className="py-4">
-              {(() => {
-                const selectedStateId = hubStates.find(hs => hs.state_name === selectedLocalityForWorkflow.state)?.state_id;
-                const selectedLocalityInfo = selectedStateId
-                  ? localities.find(loc => loc.name === selectedLocalityForWorkflow.locality && loc.state_id === selectedStateId)
-                  : undefined;
-                return (
-                  <LocalityPermitUpload
-                    locality={{
-                      state: selectedLocalityForWorkflow.state,
-                      locality: selectedLocalityForWorkflow.locality,
-                      stateId: selectedLocalityInfo?.state_id || '',
-                      localityId: selectedLocalityInfo?.id || '',
-                      hasPermit: selectedLocalityForWorkflow.hasPermit,
-                      permit: selectedLocalityForWorkflow.permitId ? permits.find(p => p.id === selectedLocalityForWorkflow.permitId) : undefined,
-                      siteCount: selectedLocalityForWorkflow.sites.length,
-                      sites: selectedLocalityForWorkflow.sites
-                    }}
-                    onPermitUploaded={handlePermitUploaded}
-                  />
-                );
-              })()}
+              <StatePermitUpload
+                state={selectedStateForWorkflow.state}
+                mmpFileId={selectedStateForWorkflow.sites?.[0]?.mmp_file_id}
+                userType="coordinator"
+                onPermitUploaded={() => {
+                  // After state permit is uploaded, redirect to local permit upload
+                  setExpandedLocalities(prev => {
+                    const newSet = new Set(prev);
+                    newSet.delete(`state-${selectedStateForWorkflow.state}`);
+                    return newSet;
+                  });
+                  
+                  // Now show the local permit question dialog
+                  setSelectedLocalityForWorkflow(selectedStateForWorkflow);
+                  setPermitQuestionDialogOpen(true);
+                  setSelectedStateForWorkflow(null);
+                }}
+              />
             </div>
             <DialogFooter>
               <Button 
                 variant="outline" 
                 onClick={() => {
-                  setSelectedLocalityForWorkflow(null);
+                  setSelectedStateForWorkflow(null);
                   setExpandedLocalities(prev => {
                     const newSet = new Set(prev);
-                    newSet.delete(`${selectedLocalityForWorkflow.state}-${selectedLocalityForWorkflow.locality}`);
+                    newSet.delete(`state-${selectedStateForWorkflow.state}`);
                     return newSet;
                   });
                 }}
