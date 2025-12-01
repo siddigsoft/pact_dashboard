@@ -28,6 +28,15 @@ export const LocalityPermitUpload: React.FC<LocalityPermitUploadProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
+  // Sanitize folder segment for storage path safety
+  const sanitizeSegment = (s: string) =>
+    (s || '')
+      .toString()
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/gi, '-')
+      .replace(/^-+|-+$/g, '');
+
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
@@ -66,11 +75,13 @@ export const LocalityPermitUpload: React.FC<LocalityPermitUploadProps> = ({
     setUploading(true);
     try {
       // Upload file to Supabase storage
-      const fileName = `locality-permit-${state}-${locality}-${Date.now()}-${selectedFile.name}`;
-      const filePath = `permits/${mmpFileId}/local/${locality}/${fileName}`;
+      const stateSegment = sanitizeSegment(state);
+      const localitySegment = sanitizeSegment(locality);
+      const fileName = `locality-permit-${stateSegment}-${localitySegment}-${Date.now()}-${selectedFile.name}`;
+      const filePath = `permits/${mmpFileId}/local/${localitySegment}/${fileName}`;
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('mmp-files')
-        .upload(filePath, selectedFile);
+        .upload(filePath, selectedFile, { upsert: true, contentType: selectedFile.type || undefined });
 
       if (uploadError) {
         throw uploadError;
@@ -125,10 +136,11 @@ export const LocalityPermitUpload: React.FC<LocalityPermitUploadProps> = ({
       });
       onPermitUploaded();
     } catch (error) {
+      const errMsg = (error as any)?.message || JSON.stringify(error);
       console.error('Upload error:', error);
       toast({
         title: "Upload failed",
-        description: "An error occurred while uploading the local permit.",
+        description: errMsg || "An error occurred while uploading the local permit.",
         variant: "destructive",
       });
     } finally {
