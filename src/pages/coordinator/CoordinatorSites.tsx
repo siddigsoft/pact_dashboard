@@ -1820,7 +1820,7 @@ const CoordinatorSites: React.FC = () => {
                     </div>
                   </div>
                   <div className="text-sm text-muted-foreground">
-                    These states require state permits to be uploaded by the FOM before you can access local permits.
+                    These states require state permits to be uploaded before you can access local permits.
                   </div>
                 </CardHeader>
                 <CardContent>
