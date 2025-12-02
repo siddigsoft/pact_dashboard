@@ -17,6 +17,38 @@ The frontend, built with React 18, TypeScript, Tailwind CSS v3, and Shadcn UI, f
 *   **Frontend:** Utilizes React Router DOM v6, Vite, and React Context API for global state. TanStack Query manages server state, and Supabase Realtime handles subscriptions. Data consistency between web and mobile is ensured via a shared Supabase database with real-time subscriptions and an offline queue for mobile.
 *   **Backend:** Leverages PostgreSQL via Supabase, employing Row Level Security (RLS) and real-time subscriptions. Supabase Auth provides authentication with email/password, Google OAuth, session management, role-based access control, and TOTP-based Two-Factor Authentication (2FA). The database schema supports core entities like profiles, roles, projects, MMPs, site visits, budgets, wallets, and cost submissions, with audit logs for financial transactions and deletions.
 *   **Mobile Offline Infrastructure:** Features IndexedDB for local storage, a Sync Manager for robust offline-to-online data synchronization, dedicated mobile UI components, a Service Worker for caching strategies, and integration for Android-specific functionalities like background location permissions and back button handling. Image compression is applied to photos before upload.
+
+    **Offline-Capable Features (work fully offline, sync when connected):**
+    - Site Visit Start/Complete: Full workflow stored in IndexedDB, synced on reconnect
+    - GPS Location Capture: Locations queued locally with accuracy metadata
+    - Photo Capture: Images compressed and queued for upload
+    - Cost Submissions: Draft submissions stored locally
+    - Settings/Preferences: Cached in IndexedDB
+    - MMP List: Cached site data with TTL (60 minutes default)
+
+    **Online-Only Features (require connectivity):**
+    - Dashboard real-time stats and live updates
+    - Wallet operations (balance, transactions, withdrawals)
+    - Chat messaging (Supabase real-time)
+    - Team live location map (viewing others' locations)
+    - Reports generation and export
+    - User management and approvals
+    - Push notifications
+
+    **Sync Mechanism:**
+    - Automatic sync triggered on network restoration
+    - Manual sync available via "Sync Now" button
+    - Priority order: Site visits > Locations > Pending actions
+    - Max 3 retries per failed sync action
+    - Progress callbacks for UI feedback
+    - Conflict resolution: Last-write-wins with server timestamp
+
+    **Mobile Navigation Enhancements:**
+    - Unified bottom navigation with offline/sync status indicator
+    - Pending sync count badge on More menu
+    - Offline mode banner when disconnected
+    - Sync progress bar during synchronization
+    - Offline capability indicators on menu items
 *   **Android APK Build:** Capacitor-based mobile deployment with 9 native plugins (app, camera, device, filesystem, geolocation, local-notifications, network, push-notifications, status-bar). Supports deep linking via pact:// scheme and HTTPS URLs. MobileAppShell component handles app lifecycle, GPS tracking, push notifications, and network monitoring. Geofencing support with Haversine distance calculations for site proximity detection. Error boundaries with retry mechanisms and diagnostic logging.
 
 ### Feature Specifications
