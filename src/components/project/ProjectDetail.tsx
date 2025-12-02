@@ -15,11 +15,13 @@ import {
   Clock3,
   FileText,
   Plus,
-  Loader2
+  Loader2,
+  User
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import { Project } from '@/types/project';
+import { useUser } from '@/context/user/UserContext';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -53,7 +55,21 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
   deleting,
 }) => {
   const navigate = useNavigate();
+  const { users } = useUser();
   const [activeTab, setActiveTab] = useState('overview');
+
+  // Helper to get user name by ID
+  const getUserName = (userId: string | undefined): string | null => {
+    if (!userId) return null;
+    const user = users.find(u => u.id === userId);
+    return user?.name || user?.email || null;
+  };
+
+  // Get project manager info
+  const projectManagerName = getUserName(project.team?.projectManager);
+  const projectManager = project.team?.projectManager 
+    ? users.find(u => u.id === project.team?.projectManager)
+    : null;
 
   // Helper function to safely format dates
   const formatDate = (dateString: string) => {
@@ -247,6 +263,23 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
                       </div>
                     </div>
                   )}
+                  
+                  <div className="space-y-1">
+                    <p className="text-sm text-muted-foreground">Project Manager</p>
+                    <div className="flex items-center">
+                      <User className="h-4 w-4 mr-2 text-primary" />
+                      {projectManager ? (
+                        <span>
+                          {projectManagerName}
+                          {projectManager.role && (
+                            <span className="text-muted-foreground ml-1">({projectManager.role})</span>
+                          )}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">Not assigned</span>
+                      )}
+                    </div>
+                  </div>
                 </div>
                 
                 {project.description && (

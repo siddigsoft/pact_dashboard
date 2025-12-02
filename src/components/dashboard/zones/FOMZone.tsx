@@ -53,6 +53,8 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
 import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
+import { useUserProjects } from '@/hooks/useUserProjects';
+import { useMMP } from '@/context/mmp/MMPContext';
 import { useNavigate } from 'react-router-dom';
 import SiteVisitsOverview from '../SiteVisitsOverview';
 import UpcomingSiteVisitsCard from '../UpcomingSiteVisitsCard';
@@ -66,6 +68,7 @@ interface MMPFile {
   status?: string | null;
   workflow?: any;
   uploaded_at?: string | null;
+  project_id?: string | null;
   project?: { name?: string | null; project_code?: string | null } | null;
   project_name?: string | null;
   hub?: string | null;
@@ -84,6 +87,8 @@ interface Filters {
 export const FOMZone: React.FC = () => {
   const { currentUser } = useAppContext();
   const { siteVisits } = useSiteVisitContext();
+  const { mmpFiles } = useMMP();
+  const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('overview');
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
@@ -94,6 +99,25 @@ export const FOMZone: React.FC = () => {
     status: '',
     project: ''
   });
+
+  // Project-filtered site visits: filter by user's project membership (admin bypass)
+  const filteredSiteVisits = useMemo(() => {
+    if (isAdminOrSuperUser) return siteVisits;
+    
+    // Build set of MMP IDs that belong to user's projects
+    const userProjectMmpIds = new Set(
+      mmpFiles
+        .filter(mmp => mmp.projectId && userProjectIds.includes(mmp.projectId))
+        .map(mmp => mmp.id)
+    );
+    
+    // Filter site visits by MMP project membership (use mmpDetails.mmpId)
+    return siteVisits.filter(visit => {
+      const visitMmpId = visit.mmpDetails?.mmpId;
+      if (!visitMmpId) return false;
+      return userProjectMmpIds.has(visitMmpId);
+    });
+  }, [siteVisits, mmpFiles, userProjectIds, isAdminOrSuperUser]);
 
   // MMPs forwarded to this FOM
   const [forwardedMMPs, setForwardedMMPs] = useState<MMPFile[]>([]);
@@ -120,7 +144,7 @@ export const FOMZone: React.FC = () => {
         const { data, error } = await supabase
           .from('mmp_files')
           .select(`
-            id, name, mmp_id, status, workflow, uploaded_at, hub, month,
+            id, name, mmp_id, status, workflow, uploaded_at, hub, month, project_name, project_id,
             project:projects(name, project_code),
             permits
           `)
@@ -170,7 +194,7 @@ export const FOMZone: React.FC = () => {
         const { data, error } = await supabase
           .from('mmp_files')
           .select(`
-            id, name, mmp_id, status, workflow, uploaded_at, hub, month, project_name,
+            id, name, mmp_id, status, workflow, uploaded_at, hub, month, project_name, project_id,
             project:projects(name, project_code)
           `)
           .in('status', ['pending', 'submitted'])
@@ -239,39 +263,47 @@ export const FOMZone: React.FC = () => {
     return () => { cancelled = true; clearInterval(interval); };
   }, []);
 
-  // Calculate metrics
-  const awaitingPermitsCount = forwardedMMPs.filter(mmp => {
+  // Project-filtered MMPs: filter by user's project membership (admin bypass)
+  const projectFilteredForwardedMMPs = useMemo(() => {
+    if (isAdminOrSuperUser) return forwardedMMPs;
+    return forwardedMMPs.filter(mmp => mmp.project_id && userProjectIds.includes(mmp.project_id));
+  }, [forwardedMMPs, userProjectIds, isAdminOrSuperUser]);
+
+  const projectFilteredAllMMPs = useMemo(() => {
+    if (isAdminOrSuperUser) return allMMPs;
+    return allMMPs.filter(mmp => mmp.project_id && userProjectIds.includes(mmp.project_id));
+  }, [allMMPs, userProjectIds, isAdminOrSuperUser]);
+
+  // Calculate metrics (using project-filtered data)
+  const awaitingPermitsCount = projectFilteredForwardedMMPs.filter(mmp => {
     const workflow = mmp.workflow as any;
     return workflow?.currentStage === 'awaitingPermits' || 
            (!mmp.permits || !(mmp.permits as any).federal);
   }).length;
 
-  const permitsAttachedCount = forwardedMMPs.filter(mmp => {
+  const permitsAttachedCount = projectFilteredForwardedMMPs.filter(mmp => {
     return mmp.permits && (mmp.permits as any).federal;
   }).length;
 
-  const pendingApprovalCount = allMMPs.filter(mmp => 
+  const pendingApprovalCount = projectFilteredAllMMPs.filter(mmp => 
     mmp.status === 'pending' || mmp.status === 'submitted'
   ).length;
 
-  const approvedCount = allMMPs.filter(mmp => mmp.status === 'approved').length;
+  const approvedCount = projectFilteredAllMMPs.filter(mmp => mmp.status === 'approved').length;
 
-
-
-  
-  // Site visit metrics
-  const totalVisits = siteVisits.length;
-  const completedVisits = siteVisits.filter(v => v.status === 'completed').length;
-  const pendingVisits = siteVisits.filter(v => v.status === 'pending' || v.status === 'permitVerified').length;
-  const assignedVisits = siteVisits.filter(v => v.status === 'assigned' || v.status === 'inProgress').length;
+  // Site visit metrics (using project-filtered data)
+  const totalVisits = filteredSiteVisits.length;
+  const completedVisits = filteredSiteVisits.filter(v => v.status === 'completed').length;
+  const pendingVisits = filteredSiteVisits.filter(v => v.status === 'pending' || v.status === 'permitVerified').length;
+  const assignedVisits = filteredSiteVisits.filter(v => v.status === 'assigned' || v.status === 'inProgress').length;
   const completionRate = totalVisits > 0 ? Math.round((completedVisits / totalVisits) * 100) : 0;
 
-  // Permit attachment rate
-  const permitAttachmentRate = forwardedMMPs.length > 0 
-    ? Math.round((permitsAttachedCount / forwardedMMPs.length) * 100) 
+  // Permit attachment rate (using project-filtered data)
+  const permitAttachmentRate = projectFilteredForwardedMMPs.length > 0 
+    ? Math.round((permitsAttachedCount / projectFilteredForwardedMMPs.length) * 100) 
     : 0;
 
-  // Get filtered MMPs
+  // Get filtered MMPs (applies UI filters on top of project filtering)
   const getFilteredMMPs = (mmps: MMPFile[]) => {
     return mmps.filter(mmp => {
       if (filters.hub && mmp.hub !== filters.hub) return false;
@@ -284,19 +316,19 @@ export const FOMZone: React.FC = () => {
     });
   };
 
-  const filteredForwardedMMPs = useMemo(() => getFilteredMMPs(forwardedMMPs), [forwardedMMPs, filters]);
-  const filteredPendingMMPs = useMemo(() => getFilteredMMPs(allMMPs.filter(m => m.status === 'pending' || m.status === 'submitted')), [allMMPs, filters]);
+  const filteredForwardedMMPs = useMemo(() => getFilteredMMPs(projectFilteredForwardedMMPs), [projectFilteredForwardedMMPs, filters]);
+  const filteredPendingMMPs = useMemo(() => getFilteredMMPs(projectFilteredAllMMPs.filter(m => m.status === 'pending' || m.status === 'submitted')), [projectFilteredAllMMPs, filters]);
 
-  // Extract unique values for filters
-  const hubs = useMemo(() => [...new Set([...forwardedMMPs, ...allMMPs].map(m => m.hub).filter(Boolean))], [forwardedMMPs, allMMPs]);
+  // Extract unique values for filters (from project-filtered data)
+  const hubs = useMemo(() => [...new Set([...projectFilteredForwardedMMPs, ...projectFilteredAllMMPs].map(m => m.hub).filter(Boolean))], [projectFilteredForwardedMMPs, projectFilteredAllMMPs]);
   const projects = useMemo(() => {
     const projs = new Set<string>();
-    [...forwardedMMPs, ...allMMPs].forEach(m => {
+    [...projectFilteredForwardedMMPs, ...projectFilteredAllMMPs].forEach(m => {
       const name = m.project?.name || m.project_name;
       if (name) projs.add(name);
     });
     return Array.from(projs);
-  }, [forwardedMMPs, allMMPs]);
+  }, [projectFilteredForwardedMMPs, projectFilteredAllMMPs]);
 
   const clearAllFilters = () => {
     setFilters({

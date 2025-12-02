@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Shield, AlertTriangle, FileCheck, ShieldAlert } from 'lucide-react';
 import FraudDetectionWidget from '../FraudDetectionWidget';
@@ -6,15 +6,23 @@ import FraudPreventionDashboardWidget from '../FraudPreventionDashboardWidget';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useMMP } from '@/context/mmp/MMPContext';
+import { useUserProjects } from '@/hooks/useUserProjects';
 import { Progress } from '@/components/ui/progress';
 
 export const ComplianceZone: React.FC = () => {
   const [activeTab, setActiveTab] = useState('detection');
   const { mmpFiles } = useMMP();
+  const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
 
-  const totalMMPs = mmpFiles?.length || 0;
-  const approvedMMPs = mmpFiles?.filter(m => m.status === 'approved').length || 0;
-  const pendingMMPs = mmpFiles?.filter(m => m.status === 'pending').length || 0;
+  // Project-filtered MMPs: filter by user's project membership (admin bypass)
+  const filteredMMPs = useMemo(() => {
+    if (isAdminOrSuperUser) return mmpFiles || [];
+    return (mmpFiles || []).filter(mmp => mmp.projectId && userProjectIds.includes(mmp.projectId));
+  }, [mmpFiles, userProjectIds, isAdminOrSuperUser]);
+
+  const totalMMPs = filteredMMPs.length;
+  const approvedMMPs = filteredMMPs.filter(m => m.status === 'approved').length;
+  const pendingMMPs = filteredMMPs.filter(m => m.status === 'pending').length;
   const complianceRate = totalMMPs > 0 ? Math.round((approvedMMPs / totalMMPs) * 100) : 0;
 
   return (

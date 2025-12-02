@@ -52,6 +52,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
 import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
 import { useWallet } from '@/context/wallet/WalletContext';
+import { useUserProjects } from '@/hooks/useUserProjects';
+import { useMMP } from '@/context/mmp/MMPContext';
 import { useNavigate } from 'react-router-dom';
 import { DashboardCalendar } from '../DashboardCalendar';
 import { useToast } from '@/hooks/use-toast';
@@ -65,6 +67,8 @@ interface Filters {
 export const DataCollectorZone: React.FC = () => {
   const { currentUser, updateUserLocation } = useAppContext();
   const { siteVisits, startSiteVisit } = useSiteVisitContext();
+  const { mmpFiles } = useMMP();
+  const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
   const { wallet, transactions, stats, getBalance } = useWallet();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -177,11 +181,34 @@ export const DataCollectorZone: React.FC = () => {
     );
   };
 
-  // Get visits assigned to this data collector
+  // Build set of MMP IDs that belong to user's projects for filtering
+  const userProjectMmpIds = useMemo(() => {
+    if (isAdminOrSuperUser) return null; // null means bypass filtering
+    return new Set(
+      mmpFiles
+        .filter(mmp => mmp.projectId && userProjectIds.includes(mmp.projectId))
+        .map(mmp => mmp.id)
+    );
+  }, [mmpFiles, userProjectIds, isAdminOrSuperUser]);
+
+  // Get visits assigned to this data collector (with project filtering)
   const myVisits = useMemo(() => {
     if (!currentUser?.id || !siteVisits) return [];
-    return siteVisits.filter(visit => visit.assignedTo === currentUser.id);
-  }, [siteVisits, currentUser?.id]);
+    
+    // First filter by assignment to current user
+    let visits = siteVisits.filter(visit => visit.assignedTo === currentUser.id);
+    
+    // Then apply project filtering (admin bypass)
+    if (userProjectMmpIds !== null) {
+      visits = visits.filter(visit => {
+        const visitMmpId = visit.mmpDetails?.mmpId;
+        if (!visitMmpId) return false;
+        return userProjectMmpIds.has(visitMmpId);
+      });
+    }
+    
+    return visits;
+  }, [siteVisits, currentUser?.id, userProjectMmpIds]);
 
   // Categorize visits
   const todaysVisits = useMemo(() => {

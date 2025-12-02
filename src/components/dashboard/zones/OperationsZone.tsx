@@ -56,6 +56,8 @@ import { useAuthorization } from '@/hooks/use-authorization';
 import { supabase } from '@/integrations/supabase/client';
 import { isAfter, addDays } from 'date-fns';
 import { getStateName } from '@/data/sudanStates';
+import { useUserProjects } from '@/hooks/useUserProjects';
+import { useMMP } from '@/context/mmp/MMPContext';
 
 type MetricCardType = 'total' | 'completed' | 'assigned' | 'pending' | 'overdue' | 'performance' | null;
 
@@ -72,6 +74,8 @@ export const OperationsZone: React.FC = () => {
   const { siteVisits: allSiteVisits } = useSiteVisitContext();
   const { users, currentUser } = useUser();
   const { hasAnyRole } = useAuthorization();
+  const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
+  const { mmpFiles } = useMMP();
   const [activeTab, setActiveTab] = useState('overview');
   const [selectedCard, setSelectedCard] = useState<MetricCardType>(null);
   const [supervisorHubName, setSupervisorHubName] = useState<string | null>(null);
@@ -135,10 +139,31 @@ export const OperationsZone: React.FC = () => {
     console.log(`📊 OperationsZone: Coordinator state loaded: ${stateName} (id: ${currentUser.stateId})`);
   }, [isCoordinator, currentUser?.stateId]);
 
+  // Helper function to check if site visit belongs to user's projects
+  const siteVisitBelongsToUserProjects = (visit: any): boolean => {
+    if (isAdminOrSuperUser) return true;
+    
+    // Get MMP ID from visit (try both direct mmpId and mmpDetails.mmpId)
+    const visitMmpId = visit.mmpId || visit.mmpDetails?.mmpId;
+    
+    // For non-admins: DENY access when project linkage is missing (default to deny)
+    if (!visitMmpId) return false;
+    
+    const mmp = mmpFiles?.find(m => m.id === visitMmpId);
+    if (!mmp) return false;
+    if (!mmp.projectId) return false;
+    
+    return userProjectIds.includes(mmp.projectId);
+  };
+
   // Apply supervisor hub filtering or coordinator state filtering to site visits
   const siteVisits = useMemo(() => {
     console.log(`📊 OperationsZone: isSupervisor=${isSupervisor}, isCoordinator=${isCoordinator}, allSiteVisits=${allSiteVisits.length}`);
     console.log(`📊 OperationsZone: supervisorHubName=${supervisorHubName}, coordinatorStateName=${coordinatorStateName}`);
+    
+    // First apply project-based filtering
+    let projectFiltered = allSiteVisits.filter(visit => siteVisitBelongsToUserProjects(visit));
+    console.log(`📊 OperationsZone: After project filter: ${projectFiltered.length} sites`);
     
     // Supervisor: filter by hub
     if (isSupervisor) {
@@ -148,7 +173,7 @@ export const OperationsZone: React.FC = () => {
       }
       
       const hubName = supervisorHubName.toLowerCase().trim();
-      const filtered = allSiteVisits.filter(visit => {
+      const filtered = projectFiltered.filter(visit => {
         const visitHub = (visit.hub || '').toLowerCase().trim();
         if (!visitHub) return false;
         return visitHub === hubName || 
@@ -167,7 +192,7 @@ export const OperationsZone: React.FC = () => {
         const stateName = coordinatorStateName.toLowerCase().trim();
         const stateId = currentUser.stateId.toLowerCase().trim();
         
-        const filtered = allSiteVisits.filter(visit => {
+        const filtered = projectFiltered.filter(visit => {
           const visitState = (visit.state || '').toLowerCase().trim();
           if (!visitState) return false;
           // Match by state name OR state ID
@@ -182,14 +207,14 @@ export const OperationsZone: React.FC = () => {
         return filtered;
       }
       
-      // Coordinator without state assignment - show all sites
-      console.log(`📊 OperationsZone: Coordinator has no state assigned - showing all ${allSiteVisits.length} sites`);
-      return allSiteVisits;
+      // Coordinator without state assignment - show project-filtered sites
+      console.log(`📊 OperationsZone: Coordinator has no state assigned - showing ${projectFiltered.length} sites`);
+      return projectFiltered;
     }
     
-    // Admin/other roles: show all
-    return allSiteVisits;
-  }, [allSiteVisits, isSupervisor, supervisorHubName, isCoordinator, coordinatorStateName, currentUser?.stateId]);
+    // Admin/other roles: show project-filtered sites
+    return projectFiltered;
+  }, [allSiteVisits, isSupervisor, supervisorHubName, isCoordinator, coordinatorStateName, currentUser?.stateId, userProjectIds, isAdminOrSuperUser, mmpFiles]);
 
   const upcomingVisits = siteVisits
     .filter(v => {

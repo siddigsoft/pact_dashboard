@@ -29,6 +29,7 @@ import { saveGPSToRegistryFromSiteEntry } from '@/utils/sitesRegistryMatcher';
 import { calculateEnumeratorFeeForUser } from '@/hooks/use-claim-fee-calculation';
 
 import { useWallet } from '@/context/wallet/WalletContext';
+import { useUserProjects } from '@/hooks/useUserProjects';
 
 // Helper component to convert SiteVisitRow[] to site entries and display using MMPSiteEntriesTable
 const SitesDisplayTable: React.FC<{ 
@@ -371,7 +372,21 @@ const MMP = () => {
   const { checkPermission, hasAnyRole, currentUser } = useAuthorization();
   const { toast } = useToast();
   const { reconcileSiteVisitFee } = useWallet();
+  const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
   const [activeTab, setActiveTab] = useState('new');
+  
+  // Filter MMPs by user's projects (admins see all, others see only their projects' MMPs)
+  const projectFilteredMMPs = useMemo(() => {
+    if (!mmpFiles) return [];
+    if (isAdminOrSuperUser) return mmpFiles;
+    
+    return mmpFiles.filter(mmp => {
+      // If MMP has no project assigned, show it (legacy/unlinked MMPs)
+      if (!mmp.projectId) return true;
+      // Only show MMPs from projects the user belongs to
+      return userProjectIds.includes(mmp.projectId);
+    });
+  }, [mmpFiles, userProjectIds, isAdminOrSuperUser]);
   // Subcategory state for Forwarded MMPs (Admin/ICT only)
   const [forwardedSubTab, setForwardedSubTab] = useState<'pending' | 'verified'>('pending');
   // Subcategory state for Verified Sites (Admin/ICT only)
@@ -1749,13 +1764,13 @@ const MMP = () => {
     }
   }, [canClaimSites]);
 
-  // Categorize MMPs
+  // Categorize MMPs (using project-filtered MMPs)
   const categorizedMMPs = useMemo(() => {
-    let filteredMMPs = mmpFiles;
+    let filteredMMPs = projectFilteredMMPs;
 
     // For FOM users, only show MMPs forwarded to them or their verified MMPs
     if (isFOM && currentUser) {
-      filteredMMPs = mmpFiles.filter(mmp => {
+      filteredMMPs = projectFilteredMMPs.filter(mmp => {
         const workflow = mmp.workflow as any;
         const forwardedToFomIds = workflow?.forwardedToFomIds || [];
         const isForwardedToThisFOM = forwardedToFomIds.includes(currentUser.id);
@@ -1767,7 +1782,7 @@ const MMP = () => {
 
     // For Coordinator users, show verified MMPs that contain sites they can verify
     if (isCoordinator && currentUser) {
-      filteredMMPs = mmpFiles.filter(mmp => 
+      filteredMMPs = projectFilteredMMPs.filter(mmp => 
         mmp.type === 'verified-template' || 
         mmp.status === 'approved' ||
         ((mmp.workflow as any)?.currentStage && ['permitsVerified', 'cpVerification', 'completed'].includes((mmp.workflow as any)?.currentStage))
@@ -1831,7 +1846,7 @@ const MMP = () => {
       forwarded: forwardedMMPs,
       verified: verifiedMMPs
     };
-  }, [mmpFiles, isFOM, currentUser]);
+  }, [projectFilteredMMPs, isFOM, currentUser, isCoordinator, isAdmin, isICT]);
 
   // Forwarded subcategories for Admin/ICT view (Removed Rejected)
   const forwardedSubcategories = useMemo(() => {
@@ -3125,7 +3140,7 @@ const MMP = () => {
                       </Badge>
                     </Button>
                     <Button variant={verifiedSubTab === 'approvedCosted' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('approvedCosted')} className={`${verifiedSubTab === 'approvedCosted' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} text-xs whitespace-nowrap flex-shrink-0`}>
-                      Approved
+                      Approved & Costed
                       <Badge variant="secondary" className="ml-1 text-xs">{approvedCostedCount}</Badge>
                     </Button>
                     <Button variant={verifiedSubTab === 'dispatched' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('dispatched')} className={`${verifiedSubTab === 'dispatched' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} text-xs whitespace-nowrap flex-shrink-0`}>
@@ -3152,7 +3167,7 @@ const MMP = () => {
                       Completed
                       <Badge variant="secondary" className="ml-1 text-xs">{completedCount}</Badge>
                     </Button>
-                    <Button variant={verifiedSubTab === 'rejected' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('rejected')} className={`${verifiedSubTab === 'rejected' ? `${rejectedCount > 0 ? 'bg-red-200 hover:bg-red-300 text-red-800 border border-red-300' : 'bg-red-100 hover:bg-red-200 text-red-800 border border-red-300'}` : `${rejectedCount > 0 ? 'bg-red-200 hover:bg-red-300' : 'bg-red-100 hover:bg-red-200'}`} text-xs whitespace-nowrap flex-shrink-0`}>
+                    <Button variant={verifiedSubTab === 'rejected' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('rejected')} className={`${verifiedSubTab === 'rejected' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} text-xs whitespace-nowrap flex-shrink-0`}>
                       Rejected
                       <Badge variant="secondary" className="ml-1 text-xs">{rejectedCount}</Badge>
                     </Button>
@@ -3251,7 +3266,7 @@ const MMP = () => {
                         }}
                         className="bg-green-600 hover:bg-green-700 text-white mb-4"
                       >
-                        Approve for Costing ({verifiedCategorySiteRows.length} sites)
+                        Bulk Cost ({verifiedCategorySiteRows.length} sites)
                       </Button>
                     </div>
                   )}

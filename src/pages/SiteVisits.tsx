@@ -28,12 +28,14 @@ import { useMMP } from "@/context/mmp/MMPContext";
 import LeafletMapContainer from '@/components/map/LeafletMapContainer';
 import { sudanStates, getStateName, getLocalityName } from '@/data/sudanStates';
 import { supabase } from '@/integrations/supabase/client';
+import { useUserProjects } from '@/hooks/useUserProjects';
 
 const SiteVisits = () => {
   const { currentUser, hasRole } = useAppContext();
   const { canViewAllSiteVisits, checkPermission, hasAnyRole } = useAuthorization();
   const { siteVisits } = useSiteVisitContext();
   const { mmpFiles } = useMMP();
+  const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -242,6 +244,29 @@ const SiteVisits = () => {
     return !isFOM ? (mmpFiles?.filter(mmp => mmp.status === 'approved') || []) : [];
   }, [isFOM, mmpFiles]);
 
+  // Helper function to check if a site visit belongs to user's projects
+  const siteVisitBelongsToUserProjects = (visit: SiteVisit): boolean => {
+    // Admins/Super Admins/ICT can see all site visits
+    if (isAdminOrSuperUser) return true;
+    
+    // If no mmpId, allow it (might be an ad-hoc visit)
+    if (!visit.mmpId) return true;
+    
+    // Find the MMP for this visit
+    const mmp = mmpFiles?.find(m => m.id === visit.mmpId);
+    if (!mmp) return true; // If MMP not found, allow for now
+    
+    // Check if MMP belongs to a project the user is a member of
+    if (mmp.projectId && userProjectIds.includes(mmp.projectId)) {
+      return true;
+    }
+    
+    // If MMP has no project assigned, allow it
+    if (!mmp.projectId) return true;
+    
+    return false;
+  };
+
   useEffect(() => {
     const canViewAll = canViewAllSiteVisits();
     
@@ -343,6 +368,9 @@ const SiteVisits = () => {
         }
       }
     }
+
+    // Apply project-based filtering (only show site visits from user's projects)
+    filtered = filtered.filter(visit => siteVisitBelongsToUserProjects(visit));
 
     // Apply dashboard query filters if present
     if (hubParam) {

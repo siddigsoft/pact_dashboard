@@ -4,14 +4,13 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { ChevronDown, ChevronRight, ArrowLeft, Eye, Pencil } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { useAppContext } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
-import { StatePermitUpload } from '@/components/StatePermitUpload';
 
 const ReviewAssignCoordinators: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -30,15 +29,9 @@ const ReviewAssignCoordinators: React.FC = () => {
   const [batchForwarded, setBatchForwarded] = useState({} as Record<string, boolean>);
   const [expandedGroups, setExpandedGroups] = useState({} as Record<string, boolean>);
   const [forwardedSiteIds, setForwardedSiteIds] = useState<Set<string>>(new Set());
-  const [statePermitSiteIds, setStatePermitSiteIds] = useState<Set<string>>(new Set());
   const [selectedSiteForView, setSelectedSiteForView] = useState<any>(null);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
-
-  // State permit attachment state - per group
-  const [attachStatePermitMap, setAttachStatePermitMap] = useState<Record<string, boolean>>({});
-  const [statePermitDialogOpen, setStatePermitDialogOpen] = useState(false);
-  const [statePermitDialogGroup, setStatePermitDialogGroup] = useState<string>('');
 
   // Database data for location dropdowns
   const [localities, setLocalities] = useState<any[]>([]);
@@ -51,7 +44,6 @@ const ReviewAssignCoordinators: React.FC = () => {
   const [selectedHub, setSelectedHub] = useState<string>('');
   const [selectedState, setSelectedState] = useState<string>('');
   const [selectedLocality, setSelectedLocality] = useState<string>('');
-  const [withStatePermitOnly, setWithStatePermitOnly] = useState<boolean>(false);
 
   useEffect(() => {
     if (!id) return;
@@ -94,24 +86,18 @@ const ReviewAssignCoordinators: React.FC = () => {
             // Find sites that have been forwarded
             // Check both new forwarded_at column and legacy dispatched_at/additional_data
             const forwarded = new Set<string>();
-            const statePermitIds = new Set<string>();
             (siteEntries || []).forEach((entry: any) => {
               const hasForwardedAt = !!entry.forwarded_at;
               const hasDispatchedAt = !!entry.dispatched_at;
               const hasAssignedTo = !!(entry.additional_data?.assigned_to);
-              const hasStatePermit = !!(entry.additional_data?.state_permit_attached);
               
               // Site is forwarded if any of these conditions are true
               if (hasForwardedAt || hasDispatchedAt || hasAssignedTo) {
                 forwarded.add(entry.id);
               }
-              if (hasStatePermit) {
-                statePermitIds.add(entry.id);
-              }
             });
             
             setForwardedSiteIds(forwarded);
-            setStatePermitSiteIds(statePermitIds);
             console.log(`Loaded ${forwarded.size} forwarded site(s) out of ${siteEntries?.length || 0} total`);
           }
         } catch (err) {
@@ -326,14 +312,8 @@ const ReviewAssignCoordinators: React.FC = () => {
     const [stateId, localityId] = groupKey.split('|');
     
     // If no filters selected, show all
-    // Note: apply state-permit filter after basic filters
     if (!selectedHub && !selectedState && !selectedLocality) {
-      let matchesAll = true;
-      if (withStatePermitOnly) {
-        const groupHasStatePermit = (attachStatePermitMap[groupKey] === true) || groupSites.some((s: any) => statePermitSiteIds.has(s.id));
-        if (!groupHasStatePermit) matchesAll = false;
-      }
-      if (matchesAll) acc[groupKey] = groupSites;
+      acc[groupKey] = groupSites;
       return acc;
     }
     
@@ -352,11 +332,6 @@ const ReviewAssignCoordinators: React.FC = () => {
     
     if (matches && selectedLocality) {
       if (localityId !== selectedLocality) matches = false;
-    }
-    
-    if (matches && withStatePermitOnly) {
-      const groupHasStatePermit = (attachStatePermitMap[groupKey] === true) || groupSites.some((s: any) => statePermitSiteIds.has(s.id));
-      if (!groupHasStatePermit) matches = false;
     }
     
     if (matches) {
@@ -385,7 +360,6 @@ const ReviewAssignCoordinators: React.FC = () => {
       const coordinatorId = assignmentMap[groupKey];
       const supervisorId = supervisorMap[groupKey];
       const siteIds = Array.from(selectedSites[groupKey] || []);
-      const [stateId] = groupKey.split('|');
       if (!coordinatorId || siteIds.length === 0) {
         toast({ title: 'Select sites and coordinator', description: 'Please select at least one site and a coordinator.', variant: 'destructive' });
         setBatchLoading(b => ({ ...b, [groupKey]: false }));
@@ -419,11 +393,6 @@ const ReviewAssignCoordinators: React.FC = () => {
               assigned_at: forwardedAt,
               supervisor_id: supervisorId || null,
               notes: `Forwarded from MMP ${mmpFile?.name || mmpFile?.mmpId} for CP verification`,
-              ...(attachStatePermitMap[groupKey] ? {
-                state_permit_attached: true,
-                state_permit_state_id: stateId,
-                state_permit_attached_at: forwardedAt,
-              } : {})
             }
           })
           .eq('id', siteEntry.id)
@@ -446,7 +415,7 @@ const ReviewAssignCoordinators: React.FC = () => {
         {
           user_id: coordinatorId,
           title: 'Sites forwarded for CP verification',
-          message: `${mmpFile?.name || 'MMP'}: ${siteIds.length} site(s) have been forwarded for your CP review${attachStatePermitMap[groupKey] ? ' (State permit attached)' : ''}`,
+          message: `${mmpFile?.name || 'MMP'}: ${siteIds.length} site(s) have been forwarded for your CP review`,
           type: 'info',
           link: `/coordinator/sites`,
           related_entity_id: mmpId,
@@ -459,7 +428,7 @@ const ReviewAssignCoordinators: React.FC = () => {
         notifications.push({
           user_id: supervisorId,
           title: 'Sites assigned to coordinator for verification',
-          message: `${mmpFile?.name || 'MMP'}: ${siteIds.length} site(s) have been assigned to ${allCoordinators.find(c => c.id === coordinatorId)?.fullName || 'Coordinator'} for CP verification${attachStatePermitMap[groupKey] ? ' (State permit attached)' : ''}`,
+          message: `${mmpFile?.name || 'MMP'}: ${siteIds.length} site(s) have been assigned to ${allCoordinators.find(c => c.id === coordinatorId)?.fullName || 'Coordinator'} for CP verification`,
           type: 'info',
           link: `/supervisor/sites`,
           related_entity_id: mmpId,
@@ -469,7 +438,7 @@ const ReviewAssignCoordinators: React.FC = () => {
 
       await supabase.from('notifications').insert(notifications);
 
-      toast({ title: 'Batch Forwarded', description: `Sites were forwarded to ${allCoordinators.find(c => c.id === coordinatorId)?.fullName || 'Coordinator'}${attachStatePermitMap[groupKey] ? ' with state permit attached' : ''}${supervisorId ? ` and notified ${allSupervisors.find(s => s.id === supervisorId)?.fullName || 'Supervisor'}` : ''}.`, variant: 'default' });
+      toast({ title: 'Batch Forwarded', description: `Sites were forwarded to ${allCoordinators.find(c => c.id === coordinatorId)?.fullName || 'Coordinator'}${supervisorId ? ` and notified ${allSupervisors.find(s => s.id === supervisorId)?.fullName || 'Supervisor'}` : ''}.`, variant: 'default' });
       
       // Mark sites as forwarded to prevent re-forwarding
       const newForwarded = new Set(forwardedSiteIds);
@@ -491,11 +460,11 @@ const ReviewAssignCoordinators: React.FC = () => {
       <div className="mb-6">
         <Button
           variant="outline"
-          onClick={() => navigate('/mmp')}
+          onClick={() => navigate(`/mmp/${mmpFile.id}`)}
           className="flex items-center gap-2"
         >
           <ArrowLeft className="h-4 w-4" />
-          Back to MMP Management
+          Back to MMP Details
         </Button>
       </div>
 
@@ -597,7 +566,6 @@ const ReviewAssignCoordinators: React.FC = () => {
                     setSelectedHub('');
                     setSelectedState('');
                     setSelectedLocality('');
-                    setWithStatePermitOnly(false);
                   }}
                 >
                   Clear Filters
@@ -607,18 +575,6 @@ const ReviewAssignCoordinators: React.FC = () => {
                 </span>
               </div>
             )}
-          </div>
-
-          {/* Filter chips */}
-          <div className="mb-4 flex items-center gap-2">
-            <Button
-              variant={withStatePermitOnly ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setWithStatePermitOnly(prev => !prev)}
-              className={withStatePermitOnly ? 'bg-blue-600 text-white' : ''}
-            >
-              With State Permit
-            </Button>
           </div>
 
           <div className="space-y-6">
@@ -710,39 +666,6 @@ const ReviewAssignCoordinators: React.FC = () => {
                               </SelectContent>
                             </Select>
                           </div>
-                          
-                          {/* State Permit Attachment Option */}
-                          <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                            <Checkbox
-                              id={`attach-state-permit-${groupKey}`}
-                              checked={attachStatePermitMap[groupKey] || false}
-                              onCheckedChange={(checked) => setAttachStatePermitMap(prev => ({ ...prev, [groupKey]: checked as boolean }))}
-                            />
-                            <div className="flex-1">
-                              <Label 
-                                htmlFor={`attach-state-permit-${groupKey}`}
-                                className="text-sm font-medium text-blue-900 cursor-pointer"
-                              >
-                                Attach State Permit
-                              </Label>
-                              <p className="text-xs text-blue-700 mt-1">
-                                Upload a state permit for {states.find(s => s.id === stateId)?.name || stateId} before forwarding sites to coordinators
-                              </p>
-                            </div>
-                            {attachStatePermitMap[groupKey] && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => {
-                                  setStatePermitDialogGroup(groupKey);
-                                  setStatePermitDialogOpen(true);
-                                }}
-                                className="border-blue-300 text-blue-700 hover:bg-blue-100"
-                              >
-                                Upload Permit
-                              </Button>
-                            )}
-                          </div>
                           <Button
                             size="sm"
                             onClick={() => handleForwardBatch(groupKey)}
@@ -751,9 +674,7 @@ const ReviewAssignCoordinators: React.FC = () => {
                           >
                             {batchLoading[groupKey]
                               ? 'Forwarding...'
-                              : attachStatePermitMap[groupKey] 
-                                ? 'Forward with State Permit'
-                                : 'Forward Selected'}
+                              : 'Forward Selected'}
                           </Button>
                         </div>
                       </>
@@ -967,41 +888,6 @@ const ReviewAssignCoordinators: React.FC = () => {
               </div>
             </div>
           )}
-        </DialogContent>
-      </Dialog>
-
-      {/* State Permit Upload Dialog */}
-      <Dialog open={statePermitDialogOpen} onOpenChange={setStatePermitDialogOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Upload State Permit</DialogTitle>
-            <DialogDescription>
-              Upload a state permit that will be attached to the MMP file before forwarding sites to coordinators.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4 max-h-96 overflow-y-auto">
-            <StatePermitUpload
-              state={states.find(s => s.id === statePermitDialogGroup.split('|')[0])?.name || 'Unknown State'}
-              mmpFileId={mmpFile?.id}
-              userType="fom"
-              onPermitUploaded={() => {
-                setStatePermitDialogOpen(false);
-                setStatePermitDialogGroup('');
-                toast({
-                  title: "State permit uploaded",
-                  description: "The state permit has been uploaded and will be attached when forwarding sites.",
-                });
-              }}
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => {
-              setStatePermitDialogOpen(false);
-              setStatePermitDialogGroup('');
-            }}>
-              Cancel
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

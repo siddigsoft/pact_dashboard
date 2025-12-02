@@ -139,7 +139,7 @@ function transformSiteVisitCostFromDB(data: any): SiteVisitCost {
 }
 
 export function WalletProvider({ children }: { children: ReactNode }) {
-  const { currentUser, authReady } = useUser();
+  const { currentUser } = useUser();
   const { toast } = useToast();
   const { getUserClassification, getActiveFeeStructure } = useClassification();
   const [wallet, setWallet] = useState<Wallet | null>(null);
@@ -153,8 +153,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (!currentUser?.id) return;
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
       const { data, error } = await supabase
         .from('wallets')
         .select('*')
@@ -1299,17 +1297,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const initWallet = async () => {
-      if (!authReady) {
-        setLoading(false);
-        return;
-      }
-
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        setLoading(false);
-        return;
-      }
-
       if (!currentUser?.id) {
         setLoading(false);
         return;
@@ -1331,7 +1318,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     };
 
     initWallet();
-  }, [authReady, currentUser?.id]);
+  }, [currentUser?.id]);
 
   useEffect(() => {
     calculateStats();

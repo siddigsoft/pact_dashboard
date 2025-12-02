@@ -3,7 +3,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,14 +12,10 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
 import { useMMP } from '@/context/mmp/MMPContext';
-import { CheckCircle, Clock, FileCheck, XCircle, ArrowLeft, Eye, Edit, Search, ChevronLeft, ChevronRight, Calendar, CheckSquare, MapPin, AlertTriangle, ChevronUp, ChevronDown } from 'lucide-react';
+import { CheckCircle, Clock, FileCheck, XCircle, ArrowLeft, Eye, Edit, Search, ChevronLeft, ChevronRight, Calendar, CheckSquare } from 'lucide-react';
 import { format } from 'date-fns';
 import { DatePicker } from '@/components/ui/date-picker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useCoordinatorLocalityPermits } from '@/hooks/use-coordinator-permits';
-import { LocalityPermitUpload } from '@/components/LocalityPermitUpload';
-import { StatePermitUpload } from '@/components/StatePermitUpload';
-import { LocalityPermitStatus } from '@/types/coordinator-permits';
 
 // Predefined options for dropdowns
 const HUB_OFFICE_OPTIONS = [
@@ -102,7 +98,9 @@ const SiteEditForm: React.FC<SiteEditFormProps> = ({ site, onSave, onCancel, hub
     activity_at_site: Array.isArray(site.activity_at_site) ? site.activity_at_site : 
                      (site.activity_at_site ? [site.activity_at_site] : [])
   });
-  const [visitDate, setVisitDate] = React.useState<Date | undefined>(undefined);
+  const [visitDate, setVisitDate] = React.useState<Date | undefined>(
+    site.visit_date ? new Date(site.visit_date) : undefined
+  );
   const [customValues, setCustomValues] = React.useState({
     survey_tool: ''
   });
@@ -125,19 +123,6 @@ const SiteEditForm: React.FC<SiteEditFormProps> = ({ site, onSave, onCancel, hub
 
   return (
     <div className="space-y-6">
-      {/* Rejection Comments Section - Show for rejected sites */}
-      {site.status?.toLowerCase() === 'rejected' && site.verification_notes && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <div className="flex items-start gap-3">
-            <XCircle className="h-5 w-5 text-red-500 mt-0.5 flex-shrink-0" />
-            <div className="flex-1">
-              <h3 className="text-sm font-semibold text-red-800">Rejection Reason</h3>
-              <p className="text-sm text-red-700 mt-1">{site.verification_notes}</p>
-            </div>
-          </div>
-        </div>
-      )}
-
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <Label htmlFor="site_name">Site Name</Label>
@@ -329,161 +314,62 @@ const SiteEditForm: React.FC<SiteEditFormProps> = ({ site, onSave, onCancel, hub
       </div>
 
       <DialogFooter>
-        {site.status?.toLowerCase() === 'permits_attached' ? (
-          // For sites with permits attached, only show Verify button
-          <Button 
-            type="button"
-            onClick={() => {
-              // Validate that visit date is required
-              if (!visitDate) {
-                toast({
-                  title: 'Validation Error',
-                  description: 'Visit date is required. Please select a visit date before verifying.',
-                  variant: 'destructive'
-                });
-                return;
-              }
-              const updatedSite = {
-                ...formData,
-                visit_date: visitDate ? visitDate.toISOString().split('T')[0] : null,
-                // Use custom values if "Other" was selected
-                hub_office: formData.hub_office,
-                monitoring_by: formData.monitoring_by,
-                survey_tool: formData.survey_tool === 'Other' ? customValues.survey_tool : formData.survey_tool,
-              };
-              onSave(updatedSite, true);
-            }}
-            disabled={!visitDate}
-            className="bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <CheckCircle className="h-4 w-4 mr-2" />
-            Verify Site
-          </Button>
-        ) : site.status?.toLowerCase() === 'rejected' ? (
-          // For rejected sites, show Save and Re-verify buttons
-          <>
-            <Button type="button" variant="outline" onClick={onCancel}>
-              Cancel
-            </Button>
-            <Button 
-              type="button" 
-              variant="outline"
-              onClick={() => {
-                // Validate that visit date is required
-                if (!visitDate) {
-                  toast({
-                    title: 'Validation Error',
-                    description: 'Visit date is required. Please select a visit date before saving.',
-                    variant: 'destructive'
-                  });
-                  return;
-                }
-                const updatedSite = {
-                  ...formData,
-                  visit_date: visitDate ? visitDate.toISOString().split('T')[0] : null,
-                  // Use custom values if "Other" was selected
-                  hub_office: formData.hub_office,
-                  monitoring_by: formData.monitoring_by,
-                  survey_tool: formData.survey_tool === 'Other' ? customValues.survey_tool : formData.survey_tool,
-                };
-                onSave(updatedSite, false);
-              }}
-            >
-              Save Changes
-            </Button>
-            <Button 
-              type="button" 
-              variant="outline"
-              onClick={() => {
-                // Validate that visit date is required
-                if (!visitDate) {
-                  toast({
-                    title: 'Validation Error',
-                    description: 'Visit date is required. Please select a visit date before re-verifying.',
-                    variant: 'destructive'
-                  });
-                  return;
-                }
-                const updatedSite = {
-                  ...formData,
-                  visit_date: visitDate ? visitDate.toISOString().split('T')[0] : null,
-                  // Use custom values if "Other" was selected
-                  hub_office: formData.hub_office,
-                  monitoring_by: formData.monitoring_by,
-                  survey_tool: formData.survey_tool === 'Other' ? customValues.survey_tool : formData.survey_tool,
-                };
-                onSave(updatedSite, true);
-              }}
-              disabled={!visitDate}
-              className="bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <CheckCircle className="h-4 w-4 mr-2" />
-              Re-verify Site
-            </Button>
-          </>
-        ) : (
-          // For other sites, show both Save and Verify buttons
-          <>
-            <Button type="button" variant="outline" onClick={onCancel}>
-              Cancel
-            </Button>
-            <Button 
-              type="button" 
-              variant="outline"
-              onClick={() => {
-                // Validate that visit date is required
-                if (!visitDate) {
-                  toast({
-                    title: 'Validation Error',
-                    description: 'Visit date is required. Please select a visit date before saving.',
-                    variant: 'destructive'
-                  });
-                  return;
-                }
-                const updatedSite = {
-                  ...formData,
-                  visit_date: visitDate ? visitDate.toISOString().split('T')[0] : null,
-                  // Use custom values if "Other" was selected
-                  hub_office: formData.hub_office,
-                  monitoring_by: formData.monitoring_by,
-                  survey_tool: formData.survey_tool === 'Other' ? customValues.survey_tool : formData.survey_tool,
-                };
-                onSave(updatedSite, false);
-              }}
-            >
-              Save
-            </Button>
-            <Button 
-              type="button" 
-              variant="outline"
-              onClick={() => {
-                // Validate that visit date is required
-                if (!visitDate) {
-                  toast({
-                    title: 'Validation Error',
-                    description: 'Visit date is required. Please select a visit date before verifying.',
-                    variant: 'destructive'
-                  });
-                  return;
-                }
-                const updatedSite = {
-                  ...formData,
-                  visit_date: visitDate ? visitDate.toISOString().split('T')[0] : null,
-                  // Use custom values if "Other" was selected
-                  hub_office: formData.hub_office,
-                  monitoring_by: formData.monitoring_by,
-                  survey_tool: formData.survey_tool === 'Other' ? customValues.survey_tool : formData.survey_tool,
-                };
-                onSave(updatedSite, true);
-              }}
-              disabled={!visitDate}
-              className="bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <CheckCircle className="h-4 w-4 mr-2" />
-              Verify
-            </Button>
-          </>
-        )}
+        <Button type="button" variant="outline" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button 
+          type="button" 
+          variant="outline"
+          onClick={() => {
+            // Validate that visit date is required
+            if (!visitDate) {
+              toast({
+                title: 'Validation Error',
+                description: 'Visit date is required. Please select a visit date before saving.',
+                variant: 'destructive'
+              });
+              return;
+            }
+            const updatedSite = {
+              ...formData,
+              visit_date: visitDate ? visitDate.toISOString().split('T')[0] : null,
+              // Use custom values if "Other" was selected
+              hub_office: formData.hub_office,
+              monitoring_by: formData.monitoring_by,
+              survey_tool: formData.survey_tool === 'Other' ? customValues.survey_tool : formData.survey_tool,
+            };
+            onSave(updatedSite, false);
+          }}
+        >
+          Save
+        </Button>
+        <Button 
+          type="button"
+          onClick={() => {
+            // Validate that visit date is required
+            if (!visitDate) {
+              toast({
+                title: 'Validation Error',
+                description: 'Visit date is required. Please select a visit date before saving.',
+                variant: 'destructive'
+              });
+              return;
+            }
+            const updatedSite = {
+              ...formData,
+              visit_date: visitDate ? visitDate.toISOString().split('T')[0] : null,
+              // Use custom values if "Other" was selected
+              hub_office: formData.hub_office,
+              monitoring_by: formData.monitoring_by,
+              survey_tool: formData.survey_tool === 'Other' ? customValues.survey_tool : formData.survey_tool,
+            };
+            onSave(updatedSite, true);
+          }}
+          className="bg-green-600 hover:bg-green-700"
+        >
+          <CheckCircle className="h-4 w-4 mr-2" />
+          Verify
+        </Button>
       </DialogFooter>
     </div>
   );
@@ -514,10 +400,8 @@ const CoordinatorSites: React.FC = () => {
   const { toast } = useToast();
   const { currentUser } = useAppContext();
   const { updateMMP } = useMMP();
-  const { permits, loading: permitsLoading, uploadPermit, fetchPermits } = useCoordinatorLocalityPermits();
   const [loading, setLoading] = useState(true);
   const [sites, setSites] = useState<SiteVisit[]>([]);
-  const [localitiesData, setLocalitiesData] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState('new');
   const [verifyDialogOpen, setVerifyDialogOpen] = useState(false);
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
@@ -535,67 +419,22 @@ const CoordinatorSites: React.FC = () => {
   const [selectedSites, setSelectedSites] = useState<Set<string>>(new Set());
   const [bulkAssignDateDialogOpen, setBulkAssignDateDialogOpen] = useState(false);
   const [bulkVerifyDialogOpen, setBulkVerifyDialogOpen] = useState(false);
-  const [bulkApproveDialogOpen, setBulkApproveDialogOpen] = useState(false);
   const [bulkVisitDate, setBulkVisitDate] = useState<string>('');
   const [bulkVerificationNotes, setBulkVerificationNotes] = useState('');
-  const [bulkApprovalNotes, setBulkApprovalNotes] = useState('');
-  
-  // Bulk locality verification state
-  const [bulkLocalityVerifyDialogOpen, setBulkLocalityVerifyDialogOpen] = useState(false);
-  const [selectedLocalityForBulkVerify, setSelectedLocalityForBulkVerify] = useState<{localityKey: string, sites: SiteVisit[]} | null>(null);
-  const [bulkLocalityVisitDate, setBulkLocalityVisitDate] = useState<string>('');
-  const [bulkLocalityVisitDateObj, setBulkLocalityVisitDateObj] = useState<Date | undefined>(undefined);
   
   // Filter states
   const [hubFilter, setHubFilter] = useState<string>('all');
   const [stateFilter, setStateFilter] = useState<string>('all');
-  const [localityFilter, setLocalityFilter] = useState<string>('all');
   const [activityFilter, setActivityFilter] = useState<string>('all');
   const [monitoringFilter, setMonitoringFilter] = useState<string>('all');
   const [surveyToolFilter, setSurveyToolFilter] = useState<string>('all');
   
   // Badge counts - loaded separately for performance
   const [newSitesCount, setNewSitesCount] = useState(0);
-  const [permitsAttachedCount, setPermitsAttachedCount] = useState(0);
   const [verifiedSitesCount, setVerifiedSitesCount] = useState(0);
   const [approvedSitesCount, setApprovedSitesCount] = useState(0);
   const [completedSitesCount, setCompletedSitesCount] = useState(0);
   const [rejectedSitesCount, setRejectedSitesCount] = useState(0);
-  
-  // Subcategory counts for new sites tabs
-  const [statePermitRequiredCount, setStatePermitRequiredCount] = useState(0);
-  const [localPermitRequiredCount, setLocalPermitRequiredCount] = useState(0);
-
-  // Permit workflow state
-  const [permitQuestionDialogOpen, setPermitQuestionDialogOpen] = useState(false);
-  const [workWithoutPermitDialogOpen, setWorkWithoutPermitDialogOpen] = useState(false);
-  const [selectedLocalityForWorkflow, setSelectedLocalityForWorkflow] = useState<any>(null);
-  const [readOnlyMode, setReadOnlyMode] = useState(false);
-  const [expandedStates, setExpandedStates] = useState<Set<string>>(new Set());
-  const [expandedLocalities, setExpandedLocalities] = useState<Set<string>>(new Set());
-  const [expandedPermitsAttachedLocalities, setExpandedPermitsAttachedLocalities] = useState<Set<string>>(new Set());
-
-  // State permit workflow state
-  const [statePermitQuestionDialogOpen, setStatePermitQuestionDialogOpen] = useState(false);
-  const [selectedStateForWorkflow, setSelectedStateForWorkflow] = useState<any>(null);
-
-  // Locality permit upload dialog state
-  const [localityPermitUploadDialogOpen, setLocalityPermitUploadDialogOpen] = useState(false);
-
-  // Individual site verification without permit dialog state
-  const [siteWithoutPermitDialogOpen, setSiteWithoutPermitDialogOpen] = useState(false);
-  const [selectedSiteForWithoutPermit, setSelectedSiteForWithoutPermit] = useState<SiteVisit | null>(null);
-
-  // Confirmation dialog for proceeding without permit
-  const [confirmWithoutPermitDialogOpen, setConfirmWithoutPermitDialogOpen] = useState(false);
-  const [withoutPermitComments, setWithoutPermitComments] = useState('');
-
-  // Preview dialog for completed sites
-  const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
-  const [selectedSiteForPreview, setSelectedSiteForPreview] = useState<SiteVisit | null>(null);
-
-  // Sub-tab state for new sites categorization
-  const [newSitesSubTab, setNewSitesSubTab] = useState('state_required');
 
   // Database data for location dropdowns
   const [hubs, setHubs] = useState<Hub[]>([]);
@@ -706,9 +545,6 @@ const CoordinatorSites: React.FC = () => {
         const newCount = { count: userEntries.filter((e: any) => 
           e.status === 'Pending' || e.status === 'Dispatched' || e.status === 'assigned' || e.status === 'inProgress' || e.status === 'in_progress'
         ).length };
-        const permitsAttachedCount = { count: userEntries.filter((e: any) => 
-          e.status?.toLowerCase() === 'permits_attached'
-        ).length };
         const verifiedCount = { count: userEntries.filter((e: any) => 
           e.status?.toLowerCase() === 'verified'
         ).length };
@@ -723,7 +559,6 @@ const CoordinatorSites: React.FC = () => {
         ).length };
 
         setNewSitesCount(newCount.count || 0);
-        setPermitsAttachedCount(permitsAttachedCount.count || 0);
         setVerifiedSitesCount(verifiedCount.count || 0);
         setApprovedSitesCount(approvedCount.count || 0);
         setCompletedSitesCount(completedCount.count || 0);
@@ -745,13 +580,10 @@ const CoordinatorSites: React.FC = () => {
     // Reset filters when tab changes
     setHubFilter('all');
     setStateFilter('all');
-    setLocalityFilter('all');
     setActivityFilter('all');
     setMonitoringFilter('all');
     setSurveyToolFilter('all');
-    // Reset expanded localities when tab changes
-    setExpandedPermitsAttachedLocalities(new Set());
-  }, [currentUser, activeTab, permits, hubStates, localities]);
+  }, [currentUser, activeTab]);
 
   const loadSites = async () => {
     if (!currentUser?.id) return;
@@ -799,199 +631,48 @@ const CoordinatorSites: React.FC = () => {
         };
       });
 
-      // Group sites by state first, then by locality within each state
-      const statesMap = new Map<string, any>();
-      
-      filtered.forEach((site: any) => {
-        const stateKey = site.state;
-        if (!statesMap.has(stateKey)) {
-          statesMap.set(stateKey, {
-            state: site.state,
-            localities: new Map(),
-            totalSites: 0,
-            hasStatePermit: false,
-            statePermitUploadedAt: null,
-            statePermitVerified: false
-          });
-        }
-        
-        const stateData = statesMap.get(stateKey);
-        const localityKey = site.locality;
-        
-        if (!stateData.localities.has(localityKey)) {
-          stateData.localities.set(localityKey, {
-            state: site.state,
-            locality: site.locality,
-            sites: [],
-            hasPermit: false,
-            permitId: null,
-            permitUploadedAt: null
-          });
-        }
-        
-        stateData.localities.get(localityKey).sites.push(site);
-        stateData.totalSites++;
-      });
-
-      // Check permit status for each locality within states
-      const statesArray = await Promise.all(Array.from(statesMap.values()).map(async (stateData: any) => {
-        // Determine state permit presence (uploaded or verified)
-        let statePermitVerified = false;
-        let statePermitUploaded = false;
-        let statePermitUploadedAt: any = null;
-
-        // Get MMP file ID from the first site in this state
-        const mmpFileId = stateData.localities.values().next().value?.sites?.[0]?.mmp_file_id;
-
-        if (mmpFileId) {
-          try {
-            const { data: mmpData, error } = await supabase
-              .from('mmp_files')
-              .select('permits')
-              .eq('id', mmpFileId)
-              .single();
-
-            if (!error && mmpData?.permits) {
-              const permitsData = mmpData.permits as any;
-              if (permitsData.statePermits) {
-                const sp = permitsData.statePermits.find((sp: any) => sp.state === stateData.state);
-                if (sp) {
-                  statePermitUploaded = true; // uploaded by FOM or coordinator
-                  statePermitVerified = !!sp.verified;
-                  statePermitUploadedAt = sp.uploadedAt || null;
-                }
-              }
-            }
-          } catch (err) {
-            console.warn('Failed to check state permit for state:', stateData.state, err);
-          }
-        }
-
-        // Convert localities map to array and check local permits
-        const localitiesArray = Array.from(stateData.localities.values()).map((locality: any) => {
-          // Resolve stateId from state name
-          const resolvedStateId = hubStates.find(hs => hs.state_name === locality.state)?.state_id;
-          // Resolve localityId from locality name + stateId
-          const resolvedLocalityId = resolvedStateId
-            ? localities.find(l => l.name === locality.locality && l.state_id === resolvedStateId)?.id
-            : undefined;
-
-          const permit = resolvedStateId && resolvedLocalityId
-            ? permits.find(p => p.stateId === resolvedStateId && p.localityId === resolvedLocalityId)
-            : undefined;
-
-          return {
-            ...locality,
-            hasPermit: !!permit,
-            permitId: permit?.id || null,
-            permitUploadedAt: permit?.uploadedAt || null
-          };
-        });
-
-        // Also consider site-level flag added when forwarding with state permit
-        let anySiteHasStatePermitFlag = false;
-        try {
-          const allSitesInState = localitiesArray.flatMap((loc: any) => loc.sites || []);
-          anySiteHasStatePermitFlag = allSitesInState.some((s: any) => s?.additional_data?.state_permit_attached === true);
-        } catch {}
-
-        const hasStatePermit = statePermitUploaded || anySiteHasStatePermitFlag;
-
-        return {
-          ...stateData,
-          localities: localitiesArray,
-          hasStatePermit,
-          statePermitUploadedAt: statePermitUploadedAt,
-          statePermitVerified: statePermitVerified
-        };
-      }));
-
-      // Flatten sites from all states and localities (they will be filtered by the workflow)
-      let allSites: SiteVisit[] = [];
-      statesArray.forEach(stateData => {
-        stateData.localities.forEach((locality: any) => {
-          allSites = allSites.concat(locality.sites);
-        });
-      });
-
       // Filter by status based on active tab
       switch (activeTab) {
         case 'new':
-          allSites = allSites.filter((e: any) => 
+          filtered = filtered.filter((e: any) => 
             e.status === 'Pending' || e.status === 'Dispatched' || e.status === 'assigned' || e.status === 'inProgress' || e.status === 'in_progress'
           );
           break;
-        case 'permits_attached':
-          allSites = allSites.filter((e: any) => 
-            e.status?.toLowerCase() === 'permits_attached'
-          );
-          break;
         case 'verified':
-          allSites = allSites.filter((e: any) => 
+          filtered = filtered.filter((e: any) => 
             e.status?.toLowerCase() === 'verified'
           );
           break;
         case 'approved':
-          allSites = allSites.filter((e: any) => 
+          filtered = filtered.filter((e: any) => 
             e.status?.toLowerCase() === 'approved'
           );
           break;
         case 'completed':
-          allSites = allSites.filter((e: any) => 
+          filtered = filtered.filter((e: any) => 
             e.status?.toLowerCase() === 'completed'
           );
           break;
         case 'rejected':
-          allSites = allSites.filter((e: any) => 
+          filtered = filtered.filter((e: any) => 
             e.status?.toLowerCase() === 'rejected'
           );
           break;
       }
 
       // Sort by assigned_at
-      allSites.sort((a: any, b: any) => {
+      filtered.sort((a: any, b: any) => {
         const aAt = a.assigned_at || a.created_at;
         const bAt = b.assigned_at || b.created_at;
         return new Date(bAt).getTime() - new Date(aAt).getTime();
       });
 
-      setSites(allSites);
-      setLocalitiesData(statesArray); // Store states data instead of localities
+      setSites(filtered);
       setCurrentPage(1); // Reset pagination when tab changes
-      
-      // Calculate subcategory counts for new sites tabs
-      const statePermitRequiredCount = statesArray
-        .filter((state: any) => !state.hasStatePermit)
-        .reduce((total: number, state: any) => total + state.totalSites, 0);
-      
-      const localPermitRequiredCount = statesArray
-        .filter((state: any) => state.hasStatePermit)
-        .flatMap((state: any) => state.localities)
-        .filter((locality: any) => !locality.hasPermit)
-        .filter((locality: any) => {
-          // Only count localities that have pending sites
-          return locality.sites.some((site: SiteVisit) => 
-            site.status === 'Pending' || site.status === 'Dispatched' || 
-            site.status === 'assigned' || site.status === 'inProgress' || 
-            site.status === 'in_progress'
-          );
-        })
-        .reduce((total: number, locality: any) => {
-          // Only count sites that are in pending/new status
-          const pendingSites = locality.sites.filter((site: SiteVisit) => 
-            site.status === 'Pending' || site.status === 'Dispatched' || 
-            site.status === 'assigned' || site.status === 'inProgress' || 
-            site.status === 'in_progress'
-          );
-          return total + pendingSites.length;
-        }, 0);
-      
-      setStatePermitRequiredCount(statePermitRequiredCount);
-      setLocalPermitRequiredCount(localPermitRequiredCount);
       
       // Initialize visit dates state
       const visitDates: { [key: string]: Date | undefined } = {};
-      allSites.forEach((site: any) => {
+      filtered.forEach((site: any) => {
         if (site.visit_date) {
           visitDates[site.id] = new Date(site.visit_date);
         }
@@ -1423,475 +1104,12 @@ const CoordinatorSites: React.FC = () => {
     }
   };
 
-  const handleBulkApproveSites = async () => {
-    if (selectedSites.size === 0) {
-      toast({
-        title: 'Validation Error',
-        description: 'Please select at least one site to approve.',
-        variant: 'destructive'
-      });
-      return;
-    }
-
-    try {
-      const siteIds = Array.from(selectedSites);
-      const updateData: any = {
-        status: 'approved',
-        approved_at: new Date().toISOString(),
-        approved_by: currentUser?.username || currentUser?.fullName || currentUser?.email || 'System',
-      };
-
-      if (bulkApprovalNotes) {
-        updateData.approval_notes = bulkApprovalNotes;
-      }
-
-      const { error } = await supabase
-        .from('mmp_site_entries')
-        .update(updateData)
-        .in('id', siteIds);
-
-      if (error) throw error;
-
-      // Also update MMP files for approved sites
-      try {
-        const selectedSitesData = sites.filter(site => selectedSites.has(site.id));
-        for (const site of selectedSitesData) {
-          if (site?.mmp_file_id && site?.site_code) {
-            const mmpUpdateData: any = { 
-              status: 'Approved',
-              approved_at: new Date().toISOString(),
-              approved_by: currentUser?.username || currentUser?.fullName || currentUser?.email || 'System'
-            };
-            if (bulkApprovalNotes) {
-              mmpUpdateData.approval_notes = bulkApprovalNotes;
-            }
-            
-            await supabase
-              .from('mmp_site_entries')
-              .update(mmpUpdateData)
-              .eq('mmp_file_id', site.mmp_file_id)
-              .eq('site_code', site.site_code);
-          }
-        }
-      } catch (syncErr) {
-        console.warn('Failed to sync mmp_site_entries on bulk approve:', syncErr);
-      }
-
-      toast({
-        title: 'Bulk Approval Complete',
-        description: `${selectedSites.size} site(s) have been approved successfully.`,
-      });
-
-      // Clear selection and reload sites
+  const handleSelectAllSites = () => {
+    if (selectedSites.size === filteredSites.length) {
       setSelectedSites(new Set());
-      setBulkApprovalNotes('');
-      setBulkApproveDialogOpen(false);
-      loadSites();
-      
-      // Reload badge counts
-      if (currentUser?.id) {
-        const userId = currentUser.id;
-        const { data: allEntries } = await supabase
-          .from('mmp_site_entries')
-          .select('id, status, additional_data');
-        
-        const userEntries = (allEntries || []).filter((entry: any) => {
-          const ad = entry.additional_data || {};
-          return ad.assigned_to === userId;
-        });
-        
-        const verifiedCount = { count: userEntries.filter((e: any) => 
-          e.status?.toLowerCase() === 'verified'
-        ).length };
-        const approvedCount = { count: userEntries.filter((e: any) => 
-          e.status?.toLowerCase() === 'approved'
-        ).length };
-        
-        setVerifiedSitesCount(verifiedCount.count || 0);
-        setApprovedSitesCount(approvedCount.count || 0);
-      }
-      
-      setActiveTab('approved');
-    } catch (error) {
-      console.error('Error bulk approving sites:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to approve sites. Please try again.',
-        variant: 'destructive'
-      });
-    }
-  };
-
-  const handleBulkLocalityVerify = async () => {
-    if (!selectedLocalityForBulkVerify || !bulkLocalityVisitDateObj) {
-      toast({
-        title: 'Validation Error',
-        description: 'Please select a visit date.',
-        variant: 'destructive'
-      });
-      return;
-    }
-
-    try {
-      const { sites: localitySites } = selectedLocalityForBulkVerify;
-      const visitDateString = bulkLocalityVisitDateObj.toISOString().split('T')[0];
-      
-      // First, update visit dates for all sites in the locality
-      const siteIds = localitySites.map(site => site.id);
-      const { error: dateError } = await supabase
-        .from('mmp_site_entries')
-        .update({ visit_date: visitDateString })
-        .in('id', siteIds);
-
-      if (dateError) throw dateError;
-
-      // Then verify all sites
-      const updateData: any = {
-        status: 'verified',
-        verified_at: new Date().toISOString(),
-        verified_by: currentUser?.username || currentUser?.fullName || currentUser?.email || 'System',
-      };
-
-      const { error: verifyError } = await supabase
-        .from('mmp_site_entries')
-        .update(updateData)
-        .in('id', siteIds);
-
-      if (verifyError) throw verifyError;
-
-      // Also update MMP files for verified sites
-      try {
-        for (const site of localitySites) {
-          if (site?.mmp_file_id && site?.site_code) {
-            const mmpUpdateData: any = { 
-              status: 'Verified',
-              visit_date: visitDateString,
-              verified_at: new Date().toISOString(),
-              verified_by: currentUser?.username || currentUser?.fullName || currentUser?.email || 'System'
-            };
-            
-            await supabase
-              .from('mmp_site_entries')
-              .update(mmpUpdateData)
-              .eq('mmp_file_id', site.mmp_file_id)
-              .eq('site_code', site.site_code);
-
-            // Mark MMP as coordinator-verified when first site is verified
-            const { data: mmpData, error: mmpError } = await supabase
-              .from('mmp_files')
-              .select('workflow, status')
-              .eq('id', site.mmp_file_id)
-              .single();
-
-            if (!mmpError && mmpData) {
-              const workflow = (mmpData.workflow as any) || {};
-              const isAlreadyVerified = workflow.coordinatorVerified === true;
-              
-              if (!isAlreadyVerified) {
-                const updatedWorkflow = {
-                  ...workflow,
-                  coordinatorVerified: true,
-                  coordinatorVerifiedAt: new Date().toISOString(),
-                  coordinatorVerifiedBy: currentUser?.username || currentUser?.fullName || currentUser?.email || 'System',
-                  currentStage: workflow.currentStage === 'awaitingCoordinatorVerification' ? 'verified' : (workflow.currentStage || 'verified'),
-                  lastUpdated: new Date().toISOString()
-                };
-
-                await supabase
-                  .from('mmp_files')
-                  .update({
-                    workflow: updatedWorkflow,
-                    status: mmpData.status === 'pending' ? 'pending' : 'pending'
-                  })
-                  .eq('id', site.mmp_file_id);
-              }
-            }
-          }
-        }
-      } catch (syncErr) {
-        console.warn('Failed to sync mmp_site_entries on bulk verify:', syncErr);
-      }
-
-      toast({
-        title: 'Bulk Verification Complete',
-        description: `Visit date set and ${localitySites.length} site(s) in this locality have been verified successfully.`,
-      });
-
-      // Clear state and reload sites
-      setBulkLocalityVerifyDialogOpen(false);
-      setSelectedLocalityForBulkVerify(null);
-      setBulkLocalityVisitDate('');
-      setBulkLocalityVisitDateObj(undefined);
-      loadSites();
-      
-      // Reload badge counts
-      if (currentUser?.id) {
-        const userId = currentUser.id;
-        const { data: allEntries } = await supabase
-          .from('mmp_site_entries')
-          .select('id, status, additional_data');
-        
-        const userEntries = (allEntries || []).filter((entry: any) => {
-          const ad = entry.additional_data || {};
-          return ad.assigned_to === userId;
-        });
-        
-        const permitsAttachedCount = { count: userEntries.filter((e: any) => 
-          e.status?.toLowerCase() === 'permits_attached'
-        ).length };
-        const verifiedCount = { count: userEntries.filter((e: any) => 
-          e.status?.toLowerCase() === 'verified'
-        ).length };
-        
-        setPermitsAttachedCount(permitsAttachedCount.count || 0);
-        setVerifiedSitesCount(verifiedCount.count || 0);
-      }
-      
-      setActiveTab('verified');
-    } catch (error) {
-      console.error('Error bulk verifying locality sites:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to verify sites. Please try again.',
-        variant: 'destructive'
-      });
-    }
-  };
-
-  const handleBulkVerifyLocalitySites = async (localitySites: SiteVisit[], notes?: string) => {
-    if (localitySites.length === 0) {
-      toast({
-        title: 'Validation Error',
-        description: 'No sites found in this locality.',
-        variant: 'destructive'
-      });
-      return;
-    }
-
-    try {
-      const siteIds = localitySites.map(site => site.id);
-      const updateData: any = {
-        status: 'verified',
-        verified_at: new Date().toISOString(),
-        verified_by: currentUser?.username || currentUser?.fullName || currentUser?.email || 'System',
-      };
-
-      if (notes) {
-        updateData.verification_notes = notes;
-      }
-
-      const { error } = await supabase
-        .from('mmp_site_entries')
-        .update(updateData)
-        .in('id', siteIds);
-
-      if (error) throw error;
-
-      // Also update MMP files for verified sites
-      try {
-        for (const site of localitySites) {
-          if (site?.mmp_file_id && site?.site_code) {
-            const mmpUpdateData: any = { 
-              status: 'Verified',
-              verified_at: new Date().toISOString(),
-              verified_by: currentUser?.username || currentUser?.fullName || currentUser?.email || 'System'
-            };
-            if (notes) {
-              mmpUpdateData.verification_notes = notes;
-            }
-            
-            await supabase
-              .from('mmp_site_entries')
-              .update(mmpUpdateData)
-              .eq('mmp_file_id', site.mmp_file_id)
-              .eq('site_code', site.site_code);
-
-            // Mark MMP as coordinator-verified when first site is verified
-            const { data: mmpData, error: mmpError } = await supabase
-              .from('mmp_files')
-              .select('workflow, status')
-              .eq('id', site.mmp_file_id)
-              .single();
-
-            if (!mmpError && mmpData) {
-              const workflow = (mmpData.workflow as any) || {};
-              const isAlreadyVerified = workflow.coordinatorVerified === true;
-              
-              if (!isAlreadyVerified) {
-                const updatedWorkflow = {
-                  ...workflow,
-                  coordinatorVerified: true,
-                  coordinatorVerifiedAt: new Date().toISOString(),
-                  coordinatorVerifiedBy: currentUser?.username || currentUser?.fullName || currentUser?.email || 'System',
-                  currentStage: workflow.currentStage === 'awaitingCoordinatorVerification' ? 'verified' : (workflow.currentStage || 'verified'),
-                  lastUpdated: new Date().toISOString()
-                };
-
-                await supabase
-                  .from('mmp_files')
-                  .update({
-                    workflow: updatedWorkflow,
-                    status: mmpData.status === 'pending' ? 'pending' : 'pending'
-                  })
-                  .eq('id', site.mmp_file_id);
-              }
-            }
-          }
-        }
-      } catch (syncErr) {
-        console.warn('Failed to sync mmp_site_entries on bulk verify:', syncErr);
-      }
-
-      toast({
-        title: 'Bulk Verification Complete',
-        description: `${localitySites.length} site(s) in this locality have been verified successfully.`,
-      });
-
-      // Reload sites and badge counts
-      loadSites();
-      
-      // Reload badge counts
-      if (currentUser?.id) {
-        const userId = currentUser.id;
-        const { data: allEntries } = await supabase
-          .from('mmp_site_entries')
-          .select('id, status, additional_data');
-        
-        const userEntries = (allEntries || []).filter((entry: any) => {
-          const ad = entry.additional_data || {};
-          return ad.assigned_to === userId;
-        });
-        
-        const permitsAttachedCount = { count: userEntries.filter((e: any) => 
-          e.status?.toLowerCase() === 'permits_attached'
-        ).length };
-        const verifiedCount = { count: userEntries.filter((e: any) => 
-          e.status?.toLowerCase() === 'verified'
-        ).length };
-        
-        setPermitsAttachedCount(permitsAttachedCount.count || 0);
-        setVerifiedSitesCount(verifiedCount.count || 0);
-      }
-      
-      setActiveTab('verified');
-    } catch (error) {
-      console.error('Error bulk verifying locality sites:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to verify sites. Please try again.',
-        variant: 'destructive'
-      });
-    }
-  };
-
-  const handlePermitQuestionResponse = (hasPermit: boolean) => {
-    setPermitQuestionDialogOpen(false);
-
-    if (hasPermit) {
-      // Show locality permit upload dialog
-      setLocalityPermitUploadDialogOpen(true);
     } else {
-      // No permit - just go back, no access
-      setSelectedLocalityForWorkflow(null);
+      setSelectedSites(new Set(filteredSites.map(site => site.id)));
     }
-  };
-
-
-
-  const handlePermitUploaded = async () => {
-    await fetchPermits();
-    
-    // Update all sites in this locality to 'permits_attached' status
-    if (selectedLocalityForWorkflow) {
-      try {
-        const { error } = await supabase
-          .from('mmp_site_entries')
-          .update({ status: 'permits_attached' })
-          .eq('state', selectedLocalityForWorkflow.state)
-          .eq('locality', selectedLocalityForWorkflow.locality);
-
-        if (error) {
-          console.warn('Failed to update site statuses to permits_attached:', error);
-        }
-      } catch (updateError) {
-        console.warn('Error updating site statuses:', updateError);
-      }
-    }
-    
-    toast({
-      title: 'Permit Uploaded',
-      description: `Permit for ${selectedLocalityForWorkflow?.locality} has been uploaded successfully. Sites in this locality are now ready for verification.`,
-    });
-    // Navigate to "Permits Attached" tab since they now have full access
-    setActiveTab('permits_attached');
-    setSelectedLocalityForWorkflow(null);
-    setExpandedStates(new Set()); // Clear expanded states
-  };
-
-  const handleSiteWithoutPermitResponse = async (proceedWithoutPermit: boolean, comments?: string) => {
-    setSiteWithoutPermitDialogOpen(false);
-
-    if (proceedWithoutPermit && selectedSiteForWithoutPermit) {
-      // Update site status to 'permits_attached'
-      try {
-        const existingComments = selectedSiteForWithoutPermit.comments || '';
-        const permitNote = 'No locality permit required';
-        const userComments = comments ? `\n\nCoordinator Comments: ${comments}` : '';
-        const updatedComments = existingComments 
-          ? `${existingComments}\n\n${permitNote}${userComments}` 
-          : `${permitNote}${userComments}`;
-
-        const { error } = await supabase
-          .from('mmp_site_entries')
-          .update({ 
-            status: 'permits_attached',
-            comments: updatedComments
-          })
-          .eq('id', selectedSiteForWithoutPermit.id);
-
-        if (error) throw error;
-
-        toast({
-          title: 'Site Status Updated',
-          description: `${selectedSiteForWithoutPermit.site_name} has been moved to "Permits Attached" and is ready for verification.`,
-        });
-
-        // Reload sites and badge counts
-        loadSites();
-        // Reload badge counts
-        if (currentUser?.id) {
-          const userId = currentUser.id;
-          const { data: allEntries } = await supabase
-            .from('mmp_site_entries')
-            .select('id, status, additional_data');
-          
-          const userEntries = (allEntries || []).filter((entry: any) => {
-            const ad = entry.additional_data || {};
-            return ad.assigned_to === userId;
-          });
-          
-          const permitsAttachedCount = { count: userEntries.filter((e: any) => 
-            e.status?.toLowerCase() === 'permits_attached'
-          ).length };
-          
-          setPermitsAttachedCount(permitsAttachedCount.count || 0);
-        }
-
-        // Navigate to "Permits Attached" tab
-        setActiveTab('permits_attached');
-      } catch (error) {
-        console.error('Error updating site status:', error);
-        toast({
-          title: 'Error',
-          description: 'Failed to update site status. Please try again.',
-          variant: 'destructive'
-        });
-      }
-    }
-
-    setSelectedSiteForWithoutPermit(null);
-    setConfirmWithoutPermitDialogOpen(false);
-    setWithoutPermitComments('');
   };
 
   const handleSiteSelection = (siteId: string) => {
@@ -1947,28 +1165,8 @@ const CoordinatorSites: React.FC = () => {
       filtered = filtered.filter(site => site.survey_tool === surveyToolFilter);
     }
 
-    // Apply locality filter
-    if (localityFilter !== 'all') {
-      filtered = filtered.filter(site => site.locality === localityFilter);
-    }
-
     return filtered;
-  }, [sites, debouncedSearchQuery, hubFilter, stateFilter, localityFilter, activityFilter, monitoringFilter, surveyToolFilter]);
-
-  // Group sites by locality for permits attached tab
-  const sitesGroupedByLocality = useMemo(() => {
-    const grouped: { [key: string]: SiteVisit[] } = {};
-    
-    filteredSites.forEach(site => {
-      const key = `${site.state}-${site.locality}`;
-      if (!grouped[key]) {
-        grouped[key] = [];
-      }
-      grouped[key].push(site);
-    });
-
-    return grouped;
-  }, [filteredSites]);
+  }, [sites, debouncedSearchQuery, hubFilter, stateFilter, activityFilter, monitoringFilter, surveyToolFilter]);
 
   // Paginate filtered results
   const paginatedSites = useMemo(() => {
@@ -1979,11 +1177,11 @@ const CoordinatorSites: React.FC = () => {
 
   const totalPages = Math.ceil(filteredSites.length / itemsPerPage);
 
-  const renderSiteCard = (site: SiteVisit, showActions: boolean = true, isPreviewMode: boolean = false) => (
+  const renderSiteCard = (site: SiteVisit, showActions: boolean = true) => (
     <Card 
       key={site.id} 
       className={`overflow-hidden transition-shadow ${
-        showActions || isPreviewMode
+        showActions 
           ? 'hover:shadow-md cursor-pointer hover:bg-gray-50' 
           : 'cursor-default'
       } ${
@@ -1994,16 +1192,11 @@ const CoordinatorSites: React.FC = () => {
         if ((e.target as HTMLInputElement).type === 'checkbox') return;
         setSelectedSiteForEdit(site);
         setEditDialogOpen(true);
-      } : isPreviewMode ? (e) => {
-        // Don't open preview dialog if clicking on checkbox
-        if ((e.target as HTMLInputElement).type === 'checkbox') return;
-        setSelectedSiteForPreview(site);
-        setPreviewDialogOpen(true);
       } : undefined}
     >
       <CardContent className="pt-4">
         <div className="flex items-start gap-3">
-          {(activeTab === 'new' || activeTab === 'permits_attached') && !readOnlyMode && (
+          {activeTab === 'new' && (
             <div className="pt-1">
               <input
                 type="checkbox"
@@ -2038,327 +1231,6 @@ const CoordinatorSites: React.FC = () => {
     </Card>
   );
 
-  const renderStateCard = (stateData: any) => {
-    const isExpanded = expandedStates.has(stateData.state);
-
-    return (
-      <Card 
-        key={stateData.state}
-        className="overflow-hidden transition-shadow hover:shadow-md cursor-pointer"
-        onClick={() => {
-          // Check if state permits are uploaded by FOM
-          if (!stateData.hasStatePermit) {
-            setSelectedStateForWorkflow(stateData);
-            setStatePermitQuestionDialogOpen(true);
-            return;
-          }
-          
-          // If state permits exist, expand to show localities
-          setExpandedStates(prev => {
-            const newSet = new Set(prev);
-            if (newSet.has(stateData.state)) {
-              newSet.delete(stateData.state);
-            } else {
-              newSet.add(stateData.state);
-            }
-            return newSet;
-          });
-        }}
-      >
-        <CardContent className="pt-4">
-          <div className="flex items-start gap-3">
-            <div className="flex-1">
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
-                  <h3 className="font-semibold text-lg">{stateData.state}</h3>
-                  <p className="text-sm text-muted-foreground">{stateData.localities.length} localit{stateData.localities.length !== 1 ? 'ies' : 'y'}</p>
-                  <p className="text-sm text-muted-foreground">{stateData.totalSites} site{stateData.totalSites !== 1 ? 's' : ''} assigned</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {stateData.hasStatePermit ? (
-                    <Badge
-                      variant="default"
-                      className={stateData.statePermitVerified ? 'bg-green-600' : 'bg-blue-600'}
-                    >
-                      <CheckCircle className="h-3 w-3 mr-1" />
-                      {stateData.statePermitVerified ? 'State Permit Verified' : 'State Permit Uploaded'}
-                    </Badge>
-                  ) : (
-                    <Badge variant="destructive">
-                      <AlertTriangle className="h-3 w-3 mr-1" />
-                      State Permit Required
-                    </Badge>
-                  )}
-                </div>
-              </div>
-              
-              {/* Show localities when state is expanded */}
-              {isExpanded && stateData.hasStatePermit && (
-                <div className="mt-4">
-                  <div className="text-sm text-muted-foreground mb-2">
-                    Localities in this state:
-                  </div>
-                  <div className="space-y-2">
-                    {stateData.localities.map((locality: any) => (
-                      <div 
-                        key={`${locality.state}-${locality.locality}`}
-                        className="flex items-center justify-between p-3 bg-gray-50 rounded cursor-pointer hover:bg-gray-100"
-                        onClick={(e) => {
-                          e.stopPropagation(); // Prevent state card click
-                          setSelectedLocalityForWorkflow(locality);
-                          setPermitQuestionDialogOpen(true);
-                        }}
-                      >
-                        <div>
-                          <span className="font-medium">{locality.locality}</span>
-                          <span className="text-muted-foreground ml-2">({locality.sites.length} sites)</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {locality.hasPermit ? (
-                            <Badge variant="default" className="bg-green-600 text-xs">
-                              <CheckCircle className="h-2 w-2 mr-1" />
-                              Local Permit
-                            </Badge>
-                          ) : (
-                            <Badge variant="destructive" className="text-xs">
-                              <AlertTriangle className="h-2 w-2 mr-1" />
-                              Local Permit Required
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  };
-
-  const renderPermitsAttachedLocalityCard = (localityKey: string, localitySites: SiteVisit[]) => {
-    const isExpanded = expandedPermitsAttachedLocalities.has(localityKey);
-    const [state, locality] = localityKey.split('-');
-    
-    return (
-      <Card 
-        key={localityKey}
-        className="overflow-hidden transition-shadow hover:shadow-md cursor-pointer"
-      >
-        <CardContent className="pt-4">
-          <div className="flex items-start gap-3">
-            <div className="flex-1">
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
-                  <h3 className="font-semibold text-lg">{locality}</h3>
-                  <p className="text-sm text-muted-foreground">{state}</p>
-                  <p className="text-sm text-muted-foreground">{localitySites.length} site{localitySites.length !== 1 ? 's' : ''} with permits attached</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant="default" className="bg-green-600">
-                    <FileCheck className="h-3 w-3 mr-1" />
-                    Permits Attached
-                  </Badge>
-                </div>
-              </div>
-              
-              {/* Action buttons */}
-              <div className="flex items-center gap-2 mt-4">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setExpandedPermitsAttachedLocalities(prev => {
-                      const newSet = new Set(prev);
-                      if (newSet.has(localityKey)) {
-                        newSet.delete(localityKey);
-                      } else {
-                        newSet.add(localityKey);
-                      }
-                      return newSet;
-                    });
-                  }}
-                  className="flex items-center gap-2"
-                >
-                  {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                  {isExpanded ? 'Hide Sites' : 'View Sites'}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelectedLocalityForBulkVerify({ localityKey, sites: localitySites });
-                    setBulkLocalityVerifyDialogOpen(true);
-                  }}
-                  className="flex items-center gap-2 bg-green-50 border-green-200 text-green-700 hover:bg-green-100"
-                >
-                  <CheckCircle className="h-4 w-4" />
-                  Verify All Sites
-                </Button>
-              </div>
-              
-              {/* Show sites when locality is expanded */}
-              {isExpanded && (
-                <div className="mt-4">
-                  <div className="text-sm text-muted-foreground mb-2">
-                    Sites in this locality:
-                  </div>
-                  <div className="space-y-2">
-                    {localitySites.map((site) => (
-                      <div 
-                        key={site.id}
-                        className="flex items-center justify-between p-3 bg-gray-50 rounded cursor-pointer hover:bg-gray-100"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedSiteForEdit(site);
-                          setEditDialogOpen(true);
-                        }}
-                      >
-                        <div>
-                          <span className="font-medium">{site.site_name}</span>
-                          <span className="text-muted-foreground ml-2">({site.site_code})</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Badge variant="secondary" className="text-xs">
-                            {site.comments?.includes('No locality permit required') 
-                              ? 'No Local Permit Required & Attached - Ready for Verification' 
-                              : 'Ready for Verification'}
-                          </Badge>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedSiteId(site.id);
-                              setVerifyDialogOpen(true);
-                            }}
-                            className="text-xs h-7 px-2"
-                          >
-                            <CheckCircle className="h-3 w-3 mr-1" />
-                            Verify
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  };
-
-  const renderLocalityCard = (localityData: any) => {
-    const localityKey = `${localityData.state}-${localityData.locality}`;
-    const isExpanded = expandedLocalities.has(localityKey);
-
-    return (
-      <Card 
-        key={localityKey}
-        className="overflow-hidden transition-shadow hover:shadow-md"
-      >
-        <CardContent className="pt-4">
-          <div className="flex items-start gap-3">
-            <div className="flex-1">
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
-                  <h3 className="font-semibold text-lg">{localityData.locality}</h3>
-                  <p className="text-sm text-muted-foreground">{localityData.stateName}</p>
-                  <p className="text-sm text-muted-foreground">{localityData.sites.length} site{localityData.sites.length !== 1 ? 's' : ''} assigned</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant="destructive">
-                    <AlertTriangle className="h-3 w-3 mr-1" />
-                    Local Permit Required
-                  </Badge>
-                </div>
-              </div>
-              
-              {/* Action buttons */}
-              <div className="flex items-center gap-2 mt-4">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setSelectedLocalityForWorkflow(localityData);
-                    setPermitQuestionDialogOpen(true);
-                  }}
-                  className="flex items-center gap-2"
-                >
-                  <FileCheck className="h-4 w-4" />
-                  Upload Permit
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setExpandedLocalities(prev => {
-                      const newSet = new Set(prev);
-                      if (newSet.has(localityKey)) {
-                        newSet.delete(localityKey);
-                      } else {
-                        newSet.add(localityKey);
-                      }
-                      return newSet;
-                    });
-                  }}
-                  className="flex items-center gap-2"
-                >
-                  {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                  {isExpanded ? 'Hide Sites' : 'View Sites'}
-                </Button>
-              </div>
-              
-              {/* Show sites when locality is expanded */}
-              {isExpanded && (
-                <div className="mt-4">
-                  <div className="text-sm text-muted-foreground mb-2">
-                    Sites in this locality:
-                  </div>
-                  <div className="space-y-2">
-                    {localityData.sites
-                      .filter((site: SiteVisit) => {
-                        // Filter by active tab status - only show sites that need verification
-                        return site.status === 'Pending' || site.status === 'Dispatched' || 
-                               site.status === 'assigned' || site.status === 'inProgress' || 
-                               site.status === 'in_progress';
-                      })
-                      .map((site: SiteVisit) => (
-                        <div 
-                          key={site.id}
-                          className="flex items-center justify-between p-3 bg-gray-50 rounded cursor-pointer hover:bg-gray-100"
-                          onClick={() => {
-                            setSelectedSiteForWithoutPermit(site);
-                            setSiteWithoutPermitDialogOpen(true);
-                          }}
-                        >
-                          <div>
-                            <span className="font-medium">{site.site_name}</span>
-                            <span className="text-muted-foreground ml-2">({site.site_code})</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Badge variant="secondary" className="text-xs">
-                              Needs Verification
-                            </Badge>
-                          </div>
-                        </div>
-                      ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  };
-
   if (loading) {
     return (
       <div className="container mx-auto px-4 py-8">
@@ -2387,14 +1259,10 @@ const CoordinatorSites: React.FC = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-6 gap-2">
+        <TabsList className="grid w-full grid-cols-5 gap-2">
           <TabsTrigger value="new" className="flex items-center justify-center gap-2 rounded-md py-2 px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm">
             <span>New Sites</span>
             <Badge variant="secondary">{newSitesCount}</Badge>
-          </TabsTrigger>
-          <TabsTrigger value="permits_attached" className="flex items-center justify-center gap-2 rounded-md py-2 px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm">
-            <span>Permits Attached</span>
-            <Badge variant="secondary">{permitsAttachedCount}</Badge>
           </TabsTrigger>
           <TabsTrigger value="verified" className="flex items-center justify-center gap-2 rounded-md py-2 px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm">
             <span>Verified</span>
@@ -2408,177 +1276,219 @@ const CoordinatorSites: React.FC = () => {
             <span>Completed</span>
             <Badge variant="secondary">{completedSitesCount}</Badge>
           </TabsTrigger>
-          <TabsTrigger value="rejected" className={`flex items-center justify-center gap-2 rounded-md py-2 px-3 ${rejectedSitesCount > 0 ? 'bg-red-200 hover:bg-red-300 data-[state=active]:bg-red-600 data-[state=active]:text-white data-[state=active]:shadow-sm' : 'bg-red-100 hover:bg-red-200 data-[state=active]:bg-red-100 data-[state=active]:text-red-800 data-[state=active]:shadow-sm'}`}>
+          <TabsTrigger value="rejected" className="flex items-center justify-center gap-2 rounded-md py-2 px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm">
             <span>Rejected</span>
             <Badge variant="secondary">{rejectedSitesCount}</Badge>
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="new" className="space-y-4">
-          <Tabs value={newSitesSubTab} onValueChange={setNewSitesSubTab} className="space-y-4">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="state_required" className="flex items-center justify-center gap-2 rounded-md py-2 px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-100 data-[state=active]:text-blue-800 data-[state=active]:shadow-sm">
-                <AlertTriangle className="h-4 w-4" />
-                State Permit Required
-                <Badge variant="secondary" className="ml-2">
-                  {statePermitRequiredCount}
-                </Badge>
-              </TabsTrigger>
-              <TabsTrigger value="local_required" className="flex items-center justify-center gap-2 rounded-md py-2 px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-100 data-[state=active]:text-blue-800 data-[state=active]:shadow-sm">
-                <MapPin className="h-4 w-4" />
-                Local Permit Required
-                <Badge variant="secondary" className="ml-2">
-                  {localPermitRequiredCount}
-                </Badge>
-              </TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="state_required" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle>States Requiring State Permits</CardTitle>
-                    <div className="relative w-full sm:w-auto max-w-sm">
-                      <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        type="search"
-                        placeholder="Search states..."
-                        className="pl-8 w-full sm:w-[300px]"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    These states require state permits to be uploaded before you can access local permits.
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  {loading || permitsLoading ? (
-                    <div className="text-center py-8">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                      <p className="text-muted-foreground">Loading states...</p>
-                    </div>
-                  ) : (() => {
-                    const stateRequiredStates = localitiesData.filter((state: any) => !state.hasStatePermit);
-                    const filteredStates = stateRequiredStates.filter((state: any) => 
-                      state.state.toLowerCase().includes(debouncedSearchQuery.toLowerCase())
-                    );
-                    
-                    return filteredStates.length === 0 ? (
-                      <div className="text-center py-8 text-muted-foreground">
-                        <CheckCircle className="h-12 w-12 mx-auto mb-4 opacity-20" />
-                        <p>{searchQuery ? 'No states match your search.' : 'All states have state permits uploaded.'}</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-4">
-                        {filteredStates.map(state => renderStateCard(state))}
-                      </div>
-                    );
-                  })()}
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="local_required" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle>Localities Requiring Local Permits</CardTitle>
-                    <div className="relative w-full sm:w-auto max-w-sm">
-                      <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        type="search"
-                        placeholder="Search localities..."
-                        className="pl-8 w-full sm:w-[300px]"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    These localities have verified state permits. You can now upload local permits for these localities.
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  {loading || permitsLoading ? (
-                    <div className="text-center py-8">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                      <p className="text-muted-foreground">Loading localities...</p>
-                    </div>
-                  ) : (() => {
-        // Get all localities from states that have state permits
-        const localRequiredLocalities = localitiesData
-          .filter((state: any) => state.hasStatePermit)
-          .flatMap((state: any) => 
-            state.localities.map((locality: any) => ({
-              ...locality,
-              stateName: state.state
-            }))
-          )
-          .filter((locality: any) => !locality.hasPermit) // Only show localities without local permits
-          .filter((locality: any) => {
-            // Only show localities that have pending sites
-            return locality.sites.some((site: SiteVisit) => 
-              site.status === 'Pending' || site.status === 'Dispatched' || 
-              site.status === 'assigned' || site.status === 'inProgress' || 
-              site.status === 'in_progress'
-            );
-          });                    const filteredLocalities = localRequiredLocalities.filter((locality: any) => 
-                      locality.locality.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
-                      locality.stateName.toLowerCase().includes(debouncedSearchQuery.toLowerCase())
-                    );
-                    
-                    return filteredLocalities.length === 0 ? (
-                      <div className="text-center py-8 text-muted-foreground">
-                        <AlertTriangle className="h-12 w-12 mx-auto mb-4 opacity-20" />
-                        <p>{searchQuery ? 'No localities match your search.' : 'No localities available for local permit upload.'}</p>
-                        <p className="text-sm mt-2">State permits must be uploaded first, and localities without local permits will appear here.</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-4">
-                        {filteredLocalities.map(locality => renderLocalityCard(locality))}
-                      </div>
-                    );
-                  })()}
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
-        </TabsContent>
-
-        <TabsContent value="permits_attached" className="space-y-4">
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle>Sites with Permits Attached</CardTitle>
+                <CardTitle>New Sites for Verification</CardTitle>
                 <div className="relative w-full sm:w-auto max-w-sm">
                   <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input
                     type="search"
-                    placeholder="Search localities or sites..."
+                    placeholder="Search sites..."
                     className="pl-8 w-full sm:w-[300px]"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
                 </div>
               </div>
-              <div className="text-sm text-muted-foreground">
-                Click on a locality to view and verify sites. You can verify all sites in a locality at once or verify them individually.
+              {/* Filter Section */}
+              <div className="mt-4 pt-4 border-t">
+                <div className="flex flex-wrap gap-4 items-end">
+                  <div className="min-w-[150px]">
+                    <Label htmlFor="hub-filter" className="text-sm font-medium">Hub Office</Label>
+                    <Select value={hubFilter} onValueChange={setHubFilter}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="All Hubs" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Hubs</SelectItem>
+                        {hubs.map((hub) => (
+                          <SelectItem key={hub.id} value={hub.name}>
+                            {hub.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div className="min-w-[150px]">
+                    <Label htmlFor="state-filter" className="text-sm font-medium">State</Label>
+                    <Select value={stateFilter} onValueChange={setStateFilter}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="All States" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All States</SelectItem>
+                        {Array.from(new Set(sites.map(site => site.state).filter(Boolean))).map((state) => (
+                          <SelectItem key={state} value={state}>
+                            {state}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="min-w-[180px]">
+                    <Label htmlFor="activity-filter" className="text-sm font-medium">Activity at Site</Label>
+                    <Select value={activityFilter} onValueChange={setActivityFilter}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="All Activities" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Activities</SelectItem>
+                        {ACTIVITY_OPTIONS.map((activity) => (
+                          <SelectItem key={activity} value={activity}>
+                            {activity}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="min-w-[150px]">
+                    <Label htmlFor="monitoring-filter" className="text-sm font-medium">Monitoring By</Label>
+                    <Select value={monitoringFilter} onValueChange={setMonitoringFilter}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="All Organizations" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Organizations</SelectItem>
+                        {MONITORING_BY_OPTIONS.map((org) => (
+                          <SelectItem key={org} value={org}>
+                            {org}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="min-w-[150px]">
+                    <Label htmlFor="survey-tool-filter" className="text-sm font-medium">Survey Tool</Label>
+                    <Select value={surveyToolFilter} onValueChange={setSurveyToolFilter}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="All Tools" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Tools</SelectItem>
+                        {Array.from(new Set(sites.map(site => site.survey_tool).filter(Boolean))).map((tool) => (
+                          <SelectItem key={tool} value={tool}>
+                            {tool}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => {
+                      setHubFilter('all');
+                      setStateFilter('all');
+                      setActivityFilter('all');
+                      setMonitoringFilter('all');
+                      setSurveyToolFilter('all');
+                      setSearchQuery('');
+                    }}
+                    className="mb-0"
+                  >
+                    Clear Filters
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
-              {Object.keys(sitesGroupedByLocality).length === 0 ? (
+              {/* Bulk Actions Bar - only show for new sites tab */}
+              {filteredSites.length > 0 && (
+                <div className="mb-4 p-4 bg-gray-50 rounded-lg border">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={selectedSites.size === filteredSites.length && filteredSites.length > 0}
+                          onChange={handleSelectAllSites}
+                          className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                        />
+                        <Label className="text-sm font-medium">
+                          Select All ({selectedSites.size} of {filteredSites.length} selected)
+                        </Label>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setBulkAssignDateDialogOpen(true)}
+                        disabled={selectedSites.size === 0}
+                        className="flex items-center gap-2"
+                      >
+                        <Calendar className="h-4 w-4" />
+                        Assign Visit Date
+                      </Button>
+                      <Button
+                        variant="default"
+                        size="sm"
+                        onClick={() => setBulkVerifyDialogOpen(true)}
+                        disabled={selectedSites.size === 0}
+                        className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
+                      >
+                        <CheckSquare className="h-4 w-4" />
+                        Verify Selected ({selectedSites.size})
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {filteredSites.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
-                  <FileCheck className="h-12 w-12 mx-auto mb-4 opacity-20" />
-                  <p>{searchQuery ? 'No localities match your search.' : 'No sites with permits attached yet.'}</p>
+                  <Clock className="h-12 w-12 mx-auto mb-4 opacity-20" />
+                  <p>{searchQuery ? 'No sites match your search.' : 'No new sites assigned to you for verification.'}</p>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {Object.entries(sitesGroupedByLocality).map(([localityKey, localitySites]) => 
-                    renderPermitsAttachedLocalityCard(localityKey, localitySites)
+                <>
+                  <div className="space-y-4">
+                    {paginatedSites.map(site => renderSiteCard(site, true))}
+                  </div>
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                      <div className="text-sm text-muted-foreground">
+                        Showing {((currentPage - 1) * itemsPerPage) + 1} - {Math.min(currentPage * itemsPerPage, filteredSites.length)} of {filteredSites.length}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                          disabled={currentPage === 1}
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                          Previous
+                        </Button>
+                        <div className="text-sm">
+                          Page {currentPage} of {totalPages}
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                          disabled={currentPage === totalPages}
+                        >
+                          Next
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
                   )}
-                </div>
+                </>
               )}
             </CardContent>
           </Card>
@@ -2600,98 +1510,110 @@ const CoordinatorSites: React.FC = () => {
                   />
                 </div>
               </div>
-              <div className="flex flex-wrap items-center gap-4 mt-4">
-                <div className="flex items-center gap-2">
-                  <Label htmlFor="hub-filter" className="text-sm font-medium">Hub:</Label>
-                  <Select value={hubFilter} onValueChange={setHubFilter}>
-                    <SelectTrigger className="w-[140px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Hubs</SelectItem>
-                      {hubs.map((hub) => (
-                        <SelectItem key={hub.id} value={hub.name}>
-                          {hub.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Label htmlFor="state-filter" className="text-sm font-medium">State:</Label>
-                  <Select value={stateFilter} onValueChange={(value) => {
-                    setStateFilter(value);
-                    setLocalityFilter('all'); // Reset locality when state changes
-                  }}>
-                    <SelectTrigger className="w-[140px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All States</SelectItem>
-                      {hubStates
-                        .filter(hs => {
-                          if (hubFilter === 'all') return true;
-                          const hub = hubs.find(h => h.id === hs.hub_id);
-                          return hub?.name === hubFilter;
-                        })
-                        .map((state) => (
-                          <SelectItem key={state.state_id} value={state.state_name}>
-                            {state.state_name}
+              {/* Filter Section */}
+              <div className="mt-4 pt-4 border-t">
+                <div className="flex flex-wrap gap-4 items-end">
+                  <div className="min-w-[150px]">
+                    <Label htmlFor="hub-filter" className="text-sm font-medium">Hub Office</Label>
+                    <Select value={hubFilter} onValueChange={setHubFilter}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="All Hubs" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Hubs</SelectItem>
+                        {hubs.map((hub) => (
+                          <SelectItem key={hub.id} value={hub.name}>
+                            {hub.name}
                           </SelectItem>
                         ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Label htmlFor="locality-filter" className="text-sm font-medium">Locality:</Label>
-                  <Select value={localityFilter} onValueChange={setLocalityFilter}>
-                    <SelectTrigger className="w-[140px]">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Localities</SelectItem>
-                      {localities
-                        .filter(loc => {
-                          if (stateFilter === 'all') return true;
-                          const selectedState = hubStates.find(hs => hs.state_name === stateFilter);
-                          if (!selectedState) return false;
-                          if (hubFilter === 'all') return loc.state_id === selectedState.state_id;
-                          const hub = hubs.find(h => h.id === selectedState.hub_id);
-                          return loc.state_id === selectedState.state_id && hub?.name === hubFilter;
-                        })
-                        .map((locality) => (
-                          <SelectItem key={locality.id} value={locality.name}>
-                            {locality.name}
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="flex items-center gap-4 mt-4">
-                {(activeTab === 'new' || activeTab === 'permits_attached') && !readOnlyMode && (
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id="select-all-sites"
-                      checked={filteredSites.length > 0 && selectedSites.size === filteredSites.length}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          // Select all filtered sites
-                          const allSiteIds = new Set(filteredSites.map(site => site.id));
-                          setSelectedSites(allSiteIds);
-                        } else {
-                          // Deselect all
-                          setSelectedSites(new Set());
-                        }
-                      }}
-                      className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                    />
-                    <Label htmlFor="select-all-sites" className="text-sm font-medium">
-                      Select All ({filteredSites.length} sites)
-                    </Label>
+                      </SelectContent>
+                    </Select>
                   </div>
-                )}
+                  
+                  <div className="min-w-[150px]">
+                    <Label htmlFor="state-filter" className="text-sm font-medium">State</Label>
+                    <Select value={stateFilter} onValueChange={setStateFilter}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="All States" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All States</SelectItem>
+                        {Array.from(new Set(sites.map(site => site.state).filter(Boolean))).map((state) => (
+                          <SelectItem key={state} value={state}>
+                            {state}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="min-w-[180px]">
+                    <Label htmlFor="activity-filter" className="text-sm font-medium">Activity at Site</Label>
+                    <Select value={activityFilter} onValueChange={setActivityFilter}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="All Activities" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Activities</SelectItem>
+                        {ACTIVITY_OPTIONS.map((activity) => (
+                          <SelectItem key={activity} value={activity}>
+                            {activity}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="min-w-[150px]">
+                    <Label htmlFor="monitoring-filter" className="text-sm font-medium">Monitoring By</Label>
+                    <Select value={monitoringFilter} onValueChange={setMonitoringFilter}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="All Organizations" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Organizations</SelectItem>
+                        {MONITORING_BY_OPTIONS.map((org) => (
+                          <SelectItem key={org} value={org}>
+                            {org}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="min-w-[150px]">
+                    <Label htmlFor="survey-tool-filter" className="text-sm font-medium">Survey Tool</Label>
+                    <Select value={surveyToolFilter} onValueChange={setSurveyToolFilter}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="All Tools" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Tools</SelectItem>
+                        {Array.from(new Set(sites.map(site => site.survey_tool).filter(Boolean))).map((tool) => (
+                          <SelectItem key={tool} value={tool}>
+                            {tool}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => {
+                      setHubFilter('all');
+                      setStateFilter('all');
+                      setActivityFilter('all');
+                      setMonitoringFilter('all');
+                      setSurveyToolFilter('all');
+                      setSearchQuery('');
+                    }}
+                    className="mb-0"
+                  >
+                    Clear Filters
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
@@ -2703,7 +1625,7 @@ const CoordinatorSites: React.FC = () => {
               ) : (
                 <>
                   <div className="space-y-4">
-                    {paginatedSites.map(site => renderSiteCard(site, false, true))}
+                    {paginatedSites.map(site => renderSiteCard(site, false))}
                   </div>
                   {totalPages > 1 && (
                     <div className="flex items-center justify-between mt-4 pt-4 border-t">
@@ -2757,6 +1679,111 @@ const CoordinatorSites: React.FC = () => {
                   />
                 </div>
               </div>
+              {/* Filter Section */}
+              <div className="mt-4 pt-4 border-t">
+                <div className="flex flex-wrap gap-4 items-end">
+                  <div className="min-w-[150px]">
+                    <Label htmlFor="hub-filter" className="text-sm font-medium">Hub Office</Label>
+                    <Select value={hubFilter} onValueChange={setHubFilter}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="All Hubs" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Hubs</SelectItem>
+                        {hubs.map((hub) => (
+                          <SelectItem key={hub.id} value={hub.name}>
+                            {hub.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div className="min-w-[150px]">
+                    <Label htmlFor="state-filter" className="text-sm font-medium">State</Label>
+                    <Select value={stateFilter} onValueChange={setStateFilter}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="All States" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All States</SelectItem>
+                        {Array.from(new Set(sites.map(site => site.state).filter(Boolean))).map((state) => (
+                          <SelectItem key={state} value={state}>
+                            {state}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="min-w-[180px]">
+                    <Label htmlFor="activity-filter" className="text-sm font-medium">Activity at Site</Label>
+                    <Select value={activityFilter} onValueChange={setActivityFilter}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="All Activities" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Activities</SelectItem>
+                        {ACTIVITY_OPTIONS.map((activity) => (
+                          <SelectItem key={activity} value={activity}>
+                            {activity}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="min-w-[150px]">
+                    <Label htmlFor="monitoring-filter" className="text-sm font-medium">Monitoring By</Label>
+                    <Select value={monitoringFilter} onValueChange={setMonitoringFilter}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="All Organizations" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Organizations</SelectItem>
+                        {MONITORING_BY_OPTIONS.map((org) => (
+                          <SelectItem key={org} value={org}>
+                            {org}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="min-w-[150px]">
+                    <Label htmlFor="survey-tool-filter" className="text-sm font-medium">Survey Tool</Label>
+                    <Select value={surveyToolFilter} onValueChange={setSurveyToolFilter}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="All Tools" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Tools</SelectItem>
+                        {Array.from(new Set(sites.map(site => site.survey_tool).filter(Boolean))).map((tool) => (
+                          <SelectItem key={tool} value={tool}>
+                            {tool}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => {
+                      setHubFilter('all');
+                      setStateFilter('all');
+                      setActivityFilter('all');
+                      setMonitoringFilter('all');
+                      setSurveyToolFilter('all');
+                      setSearchQuery('');
+                    }}
+                    className="mb-0"
+                  >
+                    Clear Filters
+                  </Button>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               {filteredSites.length === 0 ? (
@@ -2768,7 +1795,7 @@ const CoordinatorSites: React.FC = () => {
               ) : (
                 <>
                   <div className="space-y-4">
-                    {paginatedSites.map(site => renderSiteCard(site, false, true))}
+                    {paginatedSites.map(site => renderSiteCard(site, false))}
                   </div>
                   {totalPages > 1 && (
                     <div className="flex items-center justify-between mt-4 pt-4 border-t">
@@ -2822,6 +1849,111 @@ const CoordinatorSites: React.FC = () => {
                   />
                 </div>
               </div>
+              {/* Filter Section */}
+              <div className="mt-4 pt-4 border-t">
+                <div className="flex flex-wrap gap-4 items-end">
+                  <div className="min-w-[150px]">
+                    <Label htmlFor="hub-filter" className="text-sm font-medium">Hub Office</Label>
+                    <Select value={hubFilter} onValueChange={setHubFilter}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="All Hubs" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Hubs</SelectItem>
+                        {hubs.map((hub) => (
+                          <SelectItem key={hub.id} value={hub.name}>
+                            {hub.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div className="min-w-[150px]">
+                    <Label htmlFor="state-filter" className="text-sm font-medium">State</Label>
+                    <Select value={stateFilter} onValueChange={setStateFilter}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="All States" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All States</SelectItem>
+                        {Array.from(new Set(sites.map(site => site.state).filter(Boolean))).map((state) => (
+                          <SelectItem key={state} value={state}>
+                            {state}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="min-w-[180px]">
+                    <Label htmlFor="activity-filter" className="text-sm font-medium">Activity at Site</Label>
+                    <Select value={activityFilter} onValueChange={setActivityFilter}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="All Activities" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Activities</SelectItem>
+                        {ACTIVITY_OPTIONS.map((activity) => (
+                          <SelectItem key={activity} value={activity}>
+                            {activity}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="min-w-[150px]">
+                    <Label htmlFor="monitoring-filter" className="text-sm font-medium">Monitoring By</Label>
+                    <Select value={monitoringFilter} onValueChange={setMonitoringFilter}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="All Organizations" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Organizations</SelectItem>
+                        {MONITORING_BY_OPTIONS.map((org) => (
+                          <SelectItem key={org} value={org}>
+                            {org}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="min-w-[150px]">
+                    <Label htmlFor="survey-tool-filter" className="text-sm font-medium">Survey Tool</Label>
+                    <Select value={surveyToolFilter} onValueChange={setSurveyToolFilter}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="All Tools" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Tools</SelectItem>
+                        {Array.from(new Set(sites.map(site => site.survey_tool).filter(Boolean))).map((tool) => (
+                          <SelectItem key={tool} value={tool}>
+                            {tool}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => {
+                      setHubFilter('all');
+                      setStateFilter('all');
+                      setActivityFilter('all');
+                      setMonitoringFilter('all');
+                      setSurveyToolFilter('all');
+                      setSearchQuery('');
+                    }}
+                    className="mb-0"
+                  >
+                    Clear Filters
+                  </Button>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               {filteredSites.length === 0 ? (
@@ -2833,7 +1965,7 @@ const CoordinatorSites: React.FC = () => {
               ) : (
                 <>
                   <div className="space-y-4">
-                    {paginatedSites.map(site => renderSiteCard(site, false, true))}
+                    {paginatedSites.map(site => renderSiteCard(site, false))}
                   </div>
                   {totalPages > 1 && (
                     <div className="flex items-center justify-between mt-4 pt-4 border-t">
@@ -2887,8 +2019,110 @@ const CoordinatorSites: React.FC = () => {
                   />
                 </div>
               </div>
-              <div className="text-sm text-muted-foreground">
-                Click on a site to view rejection details, add comments, and edit site information.
+              {/* Filter Section */}
+              <div className="mt-4 pt-4 border-t">
+                <div className="flex flex-wrap gap-4 items-end">
+                  <div className="min-w-[150px]">
+                    <Label htmlFor="hub-filter" className="text-sm font-medium">Hub Office</Label>
+                    <Select value={hubFilter} onValueChange={setHubFilter}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="All Hubs" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Hubs</SelectItem>
+                        {hubs.map((hub) => (
+                          <SelectItem key={hub.id} value={hub.name}>
+                            {hub.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div className="min-w-[150px]">
+                    <Label htmlFor="state-filter" className="text-sm font-medium">State</Label>
+                    <Select value={stateFilter} onValueChange={setStateFilter}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="All States" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All States</SelectItem>
+                        {Array.from(new Set(sites.map(site => site.state).filter(Boolean))).map((state) => (
+                          <SelectItem key={state} value={state}>
+                            {state}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="min-w-[180px]">
+                    <Label htmlFor="activity-filter" className="text-sm font-medium">Activity at Site</Label>
+                    <Select value={activityFilter} onValueChange={setActivityFilter}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="All Activities" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Activities</SelectItem>
+                        {ACTIVITY_OPTIONS.map((activity) => (
+                          <SelectItem key={activity} value={activity}>
+                            {activity}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="min-w-[150px]">
+                    <Label htmlFor="monitoring-filter" className="text-sm font-medium">Monitoring By</Label>
+                    <Select value={monitoringFilter} onValueChange={setMonitoringFilter}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="All Organizations" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Organizations</SelectItem>
+                        {MONITORING_BY_OPTIONS.map((org) => (
+                          <SelectItem key={org} value={org}>
+                            {org}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="min-w-[150px]">
+                    <Label htmlFor="survey-tool-filter" className="text-sm font-medium">Survey Tool</Label>
+                    <Select value={surveyToolFilter} onValueChange={setSurveyToolFilter}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="All Tools" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Tools</SelectItem>
+                        {Array.from(new Set(sites.map(site => site.survey_tool).filter(Boolean))).map((tool) => (
+                          <SelectItem key={tool} value={tool}>
+                            {tool}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => {
+                      setHubFilter('all');
+                      setStateFilter('all');
+                      setActivityFilter('all');
+                      setMonitoringFilter('all');
+                      setSurveyToolFilter('all');
+                      setSearchQuery('');
+                    }}
+                    className="mb-0"
+                  >
+                    Clear Filters
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
@@ -2900,7 +2134,7 @@ const CoordinatorSites: React.FC = () => {
               ) : (
                 <>
                   <div className="space-y-4">
-                    {paginatedSites.map(site => renderSiteCard(site, true))}
+                    {paginatedSites.map(site => renderSiteCard(site, false))}
                   </div>
                   {totalPages > 1 && (
                     <div className="flex items-center justify-between mt-4 pt-4 border-t">
@@ -3238,20 +2472,19 @@ const CoordinatorSites: React.FC = () => {
             </p>
           </DialogHeader>
           <div className="py-4">
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="bulk-verification-notes" className="text-sm font-medium">
-                  Verification Notes (Optional)
-                </Label>
-                <Textarea
-                  id="bulk-verification-notes"
-                  placeholder="Add notes about the verification..."
-                  value={bulkVerificationNotes}
-                  onChange={(e) => setBulkVerificationNotes(e.target.value)}
-                  className="mt-1"
-                  rows={4}
-                />
-              </div>
+            <p className="mb-4">Are you sure you want to verify all selected sites? This action cannot be undone.</p>
+            <div className="mt-4">
+              <label htmlFor="bulk-verification-notes" className="text-sm font-medium mb-2 block">
+                Verification Notes (Optional)
+              </label>
+              <Textarea
+                id="bulk-verification-notes"
+                placeholder="Add any notes about the bulk verification..."
+                value={bulkVerificationNotes}
+                onChange={(e) => setBulkVerificationNotes(e.target.value)}
+                className="mt-1"
+                rows={4}
+              />
             </div>
           </div>
           <DialogFooter>
@@ -3265,479 +2498,14 @@ const CoordinatorSites: React.FC = () => {
               onClick={handleBulkVerifySites}
               className="bg-green-600 hover:bg-green-700"
             >
-              <CheckCircle className="h-4 w-4 mr-2" />
+              <CheckSquare className="h-4 w-4 mr-2" />
               Verify {selectedSites.size} Site{selectedSites.size !== 1 ? 's' : ''}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Bulk Locality Verify Dialog */}
-      <Dialog open={bulkLocalityVerifyDialogOpen} onOpenChange={setBulkLocalityVerifyDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Verify All Sites in Locality</DialogTitle>
-            <p className="text-sm text-muted-foreground">
-              Set visit date and verify all {selectedLocalityForBulkVerify?.sites.length} site{selectedLocalityForBulkVerify?.sites.length !== 1 ? 's' : ''} in this locality.
-            </p>
-          </DialogHeader>
-          <div className="py-4">
-            <div className="space-y-4">
-              <div>
-                <Label className="text-sm font-medium">
-                  Visit Date <span className="text-red-500">*</span>
-                </Label>
-                <div className="mt-1">
-                  <DatePicker
-                    date={bulkLocalityVisitDateObj}
-                    onSelect={setBulkLocalityVisitDateObj}
-                    className="w-full"
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  This visit date will be applied to all sites in the locality before verification.
-                </p>
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => {
-              setBulkLocalityVerifyDialogOpen(false);
-              setSelectedLocalityForBulkVerify(null);
-              setBulkLocalityVisitDate('');
-              setBulkLocalityVisitDateObj(undefined);
-            }}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleBulkLocalityVerify}
-              disabled={!bulkLocalityVisitDateObj}
-              className="bg-green-600 hover:bg-green-700"
-            >
-              <CheckCircle className="h-4 w-4 mr-2" />
-              Set Date & Verify {selectedLocalityForBulkVerify?.sites.length} Site{selectedLocalityForBulkVerify?.sites.length !== 1 ? 's' : ''}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Bulk Approve Dialog */}
-      <Dialog open={bulkApproveDialogOpen} onOpenChange={setBulkApproveDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Approve Selected Sites</DialogTitle>
-            <p className="text-sm text-muted-foreground">
-              Mark {selectedSites.size} selected site{selectedSites.size !== 1 ? 's' : ''} as approved.
-            </p>
-          </DialogHeader>
-          <div className="py-4">
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="bulk-approval-notes" className="text-sm font-medium">
-                  Approval Notes (Optional)
-                </Label>
-                <Textarea
-                  id="bulk-approval-notes"
-                  placeholder="Add notes about the approval..."
-                  value={bulkApprovalNotes}
-                  onChange={(e) => setBulkApprovalNotes(e.target.value)}
-                  className="mt-1"
-                  rows={4}
-                />
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => {
-              setBulkApproveDialogOpen(false);
-              setBulkApprovalNotes('');
-            }}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleBulkApproveSites}
-              className="bg-blue-600 hover:bg-blue-700"
-            >
-              <CheckCircle className="h-4 w-4 mr-2" />
-              Approve {selectedSites.size} Site{selectedSites.size !== 1 ? 's' : ''}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Permit Question Dialog */}
-      <Dialog open={permitQuestionDialogOpen} onOpenChange={setPermitQuestionDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Local Permit Required</DialogTitle>
-            <DialogDescription>
-              Do you have the local permit for <strong>{selectedLocalityForWorkflow?.locality}, {selectedLocalityForWorkflow?.state}</strong>?
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            <p className="text-sm text-muted-foreground">
-              Local permits are required to work on sites in this locality. If you have the permit, you can upload it now and access the sites.
-              If not, you cannot access sites in this locality.
-            </p>
-          </div>
-          <DialogFooter>
-            <Button 
-              variant="outline" 
-              onClick={() => handlePermitQuestionResponse(false)}
-            >
-              No, I don't have the permit
-            </Button>
-            <Button 
-              onClick={() => handlePermitQuestionResponse(true)}
-              className="bg-blue-600 hover:bg-blue-700"
-            >
-              Yes, I have the permit
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* State Permit Question Dialog */}
-      <Dialog open={statePermitQuestionDialogOpen} onOpenChange={setStatePermitQuestionDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>State Permit Required</DialogTitle>
-            <DialogDescription>
-              State permits for <strong>{selectedStateForWorkflow?.state}</strong> have not been uploaded by the FOM.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            <p className="text-sm text-muted-foreground">
-              State permits are required before you can access local permits. You need to upload the state permit first.
-              Do you have the state permit for this state?
-            </p>
-          </div>
-          <DialogFooter>
-            <Button 
-              variant="outline" 
-              onClick={() => {
-                setStatePermitQuestionDialogOpen(false);
-                setSelectedStateForWorkflow(null);
-              }}
-            >
-              Cancel
-            </Button>
-            <Button 
-              onClick={() => {
-                setStatePermitQuestionDialogOpen(false);
-                // Show state permit upload dialog
-                if (selectedStateForWorkflow) {
-                  const stateKey = selectedStateForWorkflow.state;
-                  setExpandedStates(prev => new Set([...prev, stateKey]));
-                }
-              }}
-              className="bg-blue-600 hover:bg-blue-700"
-            >
-              Yes, upload state permit
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-
-
-      {/* State Permit Upload Dialog */}
-      {selectedStateForWorkflow && (
-        <Dialog open={expandedStates.has(selectedStateForWorkflow.state)} onOpenChange={() => {}}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Upload State Permit</DialogTitle>
-              <DialogDescription>
-                Upload the state permit for <strong>{selectedStateForWorkflow.state}</strong>
-              </DialogDescription>
-            </DialogHeader>
-            <div className="py-4 max-h-96 overflow-y-auto">
-              <StatePermitUpload
-                state={selectedStateForWorkflow.state}
-                mmpFileId={selectedStateForWorkflow.localities?.[0]?.sites?.[0]?.mmp_file_id}
-                userType="coordinator"
-                onPermitUploaded={() => {
-                  // After state permit is uploaded, reload sites data to update state categorization
-                  loadSites();
-                  
-                  // Switch to local permit required tab since state permit is now uploaded
-                  setNewSitesSubTab('local_required');
-                  
-                  // After state permit is uploaded, redirect to local permit upload
-                  setExpandedStates(prev => {
-                    const newSet = new Set(prev);
-                    newSet.delete(selectedStateForWorkflow.state);
-                    return newSet;
-                  });
-                  
-                  // Now show the local permit question dialog
-                  setSelectedLocalityForWorkflow(selectedStateForWorkflow);
-                  setPermitQuestionDialogOpen(true);
-                  setSelectedStateForWorkflow(null);
-                }}
-              />
-            </div>
-            <DialogFooter>
-              <Button 
-                variant="outline" 
-                onClick={() => {
-                  setSelectedStateForWorkflow(null);
-                  setExpandedStates(prev => {
-                    const newSet = new Set(prev);
-                    newSet.delete(selectedStateForWorkflow.state);
-                    return newSet;
-                  });
-                }}
-              >
-                Cancel
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
-
-      {/* Locality Permit Upload Dialog */}
-      {selectedLocalityForWorkflow && (
-        <Dialog open={localityPermitUploadDialogOpen} onOpenChange={setLocalityPermitUploadDialogOpen}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Upload Local Permit</DialogTitle>
-              <DialogDescription>
-                Upload the local permit for <strong>{selectedLocalityForWorkflow.locality}, {selectedLocalityForWorkflow.state}</strong>
-              </DialogDescription>
-            </DialogHeader>
-            <div className="py-4 max-h-96 overflow-y-auto">
-              <LocalityPermitUpload
-                state={selectedLocalityForWorkflow.state}
-                locality={selectedLocalityForWorkflow.locality}
-                mmpFileId={selectedLocalityForWorkflow.sites?.[0]?.mmp_file_id}
-                onPermitUploaded={handlePermitUploaded}
-              />
-            </div>
-            <DialogFooter>
-              <Button 
-                variant="outline" 
-                onClick={() => {
-                  setLocalityPermitUploadDialogOpen(false);
-                  setSelectedLocalityForWorkflow(null);
-                }}
-              >
-                Cancel
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
-
-      {/* Site Without Permit Dialog */}
-      <Dialog open={siteWithoutPermitDialogOpen} onOpenChange={setSiteWithoutPermitDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Proceed Without Local Permit</DialogTitle>
-            <DialogDescription>
-              Can you continue to complete <strong>{selectedSiteForWithoutPermit?.site_name}</strong> without a local permit?
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            <p className="text-sm text-muted-foreground">
-              If you can proceed without the local permit, this site will be moved to "Permits Attached" and you can verify it immediately.
-              If you cannot proceed without the permit, the site will remain in this locality and wait for the local permit to be uploaded.
-            </p>
-          </div>
-          <DialogFooter>
-            <Button 
-              variant="outline" 
-              onClick={() => handleSiteWithoutPermitResponse(false)}
-            >
-              No, wait for permit
-            </Button>
-            <Button 
-              onClick={() => {
-                setSiteWithoutPermitDialogOpen(false);
-                setConfirmWithoutPermitDialogOpen(true);
-              }}
-              className="bg-blue-600 hover:bg-blue-700"
-            >
-              Yes, proceed without permit
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Confirm Without Permit Dialog */}
-      <Dialog open={confirmWithoutPermitDialogOpen} onOpenChange={setConfirmWithoutPermitDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Confirm No Local Permit Required</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to proceed without a local permit for <strong>{selectedSiteForWithoutPermit?.site_name}</strong>?
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            <p className="text-sm text-muted-foreground mb-4">
-              This action will move the site to "Permits Attached" status and allow immediate verification.
-              Please provide any additional comments explaining why no local permit is required.
-            </p>
-            <div>
-              <Label htmlFor="without-permit-comments" className="text-sm font-medium">
-                Comments (Optional)
-              </Label>
-              <Textarea
-                id="without-permit-comments"
-                placeholder="Explain why no local permit is required..."
-                value={withoutPermitComments}
-                onChange={(e) => setWithoutPermitComments(e.target.value)}
-                className="mt-1"
-                rows={4}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button 
-              variant="outline" 
-              onClick={() => {
-                setConfirmWithoutPermitDialogOpen(false);
-                setWithoutPermitComments('');
-                setSelectedSiteForWithoutPermit(null);
-              }}
-            >
-              Cancel
-            </Button>
-            <Button 
-              onClick={() => handleSiteWithoutPermitResponse(true, withoutPermitComments)}
-              className="bg-blue-600 hover:bg-blue-700"
-            >
-              Confirm & Proceed
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Site Preview Dialog for Completed Sites */}
-      <Dialog open={previewDialogOpen} onOpenChange={setPreviewDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh]">
-          <DialogHeader>
-            <DialogTitle>Site Details - {selectedSiteForPreview?.site_name}</DialogTitle>
-            <DialogDescription>
-              Read-only preview of site information
-            </DialogDescription>
-          </DialogHeader>
-          {selectedSiteForPreview && (
-            <div className="py-4 space-y-6 overflow-y-auto max-h-[calc(90vh-200px)]">
-              {/* Basic Information */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold">Basic Information</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label className="text-sm font-medium">Site Name</Label>
-                    <p className="text-sm text-muted-foreground">{selectedSiteForPreview.site_name}</p>
-                  </div>
-                  <div>
-                    <Label className="text-sm font-medium">Site Code</Label>
-                    <p className="text-sm text-muted-foreground">{selectedSiteForPreview.site_code}</p>
-                  </div>
-                  <div>
-                    <Label className="text-sm font-medium">Locality</Label>
-                    <p className="text-sm text-muted-foreground">{selectedSiteForPreview.locality}</p>
-                  </div>
-                  <div>
-                    <Label className="text-sm font-medium">State</Label>
-                    <p className="text-sm text-muted-foreground">{selectedSiteForPreview.state}</p>
-                  </div>
-                  <div>
-                    <Label className="text-sm font-medium">Hub Office</Label>
-                    <p className="text-sm text-muted-foreground">{selectedSiteForPreview.hub_office}</p>
-                  </div>
-                  <div>
-                    <Label className="text-sm font-medium">MMP File ID</Label>
-                    <p className="text-sm text-muted-foreground">{selectedSiteForPreview.mmp_file_id}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Status Information */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold">Status Information</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label className="text-sm font-medium">Current Status</Label>
-                    <p className="text-sm text-muted-foreground">{selectedSiteForPreview.status}</p>
-                  </div>
-                  <div>
-                    <Label className="text-sm font-medium">Activity</Label>
-                    <p className="text-sm text-muted-foreground">{selectedSiteForPreview.activity}</p>
-                  </div>
-                  <div>
-                    <Label className="text-sm font-medium">Main Activity</Label>
-                    <p className="text-sm text-muted-foreground">{selectedSiteForPreview.main_activity}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Dates */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold">Important Dates</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label className="text-sm font-medium">Visit Date</Label>
-                    <p className="text-sm text-muted-foreground">
-                      {selectedSiteForPreview.visit_date ? format(new Date(selectedSiteForPreview.visit_date), 'PPP') : 'Not set'}
-                    </p>
-                  </div>
-                  <div>
-                    <Label className="text-sm font-medium">Assigned Date</Label>
-                    <p className="text-sm text-muted-foreground">
-                      {selectedSiteForPreview.assigned_at ? format(new Date(selectedSiteForPreview.assigned_at), 'PPP') : 'Not set'}
-                    </p>
-                  </div>
-                  <div>
-                    <Label className="text-sm font-medium">Verified Date</Label>
-                    <p className="text-sm text-muted-foreground">
-                      {selectedSiteForPreview.verified_at ? format(new Date(selectedSiteForPreview.verified_at), 'PPP') : 'Not verified'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Comments */}
-              {selectedSiteForPreview.comments && (
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold">Comments</h3>
-                  <p className="text-sm text-muted-foreground bg-gray-50 p-3 rounded-md">
-                    {selectedSiteForPreview.comments}
-                  </p>
-                </div>
-              )}
-
-              {/* Verification Information */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold">Verification Information</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label className="text-sm font-medium">Verified By</Label>
-                    <p className="text-sm text-muted-foreground">{selectedSiteForPreview.verified_by || 'Not verified'}</p>
-                  </div>
-                  <div>
-                    <Label className="text-sm font-medium">Verification Notes</Label>
-                    <p className="text-sm text-muted-foreground">{selectedSiteForPreview.verification_notes || 'No notes'}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setPreviewDialogOpen(false);
-                setSelectedSiteForPreview(null);
-              }}
-            >
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>    </div>
+    </div>
   );
 };
 

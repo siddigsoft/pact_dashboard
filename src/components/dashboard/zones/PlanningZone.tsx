@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Calendar, FileText, Share2, MapPin } from 'lucide-react';
 import { DashboardCalendar } from '../DashboardCalendar';
@@ -9,12 +9,35 @@ import PlanningSiteVisitsList from '../PlanningSiteVisitsList';
 import { Button } from '@/components/ui/button';
 import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
 import { useAppContext } from '@/context/AppContext';
+import { useUserProjects } from '@/hooks/useUserProjects';
+import { useMMP } from '@/context/mmp/MMPContext';
 
 export const PlanningZone: React.FC = () => {
   const [activeTab, setActiveTab] = useState('calendar');
   const [showMap, setShowMap] = useState(true);
   const { siteVisits } = useSiteVisitContext();
+  const { mmpFiles } = useMMP();
+  const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
   const { users } = useAppContext();
+
+  // Project-filtered site visits: filter by user's project membership (admin bypass)
+  const filteredSiteVisits = useMemo(() => {
+    if (isAdminOrSuperUser) return siteVisits || [];
+    
+    // Build set of MMP IDs that belong to user's projects
+    const userProjectMmpIds = new Set(
+      mmpFiles
+        .filter(mmp => mmp.projectId && userProjectIds.includes(mmp.projectId))
+        .map(mmp => mmp.id)
+    );
+    
+    // Filter site visits by MMP project membership (use mmpDetails.mmpId)
+    return (siteVisits || []).filter(visit => {
+      const visitMmpId = visit.mmpDetails?.mmpId;
+      if (!visitMmpId) return false;
+      return userProjectMmpIds.has(visitMmpId);
+    });
+  }, [siteVisits, mmpFiles, userProjectIds, isAdminOrSuperUser]);
 
   return (
     <div className="space-y-4">
@@ -70,8 +93,8 @@ export const PlanningZone: React.FC = () => {
             </Button>
           </div>
 
-          {showMap && <PlanningSiteVisitsMap siteVisits={siteVisits || []} teamMembers={users || []} />}
-          <PlanningSiteVisitsList siteVisits={siteVisits || []} />
+          {showMap && <PlanningSiteVisitsMap siteVisits={filteredSiteVisits} teamMembers={users || []} />}
+          <PlanningSiteVisitsList siteVisits={filteredSiteVisits} />
         </TabsContent>
 
         <TabsContent value="mmps" className="mt-4">
