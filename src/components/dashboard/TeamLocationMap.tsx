@@ -1,12 +1,13 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Card, CardContent } from '@/components/ui/card';
-import { MapPin, Users } from 'lucide-react';
+import { MapPin, Users, RefreshCw } from 'lucide-react';
 import { User } from '@/types/user';
 import { SiteVisit } from '@/types/siteVisit';
 import { formatDistanceToNow } from 'date-fns';
 import { getUserStatus } from '@/utils/userStatusUtils';
+import { Button } from '@/components/ui/button';
 
 interface TeamLocationMapProps {
   users: User[];
@@ -16,35 +17,43 @@ interface TeamLocationMapProps {
 const TeamLocationMap: React.FC<TeamLocationMapProps> = ({ users, siteVisits = [] }) => {
   const mapRef = useRef<L.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
+  const markersLayerRef = useRef<L.LayerGroup | null>(null);
+  const isMapInitializedRef = useRef(false);
 
-  useEffect(() => {
-    if (!mapContainerRef.current) return;
+  const initializeMap = useCallback(() => {
+    if (!mapContainerRef.current || isMapInitializedRef.current) return;
 
-    if (!mapRef.current) {
-      mapRef.current = L.map(mapContainerRef.current).setView([15.5527, 32.5599], 6);
+    try {
+      mapRef.current = L.map(mapContainerRef.current, {
+        center: [15.5527, 32.5599],
+        zoom: 6,
+        zoomControl: true,
+        attributionControl: true,
+      });
 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap contributors',
         maxZoom: 19,
       }).addTo(mapRef.current);
-    }
 
-    const map = mapRef.current;
+      markersLayerRef.current = L.layerGroup().addTo(mapRef.current);
+      isMapInitializedRef.current = true;
+    } catch (error) {
+      console.error('Error initializing map:', error);
+    }
+  }, []);
+
+  const updateMarkers = useCallback(() => {
+    if (!mapRef.current || !markersLayerRef.current) return;
+
+    markersLayerRef.current.clearLayers();
     const bounds = L.latLngBounds([]);
     let hasValidBounds = false;
 
-    map.eachLayer((layer) => {
-      if (layer instanceof L.Marker) {
-        map.removeLayer(layer);
-      }
-    });
-
-    // Add team member markers (three-tier status: online=green, same-day=orange, offline=gray)
     users.forEach((user) => {
       if (user.location?.latitude && user.location?.longitude) {
         const userStatus = getUserStatus(user);
         
-        // Map status colors to hex values for the SVG
         const statusColorMap: Record<string, string> = {
           'bg-green-500': '#22c55e',
           'bg-orange-500': '#f97316',
@@ -74,14 +83,13 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({ users, siteVisits = [
 
         const marker = L.marker([user.location.latitude, user.location.longitude], {
           icon: markerIcon,
-        }).addTo(map);
+        });
 
         const lastSeenTime = user.location?.lastUpdated || user.lastActive;
         const lastSeenText = lastSeenTime 
           ? formatDistanceToNow(new Date(lastSeenTime), { addSuffix: true })
           : 'Never';
 
-        // Get accuracy color and label
         const getAccuracyInfo = (accuracy?: number) => {
           if (accuracy === undefined) return { color: '#999', label: 'Unknown' };
           if (accuracy <= 10) return { color: '#22c55e', label: 'Excellent' };
@@ -94,7 +102,7 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({ users, siteVisits = [
           <div style="min-width: 240px;">
             <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
               <div style="width: 8px; height: 8px; background: ${markerColor}; border-radius: 50%;"></div>
-              <strong style="font-size: 14px;">${user.name}</strong>
+              <strong style="font-size: 14px;">${user.name || user.fullName || 'Unknown'}</strong>
             </div>
             <div style="font-size: 12px; color: #666; margin-bottom: 4px;">
               <strong>Role:</strong> ${user.roles?.[0] || user.role || 'N/A'}
@@ -125,14 +133,17 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({ users, siteVisits = [
         `;
 
         marker.bindPopup(popupContent);
+        markersLayerRef.current?.addLayer(marker);
         bounds.extend([user.location.latitude, user.location.longitude]);
         hasValidBounds = true;
       }
     });
 
-    // Add site visit markers (different colors for status/priority)
     siteVisits.forEach((visit) => {
-      if (visit.location?.latitude && visit.location?.longitude) {
+      const lat = visit.location?.latitude || visit.coordinates?.latitude;
+      const lng = visit.location?.longitude || visit.coordinates?.longitude;
+      
+      if (lat && lng) {
         const getColor = () => {
           if (visit.status === 'completed') return '#10b981';
           if (visit.status === 'inProgress') return '#3b82f6';
@@ -159,14 +170,15 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({ users, siteVisits = [
           popupAnchor: [0, -36],
         });
 
-        const marker = L.marker([visit.location.latitude, visit.location.longitude], {
+        const marker = L.marker([lat, lng], {
           icon: markerIcon,
-        }).addTo(map);
+        });
 
+        const address = visit.location?.address || '';
         const popupContent = `
           <div style="min-width: 200px;">
             <strong style="font-size: 14px; display: block; margin-bottom: 8px;">
-              🏢 ${visit.siteName || 'Site Visit'}
+              ${visit.siteName || 'Site Visit'}
             </strong>
             ${visit.siteCode ? `
               <div style="font-size: 12px; color: #666; margin-bottom: 4px;">
@@ -189,36 +201,73 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({ users, siteVisits = [
                 <strong>Assigned To:</strong> ${typeof visit.assignedTo === 'string' ? visit.assignedTo : 'Assigned'}
               </div>
             ` : ''}
-            ${visit.location?.address ? `
+            ${address ? `
               <div style="font-size: 12px; color: #666; margin-top: 8px; padding-top: 8px; border-top: 1px solid #e5e7eb;">
-                📍 ${visit.location.address}
+                ${address}
               </div>
             ` : ''}
           </div>
         `;
 
         marker.bindPopup(popupContent);
-        bounds.extend([visit.location.latitude, visit.location.longitude]);
+        markersLayerRef.current?.addLayer(marker);
+        bounds.extend([lat, lng]);
         hasValidBounds = true;
       }
     });
 
-    if (hasValidBounds) {
-      map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+    if (hasValidBounds && mapRef.current) {
+      try {
+        mapRef.current.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+      } catch (error) {
+        console.error('Error fitting bounds:', error);
+      }
     }
+  }, [users, siteVisits]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      initializeMap();
+    }, 100);
 
     return () => {
+      clearTimeout(timer);
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
+        markersLayerRef.current = null;
+        isMapInitializedRef.current = false;
       }
     };
-  }, [users, siteVisits]);
+  }, [initializeMap]);
+
+  useEffect(() => {
+    if (isMapInitializedRef.current) {
+      updateMarkers();
+    }
+  }, [users, siteVisits, updateMarkers]);
+
+  useEffect(() => {
+    if (mapRef.current) {
+      setTimeout(() => {
+        mapRef.current?.invalidateSize();
+      }, 200);
+    }
+  }, []);
+
+  const handleRefresh = () => {
+    if (mapRef.current) {
+      mapRef.current.invalidateSize();
+      updateMarkers();
+    }
+  };
 
   const teamWithLocation = users.filter(u => u.location?.latitude && u.location?.longitude);
-  const sitesWithLocation = siteVisits.filter(v => v.location?.latitude && v.location?.longitude);
+  const sitesWithLocation = siteVisits.filter(v => 
+    (v.location?.latitude && v.location?.longitude) || 
+    (v.coordinates?.latitude && v.coordinates?.longitude)
+  );
   
-  // Calculate status counts ONLY from users with location data using three-tier system
   const onlineWithLocation = teamWithLocation.filter(u => getUserStatus(u).type === 'online');
   const sameDayWithLocation = teamWithLocation.filter(u => getUserStatus(u).type === 'same-day');
   const offlineWithLocation = teamWithLocation.filter(u => getUserStatus(u).type === 'offline');
@@ -228,7 +277,6 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({ users, siteVisits = [
 
   return (
     <div className="space-y-3">
-      {/* Map Legend */}
       <Card className="bg-muted/30 border-border/50">
         <CardContent className="p-3">
           <div className="flex items-center justify-between flex-wrap gap-3">
@@ -250,14 +298,25 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({ users, siteVisits = [
                 <span>Site Visits ({sitesWithLocation.length})</span>
               </div>
             </div>
-            <div className="text-xs text-muted-foreground">
-              {teamWithLocation.length} team member{teamWithLocation.length !== 1 ? 's' : ''} | {sitesWithLocation.length} site visit{sitesWithLocation.length !== 1 ? 's' : ''}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">
+                {teamWithLocation.length} team member{teamWithLocation.length !== 1 ? 's' : ''} | {sitesWithLocation.length} site{sitesWithLocation.length !== 1 ? 's' : ''}
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleRefresh}
+                className="h-7 text-xs gap-1"
+                data-testid="button-refresh-map"
+              >
+                <RefreshCw className="h-3 w-3" />
+                Refresh
+              </Button>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Map Container */}
       <Card className="overflow-hidden">
         <CardContent className="p-0">
           <div 
@@ -268,7 +327,6 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({ users, siteVisits = [
         </CardContent>
       </Card>
 
-      {/* Map Stats */}
       {teamWithLocation.length === 0 && sitesWithLocation.length === 0 && (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12 text-muted-foreground">
