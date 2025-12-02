@@ -149,7 +149,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [stats, setStats] = useState<WalletStats | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const refreshWallet = async () => {
+  const refreshWallet = async (showErrorToast: boolean = false) => {
     if (!currentUser?.id) return;
 
     try {
@@ -177,11 +177,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       }
     } catch (error: any) {
       console.error('Failed to fetch wallet:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to load wallet information',
-        variant: 'destructive',
-      });
+      if (showErrorToast) {
+        toast({
+          title: 'Error',
+          description: 'Failed to load wallet information',
+          variant: 'destructive',
+        });
+      }
     }
   };
 
