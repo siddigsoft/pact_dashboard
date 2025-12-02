@@ -5,6 +5,7 @@ export type AppRole =
   | 'ICT'
   | 'Field Operation Manager (FOM)'
   | 'FinancialAdmin'
+  | 'ProjectManager'
   | 'Supervisor'
   | 'Coordinator'
   | 'DataCollector'
@@ -261,6 +262,36 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     { resource: 'finances', action: 'approve' },
     { resource: 'mmp', action: 'archive' },
     { resource: 'reports', action: 'read' }
+  ],
+  ProjectManager: [
+    { resource: 'projects', action: 'create' },
+    { resource: 'projects', action: 'read' },
+    { resource: 'projects', action: 'update' },
+    { resource: 'projects', action: 'delete' },
+    { resource: 'projects', action: 'assign' },
+    { resource: 'projects', action: 'approve' },
+    { resource: 'projects', action: 'archive' },
+    { resource: 'mmp', action: 'create' },
+    { resource: 'mmp', action: 'read' },
+    { resource: 'mmp', action: 'update' },
+    { resource: 'mmp', action: 'approve' },
+    { resource: 'mmp', action: 'assign' },
+    { resource: 'site_visits', action: 'create' },
+    { resource: 'site_visits', action: 'read' },
+    { resource: 'site_visits', action: 'update' },
+    { resource: 'site_visits', action: 'assign' },
+    { resource: 'site_visits', action: 'approve' },
+    { resource: 'finances', action: 'read' },
+    { resource: 'finances', action: 'update' },
+    { resource: 'finances', action: 'approve' },
+    { resource: 'users', action: 'read' },
+    { resource: 'users', action: 'assign' },
+    { resource: 'reports', action: 'read' },
+    { resource: 'reports', action: 'create' },
+    { resource: 'wallets', action: 'read' },
+    { resource: 'wallets', action: 'approve' },
+    { resource: 'audit_logs', action: 'read' },
+    { resource: 'settings', action: 'read' },
   ],
   Supervisor: [
     { resource: 'mmp', action: 'read' },
