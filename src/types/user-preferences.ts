@@ -176,7 +176,7 @@ export const WORKFLOW_MENU_GROUPS: MenuGroup[] = [
       { id: 'wallets', title: 'Wallets', url: '/admin/wallets', icon: 'CreditCard', roles: ['admin', 'financialAdmin'], priority: 7 },
       { id: 'settings', title: 'Settings', url: '/settings', icon: 'Settings', priority: 8 },
       { id: 'project-manager-dashboard', title: 'PM Dashboard', url: '/dashboard', icon: 'FolderKanban', roles: ['projectManager'], priority: 9 },
-      { id: 'project-approvals', title: 'Approvals Queue', url: '/approvals', icon: 'ClipboardCheck', roles: ['projectManager'], priority: 10 }
+      { id: 'project-approvals', title: 'Approvals Queue', url: '/dashboard?tab=approvals', icon: 'ClipboardCheck', roles: ['projectManager'], priority: 10 }
     ]
   }
 ];

@@ -61,7 +61,7 @@ import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
 import { useUserProjects } from '@/hooks/useUserProjects';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { useBudget } from '@/context/budget/BudgetContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 interface ProjectData {
   id: string;
@@ -115,8 +115,27 @@ export const ProjectManagerZone: React.FC = () => {
   const { userProjects, userProjectIds, isAdminOrSuperUser } = useUserProjects();
   const { projectBudgets, stats: budgetStats } = useBudget();
   const navigate = useNavigate();
+  const location = useLocation();
   
-  const [activeTab, setActiveTab] = useState('overview');
+  const getInitialTab = () => {
+    const params = new URLSearchParams(location.search);
+    const tabParam = params.get('tab');
+    if (tabParam && ['overview', 'approvals', 'budget', 'deadlines', 'team', 'reports'].includes(tabParam)) {
+      return tabParam;
+    }
+    return 'overview';
+  };
+  
+  const [activeTab, setActiveTab] = useState(getInitialTab);
+  
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const tabParam = params.get('tab');
+    if (tabParam && ['overview', 'approvals', 'budget', 'deadlines', 'team', 'reports'].includes(tabParam)) {
+      setActiveTab(tabParam);
+    }
+  }, [location.search]);
+  
   const [projects, setProjects] = useState<ProjectData[]>([]);
   const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([]);
   const [loading, setLoading] = useState(true);
