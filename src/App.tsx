@@ -293,7 +293,9 @@ function App() {
             <Router>
               <AppProviders>
                 <Suspense fallback={<PageLoader />}>
-                  <AppRoutes />
+                  <AuthGuard>
+                    <AppRoutes />
+                  </AuthGuard>
                 </Suspense>
                 <Toaster />
                 <SonnerToaster />

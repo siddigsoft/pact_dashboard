@@ -120,7 +120,7 @@ export const FOMZone: React.FC = () => {
         const { data, error } = await supabase
           .from('mmp_files')
           .select(`
-            id, name, mmp_id, status, workflow, uploaded_at, hub, month, project_name,
+            id, name, mmp_id, status, workflow, uploaded_at, hub, month,
             project:projects(name, project_code),
             permits
           `)
