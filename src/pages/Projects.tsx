@@ -1,58 +1,39 @@
 import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, FolderKanban, CheckCircle2, Clock, BarChart3, AlertCircle } from 'lucide-react';
+import { Plus, FolderKanban, CheckCircle2, Clock, BarChart3 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { GradientStatCard } from '@/components/ui/gradient-stat-card';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import ProjectList from '@/components/project/ProjectList';
 import { useProjectContext } from '@/context/project/ProjectContext';
-import { useUserProjects } from '@/hooks/useUserProjects';
+import { useAppContext } from '@/context/AppContext';
 
 const ProjectsPage = () => {
   const navigate = useNavigate();
-  const { loading } = useProjectContext();
-  const { userProjects, isAdminOrSuperUser, hasProjectAccess } = useUserProjects();
+  const { projects, loading } = useProjectContext();
+  const { roles } = useAppContext();
+
+  const normalizedRoles = (roles || []).map(r => String(r).toLowerCase());
+  const canAccessFieldOpManager =
+    normalizedRoles.includes('admin') || normalizedRoles.includes('fieldopmanager');
 
   const handleViewProject = (projectId: string) => {
     navigate(`/projects/${projectId}`);
   };
 
   const projectStats = useMemo(() => {
-    const total = userProjects.length;
-    const completed = userProjects.filter(p => p.status === 'completed').length;
-    const active = userProjects.filter(p => p.status === 'active').length;
-    const pending = userProjects.filter(p => p.status === 'draft' || p.status === 'onHold').length;
+    const total = projects.length;
+    const completed = projects.filter(p => p.workflowStatus === 'completed').length;
+    const active = projects.filter(p => p.workflowStatus === 'active' || p.workflowStatus === 'in_progress').length;
+    const pending = projects.filter(p => p.workflowStatus === 'pending').length;
     const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
 
     return { total, completed, active, pending, completionRate };
-  }, [userProjects]);
-
-  if (!hasProjectAccess && !loading) {
-    return (
-      <div className="min-h-screen bg-background p-4 md:p-8 flex items-center justify-center">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
-            <div className="mx-auto w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
-              <AlertCircle className="h-8 w-8 text-muted-foreground" />
-            </div>
-            <CardTitle>No Project Access</CardTitle>
-            <CardDescription>
-              You are not currently assigned to any projects. Please contact your administrator to be added to a project team.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="text-center">
-            <Button variant="outline" onClick={() => navigate('/dashboard')}>
-              Return to Dashboard
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
+  }, [projects]);
 
   return (
     <div className="min-h-screen bg-background p-4 md:p-8 space-y-6">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center">
@@ -61,25 +42,22 @@ const ProjectsPage = () => {
           <div>
             <h1 className="text-3xl font-bold">Projects</h1>
             <p className="text-sm text-muted-foreground">
-              {isAdminOrSuperUser 
-                ? 'Manage all project planning and activity management'
-                : 'View your assigned projects and activities'}
+              Manage project planning and activity management
             </p>
           </div>
         </div>
-        {isAdminOrSuperUser && (
-          <Button onClick={() => navigate('/projects/create')} data-testid="button-create-project">
-            <Plus className="h-4 w-4 mr-2" />
-            Create Project
-          </Button>
-        )}
+        <Button onClick={() => navigate('/projects/create')} data-testid="button-create-project">
+          <Plus className="h-4 w-4 mr-2" />
+          Create Project
+        </Button>
       </div>
 
+      {/* Statistics Grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <GradientStatCard
           title="Total Projects"
           value={projectStats.total}
-          subtitle={isAdminOrSuperUser ? "All projects" : "Your projects"}
+          subtitle="All projects"
           icon={FolderKanban}
           color="blue"
           data-testid="card-stat-total-projects"
@@ -113,9 +91,10 @@ const ProjectsPage = () => {
         />
       </div>
       
+      {/* Project List */}
       <div className="bg-card rounded-lg border p-6">
         <ProjectList 
-          projects={userProjects} 
+          projects={projects} 
           onViewProject={handleViewProject}
           loading={loading}
         />

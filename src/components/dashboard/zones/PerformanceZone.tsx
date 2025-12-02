@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { TrendingUp, Trophy, Activity, DollarSign } from 'lucide-react';
 import { AchievementTracker } from '../AchievementTracker';
@@ -7,42 +7,19 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useAppContext } from '@/context/AppContext';
 import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
-import { useMMP } from '@/context/mmp/MMPContext';
-import { useUserProjects } from '@/hooks/useUserProjects';
 import { startOfMonth } from 'date-fns';
 
 export const PerformanceZone: React.FC = () => {
   const [activeTab, setActiveTab] = useState('achievements');
   const { roles } = useAppContext();
   const { siteVisits } = useSiteVisitContext();
-  const { mmpFiles } = useMMP();
-  const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
 
   const isFinanceOrAdmin = roles?.some(r => r.toLowerCase() === 'admin' || r.toLowerCase() === 'financialadmin');
 
-  // Project-filtered site visits: filter by user's project membership (admin bypass)
-  const filteredSiteVisits = useMemo(() => {
-    if (isAdminOrSuperUser) return siteVisits || [];
-    
-    // Build set of MMP IDs that belong to user's projects
-    const userProjectMmpIds = new Set(
-      mmpFiles
-        .filter(mmp => mmp.projectId && userProjectIds.includes(mmp.projectId))
-        .map(mmp => mmp.id)
-    );
-    
-    // Filter site visits by MMP project membership
-    return (siteVisits || []).filter(visit => {
-      const visitMmpId = visit.mmpDetails?.mmpId;
-      if (!visitMmpId) return false;
-      return userProjectMmpIds.has(visitMmpId);
-    });
-  }, [siteVisits, mmpFiles, userProjectIds, isAdminOrSuperUser]);
-
-  const thisMonthVisits = filteredSiteVisits.filter(v => {
+  const thisMonthVisits = siteVisits?.filter(v => {
     const visitDate = v.completedAt ? new Date(v.completedAt) : null;
     return visitDate && visitDate >= startOfMonth(new Date());
-  }).length;
+  }).length || 0;
 
   return (
     <div className="space-y-4">

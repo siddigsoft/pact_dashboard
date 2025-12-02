@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,8 +9,6 @@ import { useSiteVisitContext } from "@/context/siteVisit/SiteVisitContext";
 import { useUserCostSubmissions, useCostSubmissions, useCostSubmissionContext } from "@/context/costApproval/CostSubmissionContext";
 import { useAppContext } from "@/context/AppContext";
 import { useUser } from "@/context/user/UserContext";
-import { useUserProjects } from "@/hooks/useUserProjects";
-import { useMMP } from "@/context/mmp/MMPContext";
 import { AppRole } from "@/types";
 import CostSubmissionForm from "@/components/cost-submission/CostSubmissionForm";
 import CostSubmissionHistory from "@/components/cost-submission/CostSubmissionHistory";
@@ -21,8 +19,6 @@ const CostSubmission = () => {
   const { currentUser, roles } = useAppContext();
   const { users } = useUser();
   const { siteVisits } = useSiteVisitContext();
-  const { mmpFiles } = useMMP();
-  const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
   
   // Check if user is admin or supervisor
   const isAdmin = roles?.includes('admin' as AppRole) || currentUser?.role === 'admin';
@@ -30,25 +26,6 @@ const CostSubmission = () => {
                        roles?.includes('supervisor' as AppRole) ||
                        currentUser?.role === 'hubSupervisor' || 
                        currentUser?.role === 'supervisor';
-  
-  // Project-filtered site visits: filter by user's project membership (admin bypass)
-  const projectFilteredSiteVisits = useMemo(() => {
-    if (isAdminOrSuperUser) return siteVisits;
-    
-    // Build set of MMP IDs that belong to user's projects
-    const userProjectMmpIds = new Set(
-      mmpFiles
-        .filter(mmp => mmp.projectId && userProjectIds.includes(mmp.projectId))
-        .map(mmp => mmp.id)
-    );
-    
-    // Filter site visits by MMP project membership (use mmpDetails.mmpId)
-    return siteVisits.filter(visit => {
-      const visitMmpId = visit.mmpDetails?.mmpId;
-      if (!visitMmpId) return false;
-      return userProjectMmpIds.has(visitMmpId);
-    });
-  }, [siteVisits, mmpFiles, userProjectIds, isAdminOrSuperUser]);
   
   // Admins and supervisors can see team submissions and approval status
   const canViewTeamSubmissions = isAdmin || isSupervisor;
@@ -106,14 +83,12 @@ const CostSubmission = () => {
     ? filterSubmissionsForSupervisor(rawSubmissions)
     : rawSubmissions;
 
-  // Filter site visits by role AND project membership
   // Admins see all completed site visits, supervisors see their team's, data collectors see only their own
-  // All filtered by project membership (with admin/super user bypass)
-  const availableSiteVisits = isAdminOrSuperUser 
+  const availableSiteVisits = isAdmin 
     ? siteVisits.filter(visit => visit.status === 'completed')
     : isSupervisor && teamMemberIds.length > 0
-      ? projectFilteredSiteVisits.filter(visit => visit.status === 'completed' && teamMemberIds.includes(visit.assignedTo || ''))
-      : projectFilteredSiteVisits.filter(visit => visit.assignedTo === currentUser?.id && visit.status === 'completed');
+      ? siteVisits.filter(visit => visit.status === 'completed' && teamMemberIds.includes(visit.assignedTo || ''))
+      : siteVisits.filter(visit => visit.assignedTo === currentUser?.id && visit.status === 'completed');
 
   const submissionStats = {
     total: submissions.length,

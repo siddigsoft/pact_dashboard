@@ -48,14 +48,12 @@ import ReportChart, {
   generateTeamPerformanceChartData,
 } from "@/components/reports/ReportChart";
 import { useAuthorization } from "@/hooks/use-authorization";
-import { useUserProjects } from "@/hooks/useUserProjects";
 
 const Reports: React.FC = () => {
   const [activeTab, setActiveTab] = useState("financial");
   const { toast } = useToast();
   const navigate = useNavigate();
   const { checkPermission, hasAnyRole } = useAuthorization();
-  const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
   const canAccess = checkPermission('reports', 'read') || hasAnyRole(['admin']);
   if (!canAccess) {
     return (
@@ -90,30 +88,6 @@ const Reports: React.FC = () => {
   const [chartCanvas, setChartCanvas] = useState<HTMLCanvasElement | null>(null);
   const [showChart, setShowChart] = useState(false);
   const [exporting, setExporting] = useState(false);
-
-  // Project-filtered data: filter by user's project membership (admin bypass)
-  const filteredProjects = useMemo(() => {
-    if (isAdminOrSuperUser) return projects;
-    return projects.filter(project => userProjectIds.includes(project.id));
-  }, [projects, userProjectIds, isAdminOrSuperUser]);
-
-  const filteredMmpFiles = useMemo(() => {
-    if (isAdminOrSuperUser) return mmpFiles;
-    return mmpFiles.filter(mmp => mmp.project_id && userProjectIds.includes(mmp.project_id));
-  }, [mmpFiles, userProjectIds, isAdminOrSuperUser]);
-
-  const filteredSiteVisits = useMemo(() => {
-    if (isAdminOrSuperUser) return siteVisits;
-    // Build set of MMP IDs that belong to user's projects
-    const userProjectMmpIds = new Set(
-      filteredMmpFiles.map(mmp => mmp.id)
-    );
-    // Filter site visits by MMP project membership
-    return siteVisits.filter(visit => {
-      if (!visit.mmp_file_id) return false;
-      return userProjectMmpIds.has(visit.mmp_file_id);
-    });
-  }, [siteVisits, filteredMmpFiles, isAdminOrSuperUser]);
 
   const handleBackToDashboard = () => {
     navigate("/dashboard");
@@ -262,7 +236,7 @@ const Reports: React.FC = () => {
         size: "-",
       },
     ];
-  }, [filteredProjects, filteredSiteVisits, filteredMmpFiles]);
+  }, [projects, siteVisits, mmpFiles]);
 
   const reportTemplates = [
     {
@@ -585,13 +559,13 @@ const Reports: React.FC = () => {
   const getChartData = (reportType: string) => {
     switch (reportType) {
       case "site_visits":
-        return generateSiteVisitsChartData(buildSiteVisitsRows(filteredSiteVisits));
+        return generateSiteVisitsChartData(buildSiteVisitsRows(siteVisits));
       case "project_budget":
-        return generateProjectBudgetChartData(buildProjectBudgetRows(filteredProjects));
+        return generateProjectBudgetChartData(buildProjectBudgetRows(projects));
       case "mmp_progress":
-        return generateMMPProgressChartData(buildMMPProgressRows(filteredMmpFiles));
+        return generateMMPProgressChartData(buildMMPProgressRows(mmpFiles));
       case "team_performance":
-        return generateTeamPerformanceChartData(buildTeamPerformanceRows(filteredSiteVisits, profiles));
+        return generateTeamPerformanceChartData(buildTeamPerformanceRows(siteVisits, profiles));
       default:
         return null;
     }
@@ -695,7 +669,7 @@ const Reports: React.FC = () => {
               {loading && (
                 <div className="text-sm text-muted-foreground mb-3">Loading data...</div>
               )}
-              {showChart && filteredSiteVisits.length > 0 && (
+              {showChart && siteVisits.length > 0 && (
                 <div className="mb-6">
                   <h3 className="text-lg font-semibold mb-4">Site Visits Overview</h3>
                   <ReportChart
@@ -803,9 +777,9 @@ const Reports: React.FC = () => {
               {loading && (
                 <div className="text-sm text-muted-foreground mb-3">Loading data...</div>
               )}
-              {showChart && (filteredSiteVisits.length > 0 || filteredMmpFiles.length > 0) && (
+              {showChart && (siteVisits.length > 0 || mmpFiles.length > 0) && (
                 <div className="mb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {filteredSiteVisits.length > 0 && (
+                  {siteVisits.length > 0 && (
                     <div>
                       <h3 className="text-lg font-semibold mb-4">Site Visits Performance</h3>
                       <ReportChart
@@ -816,7 +790,7 @@ const Reports: React.FC = () => {
                       />
                     </div>
                   )}
-                  {filteredMmpFiles.length > 0 && (
+                  {mmpFiles.length > 0 && (
                     <div>
                       <h3 className="text-lg font-semibold mb-4">MMP Progress</h3>
                       <ReportChart

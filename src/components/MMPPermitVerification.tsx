@@ -7,16 +7,12 @@ import { MMPPermitsData, MMPStatePermitDocument } from '@/types/mmp/permits';
 import { MMPPermitFileUpload } from './MMPPermitFileUpload';
 import { PermitVerificationCard } from './permits/PermitVerificationCard';
 import { Progress } from '@/components/ui/progress';
-import { Upload, FileCheck, Send, Eye } from 'lucide-react';
+import { Upload, FileCheck, Send, Eye, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { useAppContext } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
 import { sudanStates } from '@/data/sudanStates';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
-import { useState as useReactState } from 'react';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { useAuthorization } from '@/hooks/use-authorization';
 import { useNavigate } from 'react-router-dom';
 
 interface MMPPermitVerificationProps {
@@ -29,21 +25,13 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
   onVerificationComplete
 }) => {
   const [permits, setPermits] = useState<MMPStatePermitDocument[]>([]);
-  const [localPermits, setLocalPermits] = useState<MMPStatePermitDocument[]>([]);
   const { toast } = useToast();
   const { updateMMP } = useMMP();
   const { currentUser } = useAppContext();
-  const [forwardLoading, setForwardLoading] = useState(false);
   const [hasForwarded, setHasForwarded] = useState(false);
-  // Modal state for review/assignment
-  const [showAssignModal, setShowAssignModal] = useReactState(false);
-  const [assignmentMap, setAssignmentMap] = useReactState({} as Record<string, string>); // key: groupKey, value: coordinatorId
-  const [selectedSites, setSelectedSites] = useReactState({} as Record<string, Set<string>>); // key: groupKey, value: Set of site ids
-  const [batchLoading, setBatchLoading] = useReactState({} as Record<string, boolean>); // key: groupKey, value: loading state
-  const [batchForwarded, setBatchForwarded] = useReactState({} as Record<string, boolean>); // key: groupKey, value: forwarded state
-  const [expandedGroups, setExpandedGroups] = useReactState({} as Record<string, boolean>); // key: groupKey, value: expanded/collapsed
   const { users } = useAppContext();
   const navigate = useNavigate();
+  const { hasAnyRole } = useAuthorization();
 
   useEffect(() => {
     let cancelled = false;
@@ -164,7 +152,7 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
       const persistedRaw = mmpFile?.permits;
       const persistedDocs = normalizeDocs(persistedRaw);
 
-      // Helper: merge by id or fileName
+      // Helper: merge by id or fileName, ensuring no duplicates
       const mergeLists = (a: MMPStatePermitDocument[], b: MMPStatePermitDocument[]) => {
         const aByKey = new Map<string, MMPStatePermitDocument>();
         const keyOf = (d: MMPStatePermitDocument) => (d.id || d.fileName || '').toString();
@@ -191,7 +179,10 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
           const key = keyOf(pd);
           if (!aByKey.has(key)) out.push(pd);
         });
-        return out;
+        // Final deduplication by key to ensure no duplicates
+        const finalMap = new Map<string, MMPStatePermitDocument>();
+        out.forEach(doc => finalMap.set(keyOf(doc), doc));
+        return Array.from(finalMap.values());
       };
 
       let finalDocs: MMPStatePermitDocument[] = [];
@@ -202,8 +193,15 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
       }
 
       if (!cancelled) {
-        setPermits(finalDocs.filter(d => d.permitType === 'federal' || d.permitType === 'state'));
-        setLocalPermits(finalDocs.filter(d => d.permitType === 'local'));
+        const currentFederalState = permits.filter(d => d.permitType === 'federal');
+        const newFederalState = finalDocs.filter(d => d.permitType === 'federal');
+        
+        const federalStateChanged = currentFederalState.length !== newFederalState.length || 
+          !currentFederalState.every((doc, i) => doc.id === newFederalState[i]?.id);
+        
+        if (federalStateChanged) {
+          setPermits(newFederalState);
+        }
       }
     };
 
@@ -216,7 +214,7 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
 
   const handleDeletePermit = async (permitId: string) => {
     try {
-      const doc = localPermits.find(p => p.id === permitId) || permits.find(p => p.id === permitId);
+      const doc = permits.find(p => p.id === permitId);
       if (!doc) {
         toast({ title: 'Permit not found', description: 'Could not locate the selected permit.', variant: 'destructive' });
         return;
@@ -235,15 +233,9 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
         console.warn('Storage remove threw (non-fatal):', e);
       }
 
-      if (doc.permitType === 'local') {
-        const updatedLocalPermits = localPermits.filter(p => p.id !== permitId);
-        setLocalPermits(updatedLocalPermits);
-        persistPermits(permits, updatedLocalPermits);
-      } else {
-        const updatedPermits = permits.filter(p => p.id !== permitId);
-        setPermits(updatedPermits);
-        persistPermits(updatedPermits, localPermits);
-      }
+      const updatedPermits = permits.filter(p => p.id !== permitId);
+      setPermits(updatedPermits);
+      persistPermits(updatedPermits);
 
       toast({ title: 'Permit deleted', description: `${doc.fileName} was removed.` });
     } catch (e) {
@@ -275,17 +267,16 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
     }
   };
 
-  const persistPermits = (docs: MMPStatePermitDocument[], localDocs: MMPStatePermitDocument[] = []) => {
+  const persistPermits = (docs: MMPStatePermitDocument[]) => {
     const now = new Date().toISOString();
-    const allDocs = [...docs, ...localDocs];
     const permitsData: MMPPermitsData = {
       federal: docs.some(d => d.permitType === 'federal'),
-      state: docs.some(d => d.permitType === 'state'),
-      local: localDocs.some(d => d.permitType === 'local'),
-      lastVerified: allDocs.some(d => d.status) ? now : undefined,
+      state: false,
+      local: false,
+      lastVerified: docs.some(d => d.status) ? now : undefined,
       verifiedBy: currentUser?.username || currentUser?.fullName || currentUser?.email || undefined,
       // Cast to MMPDocument[] for compatibility; downstream code handles extended fields safely
-      documents: allDocs as unknown as any,
+      documents: docs as unknown as any,
     };
 
     if (mmpFile?.id) {
@@ -326,15 +317,9 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
   };
 
   const handleUploadSuccess = (newPermit: MMPStatePermitDocument) => {
-    if (newPermit.permitType === 'local') {
-      const updatedLocalPermits = [...localPermits, newPermit];
-      setLocalPermits(updatedLocalPermits);
-      persistPermits(permits, updatedLocalPermits);
-    } else {
-      const updatedPermits = [...permits, newPermit];
-      setPermits(updatedPermits);
-      persistPermits(updatedPermits, localPermits);
-    }
+    const updatedPermits = [...permits, newPermit];
+    setPermits(updatedPermits);
+    persistPermits(updatedPermits);
     
     toast({
       title: "Permit Uploaded",
@@ -433,46 +418,23 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
   };
 
   const handleVerifyPermit = (permitId: string, status: 'verified' | 'rejected', notes?: string) => {
-  let decidedDoc: MMPStatePermitDocument | undefined;
-    // Check if it's a local permit
-    const localPermitIndex = localPermits.findIndex(p => p.id === permitId);
-    let updatedLocalPermits = localPermits;
-    let updatedPermits = permits;
-    if (localPermitIndex !== -1) {
-      updatedLocalPermits = localPermits.map(permit => {
-        if (permit.id === permitId) {
-          const updated = {
-            ...permit,
-            status,
-            verificationNotes: notes,
-            verifiedAt: new Date().toISOString(),
-            verifiedBy: currentUser?.username || currentUser?.fullName || currentUser?.email || 'System'
-          } as MMPStatePermitDocument;
-          decidedDoc = updated;
-          return updated;
-        }
-        return permit;
-      });
-      setLocalPermits(updatedLocalPermits);
-      persistPermits(permits, updatedLocalPermits);
-    } else {
-      updatedPermits = permits.map(permit => {
-        if (permit.id === permitId) {
-          const updated = {
-            ...permit,
-            status,
-            verificationNotes: notes,
-            verifiedAt: new Date().toISOString(),
-            verifiedBy: currentUser?.username || currentUser?.fullName || currentUser?.email || 'System'
-          } as MMPStatePermitDocument;
-          decidedDoc = updated;
-          return updated;
-        }
-        return permit;
-      });
-      setPermits(updatedPermits);
-      persistPermits(updatedPermits, localPermits);
-    }
+    let decidedDoc: MMPStatePermitDocument | undefined;
+    const updatedPermits = permits.map(permit => {
+      if (permit.id === permitId) {
+        const updated = {
+          ...permit,
+          status,
+          verificationNotes: notes,
+          verifiedAt: new Date().toISOString(),
+          verifiedBy: currentUser?.username || currentUser?.fullName || currentUser?.email || 'System'
+        } as MMPStatePermitDocument;
+        decidedDoc = updated;
+        return updated;
+      }
+      return permit;
+    });
+    setPermits(updatedPermits);
+    persistPermits(updatedPermits);
 
     // Update the corresponding mmp_site_entries record to status 'approved'
     (async () => {
@@ -506,134 +468,29 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
     }
   };
 
-  // Show modal instead of forwarding directly
-  const forwardEntriesToCoordinators = async () => {
-    setShowAssignModal(true);
-  };
 
-  // Forward a single batch (group) to the selected coordinator
-  const handleForwardBatch = async (groupKey: string) => {
-    setBatchLoading(b => ({ ...b, [groupKey]: true }));
-    try {
-      const mmpId = mmpFile?.id || mmpFile?.mmpId;
-      const coordinatorId = assignmentMap[groupKey];
-      const siteIds = Array.from(selectedSites[groupKey] || []);
-      if (!coordinatorId || siteIds.length === 0) {
-        toast({ title: 'Select sites and coordinator', description: 'Please select at least one site and a coordinator.', variant: 'destructive' });
-        setBatchLoading(b => ({ ...b, [groupKey]: false }));
-        return;
-      }
-
-      // Get the site entries for the selected sites
-      const selectedSiteEntries = groupMap[groupKey]?.filter((site: any) => siteIds.includes(site.id)) || [];
-
-      // Update mmp_site_entries to assign to coordinator (keep status as Pending)
-      const updatePromises = selectedSiteEntries.map(async (siteEntry: any) => {
-        const existingAdditionalData = siteEntry.additional_data || {};
-        
-        // Update the mmp_site_entry in the database (assign to coordinator, keep status as Pending)
-        const { data, error } = await supabase
-          .from('mmp_site_entries')
-          .update({
-            status: 'Pending',
-            dispatched_by: currentUser?.id || null,
-            dispatched_at: new Date().toISOString(),
-            additional_data: {
-              ...existingAdditionalData,
-              assigned_to: coordinatorId,
-              assigned_by: currentUser?.id || null,
-              assigned_at: new Date().toISOString(),
-              notes: `Forwarded from MMP ${mmpFile?.name || mmpFile?.mmpId} for CP verification`,
-            }
-          })
-          .eq('id', siteEntry.id)
-          .select()
-          .single();
-
-        if (error) {
-          console.error('Error updating site entry:', error);
-          throw error;
-        }
-
-        return data;
-      });
-
-      // Wait for all site entries to be updated
-      await Promise.all(updatePromises);
-
-      // Send notification to coordinator
-      await supabase.from('notifications').insert([
-        {
-          user_id: coordinatorId,
-          title: 'Sites forwarded for CP verification',
-          message: `${mmpFile?.name || 'MMP'}: ${siteIds.length} site(s) have been forwarded for your CP review`,
-          type: 'info',
-          link: `/coordinator/sites`,
-          related_entity_id: mmpId,
-          related_entity_type: 'mmpFile',
-        }
-      ]);
-
-      toast({ title: 'Batch Forwarded', description: `Sites were forwarded to ${allCoordinators.find(c => c.id === coordinatorId)?.fullName || 'Coordinator'}.`, variant: 'default' });
-      setBatchLoading(b => ({ ...b, [groupKey]: false }));
-      setBatchForwarded(f => ({ ...f, [groupKey]: true }));
-      setSelectedSites(s => ({ ...s, [groupKey]: new Set() }));
-    } catch (e) {
-      console.warn('Batch forward failed:', e);
-      toast({ title: 'Forwarding failed', description: 'Could not forward to coordinator. Please try again.', variant: 'destructive' });
-      setBatchLoading(b => ({ ...b, [groupKey]: false }));
-    }
-  };
 
   const calculateProgress = () => {
-    const allPermits = [...permits, ...localPermits];
-    if (allPermits.length === 0) return 0;
-    const verifiedCount = allPermits.filter(p => p.status === 'verified' || p.status === 'rejected').length;
-    return Math.round((verifiedCount / allPermits.length) * 100);
+    // Progress should reflect only federal permits
+    const federalPermits = permits.filter(p => p.permitType === 'federal');
+    if (federalPermits.length === 0) return 0;
+    const decided = federalPermits.filter(p => p.status === 'verified' || p.status === 'rejected').length;
+    return Math.round((decided / federalPermits.length) * 100);
   };
 
   const progress = calculateProgress();
   const siteCount = mmpFile?.siteEntries?.length || mmpFile?.entries || 0;
-  const allPermitsList = [...permits, ...localPermits];
+  // Consider only federal permits for verification gating
+  const allPermitsList = permits.filter(p => p.permitType === 'federal');
   const allVerified = allPermitsList.length > 0 && allPermitsList.every(p => p.status === 'verified');
 
-  // --- Modal assignment logic ---
-  // Prepare site groups and coordinators for modal
-  let entries: any[] = Array.isArray(mmpFile?.siteEntries) && mmpFile.siteEntries.length > 0 ? mmpFile.siteEntries : [];
-  const stateNameToId = new Map<string, string>();
-  // Add both full name and name without "State" suffix for better matching
-  for (const s of sudanStates) {
-    const normalizedName = s.name.toLowerCase();
-    stateNameToId.set(normalizedName, s.id);
-    // Also add without "State" suffix (e.g., "Northern" matches "Northern State")
-    if (normalizedName.endsWith(' state')) {
-      stateNameToId.set(normalizedName.replace(/\s+state$/, ''), s.id);
-    }
-  }
-  const localitiesByState = new Map<string, Map<string, string>>();
-  for (const s of sudanStates) {
-    const map = new Map<string, string>();
-    s.localities.forEach(l => map.set(l.name.toLowerCase(), l.id));
-    localitiesByState.set(s.id, map);
-  }
-  const groupMap: Record<string, any[]> = {};
-  entries.forEach((e: any) => {
-    const sName = String(e.state || '').trim().toLowerCase();
-    const stateId = stateNameToId.get(sName);
-    if (!stateId) return;
-    const locName = String(e.locality || '').trim().toLowerCase();
-    const locMap = localitiesByState.get(stateId);
-    const localityId = locName && locMap ? (locMap.get(locName) || '') : '';
-    const key = `${stateId}|${localityId}`;
-    if (!groupMap[key]) groupMap[key] = [];
-    groupMap[key].push(e);
-  });
-  // All coordinators in the system
-  const allCoordinators = users.filter(u => u.role === 'coordinator');
-  // Helper to get recommended coordinator for a group
-  function getRecommendedCoordinator(stateId: string, localityId: string) {
-    return allCoordinators.find(c => c.stateId === stateId && (c.localityId === localityId || !localityId));
-  }
+  // Check permit requirements
+  const isFOM = hasAnyRole(['fom', 'fieldOpManager']);
+  const hasFederalPermit = permits.some(p => p.permitType === 'federal');
+  // const hasStatePermit = permits.some(p => p.permitType === 'state'); // hidden
+  // Only federal permit is required for all roles now
+  const requiredPermitsUploaded = hasFederalPermit;
+  const canReviewOrForward = allVerified && requiredPermitsUploaded && !hasForwarded;
 
   return (
     <div className="space-y-8">
@@ -642,10 +499,10 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Upload className="h-5 w-5" />
-            Upload New Permit
+            Upload Federal Permit
           </CardTitle>
           <CardDescription>
-            Add a new permit document for verification
+            Upload the federal permit required for MMP verification
             {siteCount > 0 && (
               <span className="ml-1 text-xs font-medium text-blue-600">
                 • MMP contains {siteCount} sites
@@ -662,21 +519,81 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
         </CardContent>
       </Card>
 
-      {/* Federal/State Permits Section */}
+      {/* Permit Status Warnings */}
+      <Card className="border-orange-200 bg-orange-50">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-orange-800">
+            <AlertTriangle className="h-5 w-5" />
+            Permit Status Overview
+          </CardTitle>
+          <CardDescription className="text-orange-700">
+            Check what permits you have uploaded and what is still required
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            {/* Federal Permit Status */}
+            <div className="flex items-center justify-between p-3 rounded-lg border">
+              <div className="flex items-center gap-3">
+                {hasFederalPermit ? (
+                  <CheckCircle2 className="h-5 w-5 text-green-600" />
+                ) : (
+                  <AlertTriangle className="h-5 w-5 text-orange-600" />
+                )}
+                <div>
+                  <div className="font-medium text-gray-900">Federal Permit</div>
+                  <div className="text-sm text-gray-600">
+                    {hasFederalPermit ? "Uploaded and ready" : "Not uploaded yet"}
+                  </div>
+                </div>
+              </div>
+              <div className="text-sm font-medium">
+                {hasFederalPermit ? (
+                  <span className="text-green-600">✓ Complete</span>
+                ) : (
+                  <span className="text-orange-600">⚠ Required</span>
+                )}
+              </div>
+            </div>
+
+            {/* State Permit Status hidden */}
+            {/**
+            <div className="flex items-center justify-between p-3 rounded-lg border">...</div>
+            **/}
+
+            {/* Summary Message */}
+            <div className="mt-4 p-3 bg-white rounded-lg border">
+              <div className="text-sm">
+                {hasFederalPermit ? (
+                  <div className="text-green-700 font-medium">
+                    ✓ Federal permit uploaded. You can now review and assign coordinators.
+                  </div>
+                ) : (
+                  <div className="text-orange-700 font-medium">
+                    ⚠ Federal permit required. Upload the federal permit to proceed.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Federal Permits Section */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FileCheck className="h-5 w-5" />
-            Federal & State Permits
+            Federal Permits
           </CardTitle>
           <CardDescription>
-            Track and manage federal and state permit verifications
+            Track and manage federal permit verifications
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {permits.length > 0 ? (
-              permits.map((permit) => (
+            {permits.filter(p => p.permitType === 'federal').length > 0 ? (
+              permits.filter(p => p.permitType === 'federal').map((permit) => (
                 <PermitVerificationCard
                   key={permit.id}
                   permit={permit}
@@ -687,56 +604,28 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
             ) : (
               <div className="text-center py-8 text-muted-foreground">
                 <Upload className="h-8 w-8 mx-auto mb-2 opacity-20" />
-                <p className="text-sm font-medium mb-1">No federal/state permits uploaded yet</p>
-                <p className="text-xs">Upload federal or state permits to begin verification</p>
+                <p className="text-sm font-medium mb-1">No federal permits uploaded yet</p>
+                <p className="text-xs">Upload federal permits to begin verification</p>
               </div>
             )}
           </div>
         </CardContent>
       </Card>
 
-      {/* Local Permits Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileCheck className="h-5 w-5" />
-            Local Permits
-          </CardTitle>
-          <CardDescription>
-            Track and manage local permit verifications
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {localPermits.length > 0 ? (
-              localPermits.map((permit) => (
-                <PermitVerificationCard
-                  key={permit.id}
-                  permit={permit}
-                  onVerify={handleVerifyPermit}
-                  onDelete={handleDeletePermit}
-                />
-              ))
-            ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                <Upload className="h-8 w-8 mx-auto mb-2 opacity-20" />
-                <p className="text-sm font-medium mb-1">No local permits uploaded yet</p>
-                <p className="text-xs">Upload local permits to begin verification</p>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+      {/* Local Permits Section hidden */}
+      {/**
+      <Card> ... </Card>
+      **/}
 
       {/* Overall Progress Section */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FileCheck className="h-5 w-5" />
-            Overall Verification Progress
+            Federal Permit Verification Progress
           </CardTitle>
           <CardDescription>
-            Combined progress for all permit types
+            Federal verification progress
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -751,123 +640,30 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
             </div>
             <Progress value={progress} className="h-2" />
           </div>
-          <div className="grid grid-cols-3 gap-4 text-sm">
+          <div className="grid grid-cols-1 gap-4 text-sm">
             <div className="text-center">
-              <div className="font-medium text-blue-600">{permits.filter(p => p.permitType === 'federal').length}</div>
+              <div className="font-medium text-blue-600">{permits.length}</div>
               <div className="text-muted-foreground">Federal</div>
             </div>
-            <div className="text-center">
-              <div className="font-medium text-green-600">{permits.filter(p => p.permitType === 'state').length}</div>
-              <div className="text-muted-foreground">State</div>
-            </div>
-            <div className="text-center">
-              <div className="font-medium text-purple-600">{localPermits.length}</div>
-              <div className="text-muted-foreground">Local</div>
-            </div>
+            {/** State and Local counts hidden **/}
           </div>
-          <div className="mt-6 flex justify-end">
-            {allVerified && !hasForwarded ? (
-              <Button onClick={() => navigate(`/mmp/${mmpFile.id}`)} disabled={forwardLoading}>
-                <Eye className="h-4 w-4 mr-2" />
-                Review MMP
+          <div className="mt-6 flex justify-end gap-2">
+            {canReviewOrForward ? (
+              <Button onClick={() => navigate(`/mmp/${mmpFile.id}/review-assign-coordinators`)}>
+                <Send className="h-4 w-4 mr-2" />
+                Review & Assign Coordinators
               </Button>
-            ) : null}
+            ) : (
+              <div className="text-sm text-muted-foreground text-center w-full">
+                {!hasFederalPermit && "Upload federal permit to enable review and forwarding"}
+                {requiredPermitsUploaded && !allVerified && "Verify all permits to enable review and forwarding"}
+                {hasForwarded && "Sites have already been forwarded"}
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
 
-      {/* Assignment Modal - Usable, simple batch forwarding */}
-      <Dialog open={showAssignModal} onOpenChange={setShowAssignModal}>
-        <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Review & Assign Coordinators</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-6 overflow-y-auto flex-1 pr-2" style={{ maxHeight: '60vh' }}>
-            {Object.entries(groupMap).length === 0 ? (
-              <div className="text-center text-muted-foreground">No site groups found.</div>
-            ) : (
-              Object.entries(groupMap).map(([groupKey, groupSites]) => {
-                const [stateId, localityId] = groupKey.split('|');
-                const recommended = getRecommendedCoordinator(stateId, localityId);
-                const selectedId = assignmentMap[groupKey] || recommended?.id || '';
-                // Initialize selectedSites for this group if not set
-                if (!selectedSites[groupKey]) {
-                  setSelectedSites(s => ({ ...s, [groupKey]: new Set(groupSites.map((site: any) => site.id)) }));
-                }
-                return (
-                  <div key={groupKey} className="border rounded p-3 bg-white">
-                    <div className="flex items-center mb-2 font-medium cursor-pointer select-none" onClick={() => setExpandedGroups(g => ({ ...g, [groupKey]: !g[groupKey] }))}>
-                      {expandedGroups[groupKey] ? <ChevronDown className="w-4 h-4 mr-1" /> : <ChevronRight className="w-4 h-4 mr-1" />}
-                      {groupSites.length} site(s) in <span className="text-blue-700 ml-1">{sudanStates.find(s => s.id === stateId)?.name || stateId}</span>
-                      {localityId && (
-                        <span> / <span className="text-green-700">{sudanStates.find(s => s.id === stateId)?.localities.find(l => l.id === localityId)?.name || localityId}</span></span>
-                      )}
-                    </div>
-                    <div className="mb-2 text-sm text-muted-foreground">
-                      Recommended: {recommended ? `${recommended.fullName || recommended.name || recommended.email}` : 'None'}
-                    </div>
-                    <div className="flex items-center gap-2 mb-2">
-                      <Select value={selectedId} onValueChange={val => setAssignmentMap(a => ({ ...a, [groupKey]: val }))}>
-                        <SelectTrigger className="max-w-md">
-                          <SelectValue placeholder="Select coordinator..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {allCoordinators.map(c => (
-                            <SelectItem key={c.id} value={c.id}>
-                              {c.fullName || c.name || c.email}
-                              {recommended?.id === c.id ? ' (Recommended)' : ''}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Button
-                        size="sm"
-                        onClick={() => handleForwardBatch(groupKey)}
-                        disabled={batchLoading[groupKey] || batchForwarded[groupKey] || !assignmentMap[groupKey] || !(selectedSites[groupKey]?.size > 0)}
-                        variant={batchForwarded[groupKey] ? 'secondary' : 'default'}
-                        className="ml-2"
-                      >
-                        {batchForwarded[groupKey]
-                          ? 'Forwarded'
-                          : batchLoading[groupKey]
-                            ? 'Forwarding...'
-                            : 'Forward Selected'}
-                      </Button>
-                    </div>
-                    {expandedGroups[groupKey] && (
-                      <div className="mt-3 mb-2">
-                        <div className="font-medium text-xs mb-1">Select sites to forward:</div>
-                        <div className="max-h-40 overflow-y-auto border rounded p-2 bg-gray-50">
-                          <div className="space-y-2">
-                            {groupSites.map((site: any) => (
-                              <label key={site.id} className="flex items-center gap-2 cursor-pointer hover:bg-white p-1 rounded">
-                                <Checkbox
-                                  checked={selectedSites[groupKey]?.has(site.id) || false}
-                                  onCheckedChange={checked => {
-                                    setSelectedSites(s => {
-                                      const set = new Set(s[groupKey] || []);
-                                      if (checked) set.add(site.id); else set.delete(site.id);
-                                      return { ...s, [groupKey]: set };
-                                    });
-                                  }}
-                                />
-                                <span className="text-sm">{site.siteName || site.name || site.id}</span>
-                              </label>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowAssignModal(false)} disabled={forwardLoading}>Close</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };

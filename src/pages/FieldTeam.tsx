@@ -17,7 +17,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import GpsLocationCapture from '@/components/GpsLocationCapture';
-import { useUserProjects } from '@/hooks/useUserProjects';
 import {
   Users,
   MapPin,
@@ -53,7 +52,6 @@ const FieldTeam = () => {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const { checkPermission, hasAnyRole } = useAuthorization();
-  const { userProjectTeamUserIds, isAdminOrSuperUser } = useUserProjects();
 
   const canAccess = checkPermission('users', 'read') || hasAnyRole(['admin']);
   
@@ -92,23 +90,11 @@ const FieldTeam = () => {
   };
 
   const fieldTeamUsers = useMemo(() => {
-    const fieldRoles = users.filter((user) => {
+    return users.filter((user) => {
       const role = user.role?.toLowerCase() || '';
       return ['coordinator', 'datacollector', 'enumerator', 'data_collector'].includes(role);
     });
-    
-    // Admins/Super Admins/ICT can see all field team users
-    if (isAdminOrSuperUser) {
-      return fieldRoles;
-    }
-    
-    // Filter to only show users who are in the same projects as the current user
-    return fieldRoles.filter(user => {
-      if (!user.id) return false;
-      // Include the user if they are part of any project the current user belongs to
-      return userProjectTeamUserIds.includes(user.id);
-    });
-  }, [users, isAdminOrSuperUser, userProjectTeamUserIds]);
+  }, [users]);
 
   const filteredUsers = useMemo(() => {
     return fieldTeamUsers.filter((user) => {
