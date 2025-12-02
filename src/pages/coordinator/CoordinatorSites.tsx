@@ -125,6 +125,19 @@ const SiteEditForm: React.FC<SiteEditFormProps> = ({ site, onSave, onCancel, hub
 
   return (
     <div className="space-y-6">
+      {/* Rejection Comments Section - Show for rejected sites */}
+      {site.status?.toLowerCase() === 'rejected' && site.verification_notes && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <XCircle className="h-5 w-5 text-red-500 mt-0.5 flex-shrink-0" />
+            <div className="flex-1">
+              <h3 className="text-sm font-semibold text-red-800">Rejection Reason</h3>
+              <p className="text-sm text-red-700 mt-1">{site.verification_notes}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <Label htmlFor="site_name">Site Name</Label>
@@ -346,6 +359,68 @@ const SiteEditForm: React.FC<SiteEditFormProps> = ({ site, onSave, onCancel, hub
             <CheckCircle className="h-4 w-4 mr-2" />
             Verify Site
           </Button>
+        ) : site.status?.toLowerCase() === 'rejected' ? (
+          // For rejected sites, show Save and Re-verify buttons
+          <>
+            <Button type="button" variant="outline" onClick={onCancel}>
+              Cancel
+            </Button>
+            <Button 
+              type="button" 
+              variant="outline"
+              onClick={() => {
+                // Validate that visit date is required
+                if (!visitDate) {
+                  toast({
+                    title: 'Validation Error',
+                    description: 'Visit date is required. Please select a visit date before saving.',
+                    variant: 'destructive'
+                  });
+                  return;
+                }
+                const updatedSite = {
+                  ...formData,
+                  visit_date: visitDate ? visitDate.toISOString().split('T')[0] : null,
+                  // Use custom values if "Other" was selected
+                  hub_office: formData.hub_office,
+                  monitoring_by: formData.monitoring_by,
+                  survey_tool: formData.survey_tool === 'Other' ? customValues.survey_tool : formData.survey_tool,
+                };
+                onSave(updatedSite, false);
+              }}
+            >
+              Save Changes
+            </Button>
+            <Button 
+              type="button" 
+              variant="outline"
+              onClick={() => {
+                // Validate that visit date is required
+                if (!visitDate) {
+                  toast({
+                    title: 'Validation Error',
+                    description: 'Visit date is required. Please select a visit date before re-verifying.',
+                    variant: 'destructive'
+                  });
+                  return;
+                }
+                const updatedSite = {
+                  ...formData,
+                  visit_date: visitDate ? visitDate.toISOString().split('T')[0] : null,
+                  // Use custom values if "Other" was selected
+                  hub_office: formData.hub_office,
+                  monitoring_by: formData.monitoring_by,
+                  survey_tool: formData.survey_tool === 'Other' ? customValues.survey_tool : formData.survey_tool,
+                };
+                onSave(updatedSite, true);
+              }}
+              disabled={!visitDate}
+              className="bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <CheckCircle className="h-4 w-4 mr-2" />
+              Re-verify Site
+            </Button>
+          </>
         ) : (
           // For other sites, show both Save and Verify buttons
           <>
@@ -2772,6 +2847,9 @@ const CoordinatorSites: React.FC = () => {
                   />
                 </div>
               </div>
+              <div className="text-sm text-muted-foreground">
+                Click on a site to view rejection details, add comments, and edit site information.
+              </div>
             </CardHeader>
             <CardContent>
               {filteredSites.length === 0 ? (
@@ -2782,7 +2860,7 @@ const CoordinatorSites: React.FC = () => {
               ) : (
                 <>
                   <div className="space-y-4">
-                    {paginatedSites.map(site => renderSiteCard(site, false))}
+                    {paginatedSites.map(site => renderSiteCard(site, true))}
                   </div>
                   {totalPages > 1 && (
                     <div className="flex items-center justify-between mt-4 pt-4 border-t">
