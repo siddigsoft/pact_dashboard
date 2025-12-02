@@ -1,0 +1,38 @@
+| id                                   | email                                  | full_name                           | role          | hub_id      |
+| ------------------------------------ | -------------------------------------- | ----------------------------------- | ------------- | ----------- |
+| 68430275-90d8-4f69-8a7e-5df447a237cb | awad.alfadil@pactorg.org               | Awad Alfadil                        | coordinator   | dongola-hub |
+| 04f03465-6007-48e2-987e-6ecae669d72b | coordinator-northern@example.com       | Coordinator - Northern              | coordinator   | dongola-hub |
+| dbf59e84-e5ef-4b15-b687-cdc6166f63d2 | coordinator-river-nile@example.com     | Coordinator - River Nile            | coordinator   | dongola-hub |
+| 32255819-f7fd-4775-aca9-87a11a12cd88 | safaris.dirttrails@gmail.com           | DIRT-TRAILS SAFARIS                 | coordinator   | dongola-hub |
+| 8b279f02-b025-41a5-9014-4e07edaff49e | noor.siraj@pactorg.org                 |  Noor Siraj                         | dataCollector | dongola-hub |
+| ad137038-632c-476b-9321-a19e7e4b87c6 | adam.mohamed@pactorg.com               | Adam Mohamed Ahmed                  | dataCollector | dongola-hub |
+| 827943ff-e96b-44fa-9398-222cfe4c4e27 | ahmed'abdalla@pactorg.org              | Ahmed Abdalla                       | dataCollector | dongola-hub |
+| deb146c8-3bfb-48b7-a1f0-dc3bb660fc27 | ahmed.hassan@pactorg.org               | Ahmed Hassan                        | dataCollector | dongola-hub |
+| a79995f9-1435-45b4-87c4-84d227d52125 | alrasheed.hassan@pactorg.org           | Alrasheed Hassan Ali Fadul          | dataCollector | dongola-hub |
+| 7e9ab6f7-b476-461c-92ff-3b801ca6ac2b | ayman.ahmed@pactorg.org                | Ayman  Ahmed                        | dataCollector | dongola-hub |
+| 60383c2b-c86f-4678-ac23-4cefce7cc6e6 | francis.b.kaz@gmail.com                | Bant Francis Kazibwe                | dataCollector | dongola-hub |
+| f3b8d295-b949-4849-8c1e-ea058363c101 | datacollector-northern-1@example.com   | Data Collector - Northern 1         | dataCollector | dongola-hub |
+| d723dfc2-d926-417e-8906-d0c5328480e8 | datacollector-northern-2@example.com   | Data Collector - Northern 2         | dataCollector | dongola-hub |
+| 56b0dbb4-1ae0-4814-b7b3-01a540f91cdd | datacollector-river-nile-1@example.com | Data Collector - River Nile 1       | dataCollector | dongola-hub |
+| 1ecd1040-f45e-4928-8805-fcf730c0ae58 | datacollector-river-nile-2@example.com | Data Collector - River Nile 2       | dataCollector | dongola-hub |
+| 42735f4c-ece0-4036-b8ff-72692dac6679 | elfadul.hussin@pactorg.org             | Elfadul Hussin                      | dataCollector | dongola-hub |
+| eeaf10a4-84ad-42d7-8042-ab0a42e69e5b | siddigsoft123@gmail.com                | ELSIDDIG IBRAHIM                    | dataCollector | dongola-hub |
+| f97587f4-a995-4aa0-840d-356e6aa4710d | fatima.abdalgadir@pactorg.org          | Fatima Abdalgadir                   | dataCollector | dongola-hub |
+| a94ff67a-f8e4-4920-bada-b92feb57d1fb | ibtssam.kamal@pactorg.org              | Ibtssam  Kamal                      | dataCollector | dongola-hub |
+| bc71ea0c-9a7e-4ebb-9cfa-050f99ace27b | jalal.ahmed@pactorg.com                | Jalal Ahmed                         | dataCollector | dongola-hub |
+| 03dbf5d9-703f-4632-8feb-e71c95608490 | mahir.ahmed@pactorg.org                | Mahir Ahmed Mohamed Abdelmajed      | dataCollector | dongola-hub |
+| 1530fef0-7d4e-46ed-8090-151568aa1c5b | mawada@pactorg.com                     | Mawda Mohamed Osman                 | dataCollector | dongola-hub |
+| a4264807-9224-4e62-b89c-845923d11ed2 | mohamed.khalid@pactorg.org             | Mohamed Ali Khalid                  | dataCollector | dongola-hub |
+| 1ad8375a-1e41-442d-a8dc-f458105fa7c3 | mohammad.adam@pactorg.org              | Mohammad Adam Haroon Adam           | dataCollector | dongola-hub |
+| 26d92591-1162-422a-afac-5c02cb650e2d | abdo.mahadi@pactorg.org                | Musab Abdo Mahadi                   | dataCollector | dongola-hub |
+| 71659f96-8334-4afb-bada-5c64157ad738 | namarig.abudelaziz@pactorg.org         | Namarig Abudelaziz Abudallh Mohamed | dataCollector | dongola-hub |
+| 574bd6a0-2b61-4b40-8ee7-e46036d2aecb | nargis.hassan@pactorg.org              | Nargis Hassan Ahmed                 | dataCollector | dongola-hub |
+| 82062ed6-d0b5-4a29-b529-f66a931b61dc | nashaat.musa@pactorg.org               | Nashaat Musa Kowa                   | dataCollector | dongola-hub |
+| c08a7658-0a0c-4536-8ce3-38add7a9f562 | nusiba.bashir@pactorg.org              | Nusiba Bashir                       | dataCollector | dongola-hub |
+| 041b4174-95ec-496a-9217-25370c267363 | ahmed.musa@pactorg.org                 | Omer Hassabalrasool Ahmed Musa      | dataCollector | dongola-hub |
+| c865e585-9ab8-4165-98e2-dd6cd9c08940 | ugandaquantum@gmail.com                | Quantum Uganda                      | dataCollector | dongola-hub |
+| aedff34b-0b37-46ba-9fdb-cf8c8a3c96aa | vaniahchristian@gmail.com              | vaniah christian                    | dataCollector | dongola-hub |
+| 4e0b7caa-02fc-4d4a-9887-f8351a878dbc | dinducatering@gmail.com                | Dindu                               | fom           | dongola-hub |
+| b2c7e66d-d85f-4d1f-8bd6-2120b3e1b41e | ssgeorge480@gmail.com                  | Ssemaganda George                   | fom           | dongola-hub |
+| 3c6c492b-d1db-4705-b6cb-834de3a27b71 | pactconsultancy63@gmail.com            | pact consultancy                    | supervisor    | dongola-hub |
+| 86fc9ba9-d4f9-4fe4-a6d5-199c88c20b59 | supervisor-dongola-hub@example.com     | Supervisor - Dongola Hub            | supervisor    | dongola-hub |

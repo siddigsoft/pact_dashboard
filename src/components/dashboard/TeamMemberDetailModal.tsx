@@ -186,6 +186,35 @@ export const TeamMemberDetailModal: React.FC<TeamMemberDetailModalProps> = ({
                     </div>
                   )}
                 </div>
+                
+                {/* Location with Accuracy */}
+                {user.location?.isSharing && user.location?.latitude && user.location?.longitude && (
+                  <div className="flex items-center gap-2 text-xs mt-2 p-2 bg-blue-500/5 border border-blue-500/10 rounded">
+                    <MapPin className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+                    <span className="text-muted-foreground">
+                      {user.location.latitude.toFixed(5)}, {user.location.longitude.toFixed(5)}
+                    </span>
+                    {user.location.accuracy !== undefined && (
+                      <Badge 
+                        variant="outline" 
+                        className={`text-[10px] h-5 ${
+                          user.location.accuracy <= 10 
+                            ? 'border-green-500 text-green-600 dark:text-green-400' 
+                            : user.location.accuracy <= 30 
+                              ? 'border-yellow-500 text-yellow-600 dark:text-yellow-400' 
+                              : 'border-orange-500 text-orange-600 dark:text-orange-400'
+                        }`}
+                      >
+                        {'\u00B1'}{user.location.accuracy.toFixed(1)}m {user.location.accuracy <= 10 ? 'Excellent' : user.location.accuracy <= 30 ? 'Good' : 'Fair'}
+                      </Badge>
+                    )}
+                    {user.location.lastUpdated && (
+                      <span className="text-muted-foreground ml-auto">
+                        Updated {formatDistanceToNow(new Date(user.location.lastUpdated), { addSuffix: true })}
+                      </span>
+                    )}
+                  </div>
+                )}
               </DialogDescription>
             </div>
           </div>

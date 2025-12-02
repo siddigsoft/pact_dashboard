@@ -82,13 +82,9 @@ const config: CapacitorConfig = {
       resizeOnFullScreen: true
     },
     StatusBar: {
-      style: 'dark',
-      backgroundColor: '#1e40af',
-      overlaysWebView: false
-    },
-    NavigationBar: {
-      backgroundColor: '#1e40af',
-      color: 'white'
+      style: 'light',
+      backgroundColor: '#00000000',
+      overlaysWebView: true
     },
     Geolocation: {
       enableHighAccuracy: true,

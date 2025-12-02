@@ -2,6 +2,8 @@ import { MMPFile } from '@/types';
 import { CSVValidationError } from '@/utils/csvValidator';
 import { toast } from 'sonner';
 import { uploadMMPFile } from '@/utils/mmpFileUpload';
+import { NotificationTriggerService } from '@/services/NotificationTriggerService';
+import { supabase } from '@/integrations/supabase/client';
 
 export const useMMPUpload = (addMMPFile: (mmp: MMPFile) => void) => {
   const uploadMMP = async (
@@ -26,10 +28,21 @@ export const useMMPUpload = (addMMPFile: (mmp: MMPFile) => void) => {
         console.log('MMP uploaded successfully, adding to context:', mmpData);
         addMMPFile(mmpData);
         toast.success(`${file.name} uploaded successfully`);
+        
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user && mmpData.id) {
+          NotificationTriggerService.mmpUploadComplete(
+            user.id,
+            mmpData.name || file.name,
+            mmpData.entries || 0,
+            mmpData.id
+          ).catch(err => console.error('Failed to send upload notification:', err));
+        }
+        
         return { success: true, id: mmpData.id, mmp: mmpData, validationReport, validationErrors, validationWarnings };
       }
 
-      return { success: false, error: 'Upload finished without returning data', validationReport, validationErrors, validationWarnings }; // Fallback
+      return { success: false, error: 'Upload finished without returning data', validationReport, validationErrors, validationWarnings };
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       console.error('Error in MMP upload:', err);
