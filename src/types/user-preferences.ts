@@ -172,9 +172,11 @@ export const WORKFLOW_MENU_GROUPS: MenuGroup[] = [
       { id: 'super-admin', title: 'Super Admin', url: '/super-admin-management', icon: 'ShieldCheck', roles: ['superAdmin'], priority: 3 },
       { id: 'classifications', title: 'Classifications', url: '/classifications', icon: 'Award', roles: ['admin', 'financialAdmin'], priority: 4 },
       { id: 'financial-ops', title: 'Financial Operations', url: '/financial-operations', icon: 'TrendingUp', priority: 5 },
-      { id: 'budget', title: 'Budget', url: '/budget', icon: 'DollarSign', roles: ['admin', 'financialAdmin'], priority: 6 },
+      { id: 'budget', title: 'Budget', url: '/budget', icon: 'DollarSign', roles: ['admin', 'financialAdmin', 'projectManager'], priority: 6 },
       { id: 'wallets', title: 'Wallets', url: '/admin/wallets', icon: 'CreditCard', roles: ['admin', 'financialAdmin'], priority: 7 },
-      { id: 'settings', title: 'Settings', url: '/settings', icon: 'Settings', priority: 8 }
+      { id: 'settings', title: 'Settings', url: '/settings', icon: 'Settings', priority: 8 },
+      { id: 'project-manager-dashboard', title: 'PM Dashboard', url: '/dashboard', icon: 'FolderKanban', roles: ['projectManager'], priority: 9 },
+      { id: 'project-approvals', title: 'Approvals Queue', url: '/approvals', icon: 'ClipboardCheck', roles: ['projectManager'], priority: 10 }
     ]
   }
 ];

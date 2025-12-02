@@ -9,12 +9,13 @@ import {
   Briefcase,
   MapPin,
   DollarSign,
-  Server
+  Server,
+  FolderKanban
 } from 'lucide-react';
 import { useAppContext } from '@/context/AppContext';
 import { DashboardCommandBar } from './DashboardCommandBar';
 
-export type DashboardZone = 'operations' | 'team' | 'planning' | 'compliance' | 'performance' | 'fom' | 'data-collector' | 'financial' | 'ict';
+export type DashboardZone = 'operations' | 'team' | 'planning' | 'compliance' | 'performance' | 'fom' | 'data-collector' | 'financial' | 'ict' | 'project-manager';
 
 interface DashboardZoneLayoutProps {
   activeZone: DashboardZone;
@@ -94,6 +95,14 @@ const zones = [
     description: 'System health',
     color: 'text-cyan-500',
     roles: ['admin', 'ict']
+  },
+  {
+    id: 'project-manager' as DashboardZone,
+    label: 'Project Manager',
+    icon: FolderKanban,
+    description: 'Project oversight',
+    color: 'text-indigo-500',
+    roles: ['admin', 'projectmanager']
   }
 ];
 
