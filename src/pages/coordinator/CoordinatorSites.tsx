@@ -511,6 +511,10 @@ const CoordinatorSites: React.FC = () => {
   const [confirmWithoutPermitDialogOpen, setConfirmWithoutPermitDialogOpen] = useState(false);
   const [withoutPermitComments, setWithoutPermitComments] = useState('');
 
+  // Preview dialog for completed sites
+  const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
+  const [selectedSiteForPreview, setSelectedSiteForPreview] = useState<SiteVisit | null>(null);
+
   // Sub-tab state for new sites categorization
   const [newSitesSubTab, setNewSitesSubTab] = useState('state_required');
 
@@ -1866,11 +1870,11 @@ const CoordinatorSites: React.FC = () => {
 
   const totalPages = Math.ceil(filteredSites.length / itemsPerPage);
 
-  const renderSiteCard = (site: SiteVisit, showActions: boolean = true) => (
+  const renderSiteCard = (site: SiteVisit, showActions: boolean = true, isPreviewMode: boolean = false) => (
     <Card 
       key={site.id} 
       className={`overflow-hidden transition-shadow ${
-        showActions 
+        showActions || isPreviewMode
           ? 'hover:shadow-md cursor-pointer hover:bg-gray-50' 
           : 'cursor-default'
       } ${
@@ -1881,11 +1885,16 @@ const CoordinatorSites: React.FC = () => {
         if ((e.target as HTMLInputElement).type === 'checkbox') return;
         setSelectedSiteForEdit(site);
         setEditDialogOpen(true);
+      } : isPreviewMode ? (e) => {
+        // Don't open preview dialog if clicking on checkbox
+        if ((e.target as HTMLInputElement).type === 'checkbox') return;
+        setSelectedSiteForPreview(site);
+        setPreviewDialogOpen(true);
       } : undefined}
     >
       <CardContent className="pt-4">
         <div className="flex items-start gap-3">
-          {(activeTab === 'new' || activeTab === 'permits_attached' || activeTab === 'verified') && !readOnlyMode && (
+          {(activeTab === 'new' || activeTab === 'permits_attached') && !readOnlyMode && (
             <div className="pt-1">
               <input
                 type="checkbox"
@@ -2543,39 +2552,9 @@ const CoordinatorSites: React.FC = () => {
                     </SelectContent>
                   </Select>
                 </div>
-                {selectedSites.size > 0 && (
-                  <div className="flex items-center gap-2 ml-auto">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setBulkAssignDateDialogOpen(true)}
-                      className="flex items-center gap-2 bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
-                    >
-                      <Calendar className="h-4 w-4" />
-                      Attach Visit Date
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setBulkVerifyDialogOpen(true)}
-                      className="flex items-center gap-2 bg-green-50 border-green-200 text-green-700 hover:bg-green-100"
-                    >
-                      <CheckCircle className="h-4 w-4" />
-                      Verify and Save
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setSelectedSites(new Set())}
-                      className="text-gray-600 hover:text-gray-800"
-                    >
-                      Clear Selection
-                    </Button>
-                  </div>
-                )}
               </div>
               <div className="flex items-center gap-4 mt-4">
-                {(activeTab === 'new' || activeTab === 'permits_attached' || activeTab === 'verified') && !readOnlyMode && (
+                {(activeTab === 'new' || activeTab === 'permits_attached') && !readOnlyMode && (
                   <div className="flex items-center gap-2">
                     <input
                       type="checkbox"
@@ -2609,7 +2588,7 @@ const CoordinatorSites: React.FC = () => {
               ) : (
                 <>
                   <div className="space-y-4">
-                    {paginatedSites.map(site => renderSiteCard(site, false))}
+                    {paginatedSites.map(site => renderSiteCard(site, false, true))}
                   </div>
                   {totalPages > 1 && (
                     <div className="flex items-center justify-between mt-4 pt-4 border-t">
@@ -2674,7 +2653,7 @@ const CoordinatorSites: React.FC = () => {
               ) : (
                 <>
                   <div className="space-y-4">
-                    {paginatedSites.map(site => renderSiteCard(site, false))}
+                    {paginatedSites.map(site => renderSiteCard(site, false, true))}
                   </div>
                   {totalPages > 1 && (
                     <div className="flex items-center justify-between mt-4 pt-4 border-t">
@@ -2739,7 +2718,7 @@ const CoordinatorSites: React.FC = () => {
               ) : (
                 <>
                   <div className="space-y-4">
-                    {paginatedSites.map(site => renderSiteCard(site, false))}
+                    {paginatedSites.map(site => renderSiteCard(site, false, true))}
                   </div>
                   {totalPages > 1 && (
                     <div className="flex items-center justify-between mt-4 pt-4 border-t">
@@ -3516,7 +3495,131 @@ const CoordinatorSites: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-    </div>
+      {/* Site Preview Dialog for Completed Sites */}
+      <Dialog open={previewDialogOpen} onOpenChange={setPreviewDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh]">
+          <DialogHeader>
+            <DialogTitle>Site Details - {selectedSiteForPreview?.site_name}</DialogTitle>
+            <DialogDescription>
+              Read-only preview of site information
+            </DialogDescription>
+          </DialogHeader>
+          {selectedSiteForPreview && (
+            <div className="py-4 space-y-6 overflow-y-auto max-h-[calc(90vh-200px)]">
+              {/* Basic Information */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold">Basic Information</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-sm font-medium">Site Name</Label>
+                    <p className="text-sm text-muted-foreground">{selectedSiteForPreview.site_name}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium">Site Code</Label>
+                    <p className="text-sm text-muted-foreground">{selectedSiteForPreview.site_code}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium">Locality</Label>
+                    <p className="text-sm text-muted-foreground">{selectedSiteForPreview.locality}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium">State</Label>
+                    <p className="text-sm text-muted-foreground">{selectedSiteForPreview.state}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium">Hub Office</Label>
+                    <p className="text-sm text-muted-foreground">{selectedSiteForPreview.hub_office}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium">MMP File ID</Label>
+                    <p className="text-sm text-muted-foreground">{selectedSiteForPreview.mmp_file_id}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Status Information */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold">Status Information</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-sm font-medium">Current Status</Label>
+                    <p className="text-sm text-muted-foreground">{selectedSiteForPreview.status}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium">Activity</Label>
+                    <p className="text-sm text-muted-foreground">{selectedSiteForPreview.activity}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium">Main Activity</Label>
+                    <p className="text-sm text-muted-foreground">{selectedSiteForPreview.main_activity}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Dates */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold">Important Dates</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-sm font-medium">Visit Date</Label>
+                    <p className="text-sm text-muted-foreground">
+                      {selectedSiteForPreview.visit_date ? format(new Date(selectedSiteForPreview.visit_date), 'PPP') : 'Not set'}
+                    </p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium">Assigned Date</Label>
+                    <p className="text-sm text-muted-foreground">
+                      {selectedSiteForPreview.assigned_at ? format(new Date(selectedSiteForPreview.assigned_at), 'PPP') : 'Not set'}
+                    </p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium">Verified Date</Label>
+                    <p className="text-sm text-muted-foreground">
+                      {selectedSiteForPreview.verified_at ? format(new Date(selectedSiteForPreview.verified_at), 'PPP') : 'Not verified'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Comments */}
+              {selectedSiteForPreview.comments && (
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold">Comments</h3>
+                  <p className="text-sm text-muted-foreground bg-gray-50 p-3 rounded-md">
+                    {selectedSiteForPreview.comments}
+                  </p>
+                </div>
+              )}
+
+              {/* Verification Information */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold">Verification Information</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-sm font-medium">Verified By</Label>
+                    <p className="text-sm text-muted-foreground">{selectedSiteForPreview.verified_by || 'Not verified'}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium">Verification Notes</Label>
+                    <p className="text-sm text-muted-foreground">{selectedSiteForPreview.verification_notes || 'No notes'}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setPreviewDialogOpen(false);
+                setSelectedSiteForPreview(null);
+              }}
+            >
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>    </div>
   );
 };
 
