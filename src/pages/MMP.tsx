@@ -3125,7 +3125,7 @@ const MMP = () => {
                       </Badge>
                     </Button>
                     <Button variant={verifiedSubTab === 'approvedCosted' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('approvedCosted')} className={`${verifiedSubTab === 'approvedCosted' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} text-xs whitespace-nowrap flex-shrink-0`}>
-                      Approved & Costed
+                      Approved
                       <Badge variant="secondary" className="ml-1 text-xs">{approvedCostedCount}</Badge>
                     </Button>
                     <Button variant={verifiedSubTab === 'dispatched' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('dispatched')} className={`${verifiedSubTab === 'dispatched' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} text-xs whitespace-nowrap flex-shrink-0`}>
@@ -3251,7 +3251,7 @@ const MMP = () => {
                         }}
                         className="bg-green-600 hover:bg-green-700 text-white mb-4"
                       >
-                        Bulk Cost ({verifiedCategorySiteRows.length} sites)
+                        Approve for Costing ({verifiedCategorySiteRows.length} sites)
                       </Button>
                     </div>
                   )}

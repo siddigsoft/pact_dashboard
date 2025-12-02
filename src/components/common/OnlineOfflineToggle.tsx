@@ -87,16 +87,15 @@ export function OnlineOfflineToggle({
           "fixed right-4 z-50",
           mobileBottomOffset ? "bottom-24 md:bottom-6" : "bottom-6",
           "bg-background/95 backdrop-blur-md shadow-xl rounded-full",
-          "border-2 transition-all duration-300",
+          "border-2 transition-all duration-300 cursor-pointer",
           isOnline ? "border-green-500 shadow-green-500/20" : "border-gray-300 dark:border-gray-600",
           isLoading ? "opacity-70" : "",
           className
         )}
+        onClick={handleToggle}
         data-testid="toggle-online-offline-floating"
       >
-        <button
-          onClick={handleToggle}
-          disabled={isLoading}
+        <div
           className={cn(
             "flex items-center gap-3 px-4 py-3 min-h-[56px]",
             "touch-manipulation select-none",
@@ -139,7 +138,7 @@ export function OnlineOfflineToggle({
               isOnline ? "data-[state=checked]:bg-green-500" : ""
             )}
           />
-        </button>
+        </div>
       </div>
     );
   }
