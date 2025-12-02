@@ -459,12 +459,15 @@ const CoordinatorSites: React.FC = () => {
   const [selectedSites, setSelectedSites] = useState<Set<string>>(new Set());
   const [bulkAssignDateDialogOpen, setBulkAssignDateDialogOpen] = useState(false);
   const [bulkVerifyDialogOpen, setBulkVerifyDialogOpen] = useState(false);
+  const [bulkApproveDialogOpen, setBulkApproveDialogOpen] = useState(false);
   const [bulkVisitDate, setBulkVisitDate] = useState<string>('');
   const [bulkVerificationNotes, setBulkVerificationNotes] = useState('');
+  const [bulkApprovalNotes, setBulkApprovalNotes] = useState('');
   
   // Filter states
   const [hubFilter, setHubFilter] = useState<string>('all');
   const [stateFilter, setStateFilter] = useState<string>('all');
+  const [localityFilter, setLocalityFilter] = useState<string>('all');
   const [activityFilter, setActivityFilter] = useState<string>('all');
   const [monitoringFilter, setMonitoringFilter] = useState<string>('all');
   const [surveyToolFilter, setSurveyToolFilter] = useState<string>('all');
@@ -647,6 +650,7 @@ const CoordinatorSites: React.FC = () => {
     // Reset filters when tab changes
     setHubFilter('all');
     setStateFilter('all');
+    setLocalityFilter('all');
     setActivityFilter('all');
     setMonitoringFilter('all');
     setSurveyToolFilter('all');
@@ -1292,6 +1296,105 @@ const CoordinatorSites: React.FC = () => {
     }
   };
 
+  const handleBulkApproveSites = async () => {
+    if (selectedSites.size === 0) {
+      toast({
+        title: 'Validation Error',
+        description: 'Please select at least one site to approve.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    try {
+      const siteIds = Array.from(selectedSites);
+      const updateData: any = {
+        status: 'approved',
+        approved_at: new Date().toISOString(),
+        approved_by: currentUser?.username || currentUser?.fullName || currentUser?.email || 'System',
+      };
+
+      if (bulkApprovalNotes) {
+        updateData.approval_notes = bulkApprovalNotes;
+      }
+
+      const { error } = await supabase
+        .from('mmp_site_entries')
+        .update(updateData)
+        .in('id', siteIds);
+
+      if (error) throw error;
+
+      // Also update MMP files for approved sites
+      try {
+        const selectedSitesData = sites.filter(site => selectedSites.has(site.id));
+        for (const site of selectedSitesData) {
+          if (site?.mmp_file_id && site?.site_code) {
+            const mmpUpdateData: any = { 
+              status: 'Approved',
+              approved_at: new Date().toISOString(),
+              approved_by: currentUser?.username || currentUser?.fullName || currentUser?.email || 'System'
+            };
+            if (bulkApprovalNotes) {
+              mmpUpdateData.approval_notes = bulkApprovalNotes;
+            }
+            
+            await supabase
+              .from('mmp_site_entries')
+              .update(mmpUpdateData)
+              .eq('mmp_file_id', site.mmp_file_id)
+              .eq('site_code', site.site_code);
+          }
+        }
+      } catch (syncErr) {
+        console.warn('Failed to sync mmp_site_entries on bulk approve:', syncErr);
+      }
+
+      toast({
+        title: 'Bulk Approval Complete',
+        description: `${selectedSites.size} site(s) have been approved successfully.`,
+      });
+
+      // Clear selection and reload sites
+      setSelectedSites(new Set());
+      setBulkApprovalNotes('');
+      setBulkApproveDialogOpen(false);
+      loadSites();
+      
+      // Reload badge counts
+      if (currentUser?.id) {
+        const userId = currentUser.id;
+        const { data: allEntries } = await supabase
+          .from('mmp_site_entries')
+          .select('id, status, additional_data');
+        
+        const userEntries = (allEntries || []).filter((entry: any) => {
+          const ad = entry.additional_data || {};
+          return ad.assigned_to === userId;
+        });
+        
+        const verifiedCount = { count: userEntries.filter((e: any) => 
+          e.status?.toLowerCase() === 'verified'
+        ).length };
+        const approvedCount = { count: userEntries.filter((e: any) => 
+          e.status?.toLowerCase() === 'approved'
+        ).length };
+        
+        setVerifiedSitesCount(verifiedCount.count || 0);
+        setApprovedSitesCount(approvedCount.count || 0);
+      }
+      
+      setActiveTab('approved');
+    } catch (error) {
+      console.error('Error bulk approving sites:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to approve sites. Please try again.',
+        variant: 'destructive'
+      });
+    }
+  };
+
   const handlePermitQuestionResponse = (hasPermit: boolean) => {
     setPermitQuestionDialogOpen(false);
 
@@ -1447,8 +1550,13 @@ const CoordinatorSites: React.FC = () => {
       filtered = filtered.filter(site => site.survey_tool === surveyToolFilter);
     }
 
+    // Apply locality filter
+    if (localityFilter !== 'all') {
+      filtered = filtered.filter(site => site.locality === localityFilter);
+    }
+
     return filtered;
-  }, [sites, debouncedSearchQuery, hubFilter, stateFilter, activityFilter, monitoringFilter, surveyToolFilter]);
+  }, [sites, debouncedSearchQuery, hubFilter, stateFilter, localityFilter, activityFilter, monitoringFilter, surveyToolFilter]);
 
   // Paginate filtered results
   const paginatedSites = useMemo(() => {
@@ -1478,7 +1586,7 @@ const CoordinatorSites: React.FC = () => {
     >
       <CardContent className="pt-4">
         <div className="flex items-start gap-3">
-          {activeTab === 'new' && !readOnlyMode && (
+          {(activeTab === 'new' || activeTab === 'permits_attached' || activeTab === 'verified') && !readOnlyMode && (
             <div className="pt-1">
               <input
                 type="checkbox"
@@ -1910,6 +2018,61 @@ const CoordinatorSites: React.FC = () => {
                   />
                 </div>
               </div>
+              <div className="flex items-center gap-4 mt-4">
+                {(activeTab === 'new' || activeTab === 'permits_attached' || activeTab === 'verified') && !readOnlyMode && (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="select-all-sites"
+                      checked={filteredSites.length > 0 && selectedSites.size === filteredSites.length}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          // Select all filtered sites
+                          const allSiteIds = new Set(filteredSites.map(site => site.id));
+                          setSelectedSites(allSiteIds);
+                        } else {
+                          // Deselect all
+                          setSelectedSites(new Set());
+                        }
+                      }}
+                      className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                    />
+                    <Label htmlFor="select-all-sites" className="text-sm font-medium">
+                      Select All ({filteredSites.length} sites)
+                    </Label>
+                  </div>
+                )}
+                {selectedSites.size > 0 && activeTab === 'permits_attached' && (
+                  <div className="flex items-center gap-2 ml-auto">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setBulkAssignDateDialogOpen(true)}
+                      className="flex items-center gap-2"
+                    >
+                      <Calendar className="h-4 w-4" />
+                      Assign Visit Date
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setBulkVerifyDialogOpen(true)}
+                      className="flex items-center gap-2 bg-green-50 border-green-200 text-green-700 hover:bg-green-100"
+                    >
+                      <CheckCircle className="h-4 w-4" />
+                      Verify Sites
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setSelectedSites(new Set())}
+                      className="text-gray-600 hover:text-gray-800"
+                    >
+                      Clear Selection
+                    </Button>
+                  </div>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
               {filteredSites.length === 0 ? (
@@ -1973,6 +2136,129 @@ const CoordinatorSites: React.FC = () => {
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
                 </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-4 mt-4">
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="hub-filter" className="text-sm font-medium">Hub:</Label>
+                  <Select value={hubFilter} onValueChange={setHubFilter}>
+                    <SelectTrigger className="w-[140px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Hubs</SelectItem>
+                      {hubs.map((hub) => (
+                        <SelectItem key={hub.id} value={hub.name}>
+                          {hub.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="state-filter" className="text-sm font-medium">State:</Label>
+                  <Select value={stateFilter} onValueChange={(value) => {
+                    setStateFilter(value);
+                    setLocalityFilter('all'); // Reset locality when state changes
+                  }}>
+                    <SelectTrigger className="w-[140px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All States</SelectItem>
+                      {hubStates
+                        .filter(hs => {
+                          if (hubFilter === 'all') return true;
+                          const hub = hubs.find(h => h.id === hs.hub_id);
+                          return hub?.name === hubFilter;
+                        })
+                        .map((state) => (
+                          <SelectItem key={state.state_id} value={state.state_name}>
+                            {state.state_name}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="locality-filter" className="text-sm font-medium">Locality:</Label>
+                  <Select value={localityFilter} onValueChange={setLocalityFilter}>
+                    <SelectTrigger className="w-[140px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Localities</SelectItem>
+                      {localities
+                        .filter(loc => {
+                          if (stateFilter === 'all') return true;
+                          const selectedState = hubStates.find(hs => hs.state_name === stateFilter);
+                          if (!selectedState) return false;
+                          if (hubFilter === 'all') return loc.state_id === selectedState.state_id;
+                          const hub = hubs.find(h => h.id === selectedState.hub_id);
+                          return loc.state_id === selectedState.state_id && hub?.name === hubFilter;
+                        })
+                        .map((locality) => (
+                          <SelectItem key={locality.id} value={locality.name}>
+                            {locality.name}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                {selectedSites.size > 0 && (
+                  <div className="flex items-center gap-2 ml-auto">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setBulkAssignDateDialogOpen(true)}
+                      className="flex items-center gap-2 bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100"
+                    >
+                      <Calendar className="h-4 w-4" />
+                      Attach Visit Date
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setBulkVerifyDialogOpen(true)}
+                      className="flex items-center gap-2 bg-green-50 border-green-200 text-green-700 hover:bg-green-100"
+                    >
+                      <CheckCircle className="h-4 w-4" />
+                      Verify and Save
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setSelectedSites(new Set())}
+                      className="text-gray-600 hover:text-gray-800"
+                    >
+                      Clear Selection
+                    </Button>
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center gap-4 mt-4">
+                {(activeTab === 'new' || activeTab === 'permits_attached' || activeTab === 'verified') && !readOnlyMode && (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="select-all-sites"
+                      checked={filteredSites.length > 0 && selectedSites.size === filteredSites.length}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          // Select all filtered sites
+                          const allSiteIds = new Set(filteredSites.map(site => site.id));
+                          setSelectedSites(allSiteIds);
+                        } else {
+                          // Deselect all
+                          setSelectedSites(new Set());
+                        }
+                      }}
+                      className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                    />
+                    <Label htmlFor="select-all-sites" className="text-sm font-medium">
+                      Select All ({filteredSites.length} sites)
+                    </Label>
+                  </div>
+                )}
               </div>
             </CardHeader>
             <CardContent>
@@ -2501,6 +2787,94 @@ const CoordinatorSites: React.FC = () => {
             >
               <Calendar className="h-4 w-4 mr-2" />
               Assign Date to {selectedSites.size} Site{selectedSites.size !== 1 ? 's' : ''}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Verify Dialog */}
+      <Dialog open={bulkVerifyDialogOpen} onOpenChange={setBulkVerifyDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Verify Selected Sites</DialogTitle>
+            <p className="text-sm text-muted-foreground">
+              Mark {selectedSites.size} selected site{selectedSites.size !== 1 ? 's' : ''} as verified.
+            </p>
+          </DialogHeader>
+          <div className="py-4">
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="bulk-verification-notes" className="text-sm font-medium">
+                  Verification Notes (Optional)
+                </Label>
+                <Textarea
+                  id="bulk-verification-notes"
+                  placeholder="Add notes about the verification..."
+                  value={bulkVerificationNotes}
+                  onChange={(e) => setBulkVerificationNotes(e.target.value)}
+                  className="mt-1"
+                  rows={4}
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setBulkVerifyDialogOpen(false);
+              setBulkVerificationNotes('');
+            }}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleBulkVerifySites}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              <CheckCircle className="h-4 w-4 mr-2" />
+              Verify {selectedSites.size} Site{selectedSites.size !== 1 ? 's' : ''}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Approve Dialog */}
+      <Dialog open={bulkApproveDialogOpen} onOpenChange={setBulkApproveDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Approve Selected Sites</DialogTitle>
+            <p className="text-sm text-muted-foreground">
+              Mark {selectedSites.size} selected site{selectedSites.size !== 1 ? 's' : ''} as approved.
+            </p>
+          </DialogHeader>
+          <div className="py-4">
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="bulk-approval-notes" className="text-sm font-medium">
+                  Approval Notes (Optional)
+                </Label>
+                <Textarea
+                  id="bulk-approval-notes"
+                  placeholder="Add notes about the approval..."
+                  value={bulkApprovalNotes}
+                  onChange={(e) => setBulkApprovalNotes(e.target.value)}
+                  className="mt-1"
+                  rows={4}
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setBulkApproveDialogOpen(false);
+              setBulkApprovalNotes('');
+            }}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleBulkApproveSites}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              <CheckCircle className="h-4 w-4 mr-2" />
+              Approve {selectedSites.size} Site{selectedSites.size !== 1 ? 's' : ''}
             </Button>
           </DialogFooter>
         </DialogContent>
