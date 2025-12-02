@@ -12,6 +12,7 @@ export {
 } from './MobileFormComponents';
 export { MobileLayout, useMobileLayout } from './MobileLayout';
 export { MobileBottomNav, MobileNavSpacer } from './MobileBottomNav';
+export { MobileSyncStatus, MobileOfflineBanner } from './MobileSyncStatus';
 export { OfflineStatusBar, OfflineIndicator } from './OfflineStatusBar';
 export { PullToRefresh, RefreshableList } from './PullToRefresh';
 export { MobileAppShell, useDiagnosticLogs, addDiagnosticLog, getDiagnosticLogs } from './MobileAppShell';
