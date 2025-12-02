@@ -1,24 +1,165 @@
-import React, { useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef, useCallback, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Card, CardContent } from '@/components/ui/card';
-import { MapPin, Users, RefreshCw } from 'lucide-react';
+import { MapPin, RefreshCw } from 'lucide-react';
 import { User } from '@/types/user';
 import { SiteVisit } from '@/types/siteVisit';
 import { formatDistanceToNow } from 'date-fns';
 import { getUserStatus } from '@/utils/userStatusUtils';
-import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 
 interface TeamLocationMapProps {
   users: User[];
   siteVisits?: SiteVisit[];
 }
 
+const AUTO_REFRESH_INTERVAL = 30000;
+
 const TeamLocationMap: React.FC<TeamLocationMapProps> = ({ users, siteVisits = [] }) => {
   const mapRef = useRef<L.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const markersLayerRef = useRef<L.LayerGroup | null>(null);
   const isMapInitializedRef = useRef(false);
+  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+
+  const getStatusColor = (user: User): string => {
+    const userStatus = getUserStatus(user);
+    const statusColorMap: Record<string, string> = {
+      'bg-green-500': '#22c55e',
+      'bg-orange-500': '#f97316',
+      'bg-gray-400 dark:bg-gray-600': '#9ca3af'
+    };
+    return statusColorMap[userStatus.color] || '#9ca3af';
+  };
+
+  const createUserMarkerIcon = (user: User) => {
+    const userStatus = getUserStatus(user);
+    const markerColor = getStatusColor(user);
+    const isOnline = userStatus.type === 'online';
+    const userName = user.name || user.fullName || 'Unknown';
+    const initials = userName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+    const avatarUrl = user.avatar;
+    
+    const pulseAnimation = isOnline ? `
+      @keyframes pulse-${user.id.replace(/[^a-zA-Z0-9]/g, '')} {
+        0%, 100% { box-shadow: 0 0 0 0 ${markerColor}80; }
+        50% { box-shadow: 0 0 0 8px ${markerColor}00; }
+      }
+    ` : '';
+    
+    const animationStyle = isOnline ? `animation: pulse-${user.id.replace(/[^a-zA-Z0-9]/g, '')} 2s infinite;` : '';
+
+    if (avatarUrl) {
+      return L.divIcon({
+        className: 'custom-user-marker',
+        html: `
+          <style>${pulseAnimation}</style>
+          <div style="
+            position: relative;
+            width: 48px;
+            height: 48px;
+            ${animationStyle}
+          ">
+            <div style="
+              position: absolute;
+              top: 0;
+              left: 0;
+              width: 48px;
+              height: 48px;
+              border-radius: 50%;
+              border: 3px solid ${markerColor};
+              box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+              overflow: hidden;
+              background: white;
+            ">
+              <img 
+                src="${avatarUrl}" 
+                alt="${userName}"
+                style="width: 100%; height: 100%; object-fit: cover;"
+                onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+              />
+              <div style="
+                display: none;
+                width: 100%;
+                height: 100%;
+                background: linear-gradient(135deg, ${markerColor}90, ${markerColor});
+                color: white;
+                font-size: 16px;
+                font-weight: bold;
+                align-items: center;
+                justify-content: center;
+              ">${initials}</div>
+            </div>
+            <div style="
+              position: absolute;
+              bottom: -2px;
+              right: -2px;
+              width: 16px;
+              height: 16px;
+              border-radius: 50%;
+              background: ${markerColor};
+              border: 2px solid white;
+              box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+            "></div>
+          </div>
+        `,
+        iconSize: [48, 48],
+        iconAnchor: [24, 24],
+        popupAnchor: [0, -24],
+      });
+    }
+
+    return L.divIcon({
+      className: 'custom-user-marker',
+      html: `
+        <style>${pulseAnimation}</style>
+        <div style="
+          position: relative;
+          width: 48px;
+          height: 48px;
+          ${animationStyle}
+        ">
+          <div style="
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            border: 3px solid ${markerColor};
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            overflow: hidden;
+            background: linear-gradient(135deg, ${markerColor}90, ${markerColor});
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          ">
+            <span style="
+              color: white;
+              font-size: 16px;
+              font-weight: bold;
+              text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+            ">${initials}</span>
+          </div>
+          <div style="
+            position: absolute;
+            bottom: -2px;
+            right: -2px;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: ${markerColor};
+            border: 2px solid white;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+          "></div>
+        </div>
+      `,
+      iconSize: [48, 48],
+      iconAnchor: [24, 24],
+      popupAnchor: [0, -24],
+    });
+  };
 
   const initializeMap = useCallback(() => {
     if (!mapContainerRef.current || isMapInitializedRef.current) return;
@@ -53,33 +194,8 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({ users, siteVisits = [
     users.forEach((user) => {
       if (user.location?.latitude && user.location?.longitude) {
         const userStatus = getUserStatus(user);
-        
-        const statusColorMap: Record<string, string> = {
-          'bg-green-500': '#22c55e',
-          'bg-orange-500': '#f97316',
-          'bg-gray-400 dark:bg-gray-600': '#9ca3af'
-        };
-        const markerColor = statusColorMap[userStatus.color] || '#9ca3af';
-        const isOnline = userStatus.type === 'online';
-        
-        const markerIcon = L.divIcon({
-          className: 'custom-marker',
-          html: `
-            <div style="position: relative;">
-              <svg width="32" height="40" viewBox="0 0 32 40" xmlns="http://www.w3.org/2000/svg">
-                <path d="M16 0C7.163 0 0 7.163 0 16c0 12 16 24 16 24s16-12 16-24c0-8.837-7.163-16-16-16z" 
-                  fill="${markerColor}" 
-                  stroke="#fff" 
-                  stroke-width="2"/>
-                <circle cx="16" cy="16" r="6" fill="#fff"/>
-              </svg>
-              ${isOnline ? '<div style="position: absolute; top: 2px; right: 2px; width: 8px; height: 8px; background: #10b981; border: 2px solid #fff; border-radius: 50%;"></div>' : ''}
-            </div>
-          `,
-          iconSize: [32, 40],
-          iconAnchor: [16, 40],
-          popupAnchor: [0, -40],
-        });
+        const markerColor = getStatusColor(user);
+        const markerIcon = createUserMarkerIcon(user);
 
         const marker = L.marker([user.location.latitude, user.location.longitude], {
           icon: markerIcon,
@@ -91,44 +207,47 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({ users, siteVisits = [
           : 'Never';
 
         const getAccuracyInfo = (accuracy?: number) => {
-          if (accuracy === undefined) return { color: '#999', label: 'Unknown' };
-          if (accuracy <= 10) return { color: '#22c55e', label: 'Excellent' };
-          if (accuracy <= 30) return { color: '#eab308', label: 'Good' };
-          return { color: '#f97316', label: 'Fair' };
+          if (accuracy === undefined || accuracy === null) return { color: '#999', label: 'Unknown', value: 'N/A' };
+          if (accuracy <= 10) return { color: '#22c55e', label: 'Excellent', value: `±${accuracy.toFixed(1)}m` };
+          if (accuracy <= 30) return { color: '#eab308', label: 'Good', value: `±${accuracy.toFixed(1)}m` };
+          if (accuracy <= 100) return { color: '#f97316', label: 'Fair', value: `±${accuracy.toFixed(1)}m` };
+          return { color: '#ef4444', label: 'Poor', value: `±${accuracy.toFixed(0)}m` };
         };
         const accuracyInfo = getAccuracyInfo(user.location.accuracy);
+        const userName = user.name || user.fullName || 'Unknown';
+        const avatarHtml = user.avatar 
+          ? `<img src="${user.avatar}" alt="${userName}" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover; border: 2px solid ${markerColor};" onerror="this.style.display='none'" />`
+          : `<div style="width: 40px; height: 40px; border-radius: 50%; background: ${markerColor}; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 14px;">${userName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}</div>`;
 
         const popupContent = `
-          <div style="min-width: 240px;">
-            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-              <div style="width: 8px; height: 8px; background: ${markerColor}; border-radius: 50%;"></div>
-              <strong style="font-size: 14px;">${user.name || user.fullName || 'Unknown'}</strong>
-            </div>
-            <div style="font-size: 12px; color: #666; margin-bottom: 4px;">
-              <strong>Role:</strong> ${user.roles?.[0] || user.role || 'N/A'}
-            </div>
-            <div style="font-size: 12px; color: #666; margin-bottom: 4px;">
-              <strong>Status:</strong> <span style="display: inline-flex; align-items: center; gap: 4px;"><span style="width: 8px; height: 8px; background: ${markerColor}; border-radius: 50%; display: inline-block;"></span> ${userStatus.label}</span>
-            </div>
-            <div style="font-size: 12px; color: #666; margin-bottom: 4px;">
-              <strong>Last Seen:</strong> ${lastSeenText}
-            </div>
-            ${user.location.accuracy !== undefined ? `
-              <div style="font-size: 12px; margin-bottom: 4px;">
-                <strong style="color: #666;">GPS Accuracy:</strong> 
-                <span style="color: ${accuracyInfo.color}; font-weight: 500;">
-                  \u00B1${user.location.accuracy.toFixed(1)}m (${accuracyInfo.label})
-                </span>
+          <div style="min-width: 260px;">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+              ${avatarHtml}
+              <div>
+                <strong style="font-size: 14px; display: block;">${userName}</strong>
+                <span style="font-size: 11px; color: #666;">${user.roles?.[0] || user.role || 'Team Member'}</span>
               </div>
-            ` : ''}
+            </div>
+            <div style="background: #f8f9fa; border-radius: 6px; padding: 10px; margin-bottom: 8px;">
+              <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
+                <span style="width: 10px; height: 10px; background: ${markerColor}; border-radius: 50%; display: inline-block;"></span>
+                <span style="font-size: 12px; font-weight: 500;">${userStatus.label}</span>
+              </div>
+              <div style="font-size: 11px; color: #666;">
+                Last seen: ${lastSeenText}
+              </div>
+            </div>
+            <div style="font-size: 12px; margin-bottom: 6px;">
+              <strong style="color: #444;">GPS Accuracy:</strong> 
+              <span style="color: ${accuracyInfo.color}; font-weight: 600;">
+                ${accuracyInfo.value} (${accuracyInfo.label})
+              </span>
+            </div>
             ${user.location?.address ? `
-              <div style="font-size: 12px; color: #666; margin-top: 8px; padding-top: 8px; border-top: 1px solid #e5e7eb;">
+              <div style="font-size: 11px; color: #666; padding-top: 8px; border-top: 1px solid #e5e7eb;">
                 ${user.location.address}
               </div>
             ` : ''}
-            <div style="font-size: 11px; color: #999; margin-top: 8px; padding-top: 8px; border-top: 1px solid #e5e7eb; font-style: italic;">
-              Click card/table row for messaging & assignment options
-            </div>
           </div>
         `;
 
@@ -223,6 +342,8 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({ users, siteVisits = [
         console.error('Error fitting bounds:', error);
       }
     }
+    
+    setLastUpdated(new Date());
   }, [users, siteVisits]);
 
   useEffect(() => {
@@ -248,6 +369,16 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({ users, siteVisits = [
   }, [users, siteVisits, updateMarkers]);
 
   useEffect(() => {
+    const intervalId = setInterval(() => {
+      if (isMapInitializedRef.current) {
+        updateMarkers();
+      }
+    }, AUTO_REFRESH_INTERVAL);
+
+    return () => clearInterval(intervalId);
+  }, [updateMarkers]);
+
+  useEffect(() => {
     if (mapRef.current) {
       setTimeout(() => {
         mapRef.current?.invalidateSize();
@@ -271,9 +402,23 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({ users, siteVisits = [
   const onlineWithLocation = teamWithLocation.filter(u => getUserStatus(u).type === 'online');
   const sameDayWithLocation = teamWithLocation.filter(u => getUserStatus(u).type === 'same-day');
   const offlineWithLocation = teamWithLocation.filter(u => getUserStatus(u).type === 'offline');
-  const onlineCount = onlineWithLocation.length;
-  const sameDayCount = sameDayWithLocation.length;
-  const offlineCount = offlineWithLocation.length;
+
+  const usersWithValidAccuracy = teamWithLocation.filter(
+    u => u.location?.accuracy !== undefined && u.location?.accuracy !== null && !isNaN(u.location.accuracy)
+  );
+  const avgAccuracy = usersWithValidAccuracy.length > 0 
+    ? usersWithValidAccuracy.reduce((sum, u) => sum + (u.location?.accuracy || 0), 0) / usersWithValidAccuracy.length
+    : null;
+
+  const getOverallAccuracyLabel = (avg: number | null) => {
+    if (avg === null || isNaN(avg)) return { label: 'N/A', color: 'text-muted-foreground' };
+    if (avg <= 10) return { label: 'Excellent', color: 'text-green-600 dark:text-green-400' };
+    if (avg <= 30) return { label: 'Good', color: 'text-yellow-600 dark:text-yellow-400' };
+    if (avg <= 100) return { label: 'Fair', color: 'text-orange-600 dark:text-orange-400' };
+    return { label: 'Poor', color: 'text-red-600 dark:text-red-400' };
+  };
+
+  const overallAccuracy = getOverallAccuracyLabel(avgAccuracy);
 
   return (
     <div className="space-y-3">
@@ -282,48 +427,63 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({ users, siteVisits = [
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-4 text-xs flex-wrap">
               <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 bg-green-500 rounded-full border-2 border-white"></div>
-                <span>Online ({onlineCount})</span>
+                <div className="w-3 h-3 bg-green-500 rounded-full border-2 border-white shadow-sm"></div>
+                <span>Online ({onlineWithLocation.length})</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 bg-orange-500 rounded-full border-2 border-white"></div>
-                <span>Active Today ({sameDayCount})</span>
+                <div className="w-3 h-3 bg-orange-500 rounded-full border-2 border-white shadow-sm"></div>
+                <span>Active Today ({sameDayWithLocation.length})</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 bg-gray-400 rounded-full border-2 border-white"></div>
-                <span>Offline ({offlineCount})</span>
+                <div className="w-3 h-3 bg-gray-400 rounded-full border-2 border-white shadow-sm"></div>
+                <span>Offline ({offlineWithLocation.length})</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 bg-indigo-500 rounded-full border-2 border-white"></div>
-                <span>Site Visits ({sitesWithLocation.length})</span>
+                <div className="w-3 h-3 bg-indigo-500 rounded-full border-2 border-white shadow-sm"></div>
+                <span>Sites ({sitesWithLocation.length})</span>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">
-                {teamWithLocation.length} team member{teamWithLocation.length !== 1 ? 's' : ''} | {sitesWithLocation.length} site{sitesWithLocation.length !== 1 ? 's' : ''}
-              </span>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleRefresh}
-                className="h-7 text-xs gap-1"
-                data-testid="button-refresh-map"
-              >
+            <div className="flex items-center gap-3 flex-wrap">
+              {avgAccuracy !== null && !isNaN(avgAccuracy) && (
+                <Badge variant="outline" className="text-xs gap-1">
+                  <span>Avg GPS:</span>
+                  <span className={overallAccuracy.color}>
+                    ±{avgAccuracy.toFixed(0)}m ({overallAccuracy.label})
+                  </span>
+                </Badge>
+              )}
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <RefreshCw className="h-3 w-3" />
-                Refresh
-              </Button>
+                <span>Auto-refresh: {Math.round(AUTO_REFRESH_INTERVAL / 1000)}s</span>
+              </div>
             </div>
           </div>
         </CardContent>
       </Card>
 
       <Card className="overflow-hidden">
-        <CardContent className="p-0">
+        <CardContent className="p-0 relative">
           <div 
             ref={mapContainerRef} 
             style={{ height: '500px', width: '100%' }}
             data-testid="team-location-map"
           />
+          <div className="absolute bottom-2 left-2 z-[1000]">
+            <Badge variant="secondary" className="text-xs bg-background/90 backdrop-blur-sm shadow-sm">
+              {teamWithLocation.length} member{teamWithLocation.length !== 1 ? 's' : ''} on map
+            </Badge>
+          </div>
+          <div className="absolute bottom-2 right-2 z-[1000]">
+            <Badge 
+              variant="outline" 
+              className="text-xs bg-background/90 backdrop-blur-sm shadow-sm cursor-pointer hover-elevate"
+              onClick={handleRefresh}
+              data-testid="button-refresh-map"
+            >
+              <RefreshCw className="h-3 w-3 mr-1" />
+              Updated {formatDistanceToNow(lastUpdated, { addSuffix: true })}
+            </Badge>
+          </div>
         </CardContent>
       </Card>
 
