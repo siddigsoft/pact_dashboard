@@ -25,7 +25,6 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
   onVerificationComplete
 }) => {
   const [permits, setPermits] = useState<MMPStatePermitDocument[]>([]);
-  const [localPermits, setLocalPermits] = useState<MMPStatePermitDocument[]>([]);
   const { toast } = useToast();
   const { updateMMP } = useMMP();
   const { currentUser } = useAppContext();
@@ -194,22 +193,14 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
       }
 
       if (!cancelled) {
-        // Only update state if the data has actually changed
-        const currentFederalState = permits.filter(d => d.permitType === 'federal' || d.permitType === 'state');
-        const newFederalState = finalDocs.filter(d => d.permitType === 'federal' || d.permitType === 'state');
-        const currentLocal = localPermits;
-        const newLocal = finalDocs.filter(d => d.permitType === 'local');
+        const currentFederalState = permits.filter(d => d.permitType === 'federal');
+        const newFederalState = finalDocs.filter(d => d.permitType === 'federal');
         
         const federalStateChanged = currentFederalState.length !== newFederalState.length || 
           !currentFederalState.every((doc, i) => doc.id === newFederalState[i]?.id);
-        const localChanged = currentLocal.length !== newLocal.length || 
-          !currentLocal.every((doc, i) => doc.id === newLocal[i]?.id);
         
         if (federalStateChanged) {
           setPermits(newFederalState);
-        }
-        if (localChanged) {
-          setLocalPermits(newLocal);
         }
       }
     };
@@ -223,7 +214,7 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
 
   const handleDeletePermit = async (permitId: string) => {
     try {
-      const doc = localPermits.find(p => p.id === permitId) || permits.find(p => p.id === permitId);
+      const doc = permits.find(p => p.id === permitId);
       if (!doc) {
         toast({ title: 'Permit not found', description: 'Could not locate the selected permit.', variant: 'destructive' });
         return;
@@ -242,15 +233,9 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
         console.warn('Storage remove threw (non-fatal):', e);
       }
 
-      if (doc.permitType === 'local') {
-        const updatedLocalPermits = localPermits.filter(p => p.id !== permitId);
-        setLocalPermits(updatedLocalPermits);
-        persistPermits(permits, updatedLocalPermits);
-      } else {
-        const updatedPermits = permits.filter(p => p.id !== permitId);
-        setPermits(updatedPermits);
-        persistPermits(updatedPermits, localPermits);
-      }
+      const updatedPermits = permits.filter(p => p.id !== permitId);
+      setPermits(updatedPermits);
+      persistPermits(updatedPermits);
 
       toast({ title: 'Permit deleted', description: `${doc.fileName} was removed.` });
     } catch (e) {
@@ -282,17 +267,16 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
     }
   };
 
-  const persistPermits = (docs: MMPStatePermitDocument[], localDocs: MMPStatePermitDocument[] = []) => {
+  const persistPermits = (docs: MMPStatePermitDocument[]) => {
     const now = new Date().toISOString();
-    const allDocs = [...docs, ...localDocs];
     const permitsData: MMPPermitsData = {
       federal: docs.some(d => d.permitType === 'federal'),
-      state: docs.some(d => d.permitType === 'state'),
-      local: localDocs.some(d => d.permitType === 'local'),
-      lastVerified: allDocs.some(d => d.status) ? now : undefined,
+      state: false,
+      local: false,
+      lastVerified: docs.some(d => d.status) ? now : undefined,
       verifiedBy: currentUser?.username || currentUser?.fullName || currentUser?.email || undefined,
       // Cast to MMPDocument[] for compatibility; downstream code handles extended fields safely
-      documents: allDocs as unknown as any,
+      documents: docs as unknown as any,
     };
 
     if (mmpFile?.id) {
@@ -333,15 +317,9 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
   };
 
   const handleUploadSuccess = (newPermit: MMPStatePermitDocument) => {
-    if (newPermit.permitType === 'local') {
-      const updatedLocalPermits = [...localPermits, newPermit];
-      setLocalPermits(updatedLocalPermits);
-      persistPermits(permits, updatedLocalPermits);
-    } else {
-      const updatedPermits = [...permits, newPermit];
-      setPermits(updatedPermits);
-      persistPermits(updatedPermits, localPermits);
-    }
+    const updatedPermits = [...permits, newPermit];
+    setPermits(updatedPermits);
+    persistPermits(updatedPermits);
     
     toast({
       title: "Permit Uploaded",
@@ -440,46 +418,23 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
   };
 
   const handleVerifyPermit = (permitId: string, status: 'verified' | 'rejected', notes?: string) => {
-  let decidedDoc: MMPStatePermitDocument | undefined;
-    // Check if it's a local permit
-    const localPermitIndex = localPermits.findIndex(p => p.id === permitId);
-    let updatedLocalPermits = localPermits;
-    let updatedPermits = permits;
-    if (localPermitIndex !== -1) {
-      updatedLocalPermits = localPermits.map(permit => {
-        if (permit.id === permitId) {
-          const updated = {
-            ...permit,
-            status,
-            verificationNotes: notes,
-            verifiedAt: new Date().toISOString(),
-            verifiedBy: currentUser?.username || currentUser?.fullName || currentUser?.email || 'System'
-          } as MMPStatePermitDocument;
-          decidedDoc = updated;
-          return updated;
-        }
-        return permit;
-      });
-      setLocalPermits(updatedLocalPermits);
-      persistPermits(permits, updatedLocalPermits);
-    } else {
-      updatedPermits = permits.map(permit => {
-        if (permit.id === permitId) {
-          const updated = {
-            ...permit,
-            status,
-            verificationNotes: notes,
-            verifiedAt: new Date().toISOString(),
-            verifiedBy: currentUser?.username || currentUser?.fullName || currentUser?.email || 'System'
-          } as MMPStatePermitDocument;
-          decidedDoc = updated;
-          return updated;
-        }
-        return permit;
-      });
-      setPermits(updatedPermits);
-      persistPermits(updatedPermits, localPermits);
-    }
+    let decidedDoc: MMPStatePermitDocument | undefined;
+    const updatedPermits = permits.map(permit => {
+      if (permit.id === permitId) {
+        const updated = {
+          ...permit,
+          status,
+          verificationNotes: notes,
+          verifiedAt: new Date().toISOString(),
+          verifiedBy: currentUser?.username || currentUser?.fullName || currentUser?.email || 'System'
+        } as MMPStatePermitDocument;
+        decidedDoc = updated;
+        return updated;
+      }
+      return permit;
+    });
+    setPermits(updatedPermits);
+    persistPermits(updatedPermits);
 
     // Update the corresponding mmp_site_entries record to status 'approved'
     (async () => {
@@ -544,10 +499,10 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Upload className="h-5 w-5" />
-            Upload New Permit
+            Upload Federal Permit
           </CardTitle>
           <CardDescription>
-            Add a new permit document for verification
+            Upload the federal permit required for MMP verification
             {siteCount > 0 && (
               <span className="ml-1 text-xs font-medium text-blue-600">
                 • MMP contains {siteCount} sites
@@ -667,7 +622,7 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FileCheck className="h-5 w-5" />
-            Overall Verification Progress
+            Federal Permit Verification Progress
           </CardTitle>
           <CardDescription>
             Federal verification progress
@@ -687,23 +642,17 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
           </div>
           <div className="grid grid-cols-1 gap-4 text-sm">
             <div className="text-center">
-              <div className="font-medium text-blue-600">{permits.filter(p => p.permitType === 'federal').length}</div>
+              <div className="font-medium text-blue-600">{permits.length}</div>
               <div className="text-muted-foreground">Federal</div>
             </div>
             {/** State and Local counts hidden **/}
           </div>
           <div className="mt-6 flex justify-end gap-2">
             {canReviewOrForward ? (
-              <>
-                <Button onClick={() => navigate(`/mmp/${mmpFile.id}/review-assign-coordinators`)}>
-                  <Send className="h-4 w-4 mr-2" />
-                  Review & Assign Coordinators
-                </Button>
-                <Button onClick={() => navigate(`/mmp/${mmpFile.id}`)}>
-                  <Eye className="h-4 w-4 mr-2" />
-                  Review MMP
-                </Button>
-              </>
+              <Button onClick={() => navigate(`/mmp/${mmpFile.id}/review-assign-coordinators`)}>
+                <Send className="h-4 w-4 mr-2" />
+                Review & Assign Coordinators
+              </Button>
             ) : (
               <div className="text-sm text-muted-foreground text-center w-full">
                 {!hasFederalPermit && "Upload federal permit to enable review and forwarding"}
