@@ -471,21 +471,24 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
 
 
   const calculateProgress = () => {
-    if (permits.length === 0) return 0;
-    const verifiedCount = permits.filter(p => p.status === 'verified' || p.status === 'rejected').length;
-    return Math.round((verifiedCount / permits.length) * 100);
+    // Progress should reflect only federal permits
+    const federalPermits = permits.filter(p => p.permitType === 'federal');
+    if (federalPermits.length === 0) return 0;
+    const decided = federalPermits.filter(p => p.status === 'verified' || p.status === 'rejected').length;
+    return Math.round((decided / federalPermits.length) * 100);
   };
 
   const progress = calculateProgress();
   const siteCount = mmpFile?.siteEntries?.length || mmpFile?.entries || 0;
-  const allPermitsList = permits;
+  // Consider only federal permits for verification gating
+  const allPermitsList = permits.filter(p => p.permitType === 'federal');
   const allVerified = allPermitsList.length > 0 && allPermitsList.every(p => p.status === 'verified');
 
-  // Check permit requirements based on user role
+  // Check permit requirements
   const isFOM = hasAnyRole(['fom', 'fieldOpManager']);
   const hasFederalPermit = permits.some(p => p.permitType === 'federal');
-  
-  // For all users, only federal permit is required
+  // const hasStatePermit = permits.some(p => p.permitType === 'state'); // hidden
+  // Only federal permit is required for all roles now
   const requiredPermitsUploaded = hasFederalPermit;
   const canReviewOrForward = allVerified && requiredPermitsUploaded && !hasForwarded;
 
@@ -553,6 +556,11 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
               </div>
             </div>
 
+            {/* State Permit Status hidden */}
+            {/**
+            <div className="flex items-center justify-between p-3 rounded-lg border">...</div>
+            **/}
+
             {/* Summary Message */}
             <div className="mt-4 p-3 bg-white rounded-lg border">
               <div className="text-sm">
@@ -584,8 +592,8 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {permits.length > 0 ? (
-              permits.map((permit) => (
+            {permits.filter(p => p.permitType === 'federal').length > 0 ? (
+              permits.filter(p => p.permitType === 'federal').map((permit) => (
                 <PermitVerificationCard
                   key={permit.id}
                   permit={permit}
@@ -604,7 +612,10 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
         </CardContent>
       </Card>
 
-
+      {/* Local Permits Section hidden */}
+      {/**
+      <Card> ... </Card>
+      **/}
 
       {/* Overall Progress Section */}
       <Card>
@@ -614,7 +625,7 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
             Federal Permit Verification Progress
           </CardTitle>
           <CardDescription>
-            Progress for federal permit verification
+            Federal verification progress
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -634,6 +645,7 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
               <div className="font-medium text-blue-600">{permits.length}</div>
               <div className="text-muted-foreground">Federal</div>
             </div>
+            {/** State and Local counts hidden **/}
           </div>
           <div className="mt-6 flex justify-end gap-2">
             {canReviewOrForward ? (

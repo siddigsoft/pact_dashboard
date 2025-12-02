@@ -1,10 +1,9 @@
 
 import React, { useState } from 'react';
-import { Button } from '@/components/ui/button';
 import { FileUpload } from '@/components/FileUpload';
 import { MMPStatePermitDocument } from '@/types/mmp/permits';
 import { useToast } from '@/hooks/use-toast';
-import { Upload, Building2, Landmark, MapPin } from 'lucide-react';
+import { Landmark } from 'lucide-react';
 import { DatePicker } from '@/components/ui/date-picker';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -28,18 +27,18 @@ const permitTypes = [
     description: 'National level authorization',
     icon: Landmark,
   },
-  {
-    id: 'state',
-    name: 'State Permit',
-    description: 'State level authorization',
-    icon: Building2,
-  },
-  {
-    id: 'local',
-    name: 'Local Permit',
-    description: 'Local municipality authorization',
-    icon: MapPin,
-  },
+  // {
+  //   id: 'state',
+  //   name: 'State Permit',
+  //   description: 'State level authorization',
+  //   icon: Building2,
+  // },
+  // {
+  //   id: 'local',
+  //   name: 'Local Permit',
+  //   description: 'Local municipality authorization',
+  //   icon: MapPin,
+  // },
 ];
 
 export const MMPPermitFileUpload: React.FC<MMPPermitFileUploadProps> = ({ onUploadSuccess, bucket = 'mmp-files', pathPrefix }) => {
@@ -97,7 +96,7 @@ export const MMPPermitFileUpload: React.FC<MMPPermitFileUploadProps> = ({ onUplo
           <RadioGroup
             value={permitType}
             onValueChange={(value: 'federal' | 'state' | 'local') => setPermitType(value)}
-            className="grid grid-cols-1 md:grid-cols-2 gap-4"
+            className="grid grid-cols-1 gap-4"
           >
             {permitTypes.map((type) => {
               const Icon = type.icon;
