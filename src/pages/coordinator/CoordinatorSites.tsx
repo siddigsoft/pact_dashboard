@@ -561,6 +561,10 @@ const CoordinatorSites: React.FC = () => {
   const [approvedSitesCount, setApprovedSitesCount] = useState(0);
   const [completedSitesCount, setCompletedSitesCount] = useState(0);
   const [rejectedSitesCount, setRejectedSitesCount] = useState(0);
+  
+  // Subcategory counts for new sites tabs
+  const [statePermitRequiredCount, setStatePermitRequiredCount] = useState(0);
+  const [localPermitRequiredCount, setLocalPermitRequiredCount] = useState(0);
 
   // Permit workflow state
   const [permitQuestionDialogOpen, setPermitQuestionDialogOpen] = useState(false);
@@ -954,6 +958,36 @@ const CoordinatorSites: React.FC = () => {
       setSites(allSites);
       setLocalitiesData(statesArray); // Store states data instead of localities
       setCurrentPage(1); // Reset pagination when tab changes
+      
+      // Calculate subcategory counts for new sites tabs
+      const statePermitRequiredCount = statesArray
+        .filter((state: any) => !state.hasStatePermit)
+        .reduce((total: number, state: any) => total + state.totalSites, 0);
+      
+      const localPermitRequiredCount = statesArray
+        .filter((state: any) => state.hasStatePermit)
+        .flatMap((state: any) => state.localities)
+        .filter((locality: any) => !locality.hasPermit)
+        .filter((locality: any) => {
+          // Only count localities that have pending sites
+          return locality.sites.some((site: SiteVisit) => 
+            site.status === 'Pending' || site.status === 'Dispatched' || 
+            site.status === 'assigned' || site.status === 'inProgress' || 
+            site.status === 'in_progress'
+          );
+        })
+        .reduce((total: number, locality: any) => {
+          // Only count sites that are in pending/new status
+          const pendingSites = locality.sites.filter((site: SiteVisit) => 
+            site.status === 'Pending' || site.status === 'Dispatched' || 
+            site.status === 'assigned' || site.status === 'inProgress' || 
+            site.status === 'in_progress'
+          );
+          return total + pendingSites.length;
+        }, 0);
+      
+      setStatePermitRequiredCount(statePermitRequiredCount);
+      setLocalPermitRequiredCount(localPermitRequiredCount);
       
       // Initialize visit dates state
       const visitDates: { [key: string]: Date | undefined } = {};
@@ -2386,10 +2420,16 @@ const CoordinatorSites: React.FC = () => {
               <TabsTrigger value="state_required" className="flex items-center justify-center gap-2 rounded-md py-2 px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-100 data-[state=active]:text-blue-800 data-[state=active]:shadow-sm">
                 <AlertTriangle className="h-4 w-4" />
                 State Permit Required
+                <Badge variant="secondary" className="ml-2">
+                  {statePermitRequiredCount}
+                </Badge>
               </TabsTrigger>
               <TabsTrigger value="local_required" className="flex items-center justify-center gap-2 rounded-md py-2 px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-100 data-[state=active]:text-blue-800 data-[state=active]:shadow-sm">
                 <MapPin className="h-4 w-4" />
                 Local Permit Required
+                <Badge variant="secondary" className="ml-2">
+                  {localPermitRequiredCount}
+                </Badge>
               </TabsTrigger>
             </TabsList>
 
