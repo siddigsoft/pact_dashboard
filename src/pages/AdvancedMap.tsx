@@ -1,4 +1,3 @@
-
 import React, { useMemo, useState, useEffect, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -14,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useUser } from '@/context/user/UserContext';
 import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
+import { getUserStatus } from '@/utils/userStatusUtils';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
@@ -81,17 +81,27 @@ const AdvancedMap = () => {
       const userLocations = users
         .filter(user => {
           const hasLocation = user.location?.latitude && user.location?.longitude;
-          const matchesFilter = selectedFilter === 'all' || user.availability === selectedFilter;
-          return hasLocation && matchesFilter;
+          if (!hasLocation) return false;
+          
+          const userStatus = getUserStatus(user);
+          const matchesFilter = selectedFilter === 'all' || 
+            (selectedFilter === 'online' && userStatus.type === 'online') ||
+            (selectedFilter === 'offline' && userStatus.type === 'offline') ||
+            (selectedFilter === 'busy' && userStatus.type === 'same-day');
+          return matchesFilter;
         })
-        .map(user => ({
-          id: user.id,
-          name: user.name,
-          latitude: user.location.latitude!,
-          longitude: user.location.longitude!,
-          type: 'user' as const,
-          status: user.availability
-        }));
+        .map(user => {
+          const userStatus = getUserStatus(user);
+          return {
+            id: user.id,
+            name: user.name,
+            latitude: user.location.latitude!,
+            longitude: user.location.longitude!,
+            type: 'user' as const,
+            status: userStatus.type === 'online' ? 'online' : 
+                    userStatus.type === 'same-day' ? 'busy' : 'offline'
+          };
+        });
 
       const siteLocations = siteVisits
         .filter(site => site.coordinates?.latitude && site.coordinates?.longitude)
