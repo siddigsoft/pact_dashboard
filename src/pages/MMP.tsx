@@ -3153,7 +3153,7 @@ const MMP = () => {
                       Completed
                       <Badge variant="secondary" className="ml-1 text-xs">{completedCount}</Badge>
                     </Button>
-                    <Button variant={verifiedSubTab === 'rejected' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('rejected')} className={`${verifiedSubTab === 'rejected' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} text-xs whitespace-nowrap flex-shrink-0`}>
+                    <Button variant={verifiedSubTab === 'rejected' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('rejected')} className={`${verifiedSubTab === 'rejected' ? `${rejectedCount > 0 ? 'bg-red-200 hover:bg-red-300 text-red-800 border border-red-300' : 'bg-red-100 hover:bg-red-200 text-red-800 border border-red-300'}` : `${rejectedCount > 0 ? 'bg-red-200 hover:bg-red-300' : 'bg-red-100 hover:bg-red-200'}`} text-xs whitespace-nowrap flex-shrink-0`}>
                       Rejected
                       <Badge variant="secondary" className="ml-1 text-xs">{rejectedCount}</Badge>
                     </Button>
