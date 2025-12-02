@@ -25,7 +25,6 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
   onVerificationComplete
 }) => {
   const [permits, setPermits] = useState<MMPStatePermitDocument[]>([]);
-  const [localPermits, setLocalPermits] = useState<MMPStatePermitDocument[]>([]);
   const { toast } = useToast();
   const { updateMMP } = useMMP();
   const { currentUser } = useAppContext();
@@ -194,22 +193,14 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
       }
 
       if (!cancelled) {
-        // Only update state if the data has actually changed
-        const currentFederalState = permits.filter(d => d.permitType === 'federal' || d.permitType === 'state');
-        const newFederalState = finalDocs.filter(d => d.permitType === 'federal' || d.permitType === 'state');
-        const currentLocal = localPermits;
-        const newLocal = finalDocs.filter(d => d.permitType === 'local');
+        const currentFederalState = permits.filter(d => d.permitType === 'federal');
+        const newFederalState = finalDocs.filter(d => d.permitType === 'federal');
         
         const federalStateChanged = currentFederalState.length !== newFederalState.length || 
           !currentFederalState.every((doc, i) => doc.id === newFederalState[i]?.id);
-        const localChanged = currentLocal.length !== newLocal.length || 
-          !currentLocal.every((doc, i) => doc.id === newLocal[i]?.id);
         
         if (federalStateChanged) {
           setPermits(newFederalState);
-        }
-        if (localChanged) {
-          setLocalPermits(newLocal);
         }
       }
     };
@@ -223,7 +214,7 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
 
   const handleDeletePermit = async (permitId: string) => {
     try {
-      const doc = localPermits.find(p => p.id === permitId) || permits.find(p => p.id === permitId);
+      const doc = permits.find(p => p.id === permitId);
       if (!doc) {
         toast({ title: 'Permit not found', description: 'Could not locate the selected permit.', variant: 'destructive' });
         return;
@@ -242,15 +233,9 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
         console.warn('Storage remove threw (non-fatal):', e);
       }
 
-      if (doc.permitType === 'local') {
-        const updatedLocalPermits = localPermits.filter(p => p.id !== permitId);
-        setLocalPermits(updatedLocalPermits);
-        persistPermits(permits, updatedLocalPermits);
-      } else {
-        const updatedPermits = permits.filter(p => p.id !== permitId);
-        setPermits(updatedPermits);
-        persistPermits(updatedPermits, localPermits);
-      }
+      const updatedPermits = permits.filter(p => p.id !== permitId);
+      setPermits(updatedPermits);
+      persistPermits(updatedPermits);
 
       toast({ title: 'Permit deleted', description: `${doc.fileName} was removed.` });
     } catch (e) {
@@ -282,17 +267,16 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
     }
   };
 
-  const persistPermits = (docs: MMPStatePermitDocument[], localDocs: MMPStatePermitDocument[] = []) => {
+  const persistPermits = (docs: MMPStatePermitDocument[]) => {
     const now = new Date().toISOString();
-    const allDocs = [...docs, ...localDocs];
     const permitsData: MMPPermitsData = {
       federal: docs.some(d => d.permitType === 'federal'),
-      state: docs.some(d => d.permitType === 'state'),
-      local: localDocs.some(d => d.permitType === 'local'),
-      lastVerified: allDocs.some(d => d.status) ? now : undefined,
+      state: false,
+      local: false,
+      lastVerified: docs.some(d => d.status) ? now : undefined,
       verifiedBy: currentUser?.username || currentUser?.fullName || currentUser?.email || undefined,
       // Cast to MMPDocument[] for compatibility; downstream code handles extended fields safely
-      documents: allDocs as unknown as any,
+      documents: docs as unknown as any,
     };
 
     if (mmpFile?.id) {
@@ -333,15 +317,9 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
   };
 
   const handleUploadSuccess = (newPermit: MMPStatePermitDocument) => {
-    if (newPermit.permitType === 'local') {
-      const updatedLocalPermits = [...localPermits, newPermit];
-      setLocalPermits(updatedLocalPermits);
-      persistPermits(permits, updatedLocalPermits);
-    } else {
-      const updatedPermits = [...permits, newPermit];
-      setPermits(updatedPermits);
-      persistPermits(updatedPermits, localPermits);
-    }
+    const updatedPermits = [...permits, newPermit];
+    setPermits(updatedPermits);
+    persistPermits(updatedPermits);
     
     toast({
       title: "Permit Uploaded",
@@ -440,46 +418,23 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
   };
 
   const handleVerifyPermit = (permitId: string, status: 'verified' | 'rejected', notes?: string) => {
-  let decidedDoc: MMPStatePermitDocument | undefined;
-    // Check if it's a local permit
-    const localPermitIndex = localPermits.findIndex(p => p.id === permitId);
-    let updatedLocalPermits = localPermits;
-    let updatedPermits = permits;
-    if (localPermitIndex !== -1) {
-      updatedLocalPermits = localPermits.map(permit => {
-        if (permit.id === permitId) {
-          const updated = {
-            ...permit,
-            status,
-            verificationNotes: notes,
-            verifiedAt: new Date().toISOString(),
-            verifiedBy: currentUser?.username || currentUser?.fullName || currentUser?.email || 'System'
-          } as MMPStatePermitDocument;
-          decidedDoc = updated;
-          return updated;
-        }
-        return permit;
-      });
-      setLocalPermits(updatedLocalPermits);
-      persistPermits(permits, updatedLocalPermits);
-    } else {
-      updatedPermits = permits.map(permit => {
-        if (permit.id === permitId) {
-          const updated = {
-            ...permit,
-            status,
-            verificationNotes: notes,
-            verifiedAt: new Date().toISOString(),
-            verifiedBy: currentUser?.username || currentUser?.fullName || currentUser?.email || 'System'
-          } as MMPStatePermitDocument;
-          decidedDoc = updated;
-          return updated;
-        }
-        return permit;
-      });
-      setPermits(updatedPermits);
-      persistPermits(updatedPermits, localPermits);
-    }
+    let decidedDoc: MMPStatePermitDocument | undefined;
+    const updatedPermits = permits.map(permit => {
+      if (permit.id === permitId) {
+        const updated = {
+          ...permit,
+          status,
+          verificationNotes: notes,
+          verifiedAt: new Date().toISOString(),
+          verifiedBy: currentUser?.username || currentUser?.fullName || currentUser?.email || 'System'
+        } as MMPStatePermitDocument;
+        decidedDoc = updated;
+        return updated;
+      }
+      return permit;
+    });
+    setPermits(updatedPermits);
+    persistPermits(updatedPermits);
 
     // Update the corresponding mmp_site_entries record to status 'approved'
     (async () => {
@@ -516,25 +471,22 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
 
 
   const calculateProgress = () => {
-    const allPermits = [...permits, ...localPermits];
-    if (allPermits.length === 0) return 0;
-    const verifiedCount = allPermits.filter(p => p.status === 'verified' || p.status === 'rejected').length;
-    return Math.round((verifiedCount / allPermits.length) * 100);
+    if (permits.length === 0) return 0;
+    const verifiedCount = permits.filter(p => p.status === 'verified' || p.status === 'rejected').length;
+    return Math.round((verifiedCount / permits.length) * 100);
   };
 
   const progress = calculateProgress();
   const siteCount = mmpFile?.siteEntries?.length || mmpFile?.entries || 0;
-  const allPermitsList = [...permits, ...localPermits];
+  const allPermitsList = permits;
   const allVerified = allPermitsList.length > 0 && allPermitsList.every(p => p.status === 'verified');
 
   // Check permit requirements based on user role
   const isFOM = hasAnyRole(['fom', 'fieldOpManager']);
   const hasFederalPermit = permits.some(p => p.permitType === 'federal');
-  const hasStatePermit = permits.some(p => p.permitType === 'state');
   
-  // For FOM accounts, only federal permit is required; state permit is optional
-  // For other accounts, both federal and state permits are required
-  const requiredPermitsUploaded = isFOM ? hasFederalPermit : (hasFederalPermit && hasStatePermit);
+  // For all users, only federal permit is required
+  const requiredPermitsUploaded = hasFederalPermit;
   const canReviewOrForward = allVerified && requiredPermitsUploaded && !hasForwarded;
 
   return (
@@ -544,10 +496,10 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Upload className="h-5 w-5" />
-            Upload New Permit
+            Upload Federal Permit
           </CardTitle>
           <CardDescription>
-            Add a new permit document for verification
+            Upload the federal permit required for MMP verification
             {siteCount > 0 && (
               <span className="ml-1 text-xs font-medium text-blue-600">
                 • MMP contains {siteCount} sites
@@ -601,61 +553,17 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
               </div>
             </div>
 
-            {/* State Permit Status */}
-            <div className="flex items-center justify-between p-3 rounded-lg border">
-              <div className="flex items-center gap-3">
-                {hasStatePermit ? (
-                  <CheckCircle2 className="h-5 w-5 text-green-600" />
-                ) : (
-                  <AlertTriangle className="h-5 w-5 text-orange-600" />
-                )}
-                <div>
-                  <div className="font-medium text-gray-900">State Permit</div>
-                  <div className="text-sm text-gray-600">
-                    {hasStatePermit ? "Uploaded and ready" : "Not uploaded yet"}
-                  </div>
-                </div>
-              </div>
-              <div className="text-sm font-medium">
-                {hasStatePermit ? (
-                  <span className="text-green-600">✓ Complete</span>
-                ) : isFOM ? (
-                  <span className="text-blue-600">○ Optional</span>
-                ) : (
-                  <span className="text-orange-600">⚠ Required</span>
-                )}
-              </div>
-            </div>
-
             {/* Summary Message */}
             <div className="mt-4 p-3 bg-white rounded-lg border">
               <div className="text-sm">
-                {isFOM ? (
-                  // FOM requirements: only federal permit required
-                  hasFederalPermit ? (
-                    <div className="text-green-700 font-medium">
-                      ✓ Federal permit uploaded. You can now review and assign coordinators.
-                    </div>
-                  ) : (
-                    <div className="text-orange-700 font-medium">
-                      ⚠ Federal permit required. Upload the federal permit to proceed.
-                    </div>
-                  )
+                {hasFederalPermit ? (
+                  <div className="text-green-700 font-medium">
+                    ✓ Federal permit uploaded. You can now review and assign coordinators.
+                  </div>
                 ) : (
-                  // Other users: both permits required
-                  hasFederalPermit && hasStatePermit ? (
-                    <div className="text-green-700 font-medium">
-                      ✓ Both federal and state permits uploaded. You can now review and assign coordinators.
-                    </div>
-                  ) : !hasFederalPermit && !hasStatePermit ? (
-                    <div className="text-orange-700 font-medium">
-                      ⚠ No permits uploaded yet. Upload both federal and state permits to proceed.
-                    </div>
-                  ) : (
-                    <div className="text-orange-700 font-medium">
-                      ⚠ Missing {hasFederalPermit ? "state" : "federal"} permit. Upload the remaining permit to proceed.
-                    </div>
-                  )
+                  <div className="text-orange-700 font-medium">
+                    ⚠ Federal permit required. Upload the federal permit to proceed.
+                  </div>
                 )}
               </div>
             </div>
@@ -663,15 +571,15 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
         </CardContent>
       </Card>
 
-      {/* Federal/State Permits Section */}
+      {/* Federal Permits Section */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FileCheck className="h-5 w-5" />
-            Federal & State Permits
+            Federal Permits
           </CardTitle>
           <CardDescription>
-            Track and manage federal and state permit verifications
+            Track and manage federal permit verifications
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -688,56 +596,25 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
             ) : (
               <div className="text-center py-8 text-muted-foreground">
                 <Upload className="h-8 w-8 mx-auto mb-2 opacity-20" />
-                <p className="text-sm font-medium mb-1">No federal/state permits uploaded yet</p>
-                <p className="text-xs">Upload federal or state permits to begin verification</p>
+                <p className="text-sm font-medium mb-1">No federal permits uploaded yet</p>
+                <p className="text-xs">Upload federal permits to begin verification</p>
               </div>
             )}
           </div>
         </CardContent>
       </Card>
 
-      {/* Local Permits Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileCheck className="h-5 w-5" />
-            Local Permits
-          </CardTitle>
-          <CardDescription>
-            Track and manage local permit verifications
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {localPermits.length > 0 ? (
-              localPermits.map((permit) => (
-                <PermitVerificationCard
-                  key={permit.id}
-                  permit={permit}
-                  onVerify={handleVerifyPermit}
-                  onDelete={handleDeletePermit}
-                />
-              ))
-            ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                <Upload className="h-8 w-8 mx-auto mb-2 opacity-20" />
-                <p className="text-sm font-medium mb-1">No local permits uploaded yet</p>
-                <p className="text-xs">Upload local permits to begin verification</p>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+
 
       {/* Overall Progress Section */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FileCheck className="h-5 w-5" />
-            Overall Verification Progress
+            Federal Permit Verification Progress
           </CardTitle>
           <CardDescription>
-            Combined progress for all permit types
+            Progress for federal permit verification
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -752,43 +629,21 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
             </div>
             <Progress value={progress} className="h-2" />
           </div>
-          <div className="grid grid-cols-3 gap-4 text-sm">
+          <div className="grid grid-cols-1 gap-4 text-sm">
             <div className="text-center">
-              <div className="font-medium text-blue-600">{permits.filter(p => p.permitType === 'federal').length}</div>
+              <div className="font-medium text-blue-600">{permits.length}</div>
               <div className="text-muted-foreground">Federal</div>
-            </div>
-            <div className="text-center">
-              <div className="font-medium text-green-600">{permits.filter(p => p.permitType === 'state').length}</div>
-              <div className="text-muted-foreground">State</div>
-            </div>
-            <div className="text-center">
-              <div className="font-medium text-purple-600">{localPermits.length}</div>
-              <div className="text-muted-foreground">Local</div>
             </div>
           </div>
           <div className="mt-6 flex justify-end gap-2">
             {canReviewOrForward ? (
-              <>
-                <Button onClick={() => navigate(`/mmp/${mmpFile.id}/review-assign-coordinators`)}>
-                  <Send className="h-4 w-4 mr-2" />
-                  Review & Assign Coordinators
-                </Button>
-                <Button onClick={() => navigate(`/mmp/${mmpFile.id}`)}>
-                  <Eye className="h-4 w-4 mr-2" />
-                  Review MMP
-                </Button>
-              </>
+              <Button onClick={() => navigate(`/mmp/${mmpFile.id}/review-assign-coordinators`)}>
+                <Send className="h-4 w-4 mr-2" />
+                Review & Assign Coordinators
+              </Button>
             ) : (
               <div className="text-sm text-muted-foreground text-center w-full">
-                {isFOM ? (
-                  // FOM requirements
-                  !hasFederalPermit && "Upload federal permit to enable review and forwarding"
-                ) : (
-                  // Other users requirements
-                  !hasFederalPermit && !hasStatePermit && "Upload federal and state permits to enable review and forwarding" ||
-                  hasFederalPermit && !hasStatePermit && "Upload state permit to enable review and forwarding" ||
-                  !hasFederalPermit && hasStatePermit && "Upload federal permit to enable review and forwarding"
-                )}
+                {!hasFederalPermit && "Upload federal permit to enable review and forwarding"}
                 {requiredPermitsUploaded && !allVerified && "Verify all permits to enable review and forwarding"}
                 {hasForwarded && "Sites have already been forwarded"}
               </div>
