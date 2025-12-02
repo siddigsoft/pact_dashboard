@@ -17,6 +17,7 @@ export const siteVisits: SiteVisit[] = [
       longitude: 7.3986,
       region: 'FCT'
     },
+    
     coordinates: {
       latitude: 9.0765,
       longitude: 7.3986,

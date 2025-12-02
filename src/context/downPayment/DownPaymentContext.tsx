@@ -88,17 +88,44 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
 
     try {
       setLoading(true);
+      const userRole = currentUser.role?.toLowerCase();
+      
+      // Debug logging for troubleshooting
+      console.log('[DownPayment] Fetching requests for user:', {
+        userId: currentUser.id,
+        role: userRole,
+        hubId: currentUser.hubId
+      });
+
       let query = supabase.from('down_payment_requests').select('*');
 
-      if (currentUser.role === 'dataCollector' || currentUser.role === 'datacollector' || currentUser.role === 'coordinator') {
+      if (userRole === 'datacollector' || userRole === 'coordinator') {
+        // Data collectors and coordinators only see their own requests
         query = query.eq('requested_by', currentUser.id);
-      } else if (currentUser.role === 'supervisor' || currentUser.role === 'hubSupervisor') {
-        query = query.or(`requested_by.eq.${currentUser.id},hub_id.eq.${currentUser.hubId || 'none'}`);
+      } else if (userRole === 'supervisor' || userRole === 'hubsupervisor') {
+        /**
+         * HUB-BASED SUPERVISION: Hub supervisors manage MULTIPLE states within their hub.
+         * Examples: Kosti Hub = 7 states, Kassala Hub = 5 states
+         * Supervisors see their own requests + all requests from their hub
+         * Hub supervisors need hub_id assigned (NOT state_id) to see all team requests
+         */
+        if (currentUser.hubId) {
+          query = query.or(`requested_by.eq.${currentUser.id},hub_id.eq.${currentUser.hubId}`);
+        } else {
+          // If supervisor doesn't have hubId, try matching by hub name or just show own requests
+          console.warn('[DownPayment] Supervisor has no hubId set - showing only own requests');
+          query = query.eq('requested_by', currentUser.id);
+        }
+      } else if (userRole === 'admin' || userRole === 'financialadmin') {
+        // Admins see all requests - no filter applied
+        console.log('[DownPayment] Admin user - fetching all requests');
       }
 
       const { data, error } = await query.order('created_at', { ascending: false });
 
       if (error) throw error;
+      
+      console.log('[DownPayment] Fetched requests:', data?.length || 0);
       setRequests((data || []).map(transformFromDB));
     } catch (error: any) {
       console.error('Failed to fetch down-payment requests:', error);
@@ -118,14 +145,56 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
 
   const createRequest = async (request: CreateDownPaymentRequest): Promise<boolean> => {
     try {
+      if (request.requestedAmount <= 0) {
+        toast({
+          title: 'Invalid Amount',
+          description: 'Requested amount must be greater than zero',
+          variant: 'destructive',
+        });
+        return false;
+      }
+
+      if (request.requestedAmount > request.totalTransportationBudget) {
+        toast({
+          title: 'Amount Exceeds Budget',
+          description: `Requested amount (${request.requestedAmount.toLocaleString()} SDG) cannot exceed transportation budget (${request.totalTransportationBudget.toLocaleString()} SDG)`,
+          variant: 'destructive',
+        });
+        return false;
+      }
+
+      let hubId = request.hubId;
+      const hubName = request.hubName;
+      
+      if (!hubId && hubName) {
+        const hubNameLower = hubName.toLowerCase();
+        if (hubNameLower.includes('dongola')) {
+          hubId = 'dongola-hub';
+        } else if (hubNameLower.includes('kassala')) {
+          hubId = 'kassala-hub';
+        } else if (hubNameLower.includes('kosti')) {
+          hubId = 'kosti-hub';
+        } else if (hubNameLower.includes('forchana')) {
+          hubId = 'forchana-hub';
+        } else if (hubNameLower.includes('khartoum') || hubNameLower.includes('country')) {
+          hubId = 'country-office';
+        }
+        console.log('[DownPayment] Derived hubId from hubName:', { hubName, hubId });
+      }
+      
+      if (!hubId && currentUser?.hubId) {
+        hubId = currentUser.hubId;
+        console.log('[DownPayment] Using currentUser hubId:', hubId);
+      }
+
       const { error } = await supabase.from('down_payment_requests').insert({
         site_visit_id: request.siteVisitId,
         mmp_site_entry_id: request.mmpSiteEntryId,
         site_name: request.siteName,
         requested_by: request.requestedBy,
         requester_role: request.requesterRole,
-        hub_id: request.hubId,
-        hub_name: request.hubName,
+        hub_id: hubId,
+        hub_name: hubName,
         total_transportation_budget: request.totalTransportationBudget,
         requested_amount: request.requestedAmount,
         payment_type: request.paymentType,

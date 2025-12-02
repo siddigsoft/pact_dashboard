@@ -4,7 +4,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Hand, Loader2, CheckCircle, Wallet, Car, User, AlertCircle } from 'lucide-react';
+import { useUser } from '@/context/user/UserContext';
+import { Hand, Loader2, CheckCircle, Wallet, Car, User, AlertCircle, Banknote } from 'lucide-react';
 import { useClaimFeeCalculation, type ClaimFeeBreakdown } from '@/hooks/use-claim-fee-calculation';
 import { CLASSIFICATION_LABELS, CLASSIFICATION_COLORS } from '@/types/classification';
 
@@ -34,7 +35,14 @@ export function ClaimSiteButton({
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [feeBreakdown, setFeeBreakdown] = useState<ClaimFeeBreakdown | null>(null);
   const { toast } = useToast();
+  const { currentUser } = useUser();
   const { calculateFeeForClaim, loading: calculatingFee } = useClaimFeeCalculation();
+
+  const isFieldWorker = currentUser?.role === 'dataCollector' || 
+                        currentUser?.role === 'datacollector' || 
+                        currentUser?.role === 'coordinator';
+  
+  const canSeeBreakdown = !isFieldWorker;
 
   const handleInitiateClaim = async () => {
     if (claiming || claimed || disabled) return;
@@ -90,7 +98,9 @@ export function ClaimSiteButton({
         setClaimed(true);
         toast({
           title: 'Site Claimed!',
-          description: `${result.message} Your fee: ${finalFee.toLocaleString()} SDG + Transport: ${feeBreakdown.transportBudget.toLocaleString()} SDG = ${finalTotal.toLocaleString()} SDG`,
+          description: isFieldWorker 
+            ? `${result.message} Total payout: ${finalTotal.toLocaleString()} SDG`
+            : `${result.message} Your fee: ${finalFee.toLocaleString()} SDG + Transport: ${feeBreakdown.transportBudget.toLocaleString()} SDG = ${finalTotal.toLocaleString()} SDG`,
           variant: 'default'
         });
         onClaimed?.();
@@ -169,60 +179,106 @@ export function ClaimSiteButton({
               Confirm Site Claim
             </DialogTitle>
             <DialogDescription>
-              Review your payment breakdown before claiming "{siteName}"
+              {canSeeBreakdown 
+                ? `Review site details and your payment breakdown before accepting`
+                : `Review your total payout for "${siteName}"`
+              }
             </DialogDescription>
           </DialogHeader>
 
           {feeBreakdown && (
             <div className="space-y-4 py-4">
-              {feeBreakdown.classificationLevel && (
-                <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                  <span className="text-sm font-medium">Your Classification</span>
-                  <Badge className={CLASSIFICATION_COLORS[feeBreakdown.classificationLevel]}>
-                    {CLASSIFICATION_LABELS[feeBreakdown.classificationLevel]}
-                  </Badge>
-                </div>
-              )}
+              {canSeeBreakdown ? (
+                <>
+                  {feeBreakdown.classificationLevel && (
+                    <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                      <span className="text-sm font-medium">Your Classification</span>
+                      <Badge className={CLASSIFICATION_COLORS[feeBreakdown.classificationLevel]}>
+                        {CLASSIFICATION_LABELS[feeBreakdown.classificationLevel]}
+                      </Badge>
+                    </div>
+                  )}
 
-              {feeBreakdown.feeSource === 'default' && (
-                <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg">
-                  <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
-                  <p className="text-sm text-amber-800 dark:text-amber-200">
-                    No classification found. Using default rate of {feeBreakdown.enumeratorFee.toLocaleString()} SDG.
-                    Contact your supervisor to get classified for accurate rates.
+                  {feeBreakdown.feeSource === 'default' && (
+                    <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg">
+                      <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                      <p className="text-sm text-amber-800 dark:text-amber-200">
+                        No classification found. Using default rate of {feeBreakdown.enumeratorFee.toLocaleString()} SDG.
+                        Contact your supervisor to get classified for accurate rates.
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between py-2 border-b">
+                      <div className="flex items-center gap-2">
+                        <Car className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm">Transport Budget</span>
+                      </div>
+                      <span className="font-medium">{feeBreakdown.transportBudget.toLocaleString()} SDG</span>
+                    </div>
+
+                    <div className="flex items-center justify-between py-2 border-b">
+                      <div className="flex items-center gap-2">
+                        <User className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm">Collector Fee</span>
+                      </div>
+                      <span className="font-medium">{feeBreakdown.enumeratorFee.toLocaleString()} SDG</span>
+                    </div>
+
+                    <div className="flex items-center justify-between py-3 bg-primary/10 rounded-lg px-3">
+                      <div className="flex items-center gap-2">
+                        <Wallet className="h-5 w-5 text-primary" />
+                        <span className="font-semibold">Total Payout</span>
+                      </div>
+                      <span className="text-xl font-bold text-primary">{feeBreakdown.totalPayout.toLocaleString()} SDG</span>
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-muted-foreground text-center">
+                    This amount will be credited to your wallet after completing the site visit.
                   </p>
-                </div>
+                </>
+              ) : (
+                <>
+                  {feeBreakdown.classificationLevel && (
+                    <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                      <span className="text-sm font-medium">Your Classification</span>
+                      <Badge className={CLASSIFICATION_COLORS[feeBreakdown.classificationLevel]}>
+                        {CLASSIFICATION_LABELS[feeBreakdown.classificationLevel]}
+                      </Badge>
+                    </div>
+                  )}
+
+                  <div className="flex flex-col items-center justify-center py-6 space-y-4">
+                    <div className="p-4 bg-primary/10 rounded-full">
+                      <Banknote className="h-10 w-10 text-primary" />
+                    </div>
+                    
+                    <div className="text-center space-y-2">
+                      <p className="text-3xl font-bold text-primary">
+                        {feeBreakdown.totalPayout.toLocaleString()} SDG
+                      </p>
+                      <p className="text-sm text-muted-foreground max-w-xs">
+                        This is your total amount for this site visit, including transportation and your fees.
+                      </p>
+                    </div>
+                  </div>
+
+                  {feeBreakdown.feeSource === 'default' && (
+                    <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg">
+                      <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                      <p className="text-sm text-amber-800 dark:text-amber-200">
+                        Using default rate. Contact your supervisor to get classified for accurate rates.
+                      </p>
+                    </div>
+                  )}
+
+                  <p className="text-xs text-muted-foreground text-center">
+                    This amount will be credited to your wallet after completing the site visit.
+                  </p>
+                </>
               )}
-
-              <div className="space-y-3">
-                <div className="flex items-center justify-between py-2 border-b">
-                  <div className="flex items-center gap-2">
-                    <Car className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm">Transport Budget</span>
-                  </div>
-                  <span className="font-medium">{feeBreakdown.transportBudget.toLocaleString()} SDG</span>
-                </div>
-
-                <div className="flex items-center justify-between py-2 border-b">
-                  <div className="flex items-center gap-2">
-                    <User className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm">Your Collector Fee</span>
-                  </div>
-                  <span className="font-medium">{feeBreakdown.enumeratorFee.toLocaleString()} SDG</span>
-                </div>
-
-                <div className="flex items-center justify-between py-3 bg-primary/10 rounded-lg px-3">
-                  <div className="flex items-center gap-2">
-                    <Wallet className="h-5 w-5 text-primary" />
-                    <span className="font-semibold">Total Payout</span>
-                  </div>
-                  <span className="text-xl font-bold text-primary">{feeBreakdown.totalPayout.toLocaleString()} SDG</span>
-                </div>
-              </div>
-
-              <p className="text-xs text-muted-foreground text-center">
-                This amount will be credited to your wallet after completing the site visit.
-              </p>
             </div>
           )}
 

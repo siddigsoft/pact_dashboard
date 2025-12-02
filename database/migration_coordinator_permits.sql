@@ -104,3 +104,26 @@ DROP TRIGGER IF EXISTS update_coordinator_locality_permits_updated_at ON coordin
 CREATE TRIGGER update_coordinator_locality_permits_updated_at
   BEFORE UPDATE ON coordinator_locality_permits
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Function to update site status when permit is uploaded
+CREATE OR REPLACE FUNCTION update_sites_status_on_permit_upload()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- Update status of sites in the locality that are assigned to this coordinator
+  UPDATE mmp_site_entries
+  SET status = 'Dispatched',
+      updated_at = NOW()
+  WHERE state = NEW.state_id
+    AND locality = NEW.locality_id
+    AND (additional_data->>'assigned_to')::text = NEW.coordinator_id::text
+    AND status = 'Pending';
+
+  RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+-- Trigger to automatically update site status when permit is inserted
+DROP TRIGGER IF EXISTS trigger_update_sites_status_on_permit ON coordinator_locality_permits;
+CREATE TRIGGER trigger_update_sites_status_on_permit
+  AFTER INSERT ON coordinator_locality_permits
+  FOR EACH ROW EXECUTE FUNCTION update_sites_status_on_permit_upload();

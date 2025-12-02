@@ -1,0 +1,12 @@
+[
+  {
+    "email": "test-user@example.com",
+    "password": "TestPass!123",
+    "full_name": "Test User",
+    "username": "test-user",
+    "role": "dataCollector",
+    "state_id": "khartoum",
+    "status": "active",
+    "currency": "SDG"
+  }
+]

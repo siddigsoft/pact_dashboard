@@ -390,22 +390,25 @@ USER SIDE                          ADMIN SIDE
    - amount = 5,000
    - user_id = current user
    ↓
-                                   5. Admin navigates to:
-                                      "Withdrawal Approval" page
+                                   5. Finance Admin navigates to:
+                                      "Finance Approval" page
                                       ↓
-                                   6. Sees pending request:
+                                   6. Sees pending request with:
                                       - User: Ahmed Hassan
                                       - Amount: 5,000 SDG
-                                      - Balance: 6,800 SDG
+                                      - **Current Balance: 6,800 SDG** (displayed!)
+                                      - Balance Status: GREEN (sufficient)
                                       - Reason: "Personal expenses"
+                                      - Urgency indicator (time waiting)
                                       ↓
-                                   7. Reviews request:
-                                      ✓ Sufficient balance?
-                                      ✓ Valid reason?
-                                      ✓ Correct payment details?
+                                   7. Balance check is visual:
+                                      ✓ Green indicator = sufficient funds
+                                      ✗ Red indicator = insufficient (shows shortfall)
                                       ↓
-                                   8. Admin clicks "Approve"
-                                      Adds notes: "Approved - verified account"
+                                   8. Admin clicks "Process Payment"
+                                      - Adds transaction reference (optional)
+                                      - Uploads receipt screenshot (optional)
+                                      - Adds notes: "Approved - bank transfer"
                                       ↓
                                    9. System executes:
 

@@ -22,49 +22,45 @@ BEGIN
     -- Detect if details already exist to avoid overwriting RPC results
     v_has_details := COALESCE( (COALESCE(NEW.additional_data, '{}'::jsonb) ? 'claim_fee_calculation'), false);
 
-    -- Calculate fee only if missing or zero; otherwise keep provided value
-    IF (NEW.enumerator_fee IS NULL OR NEW.enumerator_fee <= 0) THEN
-      -- Try to get user's active classification using accepted_by (stored as text)
-      SELECT classification_level, role_scope
-      INTO v_level, v_scope
-      FROM user_classifications
-      WHERE user_id::text = NEW.accepted_by
+    -- Always calculate fee from classification for the assigned/accepted user
+    -- Guarantees DB is source of truth regardless of provided values
+    -- Try to get user's active classification using accepted_by (stored as text)
+    SELECT classification_level, role_scope
+    INTO v_level, v_scope
+    FROM user_classifications
+    WHERE user_id::text = NEW.accepted_by
+      AND is_active = true
+      AND effective_from <= NOW()
+      AND (effective_until IS NULL OR effective_until > NOW())
+    ORDER BY effective_from DESC
+    LIMIT 1;
+
+    IF v_level IS NOT NULL AND v_scope IS NOT NULL THEN
+      SELECT site_visit_base_fee_cents, complexity_multiplier
+      INTO v_base, v_mult
+      FROM classification_fee_structures
+      WHERE classification_level = v_level
+        AND role_scope = v_scope
         AND is_active = true
-        AND effective_from <= NOW()
-        AND (effective_until IS NULL OR effective_until > NOW())
-      ORDER BY effective_from DESC
+        AND valid_from <= NOW()
+        AND (valid_until IS NULL OR valid_until > NOW())
+      ORDER BY valid_from DESC
       LIMIT 1;
 
-      IF v_level IS NOT NULL AND v_scope IS NOT NULL THEN
-        SELECT site_visit_base_fee_cents, complexity_multiplier
-        INTO v_base, v_mult
-        FROM classification_fee_structures
-        WHERE classification_level = v_level
-          AND role_scope = v_scope
-          AND is_active = true
-          AND effective_from <= NOW()
-          AND (effective_until IS NULL OR effective_until > NOW())
-        ORDER BY effective_from DESC
-        LIMIT 1;
-
-        IF v_base IS NOT NULL THEN
-          -- Fees are stored in SDG despite column name *_cents
-          v_fee := ROUND(COALESCE(v_base,0) * COALESCE(v_mult, 1), 2);
-          v_fee_source := 'classification';
-        ELSE
-          v_fee := 50;
-          v_fee_source := 'default';
-        END IF;
+      IF v_base IS NOT NULL THEN
+        -- Fees are stored in SDG despite column name *_cents
+        v_fee := ROUND(COALESCE(v_base,0) * COALESCE(v_mult, 1), 2);
+        v_fee_source := 'classification';
       ELSE
         v_fee := 50;
         v_fee_source := 'default';
       END IF;
-
-      NEW.enumerator_fee := v_fee;
     ELSE
-      v_fee := NEW.enumerator_fee;
-      v_fee_source := 'provided';
+      v_fee := 50;
+      v_fee_source := 'default';
     END IF;
+
+    NEW.enumerator_fee := v_fee;
 
     -- Ensure total cost if missing
     IF (NEW.cost IS NULL OR NEW.cost <= 0) THEN
