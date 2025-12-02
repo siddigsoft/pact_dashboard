@@ -516,25 +516,25 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
 
 
   const calculateProgress = () => {
-    const allPermits = [...permits, ...localPermits];
-    if (allPermits.length === 0) return 0;
-    const verifiedCount = allPermits.filter(p => p.status === 'verified' || p.status === 'rejected').length;
-    return Math.round((verifiedCount / allPermits.length) * 100);
+    // Progress should reflect only federal permits
+    const federalPermits = permits.filter(p => p.permitType === 'federal');
+    if (federalPermits.length === 0) return 0;
+    const decided = federalPermits.filter(p => p.status === 'verified' || p.status === 'rejected').length;
+    return Math.round((decided / federalPermits.length) * 100);
   };
 
   const progress = calculateProgress();
   const siteCount = mmpFile?.siteEntries?.length || mmpFile?.entries || 0;
-  const allPermitsList = [...permits, ...localPermits];
+  // Consider only federal permits for verification gating
+  const allPermitsList = permits.filter(p => p.permitType === 'federal');
   const allVerified = allPermitsList.length > 0 && allPermitsList.every(p => p.status === 'verified');
 
-  // Check permit requirements based on user role
+  // Check permit requirements
   const isFOM = hasAnyRole(['fom', 'fieldOpManager']);
   const hasFederalPermit = permits.some(p => p.permitType === 'federal');
-  const hasStatePermit = permits.some(p => p.permitType === 'state');
-  
-  // For FOM accounts, only federal permit is required; state permit is optional
-  // For other accounts, both federal and state permits are required
-  const requiredPermitsUploaded = isFOM ? hasFederalPermit : (hasFederalPermit && hasStatePermit);
+  // const hasStatePermit = permits.some(p => p.permitType === 'state'); // hidden
+  // Only federal permit is required for all roles now
+  const requiredPermitsUploaded = hasFederalPermit;
   const canReviewOrForward = allVerified && requiredPermitsUploaded && !hasForwarded;
 
   return (
@@ -601,61 +601,22 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
               </div>
             </div>
 
-            {/* State Permit Status */}
-            <div className="flex items-center justify-between p-3 rounded-lg border">
-              <div className="flex items-center gap-3">
-                {hasStatePermit ? (
-                  <CheckCircle2 className="h-5 w-5 text-green-600" />
-                ) : (
-                  <AlertTriangle className="h-5 w-5 text-orange-600" />
-                )}
-                <div>
-                  <div className="font-medium text-gray-900">State Permit</div>
-                  <div className="text-sm text-gray-600">
-                    {hasStatePermit ? "Uploaded and ready" : "Not uploaded yet"}
-                  </div>
-                </div>
-              </div>
-              <div className="text-sm font-medium">
-                {hasStatePermit ? (
-                  <span className="text-green-600">✓ Complete</span>
-                ) : isFOM ? (
-                  <span className="text-blue-600">○ Optional</span>
-                ) : (
-                  <span className="text-orange-600">⚠ Required</span>
-                )}
-              </div>
-            </div>
+            {/* State Permit Status hidden */}
+            {/**
+            <div className="flex items-center justify-between p-3 rounded-lg border">...</div>
+            **/}
 
             {/* Summary Message */}
             <div className="mt-4 p-3 bg-white rounded-lg border">
               <div className="text-sm">
-                {isFOM ? (
-                  // FOM requirements: only federal permit required
-                  hasFederalPermit ? (
-                    <div className="text-green-700 font-medium">
-                      ✓ Federal permit uploaded. You can now review and assign coordinators.
-                    </div>
-                  ) : (
-                    <div className="text-orange-700 font-medium">
-                      ⚠ Federal permit required. Upload the federal permit to proceed.
-                    </div>
-                  )
+                {hasFederalPermit ? (
+                  <div className="text-green-700 font-medium">
+                    ✓ Federal permit uploaded. You can now review and assign coordinators.
+                  </div>
                 ) : (
-                  // Other users: both permits required
-                  hasFederalPermit && hasStatePermit ? (
-                    <div className="text-green-700 font-medium">
-                      ✓ Both federal and state permits uploaded. You can now review and assign coordinators.
-                    </div>
-                  ) : !hasFederalPermit && !hasStatePermit ? (
-                    <div className="text-orange-700 font-medium">
-                      ⚠ No permits uploaded yet. Upload both federal and state permits to proceed.
-                    </div>
-                  ) : (
-                    <div className="text-orange-700 font-medium">
-                      ⚠ Missing {hasFederalPermit ? "state" : "federal"} permit. Upload the remaining permit to proceed.
-                    </div>
-                  )
+                  <div className="text-orange-700 font-medium">
+                    ⚠ Federal permit required. Upload the federal permit to proceed.
+                  </div>
                 )}
               </div>
             </div>
@@ -663,21 +624,21 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
         </CardContent>
       </Card>
 
-      {/* Federal/State Permits Section */}
+      {/* Federal Permits Section */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FileCheck className="h-5 w-5" />
-            Federal & State Permits
+            Federal Permits
           </CardTitle>
           <CardDescription>
-            Track and manage federal and state permit verifications
+            Track and manage federal permit verifications
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {permits.length > 0 ? (
-              permits.map((permit) => (
+            {permits.filter(p => p.permitType === 'federal').length > 0 ? (
+              permits.filter(p => p.permitType === 'federal').map((permit) => (
                 <PermitVerificationCard
                   key={permit.id}
                   permit={permit}
@@ -688,46 +649,18 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
             ) : (
               <div className="text-center py-8 text-muted-foreground">
                 <Upload className="h-8 w-8 mx-auto mb-2 opacity-20" />
-                <p className="text-sm font-medium mb-1">No federal/state permits uploaded yet</p>
-                <p className="text-xs">Upload federal or state permits to begin verification</p>
+                <p className="text-sm font-medium mb-1">No federal permits uploaded yet</p>
+                <p className="text-xs">Upload federal permits to begin verification</p>
               </div>
             )}
           </div>
         </CardContent>
       </Card>
 
-      {/* Local Permits Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileCheck className="h-5 w-5" />
-            Local Permits
-          </CardTitle>
-          <CardDescription>
-            Track and manage local permit verifications
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {localPermits.length > 0 ? (
-              localPermits.map((permit) => (
-                <PermitVerificationCard
-                  key={permit.id}
-                  permit={permit}
-                  onVerify={handleVerifyPermit}
-                  onDelete={handleDeletePermit}
-                />
-              ))
-            ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                <Upload className="h-8 w-8 mx-auto mb-2 opacity-20" />
-                <p className="text-sm font-medium mb-1">No local permits uploaded yet</p>
-                <p className="text-xs">Upload local permits to begin verification</p>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+      {/* Local Permits Section hidden */}
+      {/**
+      <Card> ... </Card>
+      **/}
 
       {/* Overall Progress Section */}
       <Card>
@@ -737,7 +670,7 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
             Overall Verification Progress
           </CardTitle>
           <CardDescription>
-            Combined progress for all permit types
+            Federal verification progress
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -752,19 +685,12 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
             </div>
             <Progress value={progress} className="h-2" />
           </div>
-          <div className="grid grid-cols-3 gap-4 text-sm">
+          <div className="grid grid-cols-1 gap-4 text-sm">
             <div className="text-center">
               <div className="font-medium text-blue-600">{permits.filter(p => p.permitType === 'federal').length}</div>
               <div className="text-muted-foreground">Federal</div>
             </div>
-            <div className="text-center">
-              <div className="font-medium text-green-600">{permits.filter(p => p.permitType === 'state').length}</div>
-              <div className="text-muted-foreground">State</div>
-            </div>
-            <div className="text-center">
-              <div className="font-medium text-purple-600">{localPermits.length}</div>
-              <div className="text-muted-foreground">Local</div>
-            </div>
+            {/** State and Local counts hidden **/}
           </div>
           <div className="mt-6 flex justify-end gap-2">
             {canReviewOrForward ? (
@@ -780,15 +706,7 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
               </>
             ) : (
               <div className="text-sm text-muted-foreground text-center w-full">
-                {isFOM ? (
-                  // FOM requirements
-                  !hasFederalPermit && "Upload federal permit to enable review and forwarding"
-                ) : (
-                  // Other users requirements
-                  !hasFederalPermit && !hasStatePermit && "Upload federal and state permits to enable review and forwarding" ||
-                  hasFederalPermit && !hasStatePermit && "Upload state permit to enable review and forwarding" ||
-                  !hasFederalPermit && hasStatePermit && "Upload federal permit to enable review and forwarding"
-                )}
+                {!hasFederalPermit && "Upload federal permit to enable review and forwarding"}
                 {requiredPermitsUploaded && !allVerified && "Verify all permits to enable review and forwarding"}
                 {hasForwarded && "Sites have already been forwarded"}
               </div>
