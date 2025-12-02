@@ -256,6 +256,9 @@ export const FOMZone: React.FC = () => {
 
   const approvedCount = allMMPs.filter(mmp => mmp.status === 'approved').length;
 
+
+
+  
   // Site visit metrics
   const totalVisits = siteVisits.length;
   const completedVisits = siteVisits.filter(v => v.status === 'completed').length;
