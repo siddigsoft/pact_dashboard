@@ -43,7 +43,7 @@ import {
 import { User } from '@/types';
 
 const FieldTeam = () => {
-  const { users, currentUser, refreshUsers } = useUser();
+  const { users, currentUser, refreshUsers, updateUserLocation } = useUser();
   const { siteVisits, assignSiteVisit } = useSiteVisitContext();
   const [activeTab, setActiveTab] = useState('map');
   const [searchTerm, setSearchTerm] = useState('');
@@ -297,7 +297,9 @@ const FieldTeam = () => {
           {currentUser && (
             <GpsLocationCapture
               user={currentUser}
-              onLocationCapture={(lat, lng) => {}}
+              onLocationCapture={(lat, lng, accuracy) => {
+                updateUserLocation(lat, lng, accuracy);
+              }}
             />
           )}
           

@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 import { User } from '@/types';
 import GpsLocationCapture from '@/components/GpsLocationCapture';
+import { useUser } from '@/context/user/UserContext';
 
 interface TeamHeaderProps {
   currentUser: User | null;
@@ -12,6 +13,7 @@ interface TeamHeaderProps {
 
 const TeamHeader: React.FC<TeamHeaderProps> = ({ currentUser }) => {
   const navigate = useNavigate();
+  const { updateUserLocation } = useUser();
   
   return (
     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-gradient-to-r from-background to-muted p-6 rounded-lg shadow-sm">
@@ -35,7 +37,9 @@ const TeamHeader: React.FC<TeamHeaderProps> = ({ currentUser }) => {
       {currentUser && (
         <GpsLocationCapture
           user={currentUser}
-          onLocationCapture={(lat, lng) => {}}
+          onLocationCapture={(lat, lng, accuracy) => {
+            updateUserLocation(lat, lng, accuracy);
+          }}
         />
       )}
     </div>
