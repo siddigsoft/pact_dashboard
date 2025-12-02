@@ -5,9 +5,10 @@ import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/context/user/UserContext';
-import { CheckCircle, Loader2, Wallet, Car, User, AlertCircle, MapPin, Calendar, Building2, Banknote } from 'lucide-react';
+import { CheckCircle, Loader2, Wallet, Car, User, AlertCircle, MapPin, Calendar, Building2, Banknote, WifiOff } from 'lucide-react';
 import { useClaimFeeCalculation, type ClaimFeeBreakdown } from '@/hooks/use-claim-fee-calculation';
 import { CLASSIFICATION_LABELS, CLASSIFICATION_COLORS } from '@/types/classification';
+import { useOffline } from '@/hooks/use-offline';
 
 interface AcceptSiteButtonProps {
   site: {
@@ -51,6 +52,7 @@ export function AcceptSiteButton({
   const { toast } = useToast();
   const { currentUser } = useUser();
   const { calculateFeeForClaim, loading: calculatingFee } = useClaimFeeCalculation();
+  const { isOnline, claimSiteOffline } = useOffline();
 
   const isFieldWorker = currentUser?.role === 'dataCollector' || 
                         currentUser?.role === 'datacollector' || 
@@ -85,8 +87,31 @@ export function AcceptSiteButton({
     setAccepting(true);
     setShowConfirmation(false);
 
+    const isDispatchedSite = siteStatus === 'dispatched';
+
     try {
-      const isDispatchedSite = siteStatus === 'dispatched';
+      if (!isOnline) {
+        await claimSiteOffline({
+          siteEntryId: site.id,
+          userId,
+          isDispatchedSite,
+          enumeratorFee: feeBreakdown.enumeratorFee,
+          transportFee: feeBreakdown.transportBudget,
+          totalCost: feeBreakdown.totalPayout,
+          classificationLevel: feeBreakdown.classificationLevel,
+          roleScope: feeBreakdown.roleScope,
+          feeSource: feeBreakdown.feeSource,
+        });
+
+        setAccepted(true);
+        toast({
+          title: 'Saved Offline',
+          description: `Site ${isDispatchedSite ? 'claim' : 'acceptance'} saved. Will sync when back online.`,
+          duration: 4000,
+        });
+        onAccepted?.();
+        return;
+      }
 
       if (isDispatchedSite) {
         const { data, error } = await supabase.rpc('claim_site_visit', {
@@ -380,6 +405,11 @@ export function AcceptSiteButton({
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   Processing...
+                </>
+              ) : !isOnline ? (
+                <>
+                  <WifiOff className="h-4 w-4 mr-2" />
+                  Save Offline
                 </>
               ) : (
                 <>
