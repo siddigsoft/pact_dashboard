@@ -2374,7 +2374,7 @@ const CoordinatorSites: React.FC = () => {
             <span>Completed</span>
             <Badge variant="secondary">{completedSitesCount}</Badge>
           </TabsTrigger>
-          <TabsTrigger value="rejected" className="flex items-center justify-center gap-2 rounded-md py-2 px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm">
+          <TabsTrigger value="rejected" className={`flex items-center justify-center gap-2 rounded-md py-2 px-3 ${rejectedSitesCount > 0 ? 'bg-red-200 hover:bg-red-300 data-[state=active]:bg-red-600 data-[state=active]:text-white data-[state=active]:shadow-sm' : 'bg-red-100 hover:bg-red-200 data-[state=active]:bg-red-100 data-[state=active]:text-red-800 data-[state=active]:shadow-sm'}`}>
             <span>Rejected</span>
             <Badge variant="secondary">{rejectedSitesCount}</Badge>
           </TabsTrigger>
