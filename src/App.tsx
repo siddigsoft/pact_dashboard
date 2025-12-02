@@ -76,6 +76,8 @@ const SuperAdminManagement = lazy(() => import('./components/superAdmin/SuperAdm
 const HubOperations = lazy(() => import('./pages/HubOperations'));
 const TrackerPreparationPlan = lazy(() => import('./pages/TrackerPreparationPlan'));
 const NotificationsPage = lazy(() => import('./pages/Notifications'));
+const Documentation = lazy(() => import('./pages/Documentation'));
+const PublicDocumentation = lazy(() => import('./pages/PublicDocumentation'));
 
 // Components (keep these eagerly loaded as they're used immediately)
 import MainLayout from './components/MainLayout';
@@ -124,7 +126,7 @@ const AuthGuard = ({ children }) => {
 
   if (
     !currentUser &&
-    !['/auth', '/login', '/register', '/registration-success', '/forgot-password'].includes(location.pathname)
+    !['/auth', '/login', '/register', '/registration-success', '/forgot-password', '/docs'].includes(location.pathname)
   ) {
     return <Navigate to="/auth" replace />;
   }
@@ -143,6 +145,7 @@ const AppRoutes = () => {
       <Route path="/register" element={<Register />} />
       <Route path="/registration-success" element={<RegistrationSuccess />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/docs" element={<PublicDocumentation />} />
 
       {/* Protected routes */}
   <Route element={<AuthGuard><MainLayout /></AuthGuard>}>
@@ -209,6 +212,7 @@ const AppRoutes = () => {
   <Route path="/coordinator/sites" element={<CoordinatorSites />} />
   <Route path="/hub-operations" element={<HubOperations />} />
         <Route path="/tracker-preparation-plan" element={<TrackerPreparationPlan />} />
+        <Route path="/documentation" element={<Documentation />} />
       </Route>
 
       {/* Redirects */}
@@ -293,9 +297,7 @@ function App() {
             <Router>
               <AppProviders>
                 <Suspense fallback={<PageLoader />}>
-                  <AuthGuard>
-                    <AppRoutes />
-                  </AuthGuard>
+                  <AppRoutes />
                 </Suspense>
                 <Toaster />
                 <SonnerToaster />

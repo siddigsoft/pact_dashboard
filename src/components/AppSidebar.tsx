@@ -30,7 +30,8 @@
     Star,
     BarChart3,
     Banknote,
-    ClipboardCheck
+    ClipboardCheck,
+    BookOpen
   } from "lucide-react";
   import { useSiteVisitReminders } from "@/hooks/use-site-visit-reminders";
   import Logo from "../assets/logo.png";
@@ -92,7 +93,8 @@
     Star,
     Pin,
     Eye,
-    EyeOff
+    EyeOff,
+    BookOpen
   };
 
   interface MenuGroup {
@@ -186,6 +188,12 @@
       dataItems.push({ id: 'tracker-plan', title: "Tracker Preparation", url: "/tracker-preparation-plan", icon: BarChart3, priority: 3, isPinned: isPinned('/tracker-preparation-plan') });
     }
     if (dataItems.length) groups.push({ id: 'reports', label: "Data & Reports", order: 5, items: dataItems });
+
+    const helpItems: MenuGroup['items'] = [];
+    if (!isHidden('/documentation')) {
+      helpItems.push({ id: 'documentation', title: "Documentation", url: "/documentation", icon: BookOpen, priority: 1, isPinned: isPinned('/documentation') });
+    }
+    if (helpItems.length) groups.push({ id: 'help', label: "Help & Support", order: 7, items: helpItems });
 
     const adminItems: MenuGroup['items'] = [];
     if (!isHidden('/users') && (isAdmin || isICT || perms.users)) {

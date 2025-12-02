@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Plus, UserPlus, UserMinus, X, Briefcase, Users } from 'lucide-react';
+import { Plus, UserPlus, UserMinus, X, Briefcase, Users, AlertTriangle } from 'lucide-react';
 import { 
   Project, 
   ProjectRole, 
@@ -8,6 +8,7 @@ import {
 } from '@/types/project';
 import { User } from '@/types';
 import { useUser } from '@/context/user/UserContext';
+import { useUserProjects } from '@/hooks/useUserProjects';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -17,7 +18,18 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Select,
   SelectContent,
@@ -52,6 +64,7 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
   onTeamChange,
 }) => {
   const { users } = useUser();
+  const { getUserProjectsForUser } = useUserProjects();
   const [searchTerm, setSearchTerm] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedRole, setSelectedRole] = useState<ProjectRole>('dataCollector');
@@ -59,10 +72,11 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
     project.team?.teamComposition || []
   );
 
-  // Calculate current workload for each user
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [pendingUser, setPendingUser] = useState<User | null>(null);
+  const [userExistingProjects, setUserExistingProjects] = useState<{projectName: string; role?: string}[]>([]);
+
   const calculateWorkload = (userId: string): number => {
-    // In a real app, you would calculate this based on assigned tasks, activities, etc.
-    // For this example, we'll use a random number between 0-100
     return Math.floor(Math.random() * 100);
   };
 
@@ -76,7 +90,23 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
     return !isAlreadyTeamMember && matchesSearch;
   });
 
-  const handleAddTeamMember = (user: User) => {
+  const checkUserProjects = (user: User) => {
+    const existingProjects = getUserProjectsForUser(user.id);
+    const otherProjects = existingProjects.filter(p => p.projectId !== project.id);
+    
+    if (otherProjects.length > 0) {
+      setPendingUser(user);
+      setUserExistingProjects(otherProjects.map(p => ({
+        projectName: p.projectName,
+        role: p.role
+      })));
+      setConfirmDialogOpen(true);
+    } else {
+      addTeamMemberDirectly(user);
+    }
+  };
+
+  const addTeamMemberDirectly = (user: User) => {
     const newMember: ProjectTeamMember = {
       userId: user.id,
       name: user.name,
@@ -89,6 +119,25 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
     setTeamMembers(updatedTeam);
     onTeamChange(updatedTeam);
     setDialogOpen(false);
+  };
+
+  const handleAddTeamMember = (user: User) => {
+    checkUserProjects(user);
+  };
+
+  const handleConfirmAdd = () => {
+    if (pendingUser) {
+      addTeamMemberDirectly(pendingUser);
+    }
+    setConfirmDialogOpen(false);
+    setPendingUser(null);
+    setUserExistingProjects([]);
+  };
+
+  const handleCancelAdd = () => {
+    setConfirmDialogOpen(false);
+    setPendingUser(null);
+    setUserExistingProjects([]);
   };
 
   const handleRemoveTeamMember = (userId: string) => {
@@ -112,9 +161,25 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
     return "bg-red-500";
   };
 
+  const getUserProjectBadges = (userId: string) => {
+    const existingProjects = getUserProjectsForUser(userId);
+    const otherProjects = existingProjects.filter(p => p.projectId !== project.id);
+    
+    if (otherProjects.length === 0) return null;
+    
+    return (
+      <div className="flex items-center gap-1 mt-1">
+        <AlertTriangle className="h-3 w-3 text-amber-500" />
+        <span className="text-xs text-amber-600">
+          In {otherProjects.length} other project{otherProjects.length > 1 ? 's' : ''}
+        </span>
+      </div>
+    );
+  };
+
   return (
     <Card className="mt-8">
-      <CardHeader className="flex flex-row items-center justify-between">
+      <CardHeader className="flex flex-row items-center justify-between gap-4">
         <div>
           <CardTitle>Team Composition</CardTitle>
           <CardDescription>
@@ -211,6 +276,9 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
           <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>Add Team Member</DialogTitle>
+              <DialogDescription>
+                Search and select users to add to this project team.
+              </DialogDescription>
             </DialogHeader>
             
             <div className="space-y-4">
@@ -266,6 +334,7 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
                                 <div>
                                   <p className="font-medium">{user.name}</p>
                                   <p className="text-xs text-muted-foreground">{user.email}</p>
+                                  {getUserProjectBadges(user.id)}
                                 </div>
                               </div>
                             </TableCell>
@@ -313,6 +382,41 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        <AlertDialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-amber-500" />
+                User Already in Other Projects
+              </AlertDialogTitle>
+              <AlertDialogDescription asChild>
+                <div className="space-y-3">
+                  <p>
+                    <span className="font-medium text-foreground">{pendingUser?.name}</span> is already participating in the following project{userExistingProjects.length > 1 ? 's' : ''}:
+                  </p>
+                  <ul className="list-disc list-inside space-y-1 bg-muted/50 p-3 rounded-md">
+                    {userExistingProjects.map((proj, index) => (
+                      <li key={index} className="text-sm">
+                        <span className="font-medium">{proj.projectName}</span>
+                        {proj.role && <span className="text-muted-foreground"> - {proj.role}</span>}
+                      </li>
+                    ))}
+                  </ul>
+                  <p>
+                    Do you want to add this user to <span className="font-medium text-foreground">{project.name}</span> as well?
+                  </p>
+                </div>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={handleCancelAdd}>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleConfirmAdd}>
+                Yes, Add to Project
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </CardContent>
     </Card>
   );

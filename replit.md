@@ -21,6 +21,13 @@ The frontend, built with React 18, TypeScript, Tailwind CSS v3, and Shadcn UI, f
 
 ### Feature Specifications
 *   **Authorization System:** Resource-action based permission model (`mmp:read`, `site_visits:create`) with granular permissions and admin bypass, enforced across UI, route guards, and server-side RLS.
+*   **Project-Level Access Control:** Comprehensive project-based data isolation ensuring users only see data for projects they belong to. Implementation details:
+    - **useUserProjects Hook** (`src/hooks/useUserProjects.ts`): Core hook providing `userProjectIds`, `userProjectTeamUserIds`, `isProjectMember()`, `hasProjectAccess()`, and `isAdminOrSuperUser` for filtering.
+    - **Data Linkage Chain**: SiteVisit → MMP (via `mmpDetails.mmpId`) → Project (via `projectId`) enables proper filtering.
+    - **Admin Bypass**: Admin, Super Admin, and ICT roles bypass all project filtering and see all data.
+    - **Filtered Components**: SiteVisits.tsx, MMP.tsx, MMPManagementPage.tsx, FieldTeam.tsx, Budget.tsx, CostSubmission.tsx, Reports.tsx, and all Dashboard zones (FOMZone, OperationsZone, DataCollectorZone, PlanningZone, ComplianceZone, PerformanceZone).
+    - **Pattern**: Check `isAdminOrSuperUser` first, then filter arrays using `userProjectIds` with MMP-to-project linkage for site visits.
+    - **Project Manager Assignment**: Each project can have a designated Project Manager selected from the user list. The PM is displayed in project list cards and detail views with name and role.
 *   **File Processing:** MMP Upload Workflow for CSV files includes Zod validation, row-by-row parsing, and database insertion with rollback; includes duplicate MMP and same-site-same-month prevention.
 *   **Real-Time Capabilities:** Live Dashboard with automatic data refresh and notifications via Supabase Realtime, and real-time GPS location sharing with privacy controls.
 *   **Notification System:** Comprehensive browser push notifications with configurable settings.
@@ -31,6 +38,7 @@ The frontend, built with React 18, TypeScript, Tailwind CSS v3, and Shadcn UI, f
 *   **Tracker Preparation Plan:** Analyzes planned vs. actual site coverage, provides real-time updates, and facilitates invoice preparation with detailed cost breakdowns, multi-view analysis, and export capabilities.
 *   **Visit Tracking:** Dedicated database columns `visit_started_at`, `visit_started_by`, `visit_completed_at`, `visit_completed_by` in `mmp_site_entries` for comprehensive tracking.
 *   **GPS Accuracy Display:** Location accuracy is displayed across all team location views with color-coded indicators.
+*   **Documentation Export System:** Comprehensive user documentation with PDF and Word export capabilities. Features 23 content sections covering all platform features, workflow steps table, quick reference guides (role permissions, status colors, keyboard shortcuts, mobile gestures), and proper pagination. Accessible via /documentation route.
 
 ### System Design Choices
 The project utilizes a unified Supabase client for all Supabase interactions, ensuring consistent authentication and session management. The system integrates the complete Sudan administrative structure (18 states, 188 localities) based on official OCHA/WFP COD-AB data.
@@ -47,6 +55,7 @@ The project utilizes a unified Supabase client for all Supabase interactions, en
 *   **date-fns, uuid, clsx/class-variance-authority:** Utilities.
 *   **Leaflet:** Map components.
 *   **jspdf, jspdf-autotable, xlsx:** PDF and Excel export.
+*   **docx, file-saver:** Word document export for documentation.
 *   **Replit:** Development environment.
 *   **Vercel:** Production hosting.
 *   **Capacitor:** Mobile deployment (iOS/Android builds, native API access).

@@ -37,18 +37,14 @@ const MobileNavigation = () => {
   };
 
   const primaryNavItems: NavItem[] = [
-    { icon: Home, label: 'Dashboard', path: '/dashboard', roles: [] },
-    { icon: Map, label: 'Site Visits', path: '/site-visits', roles: [] },
+    { icon: Home, label: 'Home', path: '/dashboard', roles: [] },
+    { icon: MapPin, label: 'Sites', path: '/site-visits', roles: [] },
     { icon: FileText, label: 'MMP', path: '/mmp', roles: [] },
-    { icon: Wallet, label: 'Wallet', path: '/wallet', roles: [] },
+    { icon: MessageSquare, label: 'Chat', path: '/chat', badge: unreadChatCount, roles: [] },
     { icon: MoreHorizontal, label: 'More', path: '', roles: [] }
   ];
 
-  const filteredPrimaryNavItems = primaryNavItems.filter(item => hasRole(item.roles || []));
-
   const secondaryNavItems: NavItem[] = [
-    { icon: CheckCircle, label: 'Site Verification', path: '/coordinator/sites', roles: ['Coordinator' as AppRole, 'coordinator' as AppRole] },
-    { icon: MapPin, label: 'My Sites', path: '/mmp', roles: ['DataCollector' as AppRole, 'dataCollector' as AppRole, 'Coordinator' as AppRole, 'coordinator' as AppRole] },
     { icon: Map, label: 'Field Team', path: '/field-team', roles: [] },
     { icon: DollarSign, label: 'Finance', path: '/finance', roles: ['Admin' as AppRole, 'FinancialAdmin' as AppRole, 'Field Operation Manager (FOM)' as AppRole] },
     { icon: TrendingUp, label: 'Financial Ops', path: '/financial-operations', roles: ['Admin' as AppRole, 'FinancialAdmin' as AppRole, 'Field Operation Manager (FOM)' as AppRole] },
@@ -89,14 +85,14 @@ const MobileNavigation = () => {
         className="fixed bottom-0 left-0 right-0 z-50 shadow-lg backdrop-blur-md bg-slate-900/90 dark:bg-slate-950/90 border-t border-slate-700/50"
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       >
-        <div className="grid grid-cols-5 h-[56px]">
-          {filteredPrimaryNavItems.map((item, index) => {
+        <div className="grid grid-cols-5 h-[52px]">
+          {primaryNavItems.map((item, index) => {
             const active = isActive(item.path);
             return (
               <button
                 key={index}
                 data-testid={`button-nav-${item.label.toLowerCase()}`}
-                className={`flex flex-col items-center justify-center gap-1 transition-all duration-150 relative overflow-visible min-h-[52px] touch-manipulation select-none active:scale-95 px-1 ${
+                className={`flex flex-col items-center justify-center gap-0.5 transition-all duration-150 relative overflow-visible min-h-[48px] touch-manipulation select-none active:scale-95 ${
                   active 
                     ? 'text-blue-400' 
                     : 'text-gray-400 hover:text-white'
@@ -104,16 +100,16 @@ const MobileNavigation = () => {
                 onClick={() => handleNavigation(item.path)}
               >
                 <div className="relative">
-                  <item.icon className={`h-6 w-6 ${active ? 'drop-shadow-[0_0_6px_rgba(59,130,246,0.5)]' : ''}`} />
+                  <item.icon className={`h-5 w-5 ${active ? 'drop-shadow-[0_0_6px_rgba(59,130,246,0.5)]' : ''}`} />
                   {item.badge && item.badge > 0 && (
-                    <span className="absolute -top-1 -right-2 bg-red-500 text-white text-[9px] rounded-full min-w-[14px] h-[14px] flex items-center justify-center shadow-sm z-10 px-0.5">
+                    <span className="absolute -top-1 -right-1.5 bg-red-500 text-white text-[9px] rounded-full min-w-[14px] h-[14px] flex items-center justify-center shadow-sm z-10 px-0.5">
                       {item.badge > 99 ? '99+' : item.badge}
                     </span>
                   )}
                 </div>
-                <span className="text-[11px] font-medium leading-tight">{item.label}</span>
+                <span className="text-[10px] font-medium">{item.label}</span>
                 {active && (
-                  <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-10 h-0.5 bg-blue-500 rounded-t-full" />
+                  <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-8 h-0.5 bg-blue-500 rounded-t-full" />
                 )}
               </button>
             );

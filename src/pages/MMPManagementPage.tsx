@@ -8,6 +8,7 @@ import { Trash2 } from 'lucide-react';
 import { AlertDialog, AlertDialogTrigger, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { useUserProjects } from '@/hooks/useUserProjects';
 
 // Use the correct AppRole value for field operation manager (per schema)
 const FIELD_OP_ROLE = 'Field Operation Manager (FOM)';
@@ -16,6 +17,7 @@ const FieldOperationManagerPage = () => {
   const { currentUser, roles } = useAppContext();
   const { mmpFiles, deleteMMPFile } = useMMP();
   const { checkPermission, hasAnyRole } = useAuthorization();
+  const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
   const [deleteId, setDeleteId] = useState<string|null>(null);
   const [deleting, setDeleting] = useState(false);
   const navigate = useNavigate();
@@ -34,10 +36,21 @@ const FieldOperationManagerPage = () => {
     );
   }
 
+  // Filter MMPs by user's projects
+  const projectFilteredMMPs = useMemo(() => {
+    if (!mmpFiles) return [];
+    if (isAdminOrSuperUser) return mmpFiles;
+    
+    return mmpFiles.filter(mmp => {
+      if (!mmp.projectId) return true;
+      return userProjectIds.includes(mmp.projectId);
+    });
+  }, [mmpFiles, userProjectIds, isAdminOrSuperUser]);
+
   // Calculate total sites per hub (fallback to 0 if not present)
   const sitesPerHub = useMemo(() => {
     const map: Record<string, number> = {};
-    (mmpFiles || []).forEach(mmp => {
+    (projectFilteredMMPs || []).forEach(mmp => {
       // Use mmp.hub if exists, else fallback to mmp.projectHub or 'Unknown'
       const hub = (mmp as any).hub || (mmp as any).projectHub || 'Unknown';
       // Use mmp.sites?.length if exists, else mmp.siteCount, else 0
@@ -50,7 +63,7 @@ const FieldOperationManagerPage = () => {
       map[hub] = (map[hub] || 0) + siteCount;
     });
     return map;
-  }, [mmpFiles]);
+  }, [projectFilteredMMPs]);
 
   return (
     <div className="container mx-auto p-6 md:p-10 space-y-8">
@@ -77,7 +90,7 @@ const FieldOperationManagerPage = () => {
               </tr>
             </thead>
             <tbody>
-              {(mmpFiles || []).map(mmp => {
+              {(projectFilteredMMPs || []).map(mmp => {
                 // uploadedBy may be a string in format "Name (Role)" or an object
                 const uploadedBy = (mmp as any).uploadedBy;
                 let uploadedByName = '-';

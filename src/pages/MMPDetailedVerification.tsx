@@ -143,7 +143,7 @@ const MMPDetailedVerification: React.FC = () => {
         <div className="flex items-center gap-4 mb-4">
           <Button variant="outline" size="sm" onClick={handleGoBack} className="flex items-center gap-2">
             <ArrowLeft className="h-4 w-4" />
-            Back to MMP File
+            Back to Basic Verification
           </Button>
           <div>
             <h1 className="text-2xl font-bold">Detailed MMP Verification</h1>

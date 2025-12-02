@@ -9,9 +9,7 @@ import { useViewMode } from "@/context/ViewModeContext";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { UpdateDialog } from "@/components/UpdateDialog";
 import { OnlineOfflineToggle } from "@/components/common/OnlineOfflineToggle";
-import { GlobalRefreshBar } from "@/components/GlobalRefreshBar";
 import { NotificationInitializer } from "@/components/NotificationInitializer";
-import { MobileBottomNav } from "@/components/mobile/MobileBottomNav";
 
 interface MainLayoutContentProps {
   children?: React.ReactNode;
@@ -64,7 +62,7 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
       <SidebarProvider>
         <div className="min-h-screen flex w-full">
           {!isMobile && <AppSidebar />}
-          <SidebarInset className={`${isMobile ? 'bg-gray-50 dark:bg-gray-900' : ''} relative z-0 flex flex-col min-h-0 min-w-0 overflow-x-hidden`}>
+          <SidebarInset className={`${isMobile ? 'bg-gray-50 dark:bg-gray-900' : ''} relative z-0 flex flex-col min-w-0 overflow-x-hidden`}>
             {isMobile ? (
               <MobileAppHeader 
                 toggleSidebar={toggleSidebar} 
@@ -74,12 +72,10 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
             ) : (
               <Navbar />
             )}
-            {/* Global Refresh Bar - Available on all pages */}
-            <GlobalRefreshBar />
-            <div className={`flex-1 ${isMobile ? 'px-3 pb-16 pt-2' : 'p-4 md:p-6 lg:p-8'} ${isMobile ? 'bg-gray-50 dark:bg-gray-900 scroll-container' : 'bg-slate-50/70 dark:bg-gray-900/70'} overflow-y-auto relative z-0 min-w-0 min-h-0`}>
+            <div className={`flex-1 ${isMobile ? 'px-3 pt-safe' : 'p-4 md:p-6 lg:p-8'} ${isMobile ? 'bg-gray-50 dark:bg-gray-900 scroll-container' : 'bg-slate-50/70 dark:bg-gray-900/70'} overflow-y-auto relative z-0 min-w-0`}>
               {children || <Outlet />}
             </div>
-            {isMobile && <MobileBottomNav />}
+            {isMobile && null}
             <OnlineOfflineToggle variant="floating" />
           </SidebarInset>
         </div>

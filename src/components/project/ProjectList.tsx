@@ -14,10 +14,12 @@ import {
   CheckCircle,
   AlertCircle,
   Clock3,
-  Layers
+  Layers,
+  User
 } from 'lucide-react';
 
 import { Project } from '@/types/project';
+import { useUser } from '@/context/user/UserContext';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -42,9 +44,17 @@ const ProjectList: React.FC<ProjectListProps> = ({
   loading = false
 }) => {
   const navigate = useNavigate();
+  const { users } = useUser();
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+
+  // Helper to get user name by ID
+  const getUserName = (userId: string | undefined): string | null => {
+    if (!userId) return null;
+    const user = users.find(u => u.id === userId);
+    return user?.name || user?.email || null;
+  };
   
   // Format date safely - handles invalid dates
   const formatDate = (dateString: string): string => {
@@ -233,6 +243,15 @@ const ProjectList: React.FC<ProjectListProps> = ({
                         <BarChart className="h-4 w-4 text-muted-foreground" />
                         <span className="text-muted-foreground">
                           Budget: {project.budget.total.toLocaleString()} {project.budget.currency}
+                        </span>
+                      </div>
+                    )}
+                    
+                    {project.team?.projectManager && (
+                      <div className="flex items-center space-x-2 text-sm">
+                        <User className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-muted-foreground">
+                          PM: {getUserName(project.team.projectManager) || 'Unknown'}
                         </span>
                       </div>
                     )}
