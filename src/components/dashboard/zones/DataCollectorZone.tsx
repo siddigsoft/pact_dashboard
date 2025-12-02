@@ -132,13 +132,13 @@ export const DataCollectorZone: React.FC = () => {
     
     navigator.geolocation.getCurrentPosition(
       async (position) => {
-        const { latitude, longitude } = position.coords;
+        const { latitude, longitude, accuracy } = position.coords;
         try {
-          const success = await updateUserLocation(latitude, longitude);
+          const success = await updateUserLocation(latitude, longitude, accuracy);
           if (success) {
             toast({
               title: 'Location Updated',
-              description: `Your location has been updated: ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`,
+              description: `Location saved with accuracy: ±${accuracy.toFixed(1)}m`,
               variant: 'default'
             });
             setLocationLastUpdated(new Date().toISOString());

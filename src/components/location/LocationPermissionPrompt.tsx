@@ -53,13 +53,13 @@ const LocationPermissionPrompt: React.FC = () => {
     setLoading(true);
     navigator.geolocation.getCurrentPosition(
       async (position) => {
-        const { latitude, longitude } = position.coords;
+        const { latitude, longitude, accuracy } = position.coords;
         try {
-          const ok = await updateUserLocation(latitude, longitude);
+          const ok = await updateUserLocation(latitude, longitude, accuracy);
           if (ok) {
             toast({
               title: 'Location saved',
-              description: `We saved your location (${latitude.toFixed(4)}, ${longitude.toFixed(4)}).`,
+              description: `Location saved with accuracy: ±${accuracy.toFixed(1)}m`,
             });
             setOpen(false);
           } else {
