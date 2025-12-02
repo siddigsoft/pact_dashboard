@@ -6,10 +6,11 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
-import { Pencil, Save, X, Play } from 'lucide-react';
+import { Pencil, Save, X, Play, Banknote } from 'lucide-react';
 import { AcceptSiteButton } from '@/components/site-visit/AcceptSiteButton';
 import { RequestDownPaymentButton } from '@/components/site-visit/RequestDownPaymentButton';
 import { useAppContext } from '@/context/AppContext';
+import { useUser } from '@/context/user/UserContext';
 import { supabase } from '@/integrations/supabase/client';
 import { calculateEnumeratorFeeForUser } from '@/hooks/use-claim-fee-calculation';
 
@@ -46,9 +47,16 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
   const [sendBackOpen, setSendBackOpen] = useState(false);
   const [sendBackComments, setSendBackComments] = useState('');
   const { users } = useAppContext();
+  const { currentUser } = useUser();
   const [acceptedByName, setAcceptedByName] = useState<string | null>(null);
   const [dispatchedByName, setDispatchedByName] = useState<string | null>(null);
   const [classificationFee, setClassificationFee] = useState<number | null>(null);
+
+  const isFieldWorker = currentUser?.role === 'dataCollector' || 
+                        currentUser?.role === 'datacollector' || 
+                        currentUser?.role === 'coordinator';
+  
+  const canSeeBreakdown = !isFieldWorker;
 
   // Normalize site data
   const normalizeSite = (site: any) => {
@@ -778,141 +786,178 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
                 <div className="bg-gray-700 text-white rounded w-6 h-6 flex items-center justify-center font-semibold text-sm">
                   2
                 </div>
-                <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">Site Cost Details</h3>
+                <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">
+                  {canSeeBreakdown ? 'Site Cost Details' : 'Your Total Payout'}
+                </h3>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div className="bg-white dark:bg-gray-900 p-4 rounded-lg border">
-                  <Label className="text-xs font-medium text-gray-600 dark:text-gray-400">Data Collector Fee</Label>
-                  {isEditing ? (
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={draft?.enumeratorFee ?? ''}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setDraft((d: any) => {
-                          const newDraft = { ...d, enumeratorFee: val };
-                          const enumFee = Number(val) || 0;
-                          const transFee = Number(d?.transportFee ?? row.transportFee ?? 0);
-                          newDraft.cost = enumFee + transFee;
-                          return newDraft;
-                        });
-                      }}
-                      onBlur={() => {
-                        // When user finishes editing, use calculated fee if available
-                        if (classificationFee !== null && classificationFee > 0 && !draft?.enumeratorFee) {
-                          setDraft((d: any) => {
-                            const newDraft = { ...d, enumeratorFee: classificationFee };
-                            const transFee = Number(d?.transportFee ?? row.transportFee ?? 0);
-                            newDraft.cost = classificationFee + transFee;
-                            return newDraft;
-                          });
-                        }
-                      }}
-                      className="mt-2 text-2xl font-semibold"
-                      placeholder="Calculated at claim"
-                    />
 
-                  ) : (
-                    <>
-                      {classificationFee !== null && classificationFee > 0 ? (
-                        <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mt-2">
-                          {Number(classificationFee).toLocaleString()} SDG
-                        </p>
-                      ) : row.enumeratorFee !== undefined && row.enumeratorFee !== null && Number(row.enumeratorFee) > 0 ? (
-                        <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mt-2">
-                          {Number(row.enumeratorFee).toLocaleString()} SDG
+              {canSeeBreakdown ? (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="bg-white dark:bg-gray-900 p-4 rounded-lg border">
+                      <Label className="text-xs font-medium text-gray-600 dark:text-gray-400">Data Collector Fee</Label>
+                      {isEditing ? (
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={draft?.enumeratorFee ?? ''}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setDraft((d: any) => {
+                              const newDraft = { ...d, enumeratorFee: val };
+                              const enumFee = Number(val) || 0;
+                              const transFee = Number(d?.transportFee ?? row.transportFee ?? 0);
+                              newDraft.cost = enumFee + transFee;
+                              return newDraft;
+                            });
+                          }}
+                          onBlur={() => {
+                            if (classificationFee !== null && classificationFee > 0 && !draft?.enumeratorFee) {
+                              setDraft((d: any) => {
+                                const newDraft = { ...d, enumeratorFee: classificationFee };
+                                const transFee = Number(d?.transportFee ?? row.transportFee ?? 0);
+                                newDraft.cost = classificationFee + transFee;
+                                return newDraft;
+                              });
+                            }
+                          }}
+                          className="mt-2 text-2xl font-semibold"
+                          placeholder="Calculated at claim"
+                        />
+                      ) : (
+                        <>
+                          {classificationFee !== null && classificationFee > 0 ? (
+                            <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mt-2">
+                              {Number(classificationFee).toLocaleString()} SDG
+                            </p>
+                          ) : row.enumeratorFee !== undefined && row.enumeratorFee !== null && Number(row.enumeratorFee) > 0 ? (
+                            <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mt-2">
+                              {Number(row.enumeratorFee).toLocaleString()} SDG
+                            </p>
+                          ) : (
+                            <div className="mt-2">
+                              <p className="text-lg font-semibold text-amber-600 dark:text-amber-400">
+                                Pending
+                              </p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                Calculated when claimed based on collector classification
+                              </p>
+                            </div>
+                          )}
+                        </>
+                      )}
+                      <p className="text-xs text-gray-600 dark:text-gray-400 mt-2">Payment for completing the site visit</p>
+                    </div>
+                    <div className="bg-white dark:bg-gray-900 p-4 rounded-lg border">
+                      <Label className="text-xs font-medium text-gray-600 dark:text-gray-400">Transport Budget</Label>
+                      {isEditing ? (
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={draft?.transportFee ?? ''}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setDraft((d: any) => {
+                              const newDraft = { ...d, transportFee: val };
+                              const enumFee = classificationFee !== null && classificationFee > 0 
+                                ? classificationFee 
+                                : Number(d?.enumeratorFee ?? row.enumeratorFee ?? 0);
+                              const transFee = Number(val) || 0;
+                              newDraft.cost = enumFee + transFee;
+                              return newDraft;
+                            });
+                          }}
+                          className="mt-2 text-2xl font-semibold"
+                          placeholder="Set at dispatch"
+                        />
+                      ) : (
+                        <>
+                          <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mt-2">
+                            {row.transportFee !== undefined && row.transportFee !== null && Number(row.transportFee) > 0
+                              ? `${Number(row.transportFee).toLocaleString()} SDG`
+                              : '0 SDG'}
+                          </p>
+                          {(!row.transportFee || row.transportFee === null || Number(row.transportFee) === 0) && (
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">(Set at dispatch)</p>
+                          )}
+                        </>
+                      )}
+                      <p className="text-xs text-gray-600 dark:text-gray-400 mt-2">Transportation and logistics</p>
+                    </div>
+                    <div className="bg-blue-600 p-4 rounded-lg border border-blue-700">
+                      <Label className="text-xs font-medium text-blue-100">Total Payout</Label>
+                      {isEditing ? (
+                        <p className="text-2xl font-bold text-white mt-2">
+                          {((classificationFee !== null && classificationFee > 0 ? classificationFee : Number(draft?.enumeratorFee ?? 0)) + (Number(draft?.transportFee ?? 0))).toLocaleString()} SDG
                         </p>
                       ) : (
-                        <div className="mt-2">
-                          <p className="text-lg font-semibold text-amber-600 dark:text-amber-400">
-                            Pending
-                          </p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                            Calculated when claimed based on collector classification
-                          </p>
-                        </div>
+                        <>
+                          {classificationFee !== null && classificationFee > 0 ? (
+                            <p className="text-2xl font-bold text-white mt-2">
+                              {(Number(classificationFee) + Number(row.transportFee || 0)).toLocaleString()} SDG
+                            </p>
+                          ) : row.enumeratorFee !== undefined && row.enumeratorFee !== null && Number(row.enumeratorFee) > 0 ? (
+                            <p className="text-2xl font-bold text-white mt-2">
+                              {(Number(row.enumeratorFee) + Number(row.transportFee || 0)).toLocaleString()} SDG
+                            </p>
+                          ) : (
+                            <div className="mt-2">
+                              <p className="text-lg font-bold text-blue-100">
+                                {Number(row.transportFee || 0).toLocaleString()} SDG + Fee
+                              </p>
+                              <p className="text-xs text-blue-200 mt-1">
+                                Collector fee added at claim
+                              </p>
+                            </div>
+                          )}
+                        </>
                       )}
-                    </>
-                  )}
-                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-2">Payment for completing the site visit</p>
-                </div>
-                <div className="bg-white dark:bg-gray-900 p-4 rounded-lg border">
-                  <Label className="text-xs font-medium text-gray-600 dark:text-gray-400">Transport Budget</Label>
-                  {isEditing ? (
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={draft?.transportFee ?? ''}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setDraft((d: any) => {
-                          const newDraft = { ...d, transportFee: val };
-                          // Use calculated fee if available, otherwise use stored or draft fee
-                          const enumFee = classificationFee !== null && classificationFee > 0 
-                            ? classificationFee 
-                            : Number(d?.enumeratorFee ?? row.enumeratorFee ?? 0);
-                          const transFee = Number(val) || 0;
-                          newDraft.cost = enumFee + transFee;
-                          return newDraft;
-                        });
-                      }}
-                      className="mt-2 text-2xl font-semibold"
-                      placeholder="Set at dispatch"
-                    />
-                  ) : (
-                    <>
-                      <p className="text-2xl font-semibold text-gray-900 dark:text-gray-100 mt-2">
-                        {row.transportFee !== undefined && row.transportFee !== null && Number(row.transportFee) > 0
-                          ? `${Number(row.transportFee).toLocaleString()} SDG`
-                          : '0 SDG'}
-                      </p>
-                      {(!row.transportFee || row.transportFee === null || Number(row.transportFee) === 0) && (
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">(Set at dispatch)</p>
-                      )}
-                    </>
-                  )}
-                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-2">Transportation and logistics</p>
-                </div>
-                <div className="bg-blue-600 p-4 rounded-lg border border-blue-700">
-                  <Label className="text-xs font-medium text-blue-100">Total Payout</Label>
-                  {isEditing ? (
-                    <p className="text-2xl font-bold text-white mt-2">
-                      {((classificationFee !== null && classificationFee > 0 ? classificationFee : Number(draft?.enumeratorFee ?? 0)) + (Number(draft?.transportFee ?? 0))).toLocaleString()} SDG
+                      <p className="text-xs text-blue-100 mt-2">Complete payment upon visit</p>
+                    </div>
+                  </div>
+                  <div className="bg-white dark:bg-gray-900 p-4 rounded-lg border">
+                    <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">Payment Information</p>
+                    <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
+                      {row.enumeratorFee !== undefined && row.enumeratorFee !== null && Number(row.enumeratorFee) > 0 
+                        ? 'Upon successful completion of the site visit, the total payout will be credited to your wallet. Payment is processed automatically after you submit your visit report with photos and required documentation.'
+                        : 'Your collector fee will be calculated based on your classification level (A, B, or C) when you claim this site. The total payout = Transport Budget + Your Collector Fee.'}
                     </p>
-                  ) : (
-                    <>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex flex-col items-center justify-center py-8 space-y-4">
+                    <div className="p-4 bg-blue-600 rounded-full">
+                      <Banknote className="h-10 w-10 text-white" />
+                    </div>
+                    
+                    <div className="text-center space-y-2">
                       {classificationFee !== null && classificationFee > 0 ? (
-                        <p className="text-2xl font-bold text-white mt-2">
+                        <p className="text-4xl font-bold text-blue-600 dark:text-blue-400">
                           {(Number(classificationFee) + Number(row.transportFee || 0)).toLocaleString()} SDG
                         </p>
                       ) : row.enumeratorFee !== undefined && row.enumeratorFee !== null && Number(row.enumeratorFee) > 0 ? (
-                        <p className="text-2xl font-bold text-white mt-2">
+                        <p className="text-4xl font-bold text-blue-600 dark:text-blue-400">
                           {(Number(row.enumeratorFee) + Number(row.transportFee || 0)).toLocaleString()} SDG
                         </p>
                       ) : (
-                        <div className="mt-2">
-                          <p className="text-lg font-bold text-blue-100">
-                            {Number(row.transportFee || 0).toLocaleString()} SDG + Fee
-                          </p>
-                          <p className="text-xs text-blue-200 mt-1">
-                            Collector fee added at claim
-                          </p>
-                        </div>
+                        <p className="text-4xl font-bold text-blue-600 dark:text-blue-400">
+                          {Number(row.transportFee || 0).toLocaleString()} SDG + Fee
+                        </p>
                       )}
-                    </>
-                  )}
-                  <p className="text-xs text-blue-100 mt-2">Complete payment upon visit</p>
-                </div>
-              </div>
-              <div className="bg-white dark:bg-gray-900 p-4 rounded-lg border">
-                <p className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">Payment Information</p>
-                <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
-                  {row.enumeratorFee !== undefined && row.enumeratorFee !== null && Number(row.enumeratorFee) > 0 
-                    ? 'Upon successful completion of the site visit, the total payout will be credited to your wallet. Payment is processed automatically after you submit your visit report with photos and required documentation.'
-                    : 'Your collector fee will be calculated based on your classification level (A, B, or C) when you claim this site. The total payout = Transport Budget + Your Collector Fee.'}
-                </p>
-              </div>
+                      <p className="text-sm text-muted-foreground max-w-sm">
+                        This is your total amount for this site visit, including transportation and your fees.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="bg-white dark:bg-gray-900 p-4 rounded-lg border">
+                    <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed text-center">
+                      This amount will be credited to your wallet after completing the site visit and submitting your report.
+                    </p>
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Status and Timestamps */}

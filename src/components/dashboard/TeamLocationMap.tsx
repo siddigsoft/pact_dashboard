@@ -81,12 +81,17 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({ users, siteVisits = [
           ? formatDistanceToNow(new Date(lastSeenTime), { addSuffix: true })
           : 'Never';
 
-        // Status emoji mapping
-        const statusEmoji = userStatus.type === 'online' ? '🟢' : 
-                           userStatus.type === 'same-day' ? '🟠' : '⚫';
+        // Get accuracy color and label
+        const getAccuracyInfo = (accuracy?: number) => {
+          if (accuracy === undefined) return { color: '#999', label: 'Unknown' };
+          if (accuracy <= 10) return { color: '#22c55e', label: 'Excellent' };
+          if (accuracy <= 30) return { color: '#eab308', label: 'Good' };
+          return { color: '#f97316', label: 'Fair' };
+        };
+        const accuracyInfo = getAccuracyInfo(user.location.accuracy);
 
         const popupContent = `
-          <div style="min-width: 220px;">
+          <div style="min-width: 240px;">
             <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
               <div style="width: 8px; height: 8px; background: ${markerColor}; border-radius: 50%;"></div>
               <strong style="font-size: 14px;">${user.name}</strong>
@@ -95,18 +100,26 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({ users, siteVisits = [
               <strong>Role:</strong> ${user.roles?.[0] || user.role || 'N/A'}
             </div>
             <div style="font-size: 12px; color: #666; margin-bottom: 4px;">
-              <strong>Status:</strong> ${statusEmoji} ${userStatus.label}
+              <strong>Status:</strong> <span style="display: inline-flex; align-items: center; gap: 4px;"><span style="width: 8px; height: 8px; background: ${markerColor}; border-radius: 50%; display: inline-block;"></span> ${userStatus.label}</span>
             </div>
             <div style="font-size: 12px; color: #666; margin-bottom: 4px;">
               <strong>Last Seen:</strong> ${lastSeenText}
             </div>
+            ${user.location.accuracy !== undefined ? `
+              <div style="font-size: 12px; margin-bottom: 4px;">
+                <strong style="color: #666;">GPS Accuracy:</strong> 
+                <span style="color: ${accuracyInfo.color}; font-weight: 500;">
+                  \u00B1${user.location.accuracy.toFixed(1)}m (${accuracyInfo.label})
+                </span>
+              </div>
+            ` : ''}
             ${user.location?.address ? `
               <div style="font-size: 12px; color: #666; margin-top: 8px; padding-top: 8px; border-top: 1px solid #e5e7eb;">
-                📍 ${user.location.address}
+                ${user.location.address}
               </div>
             ` : ''}
             <div style="font-size: 11px; color: #999; margin-top: 8px; padding-top: 8px; border-top: 1px solid #e5e7eb; font-style: italic;">
-              💬 Click card/table row for messaging & assignment options
+              Click card/table row for messaging & assignment options
             </div>
           </div>
         `;

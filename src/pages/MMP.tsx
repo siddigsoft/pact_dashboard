@@ -28,6 +28,8 @@ import { useSiteClaimRealtime } from '@/hooks/use-site-claim-realtime';
 import { saveGPSToRegistryFromSiteEntry } from '@/utils/sitesRegistryMatcher';
 import { calculateEnumeratorFeeForUser } from '@/hooks/use-claim-fee-calculation';
 
+import { useWallet } from '@/context/wallet/WalletContext';
+
 // Helper component to convert SiteVisitRow[] to site entries and display using MMPSiteEntriesTable
 const SitesDisplayTable: React.FC<{ 
   siteRows: SiteVisitRow[]; 
@@ -152,15 +154,6 @@ const SitesDisplayTable: React.FC<{
               // Use calculated cost if available, otherwise use provided cost
               const finalCost = calculatedCost ?? site.cost;
               
-              // Build additional_data with fees
-              const existingAdditionalData = site.additionalData || site.additional_data || {};
-              const updatedAdditionalData = {
-                ...existingAdditionalData,
-                enumerator_fee: enumFee,
-                transport_fee: transFee,
-                cost: finalCost
-              };
-              
               const updateData: any = {
                 site_name: site.siteName || site.site_name,
                 site_code: site.siteCode || site.site_code,
@@ -181,8 +174,7 @@ const SitesDisplayTable: React.FC<{
                 status: site.status,
                 verification_notes: site.verification_notes || site.verificationNotes,
                 verified_by: site.verified_by || site.verifiedBy,
-                verified_at: site.verified_at || site.verifiedAt,
-                additional_data: updatedAdditionalData // Store fees in additional_data
+                verified_at: site.verified_at || site.verifiedAt
               };
 
               // Remove undefined values
@@ -326,15 +318,6 @@ const VerifiedSitesDisplay: React.FC<{ verifiedSites: SiteVisitRow[] }> = ({ ver
               // Use calculated cost if available, otherwise use provided cost
               const finalCost = calculatedCost ?? site.cost;
               
-              // Build additional_data with fees
-              const existingAdditionalData = site.additionalData || site.additional_data || {};
-              const updatedAdditionalData = {
-                ...existingAdditionalData,
-                enumerator_fee: enumFee,
-                transport_fee: transFee,
-                cost: finalCost
-              };
-              
               const updateData: any = {
                 site_name: site.siteName || site.site_name,
                 site_code: site.siteCode || site.site_code,
@@ -353,8 +336,7 @@ const VerifiedSitesDisplay: React.FC<{ verifiedSites: SiteVisitRow[] }> = ({ ver
                 status: site.status,
                 verification_notes: site.verification_notes || site.verificationNotes,
                 verified_by: site.verified_by || site.verifiedBy,
-                verified_at: site.verified_at || site.verifiedAt,
-                additional_data: updatedAdditionalData // Store fees in additional_data
+                verified_at: site.verified_at || site.verifiedAt
               };
 
               // Remove undefined values
@@ -388,6 +370,7 @@ const MMP = () => {
   const { mmpFiles, loading, updateMMP } = useMMP();
   const { checkPermission, hasAnyRole, currentUser } = useAuthorization();
   const { toast } = useToast();
+  const { reconcileSiteVisitFee } = useWallet();
   const [activeTab, setActiveTab] = useState('new');
   // Subcategory state for Forwarded MMPs (Admin/ICT only)
   const [forwardedSubTab, setForwardedSubTab] = useState<'pending' | 'verified'>('pending');
@@ -1499,6 +1482,22 @@ const MMP = () => {
         throw updateError;
       }
       console.log('✅ Site status updated to Completed:', updateData);
+
+      try {
+        console.log('💰 Reconciling wallet for completed site:', site.id);
+        const result = await reconcileSiteVisitFee(site.id);
+        if (result.success) {
+          toast({
+            title: 'Payment Added',
+            description: result.message,
+            variant: 'default'
+          });
+        } else {
+          console.warn('[Wallet] ' + result.message);
+        }
+      } catch (walletErr) {
+        console.error('Wallet reconciliation error:', walletErr);
+      }
 
       toast({
         title: 'Visit Report Submitted',
@@ -3348,15 +3347,6 @@ const MMP = () => {
                               // Use calculated cost if available, otherwise use provided cost
                               const finalCost = calculatedCost ?? site.cost;
                               
-                              // Build additional_data with fees
-                              const existingAdditionalData = site.additionalData || site.additional_data || {};
-                              const updatedAdditionalData = {
-                                ...existingAdditionalData,
-                                enumerator_fee: enumFee,
-                                transport_fee: transFee,
-                                cost: finalCost
-                              };
-                              
                               const updateData: any = {
                                 site_name: site.siteName || site.site_name,
                                 site_code: site.siteCode || site.site_code,
@@ -3377,8 +3367,7 @@ const MMP = () => {
                                 status: site.status,
                                 verification_notes: site.verification_notes || site.verificationNotes,
                                 verified_by: site.verified_by || site.verifiedBy,
-                                verified_at: site.verified_at || site.verifiedAt,
-                                additional_data: updatedAdditionalData // Store fees in additional_data for backward compatibility
+                                verified_at: site.verified_at || site.verifiedAt
                               };
 
                               // Remove undefined values

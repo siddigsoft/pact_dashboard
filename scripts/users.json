@@ -1,0 +1,612 @@
+[
+  {
+    "email": "supervisor-country-office@example.com",
+    "password": "TempPass!234",
+    "full_name": "Supervisor - Country Office (Khartoum)",
+    "username": "supervisor-country-office",
+    "role": "supervisor",
+    "hub_id": "country-office",
+    "status": "active",
+    "currency": "SDG"
+  },
+  {
+    "email": "supervisor-dongola-hub@example.com",
+    "password": "TempPass!234",
+    "full_name": "Supervisor - Dongola Hub",
+    "username": "supervisor-dongola-hub",
+    "role": "supervisor",
+    "hub_id": "dongola-hub",
+    "status": "active",
+    "currency": "SDG"
+  },
+  {
+    "email": "supervisor-forchana-hub@example.com",
+    "password": "TempPass!234",
+    "full_name": "Supervisor - Forchana Hub",
+    "username": "supervisor-forchana-hub",
+    "role": "supervisor",
+    "hub_id": "forchana-hub",
+    "status": "active",
+    "currency": "SDG"
+  },
+  {
+    "email": "supervisor-kassala-hub@example.com",
+    "password": "TempPass!234",
+    "full_name": "Supervisor - Kassala Hub",
+    "username": "supervisor-kassala-hub",
+    "role": "supervisor",
+    "hub_id": "kassala-hub",
+    "status": "active",
+    "currency": "SDG"
+  },
+  {
+    "email": "supervisor-kosti-hub@example.com",
+    "password": "TempPass!234",
+    "full_name": "Supervisor - Kosti Hub",
+    "username": "supervisor-kosti-hub",
+    "role": "supervisor",
+    "hub_id": "kosti-hub",
+    "status": "active",
+    "currency": "SDG"
+  },
+
+  {
+    "email": "coordinator-khartoum@example.com",
+    "password": "TempPass!234",
+    "full_name": "Coordinator - Khartoum",
+    "username": "coordinator-khartoum",
+    "role": "coordinator",
+    "state_id": "khartoum",
+    "status": "active",
+    "currency": "SDG"
+  },
+  {
+    "email": "coordinator-gezira@example.com",
+    "password": "TempPass!234",
+    "full_name": "Coordinator - Aj Jazirah",
+    "username": "coordinator-gezira",
+    "role": "coordinator",
+    "state_id": "gezira",
+    "status": "active",
+    "currency": "SDG"
+  },
+  {
+    "email": "coordinator-red-sea@example.com",
+    "password": "TempPass!234",
+    "full_name": "Coordinator - Red Sea",
+    "username": "coordinator-red-sea",
+    "role": "coordinator",
+    "state_id": "red-sea",
+    "status": "active",
+    "currency": "SDG"
+  },
+  {
+    "email": "coordinator-kassala@example.com",
+    "password": "TempPass!234",
+    "full_name": "Coordinator - Kassala",
+    "username": "coordinator-kassala",
+    "role": "coordinator",
+    "state_id": "kassala",
+    "status": "active",
+    "currency": "SDG"
+  },
+  {
+    "email": "coordinator-gedaref@example.com",
+    "password": "TempPass!234",
+    "full_name": "Coordinator - Gedaref",
+    "username": "coordinator-gedaref",
+    "role": "coordinator",
+    "state_id": "gedaref",
+    "status": "active",
+    "currency": "SDG"
+  },
+  {
+    "email": "coordinator-white-nile@example.com",
+    "password": "TempPass!234",
+    "full_name": "Coordinator - White Nile",
+    "username": "coordinator-white-nile",
+    "role": "coordinator",
+    "state_id": "white-nile",
+    "status": "active",
+    "currency": "SDG"
+  },
+  {
+    "email": "coordinator-blue-nile@example.com",
+    "password": "TempPass!234",
+    "full_name": "Coordinator - Blue Nile",
+    "username": "coordinator-blue-nile",
+    "role": "coordinator",
+    "state_id": "blue-nile",
+    "status": "active",
+    "currency": "SDG"
+  },
+  {
+    "email": "coordinator-sennar@example.com",
+    "password": "TempPass!234",
+    "full_name": "Coordinator - Sennar",
+    "username": "coordinator-sennar",
+    "role": "coordinator",
+    "state_id": "sennar",
+    "status": "active",
+    "currency": "SDG"
+  },
+  {
+    "email": "coordinator-north-kordofan@example.com",
+    "password": "TempPass!234",
+    "full_name": "Coordinator - North Kordofan",
+    "username": "coordinator-north-kordofan",
+    "role": "coordinator",
+    "state_id": "north-kordofan",
+    "status": "active",
+    "currency": "SDG"
+  },
+  {
+    "email": "coordinator-south-kordofan@example.com",
+    "password": "TempPass!234",
+    "full_name": "Coordinator - South Kordofan",
+    "username": "coordinator-south-kordofan",
+    "role": "coordinator",
+    "state_id": "south-kordofan",
+    "status": "active",
+    "currency": "SDG"
+  },
+  {
+    "email": "coordinator-west-kordofan@example.com",
+    "password": "TempPass!234",
+    "full_name": "Coordinator - West Kordofan",
+    "username": "coordinator-west-kordofan",
+    "role": "coordinator",
+    "state_id": "west-kordofan",
+    "status": "active",
+    "currency": "SDG"
+  },
+  {
+    "email": "coordinator-north-darfur@example.com",
+    "password": "TempPass!234",
+    "full_name": "Coordinator - North Darfur",
+    "username": "coordinator-north-darfur",
+    "role": "coordinator",
+    "state_id": "north-darfur",
+    "status": "active",
+    "currency": "SDG"
+  },
+  {
+    "email": "coordinator-south-darfur@example.com",
+    "password": "TempPass!234",
+    "full_name": "Coordinator - South Darfur",
+    "username": "coordinator-south-darfur",
+    "role": "coordinator",
+    "state_id": "south-darfur",
+    "status": "active",
+    "currency": "SDG"
+  },
+  {
+    "email": "coordinator-west-darfur@example.com",
+    "password": "TempPass!234",
+    "full_name": "Coordinator - West Darfur",
+    "username": "coordinator-west-darfur",
+    "role": "coordinator",
+    "state_id": "west-darfur",
+    "status": "active",
+    "currency": "SDG"
+  },
+  {
+    "email": "coordinator-east-darfur@example.com",
+    "password": "TempPass!234",
+    "full_name": "Coordinator - East Darfur",
+    "username": "coordinator-east-darfur",
+    "role": "coordinator",
+    "state_id": "east-darfur",
+    "status": "active",
+    "currency": "SDG"
+  },
+  {
+    "email": "coordinator-central-darfur@example.com",
+    "password": "TempPass!234",
+    "full_name": "Coordinator - Central Darfur",
+    "username": "coordinator-central-darfur",
+    "role": "coordinator",
+    "state_id": "central-darfur",
+    "status": "active",
+    "currency": "SDG"
+  },
+  {
+    "email": "coordinator-river-nile@example.com",
+    "password": "TempPass!234",
+    "full_name": "Coordinator - River Nile",
+    "username": "coordinator-river-nile",
+    "role": "coordinator",
+    "state_id": "river-nile",
+    "status": "active",
+    "currency": "SDG"
+  },
+  {
+    "email": "coordinator-northern@example.com",
+    "password": "TempPass!234",
+    "full_name": "Coordinator - Northern",
+    "username": "coordinator-northern",
+    "role": "coordinator",
+    "state_id": "northern",
+    "status": "active",
+    "currency": "SDG"
+  },
+
+  
+  {
+    "email": "datacollector-khartoum-1@example.com",
+    "password": "TempPass!234",
+    "full_name": "Data Collector - Khartoum 1",
+    "username": "datacollector-khartoum-1",
+    "role": "dataCollector",
+    "state_id": "khartoum",
+    "status": "active",
+    "currency": "SDG"
+  },
+  {
+    "email": "datacollector-khartoum-2@example.com",
+    "password": "TempPass!234",
+    "full_name": "Data Collector - Khartoum 2",
+    "username": "datacollector-khartoum-2",
+    "role": "dataCollector",
+    "state_id": "khartoum",
+    "status": "active",
+    "currency": "SDG"
+  },
+
+  {
+    "email": "datacollector-gezira-1@example.com",
+    "password": "TempPass!234",
+    "full_name": "Data Collector - Aj Jazirah 1",
+    "username": "datacollector-gezira-1",
+    "role": "dataCollector",
+    "state_id": "gezira",
+    "status": "active",
+    "currency": "SDG"
+  },
+  {
+    "email": "datacollector-gezira-2@example.com",
+    "password": "TempPass!234",
+    "full_name": "Data Collector - Aj Jazirah 2",
+    "username": "datacollector-gezira-2",
+    "role": "dataCollector",
+    "state_id": "gezira",
+    "status": "active",
+    "currency": "SDG"
+  },
+
+  {
+    "email": "datacollector-red-sea-1@example.com",
+    "password": "TempPass!234",
+    "full_name": "Data Collector - Red Sea 1",
+    "username": "datacollector-red-sea-1",
+    "role": "dataCollector",
+    "state_id": "red-sea",
+    "status": "active",
+    "currency": "SDG"
+  },
+  {
+    "email": "datacollector-red-sea-2@example.com",
+    "password": "TempPass!234",
+    "full_name": "Data Collector - Red Sea 2",
+    "username": "datacollector-red-sea-2",
+    "role": "dataCollector",
+    "state_id": "red-sea",
+    "status": "active",
+    "currency": "SDG"
+  },
+
+  {
+    "email": "datacollector-kassala-1@example.com",
+    "password": "TempPass!234",
+    "full_name": "Data Collector - Kassala 1",
+    "username": "datacollector-kassala-1",
+    "role": "dataCollector",
+    "state_id": "kassala",
+    "status": "active",
+    "currency": "SDG"
+  },
+  {
+    "email": "datacollector-kassala-2@example.com",
+    "password": "TempPass!234",
+    "full_name": "Data Collector - Kassala 2",
+    "username": "datacollector-kassala-2",
+    "role": "dataCollector",
+    "state_id": "kassala",
+    "status": "active",
+    "currency": "SDG"
+  },
+
+  {
+    "email": "datacollector-gedaref-1@example.com",
+    "password": "TempPass!234",
+    "full_name": "Data Collector - Gedaref 1",
+    "username": "datacollector-gedaref-1",
+    "role": "dataCollector",
+    "state_id": "gedaref",
+    "status": "active",
+    "currency": "SDG"
+  },
+  {
+    "email": "datacollector-gedaref-2@example.com",
+    "password": "TempPass!234",
+    "full_name": "Data Collector - Gedaref 2",
+    "username": "datacollector-gedaref-2",
+    "role": "dataCollector",
+    "state_id": "gedaref",
+    "status": "active",
+    "currency": "SDG"
+  },
+
+  {
+    "email": "datacollector-white-nile-1@example.com",
+    "password": "TempPass!234",
+    "full_name": "Data Collector - White Nile 1",
+    "username": "datacollector-white-nile-1",
+    "role": "dataCollector",
+    "state_id": "white-nile",
+    "status": "active",
+    "currency": "SDG"
+  },
+  {
+    "email": "datacollector-white-nile-2@example.com",
+    "password": "TempPass!234",
+    "full_name": "Data Collector - White Nile 2",
+    "username": "datacollector-white-nile-2",
+    "role": "dataCollector",
+    "state_id": "white-nile",
+    "status": "active",
+    "currency": "SDG"
+  },
+
+  {
+    "email": "datacollector-blue-nile-1@example.com",
+    "password": "TempPass!234",
+    "full_name": "Data Collector - Blue Nile 1",
+    "username": "datacollector-blue-nile-1",
+    "role": "dataCollector",
+    "state_id": "blue-nile",
+    "status": "active",
+    "currency": "SDG"
+  },
+  {
+    "email": "datacollector-blue-nile-2@example.com",
+    "password": "TempPass!234",
+    "full_name": "Data Collector - Blue Nile 2",
+    "username": "datacollector-blue-nile-2",
+    "role": "dataCollector",
+    "state_id": "blue-nile",
+    "status": "active",
+    "currency": "SDG"
+  },
+
+  {
+    "email": "datacollector-sennar-1@example.com",
+    "password": "TempPass!234",
+    "full_name": "Data Collector - Sennar 1",
+    "username": "datacollector-sennar-1",
+    "role": "dataCollector",
+    "state_id": "sennar",
+    "status": "active",
+    "currency": "SDG"
+  },
+  {
+    "email": "datacollector-sennar-2@example.com",
+    "password": "TempPass!234",
+    "full_name": "Data Collector - Sennar 2",
+    "username": "datacollector-sennar-2",
+    "role": "dataCollector",
+    "state_id": "sennar",
+    "status": "active",
+    "currency": "SDG"
+  },
+
+  {
+    "email": "datacollector-north-kordofan-1@example.com",
+    "password": "TempPass!234",
+    "full_name": "Data Collector - North Kordofan 1",
+    "username": "datacollector-north-kordofan-1",
+    "role": "dataCollector",
+    "state_id": "north-kordofan",
+    "status": "active",
+    "currency": "SDG"
+  },
+  {
+    "email": "datacollector-north-kordofan-2@example.com",
+    "password": "TempPass!234",
+    "full_name": "Data Collector - North Kordofan 2",
+    "username": "datacollector-north-kordofan-2",
+    "role": "dataCollector",
+    "state_id": "north-kordofan",
+    "status": "active",
+    "currency": "SDG"
+  },
+
+  {
+    "email": "datacollector-south-kordofan-1@example.com",
+    "password": "TempPass!234",
+    "full_name": "Data Collector - South Kordofan 1",
+    "username": "datacollector-south-kordofan-1",
+    "role": "dataCollector",
+    "state_id": "south-kordofan",
+    "status": "active",
+    "currency": "SDG"
+  },
+  {
+    "email": "datacollector-south-kordofan-2@example.com",
+    "password": "TempPass!234",
+    "full_name": "Data Collector - South Kordofan 2",
+    "username": "datacollector-south-kordofan-2",
+    "role": "dataCollector",
+    "state_id": "south-kordofan",
+    "status": "active",
+    "currency": "SDG"
+  },
+
+  {
+    "email": "datacollector-west-kordofan-1@example.com",
+    "password": "TempPass!234",
+    "full_name": "Data Collector - West Kordofan 1",
+    "username": "datacollector-west-kordofan-1",
+    "role": "dataCollector",
+    "state_id": "west-kordofan",
+    "status": "active",
+    "currency": "SDG"
+  },
+  {
+    "email": "datacollector-west-kordofan-2@example.com",
+    "password": "TempPass!234",
+    "full_name": "Data Collector - West Kordofan 2",
+    "username": "datacollector-west-kordofan-2",
+    "role": "dataCollector",
+    "state_id": "west-kordofan",
+    "status": "active",
+    "currency": "SDG"
+  },
+
+  {
+    "email": "datacollector-north-darfur-1@example.com",
+    "password": "TempPass!234",
+    "full_name": "Data Collector - North Darfur 1",
+    "username": "datacollector-north-darfur-1",
+    "role": "dataCollector",
+    "state_id": "north-darfur",
+    "status": "active",
+    "currency": "SDG"
+  },
+  {
+    "email": "datacollector-north-darfur-2@example.com",
+    "password": "TempPass!234",
+    "full_name": "Data Collector - North Darfur 2",
+    "username": "datacollector-north-darfur-2",
+    "role": "dataCollector",
+    "state_id": "north-darfur",
+    "status": "active",
+    "currency": "SDG"
+  },
+
+  {
+    "email": "datacollector-south-darfur-1@example.com",
+    "password": "TempPass!234",
+    "full_name": "Data Collector - South Darfur 1",
+    "username": "datacollector-south-darfur-1",
+    "role": "dataCollector",
+    "state_id": "south-darfur",
+    "status": "active",
+    "currency": "SDG"
+  },
+  {
+    "email": "datacollector-south-darfur-2@example.com",
+    "password": "TempPass!234",
+    "full_name": "Data Collector - South Darfur 2",
+    "username": "datacollector-south-darfur-2",
+    "role": "dataCollector",
+    "state_id": "south-darfur",
+    "status": "active",
+    "currency": "SDG"
+  },
+
+  {
+    "email": "datacollector-west-darfur-1@example.com",
+    "password": "TempPass!234",
+    "full_name": "Data Collector - West Darfur 1",
+    "username": "datacollector-west-darfur-1",
+    "role": "dataCollector",
+    "state_id": "west-darfur",
+    "status": "active",
+    "currency": "SDG"
+  },
+  {
+    "email": "datacollector-west-darfur-2@example.com",
+    "password": "TempPass!234",
+    "full_name": "Data Collector - West Darfur 2",
+    "username": "datacollector-west-darfur-2",
+    "role": "dataCollector",
+    "state_id": "west-darfur",
+    "status": "active",
+    "currency": "SDG"
+  },
+
+  {
+    "email": "datacollector-east-darfur-1@example.com",
+    "password": "TempPass!234",
+    "full_name": "Data Collector - East Darfur 1",
+    "username": "datacollector-east-darfur-1",
+    "role": "dataCollector",
+    "state_id": "east-darfur",
+    "status": "active",
+    "currency": "SDG"
+  },
+  {
+    "email": "datacollector-east-darfur-2@example.com",
+    "password": "TempPass!234",
+    "full_name": "Data Collector - East Darfur 2",
+    "username": "datacollector-east-darfur-2",
+    "role": "dataCollector",
+    "state_id": "east-darfur",
+    "status": "active",
+    "currency": "SDG"
+  },
+
+  {
+    "email": "datacollector-central-darfur-1@example.com",
+    "password": "TempPass!234",
+    "full_name": "Data Collector - Central Darfur 1",
+    "username": "datacollector-central-darfur-1",
+    "role": "dataCollector",
+    "state_id": "central-darfur",
+    "status": "active",
+    "currency": "SDG"
+  },
+  {
+    "email": "datacollector-central-darfur-2@example.com",
+    "password": "TempPass!234",
+    "full_name": "Data Collector - Central Darfur 2",
+    "username": "datacollector-central-darfur-2",
+    "role": "dataCollector",
+    "state_id": "central-darfur",
+    "status": "active",
+    "currency": "SDG"
+  },
+
+  {
+    "email": "datacollector-river-nile-1@example.com",
+    "password": "TempPass!234",
+    "full_name": "Data Collector - River Nile 1",
+    "username": "datacollector-river-nile-1",
+    "role": "dataCollector",
+    "state_id": "river-nile",
+    "status": "active",
+    "currency": "SDG"
+  },
+  {
+    "email": "datacollector-river-nile-2@example.com",
+    "password": "TempPass!234",
+    "full_name": "Data Collector - River Nile 2",
+    "username": "datacollector-river-nile-2",
+    "role": "dataCollector",
+    "state_id": "river-nile",
+    "status": "active",
+    "currency": "SDG"
+  },
+
+  {
+    "email": "datacollector-northern-1@example.com",
+    "password": "TempPass!234",
+    "full_name": "Data Collector - Northern 1",
+    "username": "datacollector-northern-1",
+    "role": "dataCollector",
+    "state_id": "northern",
+    "status": "active",
+    "currency": "SDG"
+  },
+  {
+    "email": "datacollector-northern-2@example.com",
+    "password": "TempPass!234",
+    "full_name": "Data Collector - Northern 2",
+    "username": "datacollector-northern-2",
+    "role": "dataCollector",
+    "state_id": "northern",
+    "status": "active",
+    "currency": "SDG"
+  }
+]

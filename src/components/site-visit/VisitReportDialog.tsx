@@ -60,6 +60,7 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { toast } = useToast();
+  const [finishing, setFinishing] = useState(false);
 
   const locationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -72,7 +73,8 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
       setIsGettingLocation(false);
       setShowLocationRequiredDialog(false);
       setAccuracyHistory([]);
-      
+      setFinishing(false);
+
       // Load existing draft data if available
       if (site.additionalData) {
         const draftData = site.additionalData;
@@ -105,6 +107,7 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
       setVisitStartTime(null);
       setVisitDuration(0);
       stopLocationMonitoring();
+      setFinishing(false);
       if (locationTimeoutRef.current) {
         clearTimeout(locationTimeoutRef.current);
         locationTimeoutRef.current = null;
@@ -342,6 +345,8 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
   };
 
   const handleSubmit = async () => {
+    if (finishing) return;
+    setFinishing(true);
     if (!site) return;
 
     if (!locationEnabled || !coordinates) {
@@ -524,6 +529,7 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
         description: "Failed to complete site visit. Please try again.",
         variant: "destructive",
       });
+      setFinishing(false);
     }
   };
 

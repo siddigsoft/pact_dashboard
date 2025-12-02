@@ -1,13 +1,14 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DropdownMenuContent, DropdownMenuLabel, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
-import { Bell, CheckCheck, AlertCircle, CheckCircle2, Clock, Phone, MessageSquare } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Bell, CheckCheck, AlertCircle, CheckCircle2, Clock, Phone, MessageSquare, Search, Calendar, X } from 'lucide-react';
 import { useNotifications } from '@/context/notifications/NotificationContext';
 import { useCommunication } from '@/context/communications/CommunicationContext';
 import { useChat } from '@/context/chat/ChatContextSupabase';
-import { isToday } from 'date-fns';
+import { isToday, isYesterday, isThisWeek, format } from 'date-fns';
 import { NotificationGroup } from './notification-center/NotificationGroup';
 import { NotificationFilter } from './notification-center/NotificationFilter';
 import { Notification } from '@/types';
@@ -23,6 +24,8 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
   const { notifications, markNotificationAsRead, clearAllNotifications } = useNotifications();
   const navigate = useNavigate();
   const [activeFilter, setActiveFilter] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [viewMode, setViewMode] = useState<'priority' | 'date'>('priority');
   const { users } = useUser();
   const { openChatForEntity, initiateCall } = useCommunication();
   const { siteVisits } = useSiteVisitContext();
@@ -109,17 +112,53 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
   };
 
   // Filter and group notifications
-  const filteredNotifications = notifications.filter(notification => {
-    if (activeFilter === 'unread') return !notification.isRead;
-    if (activeFilter === 'today') return isToday(new Date(notification.createdAt));
-    return true;
-  });
+  const filteredNotifications = useMemo(() => {
+    let filtered = notifications;
+    
+    if (activeFilter === 'unread') {
+      filtered = filtered.filter(n => !n.isRead);
+    } else if (activeFilter === 'today') {
+      filtered = filtered.filter(n => isToday(new Date(n.createdAt)));
+    }
+    
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(n => 
+        n.title.toLowerCase().includes(query) || 
+        n.message.toLowerCase().includes(query)
+      );
+    }
+    
+    return filtered;
+  }, [notifications, activeFilter, searchQuery]);
 
   const urgentNotifications = filteredNotifications.filter(n => n.type === 'error');
   const warningNotifications = filteredNotifications.filter(n => n.type === 'warning');
   const infoNotifications = filteredNotifications.filter(n => 
     n.type === 'info' || n.type === 'success'
   );
+
+  const dateGroupedNotifications = useMemo(() => {
+    const today: Notification[] = [];
+    const yesterday: Notification[] = [];
+    const thisWeek: Notification[] = [];
+    const older: Notification[] = [];
+
+    filteredNotifications.forEach(n => {
+      const date = new Date(n.createdAt);
+      if (isToday(date)) {
+        today.push(n);
+      } else if (isYesterday(date)) {
+        yesterday.push(n);
+      } else if (isThisWeek(date)) {
+        thisWeek.push(n);
+      } else {
+        older.push(n);
+      }
+    });
+
+    return { today, yesterday, thisWeek, older };
+  }, [filteredNotifications]);
 
   const counts = {
     all: notifications.length,
@@ -227,6 +266,53 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
             </Button>
           </div>
         </div>
+        
+        {/* Search and view toggle */}
+        <div className="flex items-center gap-2 mt-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search notifications..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-8 h-8 text-sm"
+              aria-label="Search notifications"
+              data-testid="input-notification-search"
+            />
+            {searchQuery && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6"
+                onClick={() => setSearchQuery('')}
+                aria-label="Clear search"
+                data-testid="button-clear-search"
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            )}
+          </div>
+          <div className="flex border rounded-md">
+            <Button
+              variant={viewMode === 'priority' ? 'secondary' : 'ghost'}
+              size="sm"
+              className="h-8 px-2 rounded-r-none"
+              onClick={() => setViewMode('priority')}
+              data-testid="button-view-priority"
+            >
+              <AlertCircle className="h-4 w-4" />
+            </Button>
+            <Button
+              variant={viewMode === 'date' ? 'secondary' : 'ghost'}
+              size="sm"
+              className="h-8 px-2 rounded-l-none"
+              onClick={() => setViewMode('date')}
+              data-testid="button-view-date"
+            >
+              <Calendar className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
       </div>
       
       {/* Filter tabs */}
@@ -237,34 +323,76 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
       />
       
       {/* Notification list */}
-      <ScrollArea className="h-[420px] bg-background">
+      <ScrollArea className="h-[380px] bg-background">
         <div className="p-3 space-y-4">
-          <NotificationGroup
-            title="Urgent"
-            icon={<AlertCircle className="h-4 w-4 text-red-500" />}
-            notifications={urgentNotifications}
-            onNotificationClick={handleNotificationClick}
-            actionButtons={renderActionButtons}
-            variant="urgent"
-          />
-          
-          <NotificationGroup
-            title="Warnings"
-            icon={<AlertCircle className="h-4 w-4 text-amber-500" />}
-            notifications={warningNotifications}
-            onNotificationClick={handleNotificationClick}
-            actionButtons={renderActionButtons}
-            variant="warning"
-          />
-          
-          <NotificationGroup
-            title="Information"
-            icon={<CheckCircle2 className="h-4 w-4 text-blue-500" />}
-            notifications={infoNotifications}
-            onNotificationClick={handleNotificationClick}
-            actionButtons={renderActionButtons}
-            variant="info"
-          />
+          {viewMode === 'priority' ? (
+            <>
+              <NotificationGroup
+                title="Urgent"
+                icon={<AlertCircle className="h-4 w-4 text-red-500" />}
+                notifications={urgentNotifications}
+                onNotificationClick={handleNotificationClick}
+                actionButtons={renderActionButtons}
+                variant="urgent"
+              />
+              
+              <NotificationGroup
+                title="Warnings"
+                icon={<AlertCircle className="h-4 w-4 text-amber-500" />}
+                notifications={warningNotifications}
+                onNotificationClick={handleNotificationClick}
+                actionButtons={renderActionButtons}
+                variant="warning"
+              />
+              
+              <NotificationGroup
+                title="Information"
+                icon={<CheckCircle2 className="h-4 w-4 text-blue-500" />}
+                notifications={infoNotifications}
+                onNotificationClick={handleNotificationClick}
+                actionButtons={renderActionButtons}
+                variant="info"
+              />
+            </>
+          ) : (
+            <>
+              <NotificationGroup
+                title="Today"
+                icon={<Calendar className="h-4 w-4 text-primary" />}
+                notifications={dateGroupedNotifications.today}
+                onNotificationClick={handleNotificationClick}
+                actionButtons={renderActionButtons}
+                variant="info"
+              />
+              
+              <NotificationGroup
+                title="Yesterday"
+                icon={<Clock className="h-4 w-4 text-muted-foreground" />}
+                notifications={dateGroupedNotifications.yesterday}
+                onNotificationClick={handleNotificationClick}
+                actionButtons={renderActionButtons}
+                variant="info"
+              />
+              
+              <NotificationGroup
+                title="This Week"
+                icon={<Calendar className="h-4 w-4 text-muted-foreground" />}
+                notifications={dateGroupedNotifications.thisWeek}
+                onNotificationClick={handleNotificationClick}
+                actionButtons={renderActionButtons}
+                variant="info"
+              />
+              
+              <NotificationGroup
+                title="Older"
+                icon={<Clock className="h-4 w-4 text-muted-foreground/70" />}
+                notifications={dateGroupedNotifications.older}
+                onNotificationClick={handleNotificationClick}
+                actionButtons={renderActionButtons}
+                variant="info"
+              />
+            </>
+          )}
 
           {filteredNotifications.length === 0 && (
             <div className="flex flex-col items-center justify-center py-12 text-center">
@@ -272,10 +400,10 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
                 <Bell className="h-10 w-10 text-muted-foreground/50" />
               </div>
               <p className="text-sm font-medium text-muted-foreground">
-                No notifications
+                {searchQuery ? 'No matching notifications' : 'No notifications'}
               </p>
               <p className="text-xs text-muted-foreground/70 mt-1">
-                You're all caught up!
+                {searchQuery ? 'Try a different search term' : "You're all caught up!"}
               </p>
             </div>
           )}

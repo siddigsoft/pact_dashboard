@@ -110,6 +110,15 @@ const TeamMemberLocation: React.FC<TeamMemberLocationProps> = ({ user }) => {
                 <span className="truncate">
                   {user.location.latitude.toFixed(6)}, {user.location.longitude.toFixed(6)}
                 </span>
+                {user.location.accuracy !== undefined && (
+                  <span className={`ml-1 ${
+                    user.location.accuracy <= 10 ? 'text-green-600' : 
+                    user.location.accuracy <= 30 ? 'text-yellow-600' : 
+                    'text-orange-600'
+                  }`}>
+                    ({'\u00B1'}{user.location.accuracy.toFixed(0)}m)
+                  </span>
+                )}
               </div>
             )}
             <div className="flex items-center justify-between mt-1 text-xs">

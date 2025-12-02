@@ -63,30 +63,58 @@ const MMPSiteEntriesTable = ({
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Calculate fees for sites with accepted_by users
   useEffect(() => {
     const loadFees = async () => {
       const newFees: Record<string, number> = {};
-      
+      let viewerFee: number | null = null;
+
+      // Determine if we need viewer fee once for multiple sites
+      const needsViewerFee = Boolean(
+        currentUserId && siteEntries.some((site) => {
+          const acceptedBy = site.accepted_by || site.acceptedBy;
+          const status = (site.status || '').toString().toLowerCase();
+          const isDispatched = status === 'dispatched';
+          return !acceptedBy && isDispatched && !calculatedFees[site.id];
+        })
+      );
+
+      try {
+        if (needsViewerFee && currentUserId) {
+          const result = await calculateEnumeratorFeeForUser(currentUserId);
+          viewerFee = result.fee;
+        }
+      } catch (err) {
+        console.error('Error calculating viewer classification fee:', err);
+        viewerFee = null;
+      }
+
       for (const site of siteEntries) {
+        if (calculatedFees[site.id]) continue;
+
         const acceptedBy = site.accepted_by || site.acceptedBy;
-        if (acceptedBy && !calculatedFees[site.id]) {
-          try {
+        const status = (site.status || '').toString().toLowerCase();
+        const isDispatched = status === 'dispatched';
+
+        try {
+          if (acceptedBy) {
             const result = await calculateEnumeratorFeeForUser(acceptedBy);
             newFees[site.id] = result.fee;
-          } catch (err) {
-            console.error('Error calculating fee for site:', site.id, err);
+          } else if (isDispatched && viewerFee !== null) {
+            // Show the viewer's expected payout on claim (matches dialog behavior)
+            newFees[site.id] = viewerFee;
           }
+        } catch (err) {
+          console.error('Error calculating fee for site:', site.id, err);
         }
       }
-      
+
       if (Object.keys(newFees).length > 0) {
         setCalculatedFees(prev => ({ ...prev, ...newFees }));
       }
     };
-    
+
     loadFees();
-  }, [siteEntries]);
+  }, [siteEntries, currentUserId]);
 
   // Normalize a row from either MMP siteEntries (camelCase) or mmp_site_entries (snake_case)
   const normalizeSite = (site: any) => {
