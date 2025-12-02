@@ -3,6 +3,8 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'r
 import { ThemeProvider } from 'next-themes';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './lib/queryClient';
+import { isSupabaseConfigured } from './integrations/supabase/client';
+import { ConfigurationError } from './components/ConfigurationError';
 
 // Import AppProviders
 import { AppProviders } from './context/AppContext';
@@ -63,6 +65,7 @@ const AdminWallets = lazy(() => import('./pages/AdminWallets'));
 const AdminWalletDetail = lazy(() => import('./pages/AdminWalletDetail'));
 const WithdrawalApproval = lazy(() => import('./pages/WithdrawalApproval'));
 const FinanceApproval = lazy(() => import('./pages/FinanceApproval'));
+const DownPaymentApproval = lazy(() => import('./pages/DownPaymentApproval'));
 const WalletReports = lazy(() => import('./pages/WalletReports'));
 const BudgetPage = lazy(() => import('./pages/Budget'));
 const Classifications = lazy(() => import('./pages/Classifications'));
@@ -72,6 +75,7 @@ const FinancialOperations = lazy(() => import('./pages/FinancialOperations'));
 const SuperAdminManagement = lazy(() => import('./components/superAdmin/SuperAdminManagementPage').then(module => ({ default: module.SuperAdminManagementPage })));
 const HubOperations = lazy(() => import('./pages/HubOperations'));
 const TrackerPreparationPlan = lazy(() => import('./pages/TrackerPreparationPlan'));
+const NotificationsPage = lazy(() => import('./pages/Notifications'));
 
 // Components (keep these eagerly loaded as they're used immediately)
 import MainLayout from './components/MainLayout';
@@ -168,12 +172,14 @@ const AppRoutes = () => {
         <Route path="/projects/:id/activities/:activityId" element={<ProjectActivityDetail />} />
         <Route path="/projects/:id/team" element={<ProjectTeamManagement />} />
         <Route path="/reports" element={<Reports />} />
+        <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/wallet" element={<WalletPage />} />
         <Route path="/admin/wallets" element={<AdminWallets />} />
         <Route path="/admin/wallets/:userId" element={<AdminWalletDetail />} />
         <Route path="/withdrawal-approval" element={<WithdrawalApproval />} />
         <Route path="/finance-approval" element={<FinanceApproval />} />
+        <Route path="/down-payment-approval" element={<DownPaymentApproval />} />
         <Route path="/wallet-reports" element={<WalletReports />} />
         <Route path="/budget" element={<BudgetPage />} />
         <Route path="/cost-submission" element={<CostSubmission />} />
@@ -239,6 +245,25 @@ function App() {
       (window as any).debugDatabase = debugDatabase;
     }
   }, []);
+
+  // If Supabase is not configured, show the configuration error screen
+  // This prevents the app from crashing and gives a clear error message
+  if (!isSupabaseConfigured) {
+    return (
+      <ThemeProvider
+        attribute="class"
+        defaultTheme="light"
+        enableSystem={false}
+        disableTransitionOnChange
+      >
+        <ConfigurationError
+          title="Backend Not Configured"
+          description="The database connection is not set up."
+          details="The Supabase environment variables were not included in the build. Please rebuild the APK with proper environment configuration."
+        />
+      </ThemeProvider>
+    );
+  }
 
   return (
     <ThemeProvider
