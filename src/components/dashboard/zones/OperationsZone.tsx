@@ -42,7 +42,8 @@ import {
   BarChart3,
   ExternalLink,
   Filter,
-  X
+  X,
+  ChevronDown
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { Button } from '@/components/ui/button';
@@ -83,6 +84,7 @@ export const OperationsZone: React.FC = () => {
     enumerator: '',
     status: ''
   });
+  const [showFilters, setShowFilters] = useState(false);
 
   // Check if user is a supervisor (not admin/ict)
   const isSupervisor = useMemo(() => {
@@ -524,7 +526,7 @@ export const OperationsZone: React.FC = () => {
           </DialogHeader>
 
           {/* Filter Bar */}
-          <div className="space-y-2 border-b pb-3">
+          <div className="space-y-3 border-b pb-4">
             <div className="flex items-center gap-2">
               <Filter className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm font-medium">Filters</span>
@@ -538,7 +540,7 @@ export const OperationsZone: React.FC = () => {
                   variant="ghost"
                   size="sm"
                   onClick={clearAllFilters}
-                  className="ml-auto h-7 px-2 text-xs"
+                  className="ml-auto h-8 px-3 text-xs active:scale-95 transition-all"
                   data-testid="button-clear-filters"
                 >
                   <X className="h-3 w-3 mr-1" />
@@ -547,13 +549,25 @@ export const OperationsZone: React.FC = () => {
               )}
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
+            {/* Mobile Filter Toggle */}
+            <div className="block sm:hidden">
+              <Button
+                variant="outline"
+                onClick={() => setShowFilters(!showFilters)}
+                className="w-full h-10 active:scale-95 transition-all"
+              >
+                {showFilters ? 'Hide Filters' : 'Show Filters'}
+                <ChevronDown className={`h-4 w-4 ml-2 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
+              </Button>
+            </div>
+
+            <div className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 ${showFilters ? 'block' : 'hidden sm:grid'}`}>
               {/* Hub Filter */}
               <Select
                 value={filters.hub}
                 onValueChange={(value) => setFilters(prev => ({ ...prev, hub: value === 'all' ? '' : value }))}
               >
-                <SelectTrigger className="h-8 text-xs" data-testid="select-filter-hub">
+                <SelectTrigger className="h-9 text-xs" data-testid="select-filter-hub">
                   <SelectValue placeholder="Hub" />
                 </SelectTrigger>
                 <SelectContent>
@@ -571,7 +585,7 @@ export const OperationsZone: React.FC = () => {
                 value={filters.state}
                 onValueChange={(value) => setFilters(prev => ({ ...prev, state: value === 'all' ? '' : value }))}
               >
-                <SelectTrigger className="h-8 text-xs" data-testid="select-filter-state">
+                <SelectTrigger className="h-9 text-xs" data-testid="select-filter-state">
                   <SelectValue placeholder="State" />
                 </SelectTrigger>
                 <SelectContent>
@@ -589,7 +603,7 @@ export const OperationsZone: React.FC = () => {
                 value={filters.locality}
                 onValueChange={(value) => setFilters(prev => ({ ...prev, locality: value === 'all' ? '' : value }))}
               >
-                <SelectTrigger className="h-8 text-xs" data-testid="select-filter-locality">
+                <SelectTrigger className="h-9 text-xs" data-testid="select-filter-locality">
                   <SelectValue placeholder="Locality" />
                 </SelectTrigger>
                 <SelectContent>
@@ -607,7 +621,7 @@ export const OperationsZone: React.FC = () => {
                 value={filters.coordinator}
                 onValueChange={(value) => setFilters(prev => ({ ...prev, coordinator: value === 'all' ? '' : value }))}
               >
-                <SelectTrigger className="h-8 text-xs" data-testid="select-filter-coordinator">
+                <SelectTrigger className="h-9 text-xs" data-testid="select-filter-coordinator">
                   <SelectValue placeholder="Coordinator" />
                 </SelectTrigger>
                 <SelectContent>
@@ -625,7 +639,7 @@ export const OperationsZone: React.FC = () => {
                 value={filters.enumerator}
                 onValueChange={(value) => setFilters(prev => ({ ...prev, enumerator: value === 'all' ? '' : value }))}
               >
-                <SelectTrigger className="h-8 text-xs" data-testid="select-filter-enumerator">
+                <SelectTrigger className="h-9 text-xs" data-testid="select-filter-enumerator">
                   <SelectValue placeholder="Enumerator" />
                 </SelectTrigger>
                 <SelectContent>
@@ -643,7 +657,7 @@ export const OperationsZone: React.FC = () => {
                 value={filters.status}
                 onValueChange={(value) => setFilters(prev => ({ ...prev, status: value === 'all' ? '' : value }))}
               >
-                <SelectTrigger className="h-8 text-xs" data-testid="select-filter-status">
+                <SelectTrigger className="h-9 text-xs" data-testid="select-filter-status">
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
@@ -660,111 +674,185 @@ export const OperationsZone: React.FC = () => {
           
           <div className="flex-1 overflow-auto border rounded-md">
             {filteredVisits.length > 0 ? (
-              <Table>
-                <TableHeader className="sticky top-0 bg-background z-10">
-                  <TableRow>
-                    <TableHead>MMP Name</TableHead>
-                    <TableHead className="w-[200px]">Site Name</TableHead>
-                    <TableHead>Location</TableHead>
-                    <TableHead> Visit Date (coordinator)</TableHead>
-                    <TableHead>Actual Visit Date</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Assigned To</TableHead>
-                    <TableHead className="text-right">Action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredVisits.map((visit) => {
-                    
-                    return (
-                      <TableRow key={visit.id} className="hover:bg-muted/50">
-                        <TableCell>
-                          <div className="flex flex-col">
-                            <span className="text-xs font-medium text-primary">
-                              {visit.mmpDetails?.mmpId || visit.projectName || 'N/A'}
-                            </span>
-                            {visit.mmpDetails?.projectName && visit.mmpDetails.mmpId && (
-                              <span className="text-[10px] text-muted-foreground truncate max-w-[120px]">
-                                {visit.mmpDetails.projectName}
+              <>
+                {/* Mobile Card View */}
+                <div className="block md:hidden space-y-3 p-3">
+                  {filteredVisits.map((visit) => (
+                    <Card key={visit.id} className="p-4">
+                      <div className="space-y-3">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-sm font-medium text-primary truncate">
+                                {visit.mmpDetails?.mmpId || visit.projectName || 'N/A'}
                               </span>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="font-medium">
-                          <div className="flex flex-col">
-                            <span className="text-sm">{visit.siteName}</span>
+                              <Badge 
+                                variant={
+                                  visit.status === 'completed' ? 'default' : 
+                                  visit.status === 'assigned' || visit.status === 'inProgress' ? 'secondary' : 
+                                  'outline'
+                                }
+                                className="text-[10px] flex-shrink-0"
+                              >
+                                {visit.status}
+                              </Badge>
+                            </div>
+                            <p className="text-sm font-medium truncate">{visit.siteName}</p>
                             {visit.siteCode && (
-                              <span className="text-xs text-muted-foreground">{visit.siteCode}</span>
+                              <p className="text-xs text-muted-foreground">{visit.siteCode}</p>
                             )}
                           </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1">
-                            <MapPin className="h-3 w-3 text-muted-foreground" />
-                            <span className="text-xs">{visit.locality}, {visit.state}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-col">
-                            <span className={`text-xs ${!visit.dueDate ? 'text-muted-foreground' : ''}`}>
-                              {visit.dueDate 
-                                ? format(new Date(visit.dueDate), 'MMM dd, yyyy')
-                                : 'Not scheduled yet'
-                              }
-                            </span>
-                            {!visit.dueDate && (
-                              <span className="text-[10px] text-muted-foreground">Pending scheduling</span>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-col">
-                            <span className={`text-xs ${!visit.completedAt ? 'text-muted-foreground' : ''}`}>
-                              {visit.completedAt 
-                                ? format(new Date(visit.completedAt), 'MMM dd, yyyy')
-                                : 'Not completed yet'
-                              }
-                            </span>
-                            {!visit.completedAt && (
-                              <span className="text-[10px] text-muted-foreground">Visit in progress</span>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge 
-                            variant={
-                              visit.status === 'completed' ? 'default' : 
-                              visit.status === 'assigned' || visit.status === 'inProgress' ? 'secondary' : 
-                              'outline'
-                            }
-                            className="text-[10px]"
-                          >
-                            {visit.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <span className="text-xs text-muted-foreground">
-                            {visit.assignedTo 
-                              ? users.find(u => u.id === visit.assignedTo)?.name || 'Unknown' 
-                              : 'Unassigned'}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-right">
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="h-7 px-2"
+                            className="h-8 w-8 p-0 flex-shrink-0"
                             onClick={() => window.location.href = `/site-visits/${visit.id}`}
-                            data-testid={`button-view-visit-${visit.id}`}
                           >
-                            <ExternalLink className="h-3 w-3" />
+                            <ExternalLink className="h-4 w-4" />
                           </Button>
-                        </TableCell>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3 text-xs">
+                          <div>
+                            <p className="text-muted-foreground">Location</p>
+                            <p className="font-medium truncate">{visit.locality}, {visit.state}</p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground">Assigned To</p>
+                            <p className="font-medium truncate">
+                              {visit.assignedTo 
+                                ? users.find(u => u.id === visit.assignedTo)?.name || 'Unknown' 
+                                : 'Unassigned'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground">Due Date</p>
+                            <p className="font-medium">
+                              {visit.dueDate 
+                                ? format(new Date(visit.dueDate), 'MMM dd, yyyy')
+                                : 'Not scheduled'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground">Completed</p>
+                            <p className="font-medium">
+                              {visit.completedAt 
+                                ? format(new Date(visit.completedAt), 'MMM dd, yyyy')
+                                : 'In progress'}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+
+                {/* Desktop Table View */}
+                <div className="hidden md:block">
+                  <Table>
+                    <TableHeader className="sticky top-0 bg-background z-10">
+                      <TableRow>
+                        <TableHead>MMP Name</TableHead>
+                        <TableHead className="w-[200px]">Site Name</TableHead>
+                        <TableHead>Location</TableHead>
+                        <TableHead> Visit Date (coordinator)</TableHead>
+                        <TableHead>Actual Visit Date</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Assigned To</TableHead>
+                        <TableHead className="text-right">Action</TableHead>
                       </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredVisits.map((visit) => (
+                        <TableRow key={visit.id} className="hover:bg-muted/50">
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span className="text-xs font-medium text-primary">
+                                {visit.mmpDetails?.mmpId || visit.projectName || 'N/A'}
+                              </span>
+                              {visit.mmpDetails?.projectName && visit.mmpDetails.mmpId && (
+                                <span className="text-[10px] text-muted-foreground truncate max-w-[120px]">
+                                  {visit.mmpDetails.projectName}
+                                </span>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="font-medium">
+                            <div className="flex flex-col">
+                              <span className="text-sm">{visit.siteName}</span>
+                              {visit.siteCode && (
+                                <span className="text-xs text-muted-foreground">{visit.siteCode}</span>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1">
+                              <MapPin className="h-3 w-3 text-muted-foreground" />
+                              <span className="text-xs">{visit.locality}, {visit.state}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span className={`text-xs ${!visit.dueDate ? 'text-muted-foreground' : ''}`}>
+                                {visit.dueDate 
+                                  ? format(new Date(visit.dueDate), 'MMM dd, yyyy')
+                                  : 'Not scheduled yet'
+                                }
+                              </span>
+                              {!visit.dueDate && (
+                                <span className="text-[10px] text-muted-foreground">Pending scheduling</span>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span className={`text-xs ${!visit.completedAt ? 'text-muted-foreground' : ''}`}>
+                                {visit.completedAt 
+                                  ? format(new Date(visit.completedAt), 'MMM dd, yyyy')
+                                  : 'Not completed yet'
+                                }
+                              </span>
+                              {!visit.completedAt && (
+                                <span className="text-[10px] text-muted-foreground">Visit in progress</span>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge 
+                              variant={
+                                visit.status === 'completed' ? 'default' : 
+                                visit.status === 'assigned' || visit.status === 'inProgress' ? 'secondary' : 
+                                'outline'
+                              }
+                              className="text-[10px]"
+                            >
+                              {visit.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-xs text-muted-foreground">
+                              {visit.assignedTo 
+                                ? users.find(u => u.id === visit.assignedTo)?.name || 'Unknown' 
+                                : 'Unassigned'}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 px-2"
+                              onClick={() => window.location.href = `/site-visits/${visit.id}`}
+                              data-testid={`button-view-visit-${visit.id}`}
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </>
             ) : (
               <div className="flex flex-col items-center justify-center py-12 text-center">
                 <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
