@@ -62,7 +62,8 @@ const SitesDisplayTable: React.FC<{
         const { data: mmpEntries, error: mmpError } = await supabase
           .from('mmp_site_entries')
           .select('*')
-          .in('mmp_file_id', mmpIds);
+          .in('mmp_file_id', mmpIds)
+          .not('status', 'ilike', 'completed'); // Exclude completed sites
 
         if (mmpError) throw mmpError;
 
@@ -2832,12 +2833,17 @@ const MMP = () => {
 
   const verifiedGroupedRows = useMemo(() => {
     // For "newSites" subcategory, filter to only show verified sites
+    // For other sub-tabs, exclude completed sites since tables are editable
     const filterFn = verifiedSubTab === 'newSites' 
       ? (row: SiteVisitRow) => {
           const status = row.status?.toLowerCase() || '';
           return status === 'verified';
         }
-      : undefined;
+      : (row: SiteVisitRow) => {
+          // Exclude completed sites from editable tables
+          const status = row.status?.toLowerCase() || '';
+          return status !== 'completed';
+        };
     
     return verifiedVisibleMMPs.map(m => ({
       mmp: m,
@@ -2850,7 +2856,11 @@ const MMP = () => {
     if (!isFOM) return [] as SiteVisitRow[];
     const mmps = forwardedSubcategories[forwardedSubTab] || [];
     if (mmps.length === 0) return [];
-    return buildSiteRowsFromMMPs(mmps);
+    return buildSiteRowsFromMMPs(mmps, (row) => {
+      // Exclude completed sites from editable tables
+      const status = row.status?.toLowerCase() || '';
+      return status !== 'completed';
+    });
   }, [isFOM, forwardedSubTab, forwardedSubcategories, siteVisitRows]);
 
   // Aggregated site entries (raw MMP.siteEntries) for Forwarded section
@@ -3032,7 +3042,7 @@ const MMP = () => {
       </div>
 
       {/* Body */}
-      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-lg p-2 sm:p-4 md:p-6">
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-lg p-2 sm:p-4 md:p-6 overflow-y-auto max-h-[calc(100vh-200px)]">
         {loading ? (
           <div className="text-center text-muted-foreground py-8">Loading MMP files...</div>
         ) : (
@@ -3959,7 +3969,7 @@ const MMP = () => {
                       ) : (
                         <MMPSiteEntriesTable 
                           siteEntries={sitesToShow} 
-                          editable={true}
+                          editable={enumeratorSubTab === 'mySites' && mySitesSubTab !== 'completed'}
                           onAcceptSite={enumeratorSubTab === 'smartAssigned' ? handleAcceptSite : undefined}
                           onAcknowledgeCost={enumeratorSubTab === 'smartAssigned' ? handleCostAcknowledgment : undefined}
                           onStartVisit={handleStartVisit}
