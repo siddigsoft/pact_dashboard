@@ -17,6 +17,7 @@ class _FCMService {
   private app: FirebaseApp | null = null;
   private messaging: Messaging | null = null;
   private initialized = false;
+  private nativeListeners = false;
 
   get platform(): Platform {
     if (Capacitor.getPlatform() === 'android') return 'android';
@@ -45,10 +46,32 @@ class _FCMService {
         if (swRegistration && vapidKey && 'active' in swRegistration) {
           swRegistration.active?.postMessage({ type: 'SET_VAPID_KEY', key: vapidKey });
         }
+      } else {
+        this.registerNativeListeners();
       }
 
       this.initialized = true;
     }
+  }
+
+  registerNativeListeners() {
+    if (this.platform === 'web' || this.nativeListeners) return;
+    this.nativeListeners = true;
+    PushNotifications.addListener('pushNotificationReceived', (notification: any) => {
+      try {
+        const data = notification?.data || {};
+        const title = notification?.title || data?.title || 'Notification';
+        const body = notification?.body || data?.body || '';
+        window.dispatchEvent(new CustomEvent('native-notification-received', { detail: { title, body, data } }));
+      } catch (_) {}
+    });
+    PushNotifications.addListener('pushNotificationActionPerformed', (action: any) => {
+      try {
+        const data = action?.notification?.data || {};
+        const url = data?.url || data?.link || '/notifications';
+        window.dispatchEvent(new CustomEvent('native-notification-action', { detail: { url, data } }));
+      } catch (_) {}
+    });
   }
 
   async requestPermission(): Promise<NotificationPermission> {
@@ -81,17 +104,18 @@ class _FCMService {
 
     // Native (Android/iOS)
     try {
-      await PushNotifications.register();
-      return new Promise<string | null>((resolve) => {
-        const handler = (token: any) => {
-          PushNotifications.removeAllListeners();
+      return new Promise<string | null>(async (resolve) => {
+        const regSub = await PushNotifications.addListener('registration', (token: any) => {
+          regSub.remove();
+          errSub.remove();
           resolve(token?.value ?? null);
-        };
-        PushNotifications.addListener('registration', handler);
-        PushNotifications.addListener('registrationError', (error) => {
-          console.error('[FCM] Native registration error:', error);
+        });
+        const errSub = await PushNotifications.addListener('registrationError', (_error) => {
+          regSub.remove();
+          errSub.remove();
           resolve(null);
         });
+        await PushNotifications.register();
       });
     } catch (e) {
       console.error('[FCM] Native getToken failed:', e);

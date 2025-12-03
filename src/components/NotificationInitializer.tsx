@@ -67,6 +67,27 @@ export function NotificationInitializer() {
     }
   }, [handleServiceWorkerMessage]);
 
+  // Handle native push notifications (Android/iOS via Capacitor)
+  useEffect(() => {
+    const onNativeReceived = (e: Event) => {
+      const detail = (e as CustomEvent).detail || {};
+      const title = detail.title || 'Notification';
+      const body = detail.body || '';
+      toast({ title, description: body });
+    };
+    const onNativeAction = (e: Event) => {
+      const detail = (e as CustomEvent).detail || {};
+      const url = detail.url;
+      if (url) navigate(url);
+    };
+    window.addEventListener('native-notification-received', onNativeReceived as EventListener);
+    window.addEventListener('native-notification-action', onNativeAction as EventListener);
+    return () => {
+      window.removeEventListener('native-notification-received', onNativeReceived as EventListener);
+      window.removeEventListener('native-notification-action', onNativeAction as EventListener);
+    };
+  }, [navigate, toast]);
+
   useEffect(() => {
     if (permission === 'default' && isEnabled) {
       console.log('Browser notifications supported, permission not yet requested');

@@ -6,6 +6,7 @@ export type AppRole =
   | 'Field Operation Manager (FOM)'
   | 'FinancialAdmin'
   | 'ProjectManager'
+  | 'SeniorOperationsLead'
   | 'Supervisor'
   | 'Coordinator'
   | 'DataCollector'
@@ -290,6 +291,29 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     { resource: 'reports', action: 'create' },
     { resource: 'wallets', action: 'read' },
     { resource: 'wallets', action: 'approve' },
+    { resource: 'audit_logs', action: 'read' },
+    { resource: 'settings', action: 'read' },
+  ],
+  SeniorOperationsLead: [
+    { resource: 'projects', action: 'read' },
+    { resource: 'projects', action: 'update' },
+    { resource: 'projects', action: 'approve' },
+    { resource: 'mmp', action: 'read' },
+    { resource: 'mmp', action: 'update' },
+    { resource: 'mmp', action: 'approve' },
+    { resource: 'site_visits', action: 'read' },
+    { resource: 'site_visits', action: 'update' },
+    { resource: 'site_visits', action: 'approve' },
+    { resource: 'finances', action: 'read' },
+    { resource: 'finances', action: 'update' },
+    { resource: 'finances', action: 'approve' },
+    { resource: 'finances', action: 'override' },
+    { resource: 'users', action: 'read' },
+    { resource: 'reports', action: 'read' },
+    { resource: 'reports', action: 'create' },
+    { resource: 'wallets', action: 'read' },
+    { resource: 'wallets', action: 'approve' },
+    { resource: 'wallets', action: 'override' },
     { resource: 'audit_logs', action: 'read' },
     { resource: 'settings', action: 'read' },
   ],
