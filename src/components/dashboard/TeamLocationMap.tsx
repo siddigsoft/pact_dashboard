@@ -2,28 +2,46 @@ import React, { useEffect, useRef, useCallback, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Card, CardContent } from '@/components/ui/card';
-import { MapPin, RefreshCw } from 'lucide-react';
+import { MapPin, RefreshCw, Wifi, WifiOff, Loader2 } from 'lucide-react';
 import { User } from '@/types/user';
 import { SiteVisit } from '@/types/siteVisit';
 import { formatDistanceToNow } from 'date-fns';
 import { getUserStatus } from '@/utils/userStatusUtils';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 
 interface TeamLocationMapProps {
   users: User[];
   siteVisits?: SiteVisit[];
+  isConnected?: boolean;
+  connectionStatus?: 'connecting' | 'connected' | 'disconnected';
+  lastRefresh?: Date;
+  onForceRefresh?: () => void;
+  onlineUserIds?: Set<string>;
 }
 
-const AUTO_REFRESH_INTERVAL = 30000;
+const AUTO_REFRESH_INTERVAL = 15000;
 
-const TeamLocationMap: React.FC<TeamLocationMapProps> = ({ users, siteVisits = [] }) => {
+const TeamLocationMap: React.FC<TeamLocationMapProps> = ({ 
+  users, 
+  siteVisits = [],
+  isConnected = false,
+  connectionStatus = 'disconnected',
+  lastRefresh,
+  onForceRefresh,
+  onlineUserIds = new Set()
+}) => {
   const mapRef = useRef<L.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const markersLayerRef = useRef<L.LayerGroup | null>(null);
   const isMapInitializedRef = useRef(false);
-  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+  const [lastUpdated, setLastUpdated] = useState<Date>(lastRefresh || new Date());
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const getStatusColor = (user: User): string => {
+    if (onlineUserIds.has(user.id)) {
+      return '#22c55e';
+    }
     const userStatus = getUserStatus(user);
     const statusColorMap: Record<string, string> = {
       'bg-green-500': '#22c55e',
@@ -36,7 +54,7 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({ users, siteVisits = [
   const createUserMarkerIcon = (user: User) => {
     const userStatus = getUserStatus(user);
     const markerColor = getStatusColor(user);
-    const isOnline = userStatus.type === 'online';
+    const isOnline = onlineUserIds.has(user.id) || userStatus.type === 'online';
     const userName = user.name || user.fullName || 'Unknown';
     const initials = userName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
     const avatarUrl = user.avatar;
@@ -344,7 +362,7 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({ users, siteVisits = [
     }
     
     setLastUpdated(new Date());
-  }, [users, siteVisits]);
+  }, [users, siteVisits, onlineUserIds]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -366,7 +384,7 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({ users, siteVisits = [
     if (isMapInitializedRef.current) {
       updateMarkers();
     }
-  }, [users, siteVisits, updateMarkers]);
+  }, [users, siteVisits, onlineUserIds, updateMarkers]);
 
   useEffect(() => {
     const intervalId = setInterval(() => {
@@ -386,12 +404,26 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({ users, siteVisits = [
     }
   }, []);
 
-  const handleRefresh = () => {
-    if (mapRef.current) {
-      mapRef.current.invalidateSize();
-      updateMarkers();
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      if (onForceRefresh) {
+        await onForceRefresh();
+      }
+      if (mapRef.current) {
+        mapRef.current.invalidateSize();
+        updateMarkers();
+      }
+    } finally {
+      setIsRefreshing(false);
     }
   };
+
+  useEffect(() => {
+    if (lastRefresh) {
+      setLastUpdated(lastRefresh);
+    }
+  }, [lastRefresh]);
 
   const teamWithLocation = users.filter(u => u.location?.latitude && u.location?.longitude);
   const sitesWithLocation = siteVisits.filter(v => 
@@ -452,10 +484,35 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({ users, siteVisits = [
                   </span>
                 </Badge>
               )}
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <RefreshCw className="h-3 w-3" />
-                <span>Auto-refresh: {Math.round(AUTO_REFRESH_INTERVAL / 1000)}s</span>
-              </div>
+              <Badge 
+                variant={connectionStatus === 'connected' ? 'default' : 'outline'} 
+                className={`text-xs gap-1 ${
+                  connectionStatus === 'connected' 
+                    ? 'bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/30' 
+                    : connectionStatus === 'connecting'
+                    ? 'bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-500/30'
+                    : 'bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/30'
+                }`}
+              >
+                {connectionStatus === 'connected' ? (
+                  <><Wifi className="h-3 w-3" /> Live</>
+                ) : connectionStatus === 'connecting' ? (
+                  <><Loader2 className="h-3 w-3 animate-spin" /> Connecting</>
+                ) : (
+                  <><WifiOff className="h-3 w-3" /> Offline</>
+                )}
+              </Badge>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="h-6 px-2 text-xs"
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+                data-testid="button-refresh-locations"
+              >
+                <RefreshCw className={`h-3 w-3 mr-1 ${isRefreshing ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
             </div>
           </div>
         </CardContent>

@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Users, MapPin, MessageSquare, UserCircle, LayoutGrid, Table as TableIcon, Building2 } from 'lucide-react';
+import { Users, MapPin, MessageSquare, UserCircle, LayoutGrid, Table as TableIcon, Building2, Wifi, WifiOff } from 'lucide-react';
 import { TeamCommunication } from '../TeamCommunication';
 import TeamLocationMap from '../TeamLocationMap';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,6 +15,7 @@ import { TeamMemberDetailModal } from '../TeamMemberDetailModal';
 import { User } from '@/types/user';
 import { useAppContext } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
+import { useRealtimeTeamLocations } from '@/hooks/use-realtime-team-locations';
 
 export const TeamZone: React.FC = () => {
   const [activeTab, setActiveTab] = useState('overview');
@@ -27,6 +28,15 @@ export const TeamZone: React.FC = () => {
   const { users } = useUser();
   const { siteVisits } = useSiteVisitContext();
   const { currentUser, roles } = useAppContext();
+  
+  const {
+    isConnected,
+    connectionStatus,
+    lastRefresh,
+    onlineCount,
+    onlineUserIds,
+    forceRefresh
+  } = useRealtimeTeamLocations({ enabled: true, refreshInterval: 15000 });
 
   // Check if current user is a supervisor (not admin/ict)
   const isSupervisor = useMemo(() => {
@@ -167,9 +177,16 @@ export const TeamZone: React.FC = () => {
                 {hubName}
               </Badge>
             )}
-            <Badge variant="secondary" className="gap-2 text-xs h-7">
-              <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-              {onlineMembers}/{activeFieldTeam} Online
+            <Badge 
+              variant="secondary" 
+              className={`gap-2 text-xs h-7 ${isConnected ? '' : 'opacity-70'}`}
+            >
+              {isConnected ? (
+                <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+              ) : (
+                <WifiOff className="h-3 w-3 text-muted-foreground" />
+              )}
+              {onlineCount > 0 ? onlineCount : onlineMembers}/{activeFieldTeam} Online
             </Badge>
             <Button 
               variant="outline" 
@@ -268,6 +285,11 @@ export const TeamZone: React.FC = () => {
           <TeamLocationMap 
             users={assignableTeamMembers} 
             siteVisits={siteVisits || []}
+            isConnected={isConnected}
+            connectionStatus={connectionStatus}
+            lastRefresh={lastRefresh}
+            onForceRefresh={forceRefresh}
+            onlineUserIds={onlineUserIds}
           />
         </TabsContent>
 
