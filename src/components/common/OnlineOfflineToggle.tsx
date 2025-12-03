@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Wifi, WifiOff, Loader2 } from 'lucide-react';
+import { Wifi, WifiOff, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useUser } from '@/context/user/UserContext';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 
 interface OnlineOfflineToggleProps {
-  variant?: 'floating' | 'inline' | 'compact';
+  variant?: 'floating' | 'inline' | 'compact' | 'drawer';
   className?: string;
   showLabel?: boolean;
   mobileBottomOffset?: boolean;
@@ -23,6 +23,13 @@ export function OnlineOfflineToggle({
   const { currentUser, updateUserAvailability } = useUser();
   const [isOnline, setIsOnline] = useState<boolean>(currentUser?.availability === 'online');
   const [isLoading, setIsLoading] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [drawerPosition, setDrawerPosition] = useState<{ x: number; y: number } | null>(null);
+  const drawerDraggingRef = useRef(false);
+  const drawerMovedRef = useRef(false);
+  const drawerStartPointerRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const drawerStartElRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const { toast } = useToast();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
@@ -125,6 +132,61 @@ export function OnlineOfflineToggle({
     return () => window.removeEventListener('resize', onResize);
   }, [position]);
 
+  // Drawer position initialization
+  useEffect(() => {
+    const saved = typeof window !== 'undefined' ? localStorage.getItem('onlineDrawerPos') : null;
+    if (saved) {
+      try {
+        const p = JSON.parse(saved);
+        setDrawerPosition(p);
+        return;
+      } catch {}
+    }
+    // Default position: right edge, vertically centered
+    const margin = 16;
+    const x = window.innerWidth - 60 - margin; // 60px is tab width
+    const y = Math.max(margin, window.innerHeight / 2 - 30); // 30px is half tab height
+    setDrawerPosition({ x, y });
+  }, []);
+
+  useEffect(() => {
+    const onResize = () => {
+      if (!drawerPosition) return;
+      const margin = 8;
+      const maxX = Math.max(margin, window.innerWidth - 60 - margin); // 60px tab width
+      const maxY = Math.max(margin, window.innerHeight - 60 - margin); // 60px tab height
+      setDrawerPosition({ 
+        x: Math.min(drawerPosition.x, maxX), 
+        y: Math.min(drawerPosition.y, maxY) 
+      });
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [drawerPosition]);
+
+  // Prevent default touch behaviors during drag
+  useEffect(() => {
+    const preventDefault = (e: TouchEvent) => {
+      if (drawerDraggingRef.current) {
+        e.preventDefault();
+      }
+    };
+
+    const preventScroll = (e: WheelEvent) => {
+      if (drawerDraggingRef.current) {
+        e.preventDefault();
+      }
+    };
+
+    document.addEventListener('touchmove', preventDefault, { passive: false });
+    document.addEventListener('wheel', preventScroll, { passive: false });
+
+    return () => {
+      document.removeEventListener('touchmove', preventDefault);
+      document.removeEventListener('wheel', preventScroll);
+    };
+  }, []);
+
   const onPointerDown = (e: React.PointerEvent) => {
     if (isLoading) return;
     draggingRef.current = true;
@@ -164,6 +226,62 @@ export function OnlineOfflineToggle({
         localStorage.setItem('onlineTogglePos', JSON.stringify(position));
       } catch {}
     }
+  };
+
+  // Drawer drag handlers - More responsive
+  const onDrawerPointerDown = (e: React.PointerEvent) => {
+    if (isLoading) return;
+    drawerDraggingRef.current = true;
+    drawerMovedRef.current = false;
+    setIsDragging(true);
+    drawerStartPointerRef.current = { x: e.clientX, y: e.clientY };
+    const rect = (e.target as HTMLElement).getBoundingClientRect();
+    drawerStartElRef.current = { x: rect.left, y: rect.top };
+    try {
+      (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+    } catch {}
+    // Prevent any default touch behaviors
+    e.preventDefault();
+  };
+
+  const onDrawerPointerMove = (e: React.PointerEvent) => {
+    if (!drawerDraggingRef.current) return;
+    e.preventDefault(); // Prevent scrolling while dragging
+
+    const dx = e.clientX - drawerStartPointerRef.current.x;
+    const dy = e.clientY - drawerStartPointerRef.current.y;
+
+    // More sensitive movement detection - reduce threshold for immediate response
+    if (Math.abs(dx) > 1 || Math.abs(dy) > 1) drawerMovedRef.current = true;
+
+    const margin = 8;
+    let newX = drawerStartElRef.current.x + dx;
+    let newY = drawerStartElRef.current.y + dy;
+    const tabWidth = 60;
+    const tabHeight = 60;
+    const maxX = Math.max(margin, window.innerWidth - tabWidth - margin);
+    const maxY = Math.max(margin, window.innerHeight - tabHeight - margin);
+    newX = Math.max(margin, Math.min(maxX, newX));
+    newY = Math.max(margin, Math.min(maxY, newY));
+
+    // Update position immediately without any throttling
+    setDrawerPosition({ x: newX, y: newY });
+  };
+
+  const onDrawerPointerUp = (e: React.PointerEvent) => {
+    if (!drawerDraggingRef.current) return;
+    drawerDraggingRef.current = false;
+    setIsDragging(false);
+
+    // Save position immediately when drag ends
+    if (drawerMovedRef.current && drawerPosition) {
+      try {
+        localStorage.setItem('onlineDrawerPos', JSON.stringify(drawerPosition));
+      } catch {}
+    }
+
+    // Reset moved flag
+    drawerMovedRef.current = false;
   };
 
   if (variant === 'floating') {
@@ -240,6 +358,197 @@ export function OnlineOfflineToggle({
           />
         </div>
       </div>
+    );
+  }
+
+  if (variant === 'drawer') {
+    return (
+      <>
+        {/* Full Drawer */}
+        <div
+          className={cn(
+            "fixed z-40 transition-all duration-300 ease-in-out",
+            "bg-background/95 backdrop-blur-md shadow-xl rounded-lg border",
+            isOnline ? "border-green-500 shadow-green-500/20" : "border-gray-300 dark:border-gray-600",
+            isDrawerOpen ? "opacity-100 scale-100" : "opacity-0 scale-95 pointer-events-none"
+          )}
+          style={{
+            left: drawerPosition ? `${drawerPosition.x - 280 + 60}px` : 'auto',
+            top: drawerPosition ? `${drawerPosition.y - 100}px` : 'auto',
+            width: '280px',
+            minHeight: '200px'
+          }}
+        >
+          <div className="p-4 space-y-4">
+            {/* Header with close button */}
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-foreground">Availability Status</h3>
+              <button
+                onClick={() => setIsDrawerOpen(false)}
+                className="p-1 rounded-md hover:bg-muted transition-colors"
+                aria-label="Close drawer"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Status Display */}
+            <div className={cn(
+              "flex items-center gap-3 p-3 rounded-lg border",
+              isOnline 
+                ? "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800" 
+                : "bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700"
+            )}>
+              <div className={cn(
+                "flex items-center justify-center w-10 h-10 rounded-full",
+                isOnline ? "bg-green-100 dark:bg-green-900/50" : "bg-gray-100 dark:bg-gray-800"
+              )}>
+                {isLoading ? (
+                  <Loader2 className="h-5 w-5 animate-spin text-gray-500" />
+                ) : isOnline ? (
+                  <Wifi className="h-5 w-5 text-green-600 dark:text-green-400" />
+                ) : (
+                  <WifiOff className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+                )}
+              </div>
+              
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <span className={cn(
+                    "font-semibold",
+                    isOnline ? "text-green-700 dark:text-green-400" : "text-gray-700 dark:text-gray-300"
+                  )}>
+                    {isOnline ? 'You are Online' : 'You are Offline'}
+                  </span>
+                  <Badge 
+                    variant={isOnline ? "default" : "secondary"}
+                    className={isOnline ? "bg-green-500" : ""}
+                  >
+                    {isOnline ? 'Active' : 'Inactive'}
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {isOnline 
+                    ? 'Receiving new site visit assignments' 
+                    : 'Tap to go online and receive assignments'}
+                </p>
+              </div>
+            </div>
+
+            {/* Toggle Switch */}
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Status</span>
+              <Switch
+                checked={isOnline}
+                onCheckedChange={handleToggle}
+                disabled={isLoading}
+                className={cn(
+                  "scale-110",
+                  isOnline ? "data-[state=checked]:bg-green-500" : ""
+                )}
+              />
+            </div>
+
+            {/* Quick Actions */}
+            <div className="space-y-2">
+              <button
+                onClick={handleToggle}
+                disabled={isLoading}
+                className={cn(
+                  "w-full px-3 py-2 text-sm rounded-md transition-all",
+                  isOnline 
+                    ? "bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 border border-red-200 dark:border-red-800" 
+                    : "bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/30 border border-green-200 dark:border-green-800",
+                  isLoading ? "opacity-70 cursor-not-allowed" : ""
+                )}
+              >
+                {isLoading ? (
+                  <div className="flex items-center justify-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Updating...
+                  </div>
+                ) : (
+                  isOnline ? 'Go Offline' : 'Go Online'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Draggable Drawer Tab */}
+        <div
+          className={cn(
+            "fixed z-50 transition-all duration-200 ease-out cursor-move select-none touch-none",
+            "bg-background/95 backdrop-blur-md shadow-xl rounded-lg border",
+            isOnline ? "border-green-500 shadow-green-500/20" : "border-gray-300 dark:border-gray-600",
+            "hover:shadow-lg active:scale-95",
+            isDragging ? "transition-none shadow-2xl scale-105 border-blue-500 shadow-blue-500/30" : ""
+          )}
+          style={{
+            left: drawerPosition ? `${drawerPosition.x}px` : 'auto',
+            top: drawerPosition ? `${drawerPosition.y}px` : 'auto',
+            width: '60px',
+            height: '60px',
+            // Disable text selection and touch behaviors during drag
+            userSelect: 'none',
+            WebkitUserSelect: 'none',
+            WebkitTouchCallout: 'none',
+            // Add will-change for better performance during drag
+            willChange: isDragging ? 'transform' : 'auto'
+          }}
+          onPointerDown={onDrawerPointerDown}
+          onPointerMove={onDrawerPointerMove}
+          onPointerUp={onDrawerPointerUp}
+          onClick={(e) => {
+            if (drawerMovedRef.current) {
+              e.preventDefault();
+              e.stopPropagation();
+              drawerMovedRef.current = false;
+              return;
+            }
+            setIsDrawerOpen(!isDrawerOpen);
+          }}
+          data-testid="toggle-online-offline-drawer-tab"
+        >
+          <div className="flex flex-col items-center justify-center h-full space-y-1">
+            {/* Status Icon */}
+            <div className={cn(
+              "flex items-center justify-center w-6 h-6 rounded-full transition-colors",
+              isOnline ? "bg-green-100 dark:bg-green-900/50" : "bg-gray-100 dark:bg-gray-800"
+            )}>
+              {isLoading ? (
+                <Loader2 className="h-3 w-3 animate-spin text-gray-500" />
+              ) : isOnline ? (
+                <Wifi className="h-3 w-3 text-green-600 dark:text-green-400" />
+              ) : (
+                <WifiOff className="h-3 w-3 text-gray-500 dark:text-gray-400" />
+              )}
+            </div>
+
+            {/* Chevron */}
+            <ChevronLeft className={cn(
+              "h-3 w-3 transition-transform duration-300",
+              isDrawerOpen ? "rotate-180" : ""
+            )} />
+
+            {/* Status Text */}
+            <span className={cn(
+              "text-[10px] font-medium leading-none",
+              isOnline ? "text-green-700 dark:text-green-400" : "text-gray-600 dark:text-gray-400"
+            )}>
+              {isOnline ? 'ON' : 'OFF'}
+            </span>
+          </div>
+        </div>
+
+        {/* Backdrop */}
+        {isDrawerOpen && (
+          <div
+            className="fixed inset-0 bg-black/20 backdrop-blur-sm z-30"
+            onClick={() => setIsDrawerOpen(false)}
+          />
+        )}
+      </>
     );
   }
 

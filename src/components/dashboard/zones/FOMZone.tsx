@@ -5,13 +5,6 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { GradientStatCard } from '@/components/ui/gradient-stat-card';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import {
   Table,
   TableBody,
   TableCell,
@@ -86,7 +79,6 @@ export const FOMZone: React.FC = () => {
   const { siteVisits } = useSiteVisitContext();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('overview');
-  const [selectedCard, setSelectedCard] = useState<string | null>(null);
   const [filters, setFilters] = useState<Filters>({
     hub: '',
     state: '',
@@ -350,7 +342,7 @@ export const FOMZone: React.FC = () => {
           subtitle="MMPs needing permits"
           icon={FileCheck}
           color="orange"
-          onClick={() => setSelectedCard('awaiting-permits')}
+          onClick={() => navigate('/mmp')}
         />
 
         <GradientStatCard
@@ -359,7 +351,7 @@ export const FOMZone: React.FC = () => {
           subtitle={`${permitAttachmentRate}% completion`}
           icon={CheckCircle2}
           color="green"
-          onClick={() => setSelectedCard('permits-attached')}
+          onClick={() => navigate('/mmp')}
         />
 
         <GradientStatCard
@@ -368,7 +360,7 @@ export const FOMZone: React.FC = () => {
           subtitle="MMPs in queue"
           icon={Clock}
           color="blue"
-          onClick={() => setSelectedCard('pending-approval')}
+          onClick={() => navigate('/mmp')}
         />
 
         <GradientStatCard
@@ -377,7 +369,7 @@ export const FOMZone: React.FC = () => {
           subtitle="This period"
           icon={Target}
           color="green"
-          onClick={() => setSelectedCard('approved')}
+          onClick={() => navigate('/mmp')}
         />
 
         <GradientStatCard
@@ -386,7 +378,7 @@ export const FOMZone: React.FC = () => {
           subtitle={`${completionRate}% completed`}
           icon={MapPin}
           color="cyan"
-          onClick={() => setSelectedCard('site-visits')}
+          onClick={() => navigate('/site-visits')}
         />
 
         <GradientStatCard
@@ -395,7 +387,7 @@ export const FOMZone: React.FC = () => {
           subtitle="Permit attachment rate"
           icon={TrendingUp}
           color="purple"
-          onClick={() => setSelectedCard('performance')}
+          onClick={() => navigate('/dashboard')}
         />
       </div>
 

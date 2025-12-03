@@ -547,17 +547,17 @@ const CostSubmissionForm = ({ siteVisits }: CostSubmissionFormProps) => {
 
             {/* Total Summary */}
             <Card className="bg-muted">
-              <CardContent className="pt-6">
-                <div className="flex items-center justify-between">
+              <CardContent className="pt-4 sm:pt-6">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
                   <div className="flex items-center gap-2">
-                    <DollarSign className="h-5 w-5" />
-                    <span className="text-lg font-semibold">Total Cost:</span>
+                    <DollarSign className="h-5 w-5 flex-shrink-0" />
+                    <span className="text-base sm:text-lg font-semibold">Total Cost:</span>
                   </div>
-                  <div className="text-right">
-                    <p className="text-2xl font-bold text-primary" data-testid="text-total-cost">
+                  <div className="text-left sm:text-right">
+                    <p className="text-xl sm:text-2xl font-bold text-primary" data-testid="text-total-cost">
                       {formatCurrency(totalCostCents, form.watch("currency"))}
                     </p>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs sm:text-sm text-muted-foreground">
                       {totalCostCents} cents
                     </p>
                   </div>
@@ -565,7 +565,7 @@ const CostSubmissionForm = ({ siteVisits }: CostSubmissionFormProps) => {
               </CardContent>
             </Card>
           </CardContent>
-          <CardFooter className="flex justify-between gap-4">
+          <CardFooter className="flex flex-col sm:flex-row gap-3 sm:justify-between">
             <Button
               type="button"
               variant="outline"
@@ -575,6 +575,7 @@ const CostSubmissionForm = ({ siteVisits }: CostSubmissionFormProps) => {
                 setSupportingDocuments([]);
               }}
               disabled={isPending}
+              className="min-h-[44px] w-full sm:w-auto order-2 sm:order-1"
               data-testid="button-reset"
             >
               Reset Form
@@ -582,6 +583,7 @@ const CostSubmissionForm = ({ siteVisits }: CostSubmissionFormProps) => {
             <Button
               type="submit"
               disabled={isPending || !selectedSiteVisit}
+              className="min-h-[44px] w-full sm:w-auto order-1 sm:order-2"
               data-testid="button-submit-costs"
             >
               {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
