@@ -3,10 +3,9 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { format } from 'date-fns';
-import { CalendarIcon, Plus, X, User } from 'lucide-react';
+import { CalendarIcon, Plus, X } from 'lucide-react';
 
 import { Project, ProjectType, ProjectStatus, ProjectTeamMember } from '@/types/project';
-import { useUser } from '@/context/user/UserContext';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -55,7 +54,6 @@ const formSchema = z.object({
   description: z.string().optional(),
   projectType: z.enum(['infrastructure', 'survey', 'compliance', 'monitoring', 'training', 'other']),
   status: z.enum(['draft', 'active', 'onHold', 'completed', 'cancelled']),
-  projectManager: z.string().optional(),
   startDate: z.date({
     required_error: 'Start date is required.',
   }),
@@ -90,7 +88,6 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
   isEditing = false 
 }) => {
   const { toast } = useToast();
-  const { users } = useUser();
   const [selectedCountry, setSelectedCountry] = useState<string>(initialData?.location?.country || '');
   const [selectedRegion, setSelectedRegion] = useState<string>(initialData?.location?.region || '');
   const [selectedState, setSelectedState] = useState<string>(initialData?.location?.state || '');
@@ -111,7 +108,6 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
       description: initialData?.description || '',
       projectType: (initialData?.projectType as ProjectType) || 'survey',
       status: (initialData?.status as ProjectStatus) || 'draft',
-      projectManager: initialData?.team?.projectManager || '',
       startDate: initialData?.startDate ? new Date(initialData.startDate) : new Date(),
       endDate: initialData?.endDate ? new Date(initialData.endDate) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       budgetTotal: initialData?.budget?.total || 0,
@@ -160,9 +156,6 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
         },
         team: {
           ...(initialData?.team || {}),
-          projectManager: values.projectManager && values.projectManager !== 'none' && values.projectManager !== '' 
-            ? values.projectManager 
-            : undefined,
           teamComposition: teamMembers
         },
         activities: initialData?.activities || [],
@@ -316,50 +309,6 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
                     <FormMessage />
                   </FormItem>
                 )}
-              />
-
-              <FormField
-                control={form.control}
-                name="projectManager"
-                render={({ field }) => {
-                  const normalizedValue = field.value && field.value !== '' ? field.value : 'none';
-                  const selectedUser = field.value && field.value !== 'none' 
-                    ? users.find(u => u.id === field.value) 
-                    : null;
-                  
-                  return (
-                    <FormItem>
-                      <FormLabel className="flex items-center gap-2">
-                        <User className="h-4 w-4" />
-                        Project Manager
-                      </FormLabel>
-                      <Select 
-                        onValueChange={field.onChange} 
-                        value={normalizedValue}
-                      >
-                        <FormControl>
-                          <SelectTrigger data-testid="select-project-manager">
-                            <SelectValue placeholder="Select project manager">
-                              {selectedUser 
-                                ? (selectedUser.name || selectedUser.email) 
-                                : 'No Project Manager'}
-                            </SelectValue>
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="none">No Project Manager</SelectItem>
-                          {users.map((user) => (
-                            <SelectItem key={user.id} value={user.id}>
-                              {user.name || user.email}
-                              {user.role && ` (${user.role})`}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  );
-                }}
               />
               
               <FormField

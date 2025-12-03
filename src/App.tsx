@@ -27,6 +27,7 @@ const MMPPermitMessagePage = lazy(() => import('./pages/mmp/MMPPermitMessagePage
 const EditMMP = lazy(() => import('./pages/EditMMP'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 const ReviewAssignCoordinators = lazy(() => import('./pages/ReviewAssignCoordinators'));
+const CoordinatorDashboard = lazy(() => import('./pages/coordinator/CoordinatorDashboard'));
 const SitesForVerification = lazy(() => import('./pages/coordinator/SitesForVerification'));
 const CoordinatorSites = lazy(() => import('./pages/coordinator/CoordinatorSites'));
 const Calls = lazy(() => import('./pages/Calls'));
@@ -126,7 +127,7 @@ const AuthGuard = ({ children }) => {
 
   if (
     !currentUser &&
-    !['/auth', '/login', '/register', '/registration-success', '/forgot-password', '/docs'].includes(location.pathname)
+    !['/auth', '/login', '/register', '/registration-success', '/forgot-password'].includes(location.pathname)
   ) {
     return <Navigate to="/auth" replace />;
   }
@@ -145,7 +146,6 @@ const AppRoutes = () => {
       <Route path="/register" element={<Register />} />
       <Route path="/registration-success" element={<RegistrationSuccess />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
-      <Route path="/docs" element={<PublicDocumentation />} />
 
       {/* Protected routes */}
   <Route element={<AuthGuard><MainLayout /></AuthGuard>}>
@@ -175,6 +175,8 @@ const AppRoutes = () => {
         <Route path="/projects/:id/activities/:activityId" element={<ProjectActivityDetail />} />
         <Route path="/projects/:id/team" element={<ProjectTeamManagement />} />
         <Route path="/reports" element={<Reports />} />
+        <Route path="/documentation" element={<Documentation />} />
+        <Route path="/public-documentation" element={<PublicDocumentation />} />
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/wallet" element={<WalletPage />} />
@@ -210,9 +212,9 @@ const AppRoutes = () => {
   {/* Coordinator: Sites for Verification */}
   <Route path="/coordinator/sites-for-verification" element={<SitesForVerification />} />
   <Route path="/coordinator/sites" element={<CoordinatorSites />} />
+  <Route path="/coordinator-dashboard" element={<CoordinatorDashboard />} />
   <Route path="/hub-operations" element={<HubOperations />} />
         <Route path="/tracker-preparation-plan" element={<TrackerPreparationPlan />} />
-        <Route path="/documentation" element={<Documentation />} />
       </Route>
 
       {/* Redirects */}
@@ -297,7 +299,9 @@ function App() {
             <Router>
               <AppProviders>
                 <Suspense fallback={<PageLoader />}>
-                  <AppRoutes />
+                  <AuthGuard>
+                    <AppRoutes />
+                  </AuthGuard>
                 </Suspense>
                 <Toaster />
                 <SonnerToaster />

@@ -2,8 +2,6 @@ import { useState, useMemo } from 'react';
 import { useBudget } from '@/context/budget/BudgetContext';
 import { useAppContext } from '@/context/AppContext';
 import { useToast } from '@/hooks/use-toast';
-import { useUserProjects } from '@/hooks/useUserProjects';
-import { useMMP } from '@/context/mmp/MMPContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { GradientStatCard } from '@/components/ui/gradient-stat-card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -53,8 +51,6 @@ const formatCurrency = (cents: number) => {
 const BudgetPage = () => {
   const { currentUser, hasGranularPermission } = useAppContext();
   const { toast } = useToast();
-  const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
-  const { mmpFiles } = useMMP();
   const {
     projectBudgets,
     mmpBudgets,
@@ -77,38 +73,6 @@ const BudgetPage = () => {
                            currentUser?.role === 'admin' || 
                            currentUser?.role === 'fom';
 
-  // Filter project budgets by user's projects
-  const filteredProjectBudgets = useMemo(() => {
-    if (isAdminOrSuperUser) return projectBudgets;
-    return projectBudgets.filter(budget => userProjectIds.includes(budget.projectId));
-  }, [projectBudgets, userProjectIds, isAdminOrSuperUser]);
-
-  // Filter MMP budgets by user's projects
-  const filteredMmpBudgets = useMemo(() => {
-    if (isAdminOrSuperUser) return mmpBudgets;
-    return mmpBudgets.filter(budget => {
-      const mmp = mmpFiles?.find(m => m.id === budget.mmpId);
-      if (!mmp) return true;
-      if (!mmp.projectId) return true;
-      return userProjectIds.includes(mmp.projectId);
-    });
-  }, [mmpBudgets, mmpFiles, userProjectIds, isAdminOrSuperUser]);
-
-  // Filter transactions by user's projects
-  const filteredTransactions = useMemo(() => {
-    if (isAdminOrSuperUser) return budgetTransactions;
-    return budgetTransactions.filter(tx => {
-      if (tx.projectId && userProjectIds.includes(tx.projectId)) return true;
-      if (tx.mmpId) {
-        const mmp = mmpFiles?.find(m => m.id === tx.mmpId);
-        if (!mmp) return true;
-        if (!mmp.projectId) return true;
-        return userProjectIds.includes(mmp.projectId);
-      }
-      return true;
-    });
-  }, [budgetTransactions, mmpFiles, userProjectIds, isAdminOrSuperUser]);
-
   const handleRefresh = async () => {
     await Promise.all([
       refreshProjectBudgets(),
@@ -120,9 +84,9 @@ const BudgetPage = () => {
 
   const handleExport = (format: 'pdf' | 'excel' | 'csv') => {
     const exportData: BudgetExportData = {
-      projectBudgets: filteredProjectBudgets,
-      mmpBudgets: filteredMmpBudgets,
-      transactions: filteredTransactions,
+      projectBudgets,
+      mmpBudgets,
+      transactions: budgetTransactions,
       stats,
     };
 
@@ -167,18 +131,18 @@ const BudgetPage = () => {
   const criticalAlerts = activeAlerts.filter(a => a.severity === 'critical');
   const warningAlerts = activeAlerts.filter(a => a.severity === 'warning');
 
-  const displayProjectBudgets = filterStatus === 'all' 
-    ? filteredProjectBudgets 
-    : filteredProjectBudgets.filter(pb => pb.status === filterStatus);
+  const filteredProjectBudgets = filterStatus === 'all' 
+    ? projectBudgets 
+    : projectBudgets.filter(pb => pb.status === filterStatus);
 
-  const displayMmpBudgets = filterStatus === 'all' 
-    ? filteredMmpBudgets 
-    : filteredMmpBudgets.filter(mb => mb.status === filterStatus);
+  const filteredMMPBudgets = filterStatus === 'all' 
+    ? mmpBudgets 
+    : mmpBudgets.filter(mb => mb.status === filterStatus);
 
   const utilizationBreakdown = useMemo(() => {
     const breakdown: { [key: string]: { allocated: number; spent: number; count: number } } = {};
     
-    filteredMmpBudgets.forEach(mb => {
+    mmpBudgets.forEach(mb => {
       Object.entries(mb.categoryBreakdown).forEach(([category, amount]) => {
         if (!breakdown[category]) {
           breakdown[category] = { allocated: 0, spent: 0, count: 0 };
@@ -188,14 +152,14 @@ const BudgetPage = () => {
       });
     });
 
-    filteredTransactions.filter(t => t.transactionType === 'spend' && t.category).forEach(t => {
+    budgetTransactions.filter(t => t.transactionType === 'spend' && t.category).forEach(t => {
       if (t.category && breakdown[t.category]) {
         breakdown[t.category].spent += t.amountCents;
       }
     });
 
     return breakdown;
-  }, [filteredMmpBudgets, filteredTransactions]);
+  }, [mmpBudgets, budgetTransactions]);
 
   if (loading) {
     return (
@@ -312,7 +276,7 @@ const BudgetPage = () => {
         <GradientStatCard
           title="Total Budget"
           value={formatCurrency(stats?.totalBudget ? stats.totalBudget * 100 : 0)}
-          subtitle={`Across ${filteredProjectBudgets.length} projects`}
+          subtitle={`Across ${projectBudgets.length} projects`}
           icon={Wallet}
           color="blue"
           data-testid="card-stat-total-budget"
@@ -338,8 +302,8 @@ const BudgetPage = () => {
 
         <GradientStatCard
           title="Active MMPs"
-          value={filteredMmpBudgets.filter(mb => mb.status === 'active').length}
-          subtitle={`${filteredMmpBudgets.length} total MMP budgets`}
+          value={mmpBudgets.filter(mb => mb.status === 'active').length}
+          subtitle={`${mmpBudgets.length} total MMP budgets`}
           icon={BarChart3}
           color="cyan"
           data-testid="card-stat-active-mmps"
@@ -393,7 +357,7 @@ const BudgetPage = () => {
               <CardTitle className="text-xl font-bold text-blue-300">Budget Overview</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {filteredProjectBudgets.length === 0 ? (
+              {projectBudgets.length === 0 ? (
                 <div className="text-center py-12">
                   <PieChart className="w-12 h-12 mx-auto text-blue-400 mb-4" />
                   <h3 className="text-lg font-semibold mb-2 text-blue-200">No budgets yet</h3>
@@ -409,7 +373,7 @@ const BudgetPage = () => {
                 </div>
               ) : (
                 <>
-                  {filteredProjectBudgets.slice(0, 5).map((budget) => {
+                  {projectBudgets.slice(0, 5).map((budget) => {
                     const utilizationPercent = budget.totalBudgetCents > 0
                       ? ((budget.spentBudgetCents / budget.totalBudgetCents) * 100)
                       : 0;
@@ -567,14 +531,14 @@ const BudgetPage = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredTransactions.length === 0 ? (
+                  {budgetTransactions.length === 0 ? (
                     <TableRow className="border-cyan-500/20">
                       <TableCell colSpan={5} className="text-center text-cyan-300/70 py-12">
                         No transactions yet
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filteredTransactions.slice(0, 50).map((txn) => (
+                    budgetTransactions.slice(0, 50).map((txn) => (
                       <TableRow key={txn.id} data-testid={`row-transaction-${txn.id}`} className="border-cyan-500/20 hover:bg-cyan-500/5">
                         <TableCell className="text-cyan-100">{format(new Date(txn.createdAt), 'MMM d, yyyy')}</TableCell>
                         <TableCell className="capitalize text-cyan-100">{txn.transactionType.replace('_', ' ')}</TableCell>

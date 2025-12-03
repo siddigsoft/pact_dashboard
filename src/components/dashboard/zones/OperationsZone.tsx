@@ -42,7 +42,8 @@ import {
   BarChart3,
   ExternalLink,
   Filter,
-  X
+  X,
+  ChevronDown
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { Button } from '@/components/ui/button';
@@ -56,8 +57,6 @@ import { useAuthorization } from '@/hooks/use-authorization';
 import { supabase } from '@/integrations/supabase/client';
 import { isAfter, addDays } from 'date-fns';
 import { getStateName } from '@/data/sudanStates';
-import { useUserProjects } from '@/hooks/useUserProjects';
-import { useMMP } from '@/context/mmp/MMPContext';
 
 type MetricCardType = 'total' | 'completed' | 'assigned' | 'pending' | 'overdue' | 'performance' | null;
 
@@ -74,8 +73,6 @@ export const OperationsZone: React.FC = () => {
   const { siteVisits: allSiteVisits } = useSiteVisitContext();
   const { users, currentUser } = useUser();
   const { hasAnyRole } = useAuthorization();
-  const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
-  const { mmpFiles } = useMMP();
   const [activeTab, setActiveTab] = useState('overview');
   const [selectedCard, setSelectedCard] = useState<MetricCardType>(null);
   const [supervisorHubName, setSupervisorHubName] = useState<string | null>(null);
@@ -87,6 +84,7 @@ export const OperationsZone: React.FC = () => {
     enumerator: '',
     status: ''
   });
+  const [showFilters, setShowFilters] = useState(false);
 
   // Check if user is a supervisor (not admin/ict)
   const isSupervisor = useMemo(() => {
@@ -139,31 +137,10 @@ export const OperationsZone: React.FC = () => {
     console.log(`📊 OperationsZone: Coordinator state loaded: ${stateName} (id: ${currentUser.stateId})`);
   }, [isCoordinator, currentUser?.stateId]);
 
-  // Helper function to check if site visit belongs to user's projects
-  const siteVisitBelongsToUserProjects = (visit: any): boolean => {
-    if (isAdminOrSuperUser) return true;
-    
-    // Get MMP ID from visit (try both direct mmpId and mmpDetails.mmpId)
-    const visitMmpId = visit.mmpId || visit.mmpDetails?.mmpId;
-    
-    // For non-admins: DENY access when project linkage is missing (default to deny)
-    if (!visitMmpId) return false;
-    
-    const mmp = mmpFiles?.find(m => m.id === visitMmpId);
-    if (!mmp) return false;
-    if (!mmp.projectId) return false;
-    
-    return userProjectIds.includes(mmp.projectId);
-  };
-
   // Apply supervisor hub filtering or coordinator state filtering to site visits
   const siteVisits = useMemo(() => {
     console.log(`📊 OperationsZone: isSupervisor=${isSupervisor}, isCoordinator=${isCoordinator}, allSiteVisits=${allSiteVisits.length}`);
     console.log(`📊 OperationsZone: supervisorHubName=${supervisorHubName}, coordinatorStateName=${coordinatorStateName}`);
-    
-    // First apply project-based filtering
-    let projectFiltered = allSiteVisits.filter(visit => siteVisitBelongsToUserProjects(visit));
-    console.log(`📊 OperationsZone: After project filter: ${projectFiltered.length} sites`);
     
     // Supervisor: filter by hub
     if (isSupervisor) {
@@ -173,7 +150,7 @@ export const OperationsZone: React.FC = () => {
       }
       
       const hubName = supervisorHubName.toLowerCase().trim();
-      const filtered = projectFiltered.filter(visit => {
+      const filtered = allSiteVisits.filter(visit => {
         const visitHub = (visit.hub || '').toLowerCase().trim();
         if (!visitHub) return false;
         return visitHub === hubName || 
@@ -192,7 +169,7 @@ export const OperationsZone: React.FC = () => {
         const stateName = coordinatorStateName.toLowerCase().trim();
         const stateId = currentUser.stateId.toLowerCase().trim();
         
-        const filtered = projectFiltered.filter(visit => {
+        const filtered = allSiteVisits.filter(visit => {
           const visitState = (visit.state || '').toLowerCase().trim();
           if (!visitState) return false;
           // Match by state name OR state ID
@@ -207,14 +184,14 @@ export const OperationsZone: React.FC = () => {
         return filtered;
       }
       
-      // Coordinator without state assignment - show project-filtered sites
-      console.log(`📊 OperationsZone: Coordinator has no state assigned - showing ${projectFiltered.length} sites`);
-      return projectFiltered;
+      // Coordinator without state assignment - show all sites
+      console.log(`📊 OperationsZone: Coordinator has no state assigned - showing all ${allSiteVisits.length} sites`);
+      return allSiteVisits;
     }
     
-    // Admin/other roles: show project-filtered sites
-    return projectFiltered;
-  }, [allSiteVisits, isSupervisor, supervisorHubName, isCoordinator, coordinatorStateName, currentUser?.stateId, userProjectIds, isAdminOrSuperUser, mmpFiles]);
+    // Admin/other roles: show all
+    return allSiteVisits;
+  }, [allSiteVisits, isSupervisor, supervisorHubName, isCoordinator, coordinatorStateName, currentUser?.stateId]);
 
   const upcomingVisits = siteVisits
     .filter(v => {
@@ -367,37 +344,39 @@ export const OperationsZone: React.FC = () => {
   const activeFilterCount = Object.values(filters).filter(v => v !== '').length;
 
   return (
-    <div className="p-4 md:p-8 space-y-6">
+    <div className="p-3 sm:p-4 md:p-6 lg:p-8 space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center">
-            <ClipboardList className="h-6 w-6 text-white" />
+          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center flex-shrink-0">
+            <ClipboardList className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
           </div>
-          <div>
-            <h1 className="text-3xl font-bold">Operations Center</h1>
-            <p className="text-sm text-muted-foreground">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold truncate">Operations Center</h1>
+            <p className="text-xs sm:text-sm text-muted-foreground">
               Field operations command and control
             </p>
           </div>
         </div>
         {/* Show filter context for supervisors and coordinators */}
-        {isSupervisor && supervisorHubName && (
-          <Badge variant="secondary" className="flex items-center gap-2 px-3 py-1.5 text-sm bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
-            <MapPin className="h-4 w-4" />
-            Hub: {supervisorHubName}
-          </Badge>
-        )}
-        {isCoordinator && (
-          <Badge variant="secondary" className="flex items-center gap-2 px-3 py-1.5 text-sm bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300">
-            <MapPin className="h-4 w-4" />
-            {coordinatorStateName ? `State: ${coordinatorStateName}` : 'All States'}
-          </Badge>
-        )}
+        <div className="flex flex-col sm:flex-row gap-2">
+          {isSupervisor && supervisorHubName && (
+            <Badge variant="secondary" className="flex items-center gap-2 px-3 py-1.5 text-xs sm:text-sm bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 self-start">
+              <MapPin className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
+              <span className="truncate">Hub: {supervisorHubName}</span>
+            </Badge>
+          )}
+          {isCoordinator && (
+            <Badge variant="secondary" className="flex items-center gap-2 px-3 py-1.5 text-xs sm:text-sm bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 self-start">
+              <MapPin className="h-3 w-3 sm:h-4 sm:w-4 flex-shrink-0" />
+              <span className="truncate">{coordinatorStateName ? `State: ${coordinatorStateName}` : 'All States'}</span>
+            </Badge>
+          )}
+        </div>
       </div>
 
       {/* Users Management Style Gradient Metrics Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
         <GradientStatCard
           title="Total Operations"
           value={totalVisits}
@@ -461,48 +440,48 @@ export const OperationsZone: React.FC = () => {
 
       {/* IT-Style Tab Navigation */}
       <Card className="border-border/50 bg-gradient-to-r from-muted/30 via-background to-muted/30">
-        <CardContent className="p-2">
+        <CardContent className="p-2 sm:p-3">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-4 h-auto p-0.5 bg-transparent border border-border/30">
+            <TabsList className="grid w-full grid-cols-4 h-auto p-0.5 bg-transparent border border-border/30 gap-1">
               <TabsTrigger 
                 value="overview" 
-                className="gap-1 px-2 py-1.5 data-[state=active]:bg-primary/10 data-[state=active]:border-primary/20 data-[state=active]:shadow-sm border border-transparent"
+                className="flex flex-col sm:flex-row gap-1 px-2 py-2 sm:py-1.5 data-[state=active]:bg-primary/10 data-[state=active]:border-primary/20 data-[state=active]:shadow-sm border border-transparent min-h-[60px] sm:min-h-[40px]"
                 data-testid="tab-overview"
               >
-                <div className="w-5 h-5 rounded bg-primary/10 flex items-center justify-center">
-                  <ClipboardList className="h-3 w-3 text-primary" />
+                <div className="w-5 h-5 sm:w-4 sm:h-4 rounded bg-primary/10 flex items-center justify-center flex-shrink-0">
+                  <ClipboardList className="h-3 w-3 sm:h-2.5 sm:w-2.5 text-primary" />
                 </div>
-                <span className="text-[10px] font-semibold uppercase tracking-wide">Overview</span>
+                <span className="text-[10px] sm:text-[9px] font-semibold uppercase tracking-wide text-center">Overview</span>
               </TabsTrigger>
               <TabsTrigger 
                 value="upcoming" 
-                className="gap-1 px-2 py-1.5 data-[state=active]:bg-blue-500/10 data-[state=active]:border-blue-500/20 data-[state=active]:shadow-sm border border-transparent"
+                className="flex flex-col sm:flex-row gap-1 px-2 py-2 sm:py-1.5 data-[state=active]:bg-blue-500/10 data-[state=active]:border-blue-500/20 data-[state=active]:shadow-sm border border-transparent min-h-[60px] sm:min-h-[40px]"
                 data-testid="tab-upcoming"
               >
-                <div className="w-5 h-5 rounded bg-blue-500/10 flex items-center justify-center">
-                  <Calendar className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+                <div className="w-5 h-5 sm:w-4 sm:h-4 rounded bg-blue-500/10 flex items-center justify-center flex-shrink-0">
+                  <Calendar className="h-3 w-3 sm:h-2.5 sm:w-2.5 text-blue-600 dark:text-blue-400" />
                 </div>
-                <span className="text-[10px] font-semibold uppercase tracking-wide">Upcoming</span>
+                <span className="text-[10px] sm:text-[9px] font-semibold uppercase tracking-wide text-center">Upcoming</span>
               </TabsTrigger>
               <TabsTrigger 
                 value="calendar" 
-                className="gap-1 px-2 py-1.5 data-[state=active]:bg-green-500/10 data-[state=active]:border-green-500/20 data-[state=active]:shadow-sm border border-transparent"
+                className="flex flex-col sm:flex-row gap-1 px-2 py-2 sm:py-1.5 data-[state=active]:bg-green-500/10 data-[state=active]:border-green-500/20 data-[state=active]:shadow-sm border border-transparent min-h-[60px] sm:min-h-[40px]"
                 data-testid="tab-calendar"
               >
-                <div className="w-5 h-5 rounded bg-green-500/10 flex items-center justify-center">
-                  <MapPin className="h-3 w-3 text-green-600 dark:text-green-400" />
+                <div className="w-5 h-5 sm:w-4 sm:h-4 rounded bg-green-500/10 flex items-center justify-center flex-shrink-0">
+                  <MapPin className="h-3 w-3 sm:h-2.5 sm:w-2.5 text-green-600 dark:text-green-400" />
                 </div>
-                <span className="text-[10px] font-semibold uppercase tracking-wide">Calendar</span>
+                <span className="text-[10px] sm:text-[9px] font-semibold uppercase tracking-wide text-center">Calendar</span>
               </TabsTrigger>
               <TabsTrigger 
                 value="costs" 
-                className="gap-1 px-2 py-1.5 data-[state=active]:bg-orange-500/10 data-[state=active]:border-orange-500/20 data-[state=active]:shadow-sm border border-transparent"
+                className="flex flex-col sm:flex-row gap-1 px-2 py-2 sm:py-1.5 data-[state=active]:bg-orange-500/10 data-[state=active]:border-orange-500/20 data-[state=active]:shadow-sm border border-transparent min-h-[60px] sm:min-h-[40px]"
                 data-testid="tab-costs"
               >
-                <div className="w-5 h-5 rounded bg-orange-500/10 flex items-center justify-center">
-                  <DollarSign className="h-3 w-3 text-orange-600 dark:text-orange-400" />
+                <div className="w-5 h-5 sm:w-4 sm:h-4 rounded bg-orange-500/10 flex items-center justify-center flex-shrink-0">
+                  <DollarSign className="h-3 w-3 sm:h-2.5 sm:w-2.5 text-orange-600 dark:text-orange-400" />
                 </div>
-                <span className="text-[10px] font-semibold uppercase tracking-wide">Costs</span>
+                <span className="text-[10px] sm:text-[9px] font-semibold uppercase tracking-wide text-center">Costs</span>
               </TabsTrigger>
             </TabsList>
 
@@ -527,27 +506,27 @@ export const OperationsZone: React.FC = () => {
 
       {/* Detail Modal */}
       <Dialog open={selectedCard !== null} onOpenChange={(open) => !open && setSelectedCard(null)}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+        <DialogContent className="max-w-4xl max-h-[85vh] sm:max-h-[80vh] overflow-hidden flex flex-col mx-4 sm:mx-auto">
+          <DialogHeader className="pb-3">
+            <DialogTitle className="flex items-center gap-2 text-lg sm:text-xl">
               {selectedCard === 'total' && <Activity className="h-5 w-5 text-primary" />}
               {selectedCard === 'completed' && <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />}
               {selectedCard === 'assigned' && <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />}
               {selectedCard === 'pending' && <Clock className="h-5 w-5 text-orange-600 dark:text-orange-400" />}
               {selectedCard === 'overdue' && <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />}
               {selectedCard === 'performance' && <BarChart3 className="h-5 w-5 text-purple-600 dark:text-purple-400" />}
-              <span>{getCardTitle(selectedCard)}</span>
-              <Badge variant="outline" className="ml-auto">
+              <span className="truncate">{getCardTitle(selectedCard)}</span>
+              <Badge variant="outline" className="ml-auto flex-shrink-0">
                 {filteredVisits.length} {filteredVisits.length === 1 ? 'visit' : 'visits'}
               </Badge>
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-sm">
               Detailed breakdown of {getCardTitle(selectedCard).toLowerCase()}
             </DialogDescription>
           </DialogHeader>
 
           {/* Filter Bar */}
-          <div className="space-y-2 border-b pb-3">
+          <div className="space-y-3 border-b pb-4">
             <div className="flex items-center gap-2">
               <Filter className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm font-medium">Filters</span>
@@ -561,7 +540,7 @@ export const OperationsZone: React.FC = () => {
                   variant="ghost"
                   size="sm"
                   onClick={clearAllFilters}
-                  className="ml-auto h-7 px-2 text-xs"
+                  className="ml-auto h-8 px-3 text-xs active:scale-95 transition-all"
                   data-testid="button-clear-filters"
                 >
                   <X className="h-3 w-3 mr-1" />
@@ -570,13 +549,25 @@ export const OperationsZone: React.FC = () => {
               )}
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
+            {/* Mobile Filter Toggle */}
+            <div className="block sm:hidden">
+              <Button
+                variant="outline"
+                onClick={() => setShowFilters(!showFilters)}
+                className="w-full h-10 active:scale-95 transition-all"
+              >
+                {showFilters ? 'Hide Filters' : 'Show Filters'}
+                <ChevronDown className={`h-4 w-4 ml-2 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
+              </Button>
+            </div>
+
+            <div className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 ${showFilters ? 'block' : 'hidden sm:grid'}`}>
               {/* Hub Filter */}
               <Select
                 value={filters.hub}
                 onValueChange={(value) => setFilters(prev => ({ ...prev, hub: value === 'all' ? '' : value }))}
               >
-                <SelectTrigger className="h-8 text-xs" data-testid="select-filter-hub">
+                <SelectTrigger className="h-9 text-xs" data-testid="select-filter-hub">
                   <SelectValue placeholder="Hub" />
                 </SelectTrigger>
                 <SelectContent>
@@ -594,7 +585,7 @@ export const OperationsZone: React.FC = () => {
                 value={filters.state}
                 onValueChange={(value) => setFilters(prev => ({ ...prev, state: value === 'all' ? '' : value }))}
               >
-                <SelectTrigger className="h-8 text-xs" data-testid="select-filter-state">
+                <SelectTrigger className="h-9 text-xs" data-testid="select-filter-state">
                   <SelectValue placeholder="State" />
                 </SelectTrigger>
                 <SelectContent>
@@ -612,7 +603,7 @@ export const OperationsZone: React.FC = () => {
                 value={filters.locality}
                 onValueChange={(value) => setFilters(prev => ({ ...prev, locality: value === 'all' ? '' : value }))}
               >
-                <SelectTrigger className="h-8 text-xs" data-testid="select-filter-locality">
+                <SelectTrigger className="h-9 text-xs" data-testid="select-filter-locality">
                   <SelectValue placeholder="Locality" />
                 </SelectTrigger>
                 <SelectContent>
@@ -630,7 +621,7 @@ export const OperationsZone: React.FC = () => {
                 value={filters.coordinator}
                 onValueChange={(value) => setFilters(prev => ({ ...prev, coordinator: value === 'all' ? '' : value }))}
               >
-                <SelectTrigger className="h-8 text-xs" data-testid="select-filter-coordinator">
+                <SelectTrigger className="h-9 text-xs" data-testid="select-filter-coordinator">
                   <SelectValue placeholder="Coordinator" />
                 </SelectTrigger>
                 <SelectContent>
@@ -648,7 +639,7 @@ export const OperationsZone: React.FC = () => {
                 value={filters.enumerator}
                 onValueChange={(value) => setFilters(prev => ({ ...prev, enumerator: value === 'all' ? '' : value }))}
               >
-                <SelectTrigger className="h-8 text-xs" data-testid="select-filter-enumerator">
+                <SelectTrigger className="h-9 text-xs" data-testid="select-filter-enumerator">
                   <SelectValue placeholder="Enumerator" />
                 </SelectTrigger>
                 <SelectContent>
@@ -666,7 +657,7 @@ export const OperationsZone: React.FC = () => {
                 value={filters.status}
                 onValueChange={(value) => setFilters(prev => ({ ...prev, status: value === 'all' ? '' : value }))}
               >
-                <SelectTrigger className="h-8 text-xs" data-testid="select-filter-status">
+                <SelectTrigger className="h-9 text-xs" data-testid="select-filter-status">
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
@@ -683,111 +674,185 @@ export const OperationsZone: React.FC = () => {
           
           <div className="flex-1 overflow-auto border rounded-md">
             {filteredVisits.length > 0 ? (
-              <Table>
-                <TableHeader className="sticky top-0 bg-background z-10">
-                  <TableRow>
-                    <TableHead>MMP Name</TableHead>
-                    <TableHead className="w-[200px]">Site Name</TableHead>
-                    <TableHead>Location</TableHead>
-                    <TableHead> Visit Date (coordinator)</TableHead>
-                    <TableHead>Actual Visit Date</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Assigned To</TableHead>
-                    <TableHead className="text-right">Action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredVisits.map((visit) => {
-                    
-                    return (
-                      <TableRow key={visit.id} className="hover:bg-muted/50">
-                        <TableCell>
-                          <div className="flex flex-col">
-                            <span className="text-xs font-medium text-primary">
-                              {visit.mmpDetails?.mmpId || visit.projectName || 'N/A'}
-                            </span>
-                            {visit.mmpDetails?.projectName && visit.mmpDetails.mmpId && (
-                              <span className="text-[10px] text-muted-foreground truncate max-w-[120px]">
-                                {visit.mmpDetails.projectName}
+              <>
+                {/* Mobile Card View */}
+                <div className="block md:hidden space-y-3 p-3">
+                  {filteredVisits.map((visit) => (
+                    <Card key={visit.id} className="p-4">
+                      <div className="space-y-3">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-sm font-medium text-primary truncate">
+                                {visit.mmpDetails?.mmpId || visit.projectName || 'N/A'}
                               </span>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="font-medium">
-                          <div className="flex flex-col">
-                            <span className="text-sm">{visit.siteName}</span>
+                              <Badge 
+                                variant={
+                                  visit.status === 'completed' ? 'default' : 
+                                  visit.status === 'assigned' || visit.status === 'inProgress' ? 'secondary' : 
+                                  'outline'
+                                }
+                                className="text-[10px] flex-shrink-0"
+                              >
+                                {visit.status}
+                              </Badge>
+                            </div>
+                            <p className="text-sm font-medium truncate">{visit.siteName}</p>
                             {visit.siteCode && (
-                              <span className="text-xs text-muted-foreground">{visit.siteCode}</span>
+                              <p className="text-xs text-muted-foreground">{visit.siteCode}</p>
                             )}
                           </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1">
-                            <MapPin className="h-3 w-3 text-muted-foreground" />
-                            <span className="text-xs">{visit.locality}, {visit.state}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-col">
-                            <span className={`text-xs ${!visit.dueDate ? 'text-muted-foreground' : ''}`}>
-                              {visit.dueDate 
-                                ? format(new Date(visit.dueDate), 'MMM dd, yyyy')
-                                : 'Not scheduled yet'
-                              }
-                            </span>
-                            {!visit.dueDate && (
-                              <span className="text-[10px] text-muted-foreground">Pending scheduling</span>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-col">
-                            <span className={`text-xs ${!visit.completedAt ? 'text-muted-foreground' : ''}`}>
-                              {visit.completedAt 
-                                ? format(new Date(visit.completedAt), 'MMM dd, yyyy')
-                                : 'Not completed yet'
-                              }
-                            </span>
-                            {!visit.completedAt && (
-                              <span className="text-[10px] text-muted-foreground">Visit in progress</span>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge 
-                            variant={
-                              visit.status === 'completed' ? 'default' : 
-                              visit.status === 'assigned' || visit.status === 'inProgress' ? 'secondary' : 
-                              'outline'
-                            }
-                            className="text-[10px]"
-                          >
-                            {visit.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <span className="text-xs text-muted-foreground">
-                            {visit.assignedTo 
-                              ? users.find(u => u.id === visit.assignedTo)?.name || 'Unknown' 
-                              : 'Unassigned'}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-right">
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="h-7 px-2"
+                            className="h-8 w-8 p-0 flex-shrink-0"
                             onClick={() => window.location.href = `/site-visits/${visit.id}`}
-                            data-testid={`button-view-visit-${visit.id}`}
                           >
-                            <ExternalLink className="h-3 w-3" />
+                            <ExternalLink className="h-4 w-4" />
                           </Button>
-                        </TableCell>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3 text-xs">
+                          <div>
+                            <p className="text-muted-foreground">Location</p>
+                            <p className="font-medium truncate">{visit.locality}, {visit.state}</p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground">Assigned To</p>
+                            <p className="font-medium truncate">
+                              {visit.assignedTo 
+                                ? users.find(u => u.id === visit.assignedTo)?.name || 'Unknown' 
+                                : 'Unassigned'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground">Due Date</p>
+                            <p className="font-medium">
+                              {visit.dueDate 
+                                ? format(new Date(visit.dueDate), 'MMM dd, yyyy')
+                                : 'Not scheduled'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-muted-foreground">Completed</p>
+                            <p className="font-medium">
+                              {visit.completedAt 
+                                ? format(new Date(visit.completedAt), 'MMM dd, yyyy')
+                                : 'In progress'}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+
+                {/* Desktop Table View */}
+                <div className="hidden md:block">
+                  <Table>
+                    <TableHeader className="sticky top-0 bg-background z-10">
+                      <TableRow>
+                        <TableHead>MMP Name</TableHead>
+                        <TableHead className="w-[200px]">Site Name</TableHead>
+                        <TableHead>Location</TableHead>
+                        <TableHead> Visit Date (coordinator)</TableHead>
+                        <TableHead>Actual Visit Date</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Assigned To</TableHead>
+                        <TableHead className="text-right">Action</TableHead>
                       </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredVisits.map((visit) => (
+                        <TableRow key={visit.id} className="hover:bg-muted/50">
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span className="text-xs font-medium text-primary">
+                                {visit.mmpDetails?.mmpId || visit.projectName || 'N/A'}
+                              </span>
+                              {visit.mmpDetails?.projectName && visit.mmpDetails.mmpId && (
+                                <span className="text-[10px] text-muted-foreground truncate max-w-[120px]">
+                                  {visit.mmpDetails.projectName}
+                                </span>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="font-medium">
+                            <div className="flex flex-col">
+                              <span className="text-sm">{visit.siteName}</span>
+                              {visit.siteCode && (
+                                <span className="text-xs text-muted-foreground">{visit.siteCode}</span>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1">
+                              <MapPin className="h-3 w-3 text-muted-foreground" />
+                              <span className="text-xs">{visit.locality}, {visit.state}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span className={`text-xs ${!visit.dueDate ? 'text-muted-foreground' : ''}`}>
+                                {visit.dueDate 
+                                  ? format(new Date(visit.dueDate), 'MMM dd, yyyy')
+                                  : 'Not scheduled yet'
+                                }
+                              </span>
+                              {!visit.dueDate && (
+                                <span className="text-[10px] text-muted-foreground">Pending scheduling</span>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col">
+                              <span className={`text-xs ${!visit.completedAt ? 'text-muted-foreground' : ''}`}>
+                                {visit.completedAt 
+                                  ? format(new Date(visit.completedAt), 'MMM dd, yyyy')
+                                  : 'Not completed yet'
+                                }
+                              </span>
+                              {!visit.completedAt && (
+                                <span className="text-[10px] text-muted-foreground">Visit in progress</span>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge 
+                              variant={
+                                visit.status === 'completed' ? 'default' : 
+                                visit.status === 'assigned' || visit.status === 'inProgress' ? 'secondary' : 
+                                'outline'
+                              }
+                              className="text-[10px]"
+                            >
+                              {visit.status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-xs text-muted-foreground">
+                              {visit.assignedTo 
+                                ? users.find(u => u.id === visit.assignedTo)?.name || 'Unknown' 
+                                : 'Unassigned'}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 px-2"
+                              onClick={() => window.location.href = `/site-visits/${visit.id}`}
+                              data-testid={`button-view-visit-${visit.id}`}
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </>
             ) : (
               <div className="flex flex-col items-center justify-center py-12 text-center">
                 <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">

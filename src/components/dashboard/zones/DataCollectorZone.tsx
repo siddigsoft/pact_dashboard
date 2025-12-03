@@ -52,8 +52,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
 import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
 import { useWallet } from '@/context/wallet/WalletContext';
-import { useUserProjects } from '@/hooks/useUserProjects';
-import { useMMP } from '@/context/mmp/MMPContext';
 import { useNavigate } from 'react-router-dom';
 import { DashboardCalendar } from '../DashboardCalendar';
 import { useToast } from '@/hooks/use-toast';
@@ -67,8 +65,6 @@ interface Filters {
 export const DataCollectorZone: React.FC = () => {
   const { currentUser, updateUserLocation } = useAppContext();
   const { siteVisits, startSiteVisit } = useSiteVisitContext();
-  const { mmpFiles } = useMMP();
-  const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
   const { wallet, transactions, stats, getBalance } = useWallet();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -181,34 +177,11 @@ export const DataCollectorZone: React.FC = () => {
     );
   };
 
-  // Build set of MMP IDs that belong to user's projects for filtering
-  const userProjectMmpIds = useMemo(() => {
-    if (isAdminOrSuperUser) return null; // null means bypass filtering
-    return new Set(
-      mmpFiles
-        .filter(mmp => mmp.projectId && userProjectIds.includes(mmp.projectId))
-        .map(mmp => mmp.id)
-    );
-  }, [mmpFiles, userProjectIds, isAdminOrSuperUser]);
-
-  // Get visits assigned to this data collector (with project filtering)
+  // Get visits assigned to this data collector
   const myVisits = useMemo(() => {
     if (!currentUser?.id || !siteVisits) return [];
-    
-    // First filter by assignment to current user
-    let visits = siteVisits.filter(visit => visit.assignedTo === currentUser.id);
-    
-    // Then apply project filtering (admin bypass)
-    if (userProjectMmpIds !== null) {
-      visits = visits.filter(visit => {
-        const visitMmpId = visit.mmpDetails?.mmpId;
-        if (!visitMmpId) return false;
-        return userProjectMmpIds.has(visitMmpId);
-      });
-    }
-    
-    return visits;
-  }, [siteVisits, currentUser?.id, userProjectMmpIds]);
+    return siteVisits.filter(visit => visit.assignedTo === currentUser.id);
+  }, [siteVisits, currentUser?.id]);
 
   // Categorize visits
   const todaysVisits = useMemo(() => {
@@ -270,7 +243,7 @@ export const DataCollectorZone: React.FC = () => {
     return transactions
       .filter(tx => {
         const txDate = parseISO(tx.createdAt);
-        return isValid(txDate) && txDate >= startOfMonth && tx.type === 'credit';
+        return isValid(txDate) && txDate >= startOfMonth && tx.type === 'earning';
       })
       .reduce((sum, tx) => sum + tx.amount, 0);
   }, [transactions]);
@@ -397,7 +370,7 @@ export const DataCollectorZone: React.FC = () => {
             <MapPin className="h-6 w-6 text-white" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold">Data Collector Dashboard</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold">Data Collector Dashboard</h1>
             <p className="text-sm text-muted-foreground">
               Manage your site visits and track your performance
             </p>
@@ -406,7 +379,7 @@ export const DataCollectorZone: React.FC = () => {
       </div>
 
       {/* Key Metrics Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
         <GradientStatCard
           title="Assigned"
           value={totalAssigned}
@@ -448,7 +421,7 @@ export const DataCollectorZone: React.FC = () => {
           value={overdueCount}
           subtitle={overdueCount > 0 ? "Needs attention" : "All on time"}
           icon={AlertCircle}
-          color={overdueCount > 0 ? "red" : "green"}
+          color={overdueCount > 0 ? "orange" : "green"}
           onClick={() => setActiveTab('my-visits')}
         />
 
@@ -464,22 +437,22 @@ export const DataCollectorZone: React.FC = () => {
 
       {/* Location Update Card */}
       <Card className="border-blue-200 bg-blue-50 dark:bg-blue-950/20">
-        <CardContent className="p-4">
-          <div className="flex items-center justify-between gap-4">
+        <CardContent className="p-3 sm:p-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-start gap-3 flex-1">
               <div className="w-10 h-10 rounded-lg bg-blue-600 flex items-center justify-center flex-shrink-0">
                 <MapPin className="h-5 w-5 text-white" />
               </div>
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-1">
                   <h3 className="font-semibold text-blue-900 dark:text-blue-100">Location Sharing</h3>
                   {hasLocation ? (
-                    <Badge variant="default" className="bg-green-600">
+                    <Badge variant="default" className="bg-green-600 w-fit">
                       <CheckCircle2 className="h-3 w-3 mr-1" />
                       Enabled
                     </Badge>
                   ) : (
-                    <Badge variant="destructive">Not Set</Badge>
+                    <Badge variant="destructive" className="w-fit">Not Set</Badge>
                   )}
                 </div>
                 <p className="text-sm text-blue-800 dark:text-blue-200 mb-2">
@@ -509,7 +482,7 @@ export const DataCollectorZone: React.FC = () => {
             <Button
               onClick={handleUpdateLocation}
               disabled={isUpdatingLocation}
-              className="flex-shrink-0 gap-2"
+              className="flex-shrink-0 gap-2 min-h-[44px] px-4"
               variant={hasLocation ? "default" : "default"}
             >
               {isUpdatingLocation ? (
@@ -531,9 +504,9 @@ export const DataCollectorZone: React.FC = () => {
       {/* Streak & Performance Banner */}
       {(streak > 0 || completionRate > 0) && (
         <Card className="bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-950/20 dark:to-amber-950/20 border-orange-200 dark:border-orange-800">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
+          <CardContent className="p-3 sm:p-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                 {streak > 0 && (
                   <div className="flex items-center gap-2">
                     <Flame className="h-5 w-5 text-orange-600" />
@@ -561,7 +534,7 @@ export const DataCollectorZone: React.FC = () => {
                   </div>
                 )}
               </div>
-              <div className="text-right">
+              <div className="text-center sm:text-right">
                 <div className="text-2xl font-bold text-orange-900 dark:text-orange-100">
                   {completionRate}%
                 </div>
@@ -578,51 +551,55 @@ export const DataCollectorZone: React.FC = () => {
       <Card className="border-border/50 bg-gradient-to-r from-muted/30 via-background to-muted/30">
         <CardContent className="p-2">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-3 md:grid-cols-5 h-auto p-0.5 bg-transparent border border-border/30">
+            <TabsList className="grid w-full grid-cols-3 sm:grid-cols-5 h-auto p-0.5 bg-transparent border border-border/30 gap-1 mx-auto">
               <TabsTrigger 
                 value="my-visits" 
-                className="gap-1 px-2 py-1.5 data-[state=active]:bg-primary/10 data-[state=active]:border-primary/20 data-[state=active]:shadow-sm border border-transparent"
+                className="gap-1 px-2 py-2 sm:py-1.5 data-[state=active]:bg-primary/10 data-[state=active]:border-primary/20 data-[state=active]:shadow-sm border border-transparent min-h-[44px] sm:min-h-[40px]"
               >
-                <div className="w-5 h-5 rounded bg-primary/10 flex items-center justify-center">
-                  <MapPin className="h-3 w-3 text-primary" />
+                <div className="w-5 h-5 rounded bg-primary/10 flex items-center justify-center flex-shrink-0">
+                  <MapPin className="h-3 w-3 sm:h-2.5 sm:w-2.5 text-primary" />
                 </div>
-                <span className="text-[10px] font-semibold uppercase tracking-wide">Visits</span>
+                <span className="text-[10px] sm:text-[9px] font-semibold uppercase tracking-wide text-center">Visits</span>
               </TabsTrigger>
               <TabsTrigger 
                 value="schedule" 
-                className="gap-1 px-2 py-1.5 data-[state=active]:bg-blue-500/10 data-[state=active]:border-blue-500/20 data-[state=active]:shadow-sm border border-transparent"
+                className="gap-1 px-2 py-2 sm:py-1.5 data-[state=active]:bg-blue-500/10 data-[state=active]:border-blue-500/20 data-[state=active]:shadow-sm border border-transparent min-h-[44px] sm:min-h-[40px]"
               >
-                <div className="w-5 h-5 rounded bg-blue-500/10 flex items-center justify-center">
-                  <Calendar className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+                <div className="w-5 h-5 rounded bg-blue-500/10 flex items-center justify-center flex-shrink-0">
+                  <Calendar className="h-3 w-3 sm:h-2.5 sm:w-2.5 text-blue-600 dark:text-blue-400" />
                 </div>
-                <span className="text-[10px] font-semibold uppercase tracking-wide hidden md:inline">Schedule</span>
+                <span className="text-[10px] sm:text-[9px] font-semibold uppercase tracking-wide text-center hidden sm:inline">Schedule</span>
+                <span className="text-[10px] sm:text-[9px] font-semibold uppercase tracking-wide text-center sm:hidden">Cal</span>
               </TabsTrigger>
               <TabsTrigger 
                 value="performance" 
-                className="gap-1 px-2 py-1.5 data-[state=active]:bg-green-500/10 data-[state=active]:border-green-500/20 data-[state=active]:shadow-sm border border-transparent"
+                className="gap-1 px-2 py-2 sm:py-1.5 data-[state=active]:bg-green-500/10 data-[state=active]:border-green-500/20 data-[state=active]:shadow-sm border border-transparent min-h-[44px] sm:min-h-[40px]"
               >
-                <div className="w-5 h-5 rounded bg-green-500/10 flex items-center justify-center">
-                  <TrendingUp className="h-3 w-3 text-green-600 dark:text-green-400" />
+                <div className="w-5 h-5 rounded bg-green-500/10 flex items-center justify-center flex-shrink-0">
+                  <TrendingUp className="h-3 w-3 sm:h-2.5 sm:w-2.5 text-green-600 dark:text-green-400" />
                 </div>
-                <span className="text-[10px] font-semibold uppercase tracking-wide hidden md:inline">Stats</span>
+                <span className="text-[10px] sm:text-[9px] font-semibold uppercase tracking-wide text-center hidden sm:inline">Stats</span>
+                <span className="text-[10px] sm:text-[9px] font-semibold uppercase tracking-wide text-center sm:hidden">Stats</span>
               </TabsTrigger>
               <TabsTrigger 
                 value="wallet" 
-                className="gap-1 px-2 py-1.5 data-[state=active]:bg-purple-500/10 data-[state=active]:border-purple-500/20 data-[state=active]:shadow-sm border border-transparent"
+                className="gap-1 px-2 py-2 sm:py-1.5 data-[state=active]:bg-purple-500/10 data-[state=active]:border-purple-500/20 data-[state=active]:shadow-sm border border-transparent min-h-[44px] sm:min-h-[40px]"
               >
-                <div className="w-5 h-5 rounded bg-purple-500/10 flex items-center justify-center">
-                  <Wallet className="h-3 w-3 text-purple-600 dark:text-purple-400" />
+                <div className="w-5 h-5 rounded bg-purple-500/10 flex items-center justify-center flex-shrink-0">
+                  <Wallet className="h-3 w-3 sm:h-2.5 sm:w-2.5 text-purple-600 dark:text-purple-400" />
                 </div>
-                <span className="text-[10px] font-semibold uppercase tracking-wide hidden md:inline">Wallet</span>
+                <span className="text-[10px] sm:text-[9px] font-semibold uppercase tracking-wide text-center hidden sm:inline">Wallet</span>
+                <span className="text-[10px] sm:text-[9px] font-semibold uppercase tracking-wide text-center sm:hidden">Pay</span>
               </TabsTrigger>
               <TabsTrigger 
                 value="help" 
-                className="gap-1 px-2 py-1.5 data-[state=active]:bg-amber-500/10 data-[state=active]:border-amber-500/20 data-[state=active]:shadow-sm border border-transparent"
+                className="gap-1 px-2 py-2 sm:py-1.5 data-[state=active]:bg-amber-500/10 data-[state=active]:border-amber-500/20 data-[state=active]:shadow-sm border border-transparent min-h-[44px] sm:min-h-[40px]"
               >
-                <div className="w-5 h-5 rounded bg-amber-500/10 flex items-center justify-center">
-                  <HelpCircle className="h-3 w-3 text-amber-600 dark:text-amber-400" />
+                <div className="w-5 h-5 rounded bg-amber-500/10 flex items-center justify-center flex-shrink-0">
+                  <HelpCircle className="h-3 w-3 sm:h-2.5 sm:w-2.5 text-amber-600 dark:text-amber-400" />
                 </div>
-                <span className="text-[10px] font-semibold uppercase tracking-wide hidden md:inline">Help</span>
+                <span className="text-[10px] sm:text-[9px] font-semibold uppercase tracking-wide text-center hidden sm:inline">Help</span>
+                <span className="text-[10px] sm:text-[9px] font-semibold uppercase tracking-wide text-center sm:hidden">?</span>
               </TabsTrigger>
             </TabsList>
 
@@ -638,40 +615,40 @@ export const DataCollectorZone: React.FC = () => {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                       {filteredOverdueVisits.slice(0, 5).map((visit) => {
                         const daysOverdue = differenceInDays(new Date(), parseISO(visit.dueDate));
                         return (
-                          <div 
-                            key={visit.id} 
-                            className="flex items-center justify-between p-3 border border-red-200 rounded bg-white dark:bg-gray-900"
-                          >
-                            <div className="flex-1">
-                              <div className="font-medium">{visit.siteName}</div>
-                              <div className="text-sm text-muted-foreground">
-                                {visit.locality}, {visit.state} • {daysOverdue} day{daysOverdue !== 1 ? 's' : ''} overdue
+                          <Card key={visit.id} className="p-4 border-red-200 bg-white dark:bg-gray-900">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                              <div className="flex-1">
+                                <div className="font-medium text-sm">{visit.siteName}</div>
+                                <div className="text-sm text-muted-foreground">
+                                  {visit.locality}, {visit.state} • {daysOverdue} day{daysOverdue !== 1 ? 's' : ''} overdue
+                                </div>
                               </div>
-                            </div>
-                            <div className="flex gap-2">
-                              <Button 
-                                size="sm" 
-                                onClick={() => handleStartVisit(visit)}
-                                className="gap-1"
-                              >
-                                <Play className="h-3 w-3" />
-                                Start
-                              </Button>
-                              {visit.coordinates?.latitude && (
+                              <div className="flex gap-2">
                                 <Button 
                                   size="sm" 
-                                  variant="outline"
-                                  onClick={() => openNavigation(visit)}
+                                  onClick={() => handleStartVisit(visit)}
+                                  className="gap-1 min-h-[44px] px-4"
                                 >
-                                  <Navigation className="h-3 w-3" />
+                                  <Play className="h-3 w-3" />
+                                  Start
                                 </Button>
-                              )}
+                                {visit.coordinates?.latitude && (
+                                  <Button 
+                                    size="sm" 
+                                    variant="outline"
+                                    onClick={() => openNavigation(visit)}
+                                    className="min-h-[44px] px-3"
+                                  >
+                                    <Navigation className="h-3 w-3" />
+                                  </Button>
+                                )}
+                              </div>
                             </div>
-                          </div>
+                          </Card>
                         );
                       })}
                     </div>
@@ -689,51 +666,52 @@ export const DataCollectorZone: React.FC = () => {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                       {filteredTodaysVisits.map((visit) => (
-                        <div 
-                          key={visit.id} 
-                          className="flex items-center justify-between p-3 border rounded hover:bg-muted/50"
-                        >
-                          <div className="flex-1">
-                            <div className="font-medium">{visit.siteName}</div>
-                            <div className="text-sm text-muted-foreground">
-                              {visit.locality}, {visit.state}
-                              {visit.siteCode && ` • ${visit.siteCode}`}
+                        <Card key={visit.id} className="p-4">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div className="flex-1">
+                              <div className="font-medium text-sm">{visit.siteName}</div>
+                              <div className="text-sm text-muted-foreground">
+                                {visit.locality}, {visit.state}
+                                {visit.siteCode && ` • ${visit.siteCode}`}
+                              </div>
+                            </div>
+                            <div className="flex gap-2">
+                              {visit.status === 'assigned' || visit.status === 'permitVerified' ? (
+                                <Button 
+                                  size="sm" 
+                                  onClick={() => handleStartVisit(visit)}
+                                  className="gap-1 min-h-[44px] px-4"
+                                >
+                                  <Play className="h-3 w-3" />
+                                  Start
+                                </Button>
+                              ) : visit.status === 'inProgress' ? (
+                                <Button 
+                                  size="sm" 
+                                  variant="default"
+                                  onClick={() => navigate(`/site-visits/${visit.id}`)}
+                                  className="min-h-[44px] px-4"
+                                >
+                                  Continue
+                                </Button>
+                              ) : (
+                                <Badge variant="outline" className="min-h-[44px] px-3 flex items-center">Completed</Badge>
+                              )}
+                              {visit.coordinates?.latitude && (
+                                <Button 
+                                  size="sm" 
+                                  variant="outline"
+                                  onClick={() => openNavigation(visit)}
+                                  className="min-h-[44px] px-3"
+                                >
+                                  <Navigation className="h-3 w-3" />
+                                </Button>
+                              )}
                             </div>
                           </div>
-                          <div className="flex gap-2">
-                            {visit.status === 'assigned' || visit.status === 'permitVerified' ? (
-                              <Button 
-                                size="sm" 
-                                onClick={() => handleStartVisit(visit)}
-                                className="gap-1"
-                              >
-                                <Play className="h-3 w-3" />
-                                Start
-                              </Button>
-                            ) : visit.status === 'inProgress' ? (
-                              <Button 
-                                size="sm" 
-                                variant="default"
-                                onClick={() => navigate(`/site-visits/${visit.id}`)}
-                              >
-                                Continue
-                              </Button>
-                            ) : (
-                              <Badge variant="outline">Completed</Badge>
-                            )}
-                            {visit.coordinates?.latitude && (
-                              <Button 
-                                size="sm" 
-                                variant="outline"
-                                onClick={() => openNavigation(visit)}
-                              >
-                                <Navigation className="h-3 w-3" />
-                              </Button>
-                            )}
-                          </div>
-                        </div>
+                        </Card>
                       ))}
                     </div>
                   </CardContent>
@@ -750,40 +728,41 @@ export const DataCollectorZone: React.FC = () => {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                       {filteredUpcomingVisits.slice(0, 10).map((visit) => {
                         const dueDate = parseISO(visit.dueDate);
                         const daysUntil = differenceInDays(dueDate, new Date());
                         return (
-                          <div 
-                            key={visit.id} 
-                            className="flex items-center justify-between p-3 border rounded hover:bg-muted/50"
-                          >
-                            <div className="flex-1">
-                              <div className="font-medium">{visit.siteName}</div>
-                              <div className="text-sm text-muted-foreground">
-                                {visit.locality}, {visit.state} • {format(dueDate, 'MMM dd, yyyy')} ({daysUntil} day{daysUntil !== 1 ? 's' : ''})
+                          <Card key={visit.id} className="p-4">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                              <div className="flex-1">
+                                <div className="font-medium text-sm">{visit.siteName}</div>
+                                <div className="text-sm text-muted-foreground">
+                                  {visit.locality}, {visit.state} • {format(dueDate, 'MMM dd, yyyy')} ({daysUntil} day{daysUntil !== 1 ? 's' : ''})
+                                </div>
                               </div>
-                            </div>
-                            <div className="flex gap-2">
-                              <Button 
-                                size="sm" 
-                                variant="outline"
-                                onClick={() => navigate(`/site-visits/${visit.id}`)}
-                              >
-                                View
-                              </Button>
-                              {visit.coordinates?.latitude && (
+                              <div className="flex gap-2">
                                 <Button 
                                   size="sm" 
                                   variant="outline"
-                                  onClick={() => openNavigation(visit)}
+                                  onClick={() => navigate(`/site-visits/${visit.id}`)}
+                                  className="min-h-[44px] px-4"
                                 >
-                                  <Navigation className="h-3 w-3" />
+                                  View
                                 </Button>
-                              )}
+                                {visit.coordinates?.latitude && (
+                                  <Button 
+                                    size="sm" 
+                                    variant="outline"
+                                    onClick={() => openNavigation(visit)}
+                                    className="min-h-[44px] px-3"
+                                  >
+                                    <Navigation className="h-3 w-3" />
+                                  </Button>
+                                )}
+                              </div>
                             </div>
-                          </div>
+                          </Card>
                         );
                       })}
                     </div>
@@ -873,10 +852,10 @@ export const DataCollectorZone: React.FC = () => {
 
             {/* Wallet Tab */}
             <TabsContent value="wallet" className="mt-3 space-y-4">
-              <div className="grid md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <Card>
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
+                    <CardTitle className="text-lg flex items-center gap-2">
                       <Wallet className="h-5 w-5" />
                       Wallet Balance
                     </CardTitle>
@@ -889,7 +868,7 @@ export const DataCollectorZone: React.FC = () => {
                       Available for withdrawal
                     </div>
                     <Button 
-                      className="mt-4 w-full" 
+                      className="mt-4 w-full min-h-[44px]" 
                       onClick={() => navigate('/wallet')}
                     >
                       View Wallet Details
@@ -899,7 +878,7 @@ export const DataCollectorZone: React.FC = () => {
 
                 <Card>
                   <CardHeader>
-                    <CardTitle>This Month Earnings</CardTitle>
+                    <CardTitle className="text-lg">This Month Earnings</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="text-3xl font-bold mb-2">
@@ -915,27 +894,29 @@ export const DataCollectorZone: React.FC = () => {
               {transactions && transactions.length > 0 && (
                 <Card>
                   <CardHeader>
-                    <CardTitle>Recent Transactions</CardTitle>
+                    <CardTitle className="text-lg">Recent Transactions</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                       {transactions.slice(0, 10).map((tx) => (
-                        <div key={tx.id} className="flex items-center justify-between p-2 border rounded">
-                          <div>
-                            <div className="font-medium text-sm">{tx.description || 'Site Visit Payment'}</div>
-                            <div className="text-xs text-muted-foreground">
-                              {format(parseISO(tx.createdAt), 'MMM dd, yyyy HH:mm')}
+                        <Card key={tx.id} className="p-3">
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <div className="font-medium text-sm">{tx.description || 'Site Visit Payment'}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {format(parseISO(tx.createdAt), 'MMM dd, yyyy HH:mm')}
+                              </div>
+                            </div>
+                            <div className={`font-bold text-sm ${tx.type === 'earning' || tx.type === 'bonus' ? 'text-green-600' : 'text-red-600'}`}>
+                              {tx.type === 'earning' || tx.type === 'bonus' ? '+' : '-'}{tx.amount.toLocaleString()} {tx.currency}
                             </div>
                           </div>
-                          <div className={`font-bold ${tx.type === 'credit' ? 'text-green-600' : 'text-red-600'}`}>
-                            {tx.type === 'credit' ? '+' : '-'}{tx.amount.toLocaleString()} {tx.currency}
-                          </div>
-                        </div>
+                        </Card>
                       ))}
                     </div>
                     <Button 
                       variant="outline" 
-                      className="mt-4 w-full"
+                      className="mt-4 w-full min-h-[44px]"
                       onClick={() => navigate('/wallet')}
                     >
                       View All Transactions
@@ -947,31 +928,31 @@ export const DataCollectorZone: React.FC = () => {
 
             {/* Help Tab */}
             <TabsContent value="help" className="mt-3 space-y-4">
-              <div className="grid md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 <Card>
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
+                    <CardTitle className="text-lg flex items-center gap-2">
                       <HelpCircle className="h-5 w-5" />
                       Quick Guide
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div>
-                      <div className="font-medium mb-1">Starting a Visit</div>
-                      <div className="text-sm text-muted-foreground">
-                        1. Find your assigned visit<br/>
-                        2. Click "Start" button<br/>
-                        3. Enable location permissions<br/>
-                        4. Complete the visit report
+                  <CardContent className="space-y-4">
+                    <div className="p-3 bg-muted/50 rounded">
+                      <div className="font-medium mb-2 text-sm">Starting a Visit</div>
+                      <div className="text-sm text-muted-foreground space-y-1">
+                        <div>1. Find your assigned visit</div>
+                        <div>2. Click "Start" button</div>
+                        <div>3. Enable location permissions</div>
+                        <div>4. Complete the visit report</div>
                       </div>
                     </div>
-                    <div>
-                      <div className="font-medium mb-1">Completing a Visit</div>
-                      <div className="text-sm text-muted-foreground">
-                        1. Fill in all required fields<br/>
-                        2. Add photos if needed<br/>
-                        3. Submit the report<br/>
-                        4. Wait for verification
+                    <div className="p-3 bg-muted/50 rounded">
+                      <div className="font-medium mb-2 text-sm">Completing a Visit</div>
+                      <div className="text-sm text-muted-foreground space-y-1">
+                        <div>1. Fill in all required fields</div>
+                        <div>2. Add photos if needed</div>
+                        <div>3. Submit the report</div>
+                        <div>4. Wait for verification</div>
                       </div>
                     </div>
                   </CardContent>
@@ -979,18 +960,18 @@ export const DataCollectorZone: React.FC = () => {
 
                 <Card>
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
+                    <CardTitle className="text-lg flex items-center gap-2">
                       <Phone className="h-5 w-5" />
                       Support
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <div>
-                      <div className="font-medium mb-1">Need Help?</div>
+                      <div className="font-medium mb-2 text-sm">Need Help?</div>
                       <div className="text-sm text-muted-foreground">
                         Contact your coordinator or supervisor for assistance with:
                       </div>
-                      <ul className="text-sm text-muted-foreground mt-2 list-disc list-inside">
+                      <ul className="text-sm text-muted-foreground mt-3 list-disc list-inside space-y-1">
                         <li>Visit assignments</li>
                         <li>Technical issues</li>
                         <li>Payment questions</li>

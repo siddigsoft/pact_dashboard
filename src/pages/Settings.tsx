@@ -454,146 +454,146 @@ const Settings = () => {
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="container mx-auto p-3 sm:p-4 md:p-6 lg:p-8 space-y-4 sm:space-y-6">
       <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            <SettingsIcon className="h-8 w-8 text-blue-600" />
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+            <SettingsIcon className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
             Settings
           </h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-1">
+          <p className="text-gray-600 dark:text-gray-400 mt-1 text-sm sm:text-base">
             Manage your account settings and preferences
           </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <Card 
-          className="hover-elevate active-elevate-2 cursor-pointer overflow-hidden relative bg-gradient-to-br from-blue-500 to-blue-700 text-white border-0"
+          className="hover-elevate active:scale-95 cursor-pointer overflow-hidden relative bg-gradient-to-br from-blue-500 to-blue-700 text-white border-0 min-h-[120px]"
           onClick={() => setActiveTab('general')}
           data-testid="card-general-settings"
         >
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2 p-4">
             <CardTitle className="text-sm font-medium text-white/90">
               General
             </CardTitle>
             <Globe className="h-5 w-5 text-white/80" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-white">Preferences</div>
+          <CardContent className="p-4 pt-0">
+            <div className="text-xl sm:text-2xl font-bold text-white">Preferences</div>
             <p className="text-xs text-white/80 mt-1">
               Landing page & defaults
             </p>
           </CardContent>
-          <Sparkles className="absolute -right-4 -bottom-4 h-24 w-24 text-white/10" />
+          <Sparkles className="absolute -right-4 -bottom-4 h-20 w-20 sm:h-24 sm:w-24 text-white/10" />
         </Card>
 
         <Card 
-          className="hover-elevate active-elevate-2 cursor-pointer overflow-hidden relative bg-gradient-to-br from-green-500 to-emerald-700 text-white border-0"
+          className="hover-elevate active:scale-95 cursor-pointer overflow-hidden relative bg-gradient-to-br from-green-500 to-emerald-700 text-white border-0 min-h-[120px]"
           onClick={() => setActiveTab('notifications')}
           data-testid="card-notification-settings"
         >
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2 p-4">
             <CardTitle className="text-sm font-medium text-white/90">
               Notifications
             </CardTitle>
             <Bell className="h-5 w-5 text-white/80" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-white">
+          <CardContent className="p-4 pt-0">
+            <div className="text-xl sm:text-2xl font-bold text-white">
               {notificationSettings.enabled ? "Enabled" : "Disabled"}
             </div>
             <p className="text-xs text-white/80 mt-1">
               Alerts & email settings
             </p>
           </CardContent>
-          <Sparkles className="absolute -right-4 -bottom-4 h-24 w-24 text-white/10" />
+          <Sparkles className="absolute -right-4 -bottom-4 h-20 w-20 sm:h-24 sm:w-24 text-white/10" />
         </Card>
 
         <Card 
-          className="hover-elevate active-elevate-2 cursor-pointer overflow-hidden relative bg-gradient-to-br from-purple-500 to-purple-700 text-white border-0"
+          className="hover-elevate active:scale-95 cursor-pointer overflow-hidden relative bg-gradient-to-br from-purple-500 to-purple-700 text-white border-0 min-h-[120px]"
           onClick={() => setActiveTab('appearance')}
           data-testid="card-appearance-settings"
         >
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2 p-4">
             <CardTitle className="text-sm font-medium text-white/90">
               Appearance
             </CardTitle>
             <Moon className="h-5 w-5 text-white/80" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-white">
+          <CardContent className="p-4 pt-0">
+            <div className="text-xl sm:text-2xl font-bold text-white">
               {appearanceSettings.darkMode ? "Dark" : "Light"}
             </div>
             <p className="text-xs text-white/80 mt-1">
               Theme & display options
             </p>
           </CardContent>
-          <Sparkles className="absolute -right-4 -bottom-4 h-24 w-24 text-white/10" />
+          <Sparkles className="absolute -right-4 -bottom-4 h-20 w-20 sm:h-24 sm:w-24 text-white/10" />
         </Card>
 
         <Card 
-          className="hover-elevate active-elevate-2 cursor-pointer overflow-hidden relative bg-gradient-to-br from-orange-500 to-red-600 text-white border-0"
+          className="hover-elevate active:scale-95 cursor-pointer overflow-hidden relative bg-gradient-to-br from-orange-500 to-red-600 text-white border-0 min-h-[120px]"
           onClick={() => setActiveTab('profile')}
           data-testid="card-profile-settings"
         >
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2 p-4">
             <CardTitle className="text-sm font-medium text-white/90">
               Profile
             </CardTitle>
             <User className="h-5 w-5 text-white/80" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-white truncate">
+          <CardContent className="p-4 pt-0">
+            <div className="text-xl sm:text-2xl font-bold text-white truncate">
               {currentUser?.name || "Your Profile"}
             </div>
             <p className="text-xs text-white/80 mt-1">
               Personal information
             </p>
           </CardContent>
-          <Sparkles className="absolute -right-4 -bottom-4 h-24 w-24 text-white/10" />
+          <Sparkles className="absolute -right-4 -bottom-4 h-20 w-20 sm:h-24 sm:w-24 text-white/10" />
         </Card>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4 lg:grid-cols-8 gap-1">
-          <TabsTrigger value="general" className="flex items-center gap-1" data-testid="tab-general">
+        <TabsList className="grid w-full grid-cols-4 gap-1 h-auto p-1">
+          <TabsTrigger value="general" className="flex flex-col sm:flex-row items-center gap-1 sm:gap-1 p-2 sm:p-3 min-h-[44px] text-xs sm:text-sm" data-testid="tab-general">
             <SettingsIcon className="h-4 w-4" />
-            <span className="hidden sm:inline">General</span>
+            <span className="hidden xs:inline sm:inline">General</span>
           </TabsTrigger>
-          <TabsTrigger value="navigation" className="flex items-center gap-1" data-testid="tab-navigation">
+          <TabsTrigger value="navigation" className="flex flex-col sm:flex-row items-center gap-1 sm:gap-1 p-2 sm:p-3 min-h-[44px] text-xs sm:text-sm" data-testid="tab-navigation">
             <Menu className="h-4 w-4" />
-            <span className="hidden sm:inline">Navigation</span>
+            <span className="hidden xs:inline sm:inline">Navigation</span>
           </TabsTrigger>
-          <TabsTrigger value="location" className="flex items-center gap-1" data-testid="tab-location">
+          <TabsTrigger value="location" className="flex flex-col sm:flex-row items-center gap-1 sm:gap-1 p-2 sm:p-3 min-h-[44px] text-xs sm:text-sm" data-testid="tab-location">
             <MapPin className="h-4 w-4" />
-            <span className="hidden sm:inline">Location</span>
+            <span className="hidden xs:inline sm:inline">Location</span>
           </TabsTrigger>
-          <TabsTrigger value="notifications" className="flex items-center gap-1" data-testid="tab-notifications">
+          <TabsTrigger value="notifications" className="flex flex-col sm:flex-row items-center gap-1 sm:gap-1 p-2 sm:p-3 min-h-[44px] text-xs sm:text-sm" data-testid="tab-notifications">
             <Bell className="h-4 w-4" />
-            <span className="hidden sm:inline">Notifications</span>
+            <span className="hidden xs:inline sm:inline">Notifications</span>
           </TabsTrigger>
-          <TabsTrigger value="appearance" className="flex items-center gap-1" data-testid="tab-appearance">
+          <TabsTrigger value="appearance" className="flex flex-col sm:flex-row items-center gap-1 sm:gap-1 p-2 sm:p-3 min-h-[44px] text-xs sm:text-sm" data-testid="tab-appearance">
             <Palette className="h-4 w-4" />
-            <span className="hidden sm:inline">Appearance</span>
+            <span className="hidden xs:inline sm:inline">Appearance</span>
           </TabsTrigger>
-          <TabsTrigger value="security" className="flex items-center gap-1" data-testid="tab-security">
+          <TabsTrigger value="security" className="flex flex-col sm:flex-row items-center gap-1 sm:gap-1 p-2 sm:p-3 min-h-[44px] text-xs sm:text-sm" data-testid="tab-security">
             <Shield className="h-4 w-4" />
-            <span className="hidden sm:inline">Security</span>
+            <span className="hidden xs:inline sm:inline">Security</span>
           </TabsTrigger>
-          <TabsTrigger value="profile" className="flex items-center gap-1" data-testid="tab-profile">
+          <TabsTrigger value="profile" className="flex flex-col sm:flex-row items-center gap-1 sm:gap-1 p-2 sm:p-3 min-h-[44px] text-xs sm:text-sm" data-testid="tab-profile">
             <User className="h-4 w-4" />
-            <span className="hidden sm:inline">Profile</span>
+            <span className="hidden xs:inline sm:inline">Profile</span>
           </TabsTrigger>
-          <TabsTrigger value="dataVisibility" className="flex items-center gap-1" data-testid="tab-data-visibility">
+          <TabsTrigger value="dataVisibility" className="flex flex-col sm:flex-row items-center gap-1 sm:gap-1 p-2 sm:p-3 min-h-[44px] text-xs sm:text-sm" data-testid="tab-data-visibility">
             <Eye className="h-4 w-4" />
-            <span className="hidden sm:inline">Privacy</span>
+            <span className="hidden xs:inline sm:inline">Privacy</span>
           </TabsTrigger>
         </TabsList>
         
         <TabsContent value="general" className="space-y-4">
           <Card className="border shadow-sm">
-            <CardHeader className="bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 border-b">
+            <CardHeader className="bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 border-b p-4 sm:p-6">
               <div className="flex items-center gap-2">
                 <div className="p-2 bg-blue-500 rounded-lg">
                   <SettingsIcon className="h-5 w-5 text-white" />
@@ -606,7 +606,7 @@ const Settings = () => {
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="space-y-6 pt-6">
+            <CardContent className="space-y-6 p-4 sm:p-6 pt-4 sm:pt-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-muted/50 rounded-lg">
                 <div className="space-y-1">
                   <Label htmlFor="default-page" className="text-base font-medium">Default Landing Page</Label>
@@ -618,7 +618,7 @@ const Settings = () => {
                   value={userSettings?.settings?.defaultPage || "dashboard"}
                   onValueChange={handleDefaultPageChange}
                 >
-                  <SelectTrigger className="w-full sm:w-[200px]" data-testid="select-default-page">
+                  <SelectTrigger className="w-full sm:w-[200px] min-h-[44px]" data-testid="select-default-page">
                     <SelectValue placeholder="Select page" />
                   </SelectTrigger>
                   <SelectContent>
@@ -640,6 +640,7 @@ const Settings = () => {
                       variant: "success",
                     });
                   }}
+                  className="min-h-[44px] px-6"
                   data-testid="button-save-general"
                 >
                   <Save className="mr-2 h-4 w-4" />
@@ -652,7 +653,7 @@ const Settings = () => {
         
         <TabsContent value="navigation" className="space-y-4">
           <Card className="border shadow-sm">
-            <CardHeader className="bg-gradient-to-r from-indigo-50 to-indigo-100 dark:from-indigo-900/20 dark:to-indigo-800/20 border-b">
+            <CardHeader className="bg-gradient-to-r from-indigo-50 to-indigo-100 dark:from-indigo-900/20 dark:to-indigo-800/20 border-b p-4 sm:p-6">
               <div className="flex items-center gap-2">
                 <div className="p-2 bg-indigo-500 rounded-lg">
                   <Menu className="h-5 w-5 text-white" />
@@ -665,7 +666,7 @@ const Settings = () => {
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="space-y-6 pt-6">
+            <CardContent className="space-y-6 p-4 sm:p-6 pt-4 sm:pt-6">
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
                   <LayoutDashboard className="h-5 w-5 text-indigo-600" />
@@ -678,7 +679,7 @@ const Settings = () => {
                   value={dashboardPreferences?.defaultZone || "operations"}
                   onValueChange={(value) => updateDashboardPreferences({ defaultZone: value as any })}
                 >
-                  <SelectTrigger className="w-full sm:w-[300px]" data-testid="select-default-zone">
+                  <SelectTrigger className="w-full min-h-[44px] p-3" data-testid="select-default-zone">
                     <SelectValue placeholder="Select default zone" />
                   </SelectTrigger>
                   <SelectContent>
@@ -705,13 +706,13 @@ const Settings = () => {
                 <div className="flex flex-wrap gap-2">
                   {menuPreferences?.pinnedItems?.length > 0 ? (
                     menuPreferences.pinnedItems.map((url) => (
-                      <Badge key={url} variant="secondary" className="gap-1">
+                      <Badge key={url} variant="secondary" className="gap-1 min-h-[32px] px-3 py-1">
                         <Pin className="h-3 w-3" />
                         {url.replace('/', '')}
                         <Button 
                           size="icon" 
                           variant="ghost" 
-                          className="h-4 w-4 ml-1"
+                          className="h-6 w-6 ml-1 min-h-[24px]"
                           onClick={() => {
                             const updated = menuPreferences.pinnedItems.filter(i => i !== url);
                             updateMenuPreferences({ pinnedItems: updated });
@@ -739,13 +740,13 @@ const Settings = () => {
                 <div className="flex flex-wrap gap-2">
                   {menuPreferences?.hiddenItems?.length > 0 ? (
                     menuPreferences.hiddenItems.map((url) => (
-                      <Badge key={url} variant="outline" className="gap-1">
+                      <Badge key={url} variant="outline" className="gap-1 min-h-[32px] px-3 py-1">
                         <EyeOff className="h-3 w-3" />
                         {url.replace('/', '')}
                         <Button 
                           size="icon" 
                           variant="ghost" 
-                          className="h-4 w-4 ml-1"
+                          className="h-6 w-6 ml-1 min-h-[24px]"
                           onClick={() => {
                             const updated = menuPreferences.hiddenItems.filter(i => i !== url);
                             updateMenuPreferences({ hiddenItems: updated });
@@ -762,10 +763,10 @@ const Settings = () => {
                 </div>
               </div>
 
-              <div className="flex justify-end pt-4 border-t">
+              <div className="flex flex-col sm:flex-row justify-between gap-3 pt-4 border-t">
                 <Button 
                   variant="outline"
-                  className="mr-2"
+                  className="min-h-[44px] px-6"
                   onClick={() => {
                     updateMenuPreferences({
                       hiddenItems: [],
@@ -798,7 +799,7 @@ const Settings = () => {
         
         <TabsContent value="location" className="space-y-4">
           <Card className="border shadow-sm">
-            <CardHeader className="bg-gradient-to-r from-cyan-50 to-cyan-100 dark:from-cyan-900/20 dark:to-cyan-800/20 border-b">
+            <CardHeader className="bg-gradient-to-r from-cyan-50 to-cyan-100 dark:from-cyan-900/20 dark:to-cyan-800/20 border-b p-4 sm:p-6">
               <div className="flex items-center gap-2">
                 <div className="p-2 bg-cyan-500 rounded-lg">
                   <MapPin className="h-5 w-5 text-white" />
@@ -811,7 +812,7 @@ const Settings = () => {
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="pt-6">
+            <CardContent className="p-4 sm:p-6">
               <LocationCapture />
             </CardContent>
           </Card>
@@ -823,7 +824,7 @@ const Settings = () => {
         
         <TabsContent value="appearance" className="space-y-4">
           <Card className="border shadow-sm">
-            <CardHeader className="bg-gradient-to-r from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20 border-b">
+            <CardHeader className="bg-gradient-to-r from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20 border-b p-4 sm:p-6">
               <div className="flex items-center gap-2">
                 <div className="p-2 bg-purple-500 rounded-lg">
                   <Palette className="h-5 w-5 text-white" />
@@ -836,8 +837,8 @@ const Settings = () => {
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="space-y-4 pt-6">
-              <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
+            <CardContent className="space-y-4 p-4 sm:p-6 pt-4 sm:pt-6">
+              <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg min-h-[60px]">
                 <div className="flex items-center gap-3">
                   <Moon className="h-5 w-5 text-muted-foreground" />
                   <div className="space-y-1">
@@ -851,11 +852,12 @@ const Settings = () => {
                   id="dark-mode" 
                   checked={appearanceSettings.darkMode}
                   onCheckedChange={handleDarkModeToggle}
+                  className="scale-110"
                   data-testid="switch-dark-mode"
                 />
               </div>
               
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-muted/50 rounded-lg">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-muted/50 rounded-lg min-h-[60px]">
                 <div className="space-y-1">
                   <Label htmlFor="theme" className="text-base font-medium">Theme Style</Label>
                   <p className="text-sm text-muted-foreground">
@@ -866,7 +868,7 @@ const Settings = () => {
                   value={appearanceSettings.theme}
                   onValueChange={handleThemeChange}
                 >
-                  <SelectTrigger className="w-full sm:w-[200px]" data-testid="select-theme">
+                  <SelectTrigger className="w-full sm:w-[200px] min-h-[44px]" data-testid="select-theme">
                     <SelectValue placeholder="Select theme" />
                   </SelectTrigger>
                   <SelectContent>
@@ -887,6 +889,7 @@ const Settings = () => {
                       variant: "success",
                     });
                   }}
+                  className="min-h-[44px] px-6"
                   data-testid="button-save-appearance"
                 >
                   <Save className="mr-2 h-4 w-4" />
@@ -899,7 +902,7 @@ const Settings = () => {
 
         <TabsContent value="security" className="space-y-4">
           <Card className="border shadow-sm">
-            <CardHeader className="bg-gradient-to-r from-emerald-50 to-teal-100 dark:from-emerald-900/20 dark:to-teal-800/20 border-b">
+            <CardHeader className="bg-gradient-to-r from-emerald-50 to-teal-100 dark:from-emerald-900/20 dark:to-teal-800/20 border-b p-4 sm:p-6">
               <div className="flex items-center gap-2">
                 <div className="p-2 bg-emerald-500 rounded-lg">
                   <Shield className="h-5 w-5 text-white" />
@@ -912,8 +915,8 @@ const Settings = () => {
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="space-y-6 pt-6">
-              <div className="p-4 bg-muted/50 rounded-lg">
+            <CardContent className="space-y-6 p-4 sm:p-6 pt-4 sm:pt-6">
+              <div className="p-4 bg-muted/50 rounded-lg min-h-[80px]">
                 <div className="flex items-center justify-between gap-4">
                   <div className="flex items-center gap-3">
                     <Smartphone className="h-5 w-5 text-muted-foreground" />
@@ -928,12 +931,12 @@ const Settings = () => {
                     {mfaLoading ? (
                       <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
                     ) : mfaEnabled ? (
-                      <Badge variant="default" className="bg-green-500 hover:bg-green-600">
+                      <Badge variant="default" className="bg-green-500 hover:bg-green-600 min-h-[28px] px-3">
                         <CheckCircle className="h-3 w-3 mr-1" />
                         Enabled
                       </Badge>
                     ) : (
-                      <Badge variant="secondary">
+                      <Badge variant="secondary" className="min-h-[28px] px-3">
                         <XCircle className="h-3 w-3 mr-1" />
                         Disabled
                       </Badge>
@@ -943,7 +946,7 @@ const Settings = () => {
               </div>
 
               {mfaEnabled ? (
-                <div className="p-4 border rounded-lg bg-green-50 dark:bg-green-900/20">
+                <div className="p-4 border rounded-lg bg-green-50 dark:bg-green-900/20 min-h-[100px]">
                   <div className="flex items-start gap-3">
                     <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400 mt-0.5" />
                     <div className="space-y-2">
@@ -958,7 +961,7 @@ const Settings = () => {
                         size="sm"
                         onClick={handleDisableMFA}
                         disabled={disablingMFA}
-                        className="mt-2"
+                        className="mt-2 min-h-[36px] px-4"
                         data-testid="button-disable-2fa"
                       >
                         {disablingMFA ? (
@@ -977,7 +980,7 @@ const Settings = () => {
                   </div>
                 </div>
               ) : (
-                <div className="p-4 border rounded-lg">
+                <div className="p-4 border rounded-lg min-h-[100px]">
                   <div className="flex items-start gap-3">
                     <Shield className="h-5 w-5 text-muted-foreground mt-0.5" />
                     <div className="space-y-2">
@@ -987,7 +990,7 @@ const Settings = () => {
                       </p>
                       <Button
                         onClick={() => setShowMFASetup(true)}
-                        className="mt-2"
+                        className="mt-2 min-h-[44px] px-6"
                         data-testid="button-enable-2fa"
                       >
                         <Shield className="mr-2 h-4 w-4" />
@@ -1000,11 +1003,11 @@ const Settings = () => {
 
               <div className="pt-4 border-t">
                 <h4 className="text-sm font-medium mb-3">Supported Authenticator Apps</h4>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {["Google Authenticator", "Authy", "1Password", "Microsoft Authenticator"].map((app) => (
-                    <div key={app} className="flex items-center gap-2 p-2 bg-muted/50 rounded text-sm">
+                    <div key={app} className="flex items-center gap-2 p-3 bg-muted/50 rounded min-h-[44px] text-sm">
                       <Smartphone className="h-4 w-4 text-muted-foreground" />
-                      {app}
+                      <span className="text-xs sm:text-sm">{app}</span>
                     </div>
                   ))}
                 </div>
@@ -1015,7 +1018,7 @@ const Settings = () => {
         
         <TabsContent value="profile" className="space-y-4">
           <Card className="border shadow-sm">
-            <CardHeader className="bg-gradient-to-r from-orange-50 to-red-100 dark:from-orange-900/20 dark:to-red-800/20 border-b">
+            <CardHeader className="bg-gradient-to-r from-orange-50 to-red-100 dark:from-orange-900/20 dark:to-red-800/20 border-b p-4 sm:p-6">
               <div className="flex items-center gap-2">
                 <div className="p-2 bg-orange-500 rounded-lg">
                   <User className="h-5 w-5 text-white" />
@@ -1028,7 +1031,7 @@ const Settings = () => {
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="space-y-6 pt-6">
+            <CardContent className="space-y-6 p-4 sm:p-6 pt-4 sm:pt-6">
               {/* Profile Picture Section */}
               <div className="flex flex-col items-center gap-4 pb-6 border-b">
                 <Label className="text-base font-medium">Profile Picture <span className="text-destructive">*</span></Label>
@@ -1042,7 +1045,7 @@ const Settings = () => {
                     </AvatarFallback>
                   </Avatar>
                   <div 
-                    className="absolute inset-0 bg-black/60 rounded-full opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity cursor-pointer"
+                    className="absolute inset-0 bg-black/60 rounded-full opacity-0 group-hover:opacity-100 flex items-center justify-center cursor-pointer min-h-[96px] min-w-[96px]"
                     onClick={() => avatarInputRef.current?.click()}
                   >
                     {isUploadingAvatar ? (
@@ -1065,6 +1068,7 @@ const Settings = () => {
                   size="sm"
                   onClick={() => avatarInputRef.current?.click()}
                   disabled={isUploadingAvatar}
+                  className="min-h-[44px] px-6"
                   data-testid="button-upload-avatar"
                 >
                   {isUploadingAvatar ? (
@@ -1087,7 +1091,7 @@ const Settings = () => {
                 )}
               </div>
 
-              <div className="grid gap-6 md:grid-cols-2">
+              <div className="grid gap-6 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="name" className="text-base font-medium">Full Name</Label>
                   <Input 
@@ -1112,15 +1116,15 @@ const Settings = () => {
                 </div>
               </div>
               
-              <div className="grid gap-6 md:grid-cols-2">
-                <div className="p-4 bg-muted/50 rounded-lg space-y-2">
+              <div className="grid gap-6 sm:grid-cols-2">
+                <div className="p-4 bg-muted/50 rounded-lg space-y-2 min-h-[80px]">
                   <Label className="text-base font-medium">Current Role</Label>
                   <div className="flex items-center gap-2 pt-1">
                     <RoleBadge role={currentUser?.role || "User"} size="md" />
                   </div>
                 </div>
                 
-                <div className="p-4 bg-muted/50 rounded-lg space-y-2">
+                <div className="p-4 bg-muted/50 rounded-lg space-y-2 min-h-[80px]">
                   <Label className="text-base font-medium">Classification</Label>
                   <div className="flex items-center gap-2 pt-1">
                     {currentUser && (
@@ -1138,6 +1142,7 @@ const Settings = () => {
                 <Button 
                   variant="outline" 
                   onClick={() => setShowChangePassword(true)}
+                  className="min-h-[44px] px-6"
                   data-testid="button-change-password"
                 >
                   <Lock className="mr-2 h-4 w-4" />
@@ -1145,6 +1150,7 @@ const Settings = () => {
                 </Button>
                 <Button 
                   onClick={handleSaveProfile}
+                  className="min-h-[44px] px-6"
                   data-testid="button-save-profile"
                 >
                   <Save className="mr-2 h-4 w-4" />
@@ -1157,7 +1163,7 @@ const Settings = () => {
 
         <TabsContent value="dataVisibility" className="space-y-4">
           <Card className="border shadow-sm">
-            <CardHeader className="bg-gradient-to-r from-indigo-50 to-indigo-100 dark:from-indigo-900/20 dark:to-indigo-800/20 border-b">
+            <CardHeader className="bg-gradient-to-r from-indigo-50 to-indigo-100 dark:from-indigo-900/20 dark:to-indigo-800/20 border-b p-4 sm:p-6">
               <div className="flex items-center gap-2">
                 <div className="p-2 bg-indigo-500 rounded-lg">
                   <Eye className="h-5 w-5 text-white" />
@@ -1170,8 +1176,8 @@ const Settings = () => {
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="space-y-4 pt-6">
-              <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
+            <CardContent className="space-y-4 p-4 sm:p-6 pt-4 sm:pt-6">
+              <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg min-h-[60px]">
                 <div className="flex items-center gap-3">
                   <MapPin className="h-5 w-5 text-muted-foreground" />
                   <div className="space-y-1">
@@ -1185,11 +1191,12 @@ const Settings = () => {
                   id="location-sharing" 
                   checked={!!dataVisibilitySettings?.options?.shareLocationWithTeam}
                   onCheckedChange={handleDataSharingToggle}
+                  className="scale-110"
                   data-testid="switch-location-sharing"
                 />
               </div>
               
-              <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
+              <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg min-h-[60px]">
                 <div className="flex items-center gap-3">
                   <Database className="h-5 w-5 text-muted-foreground" />
                   <div className="space-y-1">
@@ -1203,6 +1210,7 @@ const Settings = () => {
                   id="display-metrics" 
                   checked={!!dataVisibilitySettings?.options?.displayPersonalMetrics}
                   onCheckedChange={handleDisplayMetricsToggle}
+                  className="scale-110"
                   data-testid="switch-display-metrics"
                 />
               </div>
@@ -1215,6 +1223,7 @@ const Settings = () => {
                       description: "Your data visibility settings have been updated.",
                     });
                   }}
+                  className="min-h-[44px] px-6"
                   data-testid="button-save-privacy"
                 >
                   <Save className="mr-2 h-4 w-4" />
@@ -1228,9 +1237,9 @@ const Settings = () => {
       </Tabs>
 
       <Dialog open={showMFASetup} onOpenChange={setShowMFASetup}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+            <DialogTitle className="flex items-center gap-2 text-lg">
               <Shield className="h-5 w-5 text-primary" />
               Enable Two-Factor Authentication
             </DialogTitle>
@@ -1257,9 +1266,9 @@ const Settings = () => {
       </Dialog>
 
       <Dialog open={showChangePassword} onOpenChange={setShowChangePassword}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md mx-4 max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+            <DialogTitle className="flex items-center gap-2 text-lg">
               <Lock className="h-5 w-5 text-primary" />
               Change Password
             </DialogTitle>
@@ -1307,9 +1316,9 @@ const Settings = () => {
           </div>
           <DialogFooter className="gap-2 flex-row flex justify-end">
             <DialogClose asChild>
-              <Button variant="ghost" data-testid="button-cancel-password">Cancel</Button>
+              <Button variant="ghost" className="min-h-[44px] px-6" data-testid="button-cancel-password">Cancel</Button>
             </DialogClose>
-            <Button onClick={handleChangePassword} disabled={changing} data-testid="button-confirm-password">
+            <Button onClick={handleChangePassword} disabled={changing} className="min-h-[44px] px-6" data-testid="button-confirm-password">
               {changing ? (
                 <>
                   <RefreshCw className="mr-2 h-4 w-4 animate-spin" />

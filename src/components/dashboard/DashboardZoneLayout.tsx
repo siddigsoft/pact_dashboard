@@ -129,7 +129,7 @@ export const DashboardZoneLayout: React.FC<DashboardZoneLayoutProps> = ({
   const availableZones = zones.filter(z => hasRoleAccess(z.roles));
 
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="flex flex-col h-full">
       {/* Command Bar - Top most */}
       <div className="sticky top-0 z-50 border-b border-border/50">
         <DashboardCommandBar />
@@ -200,7 +200,7 @@ export const DashboardZoneLayout: React.FC<DashboardZoneLayoutProps> = ({
       </nav>
 
       {/* Main Content Area - Scrollable */}
-      <main className="flex-1 p-4 lg:p-6">
+      <main className="flex-1 p-4 lg:p-6 overflow-y-auto">
         {children}
       </main>
     </div>

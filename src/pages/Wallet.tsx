@@ -270,7 +270,7 @@ const WalletPage = () => {
         <div className="absolute bottom-20 right-20 w-96 h-96 bg-purple-500/20 rounded-full blur-[120px] animate-pulse" style={{ animationDelay: '1s' }}></div>
       </div>
 
-      <div className="relative space-y-6 p-6">
+      <div className="relative space-y-6 p-3 sm:p-4 md:p-6 lg:p-8">
         {/* Cyber Header */}
         <div className="relative">
           <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 via-purple-500/10 to-cyan-500/10 rounded-2xl blur-xl"></div>
@@ -297,7 +297,7 @@ const WalletPage = () => {
                 <button
                   type="button"
                   onClick={handleRefresh}
-                  className="px-3 py-1.5 text-sm rounded-md bg-gradient-to-r from-slate-900/50 to-blue-900/50 border border-blue-500/30 text-blue-300 hover:border-blue-400 hover:shadow-[0_0_15px_rgba(59,130,246,0.3)] transition-all backdrop-blur-xl inline-flex items-center focus:outline-none focus:ring-2 focus:ring-blue-400/70 focus:ring-offset-2 focus:ring-offset-slate-950"
+                  className="px-3 py-1.5 text-sm rounded-md bg-gradient-to-r from-slate-900/50 to-blue-900/50 border border-blue-500/30 text-blue-300 hover:border-blue-400 hover:shadow-[0_0_15px_rgba(59,130,246,0.3)] transition-all backdrop-blur-xl inline-flex items-center focus:outline-none focus:ring-2 focus:ring-blue-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px]"
                   data-testid="button-refresh-wallet"
                 >
                   <RefreshCw className="w-4 h-4 mr-2" />
@@ -306,7 +306,7 @@ const WalletPage = () => {
                 <button
                   type="button"
                   onClick={() => exportTransactionsToCSV(filteredTransactions, wallet)}
-                  className="px-3 py-1.5 text-sm rounded-md bg-gradient-to-r from-green-900/50 to-emerald-900/50 border border-green-500/30 text-green-300 hover:border-green-400 hover:shadow-[0_0_15px_rgba(34,197,94,0.3)] transition-all backdrop-blur-xl inline-flex items-center focus:outline-none focus:ring-2 focus:ring-green-400/70 focus:ring-offset-2 focus:ring-offset-slate-950"
+                  className="px-3 py-1.5 text-sm rounded-md bg-gradient-to-r from-green-900/50 to-emerald-900/50 border border-green-500/30 text-green-300 hover:border-green-400 hover:shadow-[0_0_15px_rgba(34,197,94,0.3)] transition-all backdrop-blur-xl inline-flex items-center focus:outline-none focus:ring-2 focus:ring-green-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px]"
                   data-testid="button-export-csv"
                 >
                   <Download className="w-4 h-4 mr-2" />
@@ -315,7 +315,7 @@ const WalletPage = () => {
                 <button
                   type="button"
                   onClick={() => exportTransactionsToPDF(filteredTransactions, wallet, DEFAULT_CURRENCY)}
-                  className="px-3 py-1.5 text-sm rounded-md bg-gradient-to-r from-red-900/50 to-pink-900/50 border border-red-500/30 text-red-300 hover:border-red-400 hover:shadow-[0_0_15px_rgba(239,68,68,0.3)] transition-all backdrop-blur-xl inline-flex items-center focus:outline-none focus:ring-2 focus:ring-red-400/70 focus:ring-offset-2 focus:ring-offset-slate-950"
+                  className="px-3 py-1.5 text-sm rounded-md bg-gradient-to-r from-red-900/50 to-pink-900/50 border border-red-500/30 text-red-300 hover:border-red-400 hover:shadow-[0_0_15px_rgba(239,68,68,0.3)] transition-all backdrop-blur-xl inline-flex items-center focus:outline-none focus:ring-2 focus:ring-red-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px]"
                   data-testid="button-export-pdf"
                 >
                   <Download className="w-4 h-4 mr-2" />
@@ -324,7 +324,7 @@ const WalletPage = () => {
                 <button
                   type="button"
                   onClick={handleClearAllFilters}
-                  className="px-3 py-1.5 text-sm rounded-md bg-gradient-to-r from-orange-900/50 to-amber-900/50 border border-orange-500/30 text-orange-300 hover:border-orange-400 hover:shadow-[0_0_15px_rgba(249,115,22,0.3)] transition-all backdrop-blur-xl inline-flex items-center focus:outline-none focus:ring-2 focus:ring-orange-400/70 focus:ring-offset-2 focus:ring-offset-slate-950"
+                  className="px-3 py-1.5 text-sm rounded-md bg-gradient-to-r from-orange-900/50 to-amber-900/50 border border-orange-500/30 text-orange-300 hover:border-orange-400 hover:shadow-[0_0_15px_rgba(249,115,22,0.3)] transition-all backdrop-blur-xl inline-flex items-center focus:outline-none focus:ring-2 focus:ring-orange-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px]"
                   data-testid="button-clear-filters"
                 >
                   <X className="w-4 h-4 mr-2" />
@@ -334,14 +334,14 @@ const WalletPage = () => {
               <DialogTrigger asChild>
                 <button
                   type="button"
-                  className="px-4 py-2 rounded-md bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white border-0 shadow-[0_0_20px_rgba(168,85,247,0.5)] transition-all inline-flex items-center focus:outline-none focus:ring-2 focus:ring-purple-400/70 focus:ring-offset-2 focus:ring-offset-slate-950"
+                  className="px-4 py-2 rounded-md bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white border-0 shadow-[0_0_20px_rgba(168,85,247,0.5)] transition-all inline-flex items-center focus:outline-none focus:ring-2 focus:ring-purple-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px]"
                   data-testid="button-request-withdrawal"
                 >
                   <TrendingDown className="w-4 h-4 mr-2" />
                   REQUEST WITHDRAWAL
                 </button>
               </DialogTrigger>
-              <DialogContent>
+              <DialogContent className="sm:max-w-md mx-4 max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>Request Withdrawal</DialogTitle>
                 </DialogHeader>
@@ -357,6 +357,7 @@ const WalletPage = () => {
                       value={withdrawalAmount}
                       onChange={(e) => setWithdrawalAmount(e.target.value)}
                       placeholder="Enter amount"
+                      className="h-11"
                       data-testid="input-withdrawal-amount"
                     />
                     <p className={`text-sm ${parseFloat(withdrawalAmount || '0') > currentBalance ? 'text-red-500' : 'text-muted-foreground'}`}>
@@ -378,6 +379,7 @@ const WalletPage = () => {
                       value={withdrawalReason}
                       onChange={(e) => setWithdrawalReason(e.target.value)}
                       placeholder="Transportation costs, accommodation, etc."
+                      className="min-h-[80px]"
                       data-testid="input-withdrawal-reason"
                     />
                   </div>
@@ -388,6 +390,7 @@ const WalletPage = () => {
                       value={withdrawalMethod}
                       onChange={(e) => setWithdrawalMethod(e.target.value)}
                       placeholder="Bank transfer, Mobile money, etc."
+                      className="h-11"
                       data-testid="input-withdrawal-method"
                     />
                   </div>
@@ -396,7 +399,7 @@ const WalletPage = () => {
                   <button
                     type="button"
                     onClick={() => setWithdrawalDialogOpen(false)}
-                    className="px-4 py-2 rounded-md bg-slate-800/50 hover:bg-slate-800/70 text-purple-200 border border-purple-500/20 transition focus:outline-none focus:ring-2 focus:ring-purple-400/70 focus:ring-offset-2 focus:ring-offset-slate-950"
+                    className="px-4 py-2 rounded-md bg-slate-800/50 hover:bg-slate-800/70 text-purple-200 border border-purple-500/20 transition focus:outline-none focus:ring-2 focus:ring-purple-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px]"
                     data-testid="button-cancel-withdrawal"
                   >
                     Cancel
@@ -405,7 +408,7 @@ const WalletPage = () => {
                     type="button"
                     onClick={handleWithdrawalRequest}
                     disabled={!withdrawalAmount || parseFloat(withdrawalAmount) <= 0 || parseFloat(withdrawalAmount) > currentBalance}
-                    className="px-4 py-2 rounded-md bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white border border-purple-400/50 shadow-[0_0_15px_rgba(168,85,247,0.3)] disabled:opacity-50 disabled:cursor-not-allowed transition focus:outline-none focus:ring-2 focus:ring-purple-400/70 focus:ring-offset-2 focus:ring-offset-slate-950"
+                    className="px-4 py-2 rounded-md bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white border border-purple-400/50 shadow-[0_0_15px_rgba(168,85,247,0.3)] disabled:opacity-50 disabled:cursor-not-allowed transition focus:outline-none focus:ring-2 focus:ring-purple-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px]"
                     data-testid="button-submit-withdrawal"
                   >
                     Submit Request
@@ -569,45 +572,59 @@ const WalletPage = () => {
         filters={searchFilters}
       />
 
-      {/* Main Content Tabs */}
-      <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="grid w-full grid-cols-5 bg-gradient-to-r from-slate-900/80 to-blue-900/80 border border-blue-500/30 backdrop-blur-xl p-1">
-          <TabsTrigger 
-            value="overview" 
-            data-testid="tab-overview"
-            className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-[0_0_15px_rgba(59,130,246,0.5)] text-blue-300"
-          >
-            OVERVIEW
-          </TabsTrigger>
-          <TabsTrigger 
-            value="transactions" 
-            data-testid="tab-transactions"
-            className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-[0_0_15px_rgba(59,130,246,0.5)] text-blue-300"
-          >
-            TRANSACTIONS
-          </TabsTrigger>
-          <TabsTrigger 
-            value="withdrawals" 
-            data-testid="tab-withdrawals"
-            className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-[0_0_15px_rgba(59,130,246,0.5)] text-blue-300"
-          >
-            WITHDRAWALS
-          </TabsTrigger>
-          <TabsTrigger 
-            value="earnings" 
-            data-testid="tab-earnings"
-            className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-[0_0_15px_rgba(59,130,246,0.5)] text-blue-300"
-          >
-            EARNINGS
-          </TabsTrigger>
-          <TabsTrigger 
-            value="activity" 
-            data-testid="tab-activity"
-            className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-[0_0_15px_rgba(59,130,246,0.5)] text-blue-300"
-          >
-            ACTIVITY
-          </TabsTrigger>
-        </TabsList>
+      {/* Main Content Section */}
+      <Card className="bg-gradient-to-br from-slate-900/90 to-blue-900/90 border border-blue-500/30 backdrop-blur-xl shadow-[0_0_30px_rgba(59,130,246,0.3)]">
+        <CardContent className="p-3 sm:p-4 md:p-6 lg:p-8">
+          {/* Main Content Tabs */}
+          <Tabs defaultValue="overview" className="w-full">
+            <div className="overflow-x-auto mb-6">
+              <TabsList className="inline-flex w-max bg-gradient-to-r from-slate-900/80 to-blue-900/80 border border-blue-500/30 backdrop-blur-xl p-1 min-h-[44px]">
+                <TabsTrigger 
+                  value="overview" 
+                  data-testid="tab-overview"
+                  className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-[0_0_15px_rgba(59,130,246,0.5)] text-blue-300 min-h-[44px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap"
+                >
+                  OVERVIEW
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="transactions" 
+                  data-testid="tab-transactions"
+                  className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-[0_0_15px_rgba(59,130,246,0.5)] text-blue-300 min-h-[44px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap"
+                >
+                  TRANSACTIONS
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="withdrawals" 
+                  data-testid="tab-withdrawals"
+                  className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-[0_0_15px_rgba(59,130,246,0.5)] text-blue-300 min-h-[44px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap"
+                >
+                  WITHDRAWALS
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="earnings" 
+                  data-testid="tab-earnings"
+                  className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-[0_0_15px_rgba(59,130,246,0.5)] text-blue-300 min-h-[44px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap"
+                >
+                  EARNINGS
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="activity" 
+                  data-testid="tab-activity"
+                  className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-600 data-[state=active]:to-purple-600 data-[state=active]:text-white data-[state=active]:shadow-[0_0_15px_rgba(59,130,246,0.5)] text-blue-300 min-h-[44px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap"
+                >
+                  ACTIVITY
+                </TabsTrigger>
+              </TabsList>
+            </div>
+
+            {/* Transaction Search moved inside the section */}
+            <div className="mb-6">
+              <TransactionSearch
+                onSearch={(filters) => setSearchFilters(filters)}
+                onClear={() => setSearchFilters({})}
+                filters={searchFilters}
+              />
+            </div>
 
         {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-4">
@@ -751,7 +768,7 @@ const WalletPage = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <Select value={transactionTypeFilter} onValueChange={setTransactionTypeFilter}>
-                    <SelectTrigger className="w-[160px]" data-testid="select-transaction-type">
+                    <SelectTrigger className="w-[160px] min-h-[44px]" data-testid="select-transaction-type">
                       <Filter className="w-4 h-4 mr-2" />
                       <SelectValue />
                     </SelectTrigger>
@@ -764,7 +781,7 @@ const WalletPage = () => {
                     </SelectContent>
                   </Select>
                   <Select value={dateRangeFilter} onValueChange={setDateRangeFilter}>
-                    <SelectTrigger className="w-[160px]" data-testid="select-date-range">
+                    <SelectTrigger className="w-[160px] min-h-[44px]" data-testid="select-date-range">
                       <Calendar className="w-4 h-4 mr-2" />
                       <SelectValue />
                     </SelectTrigger>
@@ -844,7 +861,7 @@ const WalletPage = () => {
                   <button
                     type="button"
                     onClick={() => exportWithdrawalsToCSV(displayWithdrawals, withdrawalStatusFilter)}
-                    className="px-3 py-1.5 text-sm rounded-md bg-gradient-to-r from-green-900/50 to-emerald-900/50 border border-green-500/30 text-green-300 hover:border-green-400 hover:shadow-[0_0_15px_rgba(34,197,94,0.3)] transition-all backdrop-blur-xl inline-flex items-center focus:outline-none focus:ring-2 focus:ring-green-400/70 focus:ring-offset-2 focus:ring-offset-slate-950"
+                    className="px-3 py-1.5 text-sm rounded-md bg-gradient-to-r from-green-900/50 to-emerald-900/50 border border-green-500/30 text-green-300 hover:border-green-400 hover:shadow-[0_0_15px_rgba(34,197,94,0.3)] transition-all backdrop-blur-xl inline-flex items-center focus:outline-none focus:ring-2 focus:ring-green-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px]"
                     data-testid="button-export-withdrawals-csv"
                   >
                     <Download className="w-4 h-4 mr-2" />
@@ -853,7 +870,7 @@ const WalletPage = () => {
                   <button
                     type="button"
                     onClick={() => exportWithdrawalsToPDF(displayWithdrawals, withdrawalStatusFilter)}
-                    className="px-3 py-1.5 text-sm rounded-md bg-gradient-to-r from-red-900/50 to-pink-900/50 border border-red-500/30 text-red-300 hover:border-red-400 hover:shadow-[0_0_15px_rgba(239,68,68,0.3)] transition-all backdrop-blur-xl inline-flex items-center focus:outline-none focus:ring-2 focus:ring-red-400/70 focus:ring-offset-2 focus:ring-offset-slate-950"
+                    className="px-3 py-1.5 text-sm rounded-md bg-gradient-to-r from-red-900/50 to-pink-900/50 border border-red-500/30 text-red-300 hover:border-red-400 hover:shadow-[0_0_15px_rgba(239,68,68,0.3)] transition-all backdrop-blur-xl inline-flex items-center focus:outline-none focus:ring-2 focus:ring-red-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px]"
                     data-testid="button-export-withdrawals-pdf"
                   >
                     <Download className="w-4 h-4 mr-2" />
@@ -863,19 +880,18 @@ const WalletPage = () => {
               </div>
             </CardHeader>
             <CardContent>
-              {/* Withdrawal Status Filter Tabs */}
               <Tabs value={withdrawalStatusFilter} onValueChange={(value: any) => setWithdrawalStatusFilter(value)} className="mb-4">
-                <TabsList className="grid w-full max-w-md grid-cols-4">
-                  <TabsTrigger value="all" data-testid="tab-withdrawals-all">
+                <TabsList className="grid w-full max-w-md grid-cols-2 sm:grid-cols-4">
+                  <TabsTrigger value="all" data-testid="tab-withdrawals-all" className="min-h-[44px] text-xs sm:text-sm">
                     All ({withdrawalRequests.length})
                   </TabsTrigger>
-                  <TabsTrigger value="pending" data-testid="tab-withdrawals-pending">
+                  <TabsTrigger value="pending" data-testid="tab-withdrawals-pending" className="min-h-[44px] text-xs sm:text-sm">
                     Pending ({pendingWithdrawals.length})
                   </TabsTrigger>
-                  <TabsTrigger value="approved" data-testid="tab-withdrawals-approved">
+                  <TabsTrigger value="approved" data-testid="tab-withdrawals-approved" className="min-h-[44px] text-xs sm:text-sm">
                     Approved ({completedWithdrawals.length})
                   </TabsTrigger>
-                  <TabsTrigger value="rejected" data-testid="tab-withdrawals-rejected">
+                  <TabsTrigger value="rejected" data-testid="tab-withdrawals-rejected" className="min-h-[44px] text-xs sm:text-sm">
                     Rejected ({rejectedWithdrawals.length})
                   </TabsTrigger>
                 </TabsList>
@@ -923,7 +939,7 @@ const WalletPage = () => {
                               <button
                                 type="button"
                                 onClick={() => cancelWithdrawalRequest(request.id)}
-                                className="px-3 py-1.5 text-sm rounded-md bg-red-900/20 hover:bg-red-900/30 text-red-300 border border-red-500/30 transition inline-flex items-center focus:outline-none focus:ring-2 focus:ring-red-400/70 focus:ring-offset-2 focus:ring-offset-slate-950"
+                                className="px-3 py-1.5 text-sm rounded-md bg-red-900/20 hover:bg-red-900/30 text-red-300 border border-red-500/30 transition inline-flex items-center focus:outline-none focus:ring-2 focus:ring-red-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px]"
                                 data-testid={`button-cancel-${request.id}`}
                               >
                                 <X className="w-3 h-3 mr-1" />
@@ -1085,6 +1101,8 @@ const WalletPage = () => {
           </div>
         </TabsContent>
       </Tabs>
+        </CardContent>
+      </Card>
     </div>
   );
 };

@@ -53,8 +53,6 @@ import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
 import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
-import { useUserProjects } from '@/hooks/useUserProjects';
-import { useMMP } from '@/context/mmp/MMPContext';
 import { useNavigate } from 'react-router-dom';
 import SiteVisitsOverview from '../SiteVisitsOverview';
 import UpcomingSiteVisitsCard from '../UpcomingSiteVisitsCard';
@@ -68,7 +66,6 @@ interface MMPFile {
   status?: string | null;
   workflow?: any;
   uploaded_at?: string | null;
-  project_id?: string | null;
   project?: { name?: string | null; project_code?: string | null } | null;
   project_name?: string | null;
   hub?: string | null;
@@ -87,8 +84,6 @@ interface Filters {
 export const FOMZone: React.FC = () => {
   const { currentUser } = useAppContext();
   const { siteVisits } = useSiteVisitContext();
-  const { mmpFiles } = useMMP();
-  const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('overview');
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
@@ -99,25 +94,6 @@ export const FOMZone: React.FC = () => {
     status: '',
     project: ''
   });
-
-  // Project-filtered site visits: filter by user's project membership (admin bypass)
-  const filteredSiteVisits = useMemo(() => {
-    if (isAdminOrSuperUser) return siteVisits;
-    
-    // Build set of MMP IDs that belong to user's projects
-    const userProjectMmpIds = new Set(
-      mmpFiles
-        .filter(mmp => mmp.projectId && userProjectIds.includes(mmp.projectId))
-        .map(mmp => mmp.id)
-    );
-    
-    // Filter site visits by MMP project membership (use mmpDetails.mmpId)
-    return siteVisits.filter(visit => {
-      const visitMmpId = visit.mmpDetails?.mmpId;
-      if (!visitMmpId) return false;
-      return userProjectMmpIds.has(visitMmpId);
-    });
-  }, [siteVisits, mmpFiles, userProjectIds, isAdminOrSuperUser]);
 
   // MMPs forwarded to this FOM
   const [forwardedMMPs, setForwardedMMPs] = useState<MMPFile[]>([]);
@@ -144,7 +120,7 @@ export const FOMZone: React.FC = () => {
         const { data, error } = await supabase
           .from('mmp_files')
           .select(`
-            id, name, mmp_id, status, workflow, uploaded_at, hub, month, project_name, project_id,
+            id, name, mmp_id, status, workflow, uploaded_at, hub, month,
             project:projects(name, project_code),
             permits
           `)
@@ -194,7 +170,7 @@ export const FOMZone: React.FC = () => {
         const { data, error } = await supabase
           .from('mmp_files')
           .select(`
-            id, name, mmp_id, status, workflow, uploaded_at, hub, month, project_name, project_id,
+            id, name, mmp_id, status, workflow, uploaded_at, hub, month, project_name,
             project:projects(name, project_code)
           `)
           .in('status', ['pending', 'submitted'])
@@ -263,47 +239,39 @@ export const FOMZone: React.FC = () => {
     return () => { cancelled = true; clearInterval(interval); };
   }, []);
 
-  // Project-filtered MMPs: filter by user's project membership (admin bypass)
-  const projectFilteredForwardedMMPs = useMemo(() => {
-    if (isAdminOrSuperUser) return forwardedMMPs;
-    return forwardedMMPs.filter(mmp => mmp.project_id && userProjectIds.includes(mmp.project_id));
-  }, [forwardedMMPs, userProjectIds, isAdminOrSuperUser]);
-
-  const projectFilteredAllMMPs = useMemo(() => {
-    if (isAdminOrSuperUser) return allMMPs;
-    return allMMPs.filter(mmp => mmp.project_id && userProjectIds.includes(mmp.project_id));
-  }, [allMMPs, userProjectIds, isAdminOrSuperUser]);
-
-  // Calculate metrics (using project-filtered data)
-  const awaitingPermitsCount = projectFilteredForwardedMMPs.filter(mmp => {
+  // Calculate metrics
+  const awaitingPermitsCount = forwardedMMPs.filter(mmp => {
     const workflow = mmp.workflow as any;
     return workflow?.currentStage === 'awaitingPermits' || 
            (!mmp.permits || !(mmp.permits as any).federal);
   }).length;
 
-  const permitsAttachedCount = projectFilteredForwardedMMPs.filter(mmp => {
+  const permitsAttachedCount = forwardedMMPs.filter(mmp => {
     return mmp.permits && (mmp.permits as any).federal;
   }).length;
 
-  const pendingApprovalCount = projectFilteredAllMMPs.filter(mmp => 
+  const pendingApprovalCount = allMMPs.filter(mmp => 
     mmp.status === 'pending' || mmp.status === 'submitted'
   ).length;
 
-  const approvedCount = projectFilteredAllMMPs.filter(mmp => mmp.status === 'approved').length;
+  const approvedCount = allMMPs.filter(mmp => mmp.status === 'approved').length;
 
-  // Site visit metrics (using project-filtered data)
-  const totalVisits = filteredSiteVisits.length;
-  const completedVisits = filteredSiteVisits.filter(v => v.status === 'completed').length;
-  const pendingVisits = filteredSiteVisits.filter(v => v.status === 'pending' || v.status === 'permitVerified').length;
-  const assignedVisits = filteredSiteVisits.filter(v => v.status === 'assigned' || v.status === 'inProgress').length;
+
+
+  
+  // Site visit metrics
+  const totalVisits = siteVisits.length;
+  const completedVisits = siteVisits.filter(v => v.status === 'completed').length;
+  const pendingVisits = siteVisits.filter(v => v.status === 'pending' || v.status === 'permitVerified').length;
+  const assignedVisits = siteVisits.filter(v => v.status === 'assigned' || v.status === 'inProgress').length;
   const completionRate = totalVisits > 0 ? Math.round((completedVisits / totalVisits) * 100) : 0;
 
-  // Permit attachment rate (using project-filtered data)
-  const permitAttachmentRate = projectFilteredForwardedMMPs.length > 0 
-    ? Math.round((permitsAttachedCount / projectFilteredForwardedMMPs.length) * 100) 
+  // Permit attachment rate
+  const permitAttachmentRate = forwardedMMPs.length > 0 
+    ? Math.round((permitsAttachedCount / forwardedMMPs.length) * 100) 
     : 0;
 
-  // Get filtered MMPs (applies UI filters on top of project filtering)
+  // Get filtered MMPs
   const getFilteredMMPs = (mmps: MMPFile[]) => {
     return mmps.filter(mmp => {
       if (filters.hub && mmp.hub !== filters.hub) return false;
@@ -316,19 +284,19 @@ export const FOMZone: React.FC = () => {
     });
   };
 
-  const filteredForwardedMMPs = useMemo(() => getFilteredMMPs(projectFilteredForwardedMMPs), [projectFilteredForwardedMMPs, filters]);
-  const filteredPendingMMPs = useMemo(() => getFilteredMMPs(projectFilteredAllMMPs.filter(m => m.status === 'pending' || m.status === 'submitted')), [projectFilteredAllMMPs, filters]);
+  const filteredForwardedMMPs = useMemo(() => getFilteredMMPs(forwardedMMPs), [forwardedMMPs, filters]);
+  const filteredPendingMMPs = useMemo(() => getFilteredMMPs(allMMPs.filter(m => m.status === 'pending' || m.status === 'submitted')), [allMMPs, filters]);
 
-  // Extract unique values for filters (from project-filtered data)
-  const hubs = useMemo(() => [...new Set([...projectFilteredForwardedMMPs, ...projectFilteredAllMMPs].map(m => m.hub).filter(Boolean))], [projectFilteredForwardedMMPs, projectFilteredAllMMPs]);
+  // Extract unique values for filters
+  const hubs = useMemo(() => [...new Set([...forwardedMMPs, ...allMMPs].map(m => m.hub).filter(Boolean))], [forwardedMMPs, allMMPs]);
   const projects = useMemo(() => {
     const projs = new Set<string>();
-    [...projectFilteredForwardedMMPs, ...projectFilteredAllMMPs].forEach(m => {
+    [...forwardedMMPs, ...allMMPs].forEach(m => {
       const name = m.project?.name || m.project_name;
       if (name) projs.add(name);
     });
     return Array.from(projs);
-  }, [projectFilteredForwardedMMPs, projectFilteredAllMMPs]);
+  }, [forwardedMMPs, allMMPs]);
 
   const clearAllFilters = () => {
     setFilters({
@@ -358,25 +326,24 @@ export const FOMZone: React.FC = () => {
   };
 
   return (
-    <div className="p-4 md:p-8 space-y-6">
+    <div className="min-h-screen bg-background p-3 sm:p-4 md:p-6 lg:p-8 space-y-4 sm:space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center">
-            <Shield className="h-6 w-6 text-white" />
+          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center flex-shrink-0">
+            <Shield className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
           </div>
-          <div>
-            <h1 className="text-3xl font-bold">Field Operations Manager</h1>
-            <p className="text-sm text-muted-foreground">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold truncate">Field Operations Manager</h1>
+            <p className="text-xs sm:text-sm text-muted-foreground">
               Permits, approvals, and field operations oversight
             </p>
           </div>
         </div>
-     
       </div>
 
       {/* Key Metrics Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
         <GradientStatCard
           title="Awaiting Permits"
           value={awaitingPermitsCount}
@@ -434,59 +401,59 @@ export const FOMZone: React.FC = () => {
 
       {/* Main Content Tabs */}
       <Card className="border-border/50 bg-gradient-to-r from-muted/30 via-background to-muted/30">
-        <CardContent className="p-2">
+        <CardContent className="p-2 sm:p-3">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-5 h-auto p-0.5 bg-transparent border border-border/30">
+            <TabsList className="grid w-full grid-cols-3 sm:grid-cols-5 h-auto p-0.5 bg-transparent border border-border/30 gap-1 mx-auto">
               <TabsTrigger 
                 value="overview" 
-                className="gap-1 px-2 py-1.5 data-[state=active]:bg-primary/10 data-[state=active]:border-primary/20 data-[state=active]:shadow-sm border border-transparent"
+                className="gap-1 px-2 py-2 sm:py-1.5 data-[state=active]:bg-primary/10 data-[state=active]:border-primary/20 data-[state=active]:shadow-sm border border-transparent min-h-[44px] sm:min-h-[40px]"
               >
-                <div className="w-5 h-5 rounded bg-primary/10 flex items-center justify-center">
-                  <FileText className="h-3 w-3 text-primary" />
+                <div className="w-5 h-5 rounded bg-primary/10 flex items-center justify-center flex-shrink-0">
+                  <FileText className="h-3 w-3 sm:h-2.5 sm:w-2.5 text-primary" />
                 </div>
-                <span className="text-[10px] font-semibold uppercase tracking-wide">Overview</span>
+                <span className="text-[10px] sm:text-[9px] font-semibold uppercase tracking-wide text-center">Overview</span>
               </TabsTrigger>
               <TabsTrigger 
                 value="permits" 
-                className="gap-1 px-2 py-1.5 data-[state=active]:bg-orange-500/10 data-[state=active]:border-orange-500/20 data-[state=active]:shadow-sm border border-transparent"
+                className="gap-1 px-2 py-2 sm:py-1.5 data-[state=active]:bg-orange-500/10 data-[state=active]:border-orange-500/20 data-[state=active]:shadow-sm border border-transparent min-h-[44px] sm:min-h-[40px]"
               >
-                <div className="w-5 h-5 rounded bg-orange-500/10 flex items-center justify-center">
-                  <Shield className="h-3 w-3 text-orange-600 dark:text-orange-400" />
+                <div className="w-5 h-5 rounded bg-orange-500/10 flex items-center justify-center flex-shrink-0">
+                  <Shield className="h-3 w-3 sm:h-2.5 sm:w-2.5 text-orange-600 dark:text-orange-400" />
                 </div>
-                <span className="text-[10px] font-semibold uppercase tracking-wide">Permits</span>
+                <span className="text-[10px] sm:text-[9px] font-semibold uppercase tracking-wide text-center">Permits</span>
               </TabsTrigger>
               <TabsTrigger 
                 value="approvals" 
-                className="gap-1 px-2 py-1.5 data-[state=active]:bg-blue-500/10 data-[state=active]:border-blue-500/20 data-[state=active]:shadow-sm border border-transparent"
+                className="gap-1 px-2 py-2 sm:py-1.5 data-[state=active]:bg-blue-500/10 data-[state=active]:border-blue-500/20 data-[state=active]:shadow-sm border border-transparent min-h-[44px] sm:min-h-[40px]"
               >
-                <div className="w-5 h-5 rounded bg-blue-500/10 flex items-center justify-center">
-                  <CheckCircle2 className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+                <div className="w-5 h-5 rounded bg-blue-500/10 flex items-center justify-center flex-shrink-0">
+                  <CheckCircle2 className="h-3 w-3 sm:h-2.5 sm:w-2.5 text-blue-600 dark:text-blue-400" />
                 </div>
-                <span className="text-[10px] font-semibold uppercase tracking-wide">Approvals</span>
+                <span className="text-[10px] sm:text-[9px] font-semibold uppercase tracking-wide text-center">Approvals</span>
               </TabsTrigger>
               <TabsTrigger 
                 value="site-visits" 
-                className="gap-1 px-2 py-1.5 data-[state=active]:bg-green-500/10 data-[state=active]:border-green-500/20 data-[state=active]:shadow-sm border border-transparent"
+                className="gap-1 px-2 py-2 sm:py-1.5 data-[state=active]:bg-green-500/10 data-[state=active]:border-green-500/20 data-[state=active]:shadow-sm border border-transparent min-h-[44px] sm:min-h-[40px]"
               >
-                <div className="w-5 h-5 rounded bg-green-500/10 flex items-center justify-center">
-                  <MapPin className="h-3 w-3 text-green-600 dark:text-green-400" />
+                <div className="w-5 h-5 rounded bg-green-500/10 flex items-center justify-center flex-shrink-0">
+                  <MapPin className="h-3 w-3 sm:h-2.5 sm:w-2.5 text-green-600 dark:text-green-400" />
                 </div>
-                <span className="text-[10px] font-semibold uppercase tracking-wide">Visits</span>
+                <span className="text-[10px] sm:text-[9px] font-semibold uppercase tracking-wide text-center">Visits</span>
               </TabsTrigger>
               <TabsTrigger 
                 value="finance" 
-                className="gap-1 px-2 py-1.5 data-[state=active]:bg-amber-500/10 data-[state=active]:border-amber-500/20 data-[state=active]:shadow-sm border border-transparent"
+                className="gap-1 px-2 py-2 sm:py-1.5 data-[state=active]:bg-amber-500/10 data-[state=active]:border-amber-500/20 data-[state=active]:shadow-sm border border-transparent min-h-[44px] sm:min-h-[40px]"
               >
-                <div className="w-5 h-5 rounded bg-amber-500/10 flex items-center justify-center">
-                  <DollarSign className="h-3 w-3 text-amber-600 dark:text-amber-400" />
+                <div className="w-5 h-5 rounded bg-amber-500/10 flex items-center justify-center flex-shrink-0">
+                  <DollarSign className="h-3 w-3 sm:h-2.5 sm:w-2.5 text-amber-600 dark:text-amber-400" />
                 </div>
-                <span className="text-[10px] font-semibold uppercase tracking-wide">Finance</span>
+                <span className="text-[10px] sm:text-[9px] font-semibold uppercase tracking-wide text-center">Finance</span>
               </TabsTrigger>
             </TabsList>
 
             {/* Overview Tab */}
             <TabsContent value="overview" className="mt-3 space-y-4">
-              <div className="grid md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {/* Forwarded MMPs Card */}
                 <Card>
                   <CardHeader>
@@ -613,7 +580,7 @@ export const FOMZone: React.FC = () => {
               </div>
 
               {/* Quick Stats */}
-              <div className="grid md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 <Card>
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm font-medium">Permit Attachment Progress</CardTitle>
@@ -688,10 +655,10 @@ export const FOMZone: React.FC = () => {
             <TabsContent value="permits" className="mt-3">
               <Card>
                 <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle>MMPs Awaiting Permits</CardTitle>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <CardTitle className="text-lg">MMPs Awaiting Permits</CardTitle>
                     {activeFilterCount > 0 && (
-                      <Button variant="ghost" size="sm" onClick={clearAllFilters} className="gap-2">
+                      <Button variant="ghost" size="sm" onClick={clearAllFilters} className="gap-2 min-h-[44px] px-4">
                         <X className="h-4 w-4" />
                         Clear Filters ({activeFilterCount})
                       </Button>
@@ -700,12 +667,12 @@ export const FOMZone: React.FC = () => {
                 </CardHeader>
                 <CardContent>
                   {/* Filters */}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
                     <Select
                       value={filters.hub}
                       onValueChange={(value) => setFilters(prev => ({ ...prev, hub: value === 'all' ? '' : value }))}
                     >
-                      <SelectTrigger className="h-8 text-xs">
+                      <SelectTrigger className="h-10">
                         <SelectValue placeholder="Hub" />
                       </SelectTrigger>
                       <SelectContent>
@@ -720,7 +687,7 @@ export const FOMZone: React.FC = () => {
                       value={filters.status}
                       onValueChange={(value) => setFilters(prev => ({ ...prev, status: value === 'all' ? '' : value }))}
                     >
-                      <SelectTrigger className="h-8 text-xs">
+                      <SelectTrigger className="h-10">
                         <SelectValue placeholder="Status" />
                       </SelectTrigger>
                       <SelectContent>
@@ -739,70 +706,139 @@ export const FOMZone: React.FC = () => {
                       No MMPs found.
                     </div>
                   ) : (
-                    <div className="border rounded-md">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>MMP Name</TableHead>
-                            <TableHead>Project</TableHead>
-                            <TableHead>Hub</TableHead>
-                            <TableHead>Forwarded</TableHead>
-                            <TableHead>Days Since</TableHead>
-                            <TableHead>Permit Status</TableHead>
-                            <TableHead className="text-right">Action</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {filteredForwardedMMPs.map((mmp) => {
-                            const hasPermitAttached = hasPermit(mmp);
-                            const daysSince = getDaysSinceForwarded(mmp);
-                            const workflow = mmp.workflow as any;
-                            const forwardedAt = workflow?.forwardedAt 
-                              ? format(new Date(workflow.forwardedAt), 'MMM dd, yyyy')
-                              : '-';
-                            
-                            return (
-                              <TableRow key={mmp.id} className="hover:bg-muted/50">
-                                <TableCell className="font-medium">
-                                  {mmp.name || mmp.mmp_id || mmp.id}
-                                </TableCell>
-                                <TableCell>
-                                  {mmp.project?.name || mmp.project_name || '-'}
-                                </TableCell>
-                                <TableCell>{mmp.hub || '-'}</TableCell>
-                                <TableCell className="text-xs">{forwardedAt}</TableCell>
-                                <TableCell>
-                                  {daysSince !== null ? (
-                                    <Badge variant={daysSince > 7 ? 'destructive' : 'secondary'}>
-                                      {daysSince} day{daysSince !== 1 ? 's' : ''}
-                                    </Badge>
-                                  ) : (
-                                    '-'
-                                  )}
-                                </TableCell>
-                                <TableCell>
+                    <>
+                      {/* Mobile Card View */}
+                      <div className="block md:hidden space-y-3">
+                        {filteredForwardedMMPs.map((mmp) => {
+                          const hasPermitAttached = hasPermit(mmp);
+                          const daysSince = getDaysSinceForwarded(mmp);
+                          const workflow = mmp.workflow as any;
+                          const forwardedAt = workflow?.forwardedAt 
+                            ? format(new Date(workflow.forwardedAt), 'MMM dd, yyyy')
+                            : '-';
+                          
+                          return (
+                            <Card key={mmp.id} className="p-4">
+                              <div className="space-y-3">
+                                <div className="flex items-start justify-between">
+                                  <div className="flex-1">
+                                    <h4 className="font-medium text-sm">
+                                      {mmp.name || mmp.mmp_id || mmp.id}
+                                    </h4>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                      {mmp.project?.name || mmp.project_name || '-'}
+                                    </p>
+                                  </div>
                                   {hasPermitAttached ? (
-                                    <Badge variant="default">Attached</Badge>
+                                    <Badge variant="default" className="text-xs">Attached</Badge>
                                   ) : (
-                                    <Badge variant="destructive">Awaiting</Badge>
+                                    <Badge variant="destructive" className="text-xs">Awaiting</Badge>
                                   )}
-                                </TableCell>
-                                <TableCell className="text-right">
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    className="h-7 px-2"
-                                    onClick={() => navigate(`/mmp/${mmp.id}${!hasPermitAttached ? '/verification' : ''}`)}
-                                  >
-                                    {hasPermitAttached ? 'View' : 'Attach Permit'}
-                                  </Button>
-                                </TableCell>
-                              </TableRow>
-                            );
-                          })}
-                        </TableBody>
-                      </Table>
-                    </div>
+                                </div>
+                                
+                                <div className="grid grid-cols-2 gap-3 text-xs">
+                                  <div>
+                                    <span className="text-muted-foreground">Hub:</span>
+                                    <div className="font-medium">{mmp.hub || '-'}</div>
+                                  </div>
+                                  <div>
+                                    <span className="text-muted-foreground">Forwarded:</span>
+                                    <div className="font-medium">{forwardedAt}</div>
+                                  </div>
+                                  <div>
+                                    <span className="text-muted-foreground">Days Since:</span>
+                                    <div className="font-medium">
+                                      {daysSince !== null ? (
+                                        <Badge variant={daysSince > 7 ? 'destructive' : 'secondary'} className="text-xs">
+                                          {daysSince} day{daysSince !== 1 ? 's' : ''}
+                                        </Badge>
+                                      ) : (
+                                        '-'
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="w-full min-h-[44px]"
+                                  onClick={() => navigate(`/mmp/${mmp.id}${!hasPermitAttached ? '/verification' : ''}`)}
+                                >
+                                  {hasPermitAttached ? 'View MMP' : 'Attach Permit'}
+                                </Button>
+                              </div>
+                            </Card>
+                          );
+                        })}
+                      </div>
+
+                      {/* Desktop Table View */}
+                      <div className="hidden md:block border rounded-md">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>MMP Name</TableHead>
+                              <TableHead>Project</TableHead>
+                              <TableHead>Hub</TableHead>
+                              <TableHead>Forwarded</TableHead>
+                              <TableHead>Days Since</TableHead>
+                              <TableHead>Permit Status</TableHead>
+                              <TableHead className="text-right">Action</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {filteredForwardedMMPs.map((mmp) => {
+                              const hasPermitAttached = hasPermit(mmp);
+                              const daysSince = getDaysSinceForwarded(mmp);
+                              const workflow = mmp.workflow as any;
+                              const forwardedAt = workflow?.forwardedAt 
+                                ? format(new Date(workflow.forwardedAt), 'MMM dd, yyyy')
+                                : '-';
+                              
+                              return (
+                                <TableRow key={mmp.id} className="hover:bg-muted/50">
+                                  <TableCell className="font-medium">
+                                    {mmp.name || mmp.mmp_id || mmp.id}
+                                  </TableCell>
+                                  <TableCell>
+                                    {mmp.project?.name || mmp.project_name || '-'}
+                                  </TableCell>
+                                  <TableCell>{mmp.hub || '-'}</TableCell>
+                                  <TableCell className="text-xs">{forwardedAt}</TableCell>
+                                  <TableCell>
+                                    {daysSince !== null ? (
+                                      <Badge variant={daysSince > 7 ? 'destructive' : 'secondary'}>
+                                        {daysSince} day{daysSince !== 1 ? 's' : ''}
+                                      </Badge>
+                                    ) : (
+                                      '-'
+                                    )}
+                                  </TableCell>
+                                  <TableCell>
+                                    {hasPermitAttached ? (
+                                      <Badge variant="default">Attached</Badge>
+                                    ) : (
+                                      <Badge variant="destructive">Awaiting</Badge>
+                                    )}
+                                  </TableCell>
+                                  <TableCell className="text-right">
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-7 px-2"
+                                      onClick={() => navigate(`/mmp/${mmp.id}${!hasPermitAttached ? '/verification' : ''}`)}
+                                    >
+                                      {hasPermitAttached ? 'View' : 'Attach Permit'}
+                                    </Button>
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </>
                   )}
                 </CardContent>
               </Card>
@@ -812,10 +848,10 @@ export const FOMZone: React.FC = () => {
             <TabsContent value="approvals" className="mt-3">
               <Card>
                 <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle>MMP Approval Queue</CardTitle>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <CardTitle className="text-lg">MMP Approval Queue</CardTitle>
                     {activeFilterCount > 0 && (
-                      <Button variant="ghost" size="sm" onClick={clearAllFilters} className="gap-2">
+                      <Button variant="ghost" size="sm" onClick={clearAllFilters} className="gap-2 min-h-[44px] px-4">
                         <X className="h-4 w-4" />
                         Clear Filters ({activeFilterCount})
                       </Button>
@@ -824,12 +860,12 @@ export const FOMZone: React.FC = () => {
                 </CardHeader>
                 <CardContent>
                   {/* Filters */}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
                     <Select
                       value={filters.hub}
                       onValueChange={(value) => setFilters(prev => ({ ...prev, hub: value === 'all' ? '' : value }))}
                     >
-                      <SelectTrigger className="h-8 text-xs">
+                      <SelectTrigger className="h-10">
                         <SelectValue placeholder="Hub" />
                       </SelectTrigger>
                       <SelectContent>
@@ -844,7 +880,7 @@ export const FOMZone: React.FC = () => {
                       value={filters.status}
                       onValueChange={(value) => setFilters(prev => ({ ...prev, status: value === 'all' ? '' : value }))}
                     >
-                      <SelectTrigger className="h-8 text-xs">
+                      <SelectTrigger className="h-10">
                         <SelectValue placeholder="Status" />
                       </SelectTrigger>
                       <SelectContent>
@@ -862,53 +898,103 @@ export const FOMZone: React.FC = () => {
                       No MMPs pending approval.
                     </div>
                   ) : (
-                    <div className="border rounded-md">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>MMP Name</TableHead>
-                            <TableHead>Project</TableHead>
-                            <TableHead>Hub</TableHead>
-                            <TableHead>Uploaded</TableHead>
-                            <TableHead>Status</TableHead>
-                            <TableHead className="text-right">Action</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {filteredPendingMMPs.map((mmp) => (
-                            <TableRow key={mmp.id} className="hover:bg-muted/50">
-                              <TableCell className="font-medium">
-                                {mmp.name || mmp.mmp_id || mmp.id}
-                              </TableCell>
-                              <TableCell>
-                                {mmp.project?.name || mmp.project_name || '-'}
-                              </TableCell>
-                              <TableCell>{mmp.hub || '-'}</TableCell>
-                              <TableCell>
-                                {mmp.uploaded_at 
-                                  ? format(new Date(mmp.uploaded_at), 'MMM dd, yyyy')
-                                  : '-'}
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant={mmp.status === 'approved' ? 'default' : 'secondary'}>
+                    <>
+                      {/* Mobile Card View */}
+                      <div className="block md:hidden space-y-3">
+                        {filteredPendingMMPs.map((mmp) => (
+                          <Card key={mmp.id} className="p-4">
+                            <div className="space-y-3">
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                  <h4 className="font-medium text-sm">
+                                    {mmp.name || mmp.mmp_id || mmp.id}
+                                  </h4>
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    {mmp.project?.name || mmp.project_name || '-'}
+                                  </p>
+                                </div>
+                                <Badge variant={mmp.status === 'approved' ? 'default' : 'secondary'} className="text-xs">
                                   {mmp.status || 'pending'}
                                 </Badge>
-                              </TableCell>
-                              <TableCell className="text-right">
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-7 px-2"
-                                  onClick={() => navigate(`/mmp/${mmp.id}`)}
-                                >
-                                  Review
-                                </Button>
-                              </TableCell>
+                              </div>
+                              
+                              <div className="grid grid-cols-2 gap-3 text-xs">
+                                <div>
+                                  <span className="text-muted-foreground">Hub:</span>
+                                  <div className="font-medium">{mmp.hub || '-'}</div>
+                                </div>
+                                <div>
+                                  <span className="text-muted-foreground">Uploaded:</span>
+                                  <div className="font-medium">
+                                    {mmp.uploaded_at 
+                                      ? format(new Date(mmp.uploaded_at), 'MMM dd, yyyy')
+                                      : '-'}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="w-full min-h-[44px]"
+                                onClick={() => navigate(`/mmp/${mmp.id}`)}
+                              >
+                                Review MMP
+                              </Button>
+                            </div>
+                          </Card>
+                        ))}
+                      </div>
+
+                      {/* Desktop Table View */}
+                      <div className="hidden md:block border rounded-md">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>MMP Name</TableHead>
+                              <TableHead>Project</TableHead>
+                              <TableHead>Hub</TableHead>
+                              <TableHead>Uploaded</TableHead>
+                              <TableHead>Status</TableHead>
+                              <TableHead className="text-right">Action</TableHead>
                             </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
+                          </TableHeader>
+                          <TableBody>
+                            {filteredPendingMMPs.map((mmp) => (
+                              <TableRow key={mmp.id} className="hover:bg-muted/50">
+                                <TableCell className="font-medium">
+                                  {mmp.name || mmp.mmp_id || mmp.id}
+                                </TableCell>
+                                <TableCell>
+                                  {mmp.project?.name || mmp.project_name || '-'}
+                                </TableCell>
+                                <TableCell>{mmp.hub || '-'}</TableCell>
+                                <TableCell>
+                                  {mmp.uploaded_at 
+                                    ? format(new Date(mmp.uploaded_at), 'MMM dd, yyyy')
+                                    : '-'}
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant={mmp.status === 'approved' ? 'default' : 'secondary'}>
+                                    {mmp.status || 'pending'}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-7 px-2"
+                                    onClick={() => navigate(`/mmp/${mmp.id}`)}
+                                  >
+                                    Review
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </>
                   )}
                 </CardContent>
               </Card>
@@ -923,20 +1009,24 @@ export const FOMZone: React.FC = () => {
             <TabsContent value="finance" className="mt-3">
               <Card>
                 <CardHeader>
-                  <CardTitle>Financial Overview</CardTitle>
+                  <CardTitle className="text-lg">Financial Overview</CardTitle>
                 </CardHeader>
                 <CardContent>
                   {financialLoading ? (
                     <div className="text-sm text-muted-foreground py-8 text-center">Loading financial data...</div>
                   ) : financialData ? (
                     <div className="space-y-6">
-                      <div className="grid md:grid-cols-3 gap-4">
+                      {/* Financial Metrics Cards */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                         <Card>
-                          <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium">Site Visit Costs</CardTitle>
+                          <CardHeader className="pb-3">
+                            <CardTitle className="text-base font-medium flex items-center gap-2">
+                              <DollarSign className="h-4 w-4 text-green-600" />
+                              Site Visit Costs
+                            </CardTitle>
                           </CardHeader>
                           <CardContent>
-                            <div className="text-2xl font-bold">
+                            <div className="text-2xl font-bold text-green-600">
                               ${financialData.totalVisitsCost.toLocaleString()}
                             </div>
                             <div className="text-xs text-muted-foreground mt-1">
@@ -946,11 +1036,14 @@ export const FOMZone: React.FC = () => {
                         </Card>
 
                         <Card>
-                          <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium">MMP Costs</CardTitle>
+                          <CardHeader className="pb-3">
+                            <CardTitle className="text-base font-medium flex items-center gap-2">
+                              <FileText className="h-4 w-4 text-blue-600" />
+                              MMP Costs
+                            </CardTitle>
                           </CardHeader>
                           <CardContent>
-                            <div className="text-2xl font-bold">
+                            <div className="text-2xl font-bold text-blue-600">
                               ${financialData.totalMMPCost.toLocaleString()}
                             </div>
                             <div className="text-xs text-muted-foreground mt-1">
@@ -960,11 +1053,14 @@ export const FOMZone: React.FC = () => {
                         </Card>
 
                         <Card>
-                          <CardHeader className="pb-2">
-                            <CardTitle className="text-sm font-medium">Total Operations</CardTitle>
+                          <CardHeader className="pb-3">
+                            <CardTitle className="text-base font-medium flex items-center gap-2">
+                              <Activity className="h-4 w-4 text-purple-600" />
+                              Total Operations
+                            </CardTitle>
                           </CardHeader>
                           <CardContent>
-                            <div className="text-2xl font-bold">
+                            <div className="text-2xl font-bold text-purple-600">
                               {financialData.totalVisits}
                             </div>
                             <div className="text-xs text-muted-foreground mt-1">
@@ -974,6 +1070,7 @@ export const FOMZone: React.FC = () => {
                         </Card>
                       </div>
 
+                      {/* Cost Summary Component */}
                       <SiteVisitCostSummary />
                     </div>
                   ) : (
