@@ -42,7 +42,7 @@ export const useLiveDashboard = () => {
           duration: 3000
         });
       }
-    } else if (table === 'site_visits') {
+    } else if (table === 'site_visits'|| table === 'mmp_site_entries') {
       refreshSiteVisits?.();
       toast({
         title: 'Site Visits Updated',

@@ -117,7 +117,6 @@ export const CostSubmissionProvider: React.FC<CostSubmissionProviderProps> = ({ 
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Debounced global invalidation for cost-related queries
   const invalidateDebounceRef = useRef<number | null>(null);
   const scheduleCostInvalidations = () => {
     if (invalidateDebounceRef.current) {
@@ -131,7 +130,6 @@ export const CostSubmissionProvider: React.FC<CostSubmissionProviderProps> = ({ 
     }, 500);
   };
 
-  // Realtime subscriptions for cost flows
   useEffect(() => {
     const channel = supabase
       .channel('cost_flow_changes')

@@ -21,7 +21,6 @@ interface MainLayoutContentProps {
 const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
   // Get app context - now this will be available since we've fixed the provider order
   const { currentUser } = useAppContext();
-  // Initialize realtime subscriptions globally across pages
   useLiveDashboard();
   const navigate = useNavigate();
   const location = useLocation();

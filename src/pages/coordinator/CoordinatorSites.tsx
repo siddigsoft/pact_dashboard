@@ -120,6 +120,36 @@ const SiteEditForm: React.FC<SiteEditFormProps> = ({ site, onSave, onCancel, hub
     const options = {
       survey_tool: SURVEY_TOOL_OPTIONS
     };
+
+  useEffect(() => {
+    let debounceId: number | null = null;
+    const scheduleReload = () => {
+      if (debounceId) window.clearTimeout(debounceId);
+      debounceId = window.setTimeout(() => {
+        loadSites();
+        debounceId = null;
+      }, 500);
+    };
+
+    const channel = supabase
+      .channel('coordinator_sites_live')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'mmp_site_entries' },
+        scheduleReload
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'site_visits' },
+        scheduleReload
+      )
+      .subscribe();
+
+    return () => {
+      try { supabase.removeChannel(channel); } catch {}
+      if (debounceId) window.clearTimeout(debounceId);
+    };
+  }, [currentUser?.id]);
     return !options[field].includes(value) && value !== '';
   };
 
