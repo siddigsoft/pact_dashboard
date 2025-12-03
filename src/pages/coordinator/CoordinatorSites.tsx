@@ -1984,7 +1984,7 @@ const CoordinatorSites: React.FC = () => {
       key={site.id} 
       className={`overflow-hidden transition-shadow ${
         showActions || isPreviewMode
-          ? 'hover:shadow-md cursor-pointer hover:bg-gray-50' 
+          ? 'hover:shadow-md cursor-pointer hover:bg-gray-50 active:scale-95' 
           : 'cursor-default'
       } ${
         selectedSites.has(site.id) ? 'ring-2 ring-blue-500 bg-blue-50' : ''
@@ -2001,37 +2001,84 @@ const CoordinatorSites: React.FC = () => {
         setPreviewDialogOpen(true);
       } : undefined}
     >
-      <CardContent className="pt-4">
-        <div className="flex items-start gap-3">
+      <CardContent className="p-4 sm:p-6">
+        <div className="flex items-start gap-3 sm:gap-4">
           {(activeTab === 'new' || activeTab === 'permits_attached') && !readOnlyMode && (
-            <div className="pt-1">
+            <div className="pt-1 flex-shrink-0">
               <input
                 type="checkbox"
                 checked={selectedSites.has(site.id)}
                 onChange={() => handleSiteSelection(site.id)}
-                className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                className="h-5 w-5 sm:h-4 sm:w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
               />
             </div>
           )}
-          <div className="flex-1">
-            <div className="flex items-center justify-between">
-              <div className="flex-1">
-                <h3 className="font-semibold text-lg">{site.site_name}</h3>
-                <p className="text-sm text-muted-foreground">Code: {site.site_code}</p>
-                <p className="text-sm text-muted-foreground">{site.state}, {site.locality}</p>
+          <div className="flex-1 min-w-0">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
+              <div className="flex-1 min-w-0 space-y-2">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <h3 className="font-semibold text-base sm:text-lg truncate pr-2">{site.site_name}</h3>
+                  <Badge variant={
+                    site.status === 'verified' ? 'default' :
+                    site.status === 'approved' ? 'success' :
+                    site.status === 'completed' ? 'success' :
+                    site.status === 'rejected' ? 'destructive' :
+                    'secondary'
+                  } className="self-start sm:self-center text-xs px-2 py-1 shrink-0">
+                    {site.status === 'assigned' ? 'New' : 
+                     site.status === 'inProgress' ? 'In Progress' : 
+                     site.status.charAt(0).toUpperCase() + site.status.slice(1)}
+                  </Badge>
+                </div>
+                <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 text-sm text-muted-foreground">
+                  <span className="truncate flex items-center gap-1">
+                    <MapPin className="h-3 w-3 flex-shrink-0" />
+                    {site.state}, {site.locality}
+                  </span>
+                  <span className="text-xs sm:text-sm">Code: {site.site_code}</span>
+                </div>
+                {site.visit_date && (
+                  <div className="flex items-center gap-1 text-xs sm:text-sm text-muted-foreground">
+                    <Calendar className="h-3 w-3" />
+                    Visit: {format(new Date(site.visit_date), 'MMM dd, yyyy')}
+                  </div>
+                )}
               </div>
-              <Badge variant={
-                site.status === 'verified' ? 'default' :
-                site.status === 'approved' ? 'success' :
-                site.status === 'completed' ? 'success' :
-                site.status === 'rejected' ? 'destructive' :
-                'secondary'
-              }>
-                {site.status === 'assigned' ? 'New' : 
-                 site.status === 'inProgress' ? 'In Progress' : 
-                 site.status.charAt(0).toUpperCase() + site.status.slice(1)}
-              </Badge>
             </div>
+            
+            {/* Mobile-friendly action buttons - larger touch targets */}
+            {showActions && (
+              <div className="flex gap-2 mt-4 sm:hidden">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedSiteForEdit(site);
+                    setEditDialogOpen(true);
+                  }}
+                  className="flex-1 text-xs py-3 h-auto min-h-[44px] active:scale-95"
+                >
+                  <Eye className="h-4 w-4 mr-2" />
+                  View Details
+                </Button>
+                {site.status?.toLowerCase() === 'permits_attached' && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedSiteId(site.id);
+                      setVerifyDialogOpen(true);
+                    }}
+                    className="flex-1 text-xs py-3 h-auto min-h-[44px] bg-green-50 border-green-200 text-green-700 hover:bg-green-100 active:scale-95"
+                  >
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                    Verify
+                  </Button>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </CardContent>
@@ -2387,30 +2434,30 @@ const CoordinatorSites: React.FC = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-6 gap-2">
-          <TabsTrigger value="new" className="flex items-center justify-center gap-2 rounded-md py-2 px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm">
-            <span>New Sites</span>
-            <Badge variant="secondary">{newSitesCount}</Badge>
+        <TabsList className="grid w-full grid-cols-3 sm:grid-cols-6 gap-1 h-auto p-1">
+          <TabsTrigger value="new" className="flex flex-col items-center justify-center gap-1 rounded-md py-2 px-1 sm:px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-xs sm:text-sm">
+            <span>New</span>
+            <Badge variant="secondary" className="text-xs">{newSitesCount}</Badge>
           </TabsTrigger>
-          <TabsTrigger value="permits_attached" className="flex items-center justify-center gap-2 rounded-md py-2 px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm">
-            <span>Permits Attached</span>
-            <Badge variant="secondary">{permitsAttachedCount}</Badge>
+          <TabsTrigger value="permits_attached" className="flex flex-col items-center justify-center gap-1 rounded-md py-2 px-1 sm:px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-xs sm:text-sm">
+            <span>Permits</span>
+            <Badge variant="secondary" className="text-xs">{permitsAttachedCount}</Badge>
           </TabsTrigger>
-          <TabsTrigger value="verified" className="flex items-center justify-center gap-2 rounded-md py-2 px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm">
+          <TabsTrigger value="verified" className="flex flex-col items-center justify-center gap-1 rounded-md py-2 px-1 sm:px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-xs sm:text-sm">
             <span>Verified</span>
-            <Badge variant="secondary">{verifiedSitesCount}</Badge>
+            <Badge variant="secondary" className="text-xs">{verifiedSitesCount}</Badge>
           </TabsTrigger>
-          <TabsTrigger value="approved" className="flex items-center justify-center gap-2 rounded-md py-2 px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm">
+          <TabsTrigger value="approved" className="flex flex-col items-center justify-center gap-1 rounded-md py-2 px-1 sm:px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-xs sm:text-sm">
             <span>Approved</span>
-            <Badge variant="secondary">{approvedSitesCount}</Badge>
+            <Badge variant="secondary" className="text-xs">{approvedSitesCount}</Badge>
           </TabsTrigger>
-          <TabsTrigger value="completed" className="flex items-center justify-center gap-2 rounded-md py-2 px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm">
+          <TabsTrigger value="completed" className="flex flex-col items-center justify-center gap-1 rounded-md py-2 px-1 sm:px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-xs sm:text-sm">
             <span>Completed</span>
-            <Badge variant="secondary">{completedSitesCount}</Badge>
+            <Badge variant="secondary" className="text-xs">{completedSitesCount}</Badge>
           </TabsTrigger>
-          <TabsTrigger value="rejected" className={`flex items-center justify-center gap-2 rounded-md py-2 px-3 ${rejectedSitesCount > 0 ? 'bg-red-200 hover:bg-red-300 data-[state=active]:bg-red-600 data-[state=active]:text-white data-[state=active]:shadow-sm' : 'bg-red-100 hover:bg-red-200 data-[state=active]:bg-red-100 data-[state=active]:text-red-800 data-[state=active]:shadow-sm'}`}>
+          <TabsTrigger value="rejected" className={`flex flex-col items-center justify-center gap-1 rounded-md py-2 px-1 sm:px-3 ${rejectedSitesCount > 0 ? 'bg-red-200 hover:bg-red-300 data-[state=active]:bg-red-600 data-[state=active]:text-white data-[state=active]:shadow-sm' : 'bg-red-100 hover:bg-red-200 data-[state=active]:bg-red-100 data-[state=active]:text-red-800 data-[state=active]:shadow-sm'} text-xs sm:text-sm`}>
             <span>Rejected</span>
-            <Badge variant="secondary">{rejectedSitesCount}</Badge>
+            <Badge variant="secondary" className="text-xs">{rejectedSitesCount}</Badge>
           </TabsTrigger>
         </TabsList>
 

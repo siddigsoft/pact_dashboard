@@ -220,8 +220,10 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
 
   return (
     <DropdownMenuContent 
-      className="w-[420px] p-0 notification-dropdown shadow-xl border border-border rounded-xl overflow-hidden" 
+      className="w-[420px] sm:w-[380px] md:w-[420px] p-0 notification-dropdown shadow-xl border border-border rounded-xl overflow-hidden max-w-[95vw] sm:max-w-[420px] z-[9999]" 
       align="end"
+      side="bottom"
+      sideOffset={8}
       ref={containerRef}
       data-testid="notification-dropdown"
     >
@@ -323,7 +325,7 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
       />
       
       {/* Notification list */}
-      <ScrollArea className="h-[380px] bg-background">
+      <ScrollArea className="h-[380px] sm:h-[400px] md:h-[380px] bg-background max-h-[60vh] sm:max-h-[70vh]">
         <div className="p-3 space-y-4">
           {viewMode === 'priority' ? (
             <>

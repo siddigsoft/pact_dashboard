@@ -27,6 +27,7 @@ const MMPPermitMessagePage = lazy(() => import('./pages/mmp/MMPPermitMessagePage
 const EditMMP = lazy(() => import('./pages/EditMMP'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 const ReviewAssignCoordinators = lazy(() => import('./pages/ReviewAssignCoordinators'));
+const CoordinatorDashboard = lazy(() => import('./pages/coordinator/CoordinatorDashboard'));
 const SitesForVerification = lazy(() => import('./pages/coordinator/SitesForVerification'));
 const CoordinatorSites = lazy(() => import('./pages/coordinator/CoordinatorSites'));
 const Calls = lazy(() => import('./pages/Calls'));
@@ -207,6 +208,7 @@ const AppRoutes = () => {
   {/* Coordinator: Sites for Verification */}
   <Route path="/coordinator/sites-for-verification" element={<SitesForVerification />} />
   <Route path="/coordinator/sites" element={<CoordinatorSites />} />
+  <Route path="/coordinator-dashboard" element={<CoordinatorDashboard />} />
   <Route path="/hub-operations" element={<HubOperations />} />
         <Route path="/tracker-preparation-plan" element={<TrackerPreparationPlan />} />
       </Route>
