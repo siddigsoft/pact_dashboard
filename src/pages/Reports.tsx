@@ -21,6 +21,10 @@ import {
   FileSpreadsheet,
   FileBarChart,
   FileDown,
+  LayoutDashboard,
+  TrendingUp,
+  Wallet,
+  Shield,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -49,9 +53,14 @@ import ReportChart, {
 } from "@/components/reports/ReportChart";
 import { useAuthorization } from "@/hooks/use-authorization";
 import { useUserProjects } from "@/hooks/useUserProjects";
+import { ExecutiveDashboard } from "@/components/reports/ExecutiveDashboard";
+import { FinancialReports } from "@/components/reports/FinancialReports";
+import { AnalyticsReports } from "@/components/reports/AnalyticsReports";
+import { ProjectCostReports } from "@/components/reports/ProjectCostReports";
+import { AuditingReports } from "@/components/reports/AuditingReports";
 
 const Reports: React.FC = () => {
-  const [activeTab, setActiveTab] = useState("financial");
+  const [activeTab, setActiveTab] = useState("executive");
   const { toast } = useToast();
   const navigate = useNavigate();
   const { checkPermission, hasAnyRole } = useAuthorization();
@@ -621,252 +630,64 @@ const Reports: React.FC = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-1 md:grid-cols-3 gap-2 p-1 h-auto">
-          <TabsTrigger value="financial" className="py-2 data-[state=active]:bg-blue-50">
-            <span className="flex items-center gap-2">
-              <BarChart4 className="h-4 w-4" />
-              <span>Financial Reports</span>
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-1 p-1 h-auto">
+          <TabsTrigger value="executive" className="py-2 text-xs data-[state=active]:bg-blue-50">
+            <span className="flex items-center gap-1">
+              <LayoutDashboard className="h-3 w-3" />
+              <span className="hidden sm:inline">Executive</span>
             </span>
           </TabsTrigger>
-          <TabsTrigger value="operational" className="py-2 data-[state=active]:bg-blue-50">
-            <span className="flex items-center gap-2">
-              <FileSpreadsheet className="h-4 w-4" />
-              <span>Operational Reports</span>
+          <TabsTrigger value="financial_new" className="py-2 text-xs data-[state=active]:bg-blue-50">
+            <span className="flex items-center gap-1">
+              <Wallet className="h-3 w-3" />
+              <span className="hidden sm:inline">Financial</span>
             </span>
           </TabsTrigger>
-          <TabsTrigger value="templates" className="py-2 data-[state=active]:bg-blue-50">
-            <span className="flex items-center gap-2">
-              <FileBarChart className="h-4 w-4" />
-              <span>Report Templates</span>
+          <TabsTrigger value="analytics" className="py-2 text-xs data-[state=active]:bg-blue-50">
+            <span className="flex items-center gap-1">
+              <TrendingUp className="h-3 w-3" />
+              <span className="hidden sm:inline">Analytics</span>
+            </span>
+          </TabsTrigger>
+          <TabsTrigger value="project_costs" className="py-2 text-xs data-[state=active]:bg-blue-50">
+            <span className="flex items-center gap-1">
+              <BarChart4 className="h-3 w-3" />
+              <span className="hidden sm:inline">Costs</span>
+            </span>
+          </TabsTrigger>
+          <TabsTrigger value="auditing" className="py-2 text-xs data-[state=active]:bg-blue-50">
+            <span className="flex items-center gap-1">
+              <Shield className="h-3 w-3" />
+              <span className="hidden sm:inline">Audit</span>
+            </span>
+          </TabsTrigger>
+          <TabsTrigger value="templates" className="py-2 text-xs data-[state=active]:bg-blue-50">
+            <span className="flex items-center gap-1">
+              <FileText className="h-3 w-3" />
+              <span className="hidden sm:inline">Templates</span>
             </span>
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="financial" className="mt-4">
-          <Card>
-            <CardHeader className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-              <div>
-                <CardTitle>Financial Reports</CardTitle>
-                <CardDescription>View and download financial reports and analyses</CardDescription>
-              </div>
-              <div className="flex gap-2 flex-wrap">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button className="flex items-center gap-2" disabled={exporting}>
-                      <FileText className="h-4 w-4" />
-                      Generate Excel
-                      <ChevronDown className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => handleGenerateReport("Financial Summary")}>Financial Summary</DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button className="flex items-center gap-2" disabled={exporting} variant="outline">
-                      <FileDown className="h-4 w-4" />
-                      Generate PDF
-                      <ChevronDown className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => handleGeneratePDFReport("Financial Summary")}>Financial Summary PDF</DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowChart(!showChart)}
-                  className="flex items-center gap-2"
-                >
-                  <BarChart4 className="h-4 w-4" />
-                  {showChart ? 'Hide' : 'Show'} Chart
-                </Button>
-                <div className="w-[250px]">
-                  <DatePickerWithRange dateRange={dateRange} onDateRangeChange={setDateRange} />
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {error && (
-                <div className="text-sm text-red-600 mb-3">{error}</div>
-              )}
-              {loading && (
-                <div className="text-sm text-muted-foreground mb-3">Loading data...</div>
-              )}
-              {showChart && filteredSiteVisits.length > 0 && (
-                <div className="mb-6">
-                  <h3 className="text-lg font-semibold mb-4">Site Visits Overview</h3>
-                  <ReportChart
-                    type="pie"
-                    data={getChartData("site_visits")}
-                    title="Site Visits by Status"
-                    onChartReady={(canvas) => setChartCanvas(canvas)}
-                  />
-                </div>
-              )}
-              <div className="rounded-md border overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Report Name</TableHead>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Format</TableHead>
-                      <TableHead>Size</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {recentReports
-                      .filter((report) => report.type === "Financial")
-                      .map((report) => (
-                        <TableRow key={report.id}>
-                          <TableCell className="font-medium">{report.name}</TableCell>
-                          <TableCell>{new Date(report.date).toLocaleDateString()}</TableCell>
-                          <TableCell>{report.format}</TableCell>
-                          <TableCell>{report.size}</TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex gap-1">
-                              <Button variant="ghost" size="sm" disabled={exporting} onClick={() => handleDownloadReport(report)}>
-                                <Download className="h-4 w-4 mr-1" /> Excel
-                              </Button>
-                              <Button variant="ghost" size="sm" disabled={exporting} onClick={() => handleDownloadPDFReport(report)}>
-                                <FileDown className="h-4 w-4 mr-1" /> PDF
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                  </TableBody>
-                  <TableCaption>A list of your recent financial reports.</TableCaption>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
+        {/* New Comprehensive Reporting Modules */}
+        <TabsContent value="executive" className="mt-4">
+          <ExecutiveDashboard />
         </TabsContent>
 
-        <TabsContent value="operational" className="mt-4">
-          <Card>
-            <CardHeader className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-              <div>
-                <CardTitle>Operational Reports</CardTitle>
-                <CardDescription>View and manage operational metrics and performance</CardDescription>
-              </div>
-              <div className="flex gap-2 flex-wrap">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button className="flex items-center gap-2" disabled={exporting}>
-                      <FileText className="h-4 w-4" />
-                      Generate Excel
-                      <ChevronDown className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => handleGenerateReport("Site Visit Report")}>Site Visit Report</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleGenerateReport("Team Performance Report")}>Team Performance Report</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleGenerateReport("MMP Implementation Report")}>MMP Implementation Report</DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button className="flex items-center gap-2" disabled={exporting} variant="outline">
-                      <FileDown className="h-4 w-4" />
-                      Generate PDF
-                      <ChevronDown className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => handleGeneratePDFReport("Site Visit Report")}>Site Visit Report PDF</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleGeneratePDFReport("Team Performance Report")}>Team Performance PDF</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleGeneratePDFReport("MMP Implementation Report")}>MMP Implementation PDF</DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowChart(!showChart)}
-                  className="flex items-center gap-2"
-                >
-                  <BarChart4 className="h-4 w-4" />
-                  {showChart ? 'Hide' : 'Show'} Chart
-                </Button>
-                <div className="w-[250px]">
-                  <DatePickerWithRange dateRange={dateRange} onDateRangeChange={setDateRange} />
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {error && (
-                <div className="text-sm text-red-600 mb-3">{error}</div>
-              )}
-              {loading && (
-                <div className="text-sm text-muted-foreground mb-3">Loading data...</div>
-              )}
-              {showChart && (filteredSiteVisits.length > 0 || filteredMmpFiles.length > 0) && (
-                <div className="mb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {filteredSiteVisits.length > 0 && (
-                    <div>
-                      <h3 className="text-lg font-semibold mb-4">Site Visits Performance</h3>
-                      <ReportChart
-                        type="bar"
-                        data={getChartData("site_visits")}
-                        title="Site Visits by Status"
-                        onChartReady={(canvas) => setChartCanvas(canvas)}
-                      />
-                    </div>
-                  )}
-                  {filteredMmpFiles.length > 0 && (
-                    <div>
-                      <h3 className="text-lg font-semibold mb-4">MMP Progress</h3>
-                      <ReportChart
-                        type="bar"
-                        data={getChartData("mmp_progress")}
-                        title="MMP Implementation Progress"
-                        onChartReady={(canvas) => setChartCanvas(canvas)}
-                      />
-                    </div>
-                  )}
-                </div>
-              )}
-              <div className="rounded-md border overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Report Name</TableHead>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Format</TableHead>
-                      <TableHead>Size</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {recentReports
-                      .filter((report) => report.type !== "Financial")
-                      .map((report) => (
-                        <TableRow key={report.id}>
-                          <TableCell className="font-medium">{report.name}</TableCell>
-                          <TableCell>{new Date(report.date).toLocaleDateString()}</TableCell>
-                          <TableCell>{report.format}</TableCell>
-                          <TableCell>{report.size}</TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex gap-1">
-                              <Button variant="ghost" size="sm" disabled={exporting} onClick={() => handleDownloadReport(report)}>
-                                <Download className="h-4 w-4 mr-1" /> Excel
-                              </Button>
-                              <Button variant="ghost" size="sm" disabled={exporting} onClick={() => handleDownloadPDFReport(report)}>
-                                <FileDown className="h-4 w-4 mr-1" /> PDF
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                  </TableBody>
-                  <TableCaption>A list of your recent operational reports.</TableCaption>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
+        <TabsContent value="financial_new" className="mt-4">
+          <FinancialReports />
+        </TabsContent>
+
+        <TabsContent value="analytics" className="mt-4">
+          <AnalyticsReports />
+        </TabsContent>
+
+        <TabsContent value="project_costs" className="mt-4">
+          <ProjectCostReports />
+        </TabsContent>
+
+        <TabsContent value="auditing" className="mt-4">
+          <AuditingReports />
         </TabsContent>
 
         <TabsContent value="templates" className="mt-4">
