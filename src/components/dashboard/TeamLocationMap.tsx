@@ -431,9 +431,17 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({
     (v.coordinates?.latitude && v.coordinates?.longitude)
   );
   
-  const onlineWithLocation = teamWithLocation.filter(u => getUserStatus(u).type === 'online');
-  const sameDayWithLocation = teamWithLocation.filter(u => getUserStatus(u).type === 'same-day');
-  const offlineWithLocation = teamWithLocation.filter(u => getUserStatus(u).type === 'offline');
+  // Check if user is online based on presence OR recent activity (5 minutes)
+  const isUserOnline = (user: User): boolean => {
+    // Check presence first (real-time status)
+    if (onlineUserIds.has(user.id)) return true;
+    // Fall back to activity-based status
+    return getUserStatus(user).type === 'online';
+  };
+  
+  const onlineWithLocation = teamWithLocation.filter(u => isUserOnline(u));
+  const sameDayWithLocation = teamWithLocation.filter(u => !isUserOnline(u) && getUserStatus(u).type === 'same-day');
+  const offlineWithLocation = teamWithLocation.filter(u => !isUserOnline(u) && getUserStatus(u).type === 'offline');
 
   const usersWithValidAccuracy = teamWithLocation.filter(
     u => u.location?.accuracy !== undefined && u.location?.accuracy !== null && !isNaN(u.location.accuracy)
