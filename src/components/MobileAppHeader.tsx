@@ -158,7 +158,7 @@ const MobileAppHeader = ({
         <SheetHeader className="px-4 py-3 border-b">
           <SheetTitle>Menu</SheetTitle>
         </SheetHeader>
-        <ScrollArea className="h-[calc(100vh-56px)]">
+        <ScrollArea className="h-[calc(100vh-56px-64px)] pb-safe">
           <div className="px-2 py-3 space-y-4">
             {menuGroups.map((group) => (
               <div key={group.id}>

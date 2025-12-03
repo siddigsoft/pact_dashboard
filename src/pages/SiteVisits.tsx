@@ -603,64 +603,77 @@ const SiteVisits = () => {
     }
     
     return (
-      <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 sm:gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
         {filteredVisits.map((visit) => (
           <Card 
             key={visit.id} 
-            className="overflow-hidden transition-all duration-300 hover:shadow-2xl hover:-translate-y-2 bg-gradient-to-b from-card to-background border-none group hover:border-primary/30 hover:border hover:scale-[1.02]"
+            className="overflow-hidden transition-all duration-200 hover:shadow-lg hover:-translate-y-1 active:scale-[0.98] bg-gradient-to-b from-card to-background border-none group hover:border-primary/30 hover:border hover:scale-[1.02]"
           >
-            <CardHeader className="pb-2">
-              <div className="flex justify-between items-start">
-                <CardTitle className="text-md font-semibold group-hover:text-primary transition-colors">
+            <CardHeader className="pb-3 sm:pb-2">
+              <div className="flex justify-between items-start gap-2">
+                <CardTitle className="text-base sm:text-md font-semibold group-hover:text-primary transition-colors leading-tight">
                   {visit.siteName}
                 </CardTitle>
-                <div className={`px-2 py-1 text-xs rounded-full transition-colors ${getStatusColor(visit.status, visit.dueDate)}`}>
+                <div className={`px-2 py-1 text-xs rounded-full transition-colors shrink-0 ${getStatusColor(visit.status, visit.dueDate)}`}>
                   {getStatusLabel(visit.status, visit.dueDate)}
                 </div>
               </div>
-              <CardDescription className="flex items-center mt-1">
-                <MapPin className="h-3 w-3 mr-1 text-primary/70" />
-                {visit.locality || 'N/A'}, {visit.state || 'N/A'}
+              <CardDescription className="flex items-center mt-1 text-sm">
+                <MapPin className="h-3 w-3 mr-1 text-primary/70 flex-shrink-0" />
+                <span className="truncate">{visit.locality || 'N/A'}, {visit.state || 'N/A'}</span>
               </CardDescription>
-              <div className="text-xs border-l-2 border-primary/30 pl-2 mt-2 py-2 bg-primary/5 rounded-r-sm group-hover:bg-primary/10 group-hover:border-primary transition-all">
-                <div className="font-medium text-muted-foreground">
-                  Status Details:
+              
+              {/* Mobile status details - more compact */}
+              <div className="text-xs border-l-2 border-primary/30 pl-2 mt-2 py-1.5 sm:py-2 bg-primary/5 rounded-r-sm group-hover:bg-primary/10 group-hover:border-primary transition-all">
+                <div className="font-medium text-muted-foreground text-xs">
+                  Status:
                 </div>
-                <div className="mt-1 text-xs text-muted-foreground">
+                <div className="mt-0.5 text-xs text-muted-foreground line-clamp-2">
                   {getStatusDescription(visit.status, visit.permitDetails)}
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="space-y-3 pb-2">
-              <div className="text-sm">
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="flex items-center text-muted-foreground">
-                    <Clock className="h-3 w-3 mr-1 text-primary/70" />
-                    Code: {visit.siteCode || 'N/A'}
+            
+            <CardContent className="space-y-3 sm:space-y-3 pb-2">
+              <div className="text-sm space-y-2">
+                {/* Mobile-optimized grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div className="flex items-center text-muted-foreground text-xs sm:text-sm">
+                    <Clock className="h-3 w-3 mr-1 text-primary/70 flex-shrink-0" />
+                    <span className="truncate">Code: {visit.siteCode || 'N/A'}</span>
                   </div>
-                  <div className="flex items-center text-muted-foreground">
-                    <CalendarIcon className="h-3 w-3 mr-1 text-primary/70" />
-                    Due: {(() => { const d = new Date(visit.dueDate || ''); return isValid(d) ? format(d, 'MMM d, yyyy') : 'N/A'; })()}
+                  <div className="flex items-center text-muted-foreground text-xs sm:text-sm">
+                    <CalendarIcon className="h-3 w-3 mr-1 text-primary/70 flex-shrink-0" />
+                    <span className="truncate">
+                      Due: {(() => { const d = new Date(visit.dueDate || ''); return isValid(d) ? format(d, 'MMM d, yyyy') : 'N/A'; })()}
+                    </span>
                   </div>
                 </div>
-                <div className="mt-2 text-muted-foreground line-clamp-1">
+                
+                {/* Activity - mobile friendly */}
+                <div className="text-muted-foreground text-xs sm:text-sm line-clamp-2 min-h-[2rem] sm:min-h-[1rem]">
                   {visit.activity || visit.mainActivity || 'No activity specified'}
                 </div>
-                <div className="grid grid-cols-2 gap-2 mt-2">
-                  <div className="text-xs text-muted-foreground">
-                    Hub: <span className="font-medium">{visit.hub || 'N/A'}</span>
+                
+                {/* Additional info - stacked on mobile */}
+                <div className="space-y-1">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-xs text-muted-foreground">
+                    <div className="truncate">
+                      Hub: <span className="font-medium">{visit.hub || 'N/A'}</span>
+                    </div>
+                    <div className="truncate">
+                      Visit Type: <span className="font-medium">{visit.visitTypeRaw || visit.visitType || 'N/A'}</span>
+                    </div>
                   </div>
-                  <div className="text-xs text-muted-foreground">
-                    Visit Type: <span className="font-medium">{visit.visitTypeRaw || visit.visitType || 'N/A'}</span>
+                  <div className="text-xs text-muted-foreground truncate">
+                    CP: <span className="font-medium">{visit.cpName || 'N/A'}</span>
                   </div>
-                </div>
-                <div className="mt-1 text-xs text-muted-foreground line-clamp-1">
-                  CP: <span className="font-medium">{visit.cpName || 'N/A'}</span>
                 </div>
               </div>
 
-              <div className="flex justify-between items-center pt-2 border-t border-border/50">
-                <div className={`text-xs px-2 py-0.5 rounded-full ${
+              {/* Priority and fees - mobile optimized */}
+              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 pt-2 border-t border-border/50">
+                <div className={`text-xs px-2 py-1 rounded-full self-start sm:self-center ${
                   visit.priority === 'high' 
                     ? 'bg-red-100 text-red-800 border border-red-200' 
                     : visit.priority === 'medium'
@@ -669,15 +682,17 @@ const SiteVisits = () => {
                 }`}>
                   {(visit.priority ? visit.priority.charAt(0).toUpperCase() + visit.priority.slice(1) : 'Unknown')} Priority
                 </div>
-                <div className="font-medium">
+                <div className="font-medium text-sm sm:text-base">
                   {visit.fees?.total ? `SDG ${Number(visit.fees.total).toLocaleString()}` : 'N/A'}
                 </div>
               </div>
             </CardContent>
-            <CardFooter className="bg-muted/20">
+            
+            {/* Mobile-optimized footer with larger touch target */}
+            <CardFooter className="bg-muted/20 p-3 sm:p-4">
               <Button 
                 asChild 
-                className="w-full shadow-sm hover:shadow-md transition-all" 
+                className="w-full shadow-sm hover:shadow-md transition-all min-h-[44px] text-sm sm:text-base py-3 active:scale-95" 
                 variant={
                   ['pending', 'approved'].includes(visit.status) ? 'outline' :
                   ['inProgress', 'assigned'].includes(visit.status) ? 'default' :
@@ -693,13 +708,13 @@ const SiteVisits = () => {
         ))}
         
         {filteredVisits.length === 0 && (
-          <div className="text-center py-20 col-span-full">
+          <div className="text-center py-12 sm:py-20 col-span-full">
             <div className="flex flex-col items-center justify-center space-y-4">
-              <div className="h-20 w-20 rounded-full bg-muted/50 backdrop-blur-sm flex items-center justify-center">
-                <NoVisitsIcon className="h-10 w-10 text-muted-foreground" />
+              <div className="h-16 w-16 sm:h-20 sm:w-20 rounded-full bg-muted/50 backdrop-blur-sm flex items-center justify-center">
+                <NoVisitsIcon className="h-8 w-8 sm:h-10 sm:w-10 text-muted-foreground" />
               </div>
-              <h3 className="text-lg font-medium">No site visits found</h3>
-              <p className="text-muted-foreground">
+              <h3 className="text-lg sm:text-xl font-medium">No site visits found</h3>
+              <p className="text-muted-foreground text-center px-4">
                 {searchTerm || statusFilter !== "all"
                   ? "Try adjusting your filters"
                   : "No site visits have been created yet"}

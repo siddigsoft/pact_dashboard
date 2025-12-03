@@ -5,9 +5,9 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, MapPin, Mail, Phone, Award, Calendar, Edit, UserCheck, UserX } from "lucide-react";
+import { ArrowLeft, MapPin, Mail, Phone, Award, Calendar, Edit, UserCheck, UserX, CreditCard, User as UserIcon } from "lucide-react";
 import { BankakAccountForm, BankakAccountFormValues } from "@/components/BankakAccountForm";
-import { User } from "@/types";
+import type { User } from "@/types/user";
 import { AppRole } from "@/types/roles";
 import { sudanStates, getLocalitiesByState, getHubNameForState } from "@/data/sudanStates";
 import { useToast } from "@/hooks/use-toast";
@@ -24,6 +24,7 @@ import { useClassification } from "@/context/classification/ClassificationContex
 import { useAuthorization } from "@/hooks/use-authorization";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle, Plus } from "lucide-react";
+import type { ClassificationHistory } from "@/types/classification";
 
 // Database role codes (camelCase) - matches Supabase app_role enum
 const availableRoles = [
@@ -65,7 +66,8 @@ const UserDetail: React.FC = () => {
   
   const canManageClassifications = canManageFinances();
   const userClassification = user ? getUserClassification(user.id) : undefined;
-  const classificationHistory = user ? getClassificationHistory(user.id) : [];
+  const [classificationHistory, setClassificationHistory] = useState<ClassificationHistory[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
   const [hubDisplayName, setHubDisplayName] = useState<string | null>(null);
 
   useEffect(() => {
@@ -108,6 +110,24 @@ const UserDetail: React.FC = () => {
     fetchHubName();
   }, [user?.hubId, user?.stateId]);
 
+  useEffect(() => {
+    const fetchClassificationHistory = async () => {
+      if (user?.id && canManageClassifications) {
+        setLoadingHistory(true);
+        try {
+          const history = await getClassificationHistory(user.id);
+          setClassificationHistory(history);
+        } catch (error) {
+          console.error('Error fetching classification history:', error);
+          setClassificationHistory([]);
+        } finally {
+          setLoadingHistory(false);
+        }
+      }
+    };
+    fetchClassificationHistory();
+  }, [user?.id, canManageClassifications, getClassificationHistory]);
+
   const handleBankAccountSubmit = (values: BankakAccountFormValues) => {
     if (!user) return;
 
@@ -118,7 +138,7 @@ const UserDetail: React.FC = () => {
         accountNumber: values.accountNumber,
         branch: values.branch
       }
-    } as any; // Type assertion for bankAccount
+    };
 
     if (updateUser) {
       updateUser(updatedUser)
@@ -328,49 +348,50 @@ const UserDetail: React.FC = () => {
   }
 
   return (
-    <div className="container max-w-5xl mx-auto p-4 space-y-8">
+    <div className="container max-w-5xl mx-auto p-3 sm:p-4 md:p-6 lg:p-8 space-y-4 sm:space-y-6 md:space-y-8">
       <div className="flex items-center justify-between mb-2">
         <Button 
           variant="outline" 
           onClick={() => navigate("/users")}
+          className="min-h-[44px] px-4"
         >
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to Users
         </Button>
         {isAdmin && !editMode && (
-          <Button onClick={handleEdit} variant="outline">
+          <Button onClick={handleEdit} variant="outline" className="min-h-[44px] px-4">
             <Edit className="h-4 w-4 mr-1" />
             Edit User
           </Button>
         )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 md:gap-8">
         {/* Profile Card */}
-        <Card className="md:col-span-1 shadow-lg border-0 bg-gradient-to-b from-primary/5 to-background">
-          <CardContent className="pt-8 pb-6 flex flex-col items-center">
-            <Avatar className="h-32 w-32 shadow-lg border-4 border-background -mt-20 mb-4">
+        <Card className="lg:col-span-1 shadow-lg border-0 bg-gradient-to-b from-primary/5 to-background">
+          <CardContent className="pt-4 sm:pt-6 md:pt-8 pb-3 sm:pb-4 md:pb-6 px-3 sm:px-4 md:px-6 flex flex-col items-center">
+            <Avatar className="h-20 w-20 sm:h-24 md:h-32 md:w-32 shadow-lg border-4 border-background -mt-12 sm:-mt-16 md:-mt-20 mb-3 sm:mb-4">
               {user.avatar ? (
                 <AvatarImage src={user.avatar} alt={user.name} />
               ) : (
-                <AvatarFallback className="bg-primary text-primary-foreground text-3xl">
+                <AvatarFallback className="bg-primary text-primary-foreground text-xl sm:text-2xl md:text-3xl">
                   {getInitials(user.name)}
                 </AvatarFallback>
               )}
             </Avatar>
-            <div className="text-center w-full">
+            <div className="text-center w-full px-2">
               {editMode ? (
                 <Input
-                  className="font-bold text-2xl text-center mb-1"
+                  className="font-bold text-lg sm:text-xl md:text-2xl text-center mb-2 h-12 min-h-[44px]"
                   value={editForm.name || ""}
                   onChange={e => handleEditChange("name", e.target.value)}
                 />
               ) : (
-                <h2 className="text-2xl font-bold">{user.name}</h2>
+                <h2 className="text-lg sm:text-xl md:text-2xl font-bold leading-tight">{user.name}</h2>
               )}
-              <div className="flex justify-center items-center gap-2 mt-1">
+              <div className="flex flex-wrap justify-center items-center gap-1 sm:gap-2 mt-2">
                 {editMode ? (
                   <select
-                    className="border rounded px-2 py-1 text-center"
+                    className="border rounded px-3 py-2 text-center min-h-[44px] text-sm w-full max-w-xs"
                     value={editForm.role || ""}
                     onChange={e => handleEditChange("role", e.target.value)}
                   >
@@ -380,84 +401,98 @@ const UserDetail: React.FC = () => {
                     ))}
                   </select>
                 ) : (
-                  <RoleBadge role={user.role} size="sm" />
+                  <>
+                    <RoleBadge role={user.role} size="sm" />
+                    <UserClassificationBadge userId={user.id} />
+                    <Badge className="min-h-[32px] px-2 sm:px-3 text-xs sm:text-sm" variant={user.isApproved ? "default" : "destructive"}>
+                      {user.isApproved ? "Active" : "Pending"}
+                    </Badge>
+                  </>
                 )}
-                <UserClassificationBadge userId={user.id} />
-                <Badge className="ml-2" variant={user.isApproved ? "default" : "destructive"}>
-                  {user.isApproved ? "Active" : "Pending Approval"}
-                </Badge>
               </div>
             </div>
-            <div className="w-full mt-6 space-y-3">
-              <div className="flex items-center gap-2">
-                <Mail className="h-4 w-4 text-muted-foreground" />
-                {editMode ? (
-                  <Input
-                    type="email"
-                    value={editForm.email || ""}
-                    onChange={e => handleEditChange("email", e.target.value)}
-                  />
-                ) : (
-                  <span>{user.email}</span>
-                )}
+            <div className="w-full mt-3 sm:mt-4 md:mt-6 space-y-2 sm:space-y-3">
+              <div className="flex items-center gap-3 min-h-[44px] p-2 sm:p-3 rounded-lg hover:bg-muted/50 transition-colors">
+                <Mail className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  {editMode ? (
+                    <Input
+                      type="email"
+                      value={editForm.email || ""}
+                      onChange={e => handleEditChange("email", e.target.value)}
+                      className="h-10 text-sm sm:text-base"
+                      placeholder="user@example.com"
+                    />
+                  ) : (
+                    <span className="text-sm sm:text-base break-all">{user.email}</span>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Phone className="h-4 w-4 text-muted-foreground" />
-                {editMode ? (
-                  <Input
-                    value={editForm.phone || ""}
-                    onChange={e => handleEditChange("phone", e.target.value)}
-                  />
-                ) : (
-                  <span>{user.phone || "N/A"}</span>
-                )}
+              <div className="flex items-center gap-3 min-h-[44px] p-2 sm:p-3 rounded-lg hover:bg-muted/50 transition-colors">
+                <Phone className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  {editMode ? (
+                    <Input
+                      value={editForm.phone || ""}
+                      onChange={e => handleEditChange("phone", e.target.value)}
+                      className="h-10 text-sm sm:text-base"
+                      placeholder="+249 xxx xxx xxx"
+                    />
+                  ) : (
+                    <span className="text-sm sm:text-base">{user.phone || "N/A"}</span>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <MapPin className="h-4 w-4 text-muted-foreground" />
-                {editMode ? (
-                  <Input
-                    value={editForm.stateId || ""}
-                    placeholder="State ID"
-                    onChange={e => handleEditChange("stateId", e.target.value)}
-                  />
-                ) : (
-                  <span>{getUserLocation(user)}</span>
-                )}
+              <div className="flex items-center gap-3 min-h-[44px] p-2 sm:p-3 rounded-lg hover:bg-muted/50 transition-colors">
+                <MapPin className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  {editMode ? (
+                    <Input
+                      value={editForm.stateId || ""}
+                      placeholder="State ID"
+                      onChange={e => handleEditChange("stateId", e.target.value)}
+                      className="h-10 text-sm sm:text-base"
+                    />
+                  ) : (
+                    <span className="text-sm sm:text-base break-words">{getUserLocation(user)}</span>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Award className="h-4 w-4 text-muted-foreground" />
-                <span>Rating: {user.performance?.rating ?? "-"}/5</span>
+              <div className="flex items-center gap-3 min-h-[44px] p-2 sm:p-3 rounded-lg hover:bg-muted/50 transition-colors">
+                <Award className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                <span className="text-sm sm:text-base">Rating: {user.performance?.rating ?? "-"}/5</span>
               </div>
-              <div className="flex items-center gap-2">
-                <Calendar className="h-4 w-4 text-muted-foreground" />
-                <span>
+              <div className="flex items-center gap-3 min-h-[44px] p-2 sm:p-3 rounded-lg hover:bg-muted/50 transition-colors">
+                <Calendar className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                <span className="text-sm sm:text-base break-words">
                   Last Active: {user.lastActive ? new Date(user.lastActive).toLocaleString() : "N/A"}
                 </span>
               </div>
             </div>
             {/* Action Buttons */}
             {!user.isApproved && isAdmin && !editMode && (
-              <div className="w-full flex justify-center gap-2 mt-6">
-                <Button onClick={handleApprove} disabled={isApproving} variant="default">
-                  <UserCheck className="h-4 w-4 mr-1" />
-                  Approve
+              <div className="w-full flex flex-col gap-2 mt-4 sm:mt-6">
+                <Button onClick={handleApprove} disabled={isApproving} variant="default" className="min-h-[44px] px-6 w-full">
+                  <UserCheck className="h-4 w-4 mr-2" />
+                  Approve User
                 </Button>
-                <Button onClick={handleReject} disabled={isRejecting} variant="destructive">
-                  <UserX className="h-4 w-4 mr-1" />
-                  Reject
+                <Button onClick={handleReject} disabled={isRejecting} variant="destructive" className="min-h-[44px] px-6 w-full">
+                  <UserX className="h-4 w-4 mr-2" />
+                  Reject User
                 </Button>
               </div>
             )}
             {editMode && (
-              <div className="w-full flex justify-center gap-2 mt-6">
-                <Button 
-                  onClick={handleEditSave} 
-                  disabled={isSaving} 
+              <div className="w-full flex flex-col gap-2 mt-4 sm:mt-6">
+                <Button
+                  onClick={handleEditSave}
+                  disabled={isSaving}
                   variant="default"
+                  className="min-h-[44px] px-6 w-full"
                 >
-                  {isSaving ? "Saving..." : "Save"}
+                  {isSaving ? "Saving..." : "Save Changes"}
                 </Button>
-                <Button onClick={handleEditCancel} variant="outline">
+                <Button onClick={handleEditCancel} variant="outline" className="min-h-[44px] px-6 w-full">
                   Cancel
                 </Button>
               </div>
@@ -466,52 +501,69 @@ const UserDetail: React.FC = () => {
         </Card>
 
         {/* Details Tabs */}
-        <Card className="md:col-span-2 shadow-lg border-0">
-          <CardHeader>
-            <CardTitle className="text-xl">User Details</CardTitle>
+        <Card className="lg:col-span-2 shadow-lg border-0">
+          <CardHeader className="p-3 sm:p-4 md:p-6">
+            <CardTitle className="text-base sm:text-lg md:text-xl">User Details</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-3 sm:p-4 md:p-6">
             <Tabs defaultValue="details" className="w-full">
-              <TabsList className="mb-4 w-full flex">
-                <TabsTrigger value="details" className="flex-1">Details</TabsTrigger>
-                <TabsTrigger value="performance" className="flex-1">Performance</TabsTrigger>
-                <TabsTrigger value="bankak" className="flex-1">Bank Account</TabsTrigger>
-                <TabsTrigger value="location" className="flex-1">Location</TabsTrigger>
+              <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-1 h-auto p-1 mb-3 sm:mb-4">
+                <TabsTrigger value="details" className="flex items-center gap-1 p-2 sm:p-3 min-h-[44px] text-xs sm:text-sm">
+                  <UserIcon className="h-4 w-4" />
+                  <span className="hidden sm:inline">Details</span>
+                </TabsTrigger>
+                <TabsTrigger value="performance" className="flex items-center gap-1 p-2 sm:p-3 min-h-[44px] text-xs sm:text-sm">
+                  <Award className="h-4 w-4" />
+                  <span className="hidden sm:inline">Performance</span>
+                </TabsTrigger>
+                <TabsTrigger value="bankak" className="flex items-center gap-1 p-2 sm:p-3 min-h-[44px] text-xs sm:text-sm">
+                  <CreditCard className="h-4 w-4" />
+                  <span className="hidden sm:inline">Bank</span>
+                </TabsTrigger>
+                <TabsTrigger value="location" className="flex items-center gap-1 p-2 sm:p-3 min-h-[44px] text-xs sm:text-sm">
+                  <MapPin className="h-4 w-4" />
+                  <span className="hidden sm:inline">Location</span>
+                </TabsTrigger>
                 {canManageClassifications && (
-                  <TabsTrigger value="classification" className="flex-1">Classification</TabsTrigger>
+                  <TabsTrigger value="classification" className="flex items-center gap-1 p-2 sm:p-3 min-h-[44px] text-xs sm:text-sm">
+                    <Award className="h-4 w-4" />
+                    <span className="hidden sm:inline">Class</span>
+                  </TabsTrigger>
                 )}
               </TabsList>
               
-              <TabsContent value="details" className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div>
-                    <h3 className="font-medium text-sm text-muted-foreground">Full Name</h3>
+              <TabsContent value="details" className="space-y-3 sm:space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 md:gap-6">
+                  <div className="space-y-1">
+                    <h3 className="font-medium text-xs sm:text-sm text-muted-foreground">Full Name</h3>
                     {editMode ? (
                       <Input
                         value={editForm.name || ""}
                         onChange={e => handleEditChange("name", e.target.value)}
+                        className="h-11 min-h-[44px] text-sm sm:text-base"
                       />
                     ) : (
-                      <p className="font-semibold">{user.name}</p>
+                      <p className="font-semibold text-sm sm:text-base md:text-base leading-relaxed">{user.name}</p>
                     )}
                   </div>
-                  <div>
-                    <h3 className="font-medium text-sm text-muted-foreground">Email</h3>
+                  <div className="space-y-1">
+                    <h3 className="font-medium text-xs sm:text-sm text-muted-foreground">Email</h3>
                     {editMode ? (
                       <Input
                         type="email"
                         value={editForm.email || ""}
                         onChange={e => handleEditChange("email", e.target.value)}
+                        className="h-11 min-h-[44px] text-sm sm:text-base"
                       />
                     ) : (
-                      <p className="font-semibold">{user.email}</p>
+                      <p className="font-semibold text-sm sm:text-base md:text-base break-all leading-relaxed">{user.email}</p>
                     )}
                   </div>
-                  <div>
-                    <h3 className="font-medium text-sm text-muted-foreground">Role</h3>
+                  <div className="space-y-1">
+                    <h3 className="font-medium text-xs sm:text-sm text-muted-foreground">Role</h3>
                     {editMode ? (
                       <select
-                        className="border rounded px-2 py-1 w-full"
+                        className="border rounded px-3 py-2 w-full h-11 min-h-[44px] text-sm sm:text-base"
                         value={editForm.role || ""}
                         onChange={e => handleEditChange("role", e.target.value)}
                       >
@@ -521,113 +573,121 @@ const UserDetail: React.FC = () => {
                         ))}
                       </select>
                     ) : (
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 items-center pt-1">
                         <RoleBadge role={user.role} size="sm" />
                         <UserClassificationBadge userId={user.id} />
                       </div>
                     )}
                   </div>
-                  <div>
-                    <h3 className="font-medium text-sm text-muted-foreground">Employee ID</h3>
+                  <div className="space-y-1">
+                    <h3 className="font-medium text-xs sm:text-sm text-muted-foreground">Employee ID</h3>
                     {editMode ? (
                       <Input
                         value={editForm.employeeId || ""}
                         onChange={e => handleEditChange("employeeId", e.target.value)}
+                        className="h-11 min-h-[44px] text-sm sm:text-base"
                       />
                     ) : (
-                      <p className="font-semibold">{user.employeeId || 'N/A'}</p>
+                      <p className="font-semibold text-sm sm:text-base md:text-base leading-relaxed">{user.employeeId || 'N/A'}</p>
                     )}
                   </div>
-                  <div>
-                    <h3 className="font-medium text-sm text-muted-foreground">Phone</h3>
+                  <div className="space-y-1">
+                    <h3 className="font-medium text-xs sm:text-sm text-muted-foreground">Phone</h3>
                     {editMode ? (
                       <Input
                         value={editForm.phone || ""}
                         onChange={e => handleEditChange("phone", e.target.value)}
+                        className="h-11 min-h-[44px] text-sm sm:text-base"
                       />
                     ) : (
-                      <p className="font-semibold">{user.phone || 'N/A'}</p>
+                      <p className="font-semibold text-sm sm:text-base md:text-base leading-relaxed">{user.phone || 'N/A'}</p>
                     )}
                   </div>
-                  <div>
-                    <h3 className="font-medium text-sm text-muted-foreground">Status</h3>
-                    <Badge variant={user.isApproved ? "default" : "destructive"}>
+                  <div className="space-y-1">
+                    <h3 className="font-medium text-xs sm:text-sm text-muted-foreground">Status</h3>
+                    <Badge variant={user.isApproved ? "default" : "destructive"} className="mt-1 min-h-[32px] px-3 text-xs sm:text-sm">
                       {user.isApproved ? 'Active' : 'Pending Approval'}
                     </Badge>
                   </div>
-                  <div>
-                    <h3 className="font-medium text-sm text-muted-foreground">Hub</h3>
-                    <p className="font-semibold">{hubDisplayName || user.hubId || 'Not set'}</p>
+                  <div className="space-y-1">
+                    <h3 className="font-medium text-xs sm:text-sm text-muted-foreground">Hub</h3>
+                    <p className="font-semibold text-sm sm:text-base md:text-base leading-relaxed break-words">{hubDisplayName || user.hubId || 'Not set'}</p>
                   </div>
-                  <div>
-                    <h3 className="font-medium text-sm text-muted-foreground">State</h3>
-                    <p className="font-semibold">{user.stateId ? (sudanStates.find(s => s.id === user.stateId)?.name || user.stateId) : 'Not set'}</p>
+                  <div className="space-y-1">
+                    <h3 className="font-medium text-xs sm:text-sm text-muted-foreground">State</h3>
+                    <p className="font-semibold text-sm sm:text-base md:text-base leading-relaxed break-words">{user.stateId ? (sudanStates.find(s => s.id === user.stateId)?.name || user.stateId) : 'Not set'}</p>
                   </div>
-                  <div>
-                    <h3 className="font-medium text-sm text-muted-foreground">Locality</h3>
-                    <p className="font-semibold">{user.stateId && user.localityId ? (getLocalitiesByState(user.stateId).find(l => l.id === user.localityId)?.name || user.localityId) : 'Not set'}</p>
+                  <div className="space-y-1 sm:col-span-2">
+                    <h3 className="font-medium text-xs sm:text-sm text-muted-foreground">Locality</h3>
+                    <p className="font-semibold text-sm sm:text-base md:text-base leading-relaxed break-words">{user.stateId && user.localityId ? (getLocalitiesByState(user.stateId).find(l => l.id === user.localityId)?.name || user.localityId) : 'Not set'}</p>
                   </div>
                 </div>
               </TabsContent>
               
               <TabsContent value="performance">
                 {user.performance ? (
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="bg-muted rounded-lg p-4">
-                        <h3 className="font-medium text-sm mb-1">Rating</h3>
-                        <p className="text-2xl font-bold">{user.performance.rating}/5</p>
+                  <div className="space-y-3 sm:space-y-4">
+                    <div className="grid grid-cols-2 gap-2 sm:gap-3 md:gap-4">
+                      <div className="bg-muted rounded-lg p-3 sm:p-4 min-h-[80px] flex flex-col justify-center">
+                        <h3 className="font-medium text-xs sm:text-sm mb-1">Rating</h3>
+                        <p className="text-lg sm:text-xl md:text-2xl font-bold">{user.performance.rating}/5</p>
                       </div>
-                      <div className="bg-muted rounded-lg p-4">
-                        <h3 className="font-medium text-sm mb-1">Completed Tasks</h3>
-                        <p className="text-2xl font-bold">{user.performance.totalCompletedTasks}</p>
+                      <div className="bg-muted rounded-lg p-3 sm:p-4 min-h-[80px] flex flex-col justify-center">
+                        <h3 className="font-medium text-xs sm:text-sm mb-1">Completed Tasks</h3>
+                        <p className="text-lg sm:text-xl md:text-2xl font-bold">{user.performance.totalCompletedTasks}</p>
                       </div>
-                      <div className="bg-muted rounded-lg p-4">
-                        <h3 className="font-medium text-sm mb-1">On-Time Completion</h3>
-                        <p className="text-2xl font-bold">{user.performance.onTimeCompletion}%</p>
+                      <div className="bg-muted rounded-lg p-3 sm:p-4 min-h-[80px] flex flex-col justify-center">
+                        <h3 className="font-medium text-xs sm:text-sm mb-1">On-Time Completion</h3>
+                        <p className="text-lg sm:text-xl md:text-2xl font-bold">{user.performance.onTimeCompletion}%</p>
                       </div>
-                      <div className="bg-muted rounded-lg p-4">
-                        <h3 className="font-medium text-sm mb-1">Current Workload</h3>
-                        <p className="text-2xl font-bold">{user.performance.currentWorkload || 0}</p>
+                      <div className="bg-muted rounded-lg p-3 sm:p-4 min-h-[80px] flex flex-col justify-center">
+                        <h3 className="font-medium text-xs sm:text-sm mb-1">Current Workload</h3>
+                        <p className="text-lg sm:text-xl md:text-2xl font-bold">{user.performance.currentWorkload || 0}</p>
                       </div>
                     </div>
                   </div>
                 ) : (
-                  <p className="text-muted-foreground">No performance data available.</p>
+                  <div className="text-center py-8 sm:py-12">
+                    <Award className="h-12 w-12 sm:h-16 sm:w-16 mx-auto mb-4 text-muted-foreground" />
+                    <p className="text-sm sm:text-base text-muted-foreground">No performance data available.</p>
+                  </div>
                 )}
               </TabsContent>
               
               <TabsContent value="bankak">
                 {user.bankAccount ? (
-                  <div className="space-y-4">
-                    <div className="bg-muted rounded-lg p-4">
-                      <h3 className="font-medium mb-2">Bank Account Details</h3>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <p className="text-sm text-muted-foreground">Account Name</p>
-                          <p className="font-medium">{user.bankAccount.accountName}</p>
+                  <div className="space-y-3 sm:space-y-4">
+                    <div className="bg-muted rounded-lg p-3 sm:p-4">
+                      <h3 className="font-medium text-sm sm:text-base mb-3">Bank Account Details</h3>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                        <div className="space-y-1">
+                          <p className="text-xs sm:text-sm text-muted-foreground">Account Name</p>
+                          <p className="font-medium text-sm sm:text-base break-words">{user.bankAccount.accountName}</p>
                         </div>
-                        <div>
-                          <p className="text-sm text-muted-foreground">Account Number</p>
-                          <p className="font-medium">{user.bankAccount.accountNumber}</p>
+                        <div className="space-y-1">
+                          <p className="text-xs sm:text-sm text-muted-foreground">Account Number</p>
+                          <p className="font-medium text-sm sm:text-base font-mono">{user.bankAccount.accountNumber}</p>
                         </div>
-                        <div>
-                          <p className="text-sm text-muted-foreground">Branch</p>
-                          <p className="font-medium">{user.bankAccount.branch}</p>
+                        <div className="sm:col-span-2 space-y-1">
+                          <p className="text-xs sm:text-sm text-muted-foreground">Branch</p>
+                          <p className="font-medium text-sm sm:text-base break-words">{user.bankAccount.branch}</p>
                         </div>
                       </div>
                     </div>
                     {canEditBankAccount && (
-                      <Button onClick={() => setBankAccountFormOpen(true)}>
+                      <Button onClick={() => setBankAccountFormOpen(true)} className="min-h-[44px] px-4 sm:px-6 w-full sm:w-auto">
+                        <Edit className="h-4 w-4 mr-2" />
                         Edit Bank Account
                       </Button>
                     )}
                   </div>
                 ) : (
-                  <div className="space-y-4">
-                    <p className="text-muted-foreground">No bank account details available.</p>
+                  <div className="text-center py-6 sm:py-8">
+                    <CreditCard className="h-12 w-12 sm:h-16 sm:w-16 mx-auto mb-4 text-muted-foreground" />
+                    <p className="text-sm sm:text-base text-muted-foreground mb-4">No bank account details available.</p>
                     {canEditBankAccount && (
-                      <Button onClick={() => setBankAccountFormOpen(true)}>
+                      <Button onClick={() => setBankAccountFormOpen(true)} className="min-h-[44px] px-6">
+                        <Plus className="h-4 w-4 mr-2" />
                         Add Bank Account
                       </Button>
                     )}
@@ -638,32 +698,32 @@ const UserDetail: React.FC = () => {
               <TabsContent value="location">
                 {user.location ? (
                   <div className="space-y-4">
-                    <div className="bg-muted rounded-lg p-4 grid grid-cols-2 gap-4">
+                    <div className="bg-muted rounded-lg p-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <p className="text-sm text-muted-foreground">Latitude</p>
-                        <p className="font-medium">{user.location.latitude}</p>
+                        <p className="font-medium text-base">{user.location.latitude}</p>
                       </div>
                       <div>
                         <p className="text-sm text-muted-foreground">Longitude</p>
-                        <p className="font-medium">{user.location.longitude}</p>
+                        <p className="font-medium text-base">{user.location.longitude}</p>
                       </div>
                       <div>
                         <p className="text-sm text-muted-foreground">Last Updated</p>
-                        <p className="font-medium">
+                        <p className="font-medium text-base">
                           {user.location.lastUpdated ? new Date(user.location.lastUpdated).toLocaleString() : 'N/A'}
                         </p>
                       </div>
                       <div>
                         <p className="text-sm text-muted-foreground">Location Sharing</p>
-                        <p className="font-medium">
+                        <p className="font-medium text-base">
                           {user.location.isSharing ? 'Enabled' : 'Disabled'}
                         </p>
                       </div>
                     </div>
-                    <div className="h-[300px] bg-slate-100 rounded-lg flex items-center justify-center">
+                    <div className="h-[250px] sm:h-[300px] bg-slate-100 rounded-lg flex items-center justify-center">
                       <div className="text-center p-4">
-                        <MapPin className="h-12 w-12 mx-auto mb-2 text-muted-foreground" />
-                        <p className="text-muted-foreground">Map view is not available in this view</p>
+                        <MapPin className="h-8 w-8 sm:h-12 sm:w-12 mx-auto mb-2 text-muted-foreground" />
+                        <p className="text-muted-foreground text-sm sm:text-base">Map view is not available in this view</p>
                         <p className="text-xs text-muted-foreground mt-1">Check the Field Team page for interactive map</p>
                       </div>
                     </div>
@@ -676,13 +736,14 @@ const UserDetail: React.FC = () => {
               {canManageClassifications && (
                 <TabsContent value="classification">
                   <div className="space-y-4">
-                    <div className="flex justify-between items-center">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                       <div>
                         <h3 className="text-lg font-semibold">Current Classification</h3>
                         <p className="text-sm text-muted-foreground">Manage user classification and retainer</p>
                       </div>
                       <Button
                         onClick={() => setClassificationDialogOpen(true)}
+                        className="min-h-[44px] px-4 w-full sm:w-auto"
                         data-testid="button-manage-classification"
                       >
                         <Plus className="h-4 w-4 mr-2" />
@@ -692,11 +753,11 @@ const UserDetail: React.FC = () => {
 
                     {userClassification ? (
                       <Card>
-                        <CardHeader>
+                        <CardHeader className="p-4 sm:p-6">
                           <CardTitle className="text-base">Active Classification</CardTitle>
                         </CardHeader>
-                        <CardContent className="space-y-4">
-                          <div className="grid grid-cols-2 gap-4">
+                        <CardContent className="p-4 sm:p-6 space-y-4">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
                               <p className="text-sm text-muted-foreground mb-2">Level</p>
                               <ClassificationBadge 
@@ -707,33 +768,33 @@ const UserDetail: React.FC = () => {
                             </div>
                             <div>
                               <p className="text-sm text-muted-foreground">Role Scope</p>
-                              <p className="font-medium">{userClassification.roleScope}</p>
+                              <p className="font-medium text-base">{userClassification.roleScope}</p>
                             </div>
                             <div>
                               <p className="text-sm text-muted-foreground">Effective From</p>
-                              <p className="font-medium">
+                              <p className="font-medium text-base">
                                 {new Date(userClassification.effectiveFrom).toLocaleDateString()}
                               </p>
                             </div>
                             <div>
                               <p className="text-sm text-muted-foreground">Status</p>
-                              <p className="font-medium">
+                              <p className="font-medium text-base">
                                 {userClassification.effectiveUntil && new Date(userClassification.effectiveUntil) < new Date()
                                   ? 'Expired'
                                   : 'Active'}
                               </p>
                             </div>
-                            {userClassification.retainerAmount && (
+                            {userClassification.hasRetainer && userClassification.retainerAmountCents && (
                               <>
                                 <div>
                                   <p className="text-sm text-muted-foreground">Retainer Amount</p>
-                                  <p className="font-medium">
-                                    {(userClassification.retainerAmount / 100).toFixed(2)} {userClassification.retainerCurrency}
+                                  <p className="font-medium text-base">
+                                    {(userClassification.retainerAmountCents / 100).toFixed(2)} {userClassification.retainerCurrency}
                                   </p>
                                 </div>
                                 <div>
                                   <p className="text-sm text-muted-foreground">Retainer Period</p>
-                                  <p className="font-medium capitalize">{userClassification.retainerPeriod}</p>
+                                  <p className="font-medium text-base capitalize">{userClassification.retainerFrequency}</p>
                                 </div>
                               </>
                             )}
@@ -750,17 +811,17 @@ const UserDetail: React.FC = () => {
                       </Alert>
                     )}
 
-                    {classificationHistory.length > 0 && (
+                    {classificationHistory.length > 0 ? (
                       <Card>
-                        <CardHeader>
+                        <CardHeader className="p-4 sm:p-6">
                           <CardTitle className="text-base">Classification History</CardTitle>
                         </CardHeader>
-                        <CardContent>
+                        <CardContent className="p-4 sm:p-6">
                           <div className="space-y-2">
                             {classificationHistory.map((history) => (
-                              <div key={history.id} className="flex justify-between items-center p-3 bg-muted rounded">
-                                <div className="space-y-2">
-                                  <div className="flex items-center gap-2">
+                              <div key={history.id} className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-3 bg-muted rounded min-h-[80px] gap-2">
+                                <div className="space-y-2 flex-1">
+                                  <div className="flex flex-wrap items-center gap-2">
                                     <ClassificationBadge 
                                       level={history.classificationLevel} 
                                       size="sm"
@@ -772,15 +833,30 @@ const UserDetail: React.FC = () => {
                                     {new Date(history.effectiveFrom).toLocaleDateString()} - 
                                     {history.effectiveUntil ? new Date(history.effectiveUntil).toLocaleDateString() : 'Present'}
                                   </p>
+                                  {history.changeReason && (
+                                    <p className="text-xs text-muted-foreground italic">
+                                      Reason: {history.changeReason}
+                                    </p>
+                                  )}
                                 </div>
-                                {history.retainerAmount && (
-                                  <p className="text-sm font-medium">
-                                    {(history.retainerAmount / 100).toFixed(2)} {history.retainerCurrency}/{history.retainerPeriod}
-                                  </p>
-                                )}
                               </div>
                             ))}
                           </div>
+                        </CardContent>
+                      </Card>
+                    ) : !loadingHistory ? (
+                      <Alert>
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertTitle>No Classification History</AlertTitle>
+                        <AlertDescription>
+                          This user has no classification history available.
+                        </AlertDescription>
+                      </Alert>
+                    ) : (
+                      <Card>
+                        <CardContent className="p-6 text-center">
+                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
+                          <p className="text-sm text-muted-foreground">Loading classification history...</p>
                         </CardContent>
                       </Card>
                     )}
@@ -793,10 +869,10 @@ const UserDetail: React.FC = () => {
       </div>
 
       <Dialog open={bankAccountFormOpen} onOpenChange={setBankAccountFormOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-md mx-4 max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>
-              {user?.bankAccount ? "Edit Bankak Account" : "Add Bankak Account"}
+            <DialogTitle className="text-base sm:text-lg">
+              {user?.bankAccount ? "Edit Bank Account" : "Add Bank Account"}
             </DialogTitle>
           </DialogHeader>
           <BankakAccountForm 
