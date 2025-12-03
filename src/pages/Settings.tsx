@@ -45,6 +45,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { TwoFactorSetup } from "@/components/auth/TwoFactorSetup";
 import { useMFA } from "@/hooks/use-mfa";
 import { Badge } from "@/components/ui/badge";
+import { NotificationSettings as NotificationSettingsComponent } from "@/components/settings/NotificationSettings";
 
 const Settings = () => {
   const { toast } = useToast();
@@ -223,6 +224,40 @@ const Settings = () => {
         ...notificationSettings.categories,
         [category]: checked
       }
+    });
+  };
+
+  const handleQuietHoursToggle = (enabled: boolean) => {
+    updateNotificationSettings({
+      ...notificationSettings,
+      quietHours: {
+        ...notificationSettings.quietHours,
+        enabled
+      }
+    });
+  };
+
+  const handleQuietHoursChange = (field: 'startHour' | 'endHour', value: number) => {
+    updateNotificationSettings({
+      ...notificationSettings,
+      quietHours: {
+        ...notificationSettings.quietHours,
+        [field]: value
+      }
+    });
+  };
+
+  const handleFrequencyChange = (frequency: 'instant' | 'hourly' | 'daily') => {
+    updateNotificationSettings({
+      ...notificationSettings,
+      frequency
+    });
+  };
+
+  const handleAutoDeleteChange = (days: number) => {
+    updateNotificationSettings({
+      ...notificationSettings,
+      autoDeleteDays: days
     });
   };
 
@@ -783,181 +818,7 @@ const Settings = () => {
         </TabsContent>
         
         <TabsContent value="notifications" className="space-y-4">
-          <Card className="border shadow-sm">
-            <CardHeader className="bg-gradient-to-r from-green-50 to-emerald-100 dark:from-green-900/20 dark:to-emerald-800/20 border-b">
-              <div className="flex items-center gap-2">
-                <div className="p-2 bg-green-500 rounded-lg">
-                  <Bell className="h-5 w-5 text-white" />
-                </div>
-                <div>
-                  <CardTitle className="text-lg">Notification Preferences</CardTitle>
-                  <CardDescription>
-                    Configure how and when you receive notifications
-                  </CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4 pt-6">
-              <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
-                <div className="space-y-1">
-                  <Label htmlFor="notifications" className="text-base font-medium">Enable Notifications</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Receive updates about your activities
-                  </p>
-                </div>
-                <Switch 
-                  id="notifications" 
-                  checked={notificationSettings.enabled}
-                  onCheckedChange={handleNotificationsToggle}
-                  data-testid="switch-notifications"
-                />
-              </div>
-              
-              <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
-                <div className="space-y-1">
-                  <Label htmlFor="email-notifications" className="text-base font-medium">Email Notifications</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Receive notifications via email
-                  </p>
-                </div>
-                <Switch 
-                  id="email-notifications" 
-                  checked={notificationSettings.email}
-                  onCheckedChange={handleEmailNotificationsToggle}
-                  disabled={!notificationSettings.enabled}
-                  data-testid="switch-email-notifications"
-                />
-              </div>
-              
-              <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
-                <div className="space-y-1">
-                  <Label htmlFor="sound-alerts" className="text-base font-medium">Sound Alerts</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Play sounds for important alerts
-                  </p>
-                </div>
-                <Switch 
-                  id="sound-alerts" 
-                  checked={notificationSettings.sound}
-                  onCheckedChange={handleSoundAlertsToggle}
-                  disabled={!notificationSettings.enabled}
-                  data-testid="switch-sound-alerts"
-                />
-              </div>
-              
-              <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
-                <div className="space-y-1">
-                  <Label htmlFor="browser-push" className="text-base font-medium">Browser Push Notifications</Label>
-                  <p className="text-sm text-muted-foreground">
-                    Receive notifications even when the browser tab is in the background
-                  </p>
-                </div>
-                <Switch 
-                  id="browser-push" 
-                  checked={notificationSettings.browserPush}
-                  onCheckedChange={handleBrowserPushToggle}
-                  disabled={!notificationSettings.enabled}
-                  data-testid="switch-browser-push"
-                />
-              </div>
-
-              <div className="pt-4 border-t">
-                <h4 className="text-sm font-semibold mb-3">Notification Categories</h4>
-                <p className="text-xs text-muted-foreground mb-4">
-                  Choose which types of notifications you want to receive
-                </p>
-                
-                <div className="grid gap-3">
-                  <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
-                    <div className="space-y-0.5">
-                      <Label htmlFor="cat-assignments" className="text-sm font-medium">Site Assignments</Label>
-                      <p className="text-xs text-muted-foreground">New assignments and site visit updates</p>
-                    </div>
-                    <Switch 
-                      id="cat-assignments"
-                      checked={notificationSettings.categories?.assignments ?? true}
-                      onCheckedChange={(checked) => handleCategoryToggle('assignments', checked)}
-                      disabled={!notificationSettings.enabled}
-                      data-testid="switch-cat-assignments"
-                    />
-                  </div>
-                  
-                  <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
-                    <div className="space-y-0.5">
-                      <Label htmlFor="cat-approvals" className="text-sm font-medium">Approvals</Label>
-                      <p className="text-xs text-muted-foreground">MMP approvals and review requests</p>
-                    </div>
-                    <Switch 
-                      id="cat-approvals"
-                      checked={notificationSettings.categories?.approvals ?? true}
-                      onCheckedChange={(checked) => handleCategoryToggle('approvals', checked)}
-                      disabled={!notificationSettings.enabled}
-                      data-testid="switch-cat-approvals"
-                    />
-                  </div>
-                  
-                  <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
-                    <div className="space-y-0.5">
-                      <Label htmlFor="cat-financial" className="text-sm font-medium">Financial</Label>
-                      <p className="text-xs text-muted-foreground">Down-payments, costs, and budget updates</p>
-                    </div>
-                    <Switch 
-                      id="cat-financial"
-                      checked={notificationSettings.categories?.financial ?? true}
-                      onCheckedChange={(checked) => handleCategoryToggle('financial', checked)}
-                      disabled={!notificationSettings.enabled}
-                      data-testid="switch-cat-financial"
-                    />
-                  </div>
-                  
-                  <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
-                    <div className="space-y-0.5">
-                      <Label htmlFor="cat-team" className="text-sm font-medium">Team Updates</Label>
-                      <p className="text-xs text-muted-foreground">Team member status and location changes</p>
-                    </div>
-                    <Switch 
-                      id="cat-team"
-                      checked={notificationSettings.categories?.team ?? true}
-                      onCheckedChange={(checked) => handleCategoryToggle('team', checked)}
-                      disabled={!notificationSettings.enabled}
-                      data-testid="switch-cat-team"
-                    />
-                  </div>
-                  
-                  <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
-                    <div className="space-y-0.5">
-                      <Label htmlFor="cat-system" className="text-sm font-medium">System Alerts</Label>
-                      <p className="text-xs text-muted-foreground">Important system messages and warnings</p>
-                    </div>
-                    <Switch 
-                      id="cat-system"
-                      checked={notificationSettings.categories?.system ?? true}
-                      onCheckedChange={(checked) => handleCategoryToggle('system', checked)}
-                      disabled={!notificationSettings.enabled}
-                      data-testid="switch-cat-system"
-                    />
-                  </div>
-                </div>
-              </div>
-              
-              <div className="flex justify-end pt-4 border-t">
-                <Button 
-                  onClick={() => {
-                    updateNotificationSettings(notificationSettings);
-                    toast({
-                      title: "Settings saved",
-                      description: "Your notification settings have been updated.",
-                      variant: "success",
-                    });
-                  }}
-                  data-testid="button-save-notifications"
-                >
-                  <Save className="mr-2 h-4 w-4" />
-                  Save Changes
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          <NotificationSettingsComponent />
         </TabsContent>
         
         <TabsContent value="appearance" className="space-y-4">

@@ -497,36 +497,70 @@ Required Information:
 
 ### Admin Approval Flow
 
-**Step 1: Review Request**
+**Step 1: Review Request (Finance Processing Page)**
 ```
-Navigate to: Withdrawal Approval → Pending Tab
+Navigate to: Finance Approval → Ready Tab
 
-Review:
+Each request card displays:
 - User details (name, role, classification)
-- Requested amount
-- Current balance
+- Requested amount (large, prominent)
+- **Current wallet balance** (color-coded)
+- Balance status indicator:
+  • Green: Sufficient funds
+  • Red: Insufficient funds with shortfall amount
 - Withdrawal history
 - Request reason
+- Urgency indicators (1+ day, 2+ days, 3+ days)
 ```
 
-**Step 2: Make Decision**
+**Step 2: Check Wallet Balance**
 
-**To Approve:**
-1. Click "Approve" button
-2. Add optional notes (e.g., "Approved - bank transfer initiated")
-3. Confirm approval
-4. System deducts balance and creates withdrawal transaction
+The Finance Processing page now shows each user's wallet balance:
+
+| Indicator | Meaning |
+|-----------|---------|
+| Green background | User has sufficient balance to process |
+| Red background | Insufficient funds - shows shortfall amount |
+| Tooltip | Hover for detailed balance info |
+
+**Example Insufficient Balance Alert:**
+```
+Insufficient wallet balance!
+User has SDG 130,110 but requested SDG 200,000.
+Shortfall: SDG 69,890
+```
+
+**Step 3: Make Decision**
+
+**To Approve (Sufficient Balance):**
+1. Verify green balance indicator
+2. Click "Process Payment" button
+3. Enter transaction reference number (optional)
+4. Attach receipt/screenshot (optional - drag & drop or click to upload)
+5. Add notes (e.g., "Approved - bank transfer initiated")
+6. Confirm approval
+7. System deducts balance and creates withdrawal transaction
 
 **To Reject:**
 1. Click "Reject" button
-2. Add required explanation (e.g., "Insufficient documentation provided")
+2. Add required explanation (e.g., "Insufficient wallet balance" or "Invalid documentation")
 3. Confirm rejection
 4. User notified with reason
 
-**Step 3: Payment Processing**
-- Mark as "paid" when funds transferred
-- Upload payment receipt (optional)
-- Update payment details
+**Step 4: Receipt Attachment**
+- Supports image files (JPG, PNG, etc.)
+- Maximum 5MB file size
+- Preview before submitting
+- Receipt URL saved to audit trail
+- Visible in transaction history
+
+**Step 5: Batch Processing (Multiple Payments)**
+1. Select multiple requests using checkboxes
+2. Click "Batch Process" button
+3. Enter batch transaction reference
+4. Add common notes
+5. Process all selected simultaneously
+6. Results summary shows success/failure count
 
 ### Withdrawal Limits & Rules
 

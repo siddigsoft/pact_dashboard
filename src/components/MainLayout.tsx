@@ -3,7 +3,6 @@ import { useNavigate, useLocation, Outlet } from "react-router-dom";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import AppSidebar from "@/components/AppSidebar";
 import Navbar from "@/components/Navbar";
-import MobileNavigation from "@/components/MobileNavigation";
 import MobileAppHeader from "@/components/MobileAppHeader";
 import TabletNavigation from '@/components/TabletNavigation';
 import { useAppContext } from "@/context/AppContext";
@@ -11,6 +10,9 @@ import { useViewMode } from "@/context/ViewModeContext";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { UpdateDialog } from "@/components/UpdateDialog";
 import { OnlineOfflineToggle } from "@/components/common/OnlineOfflineToggle";
+import { GlobalRefreshBar } from "@/components/GlobalRefreshBar";
+import { NotificationInitializer } from "@/components/NotificationInitializer";
+import { MobileBottomNav } from "@/components/mobile/MobileBottomNav";
 
 interface MainLayoutContentProps {
   children?: React.ReactNode;
@@ -60,25 +62,28 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
   return (
     <TooltipProvider>
       <UpdateDialog />
+      <NotificationInitializer />
       <SidebarProvider>
         <div className={`min-h-screen flex w-full ${isTransitioning ? 'transition-all duration-300 ease-in-out' : ''}`}>
           {!isMobile && !isTablet && <AppSidebar />}
-          <SidebarInset className={`${isMobile ? 'bg-gray-50 dark:bg-gray-900' : ''} relative z-0 flex flex-col min-w-0 overflow-x-hidden`}>
+          <SidebarInset className={`${isMobile ? 'bg-gray-50 dark:bg-gray-900' : ''} relative z-0 flex flex-col min-w-0 overflow-x-hidden min-h-0`}>
             {isMobile ? (
               <MobileAppHeader
                 toggleSidebar={toggleSidebar}
                 title={getPageTitle()}
-                showNotification={!isHomeRoute}
+                showNotification={true}
               />
             ) : isTablet ? (
               <TabletNavigation />
             ) : (
               <Navbar />
             )}
-            <div className={`flex-1 ${isMobile ? 'px-3 pb-safe-nav pt-safe' : 'p-4 md:p-6 lg:p-8'} ${isMobile ? 'bg-gray-50 dark:bg-gray-900 scroll-container' : 'bg-slate-50/70 dark:bg-gray-900/70'} overflow-y-auto relative z-0 min-w-0`}>
+            {/* Global Refresh Bar - Available on all pages */}
+            <GlobalRefreshBar />
+            <div className={`flex-1 ${isMobile ? 'px-3 pb-16 pt-2' : 'p-4 md:p-6 lg:p-8'} ${isMobile ? 'bg-gray-50 dark:bg-gray-900 scroll-container' : 'bg-slate-50/70 dark:bg-gray-900/70'} overflow-y-auto relative z-0 min-w-0 min-h-0`}>
               {children || <Outlet />}
             </div>
-            {isMobile && <MobileNavigation />}
+            {isMobile && <MobileBottomNav />}
             <OnlineOfflineToggle variant="floating" />
           </SidebarInset>
         </div>

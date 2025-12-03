@@ -57,6 +57,8 @@ const MobileNavigation = React.memo(() => {
     return items;
   }, [primaryItems, unreadChatCount]);
 
+  const filteredPrimaryNavItems = primaryNavItems; // Our unified system already handles filtering
+
   // Combine secondary and tertiary items for the "More" sheet
   const moreNavItems = useMemo(() =>
     [...secondaryItems, ...tertiaryItems].map(item => ({
@@ -96,14 +98,14 @@ const MobileNavigation = React.memo(() => {
         className="fixed bottom-0 left-0 right-0 z-50 shadow-lg backdrop-blur-md bg-slate-900/90 dark:bg-slate-950/90 border-t border-slate-700/50"
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       >
-        <div className="grid grid-cols-5 h-[52px]">
-          {primaryNavItems.map((item, index) => {
+        <div className="grid grid-cols-5 h-[56px]">
+          {filteredPrimaryNavItems.map((item, index) => {
             const active = isActive(item.path);
             return (
               <button
                 key={index}
                 data-testid={`button-nav-${item.label.toLowerCase()}`}
-                className={`flex flex-col items-center justify-center gap-0.5 transition-all duration-150 relative overflow-visible min-h-[52px] touch-manipulation select-none active:scale-95 ${
+                className={`flex flex-col items-center justify-center gap-0.5 transition-all duration-150 relative overflow-visible min-h-[52px] touch-manipulation select-none active:scale-95 px-1 ${
                   active 
                     ? 'text-blue-400' 
                     : 'text-gray-400 hover:text-white'
@@ -121,16 +123,16 @@ const MobileNavigation = React.memo(() => {
                 }}
               >
                 <div className="relative">
-                  <item.icon className={`h-5 w-5 ${active ? 'drop-shadow-[0_0_6px_rgba(59,130,246,0.5)]' : ''}`} />
+                  <item.icon className={`h-6 w-6 ${active ? 'drop-shadow-[0_0_6px_rgba(59,130,246,0.5)]' : ''}`} />
                   {item.badge && item.badge > 0 && (
-                    <span className="absolute -top-1 -right-1.5 bg-red-500 text-white text-[9px] rounded-full min-w-[14px] h-[14px] flex items-center justify-center shadow-sm z-10 px-0.5">
+                    <span className="absolute -top-1 -right-2 bg-red-500 text-white text-[9px] rounded-full min-w-[14px] h-[14px] flex items-center justify-center shadow-sm z-10 px-0.5">
                       {item.badge > 99 ? '99+' : item.badge}
                     </span>
                   )}
                 </div>
-                <span className="text-[10px] font-medium">{item.label}</span>
+                <span className="text-[11px] font-medium leading-tight">{item.label}</span>
                 {active && (
-                  <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-8 h-0.5 bg-blue-500 rounded-t-full" />
+                  <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-10 h-0.5 bg-blue-500 rounded-t-full" />
                 )}
               </button>
             );

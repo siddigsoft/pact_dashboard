@@ -139,7 +139,7 @@ function transformSiteVisitCostFromDB(data: any): SiteVisitCost {
 }
 
 export function WalletProvider({ children }: { children: ReactNode }) {
-  const { currentUser } = useUser();
+  const { currentUser, authReady } = useUser();
   const { toast } = useToast();
   const { getUserClassification, getActiveFeeStructure } = useClassification();
   const [wallet, setWallet] = useState<Wallet | null>(null);
@@ -153,6 +153,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (!currentUser?.id) return;
 
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
       const { data, error } = await supabase
         .from('wallets')
         .select('*')
@@ -380,7 +382,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
     try {
       // First try to find in local state, then fetch from database if not found
-      let request = withdrawalRequests.find(r => r.id === requestId);
+      let request: WithdrawalRequest | SupervisedWithdrawalRequest | undefined = withdrawalRequests.find(r => r.id === requestId);
       if (!request) {
         request = supervisedWithdrawalRequests.find(r => r.id === requestId);
       }
@@ -404,7 +406,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           requesterHub: requestData.profiles?.hub_id,
           requesterState: requestData.profiles?.state_id,
           requesterRole: requestData.profiles?.role,
-        };
+        } as SupervisedWithdrawalRequest;
       }
       
       if (!request) throw new Error('Request not found');
@@ -498,7 +500,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
     try {
       // First try to find in local state, then fetch from database if not found
-      let request = withdrawalRequests.find(r => r.id === requestId);
+      let request: WithdrawalRequest | SupervisedWithdrawalRequest | undefined = withdrawalRequests.find(r => r.id === requestId);
       if (!request) {
         request = supervisedWithdrawalRequests.find(r => r.id === requestId);
       }
@@ -522,7 +524,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           requesterHub: requestData.profiles?.hub_id,
           requesterState: requestData.profiles?.state_id,
           requesterRole: requestData.profiles?.role,
-        };
+        } as SupervisedWithdrawalRequest;
       }
       
       if (!request) throw new Error('Request not found');
@@ -1223,14 +1225,29 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         }));
       }
 
+      /**
+       * HUB-BASED SUPERVISION MODEL
+       * ============================
+       * Hub Supervisors manage MULTIPLE STATES within their hub:
+       * - Kosti Hub: 7 states (white-nile, north-kordofan, south-kordofan, west-kordofan, north-darfur, south-darfur, east-darfur)
+       * - Kassala Hub: 5 states (kassala, gedaref, gezira, sennar, blue-nile)
+       * - Dongola Hub: 2 states (northern, river-nile)
+       * - Forchana Hub: 2 states (west-darfur, central-darfur)
+       * - Country Office: 2 states (khartoum, red-sea)
+       * 
+       * Hub supervisors are assigned `hub_id` (NOT state_id) and see ALL team members
+       * across ALL states within their hub. Team members need matching `hub_id` to appear.
+       */
       const supervisorHubId = currentUser.hubId;
       const supervisorStateId = currentUser.stateId;
 
       if (!supervisorHubId && !supervisorStateId) {
-        console.warn('[Wallet] Supervisor has no hub or state assigned');
+        console.warn('[Wallet] Hub Supervisor has no hub_id assigned. Assign hub_id in User Management to see team members across all states in the hub.');
         return [];
       }
 
+      // Query team members by hub_id (primary) or state_id (fallback for legacy support)
+      // Hub supervisors should have hub_id set - they see ALL team members in ALL states of their hub
       const { data: teamMembers, error: teamError } = await supabase
         .from('profiles')
         .select('id, full_name, email, hub_id, state_id, role')
@@ -1282,6 +1299,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const initWallet = async () => {
+      if (!authReady) {
+        setLoading(false);
+        return;
+      }
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        setLoading(false);
+        return;
+      }
+
       if (!currentUser?.id) {
         setLoading(false);
         return;
@@ -1303,7 +1331,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     };
 
     initWallet();
-  }, [currentUser?.id]);
+  }, [authReady, currentUser?.id]);
 
   useEffect(() => {
     calculateStats();

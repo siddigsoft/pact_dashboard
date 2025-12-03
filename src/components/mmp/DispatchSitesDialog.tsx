@@ -268,11 +268,10 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
     
     selectedSiteObjects.forEach(site => {
       if (!newCosts.has(site.id)) {
-        const additionalData = site.additional_data || {};
         newCosts.set(site.id, {
           siteId: site.id,
           siteName: site.site_name || site.siteName || 'Unknown Site',
-          transportation: additionalData.transport_fee || 0,
+          transportation: Number(site.transport_fee) || Number(site.transportFee) || 0,
           accommodation: 0,
           mealAllowance: 0,
           otherCosts: 0,

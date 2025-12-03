@@ -23,7 +23,9 @@ import {
   FileText,
   User,
   MapPin,
+  AlertTriangle,
 } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { format } from 'date-fns';
 
 interface DownPaymentApprovalPanelProps {
@@ -161,8 +163,21 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     );
   };
 
+  const hasHubId = !!currentUser?.hubId;
+
   return (
     <>
+      {userRole === 'supervisor' && !hasHubId && (
+        <Alert variant="destructive" className="mb-4">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>
+            <strong>Hub Configuration Missing:</strong> Your profile doesn't have a hub assigned. 
+            You can only see your own requests. Please contact an administrator to assign you to a hub 
+            so you can review requests from your team members.
+          </AlertDescription>
+        </Alert>
+      )}
+
       <Card data-testid="card-down-payment-approval">
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
