@@ -245,8 +245,17 @@ export function useRealtimeTeamLocations({
     updateTeamLocations();
   }, [refreshUsers, updateTeamLocations]);
 
+  // Use a ref to track if we've already set up subscriptions to avoid re-running
+  const subscriptionsSetupRef = useRef(false);
+  const connectionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   useEffect(() => {
     if (!enabled) {
+      subscriptionsSetupRef.current = false;
+      if (connectionTimeoutRef.current) {
+        clearTimeout(connectionTimeoutRef.current);
+        connectionTimeoutRef.current = null;
+      }
       if (presenceChannelRef.current) {
         supabase.removeChannel(presenceChannelRef.current);
         presenceChannelRef.current = null;
@@ -256,24 +265,25 @@ export function useRealtimeTeamLocations({
         locationChannelRef.current = null;
       }
       setConnectionStatus('disconnected');
+      setIsConnected(false);
       return;
     }
 
+    // Skip if already set up
+    if (subscriptionsSetupRef.current) {
+      return;
+    }
+    subscriptionsSetupRef.current = true;
+
     console.log('[RealtimeTeamLocations] Setting up realtime subscriptions...');
     setConnectionStatus('connecting');
-    
-    let presenceSubscribed = false;
-    let locationSubscribed = false;
 
-    // Fallback timeout - if subscriptions don't complete within 5 seconds, mark as connected anyway
-    // This handles cases where Supabase Realtime isn't fully configured or presence channels aren't available
-    const connectionTimeoutId = setTimeout(() => {
-      if (!presenceSubscribed && !locationSubscribed) {
-        console.log('[RealtimeTeamLocations] Connection timeout - using fallback');
-        setIsConnected(true);
-        setConnectionStatus('connected');
-      }
-    }, 5000);
+    // Fallback timeout - if subscriptions don't complete within 3 seconds, mark as connected anyway
+    connectionTimeoutRef.current = setTimeout(() => {
+      console.log('[RealtimeTeamLocations] Connection timeout - using fallback');
+      setIsConnected(true);
+      setConnectionStatus('connected');
+    }, 3000);
 
     const presenceKey = currentUser?.id || sessionId;
     const presenceChannel = supabase.channel(PRESENCE_CHANNEL, {
@@ -294,14 +304,19 @@ export function useRealtimeTeamLocations({
       .subscribe(async (status) => {
         console.log('[RealtimeTeamLocations] Presence channel:', status);
         if (status === 'SUBSCRIBED') {
-          presenceSubscribed = true;
-          clearTimeout(connectionTimeoutId);
+          if (connectionTimeoutRef.current) {
+            clearTimeout(connectionTimeoutRef.current);
+            connectionTimeoutRef.current = null;
+          }
           setIsConnected(true);
           setConnectionStatus('connected');
           trackPresence();
-        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
           console.warn('[RealtimeTeamLocations] Presence channel error:', status);
-          // Still try to work without presence
+          if (connectionTimeoutRef.current) {
+            clearTimeout(connectionTimeoutRef.current);
+            connectionTimeoutRef.current = null;
+          }
           setIsConnected(true);
           setConnectionStatus('connected');
         }
@@ -323,12 +338,18 @@ export function useRealtimeTeamLocations({
       .subscribe((status) => {
         console.log('[RealtimeTeamLocations] Location channel:', status);
         if (status === 'SUBSCRIBED') {
-          locationSubscribed = true;
-          clearTimeout(connectionTimeoutId);
+          if (connectionTimeoutRef.current) {
+            clearTimeout(connectionTimeoutRef.current);
+            connectionTimeoutRef.current = null;
+          }
           setIsConnected(true);
           setConnectionStatus('connected');
-        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
           console.warn('[RealtimeTeamLocations] Location channel error:', status);
+          if (connectionTimeoutRef.current) {
+            clearTimeout(connectionTimeoutRef.current);
+            connectionTimeoutRef.current = null;
+          }
           setIsConnected(true);
           setConnectionStatus('connected');
         }
@@ -337,7 +358,11 @@ export function useRealtimeTeamLocations({
     locationChannelRef.current = locationChannel;
 
     return () => {
-      clearTimeout(connectionTimeoutId);
+      subscriptionsSetupRef.current = false;
+      if (connectionTimeoutRef.current) {
+        clearTimeout(connectionTimeoutRef.current);
+        connectionTimeoutRef.current = null;
+      }
       console.log('[RealtimeTeamLocations] Cleaning up subscriptions');
       if (presenceChannelRef.current) {
         supabase.removeChannel(presenceChannelRef.current);
@@ -348,7 +373,7 @@ export function useRealtimeTeamLocations({
         locationChannelRef.current = null;
       }
     };
-  }, [enabled, handleProfileUpdate, handlePresenceSync, handlePresenceJoin, handlePresenceLeave, trackPresence]);
+  }, [enabled]);
 
   useEffect(() => {
     if (!enabled) {
