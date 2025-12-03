@@ -5,6 +5,7 @@ import AppSidebar from "@/components/AppSidebar";
 import Navbar from "@/components/Navbar";
 import MobileNavigation from "@/components/MobileNavigation";
 import MobileAppHeader from "@/components/MobileAppHeader";
+import TabletNavigation from '@/components/TabletNavigation';
 import { useAppContext } from "@/context/AppContext";
 import { useViewMode } from "@/context/ViewModeContext";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -22,8 +23,9 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
   const location = useLocation();
   const [isAuthorized, setIsAuthorized] = useState<boolean>(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { viewMode } = useViewMode();
+  const { viewMode, isTransitioning } = useViewMode();
   const isMobile = viewMode === 'mobile';
+  const isTablet = viewMode === 'tablet';
   
   const getPageTitle = () => {
     const path = location.pathname;
@@ -59,15 +61,17 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
     <TooltipProvider>
       <UpdateDialog />
       <SidebarProvider>
-        <div className="min-h-screen flex w-full">
-          {!isMobile && <AppSidebar />}
+        <div className={`min-h-screen flex w-full ${isTransitioning ? 'transition-all duration-300 ease-in-out' : ''}`}>
+          {!isMobile && !isTablet && <AppSidebar />}
           <SidebarInset className={`${isMobile ? 'bg-gray-50 dark:bg-gray-900' : ''} relative z-0 flex flex-col min-w-0 overflow-x-hidden`}>
             {isMobile ? (
-              <MobileAppHeader 
-                toggleSidebar={toggleSidebar} 
+              <MobileAppHeader
+                toggleSidebar={toggleSidebar}
                 title={getPageTitle()}
                 showNotification={!isHomeRoute}
               />
+            ) : isTablet ? (
+              <TabletNavigation />
             ) : (
               <Navbar />
             )}

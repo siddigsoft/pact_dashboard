@@ -7,6 +7,7 @@ import { AppRole, ResourceType, ActionType } from '@/types/roles';
 import { ProjectProvider } from './project/ProjectContext';
 import { ChatProvider } from './chat/ChatContextSupabase';
 import { CommunicationProvider } from './communications/CommunicationContext';
+import { NavigationProvider } from './NavigationContext';
 import { ViewModeProvider } from './ViewModeContext';
 import { ArchiveProvider } from './archive/ArchiveContext';
 import { SettingsProvider } from './settings/SettingsContext';
@@ -126,48 +127,48 @@ const CompositeContextProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
 export const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   return (
-    <ViewModeProvider>
-      <NotificationProvider>
-        <UserProvider>
-          <ClassificationProvider>
-            <WalletProvider>
-              <SiteVisitProvider>
-                <MMPProvider>
-                  <ProjectProvider>
-                    <SettingsProvider>
-                      <ArchiveProvider>
-                        <RoleManagementProvider>
-                          <CompositeContextProvider>
-                            <BudgetProvider>
-                              <CostSubmissionProvider>
-                                <DownPaymentProvider>
-                                  <SuperAdminProvider>
-                                    <ChatProvider>
-                                      <CommunicationProvider>
-                                        <BrowserNotificationListener />
-                                        {children}
-                                      </CommunicationProvider>
-                                    </ChatProvider>
-                                  </SuperAdminProvider>
-                                </DownPaymentProvider>
-                              </CostSubmissionProvider>
-                            </BudgetProvider>
-                          </CompositeContextProvider>
-                        </RoleManagementProvider>
-                      </ArchiveProvider>
-                    </SettingsProvider>
-                  </ProjectProvider>
-                </MMPProvider>
-              </SiteVisitProvider>
-            </WalletProvider>
-          </ClassificationProvider>
-        </UserProvider>
-      </NotificationProvider>
-    </ViewModeProvider>
+    <NavigationProvider>
+      <ViewModeProvider>
+        <NotificationProvider>
+          <UserProvider>
+            <ClassificationProvider>
+              <WalletProvider>
+                <SiteVisitProvider>
+                  <MMPProvider>
+                    <ProjectProvider>
+                      <SettingsProvider>
+                        <ArchiveProvider>
+                          <RoleManagementProvider>
+                            <CompositeContextProvider>
+                              <BudgetProvider>
+                                <CostSubmissionProvider>
+                                  <DownPaymentProvider>
+                                    <SuperAdminProvider>
+                                      <ChatProvider>
+                                        <CommunicationProvider>
+                                          <BrowserNotificationListener />
+                                          {children}
+                                        </CommunicationProvider>
+                                      </ChatProvider>
+                                    </SuperAdminProvider>
+                                  </DownPaymentProvider>
+                                </CostSubmissionProvider>
+                              </BudgetProvider>
+                            </CompositeContextProvider>
+                          </RoleManagementProvider>
+                        </ArchiveProvider>
+                      </SettingsProvider>
+                    </ProjectProvider>
+                  </MMPProvider>
+                </SiteVisitProvider>
+              </WalletProvider>
+            </ClassificationProvider>
+          </UserProvider>
+        </NotificationProvider>
+      </ViewModeProvider>
+    </NavigationProvider>
   );
-};
-
-export const useAppContext = () => {
+};export const useAppContext = () => {
   const context = useContext(AppContext);
   if (!context) {
     throw new Error('useAppContext must be used within AppProviders');
