@@ -289,6 +289,9 @@ class SyncManager {
         await updateSyncActionStatus(action.id, 'syncing');
 
         switch (action.type) {
+          case 'site_visit_claim':
+            await this.syncSiteVisitClaim(action);
+            break;
           case 'site_visit_start':
             await this.syncSiteVisitStart(action);
             break;
@@ -323,6 +326,59 @@ class SyncManager {
     }
 
     return { synced, failed, errors };
+  }
+
+  private async syncSiteVisitClaim(action: PendingSyncAction): Promise<void> {
+    const { 
+      siteEntryId, 
+      userId, 
+      isDispatchedSite, 
+      enumeratorFee, 
+      transportFee, 
+      totalCost,
+      classificationLevel,
+      roleScope,
+      feeSource,
+      claimedAt 
+    } = action.payload;
+
+    if (isDispatchedSite) {
+      const { data, error } = await supabase.rpc('claim_site_visit', {
+        p_site_id: siteEntryId,
+        p_user_id: userId,
+        p_enumerator_fee: null,
+        p_total_cost: null,
+        p_classification_level: classificationLevel || null,
+        p_role_scope: roleScope || null,
+        p_fee_source: feeSource
+      });
+
+      if (error) throw error;
+
+      const result = data as { success: boolean; error?: string; message: string };
+      if (!result.success) {
+        throw new Error(result.message || result.error || 'Claim failed');
+      }
+    } else {
+      const { error } = await supabase
+        .from('mmp_site_entries')
+        .update({
+          status: 'accepted',
+          accepted_by: userId,
+          accepted_at: claimedAt,
+          updated_at: new Date().toISOString(),
+          enumerator_fee: enumeratorFee,
+          transport_fee: transportFee,
+          cost: totalCost,
+          additional_data: {
+            offline_claim: true,
+            offline_synced_at: new Date().toISOString(),
+          }
+        })
+        .eq('id', siteEntryId);
+
+      if (error) throw error;
+    }
   }
 
   private async syncSiteVisitStart(action: PendingSyncAction): Promise<void> {
@@ -494,32 +550,70 @@ class SyncManager {
 
 export const syncManager = new SyncManager();
 
-export function setupAutoSync() {
-  let syncTimeout: NodeJS.Timeout | null = null;
+export function setupAutoSync(intervalMs: number = 30000) {
+  let syncInterval: NodeJS.Timeout | null = null;
+  let isActive = true;
 
-  const scheduleSync = () => {
-    if (syncTimeout) clearTimeout(syncTimeout);
-    syncTimeout = setTimeout(async () => {
+  const runSync = async () => {
+    if (!isActive) return;
+    
+    try {
       if (navigator.onLine && !syncManager.isCurrentlySyncing()) {
         const stats = await getOfflineStats();
         if (stats.pendingActions > 0 || stats.unsyncedVisits > 0 || stats.unsyncedLocations > 0) {
-          console.log('[AutoSync] Starting automatic sync...');
+          console.log('[AutoSync] Background sync starting...', stats);
           await syncManager.syncAll();
         }
       }
-    }, 5000);
+    } catch (error) {
+      console.error('[AutoSync] Background sync error:', error);
+    }
   };
 
-  window.addEventListener('online', () => {
-    console.log('[AutoSync] Network restored, scheduling sync...');
-    scheduleSync();
-  });
+  const startInterval = () => {
+    if (syncInterval) clearInterval(syncInterval);
+    syncInterval = setInterval(runSync, intervalMs);
+    runSync();
+  };
+
+  const stopInterval = () => {
+    if (syncInterval) {
+      clearInterval(syncInterval);
+      syncInterval = null;
+    }
+  };
+
+  const handleOnline = () => {
+    console.log('[AutoSync] Network restored, starting background sync...');
+    runSync();
+    startInterval();
+  };
+
+  const handleOffline = () => {
+    console.log('[AutoSync] Network lost, pausing background sync...');
+    stopInterval();
+  };
+
+  const handleVisibility = () => {
+    if (document.visibilityState === 'visible' && navigator.onLine) {
+      console.log('[AutoSync] App became visible, syncing...');
+      runSync();
+    }
+  };
+
+  window.addEventListener('online', handleOnline);
+  window.addEventListener('offline', handleOffline);
+  document.addEventListener('visibilitychange', handleVisibility);
 
   if (navigator.onLine) {
-    scheduleSync();
+    startInterval();
   }
 
   return () => {
-    if (syncTimeout) clearTimeout(syncTimeout);
+    isActive = false;
+    stopInterval();
+    window.removeEventListener('online', handleOnline);
+    window.removeEventListener('offline', handleOffline);
+    document.removeEventListener('visibilitychange', handleVisibility);
   };
 }

@@ -7,7 +7,7 @@ import { User } from "@/types";
 
 interface GpsLocationCaptureProps {
   user: User;
-  onLocationCapture: (latitude: number, longitude: number) => void;
+  onLocationCapture: (latitude: number, longitude: number, accuracy?: number) => void;
   className?: string;
 }
 
@@ -37,12 +37,12 @@ const GpsLocationCapture: React.FC<GpsLocationCaptureProps> = ({
     
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        const { latitude, longitude } = position.coords;
-        onLocationCapture(latitude, longitude);
+        const { latitude, longitude, accuracy } = position.coords;
+        onLocationCapture(latitude, longitude, accuracy);
         setIsCapturing(false);
         toast({
           title: "Location Updated",
-          description: `GPS coordinates captured: ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`,
+          description: `GPS captured with accuracy: ±${accuracy.toFixed(1)}m`,
           variant: "default"
         });
       },

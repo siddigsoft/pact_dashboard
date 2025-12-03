@@ -155,6 +155,13 @@ const UserRoleDashboard: React.FC<UserRoleDashboardProps> = ({
       color: "text-cyan-600",
       bgColor: "bg-cyan-100",
     },
+    {
+      role: "projectManager",
+      displayName: "Project Manager",
+      icon: Briefcase,
+      color: "text-indigo-600",
+      bgColor: "bg-indigo-100",
+    },
   ];
 
   const handleRoleClick = (role: string) => {

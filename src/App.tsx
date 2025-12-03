@@ -77,6 +77,8 @@ const SuperAdminManagement = lazy(() => import('./components/superAdmin/SuperAdm
 const HubOperations = lazy(() => import('./pages/HubOperations'));
 const TrackerPreparationPlan = lazy(() => import('./pages/TrackerPreparationPlan'));
 const NotificationsPage = lazy(() => import('./pages/Notifications'));
+const Documentation = lazy(() => import('./pages/Documentation'));
+const PublicDocumentation = lazy(() => import('./pages/PublicDocumentation'));
 
 // Components (keep these eagerly loaded as they're used immediately)
 import MainLayout from './components/MainLayout';
@@ -173,6 +175,8 @@ const AppRoutes = () => {
         <Route path="/projects/:id/activities/:activityId" element={<ProjectActivityDetail />} />
         <Route path="/projects/:id/team" element={<ProjectTeamManagement />} />
         <Route path="/reports" element={<Reports />} />
+        <Route path="/documentation" element={<Documentation />} />
+        <Route path="/public-documentation" element={<PublicDocumentation />} />
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/wallet" element={<WalletPage />} />
@@ -295,7 +299,9 @@ function App() {
             <Router>
               <AppProviders>
                 <Suspense fallback={<PageLoader />}>
-                  <AppRoutes />
+                  <AuthGuard>
+                    <AppRoutes />
+                  </AuthGuard>
                 </Suspense>
                 <Toaster />
                 <SonnerToaster />

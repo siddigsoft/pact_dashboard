@@ -123,6 +123,8 @@ const SiteEditForm: React.FC<SiteEditFormProps> = ({ site, onSave, onCancel, hub
     return !options[field].includes(value) && value !== '';
   };
 
+  
+
   return (
     <div className="space-y-6">
       {/* Rejection Comments Section - Show for rejected sites */}
@@ -614,6 +616,69 @@ const CoordinatorSites: React.FC = () => {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
+  // Memoize filtered sites to avoid recalculation on every render
+  const filteredSites = useMemo(() => {
+    if (!sites) return [];
+    
+    let result = sites;
+    
+    // Apply search filter
+    if (debouncedSearchQuery) {
+      const query = debouncedSearchQuery.toLowerCase();
+      result = result.filter(site =>
+        site.site_name?.toLowerCase().includes(query) ||
+        site.site_code?.toLowerCase().includes(query) ||
+        site.locality?.toLowerCase().includes(query)
+      );
+    }
+    
+    // Apply location filters
+    if (hubFilter !== 'all') {
+      result = result.filter(site => site.hub_office === hubFilter);
+    }
+    if (stateFilter !== 'all') {
+      result = result.filter(site => site.state === stateFilter);
+    }
+    if (localityFilter !== 'all') {
+      result = result.filter(site => site.locality === localityFilter);
+    }
+    if (activityFilter !== 'all') {
+      result = result.filter(site => site.activity === activityFilter);
+    }
+    if (monitoringFilter !== 'all') {
+      result = result.filter(site => site.monitoring_by === monitoringFilter);
+    }
+    if (surveyToolFilter !== 'all') {
+      result = result.filter(site => site.survey_tool === surveyToolFilter);
+    }
+    
+    return result;
+  }, [sites, debouncedSearchQuery, hubFilter, stateFilter, localityFilter, activityFilter, monitoringFilter, surveyToolFilter]);
+
+  // Memoize paginated sites
+  const paginatedSites = useMemo(() => {
+    const startIdx = (currentPage - 1) * itemsPerPage;
+    return filteredSites.slice(startIdx, startIdx + itemsPerPage);
+  }, [filteredSites, currentPage, itemsPerPage]);
+
+  // Memoize total pages
+  const totalPages = useMemo(() => {
+    return Math.ceil(filteredSites.length / itemsPerPage);
+  }, [filteredSites.length, itemsPerPage]);
+
+  // Memoize sites grouped by locality
+  const sitesGroupedByLocality = useMemo(() => {
+    const grouped: { [key: string]: SiteVisit[] } = {};
+    filteredSites.forEach(site => {
+      const key = `${site.state}|${site.locality}`;
+      if (!grouped[key]) {
+        grouped[key] = [];
+      }
+      grouped[key].push(site);
+    });
+    return grouped;
+  }, [filteredSites]);
+
   // Fetch location data from database
   useEffect(() => {
     const fetchLocationData = async () => {
@@ -688,49 +753,61 @@ const CoordinatorSites: React.FC = () => {
       try {
         const userId = currentUser.id;
         
-        // Load all counts in parallel using database count queries
-        // Note: assigned_to is now stored in additional_data.assigned_to for mmp_site_entries
-        // We need to load entries and filter in memory since we can't query JSONB fields directly with count
-        const { data: allEntries, error: entriesError } = await supabase
+        // Fetch only forwarded entries with minimal columns for better performance
+        const { data: userEntries, error: entriesError } = await supabase
           .from('mmp_site_entries')
-          .select('id, status, additional_data');
+          .select('id, status')
+          .eq('forwarded_to_user_id', userId)
+          .limit(5000);
         
-        if (entriesError) throw entriesError;
+        if (entriesError) {
+          console.warn('RLS or filter error, falling back to full fetch:', entriesError);
+          // Fallback: fetch all and filter client-side
+          const { data: allEntries } = await supabase
+            .from('mmp_site_entries')
+            .select('id, status, forwarded_to_user_id')
+            .limit(5000);
+          
+          const filtered = (allEntries || []).filter((entry: any) => {
+            return entry.forwarded_to_user_id === userId;
+          });
+          
+          updateBadgeCounts(filtered);
+          return;
+        }
         
-        // Filter entries by assigned_to in additional_data
-        const userEntries = (allEntries || []).filter((entry: any) => {
-          const ad = entry.additional_data || {};
-          return ad.assigned_to === userId;
-        });
-        
-        const newCount = { count: userEntries.filter((e: any) => 
-          e.status === 'Pending' || e.status === 'Dispatched' || e.status === 'assigned' || e.status === 'inProgress' || e.status === 'in_progress'
-        ).length };
-        const permitsAttachedCount = { count: userEntries.filter((e: any) => 
-          e.status?.toLowerCase() === 'permits_attached'
-        ).length };
-        const verifiedCount = { count: userEntries.filter((e: any) => 
-          e.status?.toLowerCase() === 'verified'
-        ).length };
-        const approvedCount = { count: userEntries.filter((e: any) => 
-          e.status?.toLowerCase() === 'approved'
-        ).length };
-        const completedCount = { count: userEntries.filter((e: any) => 
-          e.status?.toLowerCase() === 'completed'
-        ).length };
-        const rejectedCount = { count: userEntries.filter((e: any) => 
-          e.status?.toLowerCase() === 'rejected'
-        ).length };
-
-        setNewSitesCount(newCount.count || 0);
-        setPermitsAttachedCount(permitsAttachedCount.count || 0);
-        setVerifiedSitesCount(verifiedCount.count || 0);
-        setApprovedSitesCount(approvedCount.count || 0);
-        setCompletedSitesCount(completedCount.count || 0);
-        setRejectedSitesCount(rejectedCount.count || 0);
+        updateBadgeCounts(userEntries || []);
       } catch (error) {
         console.error('Error loading badge counts:', error);
       }
+    };
+
+    const updateBadgeCounts = (entries: any[]) => {
+      const newCount = entries.filter((e: any) => 
+        e.status === 'Pending' || e.status === 'Dispatched' || e.status === 'assigned' || e.status === 'inProgress' || e.status === 'in_progress'
+      ).length;
+      const permitsAttachedCount = entries.filter((e: any) => 
+        e.status?.toLowerCase() === 'permits_attached'
+      ).length;
+      const verifiedCount = entries.filter((e: any) => 
+        e.status?.toLowerCase() === 'verified'
+      ).length;
+      const approvedCount = entries.filter((e: any) => 
+        e.status?.toLowerCase() === 'approved'
+      ).length;
+      const completedCount = entries.filter((e: any) => 
+        e.status?.toLowerCase() === 'completed'
+      ).length;
+      const rejectedCount = entries.filter((e: any) => 
+        e.status?.toLowerCase() === 'rejected'
+      ).length;
+
+      setNewSitesCount(newCount);
+      setPermitsAttachedCount(permitsAttachedCount);
+      setVerifiedSitesCount(verifiedCount);
+      setApprovedSitesCount(approvedCount);
+      setCompletedSitesCount(completedCount);
+      setRejectedSitesCount(rejectedCount);
     };
 
     loadBadgeCounts();
@@ -751,25 +828,54 @@ const CoordinatorSites: React.FC = () => {
     setSurveyToolFilter('all');
     // Reset expanded localities when tab changes
     setExpandedPermitsAttachedLocalities(new Set());
-  }, [currentUser, activeTab, permits, hubStates, localities]);
+  }, [currentUser?.id, activeTab]);
 
   const loadSites = async () => {
     if (!currentUser?.id) return;
     
     setLoading(true);
     try {
-      // Load all mmp_site_entries and filter by assigned_to in additional_data
+      // Load only forwarded entries with optimized query
       const { data: allEntries, error } = await supabase
         .from('mmp_site_entries')
-        .select('*')
-        .limit(1000); // Limit for performance
+        .select('id, site_name, site_code, status, state, locality, activity_at_site, main_activity, visit_date, comments, mmp_file_id, hub_office, verified_at, verified_by, verification_notes, additional_data, created_at, forwarded_to_user_id')
+        .eq('forwarded_to_user_id', currentUser.id)
+        .limit(5000); // Increased limit but filtered by user
 
-      if (error) throw error;
+      if (error) {
+        console.warn('Filter error, falling back to full fetch:', error);
+        // Fallback: fetch all and filter client-side
+        const { data: fallbackEntries, error: fallbackError } = await supabase
+          .from('mmp_site_entries')
+          .select('id, site_name, site_code, status, state, locality, activity_at_site, main_activity, visit_date, comments, mmp_file_id, hub_office, verified_at, verified_by, verification_notes, additional_data, created_at, forwarded_to_user_id')
+          .limit(5000);
+        
+        if (fallbackError) throw fallbackError;
+        
+        // Continue with fallback data
+        processEntries(fallbackEntries || [], currentUser.id);
+        return;
+      }
       
-      // Filter entries assigned to current user and transform to SiteVisit format
+      processEntries(allEntries || [], currentUser.id);
+    } catch (error) {
+      console.error('Error loading sites:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to load sites. Please try again.',
+        variant: 'destructive'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const processEntries = async (allEntries: any[], userId: string) => {
+    try {
+      
+      // Filter entries forwarded to current user and transform to SiteVisit format
       let filtered = (allEntries || []).filter((entry: any) => {
-        const ad = entry.additional_data || {};
-        return ad.assigned_to === currentUser.id;
+        return entry.forwarded_to_user_id === userId;
       }).map((entry: any) => {
         // Clear visit_date for unverified sites in the "new" tab
         const isUnverified = entry.status === 'Pending' || entry.status === 'Dispatched' || entry.status === 'assigned' || entry.status === 'inProgress' || entry.status === 'in_progress';
@@ -833,78 +939,30 @@ const CoordinatorSites: React.FC = () => {
         stateData.totalSites++;
       });
 
-      // Check permit status for each locality within states
-      const statesArray = await Promise.all(Array.from(statesMap.values()).map(async (stateData: any) => {
-        // Determine state permit presence (uploaded or verified)
-        let statePermitVerified = false;
-        let statePermitUploaded = false;
-        let statePermitUploadedAt: any = null;
+      // Build state/locality aggregates quickly without blocking on mmp_files
+      const statesArray = Array.from(statesMap.values()).map((stateData: any) => {
+        const localitiesArray = Array.from(stateData.localities.values()).map((locality: any) => ({
+          ...locality,
+          hasPermit: false,
+          permitId: null,
+          permitUploadedAt: null
+        }));
 
-        // Get MMP file ID from the first site in this state
-        const mmpFileId = stateData.localities.values().next().value?.sites?.[0]?.mmp_file_id;
-
-        if (mmpFileId) {
-          try {
-            const { data: mmpData, error } = await supabase
-              .from('mmp_files')
-              .select('permits')
-              .eq('id', mmpFileId)
-              .single();
-
-            if (!error && mmpData?.permits) {
-              const permitsData = mmpData.permits as any;
-              if (permitsData.statePermits) {
-                const sp = permitsData.statePermits.find((sp: any) => sp.state === stateData.state);
-                if (sp) {
-                  statePermitUploaded = true; // uploaded by FOM or coordinator
-                  statePermitVerified = !!sp.verified;
-                  statePermitUploadedAt = sp.uploadedAt || null;
-                }
-              }
-            }
-          } catch (err) {
-            console.warn('Failed to check state permit for state:', stateData.state, err);
-          }
-        }
-
-        // Convert localities map to array and check local permits
-        const localitiesArray = Array.from(stateData.localities.values()).map((locality: any) => {
-          // Resolve stateId from state name
-          const resolvedStateId = hubStates.find(hs => hs.state_name === locality.state)?.state_id;
-          // Resolve localityId from locality name + stateId
-          const resolvedLocalityId = resolvedStateId
-            ? localities.find(l => l.name === locality.locality && l.state_id === resolvedStateId)?.id
-            : undefined;
-
-          const permit = resolvedStateId && resolvedLocalityId
-            ? permits.find(p => p.stateId === resolvedStateId && p.localityId === resolvedLocalityId)
-            : undefined;
-
-          return {
-            ...locality,
-            hasPermit: !!permit,
-            permitId: permit?.id || null,
-            permitUploadedAt: permit?.uploadedAt || null
-          };
-        });
-
-        // Also consider site-level flag added when forwarding with state permit
+        // Consider site-level flag added when forwarding with state permit
         let anySiteHasStatePermitFlag = false;
         try {
           const allSitesInState = localitiesArray.flatMap((loc: any) => loc.sites || []);
           anySiteHasStatePermitFlag = allSitesInState.some((s: any) => s?.additional_data?.state_permit_attached === true);
         } catch {}
 
-        const hasStatePermit = statePermitUploaded || anySiteHasStatePermitFlag;
-
         return {
           ...stateData,
           localities: localitiesArray,
-          hasStatePermit,
-          statePermitUploadedAt: statePermitUploadedAt,
-          statePermitVerified: statePermitVerified
+          hasStatePermit: anySiteHasStatePermitFlag,
+          statePermitUploadedAt: null,
+          statePermitVerified: false
         };
-      }));
+      });
 
       // Flatten sites from all states and localities (they will be filtered by the workflow)
       let allSites: SiteVisit[] = [];
@@ -1009,6 +1067,182 @@ const CoordinatorSites: React.FC = () => {
     }
   };
 
+  // Rebuild locality/permit aggregates without refetching sites to avoid
+  // re-triggering the main loading spinner. Runs when metadata changes.
+  const rebuildLocalityData = async () => {
+    try {
+      if (!sites || sites.length === 0) {
+        setLocalitiesData([]);
+        setStatePermitRequiredCount(0);
+        setLocalPermitRequiredCount(0);
+        return;
+      }
+
+      const statesMap = new Map<string, any>();
+      sites.forEach((site: any) => {
+        const stateKey = site.state;
+        if (!statesMap.has(stateKey)) {
+          statesMap.set(stateKey, {
+            state: site.state,
+            localities: new Map(),
+            totalSites: 0,
+            hasStatePermit: false,
+            statePermitUploadedAt: null,
+            statePermitVerified: false
+          });
+        }
+
+        const stateData = statesMap.get(stateKey);
+        const localityKey = site.locality;
+        if (!stateData.localities.has(localityKey)) {
+          stateData.localities.set(localityKey, {
+            state: site.state,
+            locality: site.locality,
+            sites: [],
+            hasPermit: false,
+            permitId: null,
+            permitUploadedAt: null
+          });
+        }
+
+        stateData.localities.get(localityKey).sites.push(site);
+        stateData.totalSites++;
+      });
+
+      const uniqueMmpIds = Array.from(new Set(
+        sites.map((s: any) => s.mmp_file_id).filter(Boolean)
+      ));
+
+      let mmpFilesMap = new Map<string, any>();
+      if (uniqueMmpIds.length > 0) {
+        const { data: mmpFilesData } = await supabase
+          .from('mmp_files')
+          .select('id, permits')
+          .in('id', uniqueMmpIds);
+        mmpFilesMap = new Map((mmpFilesData || []).map((m: any) => [m.id, m]));
+      }
+
+      const stateNameToId = new Map(hubStates.map((hs: any) => [hs.state_name, hs.state_id]));
+      const localityKeyToId = new Map(localities.map((l: any) => [`${l.state_id}|${l.name}`, l.id]));
+      const permitKeySet = new Set(permits.map((p: any) => `${p.stateId}|${p.localityId}`));
+
+      const statesArray = Array.from(statesMap.values()).map((stateData: any) => {
+        let statePermitVerified = false;
+        let statePermitUploaded = false;
+        let statePermitUploadedAt: any = null;
+
+        const firstLocality = stateData.localities.values().next().value;
+        const mmpFileId = firstLocality?.sites?.[0]?.mmp_file_id;
+        if (mmpFileId && mmpFilesMap.has(mmpFileId)) {
+          try {
+            const mmpData = mmpFilesMap.get(mmpFileId);
+            if (mmpData?.permits?.statePermits) {
+              const sp = (mmpData.permits.statePermits as any[]).find((x: any) => x.state === stateData.state);
+              if (sp) {
+                statePermitUploaded = true;
+                statePermitVerified = !!sp.verified;
+                statePermitUploadedAt = sp.uploadedAt || null;
+              }
+            }
+          } catch {}
+        }
+
+        const localitiesArray = Array.from(stateData.localities.values()).map((locality: any) => {
+          const resolvedStateId = stateNameToId.get(locality.state);
+          const resolvedLocalityId = resolvedStateId ? localityKeyToId.get(`${resolvedStateId}|${locality.locality}`) : undefined;
+          const hasPermit = resolvedStateId && resolvedLocalityId ? permitKeySet.has(`${resolvedStateId}|${resolvedLocalityId}`) : false;
+          return {
+            ...locality,
+            hasPermit,
+            permitId: null,
+            permitUploadedAt: null
+          };
+        });
+
+        let anySiteHasStatePermitFlag = false;
+        try {
+          const allSitesInState = localitiesArray.flatMap((loc: any) => loc.sites || []);
+          anySiteHasStatePermitFlag = allSitesInState.some((s: any) => s?.additional_data?.state_permit_attached === true);
+        } catch {}
+
+        const hasStatePermit = statePermitUploaded || anySiteHasStatePermitFlag;
+
+        return {
+          ...stateData,
+          localities: localitiesArray,
+          hasStatePermit,
+          statePermitUploadedAt,
+          statePermitVerified
+        };
+      });
+
+      // Subcategory counts
+      const statePermitRequired = statesArray
+        .filter((state: any) => !state.hasStatePermit)
+        .reduce((total: number, state: any) => total + state.totalSites, 0);
+
+      const localPermitRequired = statesArray
+        .filter((state: any) => state.hasStatePermit)
+        .flatMap((state: any) => state.localities)
+        .filter((locality: any) => !locality.hasPermit)
+        .filter((locality: any) => {
+          return locality.sites.some((site: any) => 
+            site.status === 'Pending' || site.status === 'Dispatched' || 
+            site.status === 'assigned' || site.status === 'inProgress' || 
+            site.status === 'in_progress'
+          );
+        })
+        .reduce((total: number, locality: any) => {
+          const pendingSites = locality.sites.filter((site: any) => 
+            site.status === 'Pending' || site.status === 'Dispatched' || 
+            site.status === 'assigned' || site.status === 'inProgress' || 
+            site.status === 'in_progress'
+          );
+          return total + pendingSites.length;
+        }, 0);
+
+      setLocalitiesData(statesArray);
+      setStatePermitRequiredCount(statePermitRequired);
+      setLocalPermitRequiredCount(localPermitRequired);
+    } catch {}
+  };
+
+  useEffect(() => {
+    // Only recompute aggregates when metadata changes; do not refetch sites
+    rebuildLocalityData();
+  }, [sites, permits, hubStates, localities]);
+
+  useEffect(() => {
+    let debounceId: number | null = null;
+    const scheduleReload = () => {
+      if (debounceId) window.clearTimeout(debounceId);
+      debounceId = window.setTimeout(() => {
+        loadSites();
+        debounceId = null;
+      }, 1000); // Increased debounce to 1s to reduce rapid reloads
+    };
+
+    const channel = supabase
+      .channel('coordinator_sites_live')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'mmp_site_entries' },
+        (payload) => {
+          // Only reload if change is relevant to current user
+          if (payload.new?.forwarded_to_user_id === currentUser?.id ||
+              payload.old?.forwarded_to_user_id === currentUser?.id) {
+            scheduleReload();
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      try { supabase.removeChannel(channel); } catch {}
+      if (debounceId) window.clearTimeout(debounceId);
+    };
+  }, [currentUser?.id]);
+
   const handleVerifySite = async (siteId: string, notes?: string) => {
     try {
       const updateData: any = {
@@ -1110,14 +1344,13 @@ const CoordinatorSites: React.FC = () => {
       // Reload badge counts
       if (currentUser?.id) {
         const userId = currentUser.id;
-        // Load entries and filter by assigned_to in additional_data
+        // Load entries forwarded to current user
         const { data: allEntries } = await supabase
           .from('mmp_site_entries')
-          .select('id, status, additional_data');
+          .select('id, status, forwarded_to_user_id');
         
         const userEntries = (allEntries || []).filter((entry: any) => {
-          const ad = entry.additional_data || {};
-          return ad.assigned_to === userId;
+          return entry.forwarded_to_user_id === userId;
         });
         
         const newCount = { count: userEntries.filter((e: any) => 
@@ -1190,14 +1423,13 @@ const CoordinatorSites: React.FC = () => {
       // Reload badge counts
       if (currentUser?.id) {
         const userId = currentUser.id;
-        // Load entries and filter by assigned_to in additional_data
+        // Load entries forwarded to current user
         const { data: allEntries } = await supabase
           .from('mmp_site_entries')
-          .select('id, status, additional_data');
+          .select('id, status, forwarded_to_user_id');
         
         const userEntries = (allEntries || []).filter((entry: any) => {
-          const ad = entry.additional_data || {};
-          return ad.assigned_to === userId;
+          return entry.forwarded_to_user_id === userId;
         });
         
         const newCount = { count: userEntries.filter((e: any) => 
@@ -1904,80 +2136,6 @@ const CoordinatorSites: React.FC = () => {
     setSelectedSites(newSelected);
   };
 
-  // Filter sites by search query and filters (client-side filtering)
-  const filteredSites = useMemo(() => {
-    let filtered = sites;
-
-    // Apply search query filter
-    if (debouncedSearchQuery.trim()) {
-      const q = debouncedSearchQuery.toLowerCase();
-      filtered = filtered.filter(site => 
-        site.site_name?.toLowerCase().includes(q) ||
-        site.site_code?.toLowerCase().includes(q) ||
-        site.state?.toLowerCase().includes(q) ||
-        site.locality?.toLowerCase().includes(q) ||
-        site.activity?.toLowerCase().includes(q) ||
-        site.main_activity?.toLowerCase().includes(q) ||
-        site.hub_office?.toLowerCase().includes(q)
-      );
-    }
-
-    // Apply category filters
-    if (hubFilter !== 'all') {
-      filtered = filtered.filter(site => site.hub_office === hubFilter);
-    }
-
-    if (stateFilter !== 'all') {
-      filtered = filtered.filter(site => site.state === stateFilter);
-    }
-
-    if (activityFilter !== 'all') {
-      filtered = filtered.filter(site => 
-        site.activity_at_site?.includes(activityFilter) || 
-        site.activity === activityFilter ||
-        site.main_activity === activityFilter
-      );
-    }
-
-    if (monitoringFilter !== 'all') {
-      filtered = filtered.filter(site => site.monitoring_by === monitoringFilter);
-    }
-
-    if (surveyToolFilter !== 'all') {
-      filtered = filtered.filter(site => site.survey_tool === surveyToolFilter);
-    }
-
-    // Apply locality filter
-    if (localityFilter !== 'all') {
-      filtered = filtered.filter(site => site.locality === localityFilter);
-    }
-
-    return filtered;
-  }, [sites, debouncedSearchQuery, hubFilter, stateFilter, localityFilter, activityFilter, monitoringFilter, surveyToolFilter]);
-
-  // Group sites by locality for permits attached tab
-  const sitesGroupedByLocality = useMemo(() => {
-    const grouped: { [key: string]: SiteVisit[] } = {};
-    
-    filteredSites.forEach(site => {
-      const key = `${site.state}-${site.locality}`;
-      if (!grouped[key]) {
-        grouped[key] = [];
-      }
-      grouped[key].push(site);
-    });
-
-    return grouped;
-  }, [filteredSites]);
-
-  // Paginate filtered results
-  const paginatedSites = useMemo(() => {
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    const endIndex = startIndex + itemsPerPage;
-    return filteredSites.slice(startIndex, endIndex);
-  }, [filteredSites, currentPage, itemsPerPage]);
-
-  const totalPages = Math.ceil(filteredSites.length / itemsPerPage);
 
   const renderSiteCard = (site: SiteVisit, showActions: boolean = true, isPreviewMode: boolean = false) => (
     <Card 

@@ -28,6 +28,17 @@ interface UseOfflineReturn {
   isSyncing: boolean;
   lastSyncResult: SyncResult | null;
   syncNow: () => Promise<SyncResult>;
+  claimSiteOffline: (data: {
+    siteEntryId: string;
+    userId: string;
+    isDispatchedSite: boolean;
+    enumeratorFee: number;
+    transportFee: number;
+    totalCost: number;
+    classificationLevel?: string;
+    roleScope?: string;
+    feeSource?: string;
+  }) => Promise<string>;
   startSiteVisitOffline: (data: {
     siteEntryId: string;
     siteName: string;
@@ -135,6 +146,36 @@ export function useOffline(): UseOfflineReturn {
     return result;
   }, []);
 
+  const claimSiteOffline = useCallback(async (data: {
+    siteEntryId: string;
+    userId: string;
+    isDispatchedSite: boolean;
+    enumeratorFee: number;
+    transportFee: number;
+    totalCost: number;
+    classificationLevel?: string;
+    roleScope?: string;
+    feeSource?: string;
+  }): Promise<string> => {
+    const id = await addPendingSync({
+      type: 'site_visit_claim',
+      payload: {
+        siteEntryId: data.siteEntryId,
+        userId: data.userId,
+        isDispatchedSite: data.isDispatchedSite,
+        enumeratorFee: data.enumeratorFee,
+        transportFee: data.transportFee,
+        totalCost: data.totalCost,
+        classificationLevel: data.classificationLevel,
+        roleScope: data.roleScope,
+        feeSource: data.feeSource,
+        claimedAt: new Date().toISOString(),
+      },
+    });
+    await refreshStats();
+    return id;
+  }, [refreshStats]);
+
   const startSiteVisitOffline = useCallback(async (data: {
     siteEntryId: string;
     siteName: string;
@@ -226,6 +267,7 @@ export function useOffline(): UseOfflineReturn {
     isSyncing,
     lastSyncResult,
     syncNow,
+    claimSiteOffline,
     startSiteVisitOffline,
     completeSiteVisitOffline,
     getOfflineVisit,

@@ -61,6 +61,23 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [currentUser]);
 
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    const channel = supabase
+      .channel(`chat_participants:${currentUser.id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'chat_participants', filter: `user_id=eq.${currentUser.id}` },
+        () => {
+          loadChats(currentUser.id);
+        }
+      )
+      .subscribe();
+    return () => {
+      try { supabase.removeChannel(channel); } catch {}
+    };
+  }, [currentUser?.id]);
+
   const loadChats = async (userId: string) => {
     setIsLoading(true);
     setError(null);

@@ -13,6 +13,7 @@ import { OnlineOfflineToggle } from "@/components/common/OnlineOfflineToggle";
 import { GlobalRefreshBar } from "@/components/GlobalRefreshBar";
 import { NotificationInitializer } from "@/components/NotificationInitializer";
 import { MobileBottomNav } from "@/components/mobile/MobileBottomNav";
+import { useLiveDashboard } from "@/hooks/useLiveDashboard";
 
 interface MainLayoutContentProps {
   children?: React.ReactNode;
@@ -21,6 +22,7 @@ interface MainLayoutContentProps {
 const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
   // Get app context - now this will be available since we've fixed the provider order
   const { currentUser } = useAppContext();
+  useLiveDashboard();
   const navigate = useNavigate();
   const location = useLocation();
   const [isAuthorized, setIsAuthorized] = useState<boolean>(false);

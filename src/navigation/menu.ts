@@ -20,6 +20,8 @@ import {
   DollarSign,
   Settings,
   BarChart3,
+  ClipboardCheck,
+  Timer,
 } from 'lucide-react';
 import { AppRole } from '@/types';
 import { MenuPreferences, DEFAULT_MENU_PREFERENCES } from '@/types/user-preferences';
@@ -52,6 +54,7 @@ export const getWorkflowMenuGroups = (
   const isCoordinator = roles.includes('Coordinator' as AppRole) || roles.includes('coordinator' as AppRole) || defaultRole === 'coordinator' || defaultRole === 'Coordinator';
   const isFOM = roles.includes('fom' as AppRole) || defaultRole === 'fom';
   const isSupervisor = roles.includes('supervisor' as AppRole) || defaultRole === 'supervisor';
+  const isProjectManager = roles.includes('projectManager' as AppRole) || defaultRole === 'projectManager';
 
   const isHidden = (url: string) => menuPrefs.hiddenItems.includes(url);
   const isPinned = (url: string) => menuPrefs.pinnedItems.includes(url);
@@ -59,7 +62,7 @@ export const getWorkflowMenuGroups = (
   const groups: MenuGroup[] = [];
 
   const overviewItems: MenuGroup['items'] = [];
-  if (!isHidden('/dashboard') && (isAdmin || isICT || perms.dashboard)) {
+  if (!isHidden('/dashboard') && (isAdmin || isICT || isProjectManager || perms.dashboard)) {
     overviewItems.push({ id: 'dashboard', title: 'Dashboard', url: '/dashboard', icon: LayoutDashboard, priority: 1, isPinned: isPinned('/dashboard') });
   }
   if (!isHidden('/wallet') && isDataCollector) {
@@ -71,7 +74,7 @@ export const getWorkflowMenuGroups = (
   if (overviewItems.length) groups.push({ id: 'overview', label: 'Overview', order: 1, items: overviewItems });
 
   const planningItems: MenuGroup['items'] = [];
-  if (!isHidden('/projects') && (isAdmin || isICT || perms.projects)) {
+  if (!isHidden('/projects') && (isAdmin || isICT || isProjectManager || perms.projects)) {
     planningItems.push({ id: 'projects', title: 'Projects', url: '/projects', icon: FolderKanban, priority: 1, isPinned: isPinned('/projects') });
   }
   if (!isHidden('/mmp') && (isAdmin || isICT || perms.mmp || isCoordinator)) {
@@ -108,13 +111,25 @@ export const getWorkflowMenuGroups = (
   if (!isHidden('/data-visibility') && ((isAdmin || perms.dataVisibility) && !isICT)) {
     dataItems.push({ id: 'data-visibility', title: 'Data Visibility', url: '/data-visibility', icon: Link2, priority: 1, isPinned: isPinned('/data-visibility') });
   }
-  if (!isHidden('/reports') && ((isAdmin || perms.reports) && !isICT)) {
+  if (!isHidden('/reports') && ((isAdmin || isProjectManager || perms.reports) && !isICT)) {
     dataItems.push({ id: 'reports', title: 'Reports', url: '/reports', icon: Calendar, priority: 2, isPinned: isPinned('/reports') });
   }
   if (!isHidden('/tracker-preparation-plan') && (isAdmin || isICT)) {
     dataItems.push({ id: 'tracker-plan', title: 'Tracker Preparation', url: '/tracker-preparation-plan', icon: BarChart3, priority: 3, isPinned: isPinned('/tracker-preparation-plan') });
   }
   if (dataItems.length) groups.push({ id: 'reports', label: 'Data & Reports', order: 5, items: dataItems });
+
+  const projectMgmtItems: MenuGroup['items'] = [];
+  if (!isHidden('/dashboard?tab=approvals') && isProjectManager) {
+    projectMgmtItems.push({ id: 'project-approvals', title: 'Approvals Queue', url: '/dashboard?tab=approvals', icon: ClipboardCheck, priority: 1, isPinned: isPinned('/dashboard?tab=approvals') });
+  }
+  if (!isHidden('/dashboard?tab=deadlines') && isProjectManager) {
+    projectMgmtItems.push({ id: 'project-deadlines', title: 'Deadline Tracker', url: '/dashboard?tab=deadlines', icon: Timer, priority: 2, isPinned: isPinned('/dashboard?tab=deadlines') });
+  }
+  if (!isHidden('/dashboard?tab=team') && isProjectManager) {
+    projectMgmtItems.push({ id: 'team-performance', title: 'Team Performance', url: '/dashboard?tab=team', icon: Users, priority: 3, isPinned: isPinned('/dashboard?tab=team') });
+  }
+  if (projectMgmtItems.length) groups.push({ id: 'project-mgmt', label: 'Project Management', order: 5.5, items: projectMgmtItems });
 
   const adminItems: MenuGroup['items'] = [];
   if (!isHidden('/users') && (isAdmin || isICT || perms.users)) {
@@ -135,7 +150,7 @@ export const getWorkflowMenuGroups = (
   if (!isHidden('/financial-operations') && perms.financialOperations) {
     adminItems.push({ id: 'financial-ops', title: 'Financial Operations', url: '/financial-operations', icon: TrendingUp, priority: 5, isPinned: isPinned('/financial-operations') });
   }
-  if (!isHidden('/budget') && (isAdmin || isFinancialAdmin)) {
+  if (!isHidden('/budget') && (isAdmin || isFinancialAdmin || isProjectManager)) {
     adminItems.push({ id: 'budget', title: 'Budget', url: '/budget', icon: DollarSign, priority: 6, isPinned: isPinned('/budget') });
   }
   if (!isHidden('/admin/wallets') && (isAdmin || isFinancialAdmin)) {

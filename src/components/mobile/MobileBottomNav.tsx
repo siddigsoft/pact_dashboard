@@ -12,6 +12,7 @@ interface NavItem {
   label: string;
   path: string;
   badge?: number;
+  offlineCapable?: boolean;
 }
 
 interface MobileBottomNavProps {
@@ -20,10 +21,10 @@ interface MobileBottomNavProps {
 }
 
 const mainNavItems: NavItem[] = [
-  { icon: LayoutDashboard, label: 'Home', path: '/dashboard' },
-  { icon: MapPin, label: 'Sites', path: '/mmp' },
-  { icon: Wallet, label: 'Wallet', path: '/wallet' },
-  { icon: Bell, label: 'Alerts', path: '/notifications' },
+  { icon: LayoutDashboard, label: 'Home', path: '/dashboard', offlineCapable: false },
+  { icon: MapPin, label: 'Sites', path: '/site-visits', offlineCapable: true },
+  { icon: Wallet, label: 'Wallet', path: '/wallet', offlineCapable: false },
+  { icon: Bell, label: 'Alerts', path: '/notifications', offlineCapable: false },
 ];
 
 export function MobileBottomNav({ notificationCount = 0, className }: MobileBottomNavProps) {

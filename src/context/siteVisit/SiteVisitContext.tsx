@@ -19,26 +19,46 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const { currentUser, users, updateUser } = useUser();
   const { addSiteVisitFeeToWallet } = useWallet();
   
+  const refreshSiteVisits = async () => {
+    try {
+      setLoading(true);
+      const visits = await fetchSiteVisits();
+      setAppSiteVisits(visits);
+    } catch (error) {
+      console.error('Failed to load site visits:', error);
+      toast({
+        title: "Error loading site visits",
+        description: "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const loadSiteVisits = async () => {
-      try {
-        setLoading(true);
-        const visits = await fetchSiteVisits();
-        setAppSiteVisits(visits);
-      } catch (error) {
-        console.error('Failed to load site visits:', error);
-        toast({
-          title: "Error loading site visits",
-          description: "Please try refreshing the page.",
-          variant: "destructive",
-        });
-      } finally {
-        setLoading(false);
-      }
-    };
-    
-    loadSiteVisits();
+    refreshSiteVisits();
   }, [toast]);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('site_visit_changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'mmp_site_entries' },
+        () => refreshSiteVisits()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'site_visits' },
+        () => refreshSiteVisits()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   const createSiteVisit = async (siteVisitData: Partial<SiteVisit>): Promise<string | undefined> => {
     try {
@@ -736,6 +756,7 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       value={{
         siteVisits: appSiteVisits,
         loading,
+        refreshSiteVisits,
         verifySitePermit,
         assignSiteVisit,
         startSiteVisit,

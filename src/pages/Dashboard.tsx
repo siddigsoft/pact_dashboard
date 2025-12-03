@@ -13,6 +13,7 @@ import { FOMZone } from '@/components/dashboard/zones/FOMZone';
 import { DataCollectorZone } from '@/components/dashboard/zones/DataCollectorZone';
 import { FinancialZone } from '@/components/dashboard/zones/FinancialZone';
 import { ICTZone } from '@/components/dashboard/zones/ICTZone';
+import { ProjectManagerZone } from '@/components/dashboard/zones/ProjectManagerZone';
 import { DashboardZone as DashboardZoneType } from '@/types/user-preferences';
 
 const normalizeRole = (role: string): string => {
@@ -40,8 +41,8 @@ const Dashboard = () => {
 
     if (dashboardPreferences?.defaultZone) {
       const rawPref = dashboardPreferences.defaultZone as unknown as DashboardZoneType;
-      const normalizedPref = (rawPref === 'dataCollector' ? 'data-collector' : rawPref) as DashboardZone;
-      if (['operations', 'fom', 'data-collector', 'team', 'planning', 'compliance', 'performance', 'financial', 'ict'].includes(normalizedPref)) {
+      const normalizedPref = (rawPref === 'dataCollector' ? 'data-collector' : rawPref === 'projectManager' ? 'project-manager' : rawPref) as DashboardZone;
+      if (['operations', 'fom', 'data-collector', 'team', 'planning', 'compliance', 'performance', 'financial', 'ict', 'project-manager'].includes(normalizedPref)) {
         return normalizedPref;
       }
     }
@@ -57,6 +58,9 @@ const Dashboard = () => {
 
     const isFinancialAdmin = roles?.some(r => normalizeRole(r).includes('financialadmin'));
     if (isFinancialAdmin) return 'performance';
+
+    const isProjectManager = roles?.some(r => normalizeRole(r).includes('projectmanager'));
+    if (isProjectManager) return 'project-manager';
 
     const isICT = roles?.some(r => normalizeRole(r) === 'ict');
     if (isICT) return 'operations';
@@ -94,6 +98,8 @@ const Dashboard = () => {
         return <FinancialZone />;
       case 'ict':
         return <ICTZone />;
+      case 'project-manager':
+        return <ProjectManagerZone />;
       default:
         return <OperationsZone />;
     }

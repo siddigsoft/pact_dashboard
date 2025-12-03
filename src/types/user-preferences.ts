@@ -1,11 +1,12 @@
 export type DashboardZone = 
-  | 'operations'      // SuperAdmin, Admin - system overview
-  | 'fom'             // Field Operations Manager - hub & team management
-  | 'team'            // Supervisor - team activity & compliance
-  | 'planning'        // Coordinator - site verification, MMP status
-  | 'dataCollector'   // DataCollector - my sites, wallet, upcoming visits
-  | 'financial'       // FinancialAdmin - budget, cost approvals
-  | 'ict';            // ICT - system health, user stats
+  | 'operations'       // SuperAdmin, Admin - system overview
+  | 'fom'              // Field Operations Manager - hub & team management
+  | 'team'             // Supervisor - team activity & compliance
+  | 'planning'         // Coordinator - site verification, MMP status
+  | 'dataCollector'    // DataCollector - my sites, wallet, upcoming visits
+  | 'financial'        // FinancialAdmin - budget, cost approvals
+  | 'ict'              // ICT - system health, user stats
+  | 'projectManager';  // Project Manager - full project oversight, budget approval, deadlines
 
 export interface MenuPreferences {
   hiddenItems: string[];       // URLs to hide from sidebar
@@ -47,6 +48,7 @@ export const ROLE_DEFAULT_ZONES: Record<string, DashboardZone> = {
   admin: 'operations',
   ict: 'ict',
   financialAdmin: 'financial',
+  projectManager: 'projectManager',
   fom: 'fom',
   'field operation manager (fom)': 'fom',
   supervisor: 'team',
@@ -66,25 +68,30 @@ export interface DashboardWidget {
 }
 
 export const DASHBOARD_WIDGETS: DashboardWidget[] = [
-  { id: 'pending-approvals', title: 'Pending Approvals', description: 'MMPs and requests awaiting approval', zones: ['operations', 'fom'], size: 'medium', priority: 1 },
+  { id: 'pending-approvals', title: 'Pending Approvals', description: 'MMPs and requests awaiting approval', zones: ['operations', 'fom', 'projectManager'], size: 'medium', priority: 1 },
   { id: 'system-overview', title: 'System Overview', description: 'Key system metrics', zones: ['operations', 'ict'], size: 'large', priority: 1 },
-  { id: 'active-projects', title: 'Active Projects', description: 'Current project status', zones: ['operations', 'fom', 'planning'], size: 'medium', priority: 2 },
-  { id: 'mmp-pipeline', title: 'MMP Pipeline', description: 'MMP workflow status', zones: ['operations', 'fom', 'planning', 'ict'], size: 'medium', priority: 2 },
-  { id: 'site-visits-today', title: "Today's Site Visits", description: 'Scheduled visits for today', zones: ['operations', 'fom', 'team', 'dataCollector'], size: 'medium', priority: 1 },
-  { id: 'team-locations', title: 'Team Locations', description: 'Live team member locations', zones: ['fom', 'team'], size: 'large', priority: 2 },
-  { id: 'team-activity', title: 'Team Activity', description: 'Recent team member activity', zones: ['fom', 'team'], size: 'medium', priority: 3 },
-  { id: 'hub-stats', title: 'Hub Statistics', description: 'Performance by hub', zones: ['operations', 'fom'], size: 'medium', priority: 3 },
+  { id: 'active-projects', title: 'Active Projects', description: 'Current project status', zones: ['operations', 'fom', 'planning', 'projectManager'], size: 'medium', priority: 2 },
+  { id: 'mmp-pipeline', title: 'MMP Pipeline', description: 'MMP workflow status', zones: ['operations', 'fom', 'planning', 'ict', 'projectManager'], size: 'medium', priority: 2 },
+  { id: 'site-visits-today', title: "Today's Site Visits", description: 'Scheduled visits for today', zones: ['operations', 'fom', 'team', 'dataCollector', 'projectManager'], size: 'medium', priority: 1 },
+  { id: 'team-locations', title: 'Team Locations', description: 'Live team member locations', zones: ['fom', 'team', 'projectManager'], size: 'large', priority: 2 },
+  { id: 'team-activity', title: 'Team Activity', description: 'Recent team member activity', zones: ['fom', 'team', 'projectManager'], size: 'medium', priority: 3 },
+  { id: 'hub-stats', title: 'Hub Statistics', description: 'Performance by hub', zones: ['operations', 'fom', 'projectManager'], size: 'medium', priority: 3 },
   { id: 'compliance-overview', title: 'Compliance Overview', description: 'Team compliance metrics', zones: ['team'], size: 'medium', priority: 1 },
   { id: 'site-verification', title: 'Sites for Verification', description: 'Pending site verifications', zones: ['planning'], size: 'medium', priority: 1 },
   { id: 'my-sites', title: 'My Assigned Sites', description: 'Your site assignments', zones: ['dataCollector'], size: 'large', priority: 1 },
   { id: 'my-wallet', title: 'My Wallet', description: 'Wallet balance and transactions', zones: ['dataCollector'], size: 'medium', priority: 2 },
   { id: 'upcoming-visits', title: 'Upcoming Visits', description: 'Your scheduled site visits', zones: ['dataCollector'], size: 'medium', priority: 3 },
-  { id: 'budget-tracking', title: 'Budget Tracking', description: 'Budget utilization overview', zones: ['financial', 'operations'], size: 'large', priority: 1 },
-  { id: 'cost-approvals', title: 'Cost Approvals', description: 'Pending cost submissions', zones: ['financial'], size: 'medium', priority: 1 },
-  { id: 'wallet-overview', title: 'Wallet Overview', description: 'All wallets summary', zones: ['financial'], size: 'medium', priority: 2 },
+  { id: 'budget-tracking', title: 'Budget Tracking', description: 'Budget utilization overview', zones: ['financial', 'operations', 'projectManager'], size: 'large', priority: 1 },
+  { id: 'cost-approvals', title: 'Cost Approvals', description: 'Pending cost submissions', zones: ['financial', 'projectManager'], size: 'medium', priority: 1 },
+  { id: 'wallet-overview', title: 'Wallet Overview', description: 'All wallets summary', zones: ['financial', 'projectManager'], size: 'medium', priority: 2 },
   { id: 'user-stats', title: 'User Statistics', description: 'User registration and activity', zones: ['ict', 'operations'], size: 'medium', priority: 2 },
   { id: 'system-health', title: 'System Health', description: 'System performance metrics', zones: ['ict'], size: 'medium', priority: 1 },
-  { id: 'recent-activity', title: 'Recent Activity', description: 'Latest system activity', zones: ['operations', 'ict'], size: 'medium', priority: 4 }
+  { id: 'recent-activity', title: 'Recent Activity', description: 'Latest system activity', zones: ['operations', 'ict', 'projectManager'], size: 'medium', priority: 4 },
+  { id: 'project-overview', title: 'Project Overview', description: 'Complete project status and progress', zones: ['projectManager'], size: 'large', priority: 1 },
+  { id: 'budget-approval', title: 'Budget Approvals', description: 'Pending budget requests requiring approval', zones: ['projectManager'], size: 'medium', priority: 1 },
+  { id: 'deadline-tracker', title: 'Deadline Tracker', description: 'Upcoming deadlines and milestones', zones: ['projectManager'], size: 'medium', priority: 2 },
+  { id: 'team-performance', title: 'Team Performance', description: 'Team productivity and metrics', zones: ['projectManager'], size: 'medium', priority: 3 },
+  { id: 'project-timeline', title: 'Project Timeline', description: 'Activities and milestones timeline', zones: ['projectManager'], size: 'large', priority: 2 }
 ];
 
 export interface MenuGroup {
@@ -165,9 +172,11 @@ export const WORKFLOW_MENU_GROUPS: MenuGroup[] = [
       { id: 'super-admin', title: 'Super Admin', url: '/super-admin-management', icon: 'ShieldCheck', roles: ['superAdmin'], priority: 3 },
       { id: 'classifications', title: 'Classifications', url: '/classifications', icon: 'Award', roles: ['admin', 'financialAdmin'], priority: 4 },
       { id: 'financial-ops', title: 'Financial Operations', url: '/financial-operations', icon: 'TrendingUp', priority: 5 },
-      { id: 'budget', title: 'Budget', url: '/budget', icon: 'DollarSign', roles: ['admin', 'financialAdmin'], priority: 6 },
+      { id: 'budget', title: 'Budget', url: '/budget', icon: 'DollarSign', roles: ['admin', 'financialAdmin', 'projectManager'], priority: 6 },
       { id: 'wallets', title: 'Wallets', url: '/admin/wallets', icon: 'CreditCard', roles: ['admin', 'financialAdmin'], priority: 7 },
-      { id: 'settings', title: 'Settings', url: '/settings', icon: 'Settings', priority: 8 }
+      { id: 'settings', title: 'Settings', url: '/settings', icon: 'Settings', priority: 8 },
+      { id: 'project-manager-dashboard', title: 'PM Dashboard', url: '/dashboard', icon: 'FolderKanban', roles: ['projectManager'], priority: 9 },
+      { id: 'project-approvals', title: 'Approvals Queue', url: '/dashboard?tab=approvals', icon: 'ClipboardCheck', roles: ['projectManager'], priority: 10 }
     ]
   }
 ];
