@@ -526,7 +526,7 @@ const BudgetPage = () => {
             </div>
           </div>
           
-          {filteredMMPBudgets.length === 0 ? (
+          {filteredMmpBudgets.length === 0 ? (
             <Card className="bg-gradient-to-br from-slate-900/80 to-purple-900/80 border-purple-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(168,85,247,0.2)]">
               <CardContent className="flex flex-col items-center justify-center py-12">
                 <BarChart3 className="w-12 h-12 text-purple-400 mb-4" />
@@ -538,7 +538,7 @@ const BudgetPage = () => {
             </Card>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredMMPBudgets.map((budget) => (
+              {filteredMmpBudgets.map((budget) => (
                 <MMPBudgetCard
                   key={budget.id}
                   budget={budget}
