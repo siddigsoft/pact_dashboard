@@ -3037,47 +3037,51 @@ const MMP = () => {
           <div className="text-center text-muted-foreground py-8">Loading MMP files...</div>
         ) : (
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className={`grid w-full mb-6 ${canClaimSites ? 'grid-cols-1' : 'grid-cols-3'}`}>
-              {canClaimSites && (
-                <TabsTrigger value="enumerator" className="flex items-center gap-2 data-[state=active]:bg-blue-200 data-[state=active]:text-blue-900 data-[state=active]:shadow-none">
-                  My Assignments
-                  <Badge variant="secondary">{enumeratorMySites.length}</Badge>
-                </TabsTrigger>
-              )}
-              {!canClaimSites && (
-                <TabsTrigger value="new" className="flex items-center gap-2 data-[state=active]:bg-blue-200 data-[state=active]:text-blue-900 data-[state=active]:shadow-none">
-                  New MMPs
-                  <Badge variant="secondary">{categorizedMMPs.new.length}</Badge>
-                </TabsTrigger>
-              )}
-              {!canClaimSites && (
-                <TabsTrigger value="forwarded" className="flex items-center gap-2 data-[state=active]:bg-blue-200 data-[state=active]:text-blue-900 data-[state=active]:shadow-none">
-                  {isFOM ? 'Forwarded Sites' : 'Forwarded MMPs'}
-                  <Badge variant="secondary">{categorizedMMPs.forwarded.length}</Badge>
-                </TabsTrigger>
-              )}
-              {!canClaimSites && (
-                <TabsTrigger value="verified" className="flex items-center gap-2 data-[state=active]:bg-blue-200 data-[state=active]:text-blue-900 data-[state=active]:shadow-none">
-                  Verified Sites
-                  <Badge variant="secondary">{categorizedMMPs.verified.length}</Badge>
-                </TabsTrigger>
-              )}
-            </TabsList>
+            <div className="overflow-x-auto mb-6">
+              <TabsList className="inline-flex w-max bg-gradient-to-r from-slate-900/80 to-blue-900/80 border border-blue-500/30 backdrop-blur-xl p-1 min-h-[44px]">
+                {canClaimSites && (
+                  <TabsTrigger value="enumerator" className="flex items-center gap-2 data-[state=active]:bg-blue-200 data-[state=active]:text-blue-900 data-[state=active]:shadow-none min-h-[44px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap">
+                    My Assignments
+                    <Badge variant="secondary">{enumeratorMySites.length}</Badge>
+                  </TabsTrigger>
+                )}
+                {!canClaimSites && (
+                  <TabsTrigger value="new" className="flex items-center gap-2 data-[state=active]:bg-blue-200 data-[state=active]:text-blue-900 data-[state=active]:shadow-none min-h-[44px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap">
+                    New MMPs
+                    <Badge variant="secondary">{categorizedMMPs.new.length}</Badge>
+                  </TabsTrigger>
+                )}
+                {!canClaimSites && (
+                  <TabsTrigger value="forwarded" className="flex items-center gap-2 data-[state=active]:bg-blue-200 data-[state=active]:text-blue-900 data-[state=active]:shadow-none min-h-[44px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap">
+                    {isFOM ? 'Forwarded Sites' : 'Forwarded MMPs'}
+                    <Badge variant="secondary">{categorizedMMPs.forwarded.length}</Badge>
+                  </TabsTrigger>
+                )}
+                {!canClaimSites && (
+                  <TabsTrigger value="verified" className="flex items-center gap-2 data-[state=active]:bg-blue-200 data-[state=active]:text-blue-900 data-[state=active]:shadow-none min-h-[44px] text-xs sm:text-sm flex-shrink-0 whitespace-nowrap">
+                    Verified Sites
+                    <Badge variant="secondary">{categorizedMMPs.verified.length}</Badge>
+                  </TabsTrigger>
+                )}
+              </TabsList>
+            </div>
 
             {!canClaimSites && (
               <TabsContent value="new">
                 {isFOM && (
                   <div className="mb-4">
                     <div className="text-sm font-medium text-muted-foreground mb-2">Subcategory:</div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <Button variant={newFomSubTab === 'pending' ? 'default' : 'outline'} size="sm" onClick={() => setNewFomSubTab('pending')} className={newFomSubTab === 'pending' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''}>
-                        MMPs Pending Verification
-                        <Badge variant="secondary" className="ml-2">{newFomSubcategories.pending.length}</Badge>
-                      </Button>
-                      <Button variant={newFomSubTab === 'verified' ? 'default' : 'outline'} size="sm" onClick={() => setNewFomSubTab('verified')} className={newFomSubTab === 'verified' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''}>
-                        Verified MMPs
-                        <Badge variant="secondary" className="ml-2">{newFomSubcategories.verified.length}</Badge>
-                      </Button>
+                    <div className="overflow-x-auto pb-2">
+                      <div className="flex gap-2 min-w-max">
+                        <Button variant={newFomSubTab === 'pending' ? 'default' : 'outline'} size="sm" onClick={() => setNewFomSubTab('pending')} className={`${newFomSubTab === 'pending' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} flex-shrink-0 whitespace-nowrap`}>
+                          MMPs Pending Verification
+                          <Badge variant="secondary" className="ml-2">{newFomSubcategories.pending.length}</Badge>
+                        </Button>
+                        <Button variant={newFomSubTab === 'verified' ? 'default' : 'outline'} size="sm" onClick={() => setNewFomSubTab('verified')} className={`${newFomSubTab === 'verified' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} flex-shrink-0 whitespace-nowrap`}>
+                          Verified MMPs
+                          <Badge variant="secondary" className="ml-2">{newFomSubcategories.verified.length}</Badge>
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -3090,15 +3094,17 @@ const MMP = () => {
                 {(isAdmin || isICT || isFOM) && (
                   <div className="mb-4">
                     <div className="text-sm font-medium text-muted-foreground mb-2">Subcategory:</div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <Button variant={forwardedSubTab === 'pending' ? 'default' : 'outline'} size="sm" onClick={() => setForwardedSubTab('pending')} className={forwardedSubTab === 'pending' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''}>
-                        {isFOM ? 'Sites Pending Verification' : 'MMPs Pending Verification'}
-                        <Badge variant="secondary" className="ml-2">{forwardedSubcategories.pending.length}</Badge>
-                      </Button>
-                      <Button variant={forwardedSubTab === 'verified' ? 'default' : 'outline'} size="sm" onClick={() => setForwardedSubTab('verified')} className={forwardedSubTab === 'verified' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''}>
-                        {isFOM ? 'Verified Sites' : 'Verified MMPs'}
-                        <Badge variant="secondary" className="ml-2">{forwardedSubcategories.verified.length}</Badge>
-                      </Button>
+                    <div className="overflow-x-auto pb-2">
+                      <div className="flex gap-2 min-w-max">
+                        <Button variant={forwardedSubTab === 'pending' ? 'default' : 'outline'} size="sm" onClick={() => setForwardedSubTab('pending')} className={`${forwardedSubTab === 'pending' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} flex-shrink-0 whitespace-nowrap`}>
+                          {isFOM ? 'Sites Pending Verification' : 'MMPs Pending Verification'}
+                          <Badge variant="secondary" className="ml-2">{forwardedSubcategories.pending.length}</Badge>
+                        </Button>
+                        <Button variant={forwardedSubTab === 'verified' ? 'default' : 'outline'} size="sm" onClick={() => setForwardedSubTab('verified')} className={`${forwardedSubTab === 'verified' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} flex-shrink-0 whitespace-nowrap`}>
+                          {isFOM ? 'Verified Sites' : 'Verified MMPs'}
+                          <Badge variant="secondary" className="ml-2">{forwardedSubcategories.verified.length}</Badge>
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -3639,7 +3645,8 @@ const MMP = () => {
               <TabsContent value="enumerator">
                 <div className="mb-4">
                   <div className="text-sm font-medium text-muted-foreground mb-3">View:</div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div className="overflow-x-auto pb-2">
+                    <div className="flex gap-2 min-w-max">
                     <Button 
                       variant={enumeratorSubTab === 'availableSites' ? 'default' : 'outline'} 
                       onClick={() => setEnumeratorSubTab('availableSites')} 
@@ -3671,50 +3678,53 @@ const MMP = () => {
                       </div>
                     </Button>
                   </div>
+                  </div>
                   {enumeratorSubTab === 'mySites' && (
                     <div className="mt-4">
                       <div className="text-sm font-medium text-muted-foreground mb-2">Subcategories:</div>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                        <Button 
-                          variant={mySitesSubTab === 'pending' ? 'default' : 'outline'} 
-                          size="sm" 
-                          onClick={() => setMySitesSubTab('pending')} 
-                          className={mySitesSubTab === 'pending' ? 'bg-green-100 hover:bg-green-200 text-green-800 border border-green-300' : ''}
-                        >
-                          Pending Visits
-                          <Badge variant="secondary" className="ml-2">
-                            {enumeratorMySites.filter(site => 
-                              site.status?.toLowerCase() === 'accepted' || 
-                              site.status?.toLowerCase() === 'assigned' ||
-                              (site.accepted_by && site.status?.toLowerCase() !== 'completed')
-                            ).length}
-                          </Badge>
-                        </Button>
-                        <Button 
-                          variant={mySitesSubTab === 'ongoing' ? 'default' : 'outline'} 
-                          size="sm" 
-                          onClick={() => setMySitesSubTab('ongoing')} 
-                          className={mySitesSubTab === 'ongoing' ? 'bg-yellow-100 hover:bg-yellow-200 text-yellow-800 border border-yellow-300' : ''}
-                        >
-                          Ongoing
-                          <Badge variant="secondary" className="ml-2">
-                            {enumeratorMySites.filter(site => 
-                              site.status?.toLowerCase() === 'in progress' || 
-                              site.status?.toLowerCase() === 'in_progress'
-                            ).length}
-                          </Badge>
-                        </Button>
-                        <Button 
-                          variant={mySitesSubTab === 'completed' ? 'default' : 'outline'} 
-                          size="sm" 
-                          onClick={() => setMySitesSubTab('completed')} 
-                          className={mySitesSubTab === 'completed' ? 'bg-green-100 hover:bg-green-200 text-green-800 border border-green-300' : ''}
-                        >
-                          Completed
-                          <Badge variant="secondary" className="ml-2">
-                            {enumeratorMySites.filter(site => site.status?.toLowerCase() === 'completed').length}
-                          </Badge>
-                        </Button>
+                      <div className="overflow-x-auto pb-2">
+                        <div className="flex gap-2 min-w-max">
+                          <Button 
+                            variant={mySitesSubTab === 'pending' ? 'default' : 'outline'} 
+                            size="sm" 
+                            onClick={() => setMySitesSubTab('pending')} 
+                            className={`${mySitesSubTab === 'pending' ? 'bg-green-100 hover:bg-green-200 text-green-800 border border-green-300' : ''} flex-shrink-0 whitespace-nowrap`}
+                          >
+                            Pending Visits
+                            <Badge variant="secondary" className="ml-2">
+                              {enumeratorMySites.filter(site => 
+                                site.status?.toLowerCase() === 'accepted' || 
+                                site.status?.toLowerCase() === 'assigned' ||
+                                (site.accepted_by && site.status?.toLowerCase() !== 'completed')
+                              ).length}
+                            </Badge>
+                          </Button>
+                          <Button 
+                            variant={mySitesSubTab === 'ongoing' ? 'default' : 'outline'} 
+                            size="sm" 
+                            onClick={() => setMySitesSubTab('ongoing')} 
+                            className={`${mySitesSubTab === 'ongoing' ? 'bg-yellow-100 hover:bg-yellow-200 text-yellow-800 border border-yellow-300' : ''} flex-shrink-0 whitespace-nowrap`}
+                          >
+                            Ongoing
+                            <Badge variant="secondary" className="ml-2">
+                              {enumeratorMySites.filter(site => 
+                                site.status?.toLowerCase() === 'in progress' || 
+                                site.status?.toLowerCase() === 'in_progress'
+                              ).length}
+                            </Badge>
+                          </Button>
+                          <Button 
+                            variant={mySitesSubTab === 'completed' ? 'default' : 'outline'} 
+                            size="sm" 
+                            onClick={() => setMySitesSubTab('completed')} 
+                            className={`${mySitesSubTab === 'completed' ? 'bg-green-100 hover:bg-green-200 text-green-800 border border-green-300' : ''} flex-shrink-0 whitespace-nowrap`}
+                          >
+                            Completed
+                            <Badge variant="secondary" className="ml-2">
+                              {enumeratorMySites.filter(site => site.status?.toLowerCase() === 'completed').length}
+                            </Badge>
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   )}
