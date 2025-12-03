@@ -286,6 +286,7 @@ const MMPContext = createContext<MMPContextType>({
   restoreMMP: () => {},
   resetMMP: async () => false,
   attachPermitsToMMP: async () => {},
+  refreshMMPFiles: async () => {},
 });
 
 export const useMMPProvider = () => {
@@ -347,49 +348,73 @@ export const useMMPProvider = () => {
     }).eq('id', id);
   };
 
-  useEffect(() => {
-    const fetchMMPFiles = async () => {
-      try {
-        setLoading(true);
-        
-        const { data: mmpData, error } = await supabase
+  const refreshMMPFiles = async () => {
+    try {
+      setLoading(true);
+      
+      const { data: mmpData, error } = await supabase
+        .from('mmp_files')
+        .select(`
+          *,
+          project:projects(
+            id,
+            name,
+            project_code
+          ),
+          mmp_site_entries (*)
+        `)
+        .order('created_at', { ascending: false });
+
+      let rows = mmpData;
+      if (error) {
+        const { data: fallbackData, error: fallbackError } = await supabase
           .from('mmp_files')
-          .select(`
-            *,
-            project:projects(
-              id,
-              name,
-              project_code
-            ),
-            mmp_site_entries (*)
-          `)
+          .select('*')
           .order('created_at', { ascending: false });
-
-        let rows = mmpData;
-        if (error) {
-          const { data: fallbackData, error: fallbackError } = await supabase
-            .from('mmp_files')
-            .select('*')
-            .order('created_at', { ascending: false });
-          if (fallbackError) {
-            throw fallbackError;
-          }
-          rows = fallbackData;
+        if (fallbackError) {
+          throw fallbackError;
         }
-
-        const mapped = (rows || []).map(transformDBToMMPFile);
-        setMMPFiles(mapped);
-      } catch (err) {
-        console.error('Error loading MMP files:', err);
-        setError('Failed to load MMP files');
-        setMMPFiles([]);
-      } finally {
-        setLoading(false);
+        rows = fallbackData;
       }
-    };
 
-    fetchMMPFiles();
+      const mapped = (rows || []).map(transformDBToMMPFile);
+      setMMPFiles(mapped);
+    } catch (err) {
+      console.error('Error loading MMP files:', err);
+      setError('Failed to load MMP files');
+      setMMPFiles([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    refreshMMPFiles();
   }, []);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('mmp_context_changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'mmp_files' },
+        () => {
+          refreshMMPFiles();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'mmp_site_entries' },
+        () => {
+          refreshMMPFiles();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [refreshMMPFiles]);
 
   const updateMMP = async (id: string, updatedMMP: Partial<MMPFile>): Promise<boolean> => {
     setMMPFiles((prev: MMPFile[]) =>
@@ -723,7 +748,8 @@ export const useMMPProvider = () => {
     deleteMMP,
     restoreMMP,
     resetMMP
-    ,attachPermitsToMMP
+    ,attachPermitsToMMP,
+    refreshMMPFiles
   };
 };
 
