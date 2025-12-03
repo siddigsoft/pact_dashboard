@@ -182,10 +182,10 @@ const ManageClassificationDialog: React.FC<ManageClassificationDialogProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto mx-4 sm:mx-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center justify-between">
-            <span>Manage Classification - {userName}</span>
+          <DialogTitle className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <span className="text-base sm:text-lg">Manage Classification - {userName}</span>
             {currentClassification && (
               <ClassificationBadge 
                 level={currentClassification.classificationLevel} 
@@ -194,7 +194,7 @@ const ManageClassificationDialog: React.FC<ManageClassificationDialogProps> = ({
               />
             )}
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-sm">
             Assign or update team member classification level and retainer settings
           </DialogDescription>
         </DialogHeader>
@@ -244,7 +244,7 @@ const ManageClassificationDialog: React.FC<ManageClassificationDialogProps> = ({
           </div>
 
           {/* Effective Dates */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Effective From</Label>
               <Popover>
@@ -252,7 +252,7 @@ const ManageClassificationDialog: React.FC<ManageClassificationDialogProps> = ({
                   <Button
                     variant="outline"
                     className={cn(
-                      'w-full justify-start text-left font-normal',
+                      'w-full justify-start text-left font-normal min-h-[44px]',
                       !effectiveFromDate && 'text-muted-foreground'
                     )}
                     data-testid="button-effective-from"
@@ -282,7 +282,7 @@ const ManageClassificationDialog: React.FC<ManageClassificationDialogProps> = ({
                   <Button
                     variant="outline"
                     className={cn(
-                      'w-full justify-start text-left font-normal',
+                      'w-full justify-start text-left font-normal min-h-[44px]',
                       !effectiveUntilDate && 'text-muted-foreground'
                     )}
                     data-testid="button-effective-until"
@@ -329,8 +329,8 @@ const ManageClassificationDialog: React.FC<ManageClassificationDialogProps> = ({
             </div>
 
             {formData.hasRetainer && (
-              <div className="space-y-4 pl-6 border-l-2 border-primary/20">
-                <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-4 pl-4 sm:pl-6 border-l-2 border-primary/20">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="retainer-amount">Retainer Amount</Label>
                     <Input
@@ -341,6 +341,7 @@ const ManageClassificationDialog: React.FC<ManageClassificationDialogProps> = ({
                       value={(formData.retainerAmountCents / 100).toFixed(2)}
                       onChange={(e) => handleRetainerAmountChange(e.target.value)}
                       placeholder="0.00"
+                      className="min-h-[44px]"
                       data-testid="input-retainer-amount"
                     />
                   </div>
@@ -351,7 +352,7 @@ const ManageClassificationDialog: React.FC<ManageClassificationDialogProps> = ({
                       value={formData.retainerCurrency}
                       onValueChange={(value) => setFormData({ ...formData, retainerCurrency: value })}
                     >
-                      <SelectTrigger id="retainer-currency" data-testid="select-retainer-currency">
+                      <SelectTrigger id="retainer-currency" className="min-h-[44px]" data-testid="select-retainer-currency">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -371,7 +372,7 @@ const ManageClassificationDialog: React.FC<ManageClassificationDialogProps> = ({
                     value={formData.retainerFrequency}
                     onValueChange={(value) => setFormData({ ...formData, retainerFrequency: value as RetainerFrequency })}
                   >
-                    <SelectTrigger id="retainer-frequency" data-testid="select-retainer-frequency">
+                    <SelectTrigger id="retainer-frequency" className="min-h-[44px]" data-testid="select-retainer-frequency">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -467,17 +468,23 @@ const ManageClassificationDialog: React.FC<ManageClassificationDialogProps> = ({
             </Alert>
           )}
 
-          <DialogFooter>
+          <DialogFooter className="flex flex-col sm:flex-row gap-2 sm:gap-0">
             <Button
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
               disabled={isLoading}
+              className="min-h-[44px] w-full sm:w-auto order-2 sm:order-1"
               data-testid="button-cancel"
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={isLoading} data-testid="button-save-classification">
+            <Button 
+              type="submit" 
+              disabled={isLoading} 
+              className="min-h-[44px] w-full sm:w-auto order-1 sm:order-2"
+              data-testid="button-save-classification"
+            >
               {isLoading ? 'Saving...' : currentClassification ? 'Update Classification' : 'Assign Classification'}
             </Button>
           </DialogFooter>

@@ -90,6 +90,15 @@ export interface User {
     effectiveFrom: string;
     effectiveUntil?: string;
   };
+  
+  /**
+   * Bank account information for payments and financial transactions
+   */
+  bankAccount?: {
+    accountName: string;
+    accountNumber: string;
+    branch: string;
+  };
 }
 
 export interface UserLogin {
