@@ -145,29 +145,29 @@ export const TeamZone: React.FC = () => {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="min-h-screen bg-background p-3 sm:p-4 md:p-6 lg:p-8 space-y-4 sm:space-y-6">
       {/* Modern Tech Header */}
       <div className="relative overflow-hidden rounded-lg border border-border/50 bg-gradient-to-r from-green-500/5 via-blue-500/5 to-background p-4 shadow-sm">
-        <div className="relative z-10 flex items-center justify-between flex-wrap gap-3">
+        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
           <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center w-12 h-12 rounded-lg bg-green-500/10 border border-green-500/20">
-              <Users className="h-6 w-6 text-green-600 dark:text-green-400" />
+            <div className="flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-lg bg-green-500/10 border border-green-500/20 flex-shrink-0">
+              <Users className="h-5 w-5 sm:h-6 sm:w-6 text-green-600 dark:text-green-400" />
             </div>
-            <div>
-              <h2 className="text-xl font-bold">Team Coordination</h2>
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">
+            <div className="min-w-0 flex-1">
+              <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold truncate">Team Coordination</h2>
+              <p className="text-xs sm:text-sm text-muted-foreground uppercase tracking-wide">
                 {isSupervisor && hubName ? `${hubName} Hub - ` : ''}Field team locations and communication
               </p>
             </div>
           </div>
-          <div className="flex gap-2 items-center flex-wrap">
+          <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center flex-wrap">
             {isSupervisor && hubName && (
-              <Badge variant="outline" className="gap-1.5 text-xs h-7 bg-blue-500/10 border-blue-500/30 text-blue-700 dark:text-blue-300">
+              <Badge variant="outline" className="gap-1.5 text-xs h-7 bg-blue-500/10 border-blue-500/30 text-blue-700 dark:text-blue-300 self-start">
                 <Building2 className="h-3 w-3" />
                 {hubName}
               </Badge>
             )}
-            <Badge variant="secondary" className="gap-2 text-xs h-7">
+            <Badge variant="secondary" className="gap-2 text-xs h-7 self-start">
               <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
               {onlineMembers}/{activeFieldTeam} Online
             </Badge>
@@ -176,7 +176,7 @@ export const TeamZone: React.FC = () => {
               size="sm"
               onClick={() => navigate('/field-team')}
               data-testid="button-view-full-team"
-              className="h-7 text-xs"
+              className="h-8 px-4 text-xs active:scale-95 transition-all self-start"
             >
               View Full Team
             </Button>
@@ -186,18 +186,18 @@ export const TeamZone: React.FC = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-3 max-w-2xl h-auto p-1 bg-muted/30">
-          <TabsTrigger value="overview" className="gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm">
-            <UserCircle className="h-3.5 w-3.5" />
-            <span className="text-xs">Team Overview</span>
+        <TabsList className="grid w-full grid-cols-3 max-w-2xl h-auto p-1 bg-muted/30 mx-auto">
+          <TabsTrigger value="overview" className="gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm min-h-[44px] sm:min-h-[40px] px-2 py-2 sm:py-1.5">
+            <UserCircle className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+            <span className="text-xs sm:text-xs">Team Overview</span>
           </TabsTrigger>
-          <TabsTrigger value="map" className="gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm">
-            <MapPin className="h-3.5 w-3.5" />
-            <span className="text-xs">Live Map</span>
+          <TabsTrigger value="map" className="gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm min-h-[44px] sm:min-h-[40px] px-2 py-2 sm:py-1.5">
+            <MapPin className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+            <span className="text-xs sm:text-xs">Live Map</span>
           </TabsTrigger>
-          <TabsTrigger value="communication" className="gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm">
-            <MessageSquare className="h-3.5 w-3.5" />
-            <span className="text-xs">Communication</span>
+          <TabsTrigger value="communication" className="gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm min-h-[44px] sm:min-h-[40px] px-2 py-2 sm:py-1.5">
+            <MessageSquare className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+            <span className="text-xs sm:text-xs">Communication</span>
           </TabsTrigger>
         </TabsList>
 
@@ -205,19 +205,19 @@ export const TeamZone: React.FC = () => {
           {assignableTeamMembers && assignableTeamMembers.length > 0 ? (
             <>
               {/* View Toggle */}
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
                   Team Members ({assignableTeamMembers.length})
                 </h3>
-                <div className="flex gap-1 bg-muted/30 p-1 rounded-lg">
+                <div className="flex gap-1 bg-muted/30 p-1 rounded-lg self-start">
                   <Button
                     variant={viewMode === 'cards' ? 'default' : 'ghost'}
                     size="sm"
                     onClick={() => setViewMode('cards')}
                     data-testid="button-view-cards"
-                    className="h-7 text-xs gap-1.5"
+                    className="h-9 px-4 text-xs gap-1.5 active:scale-95 transition-all min-h-[36px]"
                   >
-                    <LayoutGrid className="h-3.5 w-3.5" />
+                    <LayoutGrid className="h-4 w-4" />
                     Cards
                   </Button>
                   <Button
@@ -225,9 +225,9 @@ export const TeamZone: React.FC = () => {
                     size="sm"
                     onClick={() => setViewMode('table')}
                     data-testid="button-view-table"
-                    className="h-7 text-xs gap-1.5"
+                    className="h-9 px-4 text-xs gap-1.5 active:scale-95 transition-all min-h-[36px]"
                   >
-                    <TableIcon className="h-3.5 w-3.5" />
+                    <TableIcon className="h-4 w-4" />
                     Table
                   </Button>
                 </div>
@@ -235,7 +235,7 @@ export const TeamZone: React.FC = () => {
 
               {/* Card or Table View */}
               {viewMode === 'cards' ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
                   {assignableTeamMembers.map(user => (
                     <TeamMemberCard
                       key={user.id}
