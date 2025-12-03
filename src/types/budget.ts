@@ -27,7 +27,9 @@ export interface ProjectBudget {
 export interface MMPBudget {
   id: string;
   mmpFileId: string;
+  mmpId?: string;
   projectBudgetId?: string;
+  projectId?: string;
   allocatedBudgetCents: number;
   spentBudgetCents: number;
   remainingBudgetCents: number;
@@ -52,7 +54,9 @@ export interface MMPBudget {
 export interface BudgetTransaction {
   id: string;
   projectBudgetId?: string;
+  projectId?: string;
   mmpBudgetId?: string;
+  mmpId?: string;
   siteVisitId?: string;
   walletTransactionId?: string;
   transactionType: 'allocation' | 'spend' | 'top_up' | 'reallocation' | 'adjustment' | 'refund';
