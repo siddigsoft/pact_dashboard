@@ -8,7 +8,8 @@ const STATIC_ASSETS = [
   '/',
   '/offline.html',
   '/manifest.json',
-  '/pact-logo.png',
+  '/pact-logo-192.png',
+  '/pact-logo-512.png',
   '/icons/icon-192x192.png',
   '/icons/icon-72x72.png',
   '/notification.mp3'

@@ -1229,8 +1229,8 @@ const CoordinatorSites: React.FC = () => {
         { event: '*', schema: 'public', table: 'mmp_site_entries' },
         (payload) => {
           // Only reload if change is relevant to current user
-          if (payload.new?.forwarded_to_user_id === currentUser?.id ||
-              payload.old?.forwarded_to_user_id === currentUser?.id) {
+          if ((payload.new as any)?.forwarded_to_user_id === currentUser?.id ||
+              (payload.old as any)?.forwarded_to_user_id === currentUser?.id) {
             scheduleReload();
           }
         }

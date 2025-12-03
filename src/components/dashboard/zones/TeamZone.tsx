@@ -11,7 +11,6 @@ import { Badge } from '@/components/ui/badge';
 import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
 import { TeamMemberCard } from '../TeamMemberCard';
 import { TeamMemberTable } from '../TeamMemberTable';
-import { TeamMemberDetailModal } from '../TeamMemberDetailModal';
 import { User } from '@/types/user';
 import { useAppContext } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -20,7 +19,6 @@ export const TeamZone: React.FC = () => {
   const [activeTab, setActiveTab] = useState('overview');
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
   const [selectedMember, setSelectedMember] = useState<User | null>(null);
-  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [hubName, setHubName] = useState<string | null>(null);
   
   const navigate = useNavigate();
@@ -135,13 +133,7 @@ export const TeamZone: React.FC = () => {
   }, [selectedMember, siteVisits]);
 
   const handleMemberClick = (user: User) => {
-    setSelectedMember(user);
-    setIsDetailModalOpen(true);
-  };
-
-  const handleModalClose = () => {
-    setIsDetailModalOpen(false);
-    setSelectedMember(null);
+    navigate(`/users/${user.id}`);
   };
 
   return (
@@ -275,14 +267,6 @@ export const TeamZone: React.FC = () => {
           <TeamCommunication />
         </TabsContent>
       </Tabs>
-
-      {/* Team Member Detail Modal */}
-      <TeamMemberDetailModal
-        open={isDetailModalOpen}
-        onOpenChange={handleModalClose}
-        user={selectedMember}
-        userTasks={selectedMemberTasks}
-      />
     </div>
   );
 };
