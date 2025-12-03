@@ -1,14 +1,16 @@
-import React, { useEffect, useRef, useCallback, useState } from 'react';
+import React, { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Card, CardContent } from '@/components/ui/card';
-import { MapPin, RefreshCw, Wifi, WifiOff, Loader2 } from 'lucide-react';
+import { MapPin, RefreshCw, Wifi, WifiOff, Loader2, Filter } from 'lucide-react';
 import { User } from '@/types/user';
 import { SiteVisit } from '@/types/siteVisit';
 import { formatDistanceToNow } from 'date-fns';
 import { getUserStatus } from '@/utils/userStatusUtils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+
+type StatusFilter = 'all' | 'online' | 'active-today' | 'offline' | 'sites';
 
 interface TeamLocationMapProps {
   users: User[];
@@ -37,6 +39,8 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({
   const isMapInitializedRef = useRef(false);
   const [lastUpdated, setLastUpdated] = useState<Date>(lastRefresh || new Date());
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [showSites, setShowSites] = useState(true);
 
   const getStatusColor = (user: User): string => {
     if (onlineUserIds.has(user.id)) {
@@ -209,7 +213,29 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({
     const bounds = L.latLngBounds([]);
     let hasValidBounds = false;
 
-    users.forEach((user) => {
+    // Helper to check user online status
+    const checkIsUserOnline = (user: User): boolean => {
+      if (onlineUserIds.has(user.id)) return true;
+      return getUserStatus(user).type === 'online';
+    };
+
+    // Filter users based on status filter
+    const usersToShow = users.filter(user => {
+      if (!user.location?.latitude || !user.location?.longitude) return false;
+      
+      if (statusFilter === 'all') return true;
+      
+      const isOnline = checkIsUserOnline(user);
+      const userStatusType = getUserStatus(user).type;
+      
+      if (statusFilter === 'online') return isOnline;
+      if (statusFilter === 'active-today') return !isOnline && userStatusType === 'same-day';
+      if (statusFilter === 'offline') return !isOnline && userStatusType === 'offline';
+      
+      return true;
+    });
+
+    usersToShow.forEach((user) => {
       if (user.location?.latitude && user.location?.longitude) {
         const userStatus = getUserStatus(user);
         const markerColor = getStatusColor(user);
@@ -276,11 +302,13 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({
       }
     });
 
-    siteVisits.forEach((visit) => {
-      const lat = visit.location?.latitude || visit.coordinates?.latitude;
-      const lng = visit.location?.longitude || visit.coordinates?.longitude;
-      
-      if (lat && lng) {
+    // Only show sites if showSites is true
+    if (showSites) {
+      siteVisits.forEach((visit) => {
+        const lat = visit.location?.latitude || visit.coordinates?.latitude;
+        const lng = visit.location?.longitude || visit.coordinates?.longitude;
+        
+        if (lat && lng) {
         const getColor = () => {
           if (visit.status === 'completed') return '#10b981';
           if (visit.status === 'inProgress') return '#3b82f6';
@@ -350,8 +378,9 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({
         markersLayerRef.current?.addLayer(marker);
         bounds.extend([lat, lng]);
         hasValidBounds = true;
-      }
-    });
+        }
+      });
+    }
 
     if (hasValidBounds && mapRef.current) {
       try {
@@ -362,7 +391,7 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({
     }
     
     setLastUpdated(new Date());
-  }, [users, siteVisits, onlineUserIds]);
+  }, [users, siteVisits, onlineUserIds, statusFilter, showSites, getStatusColor, createUserMarkerIcon]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -384,7 +413,7 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({
     if (isMapInitializedRef.current) {
       updateMarkers();
     }
-  }, [users, siteVisits, onlineUserIds, updateMarkers]);
+  }, [users, siteVisits, onlineUserIds, statusFilter, showSites, updateMarkers]);
 
   useEffect(() => {
     const intervalId = setInterval(() => {
@@ -460,28 +489,80 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({
 
   const overallAccuracy = getOverallAccuracyLabel(avgAccuracy);
 
+  // Filter users based on selected status
+  const filteredUsers = useMemo(() => {
+    if (statusFilter === 'all') return teamWithLocation;
+    if (statusFilter === 'online') return onlineWithLocation;
+    if (statusFilter === 'active-today') return sameDayWithLocation;
+    if (statusFilter === 'offline') return offlineWithLocation;
+    return teamWithLocation;
+  }, [statusFilter, teamWithLocation, onlineWithLocation, sameDayWithLocation, offlineWithLocation]);
+
+  // Filter sites based on toggle
+  const filteredSites = useMemo(() => {
+    return showSites ? sitesWithLocation : [];
+  }, [showSites, sitesWithLocation]);
+
   return (
     <div className="space-y-3">
       <Card className="bg-muted/30 border-border/50">
         <CardContent className="p-3">
           <div className="flex items-center justify-between flex-wrap gap-3">
-            <div className="flex items-center gap-4 text-xs flex-wrap">
-              <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 bg-green-500 rounded-full border-2 border-white shadow-sm"></div>
-                <span>Online ({onlineWithLocation.length})</span>
+            {/* Filter Buttons */}
+            <div className="flex items-center gap-2 text-xs flex-wrap">
+              <div className="flex items-center gap-1 mr-1">
+                <Filter className="h-3 w-3 text-muted-foreground" />
+                <span className="text-muted-foreground text-xs">Filter:</span>
               </div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 bg-orange-500 rounded-full border-2 border-white shadow-sm"></div>
-                <span>Active Today ({sameDayWithLocation.length})</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 bg-gray-400 rounded-full border-2 border-white shadow-sm"></div>
-                <span>Offline ({offlineWithLocation.length})</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 bg-indigo-500 rounded-full border-2 border-white shadow-sm"></div>
-                <span>Sites ({sitesWithLocation.length})</span>
-              </div>
+              <Button
+                variant={statusFilter === 'all' ? 'default' : 'outline'}
+                size="sm"
+                className="h-6 px-2 text-xs gap-1"
+                onClick={() => setStatusFilter('all')}
+                data-testid="filter-all"
+              >
+                All ({teamWithLocation.length})
+              </Button>
+              <Button
+                variant={statusFilter === 'online' ? 'default' : 'outline'}
+                size="sm"
+                className={`h-6 px-2 text-xs gap-1.5 ${statusFilter !== 'online' ? 'hover:bg-green-500/10 hover:text-green-700 dark:hover:text-green-400 hover:border-green-500/30' : 'bg-green-500 hover:bg-green-600'}`}
+                onClick={() => setStatusFilter('online')}
+                data-testid="filter-online"
+              >
+                <div className="w-2 h-2 bg-green-500 rounded-full border border-white/50"></div>
+                Online ({onlineWithLocation.length})
+              </Button>
+              <Button
+                variant={statusFilter === 'active-today' ? 'default' : 'outline'}
+                size="sm"
+                className={`h-6 px-2 text-xs gap-1.5 ${statusFilter !== 'active-today' ? 'hover:bg-orange-500/10 hover:text-orange-700 dark:hover:text-orange-400 hover:border-orange-500/30' : 'bg-orange-500 hover:bg-orange-600'}`}
+                onClick={() => setStatusFilter('active-today')}
+                data-testid="filter-active-today"
+              >
+                <div className="w-2 h-2 bg-orange-500 rounded-full border border-white/50"></div>
+                Active Today ({sameDayWithLocation.length})
+              </Button>
+              <Button
+                variant={statusFilter === 'offline' ? 'default' : 'outline'}
+                size="sm"
+                className={`h-6 px-2 text-xs gap-1.5 ${statusFilter !== 'offline' ? 'hover:bg-gray-500/10 hover:text-gray-700 dark:hover:text-gray-400 hover:border-gray-500/30' : 'bg-gray-500 hover:bg-gray-600'}`}
+                onClick={() => setStatusFilter('offline')}
+                data-testid="filter-offline"
+              >
+                <div className="w-2 h-2 bg-gray-400 rounded-full border border-white/50"></div>
+                Offline ({offlineWithLocation.length})
+              </Button>
+              <Button
+                variant={showSites ? 'default' : 'outline'}
+                size="sm"
+                className={`h-6 px-2 text-xs gap-1.5 ${!showSites ? 'hover:bg-indigo-500/10 hover:text-indigo-700 dark:hover:text-indigo-400 hover:border-indigo-500/30' : 'bg-indigo-500 hover:bg-indigo-600'}`}
+                onClick={() => setShowSites(!showSites)}
+                data-testid="filter-sites"
+              >
+                <div className="w-2 h-2 bg-indigo-500 rounded-full border border-white/50"></div>
+                Sites ({sitesWithLocation.length})
+              </Button>
             </div>
             <div className="flex items-center gap-3 flex-wrap">
               {avgAccuracy !== null && !isNaN(avgAccuracy) && (
