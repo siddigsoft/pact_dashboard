@@ -123,6 +123,8 @@ const SiteEditForm: React.FC<SiteEditFormProps> = ({ site, onSave, onCancel, hub
     return !options[field].includes(value) && value !== '';
   };
 
+  
+
   return (
     <div className="space-y-6">
       {/* Rejection Comments Section - Show for rejected sites */}
@@ -826,7 +828,7 @@ const CoordinatorSites: React.FC = () => {
     setSurveyToolFilter('all');
     // Reset expanded localities when tab changes
     setExpandedPermitsAttachedLocalities(new Set());
-  }, [currentUser, activeTab, permits, hubStates, localities]);
+  }, [currentUser?.id, activeTab]);
 
   const loadSites = async () => {
     if (!currentUser?.id) return;
@@ -836,7 +838,7 @@ const CoordinatorSites: React.FC = () => {
       // Load only forwarded entries with optimized query
       const { data: allEntries, error } = await supabase
         .from('mmp_site_entries')
-        .select('*')
+        .select('id, site_name, site_code, status, state, locality, activity_at_site, main_activity, visit_date, comments, mmp_file_id, hub_office, verified_at, verified_by, verification_notes, additional_data, created_at, forwarded_to_user_id')
         .eq('forwarded_to_user_id', currentUser.id)
         .limit(5000); // Increased limit but filtered by user
 
@@ -845,7 +847,7 @@ const CoordinatorSites: React.FC = () => {
         // Fallback: fetch all and filter client-side
         const { data: fallbackEntries, error: fallbackError } = await supabase
           .from('mmp_site_entries')
-          .select('*')
+          .select('id, site_name, site_code, status, state, locality, activity_at_site, main_activity, visit_date, comments, mmp_file_id, hub_office, verified_at, verified_by, verification_notes, additional_data, created_at, forwarded_to_user_id')
           .limit(5000);
         
         if (fallbackError) throw fallbackError;
@@ -937,89 +939,28 @@ const CoordinatorSites: React.FC = () => {
         stateData.totalSites++;
       });
 
-      // Batch fetch MMP files to avoid N+1 queries
-      const uniqueMmpIds = Array.from(new Set(
-        Array.from(statesMap.values()).flatMap((s: any) => 
-          Array.from(s.localities.values()).flatMap((l: any) => 
-            l.sites.map((site: any) => site.mmp_file_id)
-          )
-        )
-      ));
-
-      const { data: mmpFilesData } = await supabase
-        .from('mmp_files')
-        .select('id, permits')
-        .in('id', uniqueMmpIds);
-
-      const mmpFilesMap = new Map(
-        (mmpFilesData || []).map(mmp => [mmp.id, mmp])
-      );
-
-      // Check permit status for each locality within states
+      // Build state/locality aggregates quickly without blocking on mmp_files
       const statesArray = Array.from(statesMap.values()).map((stateData: any) => {
-        // Determine state permit presence (uploaded or verified)
-        let statePermitVerified = false;
-        let statePermitUploaded = false;
-        let statePermitUploadedAt: any = null;
+        const localitiesArray = Array.from(stateData.localities.values()).map((locality: any) => ({
+          ...locality,
+          hasPermit: false,
+          permitId: null,
+          permitUploadedAt: null
+        }));
 
-        // Get MMP file ID from the first site in this state
-        const mmpFileId = stateData.localities.values().next().value?.sites?.[0]?.mmp_file_id;
-
-        if (mmpFileId && mmpFilesMap.has(mmpFileId)) {
-          try {
-            const mmpData = mmpFilesMap.get(mmpFileId);
-            if (mmpData?.permits) {
-              const permitsData = mmpData.permits as any;
-              if (permitsData.statePermits) {
-                const sp = permitsData.statePermits.find((sp: any) => sp.state === stateData.state);
-                if (sp) {
-                  statePermitUploaded = true; // uploaded by FOM or coordinator
-                  statePermitVerified = !!sp.verified;
-                  statePermitUploadedAt = sp.uploadedAt || null;
-                }
-              }
-            }
-          } catch (err) {
-            console.warn('Failed to check state permit for state:', stateData.state, err);
-          }
-        }
-
-        // Convert localities map to array and check local permits
-        const localitiesArray = Array.from(stateData.localities.values()).map((locality: any) => {
-          // Resolve stateId from state name
-          const resolvedStateId = hubStates.find(hs => hs.state_name === locality.state)?.state_id;
-          // Resolve localityId from locality name + stateId
-          const resolvedLocalityId = resolvedStateId
-            ? localities.find(l => l.name === locality.locality && l.state_id === resolvedStateId)?.id
-            : undefined;
-
-          const permit = resolvedStateId && resolvedLocalityId
-            ? permits.find(p => p.stateId === resolvedStateId && p.localityId === resolvedLocalityId)
-            : undefined;
-
-          return {
-            ...locality,
-            hasPermit: !!permit,
-            permitId: permit?.id || null,
-            permitUploadedAt: permit?.uploadedAt || null
-          };
-        });
-
-        // Also consider site-level flag added when forwarding with state permit
+        // Consider site-level flag added when forwarding with state permit
         let anySiteHasStatePermitFlag = false;
         try {
           const allSitesInState = localitiesArray.flatMap((loc: any) => loc.sites || []);
           anySiteHasStatePermitFlag = allSitesInState.some((s: any) => s?.additional_data?.state_permit_attached === true);
         } catch {}
 
-        const hasStatePermit = statePermitUploaded || anySiteHasStatePermitFlag;
-
         return {
           ...stateData,
           localities: localitiesArray,
-          hasStatePermit,
-          statePermitUploadedAt: statePermitUploadedAt,
-          statePermitVerified: statePermitVerified
+          hasStatePermit: anySiteHasStatePermitFlag,
+          statePermitUploadedAt: null,
+          statePermitVerified: false
         };
       });
 
@@ -1125,6 +1066,151 @@ const CoordinatorSites: React.FC = () => {
       setLoading(false);
     }
   };
+
+  // Rebuild locality/permit aggregates without refetching sites to avoid
+  // re-triggering the main loading spinner. Runs when metadata changes.
+  const rebuildLocalityData = async () => {
+    try {
+      if (!sites || sites.length === 0) {
+        setLocalitiesData([]);
+        setStatePermitRequiredCount(0);
+        setLocalPermitRequiredCount(0);
+        return;
+      }
+
+      const statesMap = new Map<string, any>();
+      sites.forEach((site: any) => {
+        const stateKey = site.state;
+        if (!statesMap.has(stateKey)) {
+          statesMap.set(stateKey, {
+            state: site.state,
+            localities: new Map(),
+            totalSites: 0,
+            hasStatePermit: false,
+            statePermitUploadedAt: null,
+            statePermitVerified: false
+          });
+        }
+
+        const stateData = statesMap.get(stateKey);
+        const localityKey = site.locality;
+        if (!stateData.localities.has(localityKey)) {
+          stateData.localities.set(localityKey, {
+            state: site.state,
+            locality: site.locality,
+            sites: [],
+            hasPermit: false,
+            permitId: null,
+            permitUploadedAt: null
+          });
+        }
+
+        stateData.localities.get(localityKey).sites.push(site);
+        stateData.totalSites++;
+      });
+
+      const uniqueMmpIds = Array.from(new Set(
+        sites.map((s: any) => s.mmp_file_id).filter(Boolean)
+      ));
+
+      let mmpFilesMap = new Map<string, any>();
+      if (uniqueMmpIds.length > 0) {
+        const { data: mmpFilesData } = await supabase
+          .from('mmp_files')
+          .select('id, permits')
+          .in('id', uniqueMmpIds);
+        mmpFilesMap = new Map((mmpFilesData || []).map((m: any) => [m.id, m]));
+      }
+
+      const stateNameToId = new Map(hubStates.map((hs: any) => [hs.state_name, hs.state_id]));
+      const localityKeyToId = new Map(localities.map((l: any) => [`${l.state_id}|${l.name}`, l.id]));
+      const permitKeySet = new Set(permits.map((p: any) => `${p.stateId}|${p.localityId}`));
+
+      const statesArray = Array.from(statesMap.values()).map((stateData: any) => {
+        let statePermitVerified = false;
+        let statePermitUploaded = false;
+        let statePermitUploadedAt: any = null;
+
+        const firstLocality = stateData.localities.values().next().value;
+        const mmpFileId = firstLocality?.sites?.[0]?.mmp_file_id;
+        if (mmpFileId && mmpFilesMap.has(mmpFileId)) {
+          try {
+            const mmpData = mmpFilesMap.get(mmpFileId);
+            if (mmpData?.permits?.statePermits) {
+              const sp = (mmpData.permits.statePermits as any[]).find((x: any) => x.state === stateData.state);
+              if (sp) {
+                statePermitUploaded = true;
+                statePermitVerified = !!sp.verified;
+                statePermitUploadedAt = sp.uploadedAt || null;
+              }
+            }
+          } catch {}
+        }
+
+        const localitiesArray = Array.from(stateData.localities.values()).map((locality: any) => {
+          const resolvedStateId = stateNameToId.get(locality.state);
+          const resolvedLocalityId = resolvedStateId ? localityKeyToId.get(`${resolvedStateId}|${locality.locality}`) : undefined;
+          const hasPermit = resolvedStateId && resolvedLocalityId ? permitKeySet.has(`${resolvedStateId}|${resolvedLocalityId}`) : false;
+          return {
+            ...locality,
+            hasPermit,
+            permitId: null,
+            permitUploadedAt: null
+          };
+        });
+
+        let anySiteHasStatePermitFlag = false;
+        try {
+          const allSitesInState = localitiesArray.flatMap((loc: any) => loc.sites || []);
+          anySiteHasStatePermitFlag = allSitesInState.some((s: any) => s?.additional_data?.state_permit_attached === true);
+        } catch {}
+
+        const hasStatePermit = statePermitUploaded || anySiteHasStatePermitFlag;
+
+        return {
+          ...stateData,
+          localities: localitiesArray,
+          hasStatePermit,
+          statePermitUploadedAt,
+          statePermitVerified
+        };
+      });
+
+      // Subcategory counts
+      const statePermitRequired = statesArray
+        .filter((state: any) => !state.hasStatePermit)
+        .reduce((total: number, state: any) => total + state.totalSites, 0);
+
+      const localPermitRequired = statesArray
+        .filter((state: any) => state.hasStatePermit)
+        .flatMap((state: any) => state.localities)
+        .filter((locality: any) => !locality.hasPermit)
+        .filter((locality: any) => {
+          return locality.sites.some((site: any) => 
+            site.status === 'Pending' || site.status === 'Dispatched' || 
+            site.status === 'assigned' || site.status === 'inProgress' || 
+            site.status === 'in_progress'
+          );
+        })
+        .reduce((total: number, locality: any) => {
+          const pendingSites = locality.sites.filter((site: any) => 
+            site.status === 'Pending' || site.status === 'Dispatched' || 
+            site.status === 'assigned' || site.status === 'inProgress' || 
+            site.status === 'in_progress'
+          );
+          return total + pendingSites.length;
+        }, 0);
+
+      setLocalitiesData(statesArray);
+      setStatePermitRequiredCount(statePermitRequired);
+      setLocalPermitRequiredCount(localPermitRequired);
+    } catch {}
+  };
+
+  useEffect(() => {
+    // Only recompute aggregates when metadata changes; do not refetch sites
+    rebuildLocalityData();
+  }, [sites, permits, hubStates, localities]);
 
   useEffect(() => {
     let debounceId: number | null = null;
