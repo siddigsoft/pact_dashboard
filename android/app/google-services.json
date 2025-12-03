@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "254377984264",
+    "project_id": "tpm-workflow",
+    "storage_bucket": "tpm-workflow.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:254377984264:android:2bbf57201bb51d5b23acbd",
+        "android_client_info": {
+          "package_name": "com.tpm"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAYCWyv8ysOXbfJKaOHiW6INS3DR1J7z8w"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

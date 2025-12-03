@@ -15,19 +15,19 @@ export const ICTZone: React.FC = () => {
   );
 
   return (
-    <div className="space-y-4">
-      <div className="relative overflow-hidden rounded-lg border border-border/50 bg-gradient-to-r from-cyan-500/5 via-blue-500/5 to-background p-4 shadow-sm">
-        <div className="relative z-10 flex items-center justify-between flex-wrap gap-3">
+    <div className="p-3 sm:p-4 md:p-6 lg:p-8 space-y-4">
+      <div className="relative overflow-hidden rounded-lg border border-border/50 bg-gradient-to-r from-cyan-500/5 via-blue-500/5 to-background p-3 sm:p-4 shadow-sm">
+        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="flex items-center justify-center w-12 h-12 rounded-lg bg-cyan-500/10 border border-cyan-500/20">
               <Server className="h-6 w-6 text-cyan-600 dark:text-cyan-400" />
             </div>
             <div>
-              <h2 className="text-xl font-bold">ICT Operations</h2>
+              <h2 className="text-xl sm:text-2xl font-bold">ICT Operations</h2>
               <p className="text-xs text-muted-foreground uppercase tracking-wide">System health, user management, and infrastructure</p>
             </div>
           </div>
-          <Badge variant="secondary" className="gap-2 h-7 text-xs">
+          <Badge variant="secondary" className="gap-2 h-7 text-xs w-fit">
             <MonitorCheck className="h-3 w-3" />
             All Systems Operational
           </Badge>
@@ -36,23 +36,23 @@ export const ICTZone: React.FC = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-3 max-w-md h-auto p-1 bg-muted/30">
-          <TabsTrigger value="health" className="gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm">
+        <TabsList className="grid w-full grid-cols-3 max-w-md h-auto p-1 bg-muted/30 gap-1 mx-auto">
+          <TabsTrigger value="health" className="gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm min-h-[44px] px-3">
             <MonitorCheck className="h-3.5 w-3.5" />
             <span className="text-xs">Health</span>
           </TabsTrigger>
-          <TabsTrigger value="users" className="gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm">
+          <TabsTrigger value="users" className="gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm min-h-[44px] px-3">
             <Users className="h-3.5 w-3.5" />
             <span className="text-xs">Users</span>
           </TabsTrigger>
-          <TabsTrigger value="security" className="gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm">
+          <TabsTrigger value="security" className="gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm min-h-[44px] px-3">
             <Shield className="h-3.5 w-3.5" />
             <span className="text-xs">Security</span>
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="health" className="mt-4 space-y-4">
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Database</CardTitle>
@@ -80,7 +80,7 @@ export const ICTZone: React.FC = () => {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">45%</div>
-                <Progress value={45} className="mt-2 h-1" />
+                <Progress value={45} className="mt-2 h-2" />
               </CardContent>
             </Card>
             <Card>
@@ -97,7 +97,7 @@ export const ICTZone: React.FC = () => {
 
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
+              <CardTitle className="text-lg flex items-center gap-2">
                 <Activity className="h-5 w-5 text-cyan-600" />
                 System Activity
               </CardTitle>
@@ -105,8 +105,8 @@ export const ICTZone: React.FC = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                <div className="flex items-center gap-3 p-2 rounded-lg bg-muted/30">
-                  <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30">
+                  <div className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0"></div>
                   <span className="text-sm">System running normally</span>
                   <span className="text-xs text-muted-foreground ml-auto">Now</span>
                 </div>
@@ -118,14 +118,14 @@ export const ICTZone: React.FC = () => {
         <TabsContent value="users" className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
+              <CardTitle className="text-lg flex items-center gap-2">
                 <Users className="h-5 w-5 text-primary" />
                 User Statistics
               </CardTitle>
               <CardDescription>Platform user registrations and activity</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-4 md:grid-cols-3">
+              <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-3">
                 <div className="p-4 rounded-lg bg-muted/30 text-center">
                   <div className="text-3xl font-bold">0</div>
                   <div className="text-sm text-muted-foreground">Total Users</div>
@@ -146,34 +146,34 @@ export const ICTZone: React.FC = () => {
         <TabsContent value="security" className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
+              <CardTitle className="text-lg flex items-center gap-2">
                 <Shield className="h-5 w-5 text-primary" />
                 Security Overview
               </CardTitle>
               <CardDescription>Authentication and access control status</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                <div className="flex items-center justify-between p-3 rounded-lg border">
+              <div className="space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-lg border gap-2">
                   <div className="flex items-center gap-3">
-                    <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                    <div className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0"></div>
                     <span className="text-sm">Two-Factor Authentication</span>
                   </div>
-                  <Badge variant="secondary">Enabled</Badge>
+                  <Badge variant="secondary" className="w-fit">Enabled</Badge>
                 </div>
-                <div className="flex items-center justify-between p-3 rounded-lg border">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-lg border gap-2">
                   <div className="flex items-center gap-3">
-                    <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                    <div className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0"></div>
                     <span className="text-sm">Row Level Security</span>
                   </div>
-                  <Badge variant="secondary">Active</Badge>
+                  <Badge variant="secondary" className="w-fit">Active</Badge>
                 </div>
-                <div className="flex items-center justify-between p-3 rounded-lg border">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-lg border gap-2">
                   <div className="flex items-center gap-3">
-                    <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                    <div className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0"></div>
                     <span className="text-sm">SSL/TLS Encryption</span>
                   </div>
-                  <Badge variant="secondary">Enforced</Badge>
+                  <Badge variant="secondary" className="w-fit">Enforced</Badge>
                 </div>
               </div>
             </CardContent>

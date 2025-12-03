@@ -5,9 +5,10 @@
  * Handles enumerator submissions, admin/finance approvals, and payment workflow.
  */
 
-import React, { createContext, useContext, ReactNode } from 'react';
+import React, { createContext, useContext, ReactNode, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 import {
   SiteVisitCostSubmission,
   CostApprovalHistory,
@@ -116,6 +117,53 @@ export const CostSubmissionProvider: React.FC<CostSubmissionProviderProps> = ({ 
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  const invalidateDebounceRef = useRef<number | null>(null);
+  const scheduleCostInvalidations = () => {
+    if (invalidateDebounceRef.current) {
+      window.clearTimeout(invalidateDebounceRef.current);
+    }
+    invalidateDebounceRef.current = window.setTimeout(() => {
+      queryClient.invalidateQueries({ queryKey: ['cost-submissions'] });
+      queryClient.invalidateQueries({ queryKey: ['cost-approvals'] });
+      queryClient.invalidateQueries({ queryKey: ['cost-submissions', 'summary'] });
+      invalidateDebounceRef.current = null;
+    }, 500);
+  };
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('cost_flow_changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'site_visit_cost_submissions' },
+        () => scheduleCostInvalidations()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'cost_approval_history' },
+        () => scheduleCostInvalidations()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'down_payment_requests' },
+        () => scheduleCostInvalidations()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'withdrawal_requests' },
+        () => scheduleCostInvalidations()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+      if (invalidateDebounceRef.current) {
+        window.clearTimeout(invalidateDebounceRef.current);
+        invalidateDebounceRef.current = null;
+      }
+    };
+  }, []);
+
   // Query hook: All submissions
   const useAllSubmissions = (enabled: boolean = true) => {
     const { data, isLoading, error, refetch } = useQuery({
@@ -170,7 +218,8 @@ export const CostSubmissionProvider: React.FC<CostSubmissionProviderProps> = ({ 
     const { data, isLoading, error, refetch } = useQuery({
       queryKey: ['cost-approvals', 'pending'],
       queryFn: supabaseApi.fetchPendingApprovals,
-      staleTime: 1000 * 60 * 2 // 2 minutes (more frequent for approval queue)
+      staleTime: 1000 * 15, // 15s for near-real-time queue
+      refetchInterval: 15000
     });
 
     return {

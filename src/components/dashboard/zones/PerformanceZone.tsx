@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { TrendingUp, Trophy, Activity, DollarSign } from 'lucide-react';
 import { AchievementTracker } from '../AchievementTracker';
@@ -7,58 +7,35 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useAppContext } from '@/context/AppContext';
 import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
-import { useMMP } from '@/context/mmp/MMPContext';
-import { useUserProjects } from '@/hooks/useUserProjects';
 import { startOfMonth } from 'date-fns';
 
 export const PerformanceZone: React.FC = () => {
   const [activeTab, setActiveTab] = useState('achievements');
   const { roles } = useAppContext();
   const { siteVisits } = useSiteVisitContext();
-  const { mmpFiles } = useMMP();
-  const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
 
   const isFinanceOrAdmin = roles?.some(r => r.toLowerCase() === 'admin' || r.toLowerCase() === 'financialadmin');
 
-  // Project-filtered site visits: filter by user's project membership (admin bypass)
-  const filteredSiteVisits = useMemo(() => {
-    if (isAdminOrSuperUser) return siteVisits || [];
-    
-    // Build set of MMP IDs that belong to user's projects
-    const userProjectMmpIds = new Set(
-      mmpFiles
-        .filter(mmp => mmp.projectId && userProjectIds.includes(mmp.projectId))
-        .map(mmp => mmp.id)
-    );
-    
-    // Filter site visits by MMP project membership
-    return (siteVisits || []).filter(visit => {
-      const visitMmpId = visit.mmpDetails?.mmpId;
-      if (!visitMmpId) return false;
-      return userProjectMmpIds.has(visitMmpId);
-    });
-  }, [siteVisits, mmpFiles, userProjectIds, isAdminOrSuperUser]);
-
-  const thisMonthVisits = filteredSiteVisits.filter(v => {
+  const thisMonthVisits = siteVisits?.filter(v => {
     const visitDate = v.completedAt ? new Date(v.completedAt) : null;
     return visitDate && visitDate >= startOfMonth(new Date());
-  }).length;
+  }).length || 0;
 
   return (
-    <div className="space-y-4">
+    <div className="min-h-screen bg-background p-3 sm:p-4 md:p-6 lg:p-8 space-y-4 sm:space-y-6">
       {/* Modern Tech Header */}
       <div className="relative overflow-hidden rounded-lg border border-border/50 bg-gradient-to-r from-purple-500/5 via-pink-500/5 to-background p-4 shadow-sm">
-        <div className="relative z-10 flex items-center justify-between flex-wrap gap-3">
+        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center w-12 h-12 rounded-lg bg-purple-500/10 border border-purple-500/20">
-              <TrendingUp className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+            <div className="flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-lg bg-purple-500/10 border border-purple-500/20 flex-shrink-0">
+              <TrendingUp className="h-5 w-5 sm:h-6 sm:w-6 text-purple-600 dark:text-purple-400" />
             </div>
-            <div>
-              <h2 className="text-xl font-bold">Performance & Analytics</h2>
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">Goals, achievements, and activity tracking</p>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold truncate">Performance & Analytics</h2>
+              <p className="text-xs sm:text-sm text-muted-foreground uppercase tracking-wide">Goals, achievements, and activity tracking</p>
             </div>
           </div>
-          <Badge variant="secondary" className="gap-2 h-7 text-xs">
+          <Badge variant="secondary" className="gap-2 h-8 px-3 text-xs self-start">
             <Trophy className="h-3 w-3" />
             {thisMonthVisits} This Month
           </Badge>
@@ -67,14 +44,14 @@ export const PerformanceZone: React.FC = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 max-w-md h-auto p-1 bg-muted/30">
-          <TabsTrigger value="achievements" className="gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm">
-            <Trophy className="h-3.5 w-3.5" />
-            <span className="text-xs">Achievements</span>
+        <TabsList className="grid w-full grid-cols-2 max-w-md mx-auto h-auto p-1 bg-muted/30">
+          <TabsTrigger value="achievements" className="gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm min-h-[44px] sm:min-h-[40px] px-3 py-2 sm:py-1.5">
+            <Trophy className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+            <span className="text-xs sm:text-xs">Achievements</span>
           </TabsTrigger>
-          <TabsTrigger value="activity" className="gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm">
-            <Activity className="h-3.5 w-3.5" />
-            <span className="text-xs">Activity Feed</span>
+          <TabsTrigger value="activity" className="gap-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm min-h-[44px] sm:min-h-[40px] px-3 py-2 sm:py-1.5">
+            <Activity className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
+            <span className="text-xs sm:text-xs">Activity Feed</span>
           </TabsTrigger>
         </TabsList>
 

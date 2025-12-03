@@ -75,53 +75,61 @@ self.addEventListener('push', (event) => {
   if (!event.data) return;
 
   try {
-    const data = event.data.json();
-    const priority = data.priority || 'default';
-    const silent = data.silent || false;
-    
+    const payload = event.data.json();
+    const n = payload.notification || {};
+    const d = payload.data || payload || {};
+
+    const title = payload.title || n.title || d.title || 'PACT Notification';
+    const body = payload.body || n.body || d.body || d.message || '';
+    const icon = payload.icon || n.icon || d.icon || '/icons/icon-192x192.png';
+    const image = payload.image || n.image || d.image;
+    const priority = d.priority || payload.priority || 'default';
+    const silent = (d.silent ?? payload.silent) || false;
+    const link = (payload.fcmOptions && payload.fcmOptions.link) || (payload.fcm_options && payload.fcm_options.link) || d.url || d.link || '/';
+    const type = d.type || payload.type || 'info';
+    const category = d.category || payload.category || 'system';
+    const tag = d.tag || payload.tag || `pact-${Date.now()}`;
+
     const notificationOptions = {
-      body: data.body || data.message || '',
-      icon: data.icon || '/icons/icon-192x192.png',
+      body,
+      icon,
       badge: '/icons/icon-72x72.png',
-      tag: data.tag || `pact-${Date.now()}`,
+      tag,
       renotify: true,
       requireInteraction: priority === 'urgent',
-      silent: silent,
-      timestamp: data.timestamp || Date.now(),
+      silent: !!silent,
+      timestamp: d.timestamp || payload.timestamp || Date.now(),
       data: {
-        url: data.url || data.link || '/',
-        notificationId: data.id,
-        type: data.type || 'info',
-        priority: priority,
-        category: data.category || 'system'
+        url: link,
+        notificationId: d.id || payload.id,
+        type,
+        priority,
+        category,
       },
       vibrate: silent ? VIBRATION_PATTERNS.silent : (VIBRATION_PATTERNS[priority] || VIBRATION_PATTERNS.default),
-      actions: data.actions || getDefaultActions(data.type)
+      actions: d.actions || payload.actions || getDefaultActions(type)
     };
 
-    if (data.image) {
-      notificationOptions.image = data.image;
+    if (image) {
+      notificationOptions.image = image;
     }
 
     event.waitUntil(
       (async () => {
-        await self.registration.showNotification(
-          data.title || 'PACT Notification', 
-          notificationOptions
-        );
-        
+        await self.registration.showNotification(title, notificationOptions);
+
         const allClients = await clients.matchAll({ includeUncontrolled: true });
         allClients.forEach(client => {
           client.postMessage({
             type: 'PUSH_RECEIVED',
-            payload: data
+            payload
           });
         });
       })()
     );
   } catch (error) {
     console.error('Error showing push notification:', error);
-    
+
     event.waitUntil(
       self.registration.showNotification('PACT Update', {
         body: 'You have a new notification',

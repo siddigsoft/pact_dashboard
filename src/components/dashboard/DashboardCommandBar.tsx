@@ -3,6 +3,10 @@ import { Button } from '@/components/ui/button';
 import { RefreshCw } from 'lucide-react';
 import { ConnectionStatus } from './ConnectionStatus';
 import { useLiveDashboard } from '@/hooks/useLiveDashboard';
+import { useProjectContext } from '@/context/project/ProjectContext';
+import { useMMP } from '@/context/mmp/MMPContext';
+import { queryClient } from '@/lib/queryClient';
+import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
 
 interface DashboardCommandBarProps {
   onQuickAction?: (action: string) => void;
@@ -10,6 +14,26 @@ interface DashboardCommandBarProps {
 
 export const DashboardCommandBar: React.FC<DashboardCommandBarProps> = ({ onQuickAction }) => {
   const { isConnected } = useLiveDashboard();
+  const { fetchProjects } = useProjectContext();
+  const { refreshMMPFiles } = useMMP();
+  const { refreshSiteVisits } = useSiteVisitContext();
+
+  const handleRefresh = async () => {
+    // Refresh contexts
+    await Promise.allSettled([
+      fetchProjects(),
+      refreshMMPFiles(),
+      refreshSiteVisits?.(),
+    ]);
+    // Invalidate critical React Query caches
+    await Promise.allSettled([
+      queryClient.invalidateQueries({ queryKey: ['cost-submissions'] }),
+      queryClient.invalidateQueries({ queryKey: ['cost-approvals'] }),
+      queryClient.invalidateQueries({ queryKey: ['wallet'] }),
+      queryClient.invalidateQueries({ queryKey: ['walletTransactions'] }),
+      queryClient.invalidateQueries({ queryKey: ['notifications'] }),
+    ]);
+  };
 
   return (
     <div className="bg-card border-b border-border/50">
@@ -19,7 +43,7 @@ export const DashboardCommandBar: React.FC<DashboardCommandBarProps> = ({ onQuic
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => window.location.reload()}
+            onClick={handleRefresh}
             data-testid="button-refresh"
             className="gap-2"
           >
