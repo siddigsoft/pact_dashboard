@@ -63,6 +63,16 @@ The frontend, built with React 18, TypeScript, Tailwind CSS v3, and Shadcn UI, f
 *   **Tracker Preparation Plan:** Analyzes planned vs. actual site coverage, provides real-time updates, and facilitates invoice preparation with detailed cost breakdowns, multi-view analysis, and export capabilities.
 *   **Visit Tracking:** Dedicated database columns `visit_started_at`, `visit_started_by`, `visit_completed_at`, `visit_completed_by` in `mmp_site_entries` for comprehensive tracking.
 *   **GPS Accuracy Display:** Location accuracy is displayed across all team location views with color-coded indicators.
+*   **Signature & Transaction Module:** Comprehensive digital signature system for wallet transactions and document signing:
+    - **Transaction Signatures:** SHA-256 hashing for transaction integrity verification with cryptographically secure OTP generation
+    - **Document Signatures:** Multi-method support (UUID, phone, email, handwriting) for contract signing
+    - **Handwriting Signatures:** Canvas-based signature pad (SignaturePad.tsx, MobileSignaturePad.tsx) with touch support and image upload
+    - **Signature Verification:** Built-in verification dialog with audit trail logging
+    - **Mobile Support:** Optimized mobile components with gesture recognition and offline-capable signature capture
+    - **Audit Logging:** Immutable SignatureAuditLog for compliance tracking and legal evidence
+    - **Wallet Integration:** useSignature hook integrates with WalletContext for automatic transaction signing
+    - **Notification Triggers:** Signature-related notifications with category persistence (transaction signed, signature verified, document signed, signature required, signature revoked)
+    - **Security:** Web Crypto API with fallback, cryptographically secure OTP via crypto.getRandomValues, hash verification uses stored timestamps
 
 ### System Design Choices
 The project utilizes a unified Supabase client for all Supabase interactions, ensuring consistent authentication and session management. The system integrates the complete Sudan administrative structure (18 states, 188 localities) based on official OCHA/WFP COD-AB data.
