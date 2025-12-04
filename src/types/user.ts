@@ -19,6 +19,20 @@ export interface User {
   employeeId?: string;
   
   /**
+   * Phone verification status for signature methods
+   * Required for phone-based OTP signatures
+   */
+  phoneVerified?: boolean;
+  phoneVerifiedAt?: string;
+  
+  /**
+   * Email verification status for signature methods
+   * Required for email-based OTP signatures
+   */
+  emailVerified?: boolean;
+  emailVerifiedAt?: string;
+  
+  /**
    * State assignment for team members (data collectors, coordinators)
    * Used for site filtering and locality matching
    */

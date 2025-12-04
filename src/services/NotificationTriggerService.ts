@@ -1,6 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 
-export type NotificationCategory = 'assignments' | 'approvals' | 'financial' | 'team' | 'system';
+export type NotificationCategory = 'assignments' | 'approvals' | 'financial' | 'team' | 'system' | 'signatures';
 export type NotificationPriority = 'low' | 'medium' | 'high' | 'urgent';
 
 interface TriggerNotificationOptions {
@@ -12,7 +12,7 @@ interface TriggerNotificationOptions {
   priority?: NotificationPriority;
   link?: string;
   relatedEntityId?: string;
-  relatedEntityType?: 'siteVisit' | 'mmpFile' | 'transaction' | 'chat';
+  relatedEntityType?: 'siteVisit' | 'mmpFile' | 'transaction' | 'chat' | 'signature' | 'document';
 }
 
 interface QuietHoursSettings {
@@ -99,6 +99,8 @@ export const NotificationTriggerService = {
         title,
         message,
         type,
+        category,
+        priority,
         link,
         related_entity_id: relatedEntityId,
         related_entity_type: relatedEntityType,
@@ -106,6 +108,27 @@ export const NotificationTriggerService = {
       });
 
       if (error) {
+        // If category/priority columns don't exist, try without them
+        if (error.message?.includes('column') || error.code === '42703') {
+          console.warn('Notifications table missing category/priority columns, inserting without them');
+          const { error: fallbackError } = await supabase.from('notifications').insert({
+            user_id: userId,
+            title,
+            message,
+            type,
+            link,
+            related_entity_id: relatedEntityId,
+            related_entity_type: relatedEntityType,
+            is_read: false
+          });
+          
+          if (fallbackError) {
+            console.error('Failed to create notification (fallback):', fallbackError);
+            return false;
+          }
+          return true;
+        }
+        
         console.error('Failed to create notification:', error);
         return false;
       }
@@ -262,6 +285,89 @@ export const NotificationTriggerService = {
     );
 
     return successCount;
+  },
+
+  // Signature-related notifications
+  async transactionSigned(userId: string, transactionId: string, amount: number, currency: string): Promise<void> {
+    await this.send({
+      userId,
+      title: 'Transaction Signed',
+      message: `Your transaction of ${currency} ${amount.toLocaleString()} has been digitally signed and recorded`,
+      type: 'success',
+      category: 'signatures',
+      priority: 'medium',
+      link: '/wallet',
+      relatedEntityId: transactionId,
+      relatedEntityType: 'transaction'
+    });
+  },
+
+  async signatureVerified(userId: string, signatureType: 'transaction' | 'document', itemName: string): Promise<void> {
+    await this.send({
+      userId,
+      title: 'Signature Verified',
+      message: `Your ${signatureType} signature for "${itemName}" has been verified successfully`,
+      type: 'success',
+      category: 'signatures',
+      priority: 'low',
+      link: '/signatures'
+    });
+  },
+
+  async documentSignedByParty(userId: string, documentTitle: string, signerName: string, documentId: string): Promise<void> {
+    await this.send({
+      userId,
+      title: 'Document Signed',
+      message: `${signerName} has signed "${documentTitle}"`,
+      type: 'info',
+      category: 'signatures',
+      priority: 'medium',
+      link: '/signatures',
+      relatedEntityId: documentId,
+      relatedEntityType: 'document'
+    });
+  },
+
+  async signatureRequired(userId: string, documentTitle: string, documentId: string): Promise<void> {
+    await this.send({
+      userId,
+      title: 'Signature Required',
+      message: `Your signature is required for "${documentTitle}"`,
+      type: 'warning',
+      category: 'signatures',
+      priority: 'high',
+      link: '/signatures',
+      relatedEntityId: documentId,
+      relatedEntityType: 'document'
+    });
+  },
+
+  async signatureRevoked(userId: string, signatureType: 'transaction' | 'document', reason: string): Promise<void> {
+    await this.send({
+      userId,
+      title: 'Signature Revoked',
+      message: `A ${signatureType} signature has been revoked. Reason: ${reason}`,
+      type: 'warning',
+      category: 'signatures',
+      priority: 'high',
+      link: '/signatures'
+    });
+  },
+
+  async verificationCodeSent(userId: string, method: 'phone' | 'email', destination: string): Promise<void> {
+    const methodLabel = method === 'phone' ? 'SMS' : 'email';
+    const maskedDestination = method === 'phone' 
+      ? `***${destination.slice(-4)}`
+      : `${destination.slice(0, 3)}***@${destination.split('@')[1]}`;
+    
+    await this.send({
+      userId,
+      title: 'Verification Code Sent',
+      message: `A verification code has been sent via ${methodLabel} to ${maskedDestination}`,
+      type: 'info',
+      category: 'signatures',
+      priority: 'high'
+    });
   }
 };
 
