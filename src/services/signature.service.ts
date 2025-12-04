@@ -104,6 +104,7 @@ function getDeviceInfo(): { userAgent: string; deviceInfo: string } {
 export const SignatureService = {
   /**
    * Generate a transaction signature when money is received
+   * For phone/email methods, verifies that the user has pre-verified their contact info
    */
   async generateTransactionSignature(params: {
     transactionId: string;
@@ -118,6 +119,20 @@ export const SignatureService = {
     signatureMethod?: SignatureMethod;
     signatureData?: string;
   }): Promise<TransactionSignature> {
+    const method = params.signatureMethod || 'uuid';
+    
+    if (method === 'phone' || method === 'email') {
+      const { VerificationEnforcementService } = await import('./verification-enforcement.service');
+      const enforcement = await VerificationEnforcementService.checkMethodAllowed(
+        params.receiverId,
+        method
+      );
+      
+      if (!enforcement.allowed) {
+        throw new Error(enforcement.reason || `${method} not verified for transaction signatures`);
+      }
+    }
+    
     const transactionUuid = uuidv4();
     const timestamp = new Date().toISOString();
     const { userAgent, deviceInfo } = getDeviceInfo();
@@ -141,7 +156,7 @@ export const SignatureService = {
       transactionId: params.transactionId,
       walletId: params.walletId,
       signatureHash,
-      signatureMethod: params.signatureMethod || 'uuid',
+      signatureMethod: method,
       signatureData: params.signatureData,
       senderId: params.senderId,
       senderIdentifier: params.senderIdentifier,
@@ -206,6 +221,7 @@ export const SignatureService = {
 
   /**
    * Generate a document signature
+   * For phone/email methods, verifies that the user has pre-verified their contact info
    */
   async generateDocumentSignature(params: {
     documentId: string;
@@ -222,6 +238,18 @@ export const SignatureService = {
     verificationCode?: string;
     location?: { latitude: number; longitude: number; accuracy: number };
   }): Promise<DocumentSignature> {
+    if (params.signatureMethod === 'phone' || params.signatureMethod === 'email') {
+      const { VerificationEnforcementService } = await import('./verification-enforcement.service');
+      const enforcement = await VerificationEnforcementService.checkMethodAllowed(
+        params.signerId,
+        params.signatureMethod
+      );
+      
+      if (!enforcement.allowed) {
+        throw new Error(enforcement.reason || `${params.signatureMethod} not verified for signatures`);
+      }
+    }
+    
     const timestamp = new Date().toISOString();
     const { userAgent, deviceInfo } = getDeviceInfo();
     
@@ -566,6 +594,7 @@ export const SignatureService = {
 
   /**
    * Create verification request for phone/email
+   * Sends OTP via Twilio (SMS) or SendGrid (Email) if configured
    */
   async createVerificationRequest(params: {
     userId: string;
@@ -573,7 +602,8 @@ export const SignatureService = {
     destination: string;
     purpose: 'transaction' | 'document' | 'login';
     relatedId?: string;
-  }): Promise<{ requestId: string; expiresAt: string }> {
+    recipientName?: string;
+  }): Promise<{ requestId: string; expiresAt: string; deliveryResult?: any }> {
     const otp = generateOTP(6);
     const otpHash = await generateHash(otp);
     const timestamp = new Date().toISOString();
@@ -604,11 +634,30 @@ export const SignatureService = {
       throw error;
     }
     
-    // In production, send OTP via SMS/Email service
-    // For now, log it (would integrate with Twilio/SendGrid)
-    console.log(`[SignatureService] Verification code for ${params.destination}: ${otp}`);
+    // Send OTP via Twilio (SMS) or SendGrid (Email)
+    const { OTPDeliveryService } = await import('./otp-delivery.service');
     
-    return { requestId, expiresAt };
+    const purposeLabel = params.purpose === 'transaction' 
+      ? 'transaction signature'
+      : params.purpose === 'document'
+        ? 'document signing'
+        : 'account verification';
+    
+    const deliveryResult = await OTPDeliveryService.sendOTP(
+      params.method,
+      params.destination,
+      otp,
+      purposeLabel,
+      params.recipientName
+    );
+    
+    if (!deliveryResult.success) {
+      console.warn('[SignatureService] OTP delivery failed:', deliveryResult.error);
+    } else {
+      console.log(`[SignatureService] OTP sent via ${deliveryResult.provider} to ${params.destination}`);
+    }
+    
+    return { requestId, expiresAt, deliveryResult };
   },
 
   /**

@@ -73,6 +73,72 @@ The frontend, built with React 18, TypeScript, Tailwind CSS v3, and Shadcn UI, f
     - **Wallet Integration:** useSignature hook integrates with WalletContext for automatic transaction signing
     - **Notification Triggers:** Signature-related notifications with category persistence (transaction signed, signature verified, document signed, signature required, signature revoked)
     - **Security:** Web Crypto API with fallback, cryptographically secure OTP via crypto.getRandomValues, hash verification uses stored timestamps
+    - **Phone/Email Pre-Verification:** VerificationEnforcementService enforces that phone/email must be verified in user profile before allowing those signature methods. Enforcement is integrated into generateDocumentSignature() to block unverified users.
+    - **OTP Delivery Integration:** OTPDeliveryService provides mock delivery for development (logs OTP to console). Production deployment requires implementing a Supabase Edge Function for secure Twilio/SendGrid integration - see getProductionImplementationGuide() for template.
+*   **Task-Level Budget Tracking:** Granular budget management at individual task/activity level:
+    - **TaskBudget Interface:** Tracks allocated, spent, remaining budget with category breakdown (labor, transportation, materials, other)
+    - **Variance Analysis:** Calculates budget variance percentage, Cost Performance Index (CPI), Schedule Performance Index (SPI), Estimate at Completion (EAC)
+    - **Variance Status:** Automatic classification as under_budget, on_budget, over_budget, or critical based on configurable thresholds
+    - **Trend Detection:** Tracks if budget trend is improving, stable, or worsening
+    - **Spending Restrictions:** Blocks transactions that would exceed task budget, with escalation support
+    - **80% Threshold Alerts:** Automatic notifications when task budget reaches 80% utilization
+    - **Project Summary:** Aggregated variance analysis across all tasks with CPI, task counts by status
+
+### Required Database Schema Changes
+The following schema changes are required for full functionality of new features:
+
+**Profiles Table - Phone/Email Verification Columns:**
+```sql
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS phone_verified BOOLEAN DEFAULT FALSE;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS phone_verified_at TIMESTAMPTZ;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT FALSE;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMPTZ;
+```
+
+**Task Budgets Table:**
+```sql
+CREATE TABLE IF NOT EXISTS task_budgets (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  task_id VARCHAR NOT NULL,
+  task_name VARCHAR NOT NULL,
+  project_id UUID NOT NULL,
+  mmp_file_id UUID,
+  allocated_budget_cents BIGINT NOT NULL DEFAULT 0,
+  spent_budget_cents BIGINT NOT NULL DEFAULT 0,
+  remaining_budget_cents BIGINT NOT NULL DEFAULT 0,
+  planned_start_date DATE,
+  planned_end_date DATE,
+  actual_start_date DATE,
+  actual_end_date DATE,
+  estimated_hours INTEGER,
+  actual_hours INTEGER,
+  category_breakdown JSONB DEFAULT '{"labor": 0, "transportation": 0, "materials": 0, "other": 0}',
+  variance JSONB,
+  status VARCHAR NOT NULL DEFAULT 'draft',
+  priority VARCHAR NOT NULL DEFAULT 'medium',
+  assigned_to UUID,
+  created_by UUID,
+  approved_by UUID,
+  approved_at TIMESTAMPTZ,
+  budget_notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS task_budget_transactions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  task_budget_id UUID NOT NULL REFERENCES task_budgets(id),
+  transaction_type VARCHAR NOT NULL,
+  amount_cents BIGINT NOT NULL,
+  category VARCHAR,
+  description TEXT,
+  reference_id VARCHAR,
+  balance_before_cents BIGINT,
+  balance_after_cents BIGINT,
+  created_by UUID,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
 
 ### System Design Choices
 The project utilizes a unified Supabase client for all Supabase interactions, ensuring consistent authentication and session management. The system integrates the complete Sudan administrative structure (18 states, 188 localities) based on official OCHA/WFP COD-AB data.
