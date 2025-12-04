@@ -95,6 +95,41 @@ ALTER TABLE profiles ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT FAL
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMPTZ;
 ```
 
+**Handwriting Signatures Table:**
+```sql
+CREATE TABLE IF NOT EXISTS handwriting_signatures (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES profiles(id),
+  signature_image TEXT NOT NULL,
+  signature_type VARCHAR NOT NULL DEFAULT 'drawn',
+  canvas_width INTEGER,
+  canvas_height INTEGER,
+  stroke_count INTEGER,
+  is_default BOOLEAN DEFAULT FALSE,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  last_used_at TIMESTAMPTZ
+);
+
+CREATE INDEX idx_handwriting_signatures_user_id ON handwriting_signatures(user_id);
+CREATE INDEX idx_handwriting_signatures_is_active ON handwriting_signatures(is_active);
+
+ALTER TABLE handwriting_signatures ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view their own signatures"
+  ON handwriting_signatures FOR SELECT
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert their own signatures"
+  ON handwriting_signatures FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update their own signatures"
+  ON handwriting_signatures FOR UPDATE
+  USING (auth.uid() = user_id);
+```
+
 **Task Budgets Table:**
 ```sql
 CREATE TABLE IF NOT EXISTS task_budgets (
