@@ -28,6 +28,7 @@
     <color name="colorError">#ff4d4d</color>
     <color name="colorInfo">#3b82f6</color>
     
-    <!-- Launcher Background -->
+    <!-- Launcher Colors -->
     <color name="ic_launcher_background">#6b7cff</color>
+    <color name="ic_launcher_foreground">#ffffff</color>
 </resources>
