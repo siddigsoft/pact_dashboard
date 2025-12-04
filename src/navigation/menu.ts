@@ -22,6 +22,7 @@ import {
   BarChart3,
   ClipboardCheck,
   Timer,
+  FileSignature,
 } from 'lucide-react';
 import { AppRole } from '@/types';
 import { MenuPreferences, DEFAULT_MENU_PREFERENCES } from '@/types/user-preferences';
@@ -70,6 +71,9 @@ export const getWorkflowMenuGroups = (
   }
   if (!isHidden('/cost-submission') && (isDataCollector || isAdmin || isCoordinator)) {
     overviewItems.push({ id: 'cost-submission', title: 'Cost Submission', url: '/cost-submission', icon: Receipt, priority: 3, isPinned: isPinned('/cost-submission') });
+  }
+  if (!isHidden('/signatures')) {
+    overviewItems.push({ id: 'signatures', title: 'Signatures', url: '/signatures', icon: FileSignature, priority: 4, isPinned: isPinned('/signatures') });
   }
   if (overviewItems.length) groups.push({ id: 'overview', label: 'Overview', order: 1, items: overviewItems });
 
