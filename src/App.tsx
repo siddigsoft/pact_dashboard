@@ -89,6 +89,7 @@ import { Toaster as HotToaster } from 'react-hot-toast';
 import { useAppContext } from './context/AppContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import { debugDatabase } from './utils/debug-db';
+import { useFCM } from './hooks/useFCM';
 
 // Loading component for Suspense fallback
 const PageLoader = () => (
