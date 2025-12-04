@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Primary Colors - Modern Blue/Purple Theme -->
+    <color name="colorPrimary">#6b7cff</color>
+    <color name="colorPrimaryDark">#4147eb</color>
+    <color name="colorPrimaryLight">#b0c7ff</color>
+    
+    <!-- Secondary Colors -->
+    <color name="colorSecondary">#4d6f8c</color>
+    <color name="colorSecondaryDark">#3d5970</color>
+    <color name="colorSecondaryLight">#a3b7cc</color>
+    
+    <!-- Accent Colors -->
+    <color name="colorAccent">#923cff</color>
+    <color name="colorAccentDark">#7d17ff</color>
+    <color name="colorAccentLight">#bc86ff</color>
+    
+    <!-- Neutral Colors -->
+    <color name="colorBackground">#ffffff</color>
+    <color name="colorSurface">#f8f9fa</color>
+    <color name="colorForeground">#0d171e</color>
+    <color name="colorMuted">#606060</color>
+    <color name="colorBorder">#e5e7eb</color>
+    
+    <!-- Status Colors -->
+    <color name="colorSuccess">#10b981</color>
+    <color name="colorWarning">#f59e0b</color>
+    <color name="colorError">#ff4d4d</color>
+    <color name="colorInfo">#3b82f6</color>
+    
+    <!-- Launcher Background -->
+    <color name="ic_launcher_background">#6b7cff</color>
+</resources>
