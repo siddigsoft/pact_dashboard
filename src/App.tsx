@@ -85,6 +85,7 @@ const SignaturesPage = lazy(() => import('./pages/Signatures'));
 import MainLayout from './components/MainLayout';
 import { Toaster } from './components/ui/toaster';
 import { Toaster as SonnerToaster } from './components/ui/sonner';
+import { Toaster as HotToaster } from 'react-hot-toast';
 import { useAppContext } from './context/AppContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import { debugDatabase } from './utils/debug-db';
@@ -307,6 +308,17 @@ function App() {
                 </Suspense>
                 <Toaster />
                 <SonnerToaster />
+                <HotToaster
+                  position="bottom-center"
+                  toastOptions={{
+                    style: {
+                      background: '#fff',
+                      border: '1px solid #e5e7eb',
+                      padding: '12px',
+                      color: '#111',
+                    },
+                  }}
+                />
               </AppProviders>
             </Router>
           </QueryClientProvider>
