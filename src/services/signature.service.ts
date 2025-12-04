@@ -593,6 +593,24 @@ export const SignatureService = {
   },
 
   /**
+   * Delete (soft delete) a handwriting signature
+   */
+  async deleteHandwritingSignature(signatureId: string): Promise<void> {
+    const { error } = await supabase
+      .from('handwriting_signatures')
+      .update({ 
+        is_active: false,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', signatureId);
+    
+    if (error) {
+      console.error('[SignatureService] Failed to delete handwriting signature:', error);
+      throw error;
+    }
+  },
+
+  /**
    * Create verification request for phone/email
    * Sends OTP via Twilio (SMS) or SendGrid (Email) if configured
    */

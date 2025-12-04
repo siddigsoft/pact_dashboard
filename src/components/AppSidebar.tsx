@@ -31,7 +31,8 @@
     BarChart3,
     Banknote,
     ClipboardCheck,
-    BookOpen
+    BookOpen,
+    FileSignature
   } from "lucide-react";
   import { useSiteVisitReminders } from "@/hooks/use-site-visit-reminders";
   import Logo from "../assets/logo.png";
@@ -94,7 +95,8 @@
     Pin,
     Eye,
     EyeOff,
-    BookOpen
+    BookOpen,
+    FileSignature
   };
 
 
@@ -143,6 +145,9 @@
     }
     if (!isHidden('/cost-submission') && (isDataCollector || isAdmin || isCoordinator)) {
       overviewItems.push({ id: 'cost-submission', title: "Cost Submission", url: "/cost-submission", icon: Receipt, priority: 3, isPinned: isPinned('/cost-submission') });
+    }
+    if (!isHidden('/signatures')) {
+      overviewItems.push({ id: 'signatures', title: "Signatures", url: "/signatures", icon: FileSignature, priority: 4, isPinned: isPinned('/signatures') });
     }
     if (overviewItems.length) groups.push({ id: 'overview', label: "Overview", order: 1, items: overviewItems });
 

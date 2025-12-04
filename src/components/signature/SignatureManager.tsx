@@ -39,6 +39,7 @@ import { SignatureAuditLog } from './SignatureAuditLog';
 import { SignatureService } from '@/services/signature.service';
 import type { HandwritingSignature, SignatureStats } from '@/types/signature';
 import { format } from 'date-fns';
+import { useToast } from '@/hooks/use-toast';
 
 interface SignatureManagerProps {
   userId: string;
@@ -55,8 +56,10 @@ export function SignatureManager({
   userPhone,
   className,
 }: SignatureManagerProps) {
+  const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [signatures, setSignatures] = useState<HandwritingSignature[]>([]);
   const [stats, setStats] = useState<SignatureStats | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -64,6 +67,7 @@ export function SignatureManager({
 
   const loadData = async () => {
     setLoading(true);
+    setError(null);
     try {
       const [sigs, signatureStats] = await Promise.all([
         SignatureService.getUserHandwritingSignatures(userId),
@@ -71,8 +75,10 @@ export function SignatureManager({
       ]);
       setSignatures(sigs);
       setStats(signatureStats);
-    } catch (error) {
-      console.error('Failed to load signatures:', error);
+    } catch (err: any) {
+      console.error('Failed to load signatures:', err);
+      const errorMessage = err?.message || 'Failed to load signatures';
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -84,18 +90,33 @@ export function SignatureManager({
 
   const handleCreateSignature = async (signatureData: string, type: 'drawn' | 'uploaded' | 'saved') => {
     setSaving(true);
+    setError(null);
     try {
+      console.log('[SignatureManager] Saving signature...', { type, dataLength: signatureData.length });
+      
       await SignatureService.saveHandwritingSignature({
         userId,
         signatureImage: signatureData,
         signatureType: type === 'drawn' ? 'drawn' : 'uploaded',
-        isDefault: signatures.length === 0, // First signature is default
+        isDefault: signatures.length === 0,
+      });
+      
+      toast({
+        title: "Signature saved",
+        description: "Your signature has been saved successfully.",
       });
       
       setShowCreateDialog(false);
       await loadData();
-    } catch (error) {
-      console.error('Failed to save signature:', error);
+    } catch (err: any) {
+      console.error('Failed to save signature:', err);
+      const errorMessage = err?.message || 'Failed to save signature. Please try again.';
+      setError(errorMessage);
+      toast({
+        title: "Error saving signature",
+        description: errorMessage,
+        variant: "destructive",
+      });
     } finally {
       setSaving(false);
     }
@@ -103,7 +124,6 @@ export function SignatureManager({
 
   const handleSetDefault = async (signatureId: string) => {
     try {
-      // Update in Supabase - the service handles unsetting other defaults
       const signature = signatures.find(s => s.id === signatureId);
       if (signature) {
         await SignatureService.saveHandwritingSignature({
@@ -112,21 +132,38 @@ export function SignatureManager({
           signatureType: signature.signatureType,
           isDefault: true,
         });
+        toast({
+          title: "Default updated",
+          description: "Your default signature has been updated.",
+        });
         await loadData();
       }
-    } catch (error) {
-      console.error('Failed to set default signature:', error);
+    } catch (err: any) {
+      console.error('Failed to set default signature:', err);
+      toast({
+        title: "Error",
+        description: err?.message || 'Failed to set default signature.',
+        variant: "destructive",
+      });
     }
   };
 
   const handleDeleteSignature = async (signatureId: string) => {
     try {
-      // Soft delete by marking as inactive
-      // In production, you'd have a proper delete endpoint
+      await SignatureService.deleteHandwritingSignature(signatureId);
+      toast({
+        title: "Signature deleted",
+        description: "The signature has been removed.",
+      });
       setDeleteConfirmId(null);
       await loadData();
-    } catch (error) {
-      console.error('Failed to delete signature:', error);
+    } catch (err: any) {
+      console.error('Failed to delete signature:', err);
+      toast({
+        title: "Error",
+        description: err?.message || 'Failed to delete signature.',
+        variant: "destructive",
+      });
     }
   };
 
