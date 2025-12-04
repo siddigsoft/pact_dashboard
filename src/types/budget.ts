@@ -51,6 +51,66 @@ export interface MMPBudget {
   updatedAt: string;
 }
 
+/**
+ * Task-Level Budget Tracking
+ * For granular budget management at individual task/activity level
+ */
+export interface TaskBudget {
+  id: string;
+  taskId: string;
+  taskName: string;
+  projectId: string;
+  mmpFileId?: string;
+  
+  allocatedBudgetCents: number;
+  spentBudgetCents: number;
+  remainingBudgetCents: number;
+  
+  plannedStartDate?: string;
+  plannedEndDate?: string;
+  actualStartDate?: string;
+  actualEndDate?: string;
+  
+  estimatedHours?: number;
+  actualHours?: number;
+  
+  categoryBreakdown: {
+    labor: number;
+    transportation: number;
+    materials: number;
+    other: number;
+  };
+  
+  variance: TaskBudgetVariance;
+  
+  status: 'draft' | 'active' | 'completed' | 'exceeded' | 'on_hold';
+  priority: 'low' | 'medium' | 'high' | 'critical';
+  
+  assignedTo?: string;
+  createdBy?: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  
+  budgetNotes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Task Budget Variance Analysis
+ */
+export interface TaskBudgetVariance {
+  budgetVarianceCents: number;
+  budgetVariancePercentage: number;
+  timeVarianceDays?: number;
+  timeVariancePercentage?: number;
+  costPerformanceIndex: number;
+  schedulePerformanceIndex?: number;
+  estimateAtCompletion?: number;
+  varianceStatus: 'under_budget' | 'on_budget' | 'over_budget' | 'critical';
+  trendDirection: 'improving' | 'stable' | 'worsening';
+}
+
 export interface BudgetTransaction {
   id: string;
   projectBudgetId?: string;
@@ -189,5 +249,90 @@ export const BUDGET_STATUS_COLORS = {
 export const BUDGET_ALERT_SEVERITY_COLORS = {
   info: 'blue',
   warning: 'yellow',
+  critical: 'red',
+} as const;
+
+/**
+ * Task Budget Summary for reporting
+ */
+export interface TaskBudgetSummary {
+  id: string;
+  taskId: string;
+  taskName: string;
+  projectId: string;
+  projectName: string;
+  allocatedBudgetCents: number;
+  spentBudgetCents: number;
+  remainingBudgetCents: number;
+  utilizationPercentage: number;
+  variance: TaskBudgetVariance;
+  status: TaskBudget['status'];
+  priority: TaskBudget['priority'];
+  assignedToName?: string;
+  daysRemaining?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Create Task Budget Input
+ */
+export interface CreateTaskBudgetInput {
+  taskId: string;
+  taskName: string;
+  projectId: string;
+  mmpFileId?: string;
+  allocatedBudgetCents: number;
+  plannedStartDate?: string;
+  plannedEndDate?: string;
+  estimatedHours?: number;
+  categoryBreakdown?: Partial<TaskBudget['categoryBreakdown']>;
+  priority?: TaskBudget['priority'];
+  assignedTo?: string;
+  budgetNotes?: string;
+}
+
+/**
+ * Update Task Budget Input
+ */
+export interface UpdateTaskBudgetInput {
+  allocatedBudgetCents?: number;
+  plannedStartDate?: string;
+  plannedEndDate?: string;
+  actualStartDate?: string;
+  actualEndDate?: string;
+  estimatedHours?: number;
+  actualHours?: number;
+  categoryBreakdown?: Partial<TaskBudget['categoryBreakdown']>;
+  status?: TaskBudget['status'];
+  priority?: TaskBudget['priority'];
+  assignedTo?: string;
+  budgetNotes?: string;
+}
+
+/**
+ * Task Budget Spend Input
+ */
+export interface TaskBudgetSpendInput {
+  taskBudgetId: string;
+  amountCents: number;
+  category: keyof TaskBudget['categoryBreakdown'];
+  description?: string;
+  referenceId?: string;
+}
+
+/**
+ * Task Budget Variance Thresholds
+ */
+export const TASK_BUDGET_VARIANCE_THRESHOLDS = {
+  onBudget: 5,        // +/- 5% considered on budget
+  overBudget: 15,     // > 15% over is warning
+  critical: 25,       // > 25% over is critical
+} as const;
+
+export const TASK_VARIANCE_STATUS_COLORS = {
+  under_budget: 'green',
+  on_budget: 'blue',
+  over_budget: 'yellow',
   critical: 'red',
 } as const;
