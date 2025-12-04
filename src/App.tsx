@@ -109,6 +109,12 @@ const AppNotifications = () => {
   return <NotificationStack notifications={notifications} onRemove={remove} displayType="top" />;
 };
 
+// FCM initialization component - must be inside AppProviders context
+const FCMInitializer = () => {
+  useFCM();
+  return null;
+};
+
 // Redirect for old MMP view paths
 const MmpViewRedirect = () => {
   const location = useLocation();
@@ -325,6 +331,7 @@ function App() {
             <QueryClientProvider client={queryClient}>
               <Router>
                 <AppProviders>
+                  <FCMInitializer />
                   <Suspense fallback={<PageLoader />}>
                     <AuthGuard>
                       <AppRoutes />
