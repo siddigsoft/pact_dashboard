@@ -1,6 +1,14 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@200;300;400;500;600;700;800&family=Merriweather:wght@400;700&family=Fira+Code:wght@400;500;600&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Import mobile-only theme for native app */
+@import './styles/mobile-only-theme.css';
+
+/* Import WhatsApp-style notifications */
+@import './styles/whatsapp-notifications.css';
 
 /* Safe area inset variables for mobile devices */
 :root {
@@ -83,6 +91,61 @@
   }
 }
 
+/* Typography Layer */
+@layer base {
+  h1 {
+    @apply text-5xl font-bold leading-tight tracking-tighter font-display;
+    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  }
+
+  h2 {
+    @apply text-4xl font-bold leading-snug tracking-tight font-display;
+    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  }
+
+  h3 {
+    @apply text-3xl font-semibold leading-snug font-display;
+    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  }
+
+  h4 {
+    @apply text-2xl font-semibold font-display;
+    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  }
+
+  h5 {
+    @apply text-xl font-semibold;
+  }
+
+  h6 {
+    @apply text-lg font-semibold;
+  }
+
+  p {
+    @apply leading-relaxed text-base;
+  }
+
+  small {
+    @apply text-sm font-normal;
+  }
+
+  strong, b {
+    @apply font-semibold;
+  }
+
+  em, i {
+    font-style: italic;
+  }
+
+  code {
+    @apply bg-muted px-2 py-1 rounded text-sm font-mono;
+  }
+
+  pre {
+    @apply bg-muted p-4 rounded-lg overflow-x-auto font-mono text-sm;
+  }
+}
+
 @layer base {
   * {
     @apply border-border;
@@ -90,6 +153,7 @@
 
   html, body {
     @apply bg-background text-foreground;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'system-ui', sans-serif;
     /* Apply safe area padding for mobile devices */
     padding-top: var(--safe-area-top);
     padding-bottom: var(--safe-area-bottom);
@@ -488,6 +552,174 @@
   
   .cyber-dialog-form h4 {
     @apply text-cyan-100;
+  }
+
+  /* ==================== RESPONSIVE UTILITIES ==================== */
+
+  /* Responsive containers */
+  .container-responsive {
+    width: 100%;
+    margin: 0 auto;
+    padding: 0 clamp(0.5rem, 3vw, 2rem);
+  }
+
+  /* Responsive grid layouts */
+  .grid-responsive-2 {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr));
+    gap: clamp(0.75rem, 2vw, 1.5rem);
+  }
+
+  .grid-responsive-3 {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+    gap: clamp(0.75rem, 2vw, 1.5rem);
+  }
+
+  .grid-responsive-4 {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+    gap: clamp(0.75rem, 2vw, 1.5rem);
+  }
+
+  /* Stack on small screens, flex on larger */
+  .flex-responsive {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.75rem, 2vw, 1rem);
+  }
+
+  @media (min-width: 768px) {
+    .flex-responsive {
+      flex-direction: row;
+    }
+  }
+
+  /* Responsive heading sizing with clamp */
+  .heading-responsive-1 {
+    font-size: clamp(1.5rem, 5vw, 2.5rem);
+    font-weight: 700;
+    line-height: 1.2;
+  }
+
+  .heading-responsive-2 {
+    font-size: clamp(1.25rem, 4vw, 2rem);
+    font-weight: 600;
+    line-height: 1.3;
+  }
+
+  .heading-responsive-3 {
+    font-size: clamp(1rem, 3.5vw, 1.5rem);
+    font-weight: 600;
+    line-height: 1.4;
+  }
+
+  /* Responsive text sizing */
+  .text-responsive {
+    font-size: clamp(0.95rem, 2.5vw, 1.1rem);
+    line-height: 1.6;
+  }
+
+  .text-responsive-sm {
+    font-size: clamp(0.9rem, 2.5vw, 1rem);
+    line-height: 1.5;
+  }
+
+  /* Responsive padding */
+  .p-responsive {
+    padding: clamp(1rem, 4vw, 1.5rem);
+  }
+
+  .px-responsive {
+    padding-left: clamp(0.5rem, 3vw, 2rem);
+    padding-right: clamp(0.5rem, 3vw, 2rem);
+  }
+
+  .py-responsive {
+    padding-top: clamp(1rem, 4vw, 1.5rem);
+    padding-bottom: clamp(1rem, 4vw, 1.5rem);
+  }
+
+  /* Responsive gap/spacing */
+  .gap-responsive {
+    gap: clamp(0.75rem, 2vw, 1.5rem);
+  }
+
+  /* Responsive max-width for sections */
+  .section-responsive {
+    width: 100%;
+    max-width: min(100%, 1200px);
+    margin: 0 auto;
+    padding: clamp(1rem, 4vw, 2rem) clamp(0.5rem, 3vw, 2rem);
+  }
+
+  /* Responsive card styling */
+  .card-responsive {
+    padding: clamp(1rem, 3vw, 1.5rem);
+    border-radius: clamp(0.5rem, 2vw, 0.75rem);
+    background: hsl(var(--background));
+    border: 1px solid hsl(var(--border));
+  }
+
+  /* Touch-friendly buttons */
+  .btn-touch {
+    min-height: 44px;
+    min-width: 44px;
+    padding: clamp(0.5rem, 2vw, 0.75rem) clamp(0.75rem, 3vw, 1rem);
+    font-size: clamp(0.95rem, 2.5vw, 1rem);
+  }
+
+  /* Responsive images */
+  .img-responsive {
+    max-width: 100%;
+    height: auto;
+    display: block;
+  }
+
+  /* Responsive aspect ratio containers */
+  .aspect-video-responsive {
+    aspect-ratio: 16 / 9;
+  }
+
+  .aspect-square-responsive {
+    aspect-ratio: 1;
+  }
+
+  /* Tablet optimizations (min-width: 600px) */
+  @media (min-width: 600px) {
+    .container-responsive {
+      padding: 0 clamp(1rem, 4vw, 2rem);
+    }
+
+    .grid-responsive-2 {
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    }
+
+    .heading-responsive-1 {
+      font-size: 2rem;
+    }
+  }
+
+  /* Large tablet/landscape optimizations (min-width: 900px) */
+  @media (min-width: 900px) {
+    .heading-responsive-1 {
+      font-size: 2.5rem;
+    }
+
+    .section-responsive {
+      padding: 2rem clamp(1rem, 4vw, 3rem);
+    }
+  }
+
+  /* Landscape orientation adjustments */
+  @media (orientation: landscape) and (max-height: 600px) {
+    .heading-responsive-1 {
+      font-size: clamp(1.25rem, 4vw, 1.75rem);
+    }
+
+    .section-responsive {
+      padding: clamp(0.5rem, 2vw, 1rem) clamp(0.5rem, 3vw, 2rem);
+    }
   }
 
 }

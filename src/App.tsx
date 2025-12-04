@@ -5,6 +5,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './lib/queryClient';
 import { isSupabaseConfigured } from './integrations/supabase/client';
 import { ConfigurationError } from './components/ConfigurationError';
+import { isMobileApp } from './utils/platformDetection';
 
 // Import AppProviders
 import { AppProviders } from './context/AppContext';
@@ -87,6 +88,9 @@ import { Toaster } from './components/ui/toaster';
 import { Toaster as SonnerToaster } from './components/ui/sonner';
 import { Toaster as HotToaster } from 'react-hot-toast';
 import { useAppContext } from './context/AppContext';
+import { NotificationProvider } from './context/NotificationContext';
+import { NotificationStack } from './components/NotificationStack';
+import { useNotifications } from './context/NotificationContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import { debugDatabase } from './utils/debug-db';
 import { useFCM } from './hooks/useFCM';
@@ -97,6 +101,13 @@ const PageLoader = () => (
     <div className="text-sm text-muted-foreground animate-pulse">Loading...</div>
   </div>
 );
+
+// Notification display component
+const AppNotifications = () => {
+  const { notifications, remove } = useNotifications();
+  
+  return <NotificationStack notifications={notifications} onRemove={remove} displayType="top" />;
+};
 
 // Redirect for old MMP view paths
 const MmpViewRedirect = () => {
@@ -256,6 +267,17 @@ function App() {
     }
   }, []);
 
+  // Set platform attribute for mobile-specific styling
+  useEffect(() => {
+    const platform = isMobileApp() ? 'mobile' : 'web';
+    document.body.setAttribute('data-platform', platform);
+    
+    // Also add class for CSS support queries
+    if (platform === 'mobile') {
+      document.body.classList.add('mobile-app');
+    }
+  }, []);
+
   // If Supabase is not configured, show the configuration error screen
   // This prevents the app from crashing and gives a clear error message
   if (!isSupabaseConfigured) {
@@ -276,37 +298,39 @@ function App() {
   }
 
   return (
-    <ThemeProvider
-      attribute="class"
-      defaultTheme="light"
-      enableSystem={false}
-      disableTransitionOnChange
-    >
-      {isMounted && (
-        <ErrorBoundary
-          fallback={
-            <div className="min-h-screen flex items-center justify-center">
-              <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg max-w-md">
-                <h2 className="text-2xl font-bold text-red-600 mb-4">Something went wrong</h2>
-                <p className="mb-4">The application encountered an unexpected error. Please refresh the page to try again.</p>
-                <button
-                  onClick={() => window.location.reload()}
-                  className="px-4 py-2 bg-primary text-white rounded hover:bg-primary/90"
-                >
-                  Refresh Page
-                </button>
+    <NotificationProvider>
+      <ThemeProvider
+        attribute="class"
+        defaultTheme="light"
+        enableSystem={false}
+        disableTransitionOnChange
+      >
+        {isMounted && (
+          <ErrorBoundary
+            fallback={
+              <div className="min-h-screen flex items-center justify-center">
+                <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg max-w-md">
+                  <h2 className="text-2xl font-bold text-red-600 mb-4">Something went wrong</h2>
+                  <p className="mb-4">The application encountered an unexpected error. Please refresh the page to try again.</p>
+                  <button
+                    onClick={() => window.location.reload()}
+                    className="px-4 py-2 bg-primary text-white rounded hover:bg-primary/90"
+                  >
+                    Refresh Page
+                  </button>
+                </div>
               </div>
-            </div>
-          }
-        >
-          <QueryClientProvider client={queryClient}>
-            <Router>
-              <AppProviders>
-                <Suspense fallback={<PageLoader />}>
-                  <AuthGuard>
-                    <AppRoutes />
+            }
+          >
+            <QueryClientProvider client={queryClient}>
+              <Router>
+                <AppProviders>
+                  <Suspense fallback={<PageLoader />}>
+                    <AuthGuard>
+                      <AppRoutes />
                   </AuthGuard>
                 </Suspense>
+                <AppNotifications />
                 <Toaster />
                 <SonnerToaster />
                 <HotToaster
@@ -325,7 +349,8 @@ function App() {
           </QueryClientProvider>
         </ErrorBoundary>
       )}
-    </ThemeProvider>
+      </ThemeProvider>
+    </NotificationProvider>
   );
 }
 
