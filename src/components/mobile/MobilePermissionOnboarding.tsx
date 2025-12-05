@@ -1,6 +1,6 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MapPin, Camera, Mic, Bell, FolderOpen, CheckCircle2, XCircle, ChevronRight, Shield } from 'lucide-react';
+import { MapPin, Camera, Mic, Bell, FolderOpen, CheckCircle2, XCircle, ChevronRight, Shield, Settings, RefreshCw, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useMobilePermissions, PermissionType, PermissionStatus } from '@/hooks/use-mobile-permissions';
 import { hapticPresets } from '@/lib/haptics';
@@ -19,82 +19,161 @@ const permissionIcons: Record<PermissionType, typeof MapPin> = {
   storage: FolderOpen,
 };
 
+const permissionLabels: Record<PermissionType, string> = {
+  location: 'Location',
+  camera: 'Camera',
+  microphone: 'Mic',
+  notifications: 'Alerts',
+  storage: 'Files',
+};
+
 export function MobilePermissionOnboarding({ onComplete }: MobilePermissionOnboardingProps) {
   const { 
-    permissions, 
+    permissions,
     requestPermission, 
     getPermissionMessage,
     markSetupComplete,
     isChecking,
+    openAppSettings,
+    checkAllPermissions,
   } = useMobilePermissions();
   
   const [currentStep, setCurrentStep] = useState(0);
   const [isRequesting, setIsRequesting] = useState(false);
-  const [results, setResults] = useState<Record<PermissionType, PermissionStatus>>({
-    location: 'unknown',
-    camera: 'unknown',
-    microphone: 'unknown',
-    notifications: 'unknown',
-    storage: 'unknown',
-  });
+  const [showDeniedState, setShowDeniedState] = useState(false);
+  const [attemptCount, setAttemptCount] = useState(0);
+  const [grantedPermissions, setGrantedPermissions] = useState<Set<PermissionType>>(new Set());
 
   const currentPermission = permissionOrder[currentStep];
   const Icon = permissionIcons[currentPermission];
   const message = getPermissionMessage(currentPermission);
   const isLocationStep = currentPermission === 'location';
+  const currentStatus = permissions[currentPermission];
+
+  useEffect(() => {
+    if (currentStatus === 'granted' && !grantedPermissions.has(currentPermission)) {
+      setGrantedPermissions(prev => new Set([...prev, currentPermission]));
+    }
+  }, [currentStatus, currentPermission, grantedPermissions]);
+
+  const moveToNextStep = useCallback(() => {
+    if (currentStep < permissionOrder.length - 1) {
+      setCurrentStep(prev => prev + 1);
+      setShowDeniedState(false);
+      setAttemptCount(0);
+    } else {
+      markSetupComplete();
+      onComplete();
+    }
+  }, [currentStep, markSetupComplete, onComplete]);
 
   const handleAllow = useCallback(async () => {
     hapticPresets.buttonPress();
     setIsRequesting(true);
+    setShowDeniedState(false);
     
     try {
       const result = await requestPermission(currentPermission);
-      setResults(prev => ({ ...prev, [currentPermission]: result.status }));
+      console.log(`[Onboarding] ${currentPermission} permission result:`, result.status);
       
-      if (currentPermission === 'location' && result.status !== 'granted') {
-        hapticPresets.error();
-        return;
-      }
+      await checkAllPermissions();
       
-      hapticPresets.success();
-      
-      if (currentStep < permissionOrder.length - 1) {
-        setCurrentStep(prev => prev + 1);
+      if (result.status === 'granted') {
+        setGrantedPermissions(prev => new Set([...prev, currentPermission]));
+        hapticPresets.success();
+        
+        setTimeout(() => {
+          moveToNextStep();
+        }, 300);
       } else {
-        markSetupComplete();
-        onComplete();
+        if (currentPermission === 'location') {
+          hapticPresets.error();
+          setShowDeniedState(true);
+          setAttemptCount(prev => prev + 1);
+        } else {
+          hapticPresets.buttonPress();
+          moveToNextStep();
+        }
+      }
+    } catch (error) {
+      console.error(`[Onboarding] ${currentPermission} permission error:`, error);
+      if (currentPermission === 'location') {
+        setShowDeniedState(true);
+        setAttemptCount(prev => prev + 1);
+      } else {
+        moveToNextStep();
       }
     } finally {
       setIsRequesting(false);
     }
-  }, [currentPermission, currentStep, requestPermission, markSetupComplete, onComplete]);
+  }, [currentPermission, requestPermission, checkAllPermissions, moveToNextStep]);
 
   const handleSkip = useCallback(() => {
     if (isLocationStep) return;
     
     hapticPresets.buttonPress();
-    setResults(prev => ({ ...prev, [currentPermission]: 'denied' }));
-    
-    if (currentStep < permissionOrder.length - 1) {
-      setCurrentStep(prev => prev + 1);
-    } else {
-      markSetupComplete();
-      onComplete();
-    }
-  }, [currentPermission, currentStep, isLocationStep, markSetupComplete, onComplete]);
+    moveToNextStep();
+  }, [isLocationStep, moveToNextStep]);
 
-  const getStatusIcon = (status: PermissionStatus) => {
-    if (status === 'granted') return <CheckCircle2 className="w-5 h-5 text-black dark:text-white" />;
-    if (status === 'denied') return <XCircle className="w-5 h-5 text-black/40 dark:text-white/40" />;
-    return null;
+  const handleOpenSettings = useCallback(async () => {
+    hapticPresets.buttonPress();
+    const opened = await openAppSettings();
+    if (!opened) {
+      console.log('[Onboarding] Could not open settings automatically');
+    }
+  }, [openAppSettings]);
+
+  const handleRetryFromSettings = useCallback(async () => {
+    hapticPresets.buttonPress();
+    setIsRequesting(true);
+    
+    try {
+      const updatedPermissions = await checkAllPermissions();
+      const newStatus = updatedPermissions[currentPermission];
+      
+      console.log(`[Onboarding] Retry from settings - ${currentPermission}:`, newStatus);
+      
+      if (newStatus === 'granted') {
+        setGrantedPermissions(prev => new Set([...prev, currentPermission]));
+        hapticPresets.success();
+        setShowDeniedState(false);
+        setTimeout(() => {
+          moveToNextStep();
+        }, 300);
+      } else {
+        hapticPresets.error();
+        setAttemptCount(prev => prev + 1);
+      }
+    } catch (error) {
+      console.error(`[Onboarding] Error checking permissions:`, error);
+      hapticPresets.error();
+    } finally {
+      setIsRequesting(false);
+    }
+  }, [checkAllPermissions, currentPermission, moveToNextStep]);
+
+  const getStatusForPermission = (perm: PermissionType): 'granted' | 'denied' | 'pending' => {
+    const permStatus = permissions[perm];
+    if (grantedPermissions.has(perm) || permStatus === 'granted') {
+      return 'granted';
+    }
+    
+    const permIndex = permissionOrder.indexOf(perm);
+    if (permIndex < currentStep) {
+      return 'denied';
+    }
+    return 'pending';
   };
 
   if (isChecking) {
     return (
       <div className="fixed inset-0 bg-white dark:bg-black flex items-center justify-center z-50">
-        <div className="animate-pulse">
+        <motion.div 
+          animate={{ rotate: 360 }}
+          transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+        >
           <Shield className="w-16 h-16 text-black dark:text-white" />
-        </div>
+        </motion.div>
       </div>
     );
   }
@@ -104,10 +183,12 @@ export function MobilePermissionOnboarding({ onComplete }: MobilePermissionOnboa
       <div className="flex-1 flex flex-col px-6 py-8">
         <div className="flex items-center gap-2 mb-8">
           {permissionOrder.map((perm, idx) => (
-            <div
+            <motion.div
               key={perm}
-              className={`h-1 flex-1 rounded-full transition-all ${
-                idx < currentStep
+              initial={{ scaleX: 0 }}
+              animate={{ scaleX: 1 }}
+              className={`h-1.5 flex-1 rounded-full transition-all origin-left ${
+                idx < currentStep || grantedPermissions.has(perm)
                   ? 'bg-black dark:bg-white'
                   : idx === currentStep
                   ? 'bg-black/60 dark:bg-white/60'
@@ -121,46 +202,62 @@ export function MobilePermissionOnboarding({ onComplete }: MobilePermissionOnboa
         <div className="flex-1 flex flex-col items-center justify-center">
           <AnimatePresence mode="wait">
             <motion.div
-              key={currentPermission}
+              key={`${currentPermission}-${showDeniedState}`}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3 }}
               className="flex flex-col items-center text-center"
             >
-              <div className="w-24 h-24 rounded-full bg-black dark:bg-white flex items-center justify-center mb-8">
-                <Icon className="w-12 h-12 text-white dark:text-black" />
-              </div>
+              <motion.div 
+                className="w-28 h-28 rounded-full flex items-center justify-center mb-8 bg-black dark:bg-white"
+                animate={showDeniedState ? { scale: [1, 1.05, 1] } : {}}
+                transition={{ duration: 0.5 }}
+              >
+                {showDeniedState ? (
+                  <AlertTriangle className="w-14 h-14 text-white dark:text-black" />
+                ) : (
+                  <Icon className="w-14 h-14 text-white dark:text-black" />
+                )}
+              </motion.div>
 
               <h1 
-                className="text-2xl font-bold text-black dark:text-white mb-4"
+                className="text-2xl font-bold mb-4 text-black dark:text-white"
                 data-testid={`text-permission-title-${currentPermission}`}
               >
-                {message.title}
+                {showDeniedState ? 'Permission Required' : message.title}
               </h1>
 
               <p 
-                className="text-base text-black/60 dark:text-white/60 max-w-sm leading-relaxed"
+                className="text-base text-black/60 dark:text-white/60 max-w-sm leading-relaxed px-4"
                 data-testid={`text-permission-description-${currentPermission}`}
               >
-                {message.description}
+                {showDeniedState 
+                  ? `${message.title} is required for PACT to function properly. Please enable it in your device settings.`
+                  : message.description
+                }
               </p>
 
-              {isLocationStep && (
-                <div className="mt-6 px-4 py-3 bg-black/5 dark:bg-white/5 rounded-full">
-                  <p className="text-sm font-medium text-black dark:text-white">
-                    This permission is required
+              {isLocationStep && !showDeniedState && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mt-6 px-5 py-3 bg-black/5 dark:bg-white/5 rounded-full"
+                >
+                  <p className="text-sm font-semibold text-black dark:text-white">
+                    Required to continue
                   </p>
-                </div>
+                </motion.div>
               )}
 
-              {results[currentPermission] === 'denied' && isLocationStep && (
+              {showDeniedState && attemptCount >= 2 && (
                 <motion.div
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
-                  className="mt-6 px-4 py-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-xl"
+                  className="mt-6 px-4 py-3 bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-xl max-w-sm"
                 >
-                  <p className="text-sm text-red-600 dark:text-red-400">
-                    Location access was denied. Please enable it in your device settings to continue.
+                  <p className="text-sm text-black/70 dark:text-white/70">
+                    If the permission dialog doesn't appear, you may need to enable it manually in Settings.
                   </p>
                 </motion.div>
               )}
@@ -169,67 +266,155 @@ export function MobilePermissionOnboarding({ onComplete }: MobilePermissionOnboa
         </div>
 
         <div className="flex flex-col gap-3 mt-8">
-          <Button
-            size="lg"
-            onClick={handleAllow}
-            disabled={isRequesting}
-            className="w-full h-14 rounded-full bg-black dark:bg-white text-white dark:text-black font-semibold text-lg"
-            data-testid={`button-allow-${currentPermission}`}
-            aria-label={`Allow ${currentPermission} access`}
-          >
-            {isRequesting ? (
-              <div className="w-5 h-5 border-2 border-white/30 dark:border-black/30 border-t-white dark:border-t-black rounded-full animate-spin" />
-            ) : (
-              <>
-                Allow Access
-                <ChevronRight className="w-5 h-5 ml-2" />
-              </>
-            )}
-          </Button>
+          {showDeniedState ? (
+            <>
+              <Button
+                size="lg"
+                onClick={handleOpenSettings}
+                className="w-full h-14 rounded-full bg-black dark:bg-white text-white dark:text-black font-semibold text-lg gap-2"
+                data-testid="button-open-settings"
+                aria-label="Open device settings"
+              >
+                <Settings className="w-5 h-5" />
+                Open Settings
+              </Button>
+              
+              <Button
+                size="lg"
+                variant="outline"
+                onClick={handleRetryFromSettings}
+                disabled={isRequesting}
+                className="w-full h-14 rounded-full border-2 border-black dark:border-white text-black dark:text-white font-semibold text-lg gap-2"
+                data-testid="button-retry-permission"
+                aria-label="Check permission again"
+              >
+                {isRequesting ? (
+                  <div className="w-5 h-5 border-2 border-black/30 dark:border-white/30 border-t-black dark:border-t-white rounded-full animate-spin" />
+                ) : (
+                  <>
+                    <RefreshCw className="w-5 h-5" />
+                    I've Enabled It
+                  </>
+                )}
+              </Button>
 
-          {!isLocationStep && (
-            <Button
-              variant="ghost"
-              size="lg"
-              onClick={handleSkip}
-              disabled={isRequesting}
-              className="w-full h-14 rounded-full text-black/60 dark:text-white/60 font-medium"
-              data-testid={`button-skip-${currentPermission}`}
-              aria-label={`Skip ${currentPermission} permission`}
-            >
-              Skip for Now
-            </Button>
+              {!isLocationStep && (
+                <Button
+                  variant="ghost"
+                  size="lg"
+                  onClick={handleSkip}
+                  className="w-full h-14 rounded-full text-black/60 dark:text-white/60 font-medium"
+                  data-testid="button-skip-anyway"
+                  aria-label="Skip this permission"
+                >
+                  Skip Anyway
+                </Button>
+              )}
+            </>
+          ) : (
+            <>
+              <Button
+                size="lg"
+                onClick={handleAllow}
+                disabled={isRequesting}
+                className="w-full h-14 rounded-full bg-black dark:bg-white text-white dark:text-black font-semibold text-lg"
+                data-testid={`button-allow-${currentPermission}`}
+                aria-label={`Allow ${currentPermission} access`}
+              >
+                {isRequesting ? (
+                  <div className="w-5 h-5 border-2 border-white/30 dark:border-black/30 border-t-white dark:border-t-black rounded-full animate-spin" />
+                ) : (
+                  <>
+                    Allow Access
+                    <ChevronRight className="w-5 h-5 ml-2" />
+                  </>
+                )}
+              </Button>
+
+              {!isLocationStep && (
+                <Button
+                  variant="ghost"
+                  size="lg"
+                  onClick={handleSkip}
+                  disabled={isRequesting}
+                  className="w-full h-14 rounded-full text-black/60 dark:text-white/60 font-medium"
+                  data-testid={`button-skip-${currentPermission}`}
+                  aria-label={`Skip ${currentPermission} permission`}
+                >
+                  Skip for Now
+                </Button>
+              )}
+            </>
           )}
         </div>
 
-        <div className="mt-8 flex justify-center gap-6">
+        <div className="mt-8 flex justify-center gap-4">
           {permissionOrder.map((perm) => {
             const PIcon = permissionIcons[perm];
-            const status = results[perm];
+            const status = getStatusForPermission(perm);
+            const isCurrent = perm === currentPermission;
+            
             return (
-              <div
+              <motion.div
                 key={perm}
-                className="flex flex-col items-center gap-1"
+                className="flex flex-col items-center gap-1.5"
                 data-testid={`status-${perm}`}
+                animate={isCurrent ? { scale: [1, 1.1, 1] } : {}}
+                transition={{ duration: 0.5, repeat: isCurrent ? Infinity : 0, repeatDelay: 1 }}
               >
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                <div className={`relative w-11 h-11 rounded-full flex items-center justify-center transition-all ${
                   status === 'granted'
                     ? 'bg-black dark:bg-white'
                     : status === 'denied'
                     ? 'bg-black/10 dark:bg-white/10'
+                    : isCurrent
+                    ? 'bg-black/20 dark:bg-white/20 ring-2 ring-black dark:ring-white'
                     : 'bg-black/5 dark:bg-white/5'
                 }`}>
                   <PIcon className={`w-5 h-5 ${
                     status === 'granted'
                       ? 'text-white dark:text-black'
+                      : status === 'denied'
+                      ? 'text-black/40 dark:text-white/40'
                       : 'text-black/40 dark:text-white/40'
                   }`} />
+                  
+                  {status === 'granted' && (
+                    <motion.div
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      className="absolute -bottom-0.5 -right-0.5"
+                    >
+                      <CheckCircle2 className="w-4 h-4 text-black dark:text-white bg-white dark:bg-black rounded-full" />
+                    </motion.div>
+                  )}
+                  
+                  {status === 'denied' && (
+                    <motion.div
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      className="absolute -bottom-0.5 -right-0.5"
+                    >
+                      <XCircle className="w-4 h-4 text-black/50 dark:text-white/50 bg-white dark:bg-black rounded-full" />
+                    </motion.div>
+                  )}
                 </div>
-                {getStatusIcon(status)}
-              </div>
+                
+                <span className={`text-[10px] font-medium ${
+                  status === 'granted' 
+                    ? 'text-black dark:text-white' 
+                    : 'text-black/40 dark:text-white/40'
+                }`}>
+                  {permissionLabels[perm]}
+                </span>
+              </motion.div>
             );
           })}
         </div>
+
+        <p className="text-center text-xs text-black/40 dark:text-white/40 mt-6">
+          Step {currentStep + 1} of {permissionOrder.length}
+        </p>
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
-import { useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { MapPinOff, Settings, RefreshCw, AlertTriangle } from 'lucide-react';
+import { MapPin, Settings, RefreshCw, AlertTriangle, Shield, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useMobilePermissions } from '@/hooks/use-mobile-permissions';
 import { hapticPresets } from '@/lib/haptics';
@@ -16,6 +16,9 @@ export function LocationBlocker({ onRetry }: LocationBlockerProps) {
     requestPermission,
   } = useMobilePermissions();
 
+  const [isRetrying, setIsRetrying] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
+
   const handleOpenSettings = useCallback(async () => {
     hapticPresets.buttonPress();
     await openAppSettings();
@@ -23,119 +26,198 @@ export function LocationBlocker({ onRetry }: LocationBlockerProps) {
 
   const handleRetry = useCallback(async () => {
     hapticPresets.buttonPress();
+    setIsRetrying(true);
+    setRetryCount(prev => prev + 1);
     
-    const result = await requestPermission('location');
-    
-    if (result.status === 'granted') {
-      hapticPresets.success();
-      await checkAllPermissions();
-      onRetry?.();
-    } else {
+    try {
+      const result = await requestPermission('location');
+      console.log('[LocationBlocker] Permission result:', result.status);
+      
+      if (result.status === 'granted') {
+        hapticPresets.success();
+        await checkAllPermissions();
+        onRetry?.();
+      } else {
+        hapticPresets.error();
+      }
+    } catch (error) {
+      console.error('[LocationBlocker] Error:', error);
       hapticPresets.error();
+    } finally {
+      setIsRetrying(false);
     }
   }, [requestPermission, checkAllPermissions, onRetry]);
 
+  const handleCheckAgain = useCallback(async () => {
+    hapticPresets.buttonPress();
+    setIsRetrying(true);
+    
+    try {
+      const permissions = await checkAllPermissions();
+      
+      if (permissions.location === 'granted') {
+        hapticPresets.success();
+        onRetry?.();
+      } else {
+        hapticPresets.error();
+        setRetryCount(prev => prev + 1);
+      }
+    } finally {
+      setIsRetrying(false);
+    }
+  }, [checkAllPermissions, onRetry]);
+
   return (
     <div className="fixed inset-0 bg-white dark:bg-black z-[100] flex flex-col safe-area-top safe-area-bottom">
-      <div className="flex-1 flex flex-col items-center justify-center px-8 text-center">
+      <div className="flex-1 flex flex-col items-center justify-center px-6">
         <motion.div
           initial={{ scale: 0.8, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
-          transition={{ type: 'spring', damping: 20 }}
-          className="w-32 h-32 rounded-full bg-black/5 dark:bg-white/5 flex items-center justify-center mb-8"
+          transition={{ type: 'spring', damping: 20, duration: 0.5 }}
+          className="flex flex-col items-center text-center"
         >
-          <div className="w-24 h-24 rounded-full bg-black/10 dark:bg-white/10 flex items-center justify-center">
-            <MapPinOff className="w-12 h-12 text-black dark:text-white" />
-          </div>
-        </motion.div>
-
-        <motion.div
-          initial={{ y: 20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.1 }}
-        >
-          <div className="flex items-center justify-center gap-2 mb-4">
-            <AlertTriangle className="w-5 h-5 text-red-500" />
-            <span className="text-sm font-medium text-red-500 uppercase tracking-wide">
-              Location Required
-            </span>
-          </div>
-
-          <h1 
-            className="text-2xl font-bold text-black dark:text-white mb-4"
-            data-testid="text-location-blocked-title"
+          <motion.div 
+            className="relative mb-8"
+            animate={{ y: [0, -8, 0] }}
+            transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
           >
-            Location Access Disabled
-          </h1>
+            <div className="w-32 h-32 rounded-full bg-black dark:bg-white flex items-center justify-center">
+              <MapPin className="w-16 h-16 text-white dark:text-black" />
+            </div>
+            
+            <motion.div
+              className="absolute -top-1 -right-1 w-10 h-10 rounded-full bg-black dark:bg-white border-4 border-white dark:border-black flex items-center justify-center"
+              animate={{ scale: [1, 1.1, 1] }}
+              transition={{ duration: 1.5, repeat: Infinity }}
+            >
+              <AlertTriangle className="w-5 h-5 text-white dark:text-black" />
+            </motion.div>
+          </motion.div>
 
-          <p 
-            className="text-base text-black/60 dark:text-white/60 max-w-sm leading-relaxed mb-8"
-            data-testid="text-location-blocked-description"
+          <motion.div
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.2 }}
           >
-            PACT requires location access to function. This helps us track field visits, coordinate team assignments, and ensure accurate data collection.
-          </p>
+            <h1 
+              className="text-2xl font-bold text-black dark:text-white mb-3"
+              data-testid="text-location-blocked-title"
+            >
+              Location Access Required
+            </h1>
 
-          <div className="bg-black/5 dark:bg-white/5 rounded-xl p-4 mb-8 max-w-sm">
-            <h3 className="font-semibold text-black dark:text-white mb-2">
-              How to enable location:
+            <p 
+              className="text-base text-black/60 dark:text-white/60 max-w-sm leading-relaxed mb-6"
+              data-testid="text-location-blocked-description"
+            >
+              PACT needs continuous location access to track field visits and verify your activities.
+            </p>
+          </motion.div>
+
+          <motion.div
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.3 }}
+            className="bg-black/5 dark:bg-white/5 rounded-2xl p-5 mb-6 max-w-sm w-full"
+          >
+            <h3 className="font-semibold text-black dark:text-white mb-3 text-left">
+              How to enable:
             </h3>
-            <ol className="text-sm text-black/60 dark:text-white/60 text-left space-y-2">
-              <li className="flex items-start gap-2">
-                <span className="w-5 h-5 rounded-full bg-black dark:bg-white text-white dark:text-black text-xs flex items-center justify-center flex-shrink-0 mt-0.5">1</span>
-                <span>Open your device Settings</span>
+            <ol className="text-sm text-black/70 dark:text-white/70 text-left space-y-3">
+              <li className="flex items-start gap-3">
+                <span className="w-6 h-6 rounded-full bg-black dark:bg-white text-white dark:text-black text-xs font-bold flex items-center justify-center flex-shrink-0">1</span>
+                <span>Tap <strong>"Open Settings"</strong> below</span>
               </li>
-              <li className="flex items-start gap-2">
-                <span className="w-5 h-5 rounded-full bg-black dark:bg-white text-white dark:text-black text-xs flex items-center justify-center flex-shrink-0 mt-0.5">2</span>
-                <span>Find "PACT Workflow" in Apps</span>
+              <li className="flex items-start gap-3">
+                <span className="w-6 h-6 rounded-full bg-black dark:bg-white text-white dark:text-black text-xs font-bold flex items-center justify-center flex-shrink-0">2</span>
+                <span>Select <strong>"Permissions"</strong></span>
               </li>
-              <li className="flex items-start gap-2">
-                <span className="w-5 h-5 rounded-full bg-black dark:bg-white text-white dark:text-black text-xs flex items-center justify-center flex-shrink-0 mt-0.5">3</span>
-                <span>Tap Permissions, then Location</span>
+              <li className="flex items-start gap-3">
+                <span className="w-6 h-6 rounded-full bg-black dark:bg-white text-white dark:text-black text-xs font-bold flex items-center justify-center flex-shrink-0">3</span>
+                <span>Tap <strong>"Location"</strong></span>
               </li>
-              <li className="flex items-start gap-2">
-                <span className="w-5 h-5 rounded-full bg-black dark:bg-white text-white dark:text-black text-xs flex items-center justify-center flex-shrink-0 mt-0.5">4</span>
-                <span>Select "Allow all the time" or "Allow while using app"</span>
+              <li className="flex items-start gap-3">
+                <span className="w-6 h-6 rounded-full bg-black dark:bg-white text-white dark:text-black text-xs font-bold flex items-center justify-center flex-shrink-0">4</span>
+                <span>Choose <strong>"Allow all the time"</strong></span>
               </li>
             </ol>
-          </div>
-        </motion.div>
+          </motion.div>
 
-        <motion.div
-          initial={{ y: 20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.2 }}
-          className="flex flex-col gap-3 w-full max-w-sm"
+          {retryCount >= 2 && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="mb-6 px-4 py-3 bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-xl max-w-sm"
+            >
+              <p className="text-sm text-black/70 dark:text-white/70">
+                If the permission dialog doesn't appear, please use the Settings button to enable it manually.
+              </p>
+            </motion.div>
+          )}
+        </motion.div>
+      </div>
+
+      <motion.div
+        initial={{ y: 30, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ delay: 0.4 }}
+        className="px-6 pb-8 flex flex-col gap-3"
+      >
+        <Button
+          size="lg"
+          onClick={handleOpenSettings}
+          className="w-full h-14 rounded-full bg-black dark:bg-white text-white dark:text-black font-semibold text-lg gap-2"
+          data-testid="button-open-settings"
+          aria-label="Open device settings"
         >
-          <Button
-            size="lg"
-            onClick={handleOpenSettings}
-            className="w-full h-14 rounded-full bg-black dark:bg-white text-white dark:text-black font-semibold text-lg"
-            data-testid="button-open-settings"
-            aria-label="Open device settings"
-          >
-            <Settings className="w-5 h-5 mr-2" />
-            Open Settings
-          </Button>
+          <Settings className="w-5 h-5" />
+          Open Settings
+          <ChevronRight className="w-5 h-5 ml-auto" />
+        </Button>
 
-          <Button
-            variant="ghost"
-            size="lg"
-            onClick={handleRetry}
-            className="w-full h-14 rounded-full text-black dark:text-white font-medium"
-            data-testid="button-retry-location"
-            aria-label="Retry location permission"
-          >
-            <RefreshCw className="w-5 h-5 mr-2" />
-            Try Again
-          </Button>
-        </motion.div>
-      </div>
+        <Button
+          size="lg"
+          variant="outline"
+          onClick={handleCheckAgain}
+          disabled={isRetrying}
+          className="w-full h-14 rounded-full border-2 border-black dark:border-white text-black dark:text-white font-semibold text-lg gap-2"
+          data-testid="button-check-location"
+          aria-label="Check if location is enabled"
+        >
+          {isRetrying ? (
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+            >
+              <RefreshCw className="w-5 h-5" />
+            </motion.div>
+          ) : (
+            <>
+              <RefreshCw className="w-5 h-5" />
+              I've Enabled It
+            </>
+          )}
+        </Button>
 
-      <div className="px-8 pb-8 text-center">
-        <p className="text-xs text-black/40 dark:text-white/40">
-          Your location data is only shared with your team during active field visits and is protected by our privacy policy.
-        </p>
-      </div>
+        <Button
+          variant="ghost"
+          size="lg"
+          onClick={handleRetry}
+          disabled={isRetrying}
+          className="w-full h-12 rounded-full text-black/60 dark:text-white/60 font-medium"
+          data-testid="button-retry-location"
+          aria-label="Try requesting location again"
+        >
+          Request Permission Again
+        </Button>
+
+        <div className="flex items-center justify-center gap-2 mt-2">
+          <Shield className="w-4 h-4 text-black/40 dark:text-white/40" />
+          <p className="text-xs text-black/40 dark:text-white/40">
+            Your location is encrypted and only shared during active visits
+          </p>
+        </div>
+      </motion.div>
     </div>
   );
 }
