@@ -21,11 +21,11 @@ import {
   Pause,
   Play,
   Loader2,
-  Satellite,
-  Car
+  Satellite
 } from 'lucide-react';
 import { motion, AnimatePresence, PanInfo } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import PactLogo from '@/assets/logo.png';
 
 interface ActiveVisitOverlayProps {
   onCompleteVisit?: () => void;
@@ -155,10 +155,10 @@ export function ActiveVisitOverlay({
         {isMinimized ? (
           <div className="px-5 pb-6">
             <div className="flex items-center justify-between gap-4">
-              {/* Car Marker - Classic Uber black circle with white icon */}
+              {/* PACT Marker - Uber style black circle with logo */}
               <div className="flex items-center gap-4 flex-1 min-w-0">
-                <div className="w-14 h-14 rounded-full bg-black dark:bg-white flex items-center justify-center flex-shrink-0 shadow-lg">
-                  <Car className="h-7 w-7 text-white dark:text-black" />
+                <div className="w-12 h-12 rounded-full bg-black dark:bg-white flex items-center justify-center flex-shrink-0 shadow-lg">
+                  <img src={PactLogo} alt="PACT" className="h-7 w-7 object-contain" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="font-bold text-lg text-black dark:text-white truncate">
