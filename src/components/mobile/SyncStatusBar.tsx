@@ -306,7 +306,7 @@ export function OfflineBanner({ className }: { className?: string }) {
       className={cn(
         "px-4 py-2 text-center text-sm font-medium transition-colors",
         isOnline 
-          ? "bg-green-500/10 text-green-700 dark:text-green-400" 
+          ? "bg-black/10 dark:bg-white/10 text-black dark:text-white" 
           : "bg-destructive/10 text-destructive",
         className
       )}

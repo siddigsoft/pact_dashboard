@@ -48,7 +48,7 @@ export function MobileSyncStatus({
     return (
       <div className={cn("flex items-center gap-2", className)}>
         {isOnline ? (
-          <Badge variant="outline" className="gap-1 text-green-600 border-green-600/30 bg-green-50 dark:bg-green-950/30">
+          <Badge variant="outline" className="gap-1 text-foreground border-foreground/20 bg-foreground/5">
             <Cloud className="h-3 w-3" />
             Online
           </Badge>
@@ -59,7 +59,7 @@ export function MobileSyncStatus({
           </Badge>
         )}
         {pendingCount > 0 && (
-          <Badge variant="secondary" className="gap-1">
+          <Badge variant="secondary" className="gap-1 bg-black/10 dark:bg-white/10 text-foreground">
             <RefreshCw className={cn("h-3 w-3", isSyncing && "animate-spin")} />
             {pendingCount} pending
           </Badge>
@@ -206,7 +206,7 @@ export function MobileOfflineBanner() {
         !isOnline 
           ? "bg-amber-500/90 text-amber-950" 
           : isSyncing 
-            ? "bg-primary/90 text-primary-foreground"
+            ? "bg-black dark:bg-white text-white dark:text-black"
             : "bg-muted text-muted-foreground"
       )}
       data-testid="mobile-status-banner"
