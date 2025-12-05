@@ -141,10 +141,10 @@ export function ActiveVisitProvider({ children }: { children: ReactNode }) {
     setIsMinimized(false);
     
     toast({
-      title: 'Site Visit Started',
-      description: `Monitoring ${visitData.siteName}`,
+      title: t('notifications.siteVisit.started'),
+      description: t('notifications.siteVisit.startedDesc'),
     });
-  }, [toast]);
+  }, [toast, t]);
 
   const updateVisit = useCallback((updates: Partial<ActiveVisitData>) => {
     setActiveVisit(prev => prev ? { ...prev, ...updates } : null);

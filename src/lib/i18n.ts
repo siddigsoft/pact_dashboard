@@ -26,6 +26,11 @@ i18n
       lookupLocalStorage: 'pact_language',
       caches: ['localStorage'],
     },
+  })
+  .then(() => {
+    const detectedLang = i18n.language as 'en' | 'ar';
+    document.documentElement.dir = detectedLang === 'ar' ? 'rtl' : 'ltr';
+    document.documentElement.lang = detectedLang;
   });
 
 export const changeLanguage = (lng: 'en' | 'ar') => {
