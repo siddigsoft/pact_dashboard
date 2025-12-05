@@ -114,10 +114,10 @@ export function OfflineStatusBanner({ className, onRetry }: OfflineStatusBannerP
       )}
 
       {isOnline && pendingActions > 0 && !showReconnected && (
-        <div className="bg-blue-500 dark:bg-blue-600 text-white px-4 py-2 flex items-center justify-between gap-2">
+        <div className="bg-black dark:bg-white text-white dark:text-black px-4 py-2 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <CloudOff className="h-4 w-4" />
-            <span className="text-sm">Syncing {pendingActions} offline changes...</span>
+            <span className="text-sm font-medium">Syncing {pendingActions} offline changes...</span>
           </div>
           <RefreshCw className="h-4 w-4 animate-spin" />
         </div>

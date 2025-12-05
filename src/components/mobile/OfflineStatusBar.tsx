@@ -63,7 +63,7 @@ export function OfflineStatusBar({ className, compact = false }: OfflineStatusBa
       return (
         <div 
           className={cn(
-            "flex items-center gap-2 px-3 py-1.5 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-full text-sm",
+            "flex items-center gap-2 px-3 py-1.5 bg-black/10 dark:bg-white/10 text-black dark:text-white rounded-full text-sm font-medium",
             className
           )}
           data-testid="sync-status-compact"
@@ -95,9 +95,9 @@ export function OfflineStatusBar({ className, compact = false }: OfflineStatusBa
   return (
     <div 
       className={cn(
-        "p-4 rounded-lg border",
+        "p-4 rounded-2xl border",
         !isOnline ? "bg-destructive/5 border-destructive/20" : 
-        isSyncing ? "bg-blue-500/5 border-blue-500/20" :
+        isSyncing ? "bg-black/5 dark:bg-white/5 border-black/10 dark:border-white/10" :
         hasPendingData ? "bg-amber-500/5 border-amber-500/20" :
         "bg-emerald-500/5 border-emerald-500/20",
         className
@@ -109,14 +109,14 @@ export function OfflineStatusBar({ className, compact = false }: OfflineStatusBa
           <div className={cn(
             "p-2 rounded-full",
             !isOnline ? "bg-destructive/10" :
-            isSyncing ? "bg-blue-500/10" :
+            isSyncing ? "bg-black/10 dark:bg-white/10" :
             hasPendingData ? "bg-amber-500/10" :
             "bg-emerald-500/10"
           )}>
             {!isOnline ? (
               <WifiOff className="h-5 w-5 text-destructive" />
             ) : isSyncing ? (
-              <RefreshCw className="h-5 w-5 text-blue-500 animate-spin" />
+              <RefreshCw className="h-5 w-5 text-black dark:text-white animate-spin" />
             ) : hasPendingData ? (
               <CloudOff className="h-5 w-5 text-amber-500" />
             ) : (
@@ -232,7 +232,7 @@ export function OfflineIndicator() {
       className={cn(
         "fixed top-0 left-0 right-0 z-50 flex items-center justify-center gap-2 py-1 text-xs font-medium",
         !isOnline ? "bg-destructive text-destructive-foreground" :
-        isSyncing ? "bg-blue-500 text-white" :
+        isSyncing ? "bg-black dark:bg-white text-white dark:text-black" :
         "bg-amber-500 text-white"
       )}
       data-testid="offline-banner"
