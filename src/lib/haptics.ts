@@ -1,5 +1,4 @@
 import { Capacitor } from '@capacitor/core';
-import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
 
 export type HapticFeedbackType = 
   | 'light' 
@@ -12,8 +11,35 @@ export type HapticFeedbackType =
 
 const isNative = Capacitor.isNativePlatform();
 
+let HapticsModule: any = null;
+let ImpactStyleEnum: any = null;
+let NotificationTypeEnum: any = null;
+
+async function loadHapticsModule() {
+  if (HapticsModule) return true;
+  
+  try {
+    const module = await import('@capacitor/haptics');
+    HapticsModule = module.Haptics;
+    ImpactStyleEnum = module.ImpactStyle;
+    NotificationTypeEnum = module.NotificationType;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function triggerHaptic(type: HapticFeedbackType = 'light'): Promise<void> {
   if (!isNative) {
+    if ('vibrate' in navigator) {
+      const duration = type === 'heavy' ? 50 : type === 'medium' ? 30 : 15;
+      navigator.vibrate(duration);
+    }
+    return;
+  }
+
+  const loaded = await loadHapticsModule();
+  if (!loaded || !HapticsModule) {
     if ('vibrate' in navigator) {
       const duration = type === 'heavy' ? 50 : type === 'medium' ? 30 : 15;
       navigator.vibrate(duration);
@@ -24,31 +50,34 @@ export async function triggerHaptic(type: HapticFeedbackType = 'light'): Promise
   try {
     switch (type) {
       case 'light':
-        await Haptics.impact({ style: ImpactStyle.Light });
+        await HapticsModule.impact({ style: ImpactStyleEnum.Light });
         break;
       case 'medium':
-        await Haptics.impact({ style: ImpactStyle.Medium });
+        await HapticsModule.impact({ style: ImpactStyleEnum.Medium });
         break;
       case 'heavy':
-        await Haptics.impact({ style: ImpactStyle.Heavy });
+        await HapticsModule.impact({ style: ImpactStyleEnum.Heavy });
         break;
       case 'success':
-        await Haptics.notification({ type: NotificationType.Success });
+        await HapticsModule.notification({ type: NotificationTypeEnum.Success });
         break;
       case 'warning':
-        await Haptics.notification({ type: NotificationType.Warning });
+        await HapticsModule.notification({ type: NotificationTypeEnum.Warning });
         break;
       case 'error':
-        await Haptics.notification({ type: NotificationType.Error });
+        await HapticsModule.notification({ type: NotificationTypeEnum.Error });
         break;
       case 'selection':
-        await Haptics.selectionStart();
-        await Haptics.selectionChanged();
-        await Haptics.selectionEnd();
+        await HapticsModule.selectionStart();
+        await HapticsModule.selectionChanged();
+        await HapticsModule.selectionEnd();
         break;
     }
   } catch (error) {
-    console.warn('Haptic feedback not available:', error);
+    if ('vibrate' in navigator) {
+      const duration = type === 'heavy' ? 50 : type === 'medium' ? 30 : 15;
+      navigator.vibrate(duration);
+    }
   }
 }
 
@@ -60,16 +89,26 @@ export async function vibratePattern(pattern: number[]): Promise<void> {
     return;
   }
 
+  const loaded = await loadHapticsModule();
+  if (!loaded || !HapticsModule) {
+    if ('vibrate' in navigator) {
+      navigator.vibrate(pattern);
+    }
+    return;
+  }
+
   try {
     for (let i = 0; i < pattern.length; i++) {
       if (i % 2 === 0) {
-        await Haptics.vibrate({ duration: pattern[i] });
+        await HapticsModule.vibrate({ duration: pattern[i] });
       } else {
         await new Promise(resolve => setTimeout(resolve, pattern[i]));
       }
     }
   } catch (error) {
-    console.warn('Vibration pattern not available:', error);
+    if ('vibrate' in navigator) {
+      navigator.vibrate(pattern);
+    }
   }
 }
 
