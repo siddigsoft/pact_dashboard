@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useMobilePermissions } from '@/hooks/use-mobile-permissions';
 import { useDevice } from '@/hooks/use-device';
 import { MobilePermissionOnboarding } from './MobilePermissionOnboarding';
@@ -20,33 +20,55 @@ export function MobilePermissionGuard({ children }: MobilePermissionGuardProps) 
   
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showBlocker, setShowBlocker] = useState(false);
+  const onboardingCompletedRef = useRef(false);
 
   useEffect(() => {
-    if (setupComplete === null || isChecking) return;
+    // Skip if onboarding was just completed - don't re-show it
+    if (onboardingCompletedRef.current) {
+      console.log('[PermissionGuard] Onboarding was completed, not re-showing');
+      return;
+    }
+    
+    if (setupComplete === null || isChecking) {
+      console.log('[PermissionGuard] Still checking, setupComplete:', setupComplete, 'isChecking:', isChecking);
+      return;
+    }
+
+    console.log('[PermissionGuard] State update - isNative:', isNative, 'setupComplete:', setupComplete, 'isLocationBlocked:', isLocationBlocked, 'location:', permissions.location);
 
     if (isNative && !setupComplete) {
+      console.log('[PermissionGuard] Showing onboarding');
       setShowOnboarding(true);
       setShowBlocker(false);
     } else if (isNative && setupComplete && (isLocationBlocked || permissions.location !== 'granted')) {
+      console.log('[PermissionGuard] Showing location blocker');
       setShowOnboarding(false);
       setShowBlocker(true);
     } else {
+      console.log('[PermissionGuard] Showing main app');
       setShowOnboarding(false);
       setShowBlocker(false);
     }
   }, [isNative, setupComplete, isLocationBlocked, isChecking, permissions.location]);
 
   const handleOnboardingComplete = useCallback(async () => {
-    console.log('[PermissionGuard] Onboarding complete, hiding onboarding screen');
+    console.log('[PermissionGuard] handleOnboardingComplete called');
+    
+    // Mark that onboarding was completed - prevents re-showing
+    onboardingCompletedRef.current = true;
     setShowOnboarding(false);
     
-    // Don't await checkAllPermissions to avoid hanging
-    // Just do a quick location check
+    console.log('[PermissionGuard] Onboarding hidden, checking location...');
+    
+    // Quick location check with timeout
     try {
       const newPermissions = await Promise.race([
         checkAllPermissions(),
         new Promise<{ location: string }>((resolve) => 
-          setTimeout(() => resolve({ location: permissions.location }), 2000)
+          setTimeout(() => {
+            console.log('[PermissionGuard] Permission check timed out, using current location status');
+            resolve({ location: permissions.location });
+          }, 2000)
         )
       ]);
       
@@ -54,7 +76,8 @@ export function MobilePermissionGuard({ children }: MobilePermissionGuardProps) 
         console.log('[PermissionGuard] Location not granted, showing blocker');
         setShowBlocker(true);
       } else {
-        console.log('[PermissionGuard] All permissions OK, showing app');
+        console.log('[PermissionGuard] Location granted, showing main app');
+        setShowBlocker(false);
       }
     } catch (error) {
       console.error('[PermissionGuard] Error checking permissions:', error);

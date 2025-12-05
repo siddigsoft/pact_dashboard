@@ -37,6 +37,7 @@ export function useMobilePermissions() {
   const [isLocationBlocked, setIsLocationBlocked] = useState(false);
   const [setupComplete, setSetupComplete] = useState<boolean | null>(null);
   const locationCheckInterval = useRef<NodeJS.Timeout | null>(null);
+  const hasInitialized = useRef(false);
 
   const checkWebPermission = async (type: PermissionType): Promise<PermissionStatus> => {
     try {
@@ -443,10 +444,16 @@ export function useMobilePermissions() {
 
   const markSetupComplete = () => {
     try {
+      console.log('[Permissions] markSetupComplete called');
       localStorage.setItem(PERMISSION_SETUP_KEY, 'true');
       setSetupComplete(true);
+      console.log('[Permissions] Setup marked complete, localStorage set to true');
+      
+      // Verify it was saved
+      const saved = localStorage.getItem(PERMISSION_SETUP_KEY);
+      console.log('[Permissions] Verification - localStorage value:', saved);
     } catch (error) {
-      console.error('Failed to save setup status:', error);
+      console.error('[Permissions] Failed to save setup status:', error);
     }
   };
 
@@ -459,11 +466,24 @@ export function useMobilePermissions() {
     }
   };
 
+  // Initialize only once on mount - do NOT add checkAllPermissions to dependencies
   useEffect(() => {
+    if (hasInitialized.current) {
+      console.log('[Permissions] Already initialized, skipping');
+      return;
+    }
+    hasInitialized.current = true;
+    
     const savedSetup = isSetupComplete();
+    console.log('[Permissions] Initializing, setupComplete from localStorage:', savedSetup);
     setSetupComplete(savedSetup);
-    checkAllPermissions();
-  }, [checkAllPermissions]);
+    
+    // Only run initial check, don't re-run on every render
+    checkAllPermissions().catch(err => {
+      console.error('[Permissions] Initial check error:', err);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (setupComplete) {
