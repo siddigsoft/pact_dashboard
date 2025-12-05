@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { useNavigate } from 'react-router-dom';
 import { useAppContext } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
+import { useUserProjects } from '@/hooks/useUserProjects';
 import {
   CheckCircle,
   Clock,
@@ -45,6 +46,7 @@ interface RecentActivity {
 const CoordinatorDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { currentUser } = useAppContext();
+  const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
   const [stats, setStats] = useState<CoordinatorStats>({
     totalSites: 0,
     newSites: 0,
@@ -62,27 +64,56 @@ const CoordinatorDashboard: React.FC = () => {
   useEffect(() => {
     if (!currentUser?.id) return;
     loadDashboardData();
-  }, [currentUser]);
+  }, [currentUser, userProjectIds, isAdminOrSuperUser]);
 
   const loadDashboardData = async () => {
     if (!currentUser?.id) return;
+    
+    // Non-admin users with no project assignments should see nothing
+    if (!isAdminOrSuperUser && userProjectIds.length === 0) {
+      setStats({
+        totalSites: 0,
+        newSites: 0,
+        permitsAttached: 0,
+        verifiedSites: 0,
+        approvedSites: 0,
+        completedSites: 0,
+        rejectedSites: 0,
+        pendingLocalPermits: 0,
+        pendingStatePermits: 0
+      });
+      setRecentActivity([]);
+      setLoading(false);
+      return;
+    }
 
     setLoading(true);
     try {
       const userId = currentUser.id;
 
-      // Load all mmp_site_entries and filter by assigned_to in additional_data
+      // Load mmp_site_entries with mmp_files join to get project_id for filtering
       const { data: allEntries, error } = await supabase
         .from('mmp_site_entries')
-        .select('*')
+        .select(`
+          *,
+          mmp_file:mmp_files!mmp_file_id(project_id)
+        `)
         .limit(1000);
 
       if (error) throw error;
 
-      // Filter entries assigned to current user
+      // Filter entries assigned to current user AND by project membership for non-admins
       const userEntries = (allEntries || []).filter((entry: any) => {
         const ad = entry.additional_data || {};
-        return ad.assigned_to === userId;
+        const isAssignedToUser = ad.assigned_to === userId;
+        
+        // For non-admins, also check project membership (userProjectIds.length > 0 is guaranteed here)
+        if (!isAdminOrSuperUser) {
+          const projectId = entry.mmp_file?.project_id;
+          return isAssignedToUser && projectId && userProjectIds.includes(projectId);
+        }
+        
+        return isAssignedToUser;
       });
 
       // Calculate stats

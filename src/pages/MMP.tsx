@@ -8,6 +8,7 @@ import { useMMP } from '@/context/mmp/MMPContext';
 import { MMPList } from '@/components/mmp/MMPList';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { useUserProjects } from '@/hooks/useUserProjects';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import type { SiteVisitRow } from '@/components/mmp/MMPCategorySitesTable';
@@ -372,6 +373,7 @@ const MMP = () => {
   const { checkPermission, hasAnyRole, currentUser } = useAuthorization();
   const { toast } = useToast();
   const { reconcileSiteVisitFee } = useWallet();
+  const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
   const [activeTab, setActiveTab] = useState('new');
   // Subcategory state for Forwarded MMPs (Admin/ICT only)
   const [forwardedSubTab, setForwardedSubTab] = useState<'pending' | 'verified'>('pending');
@@ -1754,9 +1756,25 @@ const MMP = () => {
   const categorizedMMPs = useMemo(() => {
     let filteredMMPs = mmpFiles;
 
+    // PROJECT TEAM MEMBERSHIP FILTER
+    // Only show MMPs from projects the user belongs to (unless admin/superuser)
+    if (!isAdminOrSuperUser && userProjectIds.length > 0) {
+      filteredMMPs = mmpFiles.filter(mmp => {
+        // If MMP has no projectId, exclude it from non-admin users
+        if (!mmp.projectId) return false;
+        return userProjectIds.includes(mmp.projectId);
+      });
+    } else if (!isAdminOrSuperUser && userProjectIds.length === 0) {
+      // User is not admin and has no project assignments - show no MMPs
+      // But allow Data Collectors to see Available Sites (handled separately)
+      if (!canClaimSites) {
+        filteredMMPs = [];
+      }
+    }
+
     // For FOM users, only show MMPs forwarded to them or their verified MMPs
     if (isFOM && currentUser) {
-      filteredMMPs = mmpFiles.filter(mmp => {
+      filteredMMPs = filteredMMPs.filter(mmp => {
         const workflow = mmp.workflow as any;
         const forwardedToFomIds = workflow?.forwardedToFomIds || [];
         const isForwardedToThisFOM = forwardedToFomIds.includes(currentUser.id);
@@ -1768,7 +1786,7 @@ const MMP = () => {
 
     // For Coordinator users, show verified MMPs that contain sites they can verify
     if (isCoordinator && currentUser) {
-      filteredMMPs = mmpFiles.filter(mmp => 
+      filteredMMPs = filteredMMPs.filter(mmp => 
         mmp.type === 'verified-template' || 
         mmp.status === 'approved' ||
         ((mmp.workflow as any)?.currentStage && ['permitsVerified', 'cpVerification', 'completed'].includes((mmp.workflow as any)?.currentStage))
@@ -1832,7 +1850,7 @@ const MMP = () => {
       forwarded: forwardedMMPs,
       verified: verifiedMMPs
     };
-  }, [mmpFiles, isFOM, currentUser]);
+  }, [mmpFiles, isFOM, isCoordinator, currentUser, isAdminOrSuperUser, userProjectIds, canClaimSites]);
 
   // Forwarded subcategories for Admin/ICT view (Removed Rejected)
   const forwardedSubcategories = useMemo(() => {

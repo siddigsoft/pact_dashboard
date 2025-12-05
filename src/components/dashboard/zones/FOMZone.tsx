@@ -51,6 +51,7 @@ import SiteVisitsOverview from '../SiteVisitsOverview';
 import UpcomingSiteVisitsCard from '../UpcomingSiteVisitsCard';
 import { SiteVisitCostSummary } from '../SiteVisitCostSummary';
 import { DashboardCalendar } from '../DashboardCalendar';
+import { useUserProjects } from '@/hooks/useUserProjects';
 
 interface MMPFile {
   id: string;
@@ -78,6 +79,7 @@ export const FOMZone: React.FC = () => {
   const { currentUser } = useAppContext();
   const { siteVisits } = useSiteVisitContext();
   const navigate = useNavigate();
+  const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
   const [activeTab, setActiveTab] = useState('overview');
   const [filters, setFilters] = useState<Filters>({
     hub: '',
@@ -153,28 +155,42 @@ export const FOMZone: React.FC = () => {
     return () => { cancelled = true; clearInterval(interval); };
   }, [currentUser?.id]);
 
-  // Load all MMPs for approval queue (pending approval)
+  // Load all MMPs for approval queue (pending approval) - filtered by user's project membership
   useEffect(() => {
     let cancelled = false;
     const loadAllMMPs = async () => {
       setAllMMPsLoading(true);
       try {
-        const { data, error } = await supabase
+        let query = supabase
           .from('mmp_files')
           .select(`
-            id, name, mmp_id, status, workflow, uploaded_at, hub, month, project_name,
+            id, name, mmp_id, status, workflow, uploaded_at, hub, month, project_name, project_id,
             project:projects(name, project_code)
           `)
           .in('status', ['pending', 'submitted'])
           .order('created_at', { ascending: false })
           .limit(50);
         
+        // Apply project filter for non-admin users
+        if (!isAdminOrSuperUser && userProjectIds.length > 0) {
+          query = query.in('project_id', userProjectIds);
+        }
+        
+        const { data, error } = await query;
+        
         if (!cancelled) {
           if (error) {
             console.error('Failed to load MMPs:', error);
             setAllMMPs([]);
           } else {
-            setAllMMPs((data || []) as MMPFile[]);
+            // Additional client-side filtering for non-admin users
+            let filtered = data || [];
+            if (!isAdminOrSuperUser && userProjectIds.length > 0) {
+              filtered = filtered.filter((mmp: any) => 
+                mmp.project_id && userProjectIds.includes(mmp.project_id)
+              );
+            }
+            setAllMMPs(filtered as MMPFile[]);
           }
         }
       } catch (err) {
@@ -187,7 +203,7 @@ export const FOMZone: React.FC = () => {
     loadAllMMPs();
     const interval = setInterval(loadAllMMPs, 120000); // Refresh every 2 minutes
     return () => { cancelled = true; clearInterval(interval); };
-  }, []);
+  }, [isAdminOrSuperUser, userProjectIds]);
 
   // Load financial overview
   useEffect(() => {

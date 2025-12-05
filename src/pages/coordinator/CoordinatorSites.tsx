@@ -12,6 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
 import { useMMP } from '@/context/mmp/MMPContext';
+import { useUserProjects } from '@/hooks/useUserProjects';
 import { CheckCircle, Clock, FileCheck, XCircle, ArrowLeft, Eye, Edit, Search, ChevronLeft, ChevronRight, Calendar, CheckSquare, MapPin, AlertTriangle, ChevronUp, ChevronDown, Play } from 'lucide-react';
 import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
 import { format } from 'date-fns';
@@ -517,6 +518,7 @@ const CoordinatorSites: React.FC = () => {
   const { toast } = useToast();
   const { currentUser } = useAppContext();
   const { updateMMP } = useMMP();
+  const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
   const siteVisitContext = useSiteVisitContext();
   const [isStartingVisit, setIsStartingVisit] = useState(false);
   const { permits, loading: permitsLoading, uploadPermit, fetchPermits } = useCoordinatorLocalityPermits();
@@ -748,18 +750,27 @@ const CoordinatorSites: React.FC = () => {
     fetchLocationData();
   }, [toast]);
 
-  // Load badge counts for all tabs (always loaded)
+  // Load badge counts for all tabs (always loaded) - filtered by project membership
   useEffect(() => {
     if (!currentUser?.id) return;
     
     const loadBadgeCounts = async () => {
+      // Non-admin users with no project assignments should see nothing
+      if (!isAdminOrSuperUser && userProjectIds.length === 0) {
+        updateBadgeCounts([]);
+        return;
+      }
+      
       try {
         const userId = currentUser.id;
         
-        // Fetch only forwarded entries with minimal columns for better performance
+        // Fetch entries with mmp_file join to get project_id for filtering
         const { data: userEntries, error: entriesError } = await supabase
           .from('mmp_site_entries')
-          .select('id, status')
+          .select(`
+            id, status,
+            mmp_file:mmp_files!mmp_file_id(project_id)
+          `)
           .eq('forwarded_to_user_id', userId)
           .limit(5000);
         
@@ -768,18 +779,38 @@ const CoordinatorSites: React.FC = () => {
           // Fallback: fetch all and filter client-side
           const { data: allEntries } = await supabase
             .from('mmp_site_entries')
-            .select('id, status, forwarded_to_user_id')
+            .select(`
+              id, status, forwarded_to_user_id,
+              mmp_file:mmp_files!mmp_file_id(project_id)
+            `)
             .limit(5000);
           
-          const filtered = (allEntries || []).filter((entry: any) => {
+          let filtered = (allEntries || []).filter((entry: any) => {
             return entry.forwarded_to_user_id === userId;
           });
+          
+          // Apply project filter for non-admin users (userProjectIds.length > 0 is guaranteed here)
+          if (!isAdminOrSuperUser) {
+            filtered = filtered.filter((entry: any) => {
+              const projectId = entry.mmp_file?.project_id;
+              return projectId && userProjectIds.includes(projectId);
+            });
+          }
           
           updateBadgeCounts(filtered);
           return;
         }
         
-        updateBadgeCounts(userEntries || []);
+        // Apply project filter for non-admin users (userProjectIds.length > 0 is guaranteed here)
+        let filtered = userEntries || [];
+        if (!isAdminOrSuperUser) {
+          filtered = filtered.filter((entry: any) => {
+            const projectId = entry.mmp_file?.project_id;
+            return projectId && userProjectIds.includes(projectId);
+          });
+        }
+        
+        updateBadgeCounts(filtered);
       } catch (error) {
         console.error('Error loading badge counts:', error);
       }
@@ -814,9 +845,9 @@ const CoordinatorSites: React.FC = () => {
     };
 
     loadBadgeCounts();
-  }, [currentUser?.id]);
+  }, [currentUser?.id, userProjectIds, isAdminOrSuperUser]);
 
-  // Load sites for active tab only
+  // Load sites for active tab only - filtered by project membership
   useEffect(() => {
     loadSites();
     // Reset search and pagination when tab changes
@@ -831,26 +862,40 @@ const CoordinatorSites: React.FC = () => {
     setSurveyToolFilter('all');
     // Reset expanded localities when tab changes
     setExpandedPermitsAttachedLocalities(new Set());
-  }, [currentUser?.id, activeTab]);
+  }, [currentUser?.id, activeTab, userProjectIds, isAdminOrSuperUser]);
 
   const loadSites = async () => {
     if (!currentUser?.id) return;
     
+    // Non-admin users with no project assignments should see nothing
+    if (!isAdminOrSuperUser && userProjectIds.length === 0) {
+      setSites([]);
+      setLocalitiesData([]);
+      setLoading(false);
+      return;
+    }
+    
     setLoading(true);
     try {
-      // Load only forwarded entries with optimized query
+      // Load forwarded entries with mmp_file join to get project_id for filtering
       const { data: allEntries, error } = await supabase
         .from('mmp_site_entries')
-        .select('id, site_name, site_code, status, state, locality, activity_at_site, main_activity, visit_date, comments, mmp_file_id, hub_office, verified_at, verified_by, verification_notes, additional_data, created_at, forwarded_to_user_id')
+        .select(`
+          id, site_name, site_code, status, state, locality, activity_at_site, main_activity, visit_date, comments, mmp_file_id, hub_office, verified_at, verified_by, verification_notes, additional_data, created_at, forwarded_to_user_id,
+          mmp_file:mmp_files!mmp_file_id(project_id)
+        `)
         .eq('forwarded_to_user_id', currentUser.id)
-        .limit(5000); // Increased limit but filtered by user
+        .limit(5000);
 
       if (error) {
         console.warn('Filter error, falling back to full fetch:', error);
         // Fallback: fetch all and filter client-side
         const { data: fallbackEntries, error: fallbackError } = await supabase
           .from('mmp_site_entries')
-          .select('id, site_name, site_code, status, state, locality, activity_at_site, main_activity, visit_date, comments, mmp_file_id, hub_office, verified_at, verified_by, verification_notes, additional_data, created_at, forwarded_to_user_id')
+          .select(`
+            id, site_name, site_code, status, state, locality, activity_at_site, main_activity, visit_date, comments, mmp_file_id, hub_office, verified_at, verified_by, verification_notes, additional_data, created_at, forwarded_to_user_id,
+            mmp_file:mmp_files!mmp_file_id(project_id)
+          `)
           .limit(5000);
         
         if (fallbackError) throw fallbackError;
@@ -876,9 +921,18 @@ const CoordinatorSites: React.FC = () => {
   const processEntries = async (allEntries: any[], userId: string) => {
     try {
       
-      // Filter entries forwarded to current user and transform to SiteVisit format
+      // Filter entries forwarded to current user and by project membership for non-admins
+      // Note: userProjectIds.length > 0 is guaranteed here because loadSites returns early if empty
       let filtered = (allEntries || []).filter((entry: any) => {
-        return entry.forwarded_to_user_id === userId;
+        const isForwardedToUser = entry.forwarded_to_user_id === userId;
+        
+        // For non-admins, also check project membership
+        if (!isAdminOrSuperUser) {
+          const projectId = entry.mmp_file?.project_id;
+          return isForwardedToUser && projectId && userProjectIds.includes(projectId);
+        }
+        
+        return isForwardedToUser;
       }).map((entry: any) => {
         // Clear visit_date for unverified sites in the "new" tab
         const isUnverified = entry.status === 'Pending' || entry.status === 'Dispatched' || entry.status === 'assigned' || entry.status === 'inProgress' || entry.status === 'in_progress';
