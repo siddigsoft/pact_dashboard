@@ -195,10 +195,10 @@ const MobileNavigation = React.memo(() => {
         </SheetContent>
       </Sheet>
 
-      {/* Floating Search Button */}
+      {/* Floating Search Button - Uber style black */}
       <Button
         onClick={handleSearch}
-        className="fixed bottom-20 right-4 z-40 h-14 w-14 rounded-full shadow-lg bg-blue-600 hover:bg-blue-700 active:scale-95 transition-all duration-200"
+        className="fixed bottom-20 right-4 z-40 h-12 w-12 rounded-full shadow-lg bg-black hover:bg-black/90 dark:bg-white dark:hover:bg-white/90 active:scale-95 transition-all duration-200"
         style={{
           WebkitTapHighlightColor: 'transparent',
           touchAction: 'manipulation'
@@ -209,7 +209,7 @@ const MobileNavigation = React.memo(() => {
           }
         }}
       >
-        <Search className="h-6 w-6" />
+        <Search className="h-5 w-5 text-white dark:text-black" />
         <span className="sr-only">Search</span>
       </Button>
 
