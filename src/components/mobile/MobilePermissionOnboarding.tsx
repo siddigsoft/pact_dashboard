@@ -72,11 +72,25 @@ export function MobilePermissionOnboarding({ onComplete }: MobilePermissionOnboa
     setIsRequesting(true);
     setShowDeniedState(false);
     
+    // Storage permission is the last step - auto-proceed immediately
+    // Storage is always granted on modern Android (uses app-specific storage)
+    if (currentPermission === 'storage') {
+      console.log('[Onboarding] Storage permission - auto-completing setup');
+      setGrantedPermissions(prev => new Set([...prev, 'storage']));
+      hapticPresets.success();
+      setIsRequesting(false);
+      setTimeout(() => {
+        moveToNextStep();
+      }, 200);
+      return;
+    }
+    
     try {
       const result = await requestPermission(currentPermission);
       console.log(`[Onboarding] ${currentPermission} permission result:`, result.status);
       
-      await checkAllPermissions();
+      // Don't wait for checkAllPermissions to avoid hanging
+      checkAllPermissions().catch(err => console.log('[Onboarding] Background permission check error:', err));
       
       if (result.status === 'granted') {
         setGrantedPermissions(prev => new Set([...prev, currentPermission]));
