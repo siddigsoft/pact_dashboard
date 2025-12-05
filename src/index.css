@@ -87,42 +87,44 @@
   }
 }
 
-/* Typography Layer */
+/* Typography Layer - Compact & Clear */
 @layer base {
   h1 {
-    @apply text-5xl font-bold leading-tight tracking-tighter font-display;
-    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+    @apply text-3xl font-bold leading-tight tracking-tight;
+    font-family: 'Inter', system-ui, sans-serif;
+    letter-spacing: -0.02em;
   }
 
   h2 {
-    @apply text-4xl font-bold leading-snug tracking-tight font-display;
-    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+    @apply text-2xl font-bold leading-snug tracking-tight;
+    font-family: 'Inter', system-ui, sans-serif;
+    letter-spacing: -0.01em;
   }
 
   h3 {
-    @apply text-3xl font-semibold leading-snug font-display;
-    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+    @apply text-xl font-semibold leading-snug;
+    font-family: 'Inter', system-ui, sans-serif;
   }
 
   h4 {
-    @apply text-2xl font-semibold font-display;
-    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+    @apply text-lg font-semibold;
+    font-family: 'Inter', system-ui, sans-serif;
   }
 
   h5 {
-    @apply text-xl font-semibold;
+    @apply text-base font-semibold;
   }
 
   h6 {
-    @apply text-lg font-semibold;
+    @apply text-sm font-semibold;
   }
 
   p {
-    @apply leading-relaxed text-base;
+    @apply leading-normal text-sm;
   }
 
   small {
-    @apply text-sm font-normal;
+    @apply text-xs font-normal;
   }
 
   strong, b {
@@ -134,11 +136,11 @@
   }
 
   code {
-    @apply bg-muted px-2 py-1 rounded text-sm font-mono;
+    @apply bg-muted px-1.5 py-0.5 rounded text-xs font-mono;
   }
 
   pre {
-    @apply bg-muted p-4 rounded-lg overflow-x-auto font-mono text-sm;
+    @apply bg-muted p-3 rounded-lg overflow-x-auto font-mono text-xs;
   }
 }
 
