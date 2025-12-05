@@ -77,12 +77,12 @@ export function OfflineStatusBanner({ className, onRetry }: OfflineStatusBannerP
       aria-live="polite"
     >
       {!isOnline && (
-        <div className="bg-amber-500 dark:bg-amber-600 text-white px-4 py-3 flex items-center justify-between gap-3">
+        <div className="bg-black dark:bg-white text-white dark:text-black px-4 py-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0">
             <WifiOff className="h-5 w-5 flex-shrink-0" />
             <div className="min-w-0">
               <p className="font-medium text-sm">No Internet Connection</p>
-              <p className="text-xs text-amber-100 truncate">
+              <p className="text-xs opacity-70 truncate">
                 Changes will sync when you're back online
                 {pendingActions > 0 && ` (${pendingActions} pending)`}
               </p>
@@ -91,7 +91,7 @@ export function OfflineStatusBanner({ className, onRetry }: OfflineStatusBannerP
           <Button
             variant="ghost"
             size="sm"
-            className="flex-shrink-0 text-white hover:bg-amber-600/50 min-h-[36px]"
+            className="flex-shrink-0 text-white dark:text-black hover:bg-white/10 dark:hover:bg-black/10 min-h-[36px]"
             onClick={handleRetry}
             disabled={isRetrying}
             data-testid="button-retry-connection"
@@ -102,11 +102,11 @@ export function OfflineStatusBanner({ className, onRetry }: OfflineStatusBannerP
       )}
 
       {showReconnected && (
-        <div className="bg-emerald-500 dark:bg-emerald-600 text-white px-4 py-2 flex items-center justify-center gap-2">
+        <div className="bg-black dark:bg-white text-white dark:text-black px-4 py-2 flex items-center justify-center gap-2">
           <CheckCircle className="h-4 w-4" />
           <span className="text-sm font-medium">Back Online</span>
           {pendingActions > 0 && (
-            <span className="text-xs text-emerald-100">
+            <span className="text-xs opacity-70">
               Syncing {pendingActions} changes...
             </span>
           )}
@@ -147,8 +147,8 @@ export function ConnectionStatusIndicator() {
       className={cn(
         'flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium',
         isOnline
-          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
-          : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+          ? 'bg-black/10 dark:bg-white/10 text-black dark:text-white'
+          : 'bg-black/10 dark:bg-white/10 text-black dark:text-white'
       )}
       data-testid="status-connection"
     >

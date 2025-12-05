@@ -78,16 +78,14 @@ export function SyncProgressRing({
     if (!isOnline) return 'text-destructive';
     if (progress.isRunning) return 'text-black dark:text-white';
     if (lastSyncSuccess === false) return 'text-destructive';
-    if (pendingCount > 0) return 'text-amber-500';
-    return 'text-emerald-500';
+    return 'text-black dark:text-white';
   };
 
   const getStrokeColor = () => {
     if (!isOnline) return 'stroke-destructive';
     if (progress.isRunning) return 'stroke-black dark:stroke-white';
     if (lastSyncSuccess === false) return 'stroke-destructive';
-    if (pendingCount > 0) return 'stroke-amber-500';
-    return 'stroke-emerald-500';
+    return 'stroke-black dark:stroke-white';
   };
 
   const renderIcon = () => {
@@ -147,7 +145,7 @@ export function SyncProgressRing({
             strokeWidth={config.stroke}
             strokeDasharray={circumference}
             strokeDashoffset={0}
-            className="stroke-emerald-500"
+            className="stroke-black dark:stroke-white"
           />
         )}
       </svg>
@@ -234,15 +232,15 @@ export function SyncStatusPill({ className }: { className?: string }) {
     }
     if (pendingCount > 0) {
       return {
-        bg: 'bg-amber-500/10',
-        text: 'text-amber-600 dark:text-amber-400',
+        bg: 'bg-black/10 dark:bg-white/10',
+        text: 'text-black dark:text-white',
         label: `${pendingCount} pending`,
         icon: AlertTriangle,
       };
     }
     return {
-      bg: 'bg-emerald-500/10',
-      text: 'text-emerald-600 dark:text-emerald-400',
+      bg: 'bg-black/10 dark:bg-white/10',
+      text: 'text-black dark:text-white',
       label: 'Synced',
       icon: Check,
     };
