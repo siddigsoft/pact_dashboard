@@ -7,6 +7,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { 
   Settings as SettingsIcon, 
   Bell, 
@@ -877,6 +878,19 @@ const Settings = () => {
                     <SelectItem value="neutral">Neutral</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-muted/50 rounded-lg min-h-[60px]">
+                <div className="flex items-center gap-3">
+                  <Globe className="h-5 w-5 text-muted-foreground" />
+                  <div className="space-y-1">
+                    <Label htmlFor="language" className="text-base font-medium">Language / اللغة</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Choose your preferred language
+                    </p>
+                  </div>
+                </div>
+                <LanguageSwitcher variant="full" />
               </div>
               
               <div className="flex justify-end pt-4 border-t">

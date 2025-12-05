@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import { useTranslation } from 'react-i18next';
 
 export interface ActiveVisitData {
   id: string;
@@ -53,6 +54,7 @@ export function ActiveVisitProvider({ children }: { children: ReactNode }) {
   const [isGpsActive, setIsGpsActive] = useState(false);
   const [watchId, setWatchId] = useState<number | null>(null);
   const { toast } = useToast();
+  const { t } = useTranslation();
 
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
@@ -184,21 +186,21 @@ export function ActiveVisitProvider({ children }: { children: ReactNode }) {
       setIsGpsActive(false);
       
       toast({
-        title: 'Visit Completed',
-        description: 'Site visit has been marked as complete.',
+        title: t('notifications.siteVisit.completed'),
+        description: t('notifications.siteVisit.completedDesc'),
       });
       
       return true;
     } catch (error) {
       console.error('Failed to complete visit:', error);
       toast({
-        title: 'Error',
-        description: 'Failed to complete visit. Please try again.',
+        title: t('notifications.error.generic'),
+        description: t('notifications.error.genericDesc'),
         variant: 'destructive',
       });
       return false;
     }
-  }, [activeVisit, toast]);
+  }, [activeVisit, toast, t]);
 
   const pauseVisit = useCallback(() => {
     setActiveVisit(prev => prev ? { ...prev, status: 'paused' } : null);

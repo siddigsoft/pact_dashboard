@@ -5,6 +5,7 @@ import App from './App.tsx'
 import './index.css'
 import './styles/mobile.css' // Import mobile-specific styles
 import { initCapacitor } from './lib/capacitor-init'
+import './lib/i18n' // Initialize i18n for multilingual support
 
 initCapacitor().then(() => {
   console.log('[PACT] App initialized');
