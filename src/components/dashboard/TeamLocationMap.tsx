@@ -2,13 +2,14 @@ import React, { useEffect, useRef, useCallback, useState, useMemo } from 'react'
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Card, CardContent } from '@/components/ui/card';
-import { MapPin, RefreshCw, Wifi, WifiOff, Loader2, Filter } from 'lucide-react';
+import { MapPin, RefreshCw, Wifi, WifiOff, Loader2, Filter, Maximize2, Minimize2, X } from 'lucide-react';
 import { User } from '@/types/user';
 import { SiteVisit } from '@/types/siteVisit';
 import { formatDistanceToNow } from 'date-fns';
 import { getUserStatus } from '@/utils/userStatusUtils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 type StatusFilter = 'all' | 'online' | 'active-today' | 'offline' | 'sites';
 
@@ -35,12 +36,15 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({
 }) => {
   const mapRef = useRef<L.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
+  const fullscreenMapContainerRef = useRef<HTMLDivElement>(null);
   const markersLayerRef = useRef<L.LayerGroup | null>(null);
   const isMapInitializedRef = useRef(false);
   const [lastUpdated, setLastUpdated] = useState<Date>(lastRefresh || new Date());
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [showSites, setShowSites] = useState(true);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const fullscreenMapRef = useRef<L.Map | null>(null);
 
   const getStatusColor = (user: User): string => {
     if (onlineUserIds.has(user.id)) {
@@ -433,6 +437,123 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({
     }
   }, []);
 
+  // Initialize fullscreen map
+  const initializeFullscreenMap = useCallback(() => {
+    if (!fullscreenMapContainerRef.current || fullscreenMapRef.current) return;
+
+    try {
+      const center = mapRef.current?.getCenter() || L.latLng(15.5527, 32.5599);
+      const zoom = mapRef.current?.getZoom() || 6;
+
+      fullscreenMapRef.current = L.map(fullscreenMapContainerRef.current, {
+        center: [center.lat, center.lng],
+        zoom: zoom,
+        zoomControl: true,
+        attributionControl: true,
+      });
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors',
+        maxZoom: 19,
+      }).addTo(fullscreenMapRef.current);
+
+      // Copy markers from main map
+      const bounds = L.latLngBounds([]);
+      let hasValidBounds = false;
+
+      // Add user markers
+      const usersToShow = users.filter(user => {
+        if (!user.location?.latitude || !user.location?.longitude) return false;
+        return true;
+      });
+
+      usersToShow.forEach((user) => {
+        if (user.location?.latitude && user.location?.longitude) {
+          const markerIcon = createUserMarkerIcon(user);
+          const marker = L.marker([user.location.latitude, user.location.longitude], {
+            icon: markerIcon,
+          });
+          marker.addTo(fullscreenMapRef.current!);
+          bounds.extend([user.location.latitude, user.location.longitude]);
+          hasValidBounds = true;
+        }
+      });
+
+      // Add site markers
+      if (showSites) {
+        siteVisits.forEach((visit) => {
+          const lat = visit.location?.latitude || visit.coordinates?.latitude;
+          const lng = visit.location?.longitude || visit.coordinates?.longitude;
+          
+          if (lat && lng) {
+            const getColor = () => {
+              if (visit.status === 'completed') return '#10b981';
+              if (visit.status === 'inProgress') return '#3b82f6';
+              if (visit.priority === 'high') return '#ef4444';
+              if (visit.priority === 'medium') return '#f59e0b';
+              return '#6366f1';
+            };
+
+            const markerIcon = L.divIcon({
+              className: 'custom-marker',
+              html: `
+                <div>
+                  <svg width="28" height="36" viewBox="0 0 28 36" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M14 0C6.268 0 0 6.268 0 14c0 10.5 14 22 14 22s14-11.5 14-22c0-7.732-6.268-14-14-14z" 
+                      fill="${getColor()}" 
+                      stroke="#fff" 
+                      stroke-width="2"/>
+                    <text x="14" y="17" text-anchor="middle" fill="#fff" font-size="12" font-weight="bold">S</text>
+                  </svg>
+                </div>
+              `,
+              iconSize: [28, 36],
+              iconAnchor: [14, 36],
+              popupAnchor: [0, -36],
+            });
+
+            const marker = L.marker([lat, lng], { icon: markerIcon });
+            marker.addTo(fullscreenMapRef.current!);
+            bounds.extend([lat, lng]);
+            hasValidBounds = true;
+          }
+        });
+      }
+
+      if (hasValidBounds) {
+        try {
+          fullscreenMapRef.current.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+        } catch (error) {
+          console.error('Error fitting bounds:', error);
+        }
+      }
+    } catch (error) {
+      console.error('Error initializing fullscreen map:', error);
+    }
+  }, [users, siteVisits, showSites, createUserMarkerIcon]);
+
+  // Clean up fullscreen map when closing
+  const handleCloseFullscreen = useCallback(() => {
+    if (fullscreenMapRef.current) {
+      fullscreenMapRef.current.remove();
+      fullscreenMapRef.current = null;
+    }
+    setIsFullscreen(false);
+  }, []);
+
+  // Open fullscreen map
+  const handleOpenFullscreen = useCallback(() => {
+    setIsFullscreen(true);
+    // Initialize map after dialog opens
+    setTimeout(() => {
+      initializeFullscreenMap();
+      // Invalidate size after a short delay to ensure proper rendering
+      setTimeout(() => {
+        fullscreenMapRef.current?.invalidateSize();
+      }, 300);
+    }, 100);
+  }, [initializeFullscreenMap]);
+
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
@@ -614,6 +735,17 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({
             style={{ height: '500px', width: '100%' }}
             data-testid="team-location-map"
           />
+          <div className="absolute top-2 right-2 z-[1000]">
+            <Button
+              variant="outline"
+              size="icon"
+              className="bg-background/90 backdrop-blur-sm shadow-sm"
+              onClick={handleOpenFullscreen}
+              data-testid="button-fullscreen-map"
+            >
+              <Maximize2 className="h-4 w-4" />
+            </Button>
+          </div>
           <div className="absolute bottom-2 left-2 z-[1000]">
             <Badge variant="secondary" className="text-xs bg-background/90 backdrop-blur-sm shadow-sm">
               {teamWithLocation.length} member{teamWithLocation.length !== 1 ? 's' : ''} on map
@@ -632,6 +764,53 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({
           </div>
         </CardContent>
       </Card>
+
+      {/* Fullscreen Map Dialog */}
+      <Dialog open={isFullscreen} onOpenChange={(open) => !open && handleCloseFullscreen()}>
+        <DialogContent className="max-w-[95vw] w-[95vw] h-[90vh] p-0 overflow-hidden">
+          <DialogHeader className="absolute top-0 left-0 right-0 z-[1001] p-4 bg-background/90 backdrop-blur-sm border-b">
+            <div className="flex items-center justify-between">
+              <DialogTitle className="flex items-center gap-2">
+                <MapPin className="h-5 w-5" />
+                Team Locations - Fullscreen View
+              </DialogTitle>
+              <div className="flex items-center gap-2">
+                <Badge 
+                  variant={connectionStatus === 'connected' ? 'default' : 'outline'} 
+                  className={`text-xs gap-1 ${
+                    connectionStatus === 'connected' 
+                      ? 'bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/30' 
+                      : 'bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/30'
+                  }`}
+                >
+                  {connectionStatus === 'connected' ? (
+                    <><Wifi className="h-3 w-3" /> Live</>
+                  ) : (
+                    <><WifiOff className="h-3 w-3" /> Offline</>
+                  )}
+                </Badge>
+                <Badge variant="secondary" className="text-xs">
+                  {teamWithLocation.length} on map
+                </Badge>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleCloseFullscreen}
+                  data-testid="button-close-fullscreen"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          </DialogHeader>
+          <div 
+            ref={fullscreenMapContainerRef}
+            className="w-full h-full pt-16"
+            style={{ minHeight: 'calc(90vh - 4rem)' }}
+            data-testid="fullscreen-map-container"
+          />
+        </DialogContent>
+      </Dialog>
 
       {teamWithLocation.length === 0 && sitesWithLocation.length === 0 && (
         <Card>
