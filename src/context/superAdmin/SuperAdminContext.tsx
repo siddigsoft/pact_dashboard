@@ -95,15 +95,34 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
         .eq('is_active', true)
         .maybeSingle();
 
-      if (error) throw error;
+      if (error) {
+        // Suppress RLS permission errors - just log and return false
+        if (error.code === '42501' || error.message?.includes('permission') || error.message?.includes('RLS')) {
+          console.log('[SuperAdmin] No permission to check status (expected for some roles)');
+          return false;
+        }
+        throw error;
+      }
       return !!data;
-    } catch (error) {
-      console.error('Failed to check super-admin status:', error);
+    } catch (error: any) {
+      // Suppress permission-related errors silently
+      if (!error.message?.includes('permission') && !error.message?.includes('RLS') && error.code !== '42501') {
+        console.error('Failed to check super-admin status:', error);
+      }
       return false;
     }
   }, []);
 
   const refreshSuperAdmins = useCallback(async () => {
+    // Only admins should fetch super-admin data
+    const userRole = currentUser?.role?.toLowerCase();
+    if (!currentUser || (userRole !== 'admin' && userRole !== 'superadmin')) {
+      setSuperAdmins([]);
+      setStats(null);
+      setLoading(false);
+      return;
+    }
+    
     try {
       setLoading(true);
       const { data, error } = await supabase
@@ -111,7 +130,17 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        // Suppress RLS permission errors - just log them
+        if (error.code === '42501' || error.message?.includes('permission') || error.message?.includes('RLS')) {
+          console.log('[SuperAdmin] No permission to fetch super-admins (expected for non-admins)');
+          setSuperAdmins([]);
+          setStats(null);
+          setLoading(false);
+          return;
+        }
+        throw error;
+      }
 
       const admins = (data || []).map(transformSuperAdminFromDB);
       setSuperAdmins(admins);
@@ -126,15 +155,18 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
       });
     } catch (error: any) {
       console.error('Failed to fetch super-admins:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to load super-admin data',
-        variant: 'destructive',
-      });
+      // Only show error toast for unexpected errors, not permission issues
+      if (!error.message?.includes('permission') && !error.message?.includes('RLS')) {
+        toast({
+          title: 'Error',
+          description: 'Failed to load super-admin data',
+          variant: 'destructive',
+        });
+      }
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [currentUser, toast]);
 
   const refreshDeletionLogs = useCallback(async () => {
     try {
@@ -144,10 +176,21 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
         .order('deleted_at', { ascending: false })
         .limit(100);
 
-      if (error) throw error;
+      if (error) {
+        // Suppress RLS permission errors - just log them
+        if (error.code === '42501' || error.message?.includes('permission') || error.message?.includes('RLS')) {
+          console.log('[SuperAdmin] No permission to fetch deletion logs (expected for some roles)');
+          setDeletionLogs([]);
+          return;
+        }
+        throw error;
+      }
       setDeletionLogs((data || []).map(transformDeletionLogFromDB));
     } catch (error: any) {
-      console.error('Failed to fetch deletion logs:', error);
+      // Suppress permission-related errors silently
+      if (!error.message?.includes('permission') && !error.message?.includes('RLS') && error.code !== '42501') {
+        console.error('Failed to fetch deletion logs:', error);
+      }
     }
   }, []);
 

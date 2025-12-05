@@ -1,7 +1,7 @@
 
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Menu, Bell, Settings, LogOut, UserIcon } from 'lucide-react';
+import { Menu, Bell, Settings, LogOut, UserIcon, RefreshCw, WifiOff } from 'lucide-react';
 import { useUser } from '@/context/user/UserContext';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -22,7 +22,9 @@ import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { useSettings } from '@/context/settings/SettingsContext';
 import { MenuPreferences, DEFAULT_MENU_PREFERENCES } from '@/types/user-preferences';
 import { getWorkflowMenuGroups } from '@/navigation/menu';
-import { UberOfflineBadge } from '@/components/mobile/UberSyncIndicator';
+import { syncManager } from '@/lib/sync-manager';
+import { getOfflineStats } from '@/lib/offline-db';
+import { hapticPresets } from '@/lib/haptics';
 
 interface MobileAppHeaderProps {
   toggleSidebar?: () => void;
@@ -43,6 +45,60 @@ const MobileAppHeader = ({
   const { isSuperAdmin } = useSuperAdmin();
   const { userSettings } = useSettings();
   const [open, setOpen] = useState(false);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
+
+  // Track online status and pending sync items
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    const updateStats = async () => {
+      try {
+        const stats = await getOfflineStats();
+        setPendingCount(stats.pendingActions + stats.unsyncedVisits + stats.unsyncedLocations);
+      } catch (error) {
+        console.error('[Header] Failed to get stats:', error);
+      }
+    };
+
+    updateStats();
+    const interval = setInterval(updateStats, 5000);
+
+    // Subscribe to sync progress
+    const unsubProgress = syncManager.onProgress((progress) => {
+      setIsSyncing(progress.isRunning);
+    });
+    const unsubComplete = syncManager.onComplete(() => {
+      setIsSyncing(false);
+      updateStats();
+    });
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      clearInterval(interval);
+      unsubProgress();
+      unsubComplete();
+    };
+  }, []);
+
+  const handleSync = useCallback(async () => {
+    if (!isOnline || isSyncing) return;
+    hapticPresets.buttonPress();
+    setIsSyncing(true);
+    try {
+      await syncManager.forceSync();
+    } catch (error) {
+      console.error('[Header] Sync failed:', error);
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [isOnline, isSyncing]);
 
   const handleLogout = useCallback(async () => {
     await logout();
@@ -97,6 +153,8 @@ const MobileAppHeader = ({
           size="icon" 
           onClick={() => setOpen(true)}
           className="h-9 w-9 text-white hover:bg-white/10"
+          data-testid="button-open-menu"
+          aria-label="Open navigation menu"
         >
           <Menu className="h-5 w-5" />
         </Button>
@@ -106,8 +164,30 @@ const MobileAppHeader = ({
       </div>
       
       <div className="flex items-center gap-2">
-        {/* Uber-style Offline Badge - always visible when offline or pending */}
-        <UberOfflineBadge />
+        {/* Always-visible Sync Button */}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={handleSync}
+          disabled={!isOnline || isSyncing}
+          className="relative h-9 w-9 text-white hover:bg-white/10"
+          data-testid="button-sync-header"
+          aria-label={isOnline ? (isSyncing ? 'Syncing data' : `Sync now${pendingCount > 0 ? ` (${pendingCount} pending)` : ''}`) : 'Offline - sync unavailable'}
+        >
+          {!isOnline ? (
+            <WifiOff className="h-5 w-5 text-destructive" />
+          ) : isSyncing ? (
+            <RefreshCw className="h-5 w-5 animate-spin" />
+          ) : (
+            <RefreshCw className="h-5 w-5" />
+          )}
+          {/* Pending count badge */}
+          {isOnline && pendingCount > 0 && !isSyncing && (
+            <Badge className="absolute -top-1 -right-1 h-4 min-w-4 px-1 p-0 flex items-center justify-center bg-white text-black text-[10px]">
+              {pendingCount > 9 ? '9+' : pendingCount}
+            </Badge>
+          )}
+        </Button>
         
         {showNotification && (
           <Button 
@@ -131,6 +211,8 @@ const MobileAppHeader = ({
           <DropdownMenuTrigger asChild>
             <button 
               className="rounded-full h-9 w-9 p-1 border border-white/30 hover:bg-white/10 cursor-pointer transition-colors"
+              data-testid="button-user-menu"
+              aria-label="Open user menu"
             >
               <Avatar className="h-full w-full">
                 <AvatarImage src={currentUser?.avatar} alt={currentUser?.name || ''} />
@@ -141,16 +223,16 @@ const MobileAppHeader = ({
           <DropdownMenuContent align="end" className="w-56 z-[9999]">
             <DropdownMenuLabel className="text-base font-semibold">My Account</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => currentUser?.id && navigate(`/users/${currentUser.id}`)}>
+            <DropdownMenuItem onClick={() => currentUser?.id && navigate(`/users/${currentUser.id}`)} data-testid="menu-profile" aria-label="View profile">
               <UserIcon className="w-4 h-4 mr-2" />
               <span>Profile</span>
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => navigate('/settings')}>
+            <DropdownMenuItem onClick={() => navigate('/settings')} data-testid="menu-settings" aria-label="Open settings">
               <Settings className="w-4 h-4 mr-2" />
               <span>Settings</span>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleLogout}>
+            <DropdownMenuItem onClick={handleLogout} data-testid="menu-logout" aria-label="Log out">
               <LogOut className="w-4 h-4 mr-2" />
               <span>Log out</span>
             </DropdownMenuItem>
@@ -166,6 +248,7 @@ const MobileAppHeader = ({
   <button
     type="button"
     aria-label="Close menu"
+    data-testid="button-close-menu"
     className="p-2 rounded-full hover:bg-white/10 focus:outline-none"
     onClick={() => setOpen(false)}
   >
