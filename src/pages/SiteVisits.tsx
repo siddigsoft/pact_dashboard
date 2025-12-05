@@ -69,8 +69,26 @@ const SiteVisits = () => {
     mapDefaultZoom = countryCenters[countryParam].zoom;
   }
 
-  // Page-level access guard: require read permission or admin
-  const canAccess = checkPermission('site_visits', 'read') || hasAnyRole(['admin']);
+  // Check if user is a data collector based on role name (for access check)
+  const isDataCollectorForAccess = useMemo(() => {
+    if (!currentUser) return false;
+    const role = (currentUser.role || '').toLowerCase().replace(/[\s_-]/g, '');
+    return role === 'datacollector' || role.includes('datacollector');
+  }, [currentUser]);
+
+  // Check if user is a coordinator based on role name (for access check)
+  const isCoordinatorForAccess = useMemo(() => {
+    if (!currentUser) return false;
+    const role = (currentUser.role || '').toLowerCase().replace(/[\s_-]/g, '');
+    return role === 'coordinator' || role.includes('coordinator');
+  }, [currentUser]);
+
+  // Page-level access guard: require read permission, admin, data collector, or coordinator role
+  // Data Collectors and Coordinators are field workers who MUST have access to site visits
+  const canAccess = checkPermission('site_visits', 'read') || 
+                   hasAnyRole(['admin', 'Admin', 'DataCollector', 'Data Collector', 'Coordinator', 'ict', 'ICT', 'Supervisor', 'supervisor']) ||
+                   isDataCollectorForAccess ||
+                   isCoordinatorForAccess;
   if (!canAccess) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
