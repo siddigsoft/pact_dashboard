@@ -12,6 +12,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { saveLocationOffline, addPendingSync, getOfflineStats } from '@/lib/offline-db';
 import { syncManager, setupAutoSync, type SyncResult } from '@/lib/sync-manager';
 import { OfflineBanner, SyncStatusBar } from './SyncStatusBar';
+import { ActiveVisitOverlay } from './ActiveVisitOverlay';
+import { useActiveVisit } from '@/context/ActiveVisitContext';
 
 interface MobileAppShellProps {
   children: React.ReactNode;
@@ -43,6 +45,8 @@ export function MobileAppShell({
   const locationWatchId = useRef<string | null>(null);
   const diagnosticLogs = useRef<DiagnosticLog[]>([]);
   const autoSyncCleanup = useRef<(() => void) | null>(null);
+  
+  const activeVisitContext = useActiveVisit();
 
   const log = useCallback((level: DiagnosticLog['level'], message: string, details?: any) => {
     const logEntry: DiagnosticLog = {
@@ -223,6 +227,7 @@ export function MobileAppShell({
     }
   }, [onLocationUpdate, log]);
 
+
   const requestLocationPermission = useCallback(async (): Promise<boolean> => {
     if (!isNative) return true;
 
@@ -272,10 +277,18 @@ export function MobileAppShell({
         (position, err) => {
           if (err) {
             log('error', 'GPS watch error', err);
+            activeVisitContext.setGpsInactive();
             return;
           }
           if (position) {
             saveLocation(position);
+            if (activeVisitContext.activeVisit) {
+              activeVisitContext.updateLocation({
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude,
+                accuracy: position.coords.accuracy,
+              });
+            }
           }
         }
       );
@@ -283,8 +296,9 @@ export function MobileAppShell({
       log('info', 'GPS tracking started', { watchId: locationWatchId.current });
     } catch (error) {
       log('error', 'Failed to initialize GPS', error);
+      activeVisitContext.setGpsInactive();
     }
-  }, [isNative, requestLocationPermission, saveLocation, log]);
+  }, [isNative, requestLocationPermission, saveLocation, log, activeVisitContext]);
 
   const initializePushNotifications = useCallback(async () => {
     if (!isNative) return;
@@ -549,6 +563,9 @@ export function MobileAppShell({
           />
         </div>
       )}
+      
+      {/* Active Visit Overlay - Uber-style persistent bottom sheet */}
+      <ActiveVisitOverlay />
     </div>
   );
 }
