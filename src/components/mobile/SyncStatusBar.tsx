@@ -97,12 +97,12 @@ export function SyncStatusBar({
       return <CloudOff className="h-4 w-4 text-destructive" />;
     }
     if (progress.isRunning) {
-      return <Loader2 className="h-4 w-4 animate-spin text-primary" />;
+      return <Loader2 className="h-4 w-4 animate-spin text-black dark:text-white" />;
     }
     if (pendingCount > 0) {
-      return <AlertTriangle className="h-4 w-4 text-amber-500" />;
+      return <AlertTriangle className="h-4 w-4 text-black dark:text-white" />;
     }
-    return <Cloud className="h-4 w-4 text-green-500" />;
+    return <Cloud className="h-4 w-4 text-black dark:text-white" />;
   };
 
   const getStatusText = () => {
@@ -241,7 +241,7 @@ export function SyncStatusBar({
                 <span>
                   {lastResult.timestamp.toLocaleTimeString()} - 
                   {lastResult.success ? (
-                    <span className="text-green-500 ml-1">
+                    <span className="text-black dark:text-white ml-1">
                       <Check className="h-3 w-3 inline" /> {lastResult.synced} synced
                     </span>
                   ) : (

@@ -181,7 +181,7 @@ export class MobileErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoun
               <div className="flex items-center justify-between p-3 rounded-lg bg-muted">
                 <div className="flex items-center gap-2">
                   {isOnline ? (
-                    <Wifi className="h-4 w-4 text-green-500" />
+                    <Wifi className="h-4 w-4 text-black dark:text-white" />
                   ) : (
                     <WifiOff className="h-4 w-4 text-destructive" />
                   )}
