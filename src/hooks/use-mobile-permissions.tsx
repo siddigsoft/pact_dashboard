@@ -94,9 +94,13 @@ export function useMobilePermissions() {
           const cameraModule = await import('@capacitor/camera');
           const Camera = cameraModule.Camera;
           const status = await Camera.checkPermissions();
-          return status.camera === 'granted' ? 'granted' : 
-                 status.camera === 'denied' ? 'denied' : 'prompt';
-        } catch {
+          console.log('[Permissions] Camera check result:', JSON.stringify(status));
+          const cameraState = status.camera;
+          if (cameraState === 'granted' || cameraState === 'limited') return 'granted';
+          if (cameraState === 'denied') return 'denied';
+          return 'prompt';
+        } catch (error) {
+          console.error('[Permissions] Camera check error:', error);
           return 'unknown';
         }
       }
@@ -104,10 +108,12 @@ export function useMobilePermissions() {
         try {
           if ('permissions' in navigator) {
             const result = await navigator.permissions.query({ name: 'microphone' as PermissionName });
+            console.log('[Permissions] Microphone check result:', result.state);
             return result.state as PermissionStatus;
           }
           return 'prompt';
-        } catch {
+        } catch (error) {
+          console.error('[Permissions] Microphone check error:', error);
           return 'prompt';
         }
       }
@@ -220,11 +226,15 @@ export function useMobilePermissions() {
           try {
             const cameraModule = await import('@capacitor/camera');
             const Camera = cameraModule.Camera;
-            const result = await Camera.requestPermissions();
-            const status = result.camera === 'granted' ? 'granted' : 'denied';
+            const result = await Camera.requestPermissions({ permissions: ['camera'] });
+            console.log('[Permissions] Camera request result:', JSON.stringify(result));
+            const cameraState = result.camera;
+            const status: PermissionStatus = (cameraState === 'granted' || cameraState === 'limited') ? 'granted' : 'denied';
             setPermissions(prev => ({ ...prev, camera: status }));
             return { type, status };
           } catch (error) {
+            console.error('[Permissions] Camera request error:', error);
+            setPermissions(prev => ({ ...prev, camera: 'denied' }));
             return { type, status: 'denied', error: String(error) };
           }
         } else {
@@ -241,26 +251,18 @@ export function useMobilePermissions() {
       }
 
       if (type === 'microphone') {
-        if (isNative) {
-          try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            stream.getTracks().forEach(track => track.stop());
-            setPermissions(prev => ({ ...prev, microphone: 'granted' }));
-            return { type, status: 'granted' };
-          } catch (error) {
-            setPermissions(prev => ({ ...prev, microphone: 'denied' }));
-            return { type, status: 'denied', error: String(error) };
-          }
-        } else {
-          try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            stream.getTracks().forEach(track => track.stop());
-            setPermissions(prev => ({ ...prev, microphone: 'granted' }));
-            return { type, status: 'granted' };
-          } catch (error) {
-            setPermissions(prev => ({ ...prev, microphone: 'denied' }));
-            return { type, status: 'denied', error: String(error) };
-          }
+        try {
+          console.log('[Permissions] Requesting microphone access...');
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          stream.getTracks().forEach(track => track.stop());
+          console.log('[Permissions] Microphone access granted');
+          setPermissions(prev => ({ ...prev, microphone: 'granted' }));
+          return { type, status: 'granted' };
+        } catch (error: any) {
+          console.error('[Permissions] Microphone request error:', error);
+          const status: PermissionStatus = error.name === 'NotAllowedError' ? 'denied' : 'prompt';
+          setPermissions(prev => ({ ...prev, microphone: status }));
+          return { type, status, error: String(error) };
         }
       }
 
