@@ -46,6 +46,15 @@ The frontend, built with React 18, TypeScript, Tailwind CSS v3, and Shadcn UI, f
     - Exponential backoff retry (1s to 60s max delay)
     - Conflict resolution strategies: last-write-wins, server-wins, client-wins
 
+    **Mobile-Specific Authentication UI:**
+    - Custom MobileAuthScreen with minimalist city map background
+    - Touch-optimized design with large 14px height input fields (44px touch targets)
+    - Bottom-weighted layout with expandable login form
+    - Swipe-up gesture support with visual handle indicator
+    - Biometric login button (Fingerprint/Face ID ready)
+    - Dark gradient overlay for visual polish
+    - Connection status badge and feature pills
+
 ### Feature Specifications
 *   **Authorization System:** Resource-action based permission model with granular permissions enforced across UI, route guards, and server-side RLS.
 *   **File Processing:** MMP Upload Workflow for CSV files includes Zod validation, parsing, and database insertion with rollback and duplicate prevention.
