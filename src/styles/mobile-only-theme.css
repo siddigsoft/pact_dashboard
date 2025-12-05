@@ -4,21 +4,26 @@
 /* IMPORTANT: These styles only apply when body has data-platform="mobile" attribute */
 
 /* Mobile-specific color overrides - only apply when running as native app */
+/* STRICT UBER MONOCHROME: Black/white only with red for destructive actions */
 html[data-platform="mobile"],
 body[data-platform="mobile"],
 .mobile-app {
-  --primary: 259 100% 50%;
-  --primary-foreground: 210 40% 98%;
+  /* Primary = Black for monochrome design */
+  --primary: 0 0% 0%;
+  --primary-foreground: 0 0% 100%;
   
-  --secondary: 213 25% 45%;
-  --secondary-foreground: 210 40% 98%;
+  /* Secondary = Dark gray */
+  --secondary: 0 0% 15%;
+  --secondary-foreground: 0 0% 100%;
   
-  --accent: 264 100% 50%;
-  --accent-foreground: 210 40% 98%;
+  /* Accent = Black (same as primary for monochrome) */
+  --accent: 0 0% 0%;
+  --accent-foreground: 0 0% 100%;
   
-  --border: 210 14% 89%;
-  --input: 210 14% 89%;
-  --ring: 259 100% 50%;
+  /* Border/Input = Light gray */
+  --border: 0 0% 90%;
+  --input: 0 0% 90%;
+  --ring: 0 0% 0%;
   
   --radius: 0.75rem;
   
@@ -29,6 +34,24 @@ body[data-platform="mobile"],
   --spacing-xl: 2rem;
   --spacing-2xl: 2.5rem;
   --spacing-3xl: 3rem;
+}
+
+/* Dark mode for mobile - invert to white */
+html[data-platform="mobile"].dark,
+body[data-platform="mobile"].dark,
+.mobile-app.dark {
+  --primary: 0 0% 100%;
+  --primary-foreground: 0 0% 0%;
+  
+  --secondary: 0 0% 85%;
+  --secondary-foreground: 0 0% 0%;
+  
+  --accent: 0 0% 100%;
+  --accent-foreground: 0 0% 0%;
+  
+  --border: 0 0% 20%;
+  --input: 0 0% 20%;
+  --ring: 0 0% 100%;
 }
 
 /* Base mobile typography - use display font for headings */

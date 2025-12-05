@@ -253,16 +253,36 @@ export function useMobilePermissions() {
       if (type === 'microphone') {
         try {
           console.log('[Permissions] Requesting microphone access...');
+          
+          if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            console.log('[Permissions] MediaDevices API not available, treating as granted');
+            setPermissions(prev => ({ ...prev, microphone: 'granted' }));
+            return { type, status: 'granted' };
+          }
+          
           const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
           stream.getTracks().forEach(track => track.stop());
           console.log('[Permissions] Microphone access granted');
           setPermissions(prev => ({ ...prev, microphone: 'granted' }));
           return { type, status: 'granted' };
         } catch (error: any) {
-          console.error('[Permissions] Microphone request error:', error);
-          const status: PermissionStatus = error.name === 'NotAllowedError' ? 'denied' : 'prompt';
-          setPermissions(prev => ({ ...prev, microphone: status }));
-          return { type, status, error: String(error) };
+          console.error('[Permissions] Microphone request error:', error?.name, error?.message);
+          
+          if (error?.name === 'NotAllowedError' || error?.name === 'PermissionDeniedError') {
+            setPermissions(prev => ({ ...prev, microphone: 'denied' }));
+            return { type, status: 'denied', error: String(error) };
+          }
+          
+          if (error?.name === 'NotFoundError' || error?.name === 'DevicesNotFoundError' || 
+              error?.name === 'NotSupportedError' || error?.name === 'OverconstrainedError') {
+            console.log('[Permissions] Microphone not available/supported, treating as granted');
+            setPermissions(prev => ({ ...prev, microphone: 'granted' }));
+            return { type, status: 'granted' };
+          }
+          
+          console.log('[Permissions] Unknown microphone error, allowing skip');
+          setPermissions(prev => ({ ...prev, microphone: 'prompt' }));
+          return { type, status: 'prompt', error: String(error) };
         }
       }
 
