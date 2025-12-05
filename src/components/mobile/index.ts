@@ -94,6 +94,18 @@ export { MobileFileUpload, CompactFileUpload } from './MobileFileUpload';
 export { MobileChatBubble, ChatInput, ChatList, TypingIndicator } from './MobileChat';
 export { MobileNotificationCenter, NotificationBadge, NotificationToast } from './MobileNotificationCenter';
 
+// Uber-Style Communication Components
+export { QuickMessagesBar, QuickMessagesPanel, QuickMessagesFab, defaultQuickMessages } from './MobileQuickMessages';
+export type { QuickMessage } from './MobileQuickMessages';
+export { MobileCallOverlay, CallNotification } from './MobileCallOverlay';
+export type { CallState, CallParticipant } from './MobileCallOverlay';
+export { VoiceRecorder, VoiceNotePlayer, VoiceNotePreview, PushToTalkButton } from './MobileVoiceNotes';
+export type { VoiceNote } from './MobileVoiceNotes';
+export { SiteVisitCommPanel, FloatingCommBar, CommunicationHistory } from './MobileSiteVisitComm';
+export type { TeamMember } from './MobileSiteVisitComm';
+export { MobileEmergencyButton, EmergencyFab } from './MobileEmergencyButton';
+export type { EmergencyContact } from './MobileEmergencyButton';
+
 // Timeline & Activity Components
 export { MobileTimeline, ActivityFeed, VisitTimeline } from './MobileTimeline';
 
