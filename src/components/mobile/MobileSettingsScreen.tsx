@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
@@ -6,12 +6,7 @@ import {
   Bell,
   Shield,
   Globe,
-  Moon,
-  Sun,
-  Smartphone,
-  Wifi,
   MapPin,
-  Camera,
   Fingerprint,
   LogOut,
   ChevronRight,
@@ -21,9 +16,9 @@ import {
   Database,
   Trash2,
   Download,
-  RefreshCw,
   Activity,
   Palette,
+  Smartphone,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -33,11 +28,14 @@ import { cn } from '@/lib/utils';
 import { hapticPresets } from '@/lib/haptics';
 import { MobileHeader } from './MobileHeader';
 import { MobileBottomSheet } from './MobileBottomSheet';
-import { MobileConfirmDialog, LogoutConfirmDialog } from './MobileConfirmDialog';
+import { LogoutConfirmDialog } from './MobileConfirmDialog';
 import { MobileDeviceInfo, DeviceTrustBadge } from './MobileDeviceInfo';
-import { MobileBatteryStatus, BatteryIndicator } from './MobileBatteryStatus';
+import { MobileBatteryStatus } from './MobileBatteryStatus';
 import { MobilePerformancePanel, PerformanceBadge } from './MobilePerformancePanel';
 import { MobileLanguageSwitcher, useLanguage } from './MobileLanguageSwitcher';
+import { useSettings } from '@/context/settings/SettingsContext';
+import { useBiometric } from '@/hooks/use-biometric';
+import { useToast } from '@/hooks/use-toast';
 
 interface UserProfile {
   name: string;
@@ -60,11 +58,19 @@ export function MobileSettingsScreen({
   className,
 }: MobileSettingsScreenProps) {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const { language, setLanguage, direction } = useLanguage();
+  const { 
+    dataVisibilitySettings, 
+    updateDataVisibilitySettings,
+    notificationSettings,
+    updateNotificationSettings,
+    appearanceSettings,
+    updateAppearanceSettings
+  } = useSettings();
+  const { status: biometricStatus, storeCredentials, clearCredentials, refreshStatus } = useBiometric();
+  
   const [isDark, setIsDark] = useState(false);
-  const [notifications, setNotifications] = useState(true);
-  const [locationTracking, setLocationTracking] = useState(true);
-  const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showDeviceInfo, setShowDeviceInfo] = useState(false);
@@ -72,17 +78,61 @@ export function MobileSettingsScreen({
   const [showLanguage, setShowLanguage] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  useEffect(() => {
-    setIsDark(document.documentElement.classList.contains('dark'));
-  }, []);
+  // Derive state from settings context
+  const notificationsEnabled = notificationSettings?.enabled ?? true;
+  const locationSharingEnabled = dataVisibilitySettings?.options?.shareLocationWithTeam ?? false;
+  const biometricEnabled = biometricStatus?.hasStoredCredentials ?? false;
 
-  const handleThemeToggle = () => {
+  useEffect(() => {
+    const dark = document.documentElement.classList.contains('dark') || appearanceSettings?.darkMode;
+    setIsDark(dark);
+  }, [appearanceSettings?.darkMode]);
+
+  const handleThemeToggle = useCallback(() => {
     hapticPresets.toggle();
     const newDark = !isDark;
     setIsDark(newDark);
     document.documentElement.classList.toggle('dark', newDark);
     localStorage.setItem('theme', newDark ? 'dark' : 'light');
-  };
+    updateAppearanceSettings({ darkMode: newDark });
+  }, [isDark, updateAppearanceSettings]);
+
+  const handleNotificationsToggle = useCallback((enabled: boolean) => {
+    hapticPresets.toggle();
+    updateNotificationSettings({ ...notificationSettings, enabled });
+  }, [notificationSettings, updateNotificationSettings]);
+
+  const handleLocationSharingToggle = useCallback((enabled: boolean) => {
+    hapticPresets.toggle();
+    updateDataVisibilitySettings({
+      options: {
+        ...dataVisibilitySettings?.options,
+        shareLocationWithTeam: enabled
+      }
+    });
+  }, [dataVisibilitySettings, updateDataVisibilitySettings]);
+
+  const handleBiometricToggle = useCallback(async (enabled: boolean) => {
+    hapticPresets.toggle();
+    if (enabled) {
+      // Navigate to biometric setup
+      navigate('/settings?tab=security');
+      toast({
+        title: "Biometric Setup",
+        description: "Please set up biometric login in the Security settings.",
+      });
+    } else {
+      // Disable biometric
+      const result = await clearCredentials();
+      if (result.success) {
+        await refreshStatus();
+        toast({
+          title: "Biometric Disabled",
+          description: "Biometric login has been disabled.",
+        });
+      }
+    }
+  }, [clearCredentials, refreshStatus, navigate, toast]);
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
@@ -167,6 +217,7 @@ export function MobileSettingsScreen({
                 checked={isDark}
                 onCheckedChange={handleThemeToggle}
                 data-testid="switch-dark-mode"
+                aria-label="Toggle dark mode"
               />
             }
           />
@@ -185,12 +236,10 @@ export function MobileSettingsScreen({
             description="Receive alerts and updates"
             action={
               <Switch
-                checked={notifications}
-                onCheckedChange={(v) => {
-                  hapticPresets.toggle();
-                  setNotifications(v);
-                }}
+                checked={notificationsEnabled}
+                onCheckedChange={handleNotificationsToggle}
                 data-testid="switch-notifications"
+                aria-label="Toggle push notifications"
               />
             }
           />
@@ -199,31 +248,30 @@ export function MobileSettingsScreen({
         <SettingsSection title="Privacy & Security">
           <SettingsRow
             icon={<MapPin className="w-5 h-5" />}
-            label="Location Tracking"
-            description="Allow GPS tracking during visits"
+            label="Share Location with Team"
+            description="Allow team members to see your location"
             action={
               <Switch
-                checked={locationTracking}
-                onCheckedChange={(v) => {
-                  hapticPresets.toggle();
-                  setLocationTracking(v);
-                }}
+                checked={locationSharingEnabled}
+                onCheckedChange={handleLocationSharingToggle}
                 data-testid="switch-location"
+                aria-label="Toggle location sharing with team"
               />
             }
           />
           <SettingsRow
             icon={<Fingerprint className="w-5 h-5" />}
             label="Biometric Login"
-            description="Use fingerprint or face to login"
+            description={biometricStatus?.isAvailable 
+              ? "Use fingerprint or face to login" 
+              : "Not available on this device"}
             action={
               <Switch
                 checked={biometricEnabled}
-                onCheckedChange={(v) => {
-                  hapticPresets.toggle();
-                  setBiometricEnabled(v);
-                }}
+                onCheckedChange={handleBiometricToggle}
+                disabled={!biometricStatus?.isAvailable}
                 data-testid="switch-biometric"
+                aria-label="Toggle biometric login"
               />
             }
           />
