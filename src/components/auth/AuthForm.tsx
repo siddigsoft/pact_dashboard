@@ -406,15 +406,18 @@ const AuthForm = ({ mode }: AuthFormProps) => {
         <div className="space-y-1.5">
           <div id="login-email">
             <label className="text-xs font-medium text-muted-foreground">Email <span className="text-red-500">*</span></label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+            <div className="relative flex items-center">
+              <div className="absolute left-0 inset-y-0 flex items-center pl-3 pointer-events-none">
+                <Mail className="h-4 w-4 text-muted-foreground" />
+              </div>
               <Input
                 type="email"
-                placeholder="Email"
+                placeholder="Enter your email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="pl-9 h-9 text-sm bg-white/50 focus:bg-white transition-colors"
+                style={{ paddingLeft: '2.5rem' }}
+                className="h-9 text-sm bg-white/50 dark:bg-gray-800/50 focus:bg-white dark:focus:bg-gray-800 transition-colors"
                 data-testid="input-email"
               />
             </div>
@@ -424,25 +427,31 @@ const AuthForm = ({ mode }: AuthFormProps) => {
         <div className="space-y-1.5">
           <div id="login-password">
             <label className="text-xs font-medium text-muted-foreground">Password <span className="text-red-500">*</span></label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+            <div className="relative flex items-center">
+              <div className="absolute left-0 inset-y-0 flex items-center pl-3 pointer-events-none">
+                <Lock className="h-4 w-4 text-muted-foreground" />
+              </div>
               <Input
                 type={showPassword ? "text" : "password"}
-                placeholder="Password"
+                placeholder="Enter your password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="pl-9 pr-9 h-9 text-sm bg-white/50 focus:bg-white transition-colors"
+                style={{ paddingLeft: '2.5rem', paddingRight: '2.5rem' }}
+                className="h-9 text-sm bg-white/50 dark:bg-gray-800/50 focus:bg-white dark:focus:bg-gray-800 transition-colors"
                 data-testid="input-password"
               />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
-                data-testid="button-toggle-password"
-              >
-                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
+              <div className="absolute right-0 inset-y-0 flex items-center pr-3">
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                  data-testid="button-toggle-password"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
           </div>
         </div>
