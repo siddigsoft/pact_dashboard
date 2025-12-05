@@ -382,7 +382,7 @@ const MMP = () => {
   // Subcategory state for Enumerator dashboard
   const [enumeratorSubTab, setEnumeratorSubTab] = useState<'availableSites' | 'smartAssigned' | 'mySites'>('availableSites');
   // Sub-subcategory state for My Sites (Data Collector)
-  const [mySitesSubTab, setMySitesSubTab] = useState<'pending' | 'ongoing' | 'completed'>('pending');
+  const [mySitesSubTab, setMySitesSubTab] = useState<'pending' | 'ongoing' | 'completed' | 'all'>('pending');
   // Subcategory state for New MMPs (FOM only)
   const [newFomSubTab, setNewFomSubTab] = useState<'pending' | 'verified'>('pending');
   const [siteVisitStats, setSiteVisitStats] = useState<Record<string, {
@@ -3721,10 +3721,17 @@ const MMP = () => {
                             Pending Visits
                             <Badge variant="secondary" className="ml-2">
                               {enumeratorMySites.filter(site => {
-                                const status = site.status?.toLowerCase();
+                                const status = (site.status || '').toLowerCase().replace(/[-_\s]/g, '');
                                 return status === 'accepted' || 
                                        status === 'assigned' || 
-                                       status === 'dispatched';
+                                       status === 'dispatched' ||
+                                       status === 'smartassigned' ||
+                                       status === 'pending' ||
+                                       status === 'acknowledged' ||
+                                       status === 'costandacknowledged' ||
+                                       status.includes('pending') ||
+                                       status.includes('accepted') ||
+                                       status.includes('assigned');
                               }).length}
                             </Badge>
                           </Button>
@@ -3736,10 +3743,13 @@ const MMP = () => {
                           >
                             Ongoing
                             <Badge variant="secondary" className="ml-2">
-                              {enumeratorMySites.filter(site => 
-                                site.status?.toLowerCase() === 'in progress' || 
-                                site.status?.toLowerCase() === 'in_progress'
-                              ).length}
+                              {enumeratorMySites.filter(site => {
+                                const status = (site.status || '').toLowerCase().replace(/[-_\s]/g, '');
+                                return status === 'inprogress' || 
+                                       status.includes('ongoing') ||
+                                       status.includes('progress') ||
+                                       status.includes('started');
+                              }).length}
                             </Badge>
                           </Button>
                           <Button 
@@ -3750,7 +3760,21 @@ const MMP = () => {
                           >
                             Completed
                             <Badge variant="secondary" className="ml-2">
-                              {enumeratorMySites.filter(site => site.status?.toLowerCase() === 'completed').length}
+                              {enumeratorMySites.filter(site => {
+                                const status = (site.status || '').toLowerCase();
+                                return status.includes('completed') || status.includes('finished') || status.includes('done');
+                              }).length}
+                            </Badge>
+                          </Button>
+                          <Button 
+                            variant={mySitesSubTab === 'all' ? 'default' : 'outline'} 
+                            size="sm" 
+                            onClick={() => setMySitesSubTab('all')} 
+                            className={`${mySitesSubTab === 'all' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} flex-shrink-0 whitespace-nowrap`}
+                          >
+                            All Sites
+                            <Badge variant="secondary" className="ml-2">
+                              {enumeratorMySites.length}
                             </Badge>
                           </Button>
                         </div>
@@ -3914,7 +3938,10 @@ const MMP = () => {
                       <div>
                         <h3 className="text-lg font-semibold">
                           {enumeratorSubTab === 'mySites' 
-                            ? (mySitesSubTab === 'pending' ? 'Pending Visits' : mySitesSubTab === 'ongoing' ? 'Ongoing Visits' : 'Completed Sites')
+                            ? (mySitesSubTab === 'pending' ? 'Pending Visits' 
+                               : mySitesSubTab === 'ongoing' ? 'Ongoing Visits' 
+                               : mySitesSubTab === 'all' ? 'All My Sites'
+                               : 'Completed Sites')
                             : 'Smart Assigned Sites'
                           }
                         </h3>
@@ -3924,6 +3951,8 @@ const MMP = () => {
                                 ? 'Sites that have been accepted or smart assigned' 
                                 : mySitesSubTab === 'ongoing'
                                 ? 'Sites currently being visited or saved as drafts for offline access'
+                                : mySitesSubTab === 'all'
+                                ? 'All sites assigned to you regardless of status'
                                 : 'Sites that have been completed with submitted reports')
                             : 'Sites assigned to your area that must be visited'
                           }
@@ -3933,17 +3962,32 @@ const MMP = () => {
                         {enumeratorSubTab === 'mySites'
                           ? (mySitesSubTab === 'pending' 
                               ? enumeratorMySites.filter(site => {
-                                  const status = site.status?.toLowerCase();
+                                  const status = (site.status || '').toLowerCase().replace(/[-_\s]/g, '');
                                   return status === 'accepted' || 
                                          status === 'assigned' || 
-                                         status === 'dispatched';
+                                         status === 'dispatched' ||
+                                         status === 'smartassigned' ||
+                                         status === 'pending' ||
+                                         status === 'acknowledged' ||
+                                         status === 'costandacknowledged' ||
+                                         status.includes('pending') ||
+                                         status.includes('accepted') ||
+                                         status.includes('assigned');
                                 }).length
                               : mySitesSubTab === 'ongoing'
-                              ? enumeratorMySites.filter(site => 
-                                  site.status?.toLowerCase() === 'in progress' || 
-                                  site.status?.toLowerCase() === 'in_progress'
-                                ).length
-                              : enumeratorMySites.filter(site => site.status?.toLowerCase() === 'completed').length)
+                              ? enumeratorMySites.filter(site => {
+                                  const status = (site.status || '').toLowerCase().replace(/[-_\s]/g, '');
+                                  return status === 'inprogress' || 
+                                         status.includes('ongoing') ||
+                                         status.includes('progress') ||
+                                         status.includes('started');
+                                }).length
+                              : mySitesSubTab === 'all'
+                              ? enumeratorMySites.length
+                              : enumeratorMySites.filter(site => {
+                                  const status = (site.status || '').toLowerCase();
+                                  return status.includes('completed') || status.includes('finished') || status.includes('done');
+                                }).length)
                           : enumeratorSmartAssigned.length
                         } sites
                       </Badge>
@@ -3956,21 +4000,41 @@ const MMP = () => {
                       </div>
                     )}
                     {(() => {
-                      const sitesToShow = enumeratorSubTab === 'mySites'
-                        ? (mySitesSubTab === 'pending' 
-                            ? enumeratorMySites.filter(site => {
-                                const status = site.status?.toLowerCase();
-                                return status === 'accepted' || 
-                                       status === 'assigned' || 
-                                       status === 'dispatched';
-                              })
-                            : mySitesSubTab === 'ongoing'
-                            ? enumeratorMySites.filter(site => 
-                                site.status?.toLowerCase() === 'in progress' || 
-                                site.status?.toLowerCase() === 'in_progress'
-                              )
-                            : enumeratorMySites.filter(site => site.status?.toLowerCase() === 'completed'))
-                        : enumeratorSmartAssigned;
+                      let sitesToShow: any[] = [];
+                      if (enumeratorSubTab === 'mySites') {
+                        if (mySitesSubTab === 'all') {
+                          sitesToShow = enumeratorMySites;
+                        } else if (mySitesSubTab === 'pending') {
+                          sitesToShow = enumeratorMySites.filter(site => {
+                            const status = (site.status || '').toLowerCase().replace(/[-_\s]/g, '');
+                            return status === 'accepted' || 
+                                   status === 'assigned' || 
+                                   status === 'dispatched' ||
+                                   status === 'smartassigned' ||
+                                   status === 'pending' ||
+                                   status === 'acknowledged' ||
+                                   status === 'costandacknowledged' ||
+                                   status.includes('pending') ||
+                                   status.includes('accepted') ||
+                                   status.includes('assigned');
+                          });
+                        } else if (mySitesSubTab === 'ongoing') {
+                          sitesToShow = enumeratorMySites.filter(site => {
+                            const status = (site.status || '').toLowerCase().replace(/[-_\s]/g, '');
+                            return status === 'inprogress' || 
+                                   status.includes('ongoing') ||
+                                   status.includes('progress') ||
+                                   status.includes('started');
+                          });
+                        } else {
+                          sitesToShow = enumeratorMySites.filter(site => {
+                            const status = (site.status || '').toLowerCase();
+                            return status.includes('completed') || status.includes('finished') || status.includes('done');
+                          });
+                        }
+                      } else {
+                        sitesToShow = enumeratorSmartAssigned;
+                      }
                       
                       return sitesToShow.length === 0 ? (
                         <Card>
@@ -3981,6 +4045,8 @@ const MMP = () => {
                                     ? 'No pending visits found.' 
                                     : mySitesSubTab === 'ongoing'
                                     ? 'No ongoing visits found.'
+                                    : mySitesSubTab === 'all'
+                                    ? 'No sites assigned to you yet. Check "Available Sites" to claim new sites.'
                                     : 'No completed sites found.')
                                 : 'No sites assigned to you yet.'
                               }
