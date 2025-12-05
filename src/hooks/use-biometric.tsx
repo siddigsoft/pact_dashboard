@@ -26,6 +26,8 @@ export interface UseBiometricReturn {
     credentials?: BiometricCredentials;
     error?: string 
   }>;
+  storeCredentials: (credentials: BiometricCredentials) => Promise<{ success: boolean; error?: string }>;
+  clearCredentials: () => Promise<{ success: boolean; error?: string }>;
   checkAvailability: () => Promise<BiometricStatus>;
   refreshStatus: () => Promise<void>;
 }
@@ -267,6 +269,20 @@ export function useBiometric(): UseBiometricReturn {
     return { success: true, credentials };
   }, [authenticate]);
 
+  const storeCredentials = useCallback(async (credentials: BiometricCredentials): Promise<{ success: boolean; error?: string }> => {
+    if (!isNative) {
+      return { success: false, error: 'Biometric storage is only available in the mobile app' };
+    }
+    return saveCredentials(credentials);
+  }, [isNative]);
+
+  const clearCredentials = useCallback(async (): Promise<{ success: boolean; error?: string }> => {
+    if (!isNative) {
+      return { success: false, error: 'Biometric storage is only available in the mobile app' };
+    }
+    return deleteCredentials();
+  }, [isNative]);
+
   useEffect(() => {
     const initBiometric = async () => {
       setIsLoading(true);
@@ -291,6 +307,8 @@ export function useBiometric(): UseBiometricReturn {
     isLoading,
     authenticate,
     authenticateAndGetCredentials,
+    storeCredentials,
+    clearCredentials,
     checkAvailability,
     refreshStatus,
   };

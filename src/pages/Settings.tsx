@@ -53,16 +53,21 @@ import { Fingerprint } from "lucide-react";
 
 function BiometricSettingsSection() {
   const { isNative } = useDevice();
+  const { currentUser } = useUser();
   const { 
     status, 
     isLoading, 
     storeCredentials, 
     clearCredentials, 
-    refreshStatus 
+    refreshStatus,
+    authenticate
   } = useBiometric();
   const { toast } = useToast();
   const [isEnabling, setIsEnabling] = useState(false);
   const [isDisabling, setIsDisabling] = useState(false);
+  const [showPasswordDialog, setShowPasswordDialog] = useState(false);
+  const [password, setPassword] = useState("");
+  const [passwordError, setPasswordError] = useState("");
 
   if (!isNative) {
     return (
@@ -91,34 +96,97 @@ function BiometricSettingsSection() {
     );
   }
 
-  const handleEnableBiometric = async () => {
+  const handleStartEnableBiometric = async () => {
+    await refreshStatus();
+    
+    if (!status.isAvailable) {
+      toast({
+        title: "Biometric Not Available",
+        description: status.errorMessage || "Your device doesn't support biometric authentication.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!status.isEnrolled) {
+      toast({
+        title: "No Biometrics Enrolled",
+        description: "Please set up fingerprint or face recognition in your device settings first.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setPassword("");
+    setPasswordError("");
+    setShowPasswordDialog(true);
+  };
+
+  const handleConfirmEnableBiometric = async () => {
+    if (!password.trim()) {
+      setPasswordError("Please enter your password");
+      return;
+    }
+
+    if (!currentUser?.email) {
+      setPasswordError("Unable to get your email. Please try again.");
+      return;
+    }
+
     setIsEnabling(true);
+    setPasswordError("");
+    
     try {
-      await refreshStatus();
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: currentUser.email,
+        password: password,
+      });
+
+      if (signInError) {
+        setPasswordError("Incorrect password. Please try again.");
+        setIsEnabling(false);
+        return;
+      }
+
+      const authResult = await authenticate({
+        reason: 'Verify your identity to enable biometric login',
+        title: 'Enable Biometric Login',
+      });
+
+      if (!authResult.success) {
+        toast({
+          title: "Authentication Failed",
+          description: authResult.error || "Biometric verification failed. Please try again.",
+          variant: "destructive",
+        });
+        setIsEnabling(false);
+        return;
+      }
+
+      const storeResult = await storeCredentials({
+        username: currentUser.email,
+        password: password,
+      });
+
+      if (!storeResult.success) {
+        toast({
+          title: "Error",
+          description: storeResult.error || "Failed to save credentials securely.",
+          variant: "destructive",
+        });
+        setIsEnabling(false);
+        return;
+      }
+
+      setShowPasswordDialog(false);
+      setPassword("");
       
-      if (!status.isAvailable) {
-        toast({
-          title: "Biometric Not Available",
-          description: status.errorMessage || "Your device doesn't support biometric authentication.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      if (!status.isEnrolled) {
-        toast({
-          title: "No Biometrics Enrolled",
-          description: "Please set up fingerprint or face recognition in your device settings first.",
-          variant: "destructive",
-        });
-        return;
-      }
-
       toast({
         title: "Biometric Enabled",
         description: "You can now use fingerprint or face recognition to log in.",
         variant: "default",
       });
+      
       await refreshStatus();
     } catch (error: any) {
       toast({
@@ -249,7 +317,7 @@ function BiometricSettingsSection() {
                     Set up biometric authentication for faster, more secure access to the app without entering your password.
                   </p>
                   <Button
-                    onClick={handleEnableBiometric}
+                    onClick={handleStartEnableBiometric}
                     disabled={isEnabling}
                     className="mt-2 min-h-[44px] px-6"
                     data-testid="button-enable-biometric"
@@ -278,6 +346,73 @@ function BiometricSettingsSection() {
           <p className="text-sm text-muted-foreground">{status.errorMessage}</p>
         </div>
       )}
+
+      <Dialog open={showPasswordDialog} onOpenChange={setShowPasswordDialog}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Fingerprint className="h-5 w-5" />
+              Enable Biometric Login
+            </DialogTitle>
+            <DialogDescription>
+              Enter your password to securely save your login credentials for biometric authentication.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="biometric-password">Password</Label>
+              <Input
+                id="biometric-password"
+                type="password"
+                placeholder="Enter your password"
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  setPasswordError("");
+                }}
+                className={passwordError ? "border-destructive" : ""}
+                data-testid="input-biometric-password"
+              />
+              {passwordError && (
+                <p className="text-sm text-destructive">{passwordError}</p>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Your password will be encrypted and stored securely on your device. It will only be accessible via biometric authentication.
+            </p>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowPasswordDialog(false);
+                setPassword("");
+                setPasswordError("");
+              }}
+              disabled={isEnabling}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConfirmEnableBiometric}
+              disabled={isEnabling || !password.trim()}
+              data-testid="button-confirm-biometric"
+            >
+              {isEnabling ? (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                  Verifying...
+                </>
+              ) : (
+                <>
+                  <Fingerprint className="mr-2 h-4 w-4" />
+                  Enable
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
