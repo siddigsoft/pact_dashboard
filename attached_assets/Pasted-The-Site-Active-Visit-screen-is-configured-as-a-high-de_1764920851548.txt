@@ -1,0 +1,41 @@
+The "Site Active Visit" screen is configured as a high-density Field Monitoring Dashboard. It is designed to give a Field Manager complete situational awareness of a specific active survey mission.
+
+Here is the comprehensive breakdown of the screen's configuration:
+
+1. Data & State Configuration
+The screen is driven by three core data models (currently mocked):
+
+COLLECTOR_DETAILS: Stores the enumerator's profile, device status (Battery 82%, Signal 4G), and real-time metrics (Quality Score 98%, Avg Duration 14m).
+RECENT_SUBMISSIONS: A log of the last 3 household interviews, including their validation status (Valid vs. Flagged).
+ALERTS: System warnings (e.g., "GPS Drift detected").
+2. Visual Layers
+Map Background:
+Base Layer: Minimalist greyscale city map with a technical grid overlay.
+Target Pin: A red pulsing pin marking the "Sector 4 Health Center".
+Live Tracker: An animated blue avatar representing the enumerator moving across the map, complete with a "Green Dot" indicator for online status.
+Heads-Up Display (HUD):
+Top Right: Status pills showing Connectivity ("Online - WiFi") and Local Time ("10:45 AM").
+Top Left: Global navigation menu.
+3. The Dashboard Panel (Bottom Sheet)
+The main interface is a scrollable bottom sheet divided into three tabs:
+
+A. Header Section (Sticky)
+Mission Banner: Displays the active mission ID (#SV-882) and Site Name.
+Real-Time ETA: Large, readable "3 min" indicator showing arrival time.
+B. Tab 1: Overview (Operational View)
+Enumerator Card: Displays the photo, name, role, and Device Telemetry (Battery level, Signal strength, Sync status).
+KPI Grid:
+Target Progress: Visual bar showing 12/25 completed (48%).
+Quality Score: 98% (Green), calculated based on interview protocols.
+Alert Stream: Color-coded warnings (e.g., Amber for "GPS Drift").
+C. Tab 2: Submissions (Data Quality View)
+Record Log: A list of recent households (e.g., HH-104).
+Validation Flags: Instant feedback on data quality (e.g., "Flagged: Duration < 5m").
+D. Tab 3: Technical (Device Health View)
+Diagnostics: Detailed readouts for troubleshooting:
+GPS Accuracy: 4.2m
+Satellites Locked: 8
+App Version: v2.4.1
+4. Action Bar
+Contact: Quick button to call the field team.
+Full Report: Deep link to the detailed analytics view.

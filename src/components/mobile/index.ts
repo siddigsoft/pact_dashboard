@@ -17,3 +17,5 @@ export { OfflineStatusBar, OfflineIndicator } from './OfflineStatusBar';
 export { PullToRefresh, RefreshableList } from './PullToRefresh';
 export { MobileAppShell, useDiagnosticLogs, addDiagnosticLog, getDiagnosticLogs } from './MobileAppShell';
 export { MobileErrorBoundary, RetryButton } from './ErrorBoundary';
+export { ActiveVisitOverlay } from './ActiveVisitOverlay';
+export { MobileAuthScreen } from './MobileAuthScreen';

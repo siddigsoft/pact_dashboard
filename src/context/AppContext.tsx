@@ -18,6 +18,7 @@ import { ClassificationProvider } from './classification/ClassificationContext';
 import { CostSubmissionProvider } from './costApproval/CostSubmissionContext';
 import { DownPaymentProvider } from './downPayment/DownPaymentContext';
 import { SuperAdminProvider } from './superAdmin/SuperAdminContext';
+import { ActiveVisitProvider } from './ActiveVisitContext';
 import BrowserNotificationListener from '@/components/BrowserNotificationListener';
 
 interface CompositeContextType {
@@ -144,12 +145,14 @@ export const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children
                                 <CostSubmissionProvider>
                                   <DownPaymentProvider>
                                     <SuperAdminProvider>
-                                      <ChatProvider>
-                                        <CommunicationProvider>
-                                          <BrowserNotificationListener />
-                                          {children}
-                                        </CommunicationProvider>
-                                      </ChatProvider>
+                                      <ActiveVisitProvider>
+                                        <ChatProvider>
+                                          <CommunicationProvider>
+                                            <BrowserNotificationListener />
+                                            {children}
+                                          </CommunicationProvider>
+                                        </ChatProvider>
+                                      </ActiveVisitProvider>
                                     </SuperAdminProvider>
                                   </DownPaymentProvider>
                                 </CostSubmissionProvider>
