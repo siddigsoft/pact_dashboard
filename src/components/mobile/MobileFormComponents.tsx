@@ -157,7 +157,7 @@ export const MobileTextarea = forwardRef<HTMLTextAreaElement, MobileTextareaProp
           {showCount && maxLength && (
             <p className={cn(
               'text-xs',
-              charCount > maxLength * 0.9 ? 'text-amber-500' : 'text-muted-foreground'
+              charCount > maxLength * 0.9 ? 'text-black dark:text-white font-medium' : 'text-muted-foreground'
             )}>
               {charCount}/{maxLength}
             </p>

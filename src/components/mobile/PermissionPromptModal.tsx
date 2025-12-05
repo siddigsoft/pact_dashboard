@@ -107,7 +107,7 @@ export function PermissionPromptModal({
           <ul className="space-y-2">
             {config.benefits.map((benefit, index) => (
               <li key={index} className="flex items-start gap-2 text-sm">
-                <Shield className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
+                <Shield className="h-4 w-4 text-black dark:text-white mt-0.5 flex-shrink-0" />
                 <span>{benefit}</span>
               </li>
             ))}
