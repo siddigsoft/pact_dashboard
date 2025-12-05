@@ -336,7 +336,6 @@ export function MobilePermissionOnboarding({ onComplete }: MobilePermissionOnboa
                   variant="ghost"
                   size="lg"
                   onClick={handleSkip}
-                  disabled={isRequesting}
                   className="w-full h-14 rounded-full text-black/60 dark:text-white/60 font-medium"
                   data-testid={`button-skip-${currentPermission}`}
                   aria-label={`Skip ${currentPermission} permission`}

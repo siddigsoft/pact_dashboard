@@ -255,16 +255,33 @@ export function useMobilePermissions() {
           console.log('[Permissions] Requesting microphone access...');
           
           if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            console.log('[Permissions] MediaDevices API not available, treating as granted');
+            console.log('[Permissions] MediaDevices API not available, skipping microphone');
             setPermissions(prev => ({ ...prev, microphone: 'granted' }));
             return { type, status: 'granted' };
           }
           
-          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          stream.getTracks().forEach(track => track.stop());
-          console.log('[Permissions] Microphone access granted');
-          setPermissions(prev => ({ ...prev, microphone: 'granted' }));
-          return { type, status: 'granted' };
+          const timeoutPromise = new Promise<never>((_, reject) => {
+            setTimeout(() => reject(new Error('Microphone permission timeout')), 5000);
+          });
+          
+          const micPromise = navigator.mediaDevices.getUserMedia({ audio: true });
+          
+          try {
+            const stream = await Promise.race([micPromise, timeoutPromise]);
+            if (stream && typeof stream.getTracks === 'function') {
+              stream.getTracks().forEach(track => track.stop());
+            }
+            console.log('[Permissions] Microphone access granted');
+            setPermissions(prev => ({ ...prev, microphone: 'granted' }));
+            return { type, status: 'granted' };
+          } catch (raceError: any) {
+            if (raceError?.message === 'Microphone permission timeout') {
+              console.log('[Permissions] Microphone request timed out, allowing skip');
+              setPermissions(prev => ({ ...prev, microphone: 'prompt' }));
+              return { type, status: 'prompt', error: 'Request timed out' };
+            }
+            throw raceError;
+          }
         } catch (error: any) {
           console.error('[Permissions] Microphone request error:', error?.name, error?.message);
           
@@ -273,14 +290,7 @@ export function useMobilePermissions() {
             return { type, status: 'denied', error: String(error) };
           }
           
-          if (error?.name === 'NotFoundError' || error?.name === 'DevicesNotFoundError' || 
-              error?.name === 'NotSupportedError' || error?.name === 'OverconstrainedError') {
-            console.log('[Permissions] Microphone not available/supported, treating as granted');
-            setPermissions(prev => ({ ...prev, microphone: 'granted' }));
-            return { type, status: 'granted' };
-          }
-          
-          console.log('[Permissions] Unknown microphone error, allowing skip');
+          console.log('[Permissions] Microphone error, allowing to proceed');
           setPermissions(prev => ({ ...prev, microphone: 'prompt' }));
           return { type, status: 'prompt', error: String(error) };
         }
