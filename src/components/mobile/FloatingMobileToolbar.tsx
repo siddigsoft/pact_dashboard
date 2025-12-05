@@ -12,6 +12,7 @@ import {
   CheckCircle,
   X,
   MoreVertical,
+  AlertCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -24,7 +25,9 @@ interface FloatingMobileToolbarProps {
   className?: string;
   onCall?: () => void;
   onMessage?: () => void;
+  onSOS?: () => void;
   showCommunication?: boolean;
+  showEmergency?: boolean;
   position?: 'bottom-left' | 'bottom-right' | 'top-left' | 'top-right';
   callerName?: string;
   callerRole?: string;
@@ -34,7 +37,9 @@ export function FloatingMobileToolbar({
   className,
   onCall,
   onMessage,
+  onSOS,
   showCommunication = true,
+  showEmergency = true,
   position = 'bottom-right',
   callerName = 'Supervisor',
   callerRole = 'Field Coordinator',
@@ -95,6 +100,12 @@ export function FloatingMobileToolbar({
     hapticPresets.buttonPress();
     onMessage?.();
   }, [onMessage]);
+
+  const handleSOS = useCallback(() => {
+    hapticPresets.heavy();
+    setIsExpanded(false);
+    onSOS?.();
+  }, [onSOS]);
 
   const toggleExpanded = useCallback(() => {
     hapticPresets.selection();
@@ -205,6 +216,26 @@ export function FloatingMobileToolbar({
                     <div className="text-left">
                       <p className="text-sm font-medium text-black dark:text-white">Message {callerName}</p>
                       <p className="text-xs text-black/60 dark:text-white/60">Quick message</p>
+                    </div>
+                  </button>
+                </div>
+              )}
+
+              {/* Emergency SOS */}
+              {showEmergency && onSOS && (
+                <div className="p-2 border-t border-black/5 dark:border-white/5">
+                  <button
+                    onClick={handleSOS}
+                    className="w-full flex items-center gap-3 p-3 rounded-xl bg-destructive/10 hover:bg-destructive/20 transition-colors"
+                    data-testid="button-open-sos"
+                    aria-label="Open Emergency SOS"
+                  >
+                    <div className="w-10 h-10 bg-destructive rounded-full flex items-center justify-center flex-shrink-0">
+                      <AlertCircle className="h-5 w-5 text-white" />
+                    </div>
+                    <div className="text-left">
+                      <p className="text-sm font-bold text-destructive">Emergency SOS</p>
+                      <p className="text-xs text-black/60 dark:text-white/60">Alert supervisors</p>
                     </div>
                   </button>
                 </div>

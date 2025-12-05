@@ -150,9 +150,12 @@ export function ActiveVisitOverlay({
   };
 
   const handleDragEnd = (_: any, info: PanInfo) => {
+    // Swipe down to minimize, swipe up to expand
     if (info.velocity.y > 500 || info.offset.y > 100) {
-      toggleMinimize();
+      hapticPresets.swipe();
+      if (!isMinimized) toggleMinimize();
     } else if (info.velocity.y < -500 || info.offset.y < -100) {
+      hapticPresets.swipe();
       if (isMinimized) toggleMinimize();
     }
   };

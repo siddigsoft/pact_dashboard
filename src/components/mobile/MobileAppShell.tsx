@@ -14,6 +14,9 @@ import { syncManager, setupAutoSync, type SyncResult } from '@/lib/sync-manager'
 import { OfflineBanner, SyncStatusBar } from './SyncStatusBar';
 import { ActiveVisitOverlay } from './ActiveVisitOverlay';
 import { useActiveVisit } from '@/context/ActiveVisitContext';
+import { SyncProgressToast } from './SyncProgressToast';
+import { EmergencySOS } from './EmergencySOS';
+import { FloatingMobileToolbar } from './FloatingMobileToolbar';
 
 interface MobileAppShellProps {
   children: React.ReactNode;
@@ -42,6 +45,7 @@ export function MobileAppShell({
   const [isNative] = useState(Capacitor.isNativePlatform());
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [showOfflineBanner, setShowOfflineBanner] = useState(false);
+  const [showEmergencySOS, setShowEmergencySOS] = useState(false);
   const locationWatchId = useRef<string | null>(null);
   const diagnosticLogs = useRef<DiagnosticLog[]>([]);
   const autoSyncCleanup = useRef<(() => void) | null>(null);
@@ -545,6 +549,9 @@ export function MobileAppShell({
 
   return (
     <div className="flex flex-col h-full">
+      {/* Sync Progress Toasts */}
+      <SyncProgressToast />
+      
       {/* Offline Banner */}
       {showOfflineBanner && <OfflineBanner />}
       
@@ -566,6 +573,19 @@ export function MobileAppShell({
       
       {/* Active Visit Overlay - Uber-style persistent bottom sheet */}
       <ActiveVisitOverlay />
+      
+      {/* Floating Mobile Toolbar with SOS trigger */}
+      <FloatingMobileToolbar 
+        position="bottom-right"
+        showEmergency={true}
+        onSOS={() => setShowEmergencySOS(true)}
+      />
+      
+      {/* Emergency SOS Modal */}
+      <EmergencySOS 
+        isVisible={showEmergencySOS} 
+        onClose={() => setShowEmergencySOS(false)} 
+      />
     </div>
   );
 }
