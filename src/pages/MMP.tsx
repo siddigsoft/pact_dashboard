@@ -3720,11 +3720,12 @@ const MMP = () => {
                           >
                             Pending Visits
                             <Badge variant="secondary" className="ml-2">
-                              {enumeratorMySites.filter(site => 
-                                site.status?.toLowerCase() === 'accepted' || 
-                                site.status?.toLowerCase() === 'assigned' ||
-                                (site.accepted_by && site.status?.toLowerCase() !== 'completed')
-                              ).length}
+                              {enumeratorMySites.filter(site => {
+                                const status = site.status?.toLowerCase();
+                                return status === 'accepted' || 
+                                       status === 'assigned' || 
+                                       status === 'dispatched';
+                              }).length}
                             </Badge>
                           </Button>
                           <Button 
@@ -3931,11 +3932,12 @@ const MMP = () => {
                       <Badge variant="secondary">
                         {enumeratorSubTab === 'mySites'
                           ? (mySitesSubTab === 'pending' 
-                              ? enumeratorMySites.filter(site => 
-                                  site.status?.toLowerCase() === 'accepted' || 
-                                  site.status?.toLowerCase() === 'assigned' ||
-                                  (site.accepted_by && site.status?.toLowerCase() !== 'completed')
-                                ).length
+                              ? enumeratorMySites.filter(site => {
+                                  const status = site.status?.toLowerCase();
+                                  return status === 'accepted' || 
+                                         status === 'assigned' || 
+                                         status === 'dispatched';
+                                }).length
                               : mySitesSubTab === 'ongoing'
                               ? enumeratorMySites.filter(site => 
                                   site.status?.toLowerCase() === 'in progress' || 
@@ -3956,11 +3958,12 @@ const MMP = () => {
                     {(() => {
                       const sitesToShow = enumeratorSubTab === 'mySites'
                         ? (mySitesSubTab === 'pending' 
-                            ? enumeratorMySites.filter(site => 
-                                site.status?.toLowerCase() === 'accepted' || 
-                                site.status?.toLowerCase() === 'assigned' ||
-                                (site.accepted_by && site.status?.toLowerCase() !== 'completed')
-                              )
+                            ? enumeratorMySites.filter(site => {
+                                const status = site.status?.toLowerCase();
+                                return status === 'accepted' || 
+                                       status === 'assigned' || 
+                                       status === 'dispatched';
+                              })
                             : mySitesSubTab === 'ongoing'
                             ? enumeratorMySites.filter(site => 
                                 site.status?.toLowerCase() === 'in progress' || 
