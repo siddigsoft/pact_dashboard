@@ -73,6 +73,7 @@ const BudgetPage = lazy(() => import('./pages/Budget'));
 const Classifications = lazy(() => import('./pages/Classifications'));
 const ClassificationFeeManagement = lazy(() => import('./pages/ClassificationFeeManagement'));
 const CostSubmission = lazy(() => import('./pages/CostSubmission'));
+const DemoDataCollector = lazy(() => import('./pages/DemoDataCollector'));
 const FinancialOperations = lazy(() => import('./pages/FinancialOperations'));
 const SuperAdminManagement = lazy(() => import('./components/superAdmin/SuperAdminManagementPage').then(module => ({ default: module.SuperAdminManagementPage })));
 const HubOperations = lazy(() => import('./pages/HubOperations'));
@@ -147,7 +148,8 @@ const AuthGuard = ({ children }) => {
 
   if (
     !currentUser &&
-    !['/auth', '/login', '/register', '/registration-success', '/forgot-password'].includes(location.pathname)
+    !['/auth', '/login', '/register', '/registration-success', '/forgot-password'].includes(location.pathname) &&
+    !location.pathname.startsWith('/demo/')
   ) {
     return <Navigate to="/auth" replace />;
   }
@@ -166,6 +168,7 @@ const AppRoutes = () => {
       <Route path="/register" element={<Register />} />
       <Route path="/registration-success" element={<RegistrationSuccess />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/demo/data-collector" element={<DemoDataCollector />} />
 
       {/* Protected routes */}
   <Route element={<AuthGuard><MainLayout /></AuthGuard>}>
