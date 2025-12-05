@@ -164,20 +164,22 @@ export function ActiveVisitOverlay({
 
         {/* Minimized View */}
         {isMinimized ? (
-          <div className="px-4 pb-4">
+          <div className="px-4 pb-5">
             <div className="flex items-center justify-between gap-3">
               {/* Site Info */}
               <div className="flex items-center gap-3 flex-1 min-w-0">
-                <div className="w-10 h-10 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
-                  <MapPin className="h-5 w-5 text-white" />
+                <div className="w-12 h-12 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
+                  <MapPin className="h-6 w-6 text-white" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="font-semibold text-sm truncate">{activeVisit.siteName}</p>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <Clock className="h-3 w-3" />
-                    <span className="font-mono">{formatTime(elapsedTime)}</span>
+                  <p className="font-semibold text-base truncate">{activeVisit.siteName}</p>
+                  <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                    <span className="flex items-center gap-1">
+                      <Clock className="h-4 w-4" />
+                      <span className="font-mono font-medium">{formatTime(elapsedTime)}</span>
+                    </span>
                     <span className={cn("flex items-center gap-1", getGpsStatusColor())}>
-                      <Satellite className="h-3 w-3" />
+                      <Satellite className="h-4 w-4" />
                       {getGpsStatusText()}
                     </span>
                   </div>
@@ -227,17 +229,17 @@ export function ActiveVisitOverlay({
                   <Badge 
                     variant="outline" 
                     className={cn(
-                      "border-0 text-xs",
+                      "border-0 text-sm py-1 px-2",
                       isGpsActive 
                         ? "bg-green-500/20 text-green-300" 
                         : "bg-red-500/20 text-red-300"
                     )}
                   >
-                    {isGpsActive ? <Wifi className="h-3 w-3 mr-1" /> : <WifiOff className="h-3 w-3 mr-1" />}
+                    {isGpsActive ? <Wifi className="h-4 w-4 mr-1" /> : <WifiOff className="h-4 w-4 mr-1" />}
                     {isGpsActive ? 'Online' : 'Offline'}
                   </Badge>
-                  <Badge variant="outline" className="border-0 bg-white/10 text-white text-xs">
-                    <Clock className="h-3 w-3 mr-1" />
+                  <Badge variant="outline" className="border-0 bg-white/10 text-white text-sm py-1 px-2">
+                    <Clock className="h-4 w-4 mr-1" />
                     {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </Badge>
                 </div>
@@ -255,13 +257,13 @@ export function ActiveVisitOverlay({
               {/* Mission Banner */}
               <div className="flex items-start justify-between relative">
                 <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Badge className="bg-blue-500 text-white text-xs">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Badge className="bg-blue-500 text-white text-sm py-0.5 px-2">
                       #{activeVisit.siteCode}
                     </Badge>
                     <Badge 
                       className={cn(
-                        "text-xs",
+                        "text-sm py-0.5 px-2",
                         activeVisit.status === 'active' 
                           ? "bg-green-500 text-white" 
                           : "bg-yellow-500 text-black"
@@ -270,18 +272,18 @@ export function ActiveVisitOverlay({
                       {activeVisit.status === 'active' ? 'In Progress' : 'Paused'}
                     </Badge>
                   </div>
-                  <h2 className="text-lg font-bold mb-1">{activeVisit.siteName}</h2>
-                  <p className="text-sm text-white/70">
+                  <h2 className="text-xl font-bold mb-1">{activeVisit.siteName}</h2>
+                  <p className="text-base text-white/70">
                     {activeVisit.locality}, {activeVisit.state}
                   </p>
                 </div>
 
                 {/* Live Timer */}
                 <div className="text-right">
-                  <div className="text-3xl font-mono font-bold text-green-400">
+                  <div className="text-4xl font-mono font-bold text-green-400">
                     {formatTime(elapsedTime)}
                   </div>
-                  <p className="text-xs text-white/60">Duration</p>
+                  <p className="text-sm text-white/60">Duration</p>
                 </div>
               </div>
 
@@ -305,14 +307,14 @@ export function ActiveVisitOverlay({
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id as any)}
                   className={cn(
-                    "flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium transition-colors",
+                    "flex-1 flex items-center justify-center gap-2 py-4 text-base font-medium transition-colors",
                     activeTab === tab.id 
                       ? "text-primary border-b-2 border-primary bg-primary/5" 
                       : "text-muted-foreground"
                   )}
                   data-testid={`tab-${tab.id}`}
                 >
-                  <tab.icon className="h-4 w-4" />
+                  <tab.icon className="h-5 w-5" />
                   <span>{tab.label}</span>
                 </button>
               ))}
@@ -329,20 +331,20 @@ export function ActiveVisitOverlay({
                     gpsAccuracy !== null && gpsAccuracy <= 10 ? "border-green-200 bg-green-50 dark:bg-green-950/20" :
                     "border-yellow-200 bg-yellow-50 dark:bg-yellow-950/20"
                   )}>
-                    <CardContent className="p-4">
+                    <CardContent className="p-5">
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-4">
                           <div className={cn(
-                            "w-10 h-10 rounded-full flex items-center justify-center",
+                            "w-12 h-12 rounded-full flex items-center justify-center",
                             !isGpsActive ? "bg-red-500" :
                             gpsAccuracy !== null && gpsAccuracy <= 10 ? "bg-green-500" :
                             "bg-yellow-500"
                           )}>
-                            <Satellite className="h-5 w-5 text-white" />
+                            <Satellite className="h-6 w-6 text-white" />
                           </div>
                           <div>
-                            <p className="font-semibold">GPS Status</p>
-                            <p className="text-sm text-muted-foreground">
+                            <p className="font-semibold text-lg">GPS Status</p>
+                            <p className="text-base text-muted-foreground">
                               {!isGpsActive ? 'Signal lost' : 
                                gpsAccuracy !== null && gpsAccuracy <= 10 ? 'Excellent accuracy' :
                                'Acquiring better signal...'}
@@ -350,11 +352,11 @@ export function ActiveVisitOverlay({
                           </div>
                         </div>
                         <div className="text-right">
-                          <p className={cn("text-2xl font-bold", getGpsStatusColor())}>
+                          <p className={cn("text-3xl font-bold", getGpsStatusColor())}>
                             {getGpsStatusText()}
                           </p>
                           {activeVisit.coordinates && (
-                            <p className="text-xs text-muted-foreground">
+                            <p className="text-sm text-muted-foreground">
                               {activeVisit.coordinates.latitude.toFixed(5)}, {activeVisit.coordinates.longitude.toFixed(5)}
                             </p>
                           )}
@@ -364,19 +366,19 @@ export function ActiveVisitOverlay({
                   </Card>
 
                   {/* KPI Grid */}
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-2 gap-4">
                     <Card>
-                      <CardContent className="p-4 text-center">
-                        <Camera className="h-6 w-6 mx-auto mb-2 text-blue-500" />
-                        <p className="text-2xl font-bold">{activeVisit.photoCount}</p>
-                        <p className="text-xs text-muted-foreground">Photos</p>
+                      <CardContent className="p-5 text-center">
+                        <Camera className="h-8 w-8 mx-auto mb-2 text-blue-500" />
+                        <p className="text-3xl font-bold">{activeVisit.photoCount}</p>
+                        <p className="text-sm text-muted-foreground">Photos</p>
                       </CardContent>
                     </Card>
                     <Card>
-                      <CardContent className="p-4 text-center">
-                        <FileText className="h-6 w-6 mx-auto mb-2 text-purple-500" />
-                        <p className="text-2xl font-bold">{localNotes.length > 0 ? 'Yes' : 'No'}</p>
-                        <p className="text-xs text-muted-foreground">Notes Added</p>
+                      <CardContent className="p-5 text-center">
+                        <FileText className="h-8 w-8 mx-auto mb-2 text-purple-500" />
+                        <p className="text-3xl font-bold">{localNotes.length > 0 ? 'Yes' : 'No'}</p>
+                        <p className="text-sm text-muted-foreground">Notes Added</p>
                       </CardContent>
                     </Card>
                   </div>
@@ -384,9 +386,9 @@ export function ActiveVisitOverlay({
                   {/* Activity Info */}
                   {activeVisit.activity && (
                     <Card>
-                      <CardContent className="p-4">
-                        <p className="text-sm text-muted-foreground mb-1">Activity Type</p>
-                        <p className="font-medium">{activeVisit.activity}</p>
+                      <CardContent className="p-5">
+                        <p className="text-base text-muted-foreground mb-1">Activity Type</p>
+                        <p className="font-medium text-lg">{activeVisit.activity}</p>
                       </CardContent>
                     </Card>
                   )}
@@ -394,11 +396,11 @@ export function ActiveVisitOverlay({
                   {/* Alerts */}
                   {!isGpsActive && (
                     <Card className="border-amber-200 bg-amber-50 dark:bg-amber-950/20">
-                      <CardContent className="p-4 flex items-center gap-3">
-                        <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0" />
+                      <CardContent className="p-5 flex items-center gap-4">
+                        <AlertCircle className="h-6 w-6 text-amber-600 flex-shrink-0" />
                         <div>
-                          <p className="font-medium text-amber-900 dark:text-amber-100">GPS Signal Lost</p>
-                          <p className="text-sm text-amber-700 dark:text-amber-300">
+                          <p className="font-medium text-lg text-amber-900 dark:text-amber-100">GPS Signal Lost</p>
+                          <p className="text-base text-amber-700 dark:text-amber-300">
                             Move to an open area for better signal
                           </p>
                         </div>
@@ -411,16 +413,16 @@ export function ActiveVisitOverlay({
               {activeTab === 'notes' && (
                 <div className="space-y-4">
                   <div>
-                    <label className="text-sm font-medium mb-2 block">Visit Notes</label>
+                    <label className="text-base font-medium mb-3 block">Visit Notes</label>
                     <Textarea
                       value={localNotes}
                       onChange={(e) => handleNotesChange(e.target.value)}
                       placeholder="Add observations, issues, or important details about this visit..."
-                      className="min-h-[200px] text-base"
+                      className="min-h-[200px] text-lg"
                       data-testid="textarea-visit-notes"
                     />
                   </div>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-sm text-muted-foreground">
                     Notes are automatically saved as you type
                   </p>
                 </div>
@@ -429,44 +431,44 @@ export function ActiveVisitOverlay({
               {activeTab === 'technical' && (
                 <div className="space-y-4">
                   <Card>
-                    <CardContent className="p-4 space-y-4">
-                      <h3 className="font-semibold flex items-center gap-2">
-                        <Compass className="h-4 w-4" />
+                    <CardContent className="p-5 space-y-5">
+                      <h3 className="font-semibold text-lg flex items-center gap-2">
+                        <Compass className="h-5 w-5" />
                         Device Diagnostics
                       </h3>
                       
-                      <div className="space-y-3">
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-muted-foreground">GPS Accuracy</span>
-                          <span className={cn("font-mono text-sm", getGpsStatusColor())}>
+                      <div className="space-y-4">
+                        <div className="flex justify-between items-center py-1">
+                          <span className="text-base text-muted-foreground">GPS Accuracy</span>
+                          <span className={cn("font-mono text-base font-medium", getGpsStatusColor())}>
                             {gpsAccuracy !== null ? `±${gpsAccuracy.toFixed(1)}m` : 'N/A'}
                           </span>
                         </div>
                         
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-muted-foreground">Latitude</span>
-                          <span className="font-mono text-sm">
+                        <div className="flex justify-between items-center py-1">
+                          <span className="text-base text-muted-foreground">Latitude</span>
+                          <span className="font-mono text-base">
                             {activeVisit.coordinates?.latitude.toFixed(6) || 'N/A'}
                           </span>
                         </div>
                         
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-muted-foreground">Longitude</span>
-                          <span className="font-mono text-sm">
+                        <div className="flex justify-between items-center py-1">
+                          <span className="text-base text-muted-foreground">Longitude</span>
+                          <span className="font-mono text-base">
                             {activeVisit.coordinates?.longitude.toFixed(6) || 'N/A'}
                           </span>
                         </div>
 
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-muted-foreground">Started At</span>
-                          <span className="font-mono text-sm">
+                        <div className="flex justify-between items-center py-1">
+                          <span className="text-base text-muted-foreground">Started At</span>
+                          <span className="font-mono text-base">
                             {new Date(activeVisit.startedAt).toLocaleTimeString()}
                           </span>
                         </div>
 
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-muted-foreground">Visit ID</span>
-                          <span className="font-mono text-sm text-muted-foreground">
+                        <div className="flex justify-between items-center py-1">
+                          <span className="text-base text-muted-foreground">Visit ID</span>
+                          <span className="font-mono text-base text-muted-foreground">
                             {activeVisit.id.slice(0, 8)}...
                           </span>
                         </div>
