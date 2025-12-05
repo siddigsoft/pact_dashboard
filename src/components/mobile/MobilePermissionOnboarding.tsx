@@ -271,7 +271,7 @@ export function MobilePermissionOnboarding({ onComplete }: MobilePermissionOnboa
               <Button
                 size="lg"
                 onClick={handleOpenSettings}
-                className="w-full h-14 rounded-full bg-black dark:bg-white text-white dark:text-black font-semibold text-lg gap-2"
+                className="w-full h-14 rounded-full !bg-black dark:!bg-white !text-white dark:!text-black font-semibold text-lg gap-2 hover:!bg-black/90 dark:hover:!bg-white/90"
                 data-testid="button-open-settings"
                 aria-label="Open device settings"
               >
@@ -284,7 +284,7 @@ export function MobilePermissionOnboarding({ onComplete }: MobilePermissionOnboa
                 variant="outline"
                 onClick={handleRetryFromSettings}
                 disabled={isRequesting}
-                className="w-full h-14 rounded-full border-2 border-black dark:border-white text-black dark:text-white font-semibold text-lg gap-2"
+                className="w-full h-14 rounded-full !border-2 !border-black dark:!border-white !text-black dark:!text-white font-semibold text-lg gap-2 !bg-transparent hover:!bg-black/5 dark:hover:!bg-white/5"
                 data-testid="button-retry-permission"
                 aria-label="Check permission again"
               >
@@ -317,7 +317,7 @@ export function MobilePermissionOnboarding({ onComplete }: MobilePermissionOnboa
                 size="lg"
                 onClick={handleAllow}
                 disabled={isRequesting}
-                className="w-full h-14 rounded-full bg-black dark:bg-white text-white dark:text-black font-semibold text-lg"
+                className="w-full h-14 rounded-full !bg-black dark:!bg-white !text-white dark:!text-black font-semibold text-lg hover:!bg-black/90 dark:hover:!bg-white/90"
                 data-testid={`button-allow-${currentPermission}`}
                 aria-label={`Allow ${currentPermission} access`}
               >
