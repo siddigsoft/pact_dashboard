@@ -22,6 +22,7 @@ import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { useSettings } from '@/context/settings/SettingsContext';
 import { MenuPreferences, DEFAULT_MENU_PREFERENCES } from '@/types/user-preferences';
 import { getWorkflowMenuGroups } from '@/navigation/menu';
+import { UberOfflineBadge } from '@/components/mobile/UberSyncIndicator';
 
 interface MobileAppHeaderProps {
   toggleSidebar?: () => void;
@@ -104,12 +105,17 @@ const MobileAppHeader = ({
         </h1>
       </div>
       
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2">
+        {/* Uber-style Offline Badge - always visible when offline or pending */}
+        <UberOfflineBadge />
+        
         {showNotification && (
           <Button 
             variant="ghost" 
             size="icon" 
-            className="relative h-9 w-9 text-white hover:bg-white/10" 
+            className="relative h-9 w-9 text-white hover:bg-white/10"
+            data-testid="button-notifications"
+            aria-label="View notifications"
             onClick={() => navigate('/notifications')}
           >
             <Bell className="h-5 w-5" />
