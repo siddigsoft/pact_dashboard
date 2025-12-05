@@ -69,6 +69,7 @@ export function MobileHeader({
               size="icon"
               onClick={handleBack}
               data-testid="button-back"
+              aria-label="Go back"
             >
               <ArrowLeft className="h-5 w-5" />
             </Button>
@@ -79,6 +80,7 @@ export function MobileHeader({
               size="icon"
               onClick={handleClose}
               data-testid="button-close"
+              aria-label="Close"
             >
               <X className="h-5 w-5" />
             </Button>
