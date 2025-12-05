@@ -6,6 +6,8 @@ import {
   Bell
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { hapticPresets } from '@/lib/haptics';
+import { motion } from 'framer-motion';
 
 interface NavItem {
   icon: React.ElementType;
@@ -39,6 +41,9 @@ export function MobileBottomNav({ notificationCount = 0, className }: MobileBott
   };
 
   const handleNavigation = (path: string) => {
+    if (!isActive(path)) {
+      hapticPresets.buttonPress();
+    }
     navigate(path);
   };
 
@@ -73,14 +78,23 @@ export function MobileBottomNav({ notificationCount = 0, className }: MobileBott
                 )}
                 data-testid={`nav-${item.label.toLowerCase()}`}
               >
-                <div className="relative">
+                <motion.div 
+                  className="relative"
+                  whileTap={{ scale: 0.9 }}
+                  transition={{ duration: 0.1 }}
+                >
                   <Icon className={cn("h-5 w-5", active && "stroke-[2.5px]")} />
                   {showBadge && (
-                    <span className="absolute -top-1 -right-1 h-4 min-w-4 flex items-center justify-center rounded-full bg-black dark:bg-white text-white dark:text-black text-[10px] font-medium px-1">
+                    <motion.span 
+                      className="absolute -top-1 -right-1 h-4 min-w-4 flex items-center justify-center rounded-full bg-black dark:bg-white text-white dark:text-black text-[10px] font-medium px-1"
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      transition={{ type: 'spring', stiffness: 500, damping: 15 }}
+                    >
                       {notificationCount > 99 ? '99+' : notificationCount}
-                    </span>
+                    </motion.span>
                   )}
-                </div>
+                </motion.div>
                 <span className={cn(
                   "text-[10px] font-medium",
                   active && "font-semibold"
@@ -88,7 +102,11 @@ export function MobileBottomNav({ notificationCount = 0, className }: MobileBott
                   {item.label}
                 </span>
                 {active && (
-                  <div className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-black dark:bg-white rounded-full" />
+                  <motion.div 
+                    className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-black dark:bg-white rounded-full"
+                    layoutId="nav-indicator"
+                    transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                  />
                 )}
               </button>
             );
