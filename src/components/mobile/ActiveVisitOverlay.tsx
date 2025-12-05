@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useActiveVisit } from '@/context/ActiveVisitContext';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -41,6 +42,7 @@ export function ActiveVisitOverlay({
   onTakePhoto,
   onOpenNavigation 
 }: ActiveVisitOverlayProps) {
+  const { t } = useTranslation();
   const {
     activeVisit,
     isMinimized,
@@ -86,8 +88,8 @@ export function ActiveVisitOverlay({
   };
 
   const getGpsStatusText = () => {
-    if (!isGpsActive) return 'GPS Off';
-    if (gpsAccuracy === null) return 'Acquiring...';
+    if (!isGpsActive) return t('gps.off');
+    if (gpsAccuracy === null) return t('gps.acquiring');
     return `±${gpsAccuracy.toFixed(0)}m`;
   };
 
