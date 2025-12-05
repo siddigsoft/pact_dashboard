@@ -19,6 +19,11 @@
             android:launchMode="singleTask"
             android:exported="true">
 
+            <!-- App Shortcuts for long-press launcher icon -->
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
+
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

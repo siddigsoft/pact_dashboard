@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    
+    <!-- Quick action: Start new site visit -->
+    <shortcut
+        android:shortcutId="new_visit"
+        android:enabled="true"
+        android:icon="@drawable/ic_new_visit"
+        android:shortcutShortLabel="@string/shortcut_new_visit_short"
+        android:shortcutLongLabel="@string/shortcut_new_visit_long"
+        android:shortcutDisabledMessage="@string/shortcut_disabled">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.pact.workflow"
+            android:targetClass="com.pact.workflow.MainActivity"
+            android:data="pact://app/site-visits/new" />
+        <categories android:name="android.shortcut.conversation" />
+    </shortcut>
+
+    <!-- Quick action: Scan QR Code -->
+    <shortcut
+        android:shortcutId="scan_qr"
+        android:enabled="true"
+        android:icon="@drawable/ic_qr_scan"
+        android:shortcutShortLabel="@string/shortcut_scan_qr_short"
+        android:shortcutLongLabel="@string/shortcut_scan_qr_long"
+        android:shortcutDisabledMessage="@string/shortcut_disabled">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.pact.workflow"
+            android:targetClass="com.pact.workflow.MainActivity"
+            android:data="pact://app/scan" />
+    </shortcut>
+
+    <!-- Quick action: View Wallet -->
+    <shortcut
+        android:shortcutId="wallet"
+        android:enabled="true"
+        android:icon="@drawable/ic_wallet"
+        android:shortcutShortLabel="@string/shortcut_wallet_short"
+        android:shortcutLongLabel="@string/shortcut_wallet_long"
+        android:shortcutDisabledMessage="@string/shortcut_disabled">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.pact.workflow"
+            android:targetClass="com.pact.workflow.MainActivity"
+            android:data="pact://app/wallet" />
+    </shortcut>
+
+    <!-- Quick action: Pending Approvals -->
+    <shortcut
+        android:shortcutId="approvals"
+        android:enabled="true"
+        android:icon="@drawable/ic_approval"
+        android:shortcutShortLabel="@string/shortcut_approvals_short"
+        android:shortcutLongLabel="@string/shortcut_approvals_long"
+        android:shortcutDisabledMessage="@string/shortcut_disabled">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.pact.workflow"
+            android:targetClass="com.pact.workflow.MainActivity"
+            android:data="pact://app/approvals" />
+    </shortcut>
+
+</shortcuts>
