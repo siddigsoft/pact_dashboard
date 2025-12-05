@@ -57,13 +57,28 @@ export function MobilePermissionOnboarding({ onComplete }: MobilePermissionOnboa
   }, [currentStatus, currentPermission, grantedPermissions]);
 
   const moveToNextStep = useCallback(() => {
+    console.log(`[Onboarding] moveToNextStep called, currentStep: ${currentStep}, total steps: ${permissionOrder.length}`);
+    
     if (currentStep < permissionOrder.length - 1) {
+      console.log(`[Onboarding] Moving to step ${currentStep + 1}`);
       setCurrentStep(prev => prev + 1);
       setShowDeniedState(false);
       setAttemptCount(0);
     } else {
-      markSetupComplete();
-      onComplete();
+      console.log('[Onboarding] Final step reached, completing setup...');
+      try {
+        markSetupComplete();
+        console.log('[Onboarding] markSetupComplete called successfully');
+      } catch (error) {
+        console.error('[Onboarding] Error in markSetupComplete:', error);
+      }
+      
+      try {
+        onComplete();
+        console.log('[Onboarding] onComplete called successfully');
+      } catch (error) {
+        console.error('[Onboarding] Error in onComplete:', error);
+      }
     }
   }, [currentStep, markSetupComplete, onComplete]);
 

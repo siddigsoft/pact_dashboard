@@ -37,12 +37,33 @@ export function MobilePermissionGuard({ children }: MobilePermissionGuardProps) 
   }, [isNative, setupComplete, isLocationBlocked, isChecking, permissions.location]);
 
   const handleOnboardingComplete = useCallback(async () => {
+    console.log('[PermissionGuard] Onboarding complete, hiding onboarding screen');
     setShowOnboarding(false);
-    const newPermissions = await checkAllPermissions();
-    if (newPermissions.location !== 'granted') {
-      setShowBlocker(true);
+    
+    // Don't await checkAllPermissions to avoid hanging
+    // Just do a quick location check
+    try {
+      const newPermissions = await Promise.race([
+        checkAllPermissions(),
+        new Promise<{ location: string }>((resolve) => 
+          setTimeout(() => resolve({ location: permissions.location }), 2000)
+        )
+      ]);
+      
+      if (newPermissions.location !== 'granted') {
+        console.log('[PermissionGuard] Location not granted, showing blocker');
+        setShowBlocker(true);
+      } else {
+        console.log('[PermissionGuard] All permissions OK, showing app');
+      }
+    } catch (error) {
+      console.error('[PermissionGuard] Error checking permissions:', error);
+      // If there's an error, still proceed if we think location is granted
+      if (permissions.location !== 'granted') {
+        setShowBlocker(true);
+      }
     }
-  }, [checkAllPermissions]);
+  }, [checkAllPermissions, permissions.location]);
 
   const handleRetryLocation = useCallback(async () => {
     const newPermissions = await checkAllPermissions();
