@@ -166,7 +166,7 @@ export function LocationBlocker({ onRetry }: LocationBlockerProps) {
         <Button
           size="lg"
           onClick={handleOpenSettings}
-          className="w-full h-14 rounded-full bg-black dark:bg-white text-white dark:text-black font-semibold text-lg gap-2"
+          className="w-full h-14 rounded-full !bg-black dark:!bg-white !text-white dark:!text-black font-semibold text-lg gap-2 hover:!bg-black/90 dark:hover:!bg-white/90"
           data-testid="button-open-settings"
           aria-label="Open device settings"
         >
@@ -180,7 +180,7 @@ export function LocationBlocker({ onRetry }: LocationBlockerProps) {
           variant="outline"
           onClick={handleCheckAgain}
           disabled={isRetrying}
-          className="w-full h-14 rounded-full border-2 border-black dark:border-white text-black dark:text-white font-semibold text-lg gap-2"
+          className="w-full h-14 rounded-full !border-2 !border-black dark:!border-white !text-black dark:!text-white font-semibold text-lg gap-2 !bg-transparent hover:!bg-black/5 dark:hover:!bg-white/5"
           data-testid="button-check-location"
           aria-label="Check if location is enabled"
         >
