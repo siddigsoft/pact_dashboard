@@ -85,4 +85,5 @@ export const hapticPresets = {
   swipe: () => triggerHaptic('selection'),
   longPress: () => triggerHaptic('heavy'),
   notification: () => vibratePattern([100, 50, 100]),
+  selection: () => triggerHaptic('selection'),
 };
