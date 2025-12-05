@@ -2954,7 +2954,7 @@ const CoordinatorSites: React.FC = () => {
               ) : (
                 <>
                   <div className="space-y-4">
-                    {paginatedSites.map(site => renderSiteCard(site, false, true))}
+                    {paginatedSites.map(site => renderSiteCard(site, true))}
                   </div>
                   {totalPages > 1 && (
                     <div className="flex items-center justify-between mt-4 pt-4 border-t">
@@ -3019,7 +3019,7 @@ const CoordinatorSites: React.FC = () => {
               ) : (
                 <>
                   <div className="space-y-4">
-                    {paginatedSites.map(site => renderSiteCard(site, false, true))}
+                    {paginatedSites.map(site => renderSiteCard(site, true))}
                   </div>
                   {totalPages > 1 && (
                     <div className="flex items-center justify-between mt-4 pt-4 border-t">
