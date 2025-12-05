@@ -86,7 +86,7 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
               {children || <Outlet />}
             </div>
             {isMobile && <MobileBottomNav />}
-            <OnlineOfflineToggle variant="drawer" />
+            <OnlineOfflineToggle variant="floating" />
           </SidebarInset>
         </div>
       </SidebarProvider>
