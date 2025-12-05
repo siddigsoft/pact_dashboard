@@ -66,6 +66,44 @@ const CoordinatorDashboard: React.FC = () => {
     loadDashboardData();
   }, [currentUser, userProjectIds, isAdminOrSuperUser]);
 
+  // Real-time subscription for automatic updates without page refresh
+  useEffect(() => {
+    if (!currentUser?.id) return;
+
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    
+    const debouncedReload = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        loadDashboardData();
+        debounceTimer = null;
+      }, 1000); // 1s debounce to avoid rapid reloads
+    };
+
+    const channel = supabase
+      .channel('coordinator_dashboard_realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'mmp_site_entries' },
+        debouncedReload
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'mmp_files' },
+        debouncedReload
+      )
+      .subscribe();
+
+    // Fallback polling every 60s in case realtime disconnects
+    const pollInterval = setInterval(loadDashboardData, 60000);
+
+    return () => {
+      try { supabase.removeChannel(channel); } catch {}
+      if (debounceTimer) clearTimeout(debounceTimer);
+      clearInterval(pollInterval);
+    };
+  }, [currentUser?.id, userProjectIds, isAdminOrSuperUser]);
+
   const loadDashboardData = async () => {
     if (!currentUser?.id) return;
     
