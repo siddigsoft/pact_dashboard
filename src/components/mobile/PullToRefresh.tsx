@@ -113,7 +113,7 @@ export function PullToRefresh({
         <div 
           className={cn(
             "flex items-center justify-center w-10 h-10 rounded-full bg-background border shadow-md transition-all",
-            isRefreshing && "border-primary"
+            isRefreshing && "border-black dark:border-white"
           )}
           style={{
             opacity: isRefreshing ? 1 : opacity,
@@ -123,8 +123,8 @@ export function PullToRefresh({
           <RefreshCw 
             className={cn(
               "h-5 w-5 text-muted-foreground transition-colors",
-              isRefreshing && "text-primary animate-spin",
-              pullDistance >= pullThreshold && !isRefreshing && "text-primary"
+              isRefreshing && "text-black dark:text-white animate-spin",
+              pullDistance >= pullThreshold && !isRefreshing && "text-black dark:text-white"
             )}
             style={{
               transform: isRefreshing ? undefined : `rotate(${rotation}deg)`,
