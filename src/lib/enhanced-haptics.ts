@@ -65,6 +65,43 @@ async function loadHapticsModule(): Promise<boolean> {
   }
 }
 
+const WEB_VIBRATE_PATTERNS: Record<HapticPattern, number[]> = {
+  tap: [15],
+  doubleTap: [15, 100, 15],
+  longPress: [50],
+  success: [30, 50, 30],
+  warning: [50, 30, 50],
+  error: [100, 50, 100],
+  selection: [10],
+  swipeLeft: [30],
+  swipeRight: [30],
+  swipeUp: [20],
+  swipeDown: [20],
+  pullToRefresh: [30, 30, 50],
+  dragStart: [15],
+  dragEnd: [30],
+  formError: [50, 50, 50, 50, 100],
+  formSuccess: [30, 50, 30],
+  syncStart: [15],
+  syncComplete: [50, 100, 100],
+  syncError: [100, 50, 100, 50, 100],
+  emergency: [200, 100, 200, 100, 200, 100, 500],
+  notification: [100, 50, 100],
+  message: [50, 50, 100],
+  call: [500, 500, 500, 500, 500, 500],
+  countdown: [30],
+  unlock: [30, 50, 80],
+  lock: [80, 50, 30],
+  toggle: [30],
+  slider: [10],
+  picker: [10],
+  keyboard: [15],
+  delete: [50, 30, 80],
+  undo: [30],
+  confirm: [30],
+  cancel: [15],
+};
+
 const HAPTIC_PATTERNS: Record<HapticPattern, PatternConfig> = {
   tap: { type: 'impact', style: 'light' },
   doubleTap: { type: 'impact', style: 'light', repeat: 2, delay: 100 },
@@ -114,7 +151,30 @@ const HAPTIC_PATTERNS: Record<HapticPattern, PatternConfig> = {
   cancel: { type: 'impact', style: 'light' },
 };
 
-async function executePattern(config: PatternConfig): Promise<void> {
+let vibrateUnavailableLogged = false;
+
+function vibrateWithPattern(pattern: HapticPattern): void {
+  if ('vibrate' in navigator) {
+    const webPattern = WEB_VIBRATE_PATTERNS[pattern];
+    if (webPattern) {
+      try {
+        navigator.vibrate(webPattern);
+      } catch (error) {
+        if (!vibrateUnavailableLogged) {
+          console.warn('[EnhancedHaptics] Vibration failed:', error);
+          vibrateUnavailableLogged = true;
+        }
+      }
+    }
+  } else {
+    if (!vibrateUnavailableLogged) {
+      console.debug('[EnhancedHaptics] Vibration API not available on this device');
+      vibrateUnavailableLogged = true;
+    }
+  }
+}
+
+async function executePattern(config: PatternConfig, pattern?: HapticPattern): Promise<void> {
   const loaded = await loadHapticsModule();
 
   if (config.type === 'vibrate' && config.pattern) {
@@ -125,7 +185,9 @@ async function executePattern(config: PatternConfig): Promise<void> {
   }
 
   if (!isNative || !loaded || !HapticsModule) {
-    if ('vibrate' in navigator) {
+    if (pattern) {
+      vibrateWithPattern(pattern);
+    } else if ('vibrate' in navigator) {
       const duration = config.style === 'heavy' ? 50 : config.style === 'medium' ? 30 : 15;
       navigator.vibrate(duration);
     }
@@ -159,7 +221,9 @@ async function executePattern(config: PatternConfig): Promise<void> {
         break;
     }
   } catch (error) {
-    if ('vibrate' in navigator) {
+    if (pattern) {
+      vibrateWithPattern(pattern);
+    } else if ('vibrate' in navigator) {
       navigator.vibrate(30);
     }
   }
@@ -171,13 +235,13 @@ export async function triggerHaptic(pattern: HapticPattern): Promise<void> {
 
   if (config.repeat && config.repeat > 1) {
     for (let i = 0; i < config.repeat; i++) {
-      await executePattern(config);
+      await executePattern(config, pattern);
       if (config.delay && i < config.repeat - 1) {
         await new Promise((resolve) => setTimeout(resolve, config.delay));
       }
     }
   } else {
-    await executePattern(config);
+    await executePattern(config, pattern);
   }
 }
 

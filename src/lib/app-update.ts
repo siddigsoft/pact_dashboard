@@ -156,7 +156,7 @@ export function clearSkippedVersion(): void {
   localStorage.removeItem(SKIPPED_VERSION_KEY);
 }
 
-export async function openAppStore(): Promise<void> {
+export async function openAppStore(): Promise<{ success: boolean; error?: string }> {
   const platform = Capacitor.getPlatform();
   let storeUrl = '';
 
@@ -168,18 +168,25 @@ export async function openAppStore(): Promise<void> {
     storeUrl = `https://play.google.com/store/apps/details?id=${packageName}`;
   }
 
-  if (storeUrl) {
-    try {
-      if (Capacitor.isNativePlatform()) {
-        const { App } = await import('@capacitor/app');
-        window.open(storeUrl, '_system');
-      } else {
-        window.open(storeUrl, '_blank');
+  if (!storeUrl) {
+    console.warn('[AppUpdate] No store URL configured for platform:', platform);
+    return { success: false, error: 'App store URL not configured' };
+  }
+
+  try {
+    if (Capacitor.isNativePlatform()) {
+      window.open(storeUrl, '_system');
+    } else {
+      const newWindow = window.open(storeUrl, '_blank');
+      if (!newWindow) {
+        console.warn('[AppUpdate] Pop-up blocked, providing link');
+        return { success: false, error: 'Pop-up blocked. Please allow pop-ups to update.' };
       }
-    } catch (error) {
-      console.error('[AppUpdate] Failed to open app store:', error);
-      window.open(storeUrl, '_blank');
     }
+    return { success: true };
+  } catch (error: any) {
+    console.error('[AppUpdate] Failed to open app store:', error);
+    return { success: false, error: error?.message || 'Failed to open app store' };
   }
 }
 

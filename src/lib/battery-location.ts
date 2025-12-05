@@ -79,6 +79,8 @@ let batteryStatusListeners: Set<(status: BatteryStatus) => void> = new Set();
 let configChangeListeners: Set<(config: LocationConfig, mode: BatteryMode) => void> = new Set();
 let manualMode: BatteryMode | null = null;
 let batteryMonitorInterval: NodeJS.Timeout | null = null;
+let initError: string | null = null;
+let isInitialized = false;
 
 async function getBatteryAPI(): Promise<any | null> {
   if ('getBattery' in navigator) {
@@ -91,62 +93,86 @@ async function getBatteryAPI(): Promise<any | null> {
   return null;
 }
 
-export async function initBatteryMonitor(): Promise<void> {
-  const battery = await getBatteryAPI();
+export async function initBatteryMonitor(): Promise<{ success: boolean; error?: string }> {
+  if (isInitialized) {
+    return { success: true };
+  }
 
-  if (battery) {
-    const updateBatteryStatus = () => {
-      const newStatus: BatteryStatus = {
-        level: Math.round(battery.level * 100),
-        isCharging: battery.charging,
-        chargingTime: battery.chargingTime === Infinity ? null : battery.chargingTime,
-        dischargingTime: battery.dischargingTime === Infinity ? null : battery.dischargingTime,
+  try {
+    const battery = await getBatteryAPI();
+
+    if (battery) {
+      const updateBatteryStatus = () => {
+        const newStatus: BatteryStatus = {
+          level: Math.round(battery.level * 100),
+          isCharging: battery.charging,
+          chargingTime: battery.chargingTime === Infinity ? null : battery.chargingTime,
+          dischargingTime: battery.dischargingTime === Infinity ? null : battery.dischargingTime,
+        };
+
+        if (
+          newStatus.level !== currentBatteryStatus.level ||
+          newStatus.isCharging !== currentBatteryStatus.isCharging
+        ) {
+          currentBatteryStatus = newStatus;
+          notifyBatteryListeners();
+          updateLocationConfigBasedOnBattery();
+        }
       };
 
-      if (
-        newStatus.level !== currentBatteryStatus.level ||
-        newStatus.isCharging !== currentBatteryStatus.isCharging
-      ) {
-        currentBatteryStatus = newStatus;
-        notifyBatteryListeners();
-        updateLocationConfigBasedOnBattery();
-      }
-    };
+      battery.addEventListener('levelchange', updateBatteryStatus);
+      battery.addEventListener('chargingchange', updateBatteryStatus);
+      battery.addEventListener('chargingtimechange', updateBatteryStatus);
+      battery.addEventListener('dischargingtimechange', updateBatteryStatus);
 
-    battery.addEventListener('levelchange', updateBatteryStatus);
-    battery.addEventListener('chargingchange', updateBatteryStatus);
-    battery.addEventListener('chargingtimechange', updateBatteryStatus);
-    battery.addEventListener('dischargingtimechange', updateBatteryStatus);
+      updateBatteryStatus();
+      isInitialized = true;
+      initError = null;
+      console.log('[BatteryLocation] Battery monitor initialized via Battery API');
+    } else {
+      batteryMonitorInterval = setInterval(async () => {
+        if (Capacitor.isNativePlatform()) {
+          try {
+            const { Device } = await import('@capacitor/device');
+            const info = await Device.getBatteryInfo();
 
-    updateBatteryStatus();
-  } else {
-    batteryMonitorInterval = setInterval(async () => {
-      if (Capacitor.isNativePlatform()) {
-        try {
-          const { Device } = await import('@capacitor/device');
-          const info = await Device.getBatteryInfo();
+            const newStatus: BatteryStatus = {
+              level: Math.round((info.batteryLevel || 1) * 100),
+              isCharging: info.isCharging || false,
+              chargingTime: null,
+              dischargingTime: null,
+            };
 
-          const newStatus: BatteryStatus = {
-            level: Math.round((info.batteryLevel || 1) * 100),
-            isCharging: info.isCharging || false,
-            chargingTime: null,
-            dischargingTime: null,
-          };
-
-          if (
-            newStatus.level !== currentBatteryStatus.level ||
-            newStatus.isCharging !== currentBatteryStatus.isCharging
-          ) {
-            currentBatteryStatus = newStatus;
-            notifyBatteryListeners();
-            updateLocationConfigBasedOnBattery();
+            if (
+              newStatus.level !== currentBatteryStatus.level ||
+              newStatus.isCharging !== currentBatteryStatus.isCharging
+            ) {
+              currentBatteryStatus = newStatus;
+              notifyBatteryListeners();
+              updateLocationConfigBasedOnBattery();
+            }
+          } catch (error) {
+            console.warn('[BatteryLocation] Failed to get battery info:', error);
           }
-        } catch (error) {
-          console.warn('[BatteryLocation] Failed to get battery info:', error);
         }
-      }
-    }, 60000);
+      }, 60000);
+
+      isInitialized = true;
+      initError = null;
+      console.log('[BatteryLocation] Battery monitor initialized via polling');
+    }
+
+    return { success: true };
+  } catch (error: any) {
+    const errorMessage = error?.message || 'Failed to initialize battery monitor';
+    initError = errorMessage;
+    console.error('[BatteryLocation] Init error:', error);
+    return { success: false, error: errorMessage };
   }
+}
+
+export function getInitStatus(): { isInitialized: boolean; error: string | null } {
+  return { isInitialized, error: initError };
 }
 
 export function stopBatteryMonitor(): void {
@@ -212,7 +238,9 @@ function updateLocationConfigBasedOnBattery(): void {
 
 export function setManualMode(mode: BatteryMode | null): void {
   manualMode = mode;
-  updateLocationConfigBasedOnBattery();
+  const currentMode = getRecommendedMode();
+  const config = DEFAULT_CONFIG.configs[currentMode];
+  notifyConfigListeners(config, currentMode);
 }
 
 export function getManualMode(): BatteryMode | null {
