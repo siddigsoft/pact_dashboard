@@ -41,6 +41,7 @@ export default defineConfig(({ mode }) => ({
     rollupOptions: {
       external: [
         '@capacitor-firebase/crashlytics',
+        '@capacitor/haptics',
         'capacitor-native-biometric',
       ],
       output: {
