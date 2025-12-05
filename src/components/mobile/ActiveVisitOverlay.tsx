@@ -3,9 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useActiveVisit } from '@/context/ActiveVisitContext';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
-import { Progress } from '@/components/ui/progress';
 import { 
   MapPin, 
   Clock, 
@@ -16,17 +14,15 @@ import {
   CheckCircle2,
   Wifi,
   WifiOff,
-  Signal,
-  Battery,
   Compass,
   Target,
   FileText,
   AlertCircle,
   Pause,
   Play,
-  Phone,
   Loader2,
-  Satellite
+  Satellite,
+  Car
 } from 'lucide-react';
 import { motion, AnimatePresence, PanInfo } from 'framer-motion';
 import { cn } from '@/lib/utils';
@@ -57,7 +53,7 @@ export function ActiveVisitOverlay({
     resumeVisit,
   } = useActiveVisit();
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'notes' | 'technical'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'submissions' | 'technical'>('overview');
   const [isCompleting, setIsCompleting] = useState(false);
   const [localNotes, setLocalNotes] = useState('');
   const dragConstraintsRef = useRef(null);
@@ -78,13 +74,6 @@ export function ActiveVisitOverlay({
       return `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     }
     return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  const getGpsStatusColor = () => {
-    if (!isGpsActive || gpsAccuracy === null) return 'text-red-500';
-    if (gpsAccuracy <= 10) return 'text-green-500';
-    if (gpsAccuracy <= 50) return 'text-yellow-500';
-    return 'text-red-500';
   };
 
   const getGpsStatusText = () => {
@@ -137,14 +126,14 @@ export function ActiveVisitOverlay({
       <motion.div
         ref={dragConstraintsRef}
         className={cn(
-          "fixed left-0 right-0 z-[9999] bg-background border-t shadow-2xl",
-          "rounded-t-3xl overflow-hidden",
+          "fixed left-0 right-0 z-[9999] bg-white dark:bg-black",
+          "rounded-t-3xl overflow-hidden shadow-[0_-10px_60px_-15px_rgba(0,0,0,0.3)]",
           "bottom-0"
         )}
         initial={{ y: "100%" }}
         animate={{ 
           y: 0,
-          height: isMinimized ? "auto" : "70vh"
+          height: isMinimized ? "auto" : "75vh"
         }}
         exit={{ y: "100%" }}
         transition={{ type: "spring", damping: 25, stiffness: 300 }}
@@ -154,31 +143,33 @@ export function ActiveVisitOverlay({
         onDragEnd={handleDragEnd}
         data-testid="active-visit-overlay"
       >
-        {/* Drag Handle */}
+        {/* Drag Handle - Uber style */}
         <div 
-          className="flex justify-center py-2 cursor-grab active:cursor-grabbing"
+          className="flex justify-center py-3 cursor-grab active:cursor-grabbing"
           onClick={toggleMinimize}
         >
-          <div className="w-12 h-1.5 bg-muted-foreground/30 rounded-full" />
+          <div className="w-10 h-1 bg-black/20 dark:bg-white/20 rounded-full" />
         </div>
 
-        {/* Minimized View */}
+        {/* Minimized View - Uber style compact bar */}
         {isMinimized ? (
-          <div className="px-4 pb-5">
-            <div className="flex items-center justify-between gap-3">
-              {/* Site Info */}
-              <div className="flex items-center gap-3 flex-1 min-w-0">
-                <div className="w-12 h-12 rounded-full bg-green-500 flex items-center justify-center flex-shrink-0">
-                  <MapPin className="h-6 w-6 text-white" />
+          <div className="px-5 pb-6">
+            <div className="flex items-center justify-between gap-4">
+              {/* Car Marker - Classic Uber black circle with white icon */}
+              <div className="flex items-center gap-4 flex-1 min-w-0">
+                <div className="w-14 h-14 rounded-full bg-black dark:bg-white flex items-center justify-center flex-shrink-0 shadow-lg">
+                  <Car className="h-7 w-7 text-white dark:text-black" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="font-semibold text-base truncate">{activeVisit.siteName}</p>
-                  <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                    <span className="flex items-center gap-1">
+                  <p className="font-bold text-lg text-black dark:text-white truncate">
+                    {activeVisit.siteName}
+                  </p>
+                  <div className="flex items-center gap-4 text-sm text-black/60 dark:text-white/60">
+                    <span className="flex items-center gap-1.5 font-medium">
                       <Clock className="h-4 w-4" />
-                      <span className="font-mono font-medium">{formatTime(elapsedTime)}</span>
+                      <span className="font-mono">{formatTime(elapsedTime)}</span>
                     </span>
-                    <span className={cn("flex items-center gap-1", getGpsStatusColor())}>
+                    <span className="flex items-center gap-1.5">
                       <Satellite className="h-4 w-4" />
                       {getGpsStatusText()}
                     </span>
@@ -186,67 +177,65 @@ export function ActiveVisitOverlay({
                 </div>
               </div>
 
-              {/* Quick Actions */}
+              {/* Quick Actions - Pill buttons */}
               <div className="flex items-center gap-2">
                 <Button 
                   size="icon" 
                   variant="outline"
+                  className="rounded-full h-11 w-11 border-black/20 dark:border-white/20"
                   onClick={handleTakePhoto}
                   data-testid="button-quick-photo"
                 >
-                  <Camera className="h-4 w-4" />
+                  <Camera className="h-5 w-5" />
                 </Button>
                 <Button 
                   size="icon"
+                  className="rounded-full h-11 w-11 bg-black dark:bg-white text-white dark:text-black"
                   onClick={toggleMinimize}
                   data-testid="button-expand-overlay"
                 >
-                  <ChevronUp className="h-4 w-4" />
+                  <ChevronUp className="h-5 w-5" />
                 </Button>
               </div>
             </div>
           </div>
         ) : (
-          /* Expanded View */
+          /* Expanded View - Uber style */
           <div className="flex flex-col h-full overflow-hidden">
-            {/* Header with Map Background */}
-            <div className="relative bg-gradient-to-b from-slate-800 to-slate-900 text-white p-4">
-              {/* Grid Overlay Pattern */}
+            {/* Header - Stark black with white text */}
+            <div className="relative bg-black dark:bg-white text-white dark:text-black px-5 py-5">
+              {/* Grid Pattern - Subtle map texture */}
               <div 
-                className="absolute inset-0 opacity-10"
+                className="absolute inset-0 opacity-5"
                 style={{
                   backgroundImage: `
-                    linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px),
-                    linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)
+                    linear-gradient(rgba(255,255,255,0.3) 1px, transparent 1px),
+                    linear-gradient(90deg, rgba(255,255,255,0.3) 1px, transparent 1px)
                   `,
-                  backgroundSize: '20px 20px'
+                  backgroundSize: '24px 24px'
                 }}
               />
               
-              {/* Status Bar */}
-              <div className="flex items-center justify-between mb-4 relative">
+              {/* Top Row - Status badges as pills */}
+              <div className="flex items-center justify-between mb-5 relative">
                 <div className="flex items-center gap-2">
-                  <Badge 
-                    variant="outline" 
-                    className={cn(
-                      "border-0 text-sm py-1 px-2",
-                      isGpsActive 
-                        ? "bg-green-500/20 text-green-300" 
-                        : "bg-red-500/20 text-red-300"
-                    )}
-                  >
-                    {isGpsActive ? <Wifi className="h-4 w-4 mr-1" /> : <WifiOff className="h-4 w-4 mr-1" />}
+                  {/* Active Mission Badge - Black pill white text (inverted in header) */}
+                  <span className={cn(
+                    "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold",
+                    "bg-white/20 text-white dark:bg-black/20 dark:text-black"
+                  )}>
+                    {isGpsActive ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}
                     {isGpsActive ? 'Online' : 'Offline'}
-                  </Badge>
-                  <Badge variant="outline" className="border-0 bg-white/10 text-white text-sm py-1 px-2">
-                    <Clock className="h-4 w-4 mr-1" />
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium bg-white/10 text-white/80 dark:bg-black/10 dark:text-black/80">
+                    <Clock className="h-3.5 w-3.5" />
                     {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </Badge>
+                  </span>
                 </div>
                 <Button 
                   size="icon" 
                   variant="ghost" 
-                  className="text-white h-8 w-8"
+                  className="text-white dark:text-black h-9 w-9 rounded-full hover:bg-white/10 dark:hover:bg-black/10"
                   onClick={toggleMinimize}
                   data-testid="button-minimize-overlay"
                 >
@@ -254,293 +243,270 @@ export function ActiveVisitOverlay({
                 </Button>
               </div>
 
-              {/* Mission Banner */}
+              {/* Mission Info */}
               <div className="flex items-start justify-between relative">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Badge className="bg-blue-500 text-white text-sm py-0.5 px-2">
+                <div className="flex-1 pr-4">
+                  {/* Mission Badge - Black pill with white text */}
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-white text-black dark:bg-black dark:text-white">
                       #{activeVisit.siteCode}
-                    </Badge>
-                    <Badge 
-                      className={cn(
-                        "text-sm py-0.5 px-2",
-                        activeVisit.status === 'active' 
-                          ? "bg-green-500 text-white" 
-                          : "bg-yellow-500 text-black"
-                      )}
-                    >
-                      {activeVisit.status === 'active' ? 'In Progress' : 'Paused'}
-                    </Badge>
+                    </span>
+                    <span className={cn(
+                      "inline-flex items-center px-3 py-1 rounded-full text-xs font-bold",
+                      activeVisit.status === 'active' 
+                        ? "bg-white text-black dark:bg-black dark:text-white" 
+                        : "bg-white/50 text-black dark:bg-black/50 dark:text-white"
+                    )}>
+                      {activeVisit.status === 'active' ? 'IN PROGRESS' : 'PAUSED'}
+                    </span>
                   </div>
-                  <h2 className="text-xl font-bold mb-1">{activeVisit.siteName}</h2>
-                  <p className="text-base text-white/70">
+                  <h2 className="text-2xl font-bold mb-1">{activeVisit.siteName}</h2>
+                  <p className="text-base text-white/70 dark:text-black/70">
                     {activeVisit.locality}, {activeVisit.state}
                   </p>
                 </div>
 
-                {/* Live Timer */}
+                {/* Live Timer - Large mono */}
                 <div className="text-right">
-                  <div className="text-4xl font-mono font-bold text-green-400">
+                  <div className="text-4xl font-mono font-bold tracking-tight">
                     {formatTime(elapsedTime)}
                   </div>
-                  <p className="text-sm text-white/60">Duration</p>
+                  <p className="text-sm text-white/50 dark:text-black/50 uppercase tracking-wider">Duration</p>
                 </div>
               </div>
 
-              {/* Pulsing Target Pin Indicator */}
-              <div className="absolute right-4 bottom-4">
+              {/* Pulsing Indicator */}
+              <div className="absolute right-5 bottom-5">
                 <div className="relative">
-                  <div className="absolute inset-0 bg-red-500 rounded-full animate-ping opacity-25" />
-                  <div className="w-3 h-3 bg-red-500 rounded-full relative z-10" />
+                  <div className="absolute inset-0 bg-white dark:bg-black rounded-full animate-ping opacity-30" />
+                  <div className="w-3 h-3 bg-white dark:bg-black rounded-full relative z-10" />
                 </div>
               </div>
             </div>
 
-            {/* Tab Navigation */}
-            <div className="flex border-b bg-muted/30">
+            {/* Tab Navigation - Pill Selectors */}
+            <div className="flex gap-2 p-4 bg-white dark:bg-black">
               {[
                 { id: 'overview', label: 'Overview', icon: Target },
-                { id: 'notes', label: 'Notes', icon: FileText },
+                { id: 'submissions', label: 'Submissions', icon: FileText },
                 { id: 'technical', label: 'Technical', icon: Compass },
               ].map((tab) => (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id as any)}
                   className={cn(
-                    "flex-1 flex items-center justify-center gap-2 py-4 text-base font-medium transition-colors",
+                    "flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-full text-sm font-semibold transition-all",
                     activeTab === tab.id 
-                      ? "text-primary border-b-2 border-primary bg-primary/5" 
-                      : "text-muted-foreground"
+                      ? "bg-black text-white dark:bg-white dark:text-black" 
+                      : "bg-black/5 text-black/60 dark:bg-white/10 dark:text-white/60"
                   )}
                   data-testid={`tab-${tab.id}`}
                 >
-                  <tab.icon className="h-5 w-5" />
+                  <tab.icon className="h-4 w-4" />
                   <span>{tab.label}</span>
                 </button>
               ))}
             </div>
 
-            {/* Tab Content */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {/* Tab Content - Floating Cards with shadows, no borders */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-4 bg-gray-50 dark:bg-neutral-950">
               {activeTab === 'overview' && (
                 <>
-                  {/* GPS Status Card */}
-                  <Card className={cn(
-                    "border-2",
-                    !isGpsActive ? "border-red-200 bg-red-50 dark:bg-red-950/20" :
-                    gpsAccuracy !== null && gpsAccuracy <= 10 ? "border-green-200 bg-green-50 dark:bg-green-950/20" :
-                    "border-yellow-200 bg-yellow-50 dark:bg-yellow-950/20"
+                  {/* GPS Status - Floating Card */}
+                  <div className={cn(
+                    "rounded-2xl p-5 shadow-lg",
+                    "bg-white dark:bg-neutral-900"
                   )}>
-                    <CardContent className="p-5">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                          <div className={cn(
-                            "w-12 h-12 rounded-full flex items-center justify-center",
-                            !isGpsActive ? "bg-red-500" :
-                            gpsAccuracy !== null && gpsAccuracy <= 10 ? "bg-green-500" :
-                            "bg-yellow-500"
-                          )}>
-                            <Satellite className="h-6 w-6 text-white" />
-                          </div>
-                          <div>
-                            <p className="font-semibold text-lg">GPS Status</p>
-                            <p className="text-base text-muted-foreground">
-                              {!isGpsActive ? 'Signal lost' : 
-                               gpsAccuracy !== null && gpsAccuracy <= 10 ? 'Excellent accuracy' :
-                               'Acquiring better signal...'}
-                            </p>
-                          </div>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        {/* Car Marker - Black circle white icon */}
+                        <div className={cn(
+                          "w-14 h-14 rounded-full flex items-center justify-center shadow-md",
+                          "bg-black dark:bg-white"
+                        )}>
+                          <Satellite className="h-7 w-7 text-white dark:text-black" />
                         </div>
-                        <div className="text-right">
-                          <p className={cn("text-3xl font-bold", getGpsStatusColor())}>
-                            {getGpsStatusText()}
+                        <div>
+                          <p className="font-bold text-lg text-black dark:text-white">GPS Status</p>
+                          <p className="text-sm text-black/50 dark:text-white/50">
+                            {!isGpsActive ? 'Signal lost' : 
+                             gpsAccuracy !== null && gpsAccuracy <= 10 ? 'Excellent accuracy' :
+                             'Acquiring signal...'}
                           </p>
-                          {activeVisit.coordinates && (
-                            <p className="text-sm text-muted-foreground">
-                              {activeVisit.coordinates.latitude.toFixed(5)}, {activeVisit.coordinates.longitude.toFixed(5)}
-                            </p>
-                          )}
                         </div>
                       </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* KPI Grid */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <Card>
-                      <CardContent className="p-5 text-center">
-                        <Camera className="h-8 w-8 mx-auto mb-2 text-blue-500" />
-                        <p className="text-3xl font-bold">{activeVisit.photoCount}</p>
-                        <p className="text-sm text-muted-foreground">Photos</p>
-                      </CardContent>
-                    </Card>
-                    <Card>
-                      <CardContent className="p-5 text-center">
-                        <FileText className="h-8 w-8 mx-auto mb-2 text-purple-500" />
-                        <p className="text-3xl font-bold">{localNotes.length > 0 ? 'Yes' : 'No'}</p>
-                        <p className="text-sm text-muted-foreground">Notes Added</p>
-                      </CardContent>
-                    </Card>
+                      <div className="text-right">
+                        <p className={cn(
+                          "text-3xl font-bold font-mono",
+                          !isGpsActive ? "text-black/30 dark:text-white/30" : "text-black dark:text-white"
+                        )}>
+                          {getGpsStatusText()}
+                        </p>
+                        {activeVisit.coordinates && (
+                          <p className="text-xs text-black/40 dark:text-white/40 font-mono">
+                            {activeVisit.coordinates.latitude.toFixed(5)}, {activeVisit.coordinates.longitude.toFixed(5)}
+                          </p>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
-                  {/* Activity Info */}
+                  {/* KPI Grid - Floating Cards */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="rounded-2xl p-5 shadow-lg bg-white dark:bg-neutral-900 text-center">
+                      <div className="w-12 h-12 rounded-full bg-black dark:bg-white mx-auto mb-3 flex items-center justify-center">
+                        <Camera className="h-6 w-6 text-white dark:text-black" />
+                      </div>
+                      <p className="text-3xl font-bold text-black dark:text-white">{activeVisit.photoCount}</p>
+                      <p className="text-sm text-black/50 dark:text-white/50">Photos</p>
+                    </div>
+                    <div className="rounded-2xl p-5 shadow-lg bg-white dark:bg-neutral-900 text-center">
+                      <div className="w-12 h-12 rounded-full bg-black dark:bg-white mx-auto mb-3 flex items-center justify-center">
+                        <FileText className="h-6 w-6 text-white dark:text-black" />
+                      </div>
+                      <p className="text-3xl font-bold text-black dark:text-white">{localNotes.length > 0 ? 'Yes' : 'No'}</p>
+                      <p className="text-sm text-black/50 dark:text-white/50">Notes Added</p>
+                    </div>
+                  </div>
+
+                  {/* Activity Info - Floating Card */}
                   {activeVisit.activity && (
-                    <Card>
-                      <CardContent className="p-5">
-                        <p className="text-base text-muted-foreground mb-1">Activity Type</p>
-                        <p className="font-medium text-lg">{activeVisit.activity}</p>
-                      </CardContent>
-                    </Card>
+                    <div className="rounded-2xl p-5 shadow-lg bg-white dark:bg-neutral-900">
+                      <p className="text-sm text-black/50 dark:text-white/50 mb-1">Activity Type</p>
+                      <p className="font-bold text-lg text-black dark:text-white">{activeVisit.activity}</p>
+                    </div>
                   )}
 
-                  {/* Alerts */}
+                  {/* Alert - Floating Card */}
                   {!isGpsActive && (
-                    <Card className="border-amber-200 bg-amber-50 dark:bg-amber-950/20">
-                      <CardContent className="p-5 flex items-center gap-4">
-                        <AlertCircle className="h-6 w-6 text-amber-600 flex-shrink-0" />
-                        <div>
-                          <p className="font-medium text-lg text-amber-900 dark:text-amber-100">GPS Signal Lost</p>
-                          <p className="text-base text-amber-700 dark:text-amber-300">
-                            Move to an open area for better signal
-                          </p>
-                        </div>
-                      </CardContent>
-                    </Card>
+                    <div className="rounded-2xl p-5 shadow-lg bg-white dark:bg-neutral-900 flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-full bg-black dark:bg-white flex items-center justify-center flex-shrink-0">
+                        <AlertCircle className="h-6 w-6 text-white dark:text-black" />
+                      </div>
+                      <div>
+                        <p className="font-bold text-black dark:text-white">GPS Signal Lost</p>
+                        <p className="text-sm text-black/50 dark:text-white/50">
+                          Move to an open area for better signal
+                        </p>
+                      </div>
+                    </div>
                   )}
                 </>
               )}
 
-              {activeTab === 'notes' && (
+              {activeTab === 'submissions' && (
                 <div className="space-y-4">
-                  <div>
-                    <label className="text-base font-medium mb-3 block">Visit Notes</label>
+                  <div className="rounded-2xl p-5 shadow-lg bg-white dark:bg-neutral-900">
+                    <label className="text-sm font-bold text-black dark:text-white mb-3 block uppercase tracking-wider">
+                      Visit Notes
+                    </label>
                     <Textarea
                       value={localNotes}
                       onChange={(e) => handleNotesChange(e.target.value)}
-                      placeholder="Add observations, issues, or important details about this visit..."
-                      className="min-h-[200px] text-lg"
+                      placeholder="Add observations, issues, or important details..."
+                      className="min-h-[180px] text-base border-0 bg-gray-50 dark:bg-neutral-800 rounded-xl resize-none focus-visible:ring-1 focus-visible:ring-black dark:focus-visible:ring-white"
                       data-testid="textarea-visit-notes"
                     />
+                    <p className="text-xs text-black/40 dark:text-white/40 mt-3">
+                      Auto-saved as you type
+                    </p>
                   </div>
-                  <p className="text-sm text-muted-foreground">
-                    Notes are automatically saved as you type
-                  </p>
                 </div>
               )}
 
               {activeTab === 'technical' && (
                 <div className="space-y-4">
-                  <Card>
-                    <CardContent className="p-5 space-y-5">
-                      <h3 className="font-semibold text-lg flex items-center gap-2">
-                        <Compass className="h-5 w-5" />
-                        Device Diagnostics
-                      </h3>
-                      
-                      <div className="space-y-4">
-                        <div className="flex justify-between items-center py-1">
-                          <span className="text-base text-muted-foreground">GPS Accuracy</span>
-                          <span className={cn("font-mono text-base font-medium", getGpsStatusColor())}>
-                            {gpsAccuracy !== null ? `±${gpsAccuracy.toFixed(1)}m` : 'N/A'}
-                          </span>
+                  {/* Device Diagnostics - Floating Card */}
+                  <div className="rounded-2xl p-5 shadow-lg bg-white dark:bg-neutral-900">
+                    <h3 className="font-bold text-black dark:text-white flex items-center gap-2 mb-4">
+                      <Compass className="h-5 w-5" />
+                      Device Diagnostics
+                    </h3>
+                    
+                    <div className="space-y-4">
+                      {[
+                        { label: 'GPS Accuracy', value: gpsAccuracy !== null ? `±${gpsAccuracy.toFixed(1)}m` : 'N/A' },
+                        { label: 'Latitude', value: activeVisit.coordinates?.latitude.toFixed(6) || 'N/A' },
+                        { label: 'Longitude', value: activeVisit.coordinates?.longitude.toFixed(6) || 'N/A' },
+                        { label: 'Started At', value: new Date(activeVisit.startedAt).toLocaleTimeString() },
+                        { label: 'Visit ID', value: activeVisit.id.slice(0, 8) + '...' },
+                      ].map((item, i) => (
+                        <div key={i} className="flex justify-between items-center py-2 border-b border-black/5 dark:border-white/5 last:border-0">
+                          <span className="text-sm text-black/50 dark:text-white/50">{item.label}</span>
+                          <span className="font-mono text-sm font-medium text-black dark:text-white">{item.value}</span>
                         </div>
-                        
-                        <div className="flex justify-between items-center py-1">
-                          <span className="text-base text-muted-foreground">Latitude</span>
-                          <span className="font-mono text-base">
-                            {activeVisit.coordinates?.latitude.toFixed(6) || 'N/A'}
-                          </span>
-                        </div>
-                        
-                        <div className="flex justify-between items-center py-1">
-                          <span className="text-base text-muted-foreground">Longitude</span>
-                          <span className="font-mono text-base">
-                            {activeVisit.coordinates?.longitude.toFixed(6) || 'N/A'}
-                          </span>
-                        </div>
+                      ))}
+                    </div>
+                  </div>
 
-                        <div className="flex justify-between items-center py-1">
-                          <span className="text-base text-muted-foreground">Started At</span>
-                          <span className="font-mono text-base">
-                            {new Date(activeVisit.startedAt).toLocaleTimeString()}
-                          </span>
-                        </div>
-
-                        <div className="flex justify-between items-center py-1">
-                          <span className="text-base text-muted-foreground">Visit ID</span>
-                          <span className="font-mono text-base text-muted-foreground">
-                            {activeVisit.id.slice(0, 8)}...
-                          </span>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardContent className="p-4 space-y-3">
-                      <h3 className="font-semibold flex items-center gap-2">
-                        <Signal className="h-4 w-4" />
-                        Connection Status
-                      </h3>
-                      
-                      <div className="flex items-center gap-3">
-                        {isGpsActive ? (
-                          <Badge className="bg-green-500">Connected</Badge>
-                        ) : (
-                          <Badge variant="destructive">Disconnected</Badge>
-                        )}
-                        <span className="text-sm text-muted-foreground">
-                          {isGpsActive ? 'Real-time sync active' : 'Working offline'}
-                        </span>
-                      </div>
-                    </CardContent>
-                  </Card>
+                  {/* Connection Status - Floating Card */}
+                  <div className="rounded-2xl p-5 shadow-lg bg-white dark:bg-neutral-900">
+                    <h3 className="font-bold text-black dark:text-white flex items-center gap-2 mb-3">
+                      <Wifi className="h-5 w-5" />
+                      Connection Status
+                    </h3>
+                    
+                    <div className="flex items-center gap-3">
+                      <span className={cn(
+                        "inline-flex items-center px-3 py-1.5 rounded-full text-xs font-bold",
+                        isGpsActive 
+                          ? "bg-black text-white dark:bg-white dark:text-black" 
+                          : "bg-black/10 text-black dark:bg-white/10 dark:text-white"
+                      )}>
+                        {isGpsActive ? 'CONNECTED' : 'OFFLINE'}
+                      </span>
+                      <span className="text-sm text-black/50 dark:text-white/50">
+                        {isGpsActive ? 'Real-time sync active' : 'Working offline'}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
 
-            {/* Action Bar */}
-            <div className="border-t bg-background p-4 space-y-3">
-              {/* Quick Actions */}
-              <div className="flex gap-2">
+            {/* Action Bar - Pill Buttons */}
+            <div className="bg-white dark:bg-black p-5 space-y-4 shadow-[0_-4px_20px_-5px_rgba(0,0,0,0.1)]">
+              {/* Quick Actions Row - Pill buttons */}
+              <div className="flex gap-3">
                 <Button 
                   variant="outline" 
-                  className="flex-1 gap-2"
+                  className="flex-1 gap-2 rounded-full h-12 border-black/20 dark:border-white/20 font-semibold"
                   onClick={handleTakePhoto}
                   data-testid="button-take-photo"
                 >
-                  <Camera className="h-4 w-4" />
+                  <Camera className="h-5 w-5" />
                   Photo ({activeVisit.photoCount})
                 </Button>
                 
                 <Button 
                   variant="outline" 
-                  className="flex-1 gap-2"
+                  className="flex-1 gap-2 rounded-full h-12 border-black/20 dark:border-white/20 font-semibold"
                   onClick={handleNavigation}
                   disabled={!activeVisit.targetCoordinates}
                   data-testid="button-navigate"
                 >
-                  <Navigation className="h-4 w-4" />
+                  <Navigation className="h-5 w-5" />
                   Navigate
                 </Button>
 
                 <Button 
                   variant="outline" 
                   size="icon"
+                  className="rounded-full h-12 w-12 border-black/20 dark:border-white/20"
                   onClick={activeVisit.status === 'active' ? pauseVisit : resumeVisit}
                   data-testid="button-pause-resume"
                 >
                   {activeVisit.status === 'active' ? (
-                    <Pause className="h-4 w-4" />
+                    <Pause className="h-5 w-5" />
                   ) : (
-                    <Play className="h-4 w-4" />
+                    <Play className="h-5 w-5" />
                   )}
                 </Button>
               </div>
 
-              {/* Complete Visit Button */}
+              {/* Complete Button - Primary black pill */}
               <Button 
-                className="w-full h-12 text-base gap-2 bg-green-600 hover:bg-green-700"
+                className="w-full h-14 text-base gap-2 rounded-full bg-black hover:bg-black/90 dark:bg-white dark:hover:bg-white/90 dark:text-black font-bold"
                 onClick={handleComplete}
                 disabled={isCompleting || activeVisit.photoCount === 0}
                 data-testid="button-complete-visit"
@@ -559,7 +525,7 @@ export function ActiveVisitOverlay({
               </Button>
               
               {activeVisit.photoCount === 0 && (
-                <p className="text-xs text-center text-muted-foreground">
+                <p className="text-xs text-center text-black/40 dark:text-white/40">
                   At least 1 photo is required to complete the visit
                 </p>
               )}
