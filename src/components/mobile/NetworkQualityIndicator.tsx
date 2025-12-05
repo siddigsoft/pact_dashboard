@@ -53,14 +53,14 @@ const qualityConfig: Record<NetworkQuality, {
   slow: {
     label: 'Slow',
     icon: <SignalLow className="h-3.5 w-3.5" />,
-    color: 'text-amber-600 dark:text-amber-400',
-    bgColor: 'bg-amber-500/10',
+    color: 'text-black/50 dark:text-white/50',
+    bgColor: 'bg-black/5 dark:bg-white/5',
   },
   moderate: {
     label: 'Moderate',
     icon: <SignalMedium className="h-3.5 w-3.5" />,
-    color: 'text-blue-600 dark:text-blue-400',
-    bgColor: 'bg-blue-500/10',
+    color: 'text-black/70 dark:text-white/70',
+    bgColor: 'bg-black/5 dark:bg-white/10',
   },
   fast: {
     label: 'Good',
@@ -71,8 +71,8 @@ const qualityConfig: Record<NetworkQuality, {
   excellent: {
     label: 'Excellent',
     icon: <Wifi className="h-3.5 w-3.5" />,
-    color: 'text-emerald-600 dark:text-emerald-400',
-    bgColor: 'bg-emerald-500/10',
+    color: 'text-black dark:text-white',
+    bgColor: 'bg-black/10 dark:bg-white/10',
   },
 };
 
@@ -210,7 +210,7 @@ export function NetworkStatusBar({ onRetry, className }: NetworkStatusBarProps) 
         "px-4 py-2 flex items-center justify-between gap-3",
         !isOnline 
           ? "bg-destructive text-white" 
-          : "bg-amber-500/10 text-amber-700 dark:text-amber-300",
+          : "bg-black/10 dark:bg-white/10 text-black dark:text-white",
         className
       )}
       role="alert"

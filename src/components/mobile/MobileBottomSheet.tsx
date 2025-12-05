@@ -42,9 +42,18 @@ export function MobileBottomSheet({
 }: MobileBottomSheetProps) {
   const dragControls = useDragControls();
   const sheetRef = useRef<HTMLDivElement>(null);
-  const currentSnapIndex = useRef(snapPoints.indexOf(defaultSnapPoint));
+  
+  const getValidSnapIndex = useCallback((snap: 'min' | 'half' | 'full', points: typeof snapPoints): number => {
+    const index = points.indexOf(snap);
+    return index >= 0 ? index : 0;
+  }, []);
+  
+  const currentSnapIndex = useRef(getValidSnapIndex(defaultSnapPoint, snapPoints));
 
-  const getSnapHeight = useCallback((snap: 'min' | 'half' | 'full') => {
+  const getSnapHeight = useCallback((snap: 'min' | 'half' | 'full' | undefined): string => {
+    if (!snap || !snapHeights[snap]) {
+      return snapHeights.half;
+    }
     return snapHeights[snap];
   }, []);
 
@@ -77,7 +86,7 @@ export function MobileBottomSheet({
 
   useEffect(() => {
     if (isOpen) {
-      currentSnapIndex.current = snapPoints.indexOf(defaultSnapPoint);
+      currentSnapIndex.current = getValidSnapIndex(defaultSnapPoint, snapPoints);
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = '';
@@ -86,7 +95,7 @@ export function MobileBottomSheet({
     return () => {
       document.body.style.overflow = '';
     };
-  }, [isOpen, defaultSnapPoint, snapPoints]);
+  }, [isOpen, defaultSnapPoint, snapPoints, getValidSnapIndex]);
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -141,6 +150,11 @@ export function MobileBottomSheet({
               <div 
                 className="flex justify-center py-3 cursor-grab active:cursor-grabbing touch-manipulation"
                 onPointerDown={(e) => dragControls.start(e)}
+                role="slider"
+                aria-label="Drag handle to resize sheet"
+                aria-orientation="vertical"
+                tabIndex={0}
+                data-testid="sheet-drag-handle"
               >
                 <div className="w-10 h-1 bg-black/20 dark:bg-white/20 rounded-full" />
               </div>

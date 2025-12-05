@@ -33,13 +33,13 @@ const variantConfig: Record<DialogVariant, { icon: React.ReactNode; iconBg: stri
   },
   warning: {
     icon: <AlertTriangle className="h-6 w-6" />,
-    iconBg: 'bg-amber-500/10',
-    iconColor: 'text-amber-600 dark:text-amber-400',
+    iconBg: 'bg-black/20 dark:bg-white/20',
+    iconColor: 'text-black dark:text-white',
   },
   info: {
     icon: <AlertCircle className="h-6 w-6" />,
-    iconBg: 'bg-blue-500/10',
-    iconColor: 'text-blue-600 dark:text-blue-400',
+    iconBg: 'bg-black/10 dark:bg-white/10',
+    iconColor: 'text-black dark:text-white',
   },
 };
 

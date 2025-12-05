@@ -43,9 +43,9 @@ function getPasswordStrength(password: string): {
 
 const strengthConfig: Record<StrengthLevel, { label: string; color: string; bgColor: string }> = {
   weak: { label: 'Weak', color: 'text-destructive', bgColor: 'bg-destructive' },
-  fair: { label: 'Fair', color: 'text-amber-600 dark:text-amber-400', bgColor: 'bg-amber-500' },
-  good: { label: 'Good', color: 'text-blue-600 dark:text-blue-400', bgColor: 'bg-blue-500' },
-  strong: { label: 'Strong', color: 'text-emerald-600 dark:text-emerald-400', bgColor: 'bg-emerald-500' },
+  fair: { label: 'Fair', color: 'text-black/60 dark:text-white/60', bgColor: 'bg-black/40 dark:bg-white/40' },
+  good: { label: 'Good', color: 'text-black/80 dark:text-white/80', bgColor: 'bg-black/60 dark:bg-white/60' },
+  strong: { label: 'Strong', color: 'text-black dark:text-white', bgColor: 'bg-black dark:bg-white' },
 };
 
 export function PasswordStrengthIndicator({

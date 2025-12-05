@@ -159,20 +159,20 @@ export const swipeActionPresets = {
   archive: {
     icon: <Archive className="h-5 w-5" />,
     label: 'Archive',
-    color: 'text-white',
-    bgColor: '#6366f1',
+    color: 'text-white dark:text-black',
+    bgColor: '#000000',
   },
   complete: {
     icon: <CheckCircle className="h-5 w-5" />,
     label: 'Done',
-    color: 'text-white',
-    bgColor: '#22c55e',
+    color: 'text-white dark:text-black',
+    bgColor: '#000000',
   },
   more: {
     icon: <MoreHorizontal className="h-5 w-5" />,
     label: 'More',
-    color: 'text-white',
-    bgColor: '#6b7280',
+    color: 'text-white dark:text-black',
+    bgColor: '#333333',
   },
 };
 
