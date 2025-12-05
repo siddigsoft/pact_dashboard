@@ -62,6 +62,7 @@ export { OfflineQueueBadge, OfflineQueuePanel, SyncIndicator, LastSyncInfo } fro
 // Action Components
 export { MobileActionButton, MobileIconButton, MobileFAB } from './MobileActionButton';
 export { ActiveVisitOverlay } from './ActiveVisitOverlay';
+export { FloatingMobileToolbar, CompactSyncButton, SyncFAB } from './FloatingMobileToolbar';
 
 // Display Components
 export { MobileEmptyState } from './MobileEmptyState';

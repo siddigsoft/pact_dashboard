@@ -553,9 +553,9 @@ export function MobileAppShell({
         {children}
       </div>
       
-      {/* Sync Status Bar - Fixed at bottom on mobile */}
-      {showSyncStatus && isNative && (
-        <div className="fixed bottom-16 left-0 right-0 z-40 px-4 pb-2">
+      {/* Sync Status Bar - Fixed at bottom on all mobile devices */}
+      {showSyncStatus && (
+        <div className="fixed bottom-16 left-0 right-0 z-40 px-4 pb-2 safe-area-bottom">
           <SyncStatusBar 
             compact={false}
             showDetails={true}

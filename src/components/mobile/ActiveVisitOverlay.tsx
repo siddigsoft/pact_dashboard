@@ -21,22 +21,38 @@ import {
   Pause,
   Play,
   Loader2,
-  Satellite
+  Satellite,
+  Phone,
+  MessageSquare,
+  RefreshCw,
+  CloudOff,
+  Cloud
 } from 'lucide-react';
 import { motion, AnimatePresence, PanInfo } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { hapticPresets } from '@/lib/haptics';
+import { syncManager, type SyncProgress } from '@/lib/sync-manager';
+import { getOfflineStats } from '@/lib/offline-db';
 import PactLogo from '@/assets/logo.png';
 
 interface ActiveVisitOverlayProps {
   onCompleteVisit?: () => void;
   onTakePhoto?: () => void;
   onOpenNavigation?: () => void;
+  onCallSupervisor?: () => void;
+  onMessageSupervisor?: () => void;
+  supervisorName?: string;
+  supervisorRole?: string;
 }
 
 export function ActiveVisitOverlay({ 
   onCompleteVisit, 
   onTakePhoto,
-  onOpenNavigation 
+  onOpenNavigation,
+  onCallSupervisor,
+  onMessageSupervisor,
+  supervisorName = 'Supervisor',
+  supervisorRole = 'Field Coordinator'
 }: ActiveVisitOverlayProps) {
   const { t } = useTranslation();
   const {
@@ -57,6 +73,57 @@ export function ActiveVisitOverlay({
   const [isCompleting, setIsCompleting] = useState(false);
   const [localNotes, setLocalNotes] = useState('');
   const dragConstraintsRef = useRef(null);
+  
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [syncProgress, setSyncProgress] = useState<SyncProgress>(syncManager.getProgress());
+  const [pendingCount, setPendingCount] = useState(0);
+  
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    
+    const refreshStats = async () => {
+      try {
+        const stats = await getOfflineStats();
+        setPendingCount(stats.pendingActions + stats.unsyncedVisits + stats.unsyncedLocations);
+      } catch (e) {
+        console.error('Failed to get stats:', e);
+      }
+    };
+    
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    
+    const unsubProgress = syncManager.onProgress(setSyncProgress);
+    const unsubComplete = syncManager.onComplete(() => refreshStats());
+    
+    refreshStats();
+    const interval = setInterval(refreshStats, 10000);
+    
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      unsubProgress();
+      unsubComplete();
+      clearInterval(interval);
+    };
+  }, []);
+  
+  const handleSync = async () => {
+    if (!isOnline || syncProgress.isRunning) return;
+    hapticPresets.buttonPress();
+    await syncManager.forceSync();
+  };
+  
+  const handleCall = () => {
+    hapticPresets.buttonPress();
+    onCallSupervisor?.();
+  };
+  
+  const handleMessage = () => {
+    hapticPresets.buttonPress();
+    onMessageSupervisor?.();
+  };
 
   useEffect(() => {
     if (activeVisit?.notes) {
@@ -179,12 +246,53 @@ export function ActiveVisitOverlay({
 
               {/* Quick Actions - Pill buttons */}
               <div className="flex items-center gap-2">
+                {/* Sync Button */}
+                <Button 
+                  size="icon" 
+                  variant={!isOnline ? "destructive" : pendingCount > 0 ? "default" : "outline"}
+                  className="rounded-full h-11 w-11"
+                  onClick={handleSync}
+                  disabled={!isOnline || syncProgress.isRunning}
+                  data-testid="button-quick-sync"
+                  aria-label={!isOnline ? 'Offline' : syncProgress.isRunning ? 'Syncing' : `Sync ${pendingCount} items`}
+                >
+                  {!isOnline ? (
+                    <CloudOff className="h-5 w-5" />
+                  ) : syncProgress.isRunning ? (
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-5 w-5" />
+                  )}
+                </Button>
+                {/* Call Button */}
+                <Button 
+                  size="icon" 
+                  variant="outline"
+                  className="rounded-full h-11 w-11 border-black/20 dark:border-white/20"
+                  onClick={handleCall}
+                  data-testid="button-quick-call"
+                  aria-label={`Call ${supervisorName}`}
+                >
+                  <Phone className="h-5 w-5" />
+                </Button>
+                {/* Message Button */}
+                <Button 
+                  size="icon" 
+                  variant="outline"
+                  className="rounded-full h-11 w-11 border-black/20 dark:border-white/20"
+                  onClick={handleMessage}
+                  data-testid="button-quick-message"
+                  aria-label={`Message ${supervisorName}`}
+                >
+                  <MessageSquare className="h-5 w-5" />
+                </Button>
                 <Button 
                   size="icon" 
                   variant="outline"
                   className="rounded-full h-11 w-11 border-black/20 dark:border-white/20"
                   onClick={handleTakePhoto}
                   data-testid="button-quick-photo"
+                  aria-label="Take photo"
                 >
                   <Camera className="h-5 w-5" />
                 </Button>
@@ -193,11 +301,33 @@ export function ActiveVisitOverlay({
                   className="rounded-full h-11 w-11 bg-black dark:bg-white text-white dark:text-black"
                   onClick={toggleMinimize}
                   data-testid="button-expand-overlay"
+                  aria-label="Expand visit details"
                 >
                   <ChevronUp className="h-5 w-5" />
                 </Button>
               </div>
             </div>
+            
+            {/* Pending Sync Indicator */}
+            {pendingCount > 0 && (
+              <div className="px-5 pb-3">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-black/50 dark:text-white/50">
+                    {!isOnline ? 'Working offline' : `${pendingCount} items pending sync`}
+                  </span>
+                  {isOnline && !syncProgress.isRunning && (
+                    <button 
+                      onClick={handleSync}
+                      className="text-black dark:text-white font-medium"
+                      data-testid="button-sync-link"
+                      aria-label={`Sync ${pendingCount} pending items`}
+                    >
+                      Sync Now
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           /* Expanded View - Uber style */
@@ -238,6 +368,7 @@ export function ActiveVisitOverlay({
                   className="text-white dark:text-black h-9 w-9 rounded-full hover:bg-white/10 dark:hover:bg-black/10"
                   onClick={toggleMinimize}
                   data-testid="button-minimize-overlay"
+                  aria-label="Minimize visit details"
                 >
                   <ChevronDown className="h-5 w-5" />
                 </Button>
@@ -294,6 +425,7 @@ export function ActiveVisitOverlay({
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id as any)}
+                  aria-label={`View ${tab.label.toLowerCase()} tab`}
                   className={cn(
                     "flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-full text-sm font-semibold transition-all",
                     activeTab === tab.id 
@@ -466,6 +598,60 @@ export function ActiveVisitOverlay({
 
             {/* Action Bar - Pill Buttons */}
             <div className="bg-white dark:bg-black p-5 space-y-4 shadow-[0_-4px_20px_-5px_rgba(0,0,0,0.1)]">
+              {/* Communication & Sync Row */}
+              <div className="flex gap-3">
+                {/* Sync Status/Button */}
+                <Button 
+                  variant={!isOnline ? "destructive" : pendingCount > 0 ? "default" : "outline"}
+                  className="flex-1 gap-2 rounded-full h-12 font-semibold"
+                  onClick={handleSync}
+                  disabled={!isOnline || syncProgress.isRunning}
+                  data-testid="button-sync-expanded"
+                  aria-label={!isOnline ? 'Offline' : syncProgress.isRunning ? 'Syncing' : `Sync ${pendingCount} items`}
+                >
+                  {!isOnline ? (
+                    <>
+                      <CloudOff className="h-5 w-5" />
+                      Offline
+                    </>
+                  ) : syncProgress.isRunning ? (
+                    <>
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                      Syncing...
+                    </>
+                  ) : (
+                    <>
+                      {pendingCount > 0 ? <Cloud className="h-5 w-5" /> : <RefreshCw className="h-5 w-5" />}
+                      {pendingCount > 0 ? `${pendingCount} pending` : 'Synced'}
+                    </>
+                  )}
+                </Button>
+
+                {/* Call Supervisor */}
+                <Button 
+                  variant="outline" 
+                  className="flex-1 gap-2 rounded-full h-12 border-black/20 dark:border-white/20 font-semibold"
+                  onClick={handleCall}
+                  data-testid="button-call-expanded"
+                  aria-label={`Call ${supervisorName}`}
+                >
+                  <Phone className="h-5 w-5" />
+                  Call
+                </Button>
+                
+                {/* Message Supervisor */}
+                <Button 
+                  variant="outline" 
+                  className="flex-1 gap-2 rounded-full h-12 border-black/20 dark:border-white/20 font-semibold"
+                  onClick={handleMessage}
+                  data-testid="button-message-expanded"
+                  aria-label={`Message ${supervisorName}`}
+                >
+                  <MessageSquare className="h-5 w-5" />
+                  Message
+                </Button>
+              </div>
+
               {/* Quick Actions Row - Pill buttons */}
               <div className="flex gap-3">
                 <Button 
@@ -473,6 +659,7 @@ export function ActiveVisitOverlay({
                   className="flex-1 gap-2 rounded-full h-12 border-black/20 dark:border-white/20 font-semibold"
                   onClick={handleTakePhoto}
                   data-testid="button-take-photo"
+                  aria-label={`Take photo (${activeVisit.photoCount} captured)`}
                 >
                   <Camera className="h-5 w-5" />
                   Photo ({activeVisit.photoCount})
@@ -484,6 +671,7 @@ export function ActiveVisitOverlay({
                   onClick={handleNavigation}
                   disabled={!activeVisit.targetCoordinates}
                   data-testid="button-navigate"
+                  aria-label="Open navigation to site"
                 >
                   <Navigation className="h-5 w-5" />
                   Navigate
@@ -495,6 +683,7 @@ export function ActiveVisitOverlay({
                   className="rounded-full h-12 w-12 border-black/20 dark:border-white/20"
                   onClick={activeVisit.status === 'active' ? pauseVisit : resumeVisit}
                   data-testid="button-pause-resume"
+                  aria-label={activeVisit.status === 'active' ? 'Pause visit' : 'Resume visit'}
                 >
                   {activeVisit.status === 'active' ? (
                     <Pause className="h-5 w-5" />
@@ -510,6 +699,7 @@ export function ActiveVisitOverlay({
                 onClick={handleComplete}
                 disabled={isCompleting || activeVisit.photoCount === 0}
                 data-testid="button-complete-visit"
+                aria-label={isCompleting ? 'Completing visit' : 'Complete site visit'}
               >
                 {isCompleting ? (
                   <>
