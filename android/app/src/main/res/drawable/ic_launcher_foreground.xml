@@ -46,9 +46,7 @@
         android:pathData="M80,44 L80,48 L85,48 L85,64 L89,64 L89,48 L94,48 L94,44 L80,44" />
     
     <!-- Small dot accent -->
-    <circle
+    <path
         android:fillColor="#FFFFFF"
-        android:centerX="54"
-        android:centerY="72"
-        android:radius="2" />
+        android:pathData="M54,70 A2,2 0 1,1 53.99,70 A2,2 0 1,1 54,70" />
 </vector>
