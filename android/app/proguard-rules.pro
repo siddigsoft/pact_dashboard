@@ -55,6 +55,7 @@
 # Keep main activity and services
 -keep class com.pact.workflow.MainActivity { *; }
 -keep class com.pact.workflow.LocationForegroundService { *; }
+-keep class com.pact.workflow.PACTFirebaseMessagingService { *; }
 
 # Keep any native methods
 -keepclasseswithmembernames class * {

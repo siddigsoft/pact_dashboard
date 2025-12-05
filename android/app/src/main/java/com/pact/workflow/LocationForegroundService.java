@@ -6,25 +6,22 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
 import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.IBinder;
-import android.os.Looper;
 import android.util.Log;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
-
-import com.google.android.gms.location.FusedLocationProviderClient;
-import com.google.android.gms.location.LocationCallback;
-import com.google.android.gms.location.LocationRequest;
-import com.google.android.gms.location.LocationResult;
-import com.google.android.gms.location.LocationServices;
-import com.google.android.gms.location.Priority;
 
 public class LocationForegroundService extends Service {
     private static final String TAG = "LocationForegroundSvc";
@@ -32,13 +29,12 @@ public class LocationForegroundService extends Service {
     private static final String CHANNEL_NAME = "Location Tracking";
     private static final int NOTIFICATION_ID = 12345;
     
-    private FusedLocationProviderClient fusedLocationClient;
-    private LocationCallback locationCallback;
+    private LocationManager locationManager;
+    private LocationListener locationListener;
     private boolean isTracking = false;
     
     // Location update interval (in milliseconds)
     private static final long UPDATE_INTERVAL = 30000; // 30 seconds
-    private static final long FASTEST_INTERVAL = 15000; // 15 seconds
     private static final float MIN_DISPLACEMENT = 10f; // 10 meters
     
     @Override
@@ -46,26 +42,37 @@ public class LocationForegroundService extends Service {
         super.onCreate();
         Log.d(TAG, "Location service created");
         
-        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
+        locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
         
-        locationCallback = new LocationCallback() {
+        locationListener = new LocationListener() {
             @Override
-            public void onLocationResult(LocationResult locationResult) {
-                if (locationResult == null) return;
+            public void onLocationChanged(@NonNull Location location) {
+                Log.d(TAG, "Location update: " + location.getLatitude() + 
+                      ", " + location.getLongitude() + 
+                      " (accuracy: " + location.getAccuracy() + "m)");
                 
-                for (Location location : locationResult.getLocations()) {
-                    Log.d(TAG, "Location update: " + location.getLatitude() + 
-                          ", " + location.getLongitude() + 
-                          " (accuracy: " + location.getAccuracy() + "m)");
-                    
-                    // Broadcast location to the app
-                    Intent intent = new Intent("com.pact.workflow.LOCATION_UPDATE");
-                    intent.putExtra("latitude", location.getLatitude());
-                    intent.putExtra("longitude", location.getLongitude());
-                    intent.putExtra("accuracy", location.getAccuracy());
-                    intent.putExtra("timestamp", location.getTime());
-                    sendBroadcast(intent);
-                }
+                // Broadcast location to the app
+                Intent intent = new Intent("com.pact.workflow.LOCATION_UPDATE");
+                intent.putExtra("latitude", location.getLatitude());
+                intent.putExtra("longitude", location.getLongitude());
+                intent.putExtra("accuracy", location.getAccuracy());
+                intent.putExtra("timestamp", location.getTime());
+                sendBroadcast(intent);
+            }
+            
+            @Override
+            public void onStatusChanged(String provider, int status, Bundle extras) {
+                Log.d(TAG, "Provider status changed: " + provider + " status: " + status);
+            }
+            
+            @Override
+            public void onProviderEnabled(@NonNull String provider) {
+                Log.d(TAG, "Provider enabled: " + provider);
+            }
+            
+            @Override
+            public void onProviderDisabled(@NonNull String provider) {
+                Log.d(TAG, "Provider disabled: " + provider);
             }
         };
         
@@ -120,14 +127,7 @@ public class LocationForegroundService extends Service {
         boolean coarseLocation = ContextCompat.checkSelfPermission(this, 
             Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED;
         
-        // Check for foreground service location permission on Android 10+
-        boolean foregroundServiceLocation = true;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            foregroundServiceLocation = ContextCompat.checkSelfPermission(this, 
-                Manifest.permission.FOREGROUND_SERVICE) == PackageManager.PERMISSION_GRANTED;
-        }
-        
-        return (fineLocation || coarseLocation) && foregroundServiceLocation;
+        return fineLocation || coarseLocation;
     }
     
     private void startTracking() {
@@ -141,22 +141,44 @@ public class LocationForegroundService extends Service {
             return;
         }
         
+        if (locationManager == null) {
+            Log.e(TAG, "LocationManager is null");
+            return;
+        }
+        
         try {
-            LocationRequest locationRequest = new LocationRequest.Builder(
-                Priority.PRIORITY_HIGH_ACCURACY, UPDATE_INTERVAL)
-                .setMinUpdateIntervalMillis(FASTEST_INTERVAL)
-                .setMinUpdateDistanceMeters(MIN_DISPLACEMENT)
-                .setWaitForAccurateLocation(true)
-                .build();
+            // Try GPS provider first, fall back to network
+            String provider = LocationManager.GPS_PROVIDER;
+            if (!locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+                if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+                    provider = LocationManager.NETWORK_PROVIDER;
+                } else {
+                    Log.e(TAG, "No location provider available");
+                    stopSelf();
+                    return;
+                }
+            }
             
-            fusedLocationClient.requestLocationUpdates(
-                locationRequest, 
-                locationCallback, 
-                Looper.getMainLooper()
+            locationManager.requestLocationUpdates(
+                provider,
+                UPDATE_INTERVAL,
+                MIN_DISPLACEMENT,
+                locationListener
             );
             
+            // Also request network updates for better accuracy
+            if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER) && 
+                !provider.equals(LocationManager.NETWORK_PROVIDER)) {
+                locationManager.requestLocationUpdates(
+                    LocationManager.NETWORK_PROVIDER,
+                    UPDATE_INTERVAL,
+                    MIN_DISPLACEMENT,
+                    locationListener
+                );
+            }
+            
             isTracking = true;
-            Log.d(TAG, "Location tracking started");
+            Log.d(TAG, "Location tracking started with provider: " + provider);
             
         } catch (SecurityException e) {
             Log.e(TAG, "Location permission not granted", e);
@@ -171,7 +193,9 @@ public class LocationForegroundService extends Service {
         if (!isTracking) return;
         
         try {
-            fusedLocationClient.removeLocationUpdates(locationCallback);
+            if (locationManager != null && locationListener != null) {
+                locationManager.removeUpdates(locationListener);
+            }
             isTracking = false;
             Log.d(TAG, "Location tracking stopped");
         } catch (Exception e) {

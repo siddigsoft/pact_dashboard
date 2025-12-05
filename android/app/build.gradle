@@ -136,9 +136,6 @@ dependencies {
     
     // Work Manager for background sync
     implementation 'androidx.work:work-runtime:2.9.0'
-    
-    // Google Play Services Location for GPS tracking
-    implementation 'com.google.android.gms:play-services-location:21.3.0'
 }
 
 apply from: 'capacitor.build.gradle'

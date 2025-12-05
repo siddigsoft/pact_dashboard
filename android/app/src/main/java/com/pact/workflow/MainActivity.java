@@ -22,14 +22,14 @@ public class MainActivity extends BridgeActivity {
     }
     
     @Override
-    protected void onResume() {
+    public void onResume() {
         super.onResume();
         // Notify FCM service that app is in foreground
         PACTFirebaseMessagingService.setAppForeground(true);
     }
     
     @Override
-    protected void onPause() {
+    public void onPause() {
         super.onPause();
         // Notify FCM service that app is in background
         PACTFirebaseMessagingService.setAppForeground(false);
