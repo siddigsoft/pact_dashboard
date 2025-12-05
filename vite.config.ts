@@ -43,6 +43,7 @@ export default defineConfig(({ mode }) => ({
         '@capacitor-firebase/crashlytics',
         '@capacitor/haptics',
         'capacitor-native-biometric',
+        'capacitor-native-settings',
       ],
       output: {
         manualChunks(id) {
