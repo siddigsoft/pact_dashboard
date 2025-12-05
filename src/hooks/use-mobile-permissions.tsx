@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useDevice } from './use-device';
 
-export type PermissionType = 'location' | 'camera' | 'notifications' | 'storage';
+export type PermissionType = 'location' | 'camera' | 'notifications' | 'storage' | 'microphone';
 export type PermissionStatus = 'granted' | 'denied' | 'prompt' | 'unknown';
 
 interface PermissionState {
@@ -9,6 +9,7 @@ interface PermissionState {
   camera: PermissionStatus;
   notifications: PermissionStatus;
   storage: PermissionStatus;
+  microphone: PermissionStatus;
 }
 
 interface PermissionResult {
@@ -22,13 +23,20 @@ const defaultPermissions: PermissionState = {
   camera: 'unknown',
   notifications: 'unknown',
   storage: 'unknown',
+  microphone: 'unknown',
 };
+
+const PERMISSION_SETUP_KEY = 'pact_permission_setup_complete';
+const LOCATION_CHECK_INTERVAL = 30000;
 
 export function useMobilePermissions() {
   const { isNative, deviceInfo } = useDevice();
   const [permissions, setPermissions] = useState<PermissionState>(defaultPermissions);
   const [isChecking, setIsChecking] = useState(false);
   const [showPermissionModal, setShowPermissionModal] = useState<PermissionType | null>(null);
+  const [isLocationBlocked, setIsLocationBlocked] = useState(false);
+  const [setupComplete, setSetupComplete] = useState<boolean | null>(null);
+  const locationCheckInterval = useRef<NodeJS.Timeout | null>(null);
 
   const checkWebPermission = async (type: PermissionType): Promise<PermissionStatus> => {
     try {
@@ -37,8 +45,20 @@ export function useMobilePermissions() {
         return result.state as PermissionStatus;
       }
       if (type === 'camera') {
-        const result = await navigator.permissions.query({ name: 'camera' as PermissionName });
-        return result.state as PermissionStatus;
+        try {
+          const result = await navigator.permissions.query({ name: 'camera' as PermissionName });
+          return result.state as PermissionStatus;
+        } catch {
+          return 'prompt';
+        }
+      }
+      if (type === 'microphone') {
+        try {
+          const result = await navigator.permissions.query({ name: 'microphone' as PermissionName });
+          return result.state as PermissionStatus;
+        } catch {
+          return 'prompt';
+        }
       }
       if (type === 'notifications') {
         if (!('Notification' in window)) return 'denied';
@@ -80,6 +100,17 @@ export function useMobilePermissions() {
           return 'unknown';
         }
       }
+      if (type === 'microphone') {
+        try {
+          if ('permissions' in navigator) {
+            const result = await navigator.permissions.query({ name: 'microphone' as PermissionName });
+            return result.state as PermissionStatus;
+          }
+          return 'prompt';
+        } catch {
+          return 'prompt';
+        }
+      }
       if (type === 'notifications') {
         try {
           const pushModule = await import('@capacitor/push-notifications');
@@ -100,6 +131,14 @@ export function useMobilePermissions() {
     }
   };
 
+  const checkLocationOnly = useCallback(async (): Promise<PermissionStatus> => {
+    if (isNative) {
+      return await checkNativePermission('location');
+    } else {
+      return await checkWebPermission('location');
+    }
+  }, [isNative]);
+
   const checkAllPermissions = useCallback(async () => {
     setIsChecking(true);
     const newPermissions: PermissionState = { ...defaultPermissions };
@@ -108,11 +147,13 @@ export function useMobilePermissions() {
       if (isNative) {
         newPermissions.location = await checkNativePermission('location');
         newPermissions.camera = await checkNativePermission('camera');
+        newPermissions.microphone = await checkNativePermission('microphone');
         newPermissions.notifications = await checkNativePermission('notifications');
         newPermissions.storage = await checkNativePermission('storage');
       } else {
         newPermissions.location = await checkWebPermission('location');
         newPermissions.camera = await checkWebPermission('camera');
+        newPermissions.microphone = await checkWebPermission('microphone');
         newPermissions.notifications = await checkWebPermission('notifications');
         newPermissions.storage = 'granted';
       }
@@ -122,6 +163,13 @@ export function useMobilePermissions() {
 
     setPermissions(newPermissions);
     setIsChecking(false);
+    
+    if (newPermissions.location !== 'granted') {
+      setIsLocationBlocked(true);
+    } else {
+      setIsLocationBlocked(false);
+    }
+    
     return newPermissions;
   }, [isNative]);
 
@@ -135,8 +183,14 @@ export function useMobilePermissions() {
             const result = await Geolocation.requestPermissions();
             const status = result.location === 'granted' ? 'granted' : 'denied';
             setPermissions(prev => ({ ...prev, location: status }));
+            if (status !== 'granted') {
+              setIsLocationBlocked(true);
+            } else {
+              setIsLocationBlocked(false);
+            }
             return { type, status };
           } catch (error) {
+            setIsLocationBlocked(true);
             return { type, status: 'denied', error: String(error) };
           }
         } else {
@@ -144,11 +198,15 @@ export function useMobilePermissions() {
             navigator.geolocation.getCurrentPosition(
               () => {
                 setPermissions(prev => ({ ...prev, location: 'granted' }));
+                setIsLocationBlocked(false);
                 resolve({ type, status: 'granted' });
               },
               (error) => {
                 const status = error.code === 1 ? 'denied' : 'prompt';
                 setPermissions(prev => ({ ...prev, location: status }));
+                if (status === 'denied') {
+                  setIsLocationBlocked(true);
+                }
                 resolve({ type, status, error: error.message });
               },
               { enableHighAccuracy: true, timeout: 10000 }
@@ -177,6 +235,30 @@ export function useMobilePermissions() {
             return { type, status: 'granted' };
           } catch (error) {
             setPermissions(prev => ({ ...prev, camera: 'denied' }));
+            return { type, status: 'denied', error: String(error) };
+          }
+        }
+      }
+
+      if (type === 'microphone') {
+        if (isNative) {
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            stream.getTracks().forEach(track => track.stop());
+            setPermissions(prev => ({ ...prev, microphone: 'granted' }));
+            return { type, status: 'granted' };
+          } catch (error) {
+            setPermissions(prev => ({ ...prev, microphone: 'denied' }));
+            return { type, status: 'denied', error: String(error) };
+          }
+        } else {
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            stream.getTracks().forEach(track => track.stop());
+            setPermissions(prev => ({ ...prev, microphone: 'granted' }));
+            return { type, status: 'granted' };
+          } catch (error) {
+            setPermissions(prev => ({ ...prev, microphone: 'denied' }));
             return { type, status: 'denied', error: String(error) };
           }
         }
@@ -222,70 +304,204 @@ export function useMobilePermissions() {
   const requestAllPermissions = async (): Promise<PermissionResult[]> => {
     const results: PermissionResult[] = [];
     
-    if (permissions.location !== 'granted') {
-      setShowPermissionModal('location');
-      const result = await requestPermission('location');
-      results.push(result);
+    setShowPermissionModal('location');
+    const locationResult = await requestPermission('location');
+    results.push(locationResult);
+    
+    if (locationResult.status !== 'granted') {
+      setShowPermissionModal(null);
+      return results;
     }
     
-    if (permissions.camera !== 'granted') {
-      setShowPermissionModal('camera');
-      const result = await requestPermission('camera');
-      results.push(result);
-    }
+    setShowPermissionModal('camera');
+    const cameraResult = await requestPermission('camera');
+    results.push(cameraResult);
     
-    if (permissions.notifications !== 'granted') {
-      setShowPermissionModal('notifications');
-      const result = await requestPermission('notifications');
-      results.push(result);
-    }
+    setShowPermissionModal('microphone');
+    const micResult = await requestPermission('microphone');
+    results.push(micResult);
+    
+    setShowPermissionModal('notifications');
+    const notifResult = await requestPermission('notifications');
+    results.push(notifResult);
+    
+    setShowPermissionModal('storage');
+    const storageResult = await requestPermission('storage');
+    results.push(storageResult);
 
     setShowPermissionModal(null);
     return results;
   };
 
-  const getPermissionMessage = (type: PermissionType): { title: string; description: string } => {
+  const getPermissionMessage = (type: PermissionType): { title: string; description: string; icon: string } => {
     switch (type) {
       case 'location':
         return {
           title: 'Location Access Required',
-          description: 'PACT needs access to your location to track field visits and share your position with your team. This helps coordinators manage assignments effectively.',
+          description: 'PACT needs access to your location to track field visits and share your position with your team. This permission is required and cannot be disabled.',
+          icon: 'map-pin',
         };
       case 'camera':
         return {
-          title: 'Camera Access Required',
+          title: 'Camera Access',
           description: 'PACT needs camera access to capture site photos and verify field visits. Photos help document site conditions accurately.',
+          icon: 'camera',
+        };
+      case 'microphone':
+        return {
+          title: 'Microphone Access',
+          description: 'PACT needs microphone access for voice notes and in-app communication features.',
+          icon: 'mic',
         };
       case 'notifications':
         return {
-          title: 'Enable Notifications',
+          title: 'Push Notifications',
           description: 'Stay updated with assignment alerts, approval requests, and team messages. You can customize notifications in settings.',
+          icon: 'bell',
         };
       case 'storage':
         return {
-          title: 'Storage Access Required',
+          title: 'Storage Access',
           description: 'PACT needs storage access to save offline data and cache site information for areas with limited connectivity.',
+          icon: 'folder',
         };
       default:
-        return { title: '', description: '' };
+        return { title: '', description: '', icon: '' };
+    }
+  };
+
+  const openAppSettings = async (): Promise<boolean> => {
+    try {
+      if (isNative) {
+        try {
+          const nativeSettingsModule = await import('capacitor-native-settings');
+          const { NativeSettings, AndroidSettings, IOSSettings } = nativeSettingsModule;
+          await NativeSettings.open({
+            optionAndroid: AndroidSettings.ApplicationDetails,
+            optionIOS: IOSSettings.App
+          });
+          return true;
+        } catch {
+          console.log('[Permissions] Native settings plugin not available, user must open settings manually');
+          return false;
+        }
+      }
+      return false;
+    } catch (error) {
+      console.error('Failed to open app settings:', error);
+      return false;
+    }
+  };
+
+  const isSetupComplete = (): boolean => {
+    try {
+      return localStorage.getItem(PERMISSION_SETUP_KEY) === 'true';
+    } catch {
+      return false;
+    }
+  };
+
+  const markSetupComplete = () => {
+    try {
+      localStorage.setItem(PERMISSION_SETUP_KEY, 'true');
+      setSetupComplete(true);
+    } catch (error) {
+      console.error('Failed to save setup status:', error);
+    }
+  };
+
+  const resetSetup = () => {
+    try {
+      localStorage.removeItem(PERMISSION_SETUP_KEY);
+      setSetupComplete(false);
+    } catch (error) {
+      console.error('Failed to reset setup:', error);
     }
   };
 
   useEffect(() => {
+    const savedSetup = isSetupComplete();
+    setSetupComplete(savedSetup);
     checkAllPermissions();
   }, [checkAllPermissions]);
+
+  useEffect(() => {
+    if (setupComplete) {
+      locationCheckInterval.current = setInterval(async () => {
+        const locationStatus = await checkLocationOnly();
+        if (locationStatus !== 'granted') {
+          setIsLocationBlocked(true);
+          setPermissions(prev => ({ ...prev, location: locationStatus }));
+        } else {
+          setIsLocationBlocked(false);
+          setPermissions(prev => ({ ...prev, location: 'granted' }));
+        }
+      }, LOCATION_CHECK_INTERVAL);
+    }
+
+    return () => {
+      if (locationCheckInterval.current) {
+        clearInterval(locationCheckInterval.current);
+      }
+    };
+  }, [setupComplete, checkLocationOnly]);
+
+  useEffect(() => {
+    const handleAppStateChange = async () => {
+      const locationStatus = await checkLocationOnly();
+      if (locationStatus !== 'granted') {
+        setIsLocationBlocked(true);
+      } else {
+        setIsLocationBlocked(false);
+      }
+    };
+
+    const setupAppStateListener = async () => {
+      if (isNative) {
+        try {
+          const appModule = await import('@capacitor/app');
+          appModule.App.addListener('appStateChange', async ({ isActive }) => {
+            if (isActive) {
+              await handleAppStateChange();
+            }
+          });
+        } catch (error) {
+          console.error('Failed to setup app state listener:', error);
+        }
+      } else {
+        document.addEventListener('visibilitychange', async () => {
+          if (document.visibilityState === 'visible') {
+            await handleAppStateChange();
+          }
+        });
+      }
+    };
+
+    if (setupComplete) {
+      setupAppStateListener();
+    }
+  }, [isNative, setupComplete, checkLocationOnly]);
 
   return {
     permissions,
     isChecking,
     showPermissionModal,
     setShowPermissionModal,
+    isLocationBlocked,
+    setupComplete,
     checkAllPermissions,
+    checkLocationOnly,
     requestPermission,
     requestAllPermissions,
     getPermissionMessage,
+    openAppSettings,
+    markSetupComplete,
+    resetSetup,
+    isSetupComplete,
     hasLocationPermission: permissions.location === 'granted',
     hasCameraPermission: permissions.camera === 'granted',
+    hasMicrophonePermission: permissions.microphone === 'granted',
     hasNotificationPermission: permissions.notifications === 'granted',
+    hasStoragePermission: permissions.storage === 'granted',
   };
 }

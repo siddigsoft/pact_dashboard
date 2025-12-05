@@ -95,6 +95,7 @@ import { useNotifications } from './context/NotificationContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import { debugDatabase } from './utils/debug-db';
 import { useFCM } from './hooks/useFCM';
+import { MobilePermissionGuard } from './components/mobile/MobilePermissionGuard';
 
 // Loading component for Suspense fallback
 const PageLoader = () => (
@@ -337,8 +338,10 @@ function App() {
                   <FCMInitializer />
                   <Suspense fallback={<PageLoader />}>
                     <AuthGuard>
-                      <AppRoutes />
-                  </AuthGuard>
+                      <MobilePermissionGuard>
+                        <AppRoutes />
+                      </MobilePermissionGuard>
+                    </AuthGuard>
                 </Suspense>
                 <AppNotifications />
                 <Toaster />
