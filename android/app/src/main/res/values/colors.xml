@@ -1,25 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Primary Colors - Modern Blue/Purple Theme -->
-    <color name="colorPrimary">#6b7cff</color>
-    <color name="colorPrimaryDark">#4147eb</color>
-    <color name="colorPrimaryLight">#b0c7ff</color>
+    <!-- PACT Brand Colors - Uber Style Black/White Monochrome -->
+    <color name="colorPrimary">#000000</color>
+    <color name="colorPrimaryDark">#000000</color>
+    <color name="colorPrimaryLight">#333333</color>
     
     <!-- Secondary Colors -->
-    <color name="colorSecondary">#4d6f8c</color>
-    <color name="colorSecondaryDark">#3d5970</color>
-    <color name="colorSecondaryLight">#a3b7cc</color>
+    <color name="colorSecondary">#1a1a1a</color>
+    <color name="colorSecondaryDark">#000000</color>
+    <color name="colorSecondaryLight">#404040</color>
     
     <!-- Accent Colors -->
-    <color name="colorAccent">#923cff</color>
-    <color name="colorAccentDark">#7d17ff</color>
-    <color name="colorAccentLight">#bc86ff</color>
+    <color name="colorAccent">#FFFFFF</color>
+    <color name="colorAccentDark">#e0e0e0</color>
+    <color name="colorAccentLight">#FFFFFF</color>
     
     <!-- Neutral Colors -->
-    <color name="colorBackground">#ffffff</color>
+    <color name="colorBackground">#FFFFFF</color>
     <color name="colorSurface">#f8f9fa</color>
-    <color name="colorForeground">#0d171e</color>
-    <color name="colorMuted">#606060</color>
+    <color name="colorForeground">#000000</color>
+    <color name="colorMuted">#666666</color>
     <color name="colorBorder">#e5e7eb</color>
     
     <!-- Status Colors -->
@@ -28,7 +28,14 @@
     <color name="colorError">#ff4d4d</color>
     <color name="colorInfo">#3b82f6</color>
     
-    <!-- Launcher Colors -->
-    <color name="ic_launcher_background">#6b7cff</color>
-    <color name="ic_launcher_foreground">#ffffff</color>
+    <!-- Launcher Colors - Black/White Uber Style -->
+    <color name="ic_launcher_background">#000000</color>
+    <color name="ic_launcher_foreground">#FFFFFF</color>
+    
+    <!-- Splash Screen - Stark Black -->
+    <color name="splashBackground">#000000</color>
+    
+    <!-- Status Bar & Navigation -->
+    <color name="statusBarColor">#000000</color>
+    <color name="navigationBarColor">#000000</color>
 </resources>
