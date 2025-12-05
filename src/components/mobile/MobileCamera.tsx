@@ -521,14 +521,15 @@ export function PhotoThumbnail({
             onRemove();
           }}
           data-testid="button-remove-photo"
+          aria-label="Remove photo"
         >
           <X className="h-3 w-3 text-white" />
         </button>
       )}
 
       {photo.metadata?.latitude && (
-        <div className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded-md bg-black/50 flex items-center gap-1">
-          <Circle className="h-2 w-2 text-green-400 fill-green-400" />
+        <div className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded-md bg-black/50 flex items-center gap-1" data-testid="indicator-gps">
+          <Circle className="h-2 w-2 text-white fill-white" />
           <span className="text-[10px] text-white">GPS</span>
         </div>
       )}
