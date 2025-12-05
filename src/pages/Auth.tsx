@@ -31,8 +31,12 @@ import {
   DialogTitle 
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { useDevice } from "@/hooks/use-device";
+import { MobileAuthScreen } from "@/components/mobile/MobileAuthScreen";
 
 const Auth = () => {
+  const { isNative, isMobile: isDeviceMobile, isLoading: isDeviceLoading } = useDevice();
+  const isMobileView = isNative || isDeviceMobile;
   const navigate = useNavigate();
   const [resendLoading, setResendLoading] = useState(false);
 
@@ -89,6 +93,11 @@ const Auth = () => {
     { label: "Uptime", value: "99.9%", icon: Activity },
     { label: "Protected", value: "Secure", icon: Shield }
   ];
+
+  // Show mobile auth screen for mobile devices
+  if (isMobileView && !isDeviceLoading) {
+    return <MobileAuthScreen />;
+  }
 
   return (
     <div className="min-h-screen bg-background relative overflow-hidden flex items-center justify-center p-4">
