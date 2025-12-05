@@ -12,7 +12,8 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
 import { useMMP } from '@/context/mmp/MMPContext';
-import { CheckCircle, Clock, FileCheck, XCircle, ArrowLeft, Eye, Edit, Search, ChevronLeft, ChevronRight, Calendar, CheckSquare, MapPin, AlertTriangle, ChevronUp, ChevronDown } from 'lucide-react';
+import { CheckCircle, Clock, FileCheck, XCircle, ArrowLeft, Eye, Edit, Search, ChevronLeft, ChevronRight, Calendar, CheckSquare, MapPin, AlertTriangle, ChevronUp, ChevronDown, Play } from 'lucide-react';
+import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
 import { format } from 'date-fns';
 import { DatePicker } from '@/components/ui/date-picker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -516,6 +517,8 @@ const CoordinatorSites: React.FC = () => {
   const { toast } = useToast();
   const { currentUser } = useAppContext();
   const { updateMMP } = useMMP();
+  const { startSiteVisit } = useSiteVisitContext();
+  const [isStartingVisit, setIsStartingVisit] = useState(false);
   const { permits, loading: permitsLoading, uploadPermit, fetchPermits } = useCoordinatorLocalityPermits();
   const [loading, setLoading] = useState(true);
   const [sites, setSites] = useState<SiteVisit[]>([]);
@@ -2206,35 +2209,78 @@ const CoordinatorSites: React.FC = () => {
             
             {/* Mobile-friendly action buttons - larger touch targets */}
             {showActions && (
-              <div className="flex gap-2 mt-4 sm:hidden">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelectedSiteForEdit(site);
-                    setEditDialogOpen(true);
-                  }}
-                  className="flex-1 text-xs py-3 h-auto min-h-[44px] active:scale-95"
-                >
-                  <Eye className="h-4 w-4 mr-2" />
-                  View Details
-                </Button>
-                {site.status?.toLowerCase() === 'permits_attached' && (
+              <div className="flex flex-col gap-2 mt-4 sm:hidden">
+                {/* Start Visit button - Uber style black pill for startable statuses */}
+                {['dispatched', 'verified', 'approved', 'assigned'].includes(site.status?.toLowerCase()) && (
+                  <Button
+                    size="sm"
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      setIsStartingVisit(true);
+                      try {
+                        const success = await startSiteVisit(site.id);
+                        if (success) {
+                          toast({
+                            title: 'Visit Started',
+                            description: `Site visit for ${site.site_name} has begun.`,
+                          });
+                          navigate(`/site-visits/${site.id}`);
+                        }
+                      } catch (error) {
+                        console.error('Error starting visit:', error);
+                        toast({
+                          title: 'Error',
+                          description: 'Failed to start site visit. Please try again.',
+                          variant: 'destructive',
+                        });
+                      } finally {
+                        setIsStartingVisit(false);
+                      }
+                    }}
+                    disabled={isStartingVisit}
+                    className="w-full py-4 h-auto min-h-[52px] rounded-full bg-black dark:bg-white text-white dark:text-black font-bold text-base active:scale-95 hover:bg-black/90 dark:hover:bg-white/90"
+                    data-testid={`button-start-visit-${site.id}`}
+                    aria-label={`Start visit for ${site.site_name}`}
+                  >
+                    <Play className="h-5 w-5 mr-2" />
+                    {isStartingVisit ? 'Starting...' : 'Start Visit'}
+                  </Button>
+                )}
+                
+                <div className="flex gap-2">
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={(e) => {
                       e.stopPropagation();
-                      setSelectedSiteId(site.id);
-                      setVerifyDialogOpen(true);
+                      setSelectedSiteForEdit(site);
+                      setEditDialogOpen(true);
                     }}
-                    className="flex-1 text-xs py-3 h-auto min-h-[44px] bg-green-50 border-green-200 text-green-700 hover:bg-green-100 active:scale-95"
+                    className="flex-1 text-xs py-3 h-auto min-h-[44px] active:scale-95"
+                    data-testid={`button-view-site-${site.id}`}
+                    aria-label={`View details for ${site.site_name}`}
                   >
-                    <CheckCircle className="h-4 w-4 mr-2" />
-                    Verify
+                    <Eye className="h-4 w-4 mr-2" />
+                    View
                   </Button>
-                )}
+                  {site.status?.toLowerCase() === 'permits_attached' && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedSiteId(site.id);
+                        setVerifyDialogOpen(true);
+                      }}
+                      className="flex-1 text-xs py-3 h-auto min-h-[44px] bg-black/5 dark:bg-white/5 border-black/20 dark:border-white/20 active:scale-95"
+                      data-testid={`button-verify-site-${site.id}`}
+                      aria-label={`Verify site ${site.site_name}`}
+                    >
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                      Verify
+                    </Button>
+                  )}
+                </div>
               </div>
             )}
           </div>
