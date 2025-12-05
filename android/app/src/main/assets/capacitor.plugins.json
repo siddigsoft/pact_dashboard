@@ -1,9 +1,5 @@
 [
 	{
-		"pkg": "@capacitor-firebase/crashlytics",
-		"classpath": "io.capawesome.capacitorjs.plugins.firebase.crashlytics.FirebaseCrashlyticsPlugin"
-	},
-	{
 		"pkg": "@capacitor/app",
 		"classpath": "com.capacitorjs.plugins.app.AppPlugin"
 	},
@@ -24,10 +20,6 @@
 		"classpath": "com.capacitorjs.plugins.geolocation.GeolocationPlugin"
 	},
 	{
-		"pkg": "@capacitor/haptics",
-		"classpath": "com.capacitorjs.plugins.haptics.HapticsPlugin"
-	},
-	{
 		"pkg": "@capacitor/local-notifications",
 		"classpath": "com.capacitorjs.plugins.localnotifications.LocalNotificationsPlugin"
 	},
@@ -42,9 +34,5 @@
 	{
 		"pkg": "@capacitor/status-bar",
 		"classpath": "com.capacitorjs.plugins.statusbar.StatusBarPlugin"
-	},
-	{
-		"pkg": "capacitor-native-biometric",
-		"classpath": "com.epicshaggy.biometric.NativeBiometric"
 	}
 ]
