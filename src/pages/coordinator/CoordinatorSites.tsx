@@ -517,7 +517,7 @@ const CoordinatorSites: React.FC = () => {
   const { toast } = useToast();
   const { currentUser } = useAppContext();
   const { updateMMP } = useMMP();
-  const { startSiteVisit } = useSiteVisitContext();
+  const siteVisitContext = useSiteVisitContext();
   const [isStartingVisit, setIsStartingVisit] = useState(false);
   const { permits, loading: permitsLoading, uploadPermit, fetchPermits } = useCoordinatorLocalityPermits();
   const [loading, setLoading] = useState(true);
@@ -2218,7 +2218,7 @@ const CoordinatorSites: React.FC = () => {
                       e.stopPropagation();
                       setIsStartingVisit(true);
                       try {
-                        const success = await startSiteVisit(site.id);
+                        const success = await siteVisitContext.startSiteVisit(site.id);
                         if (success) {
                           toast({
                             title: 'Visit Started',
