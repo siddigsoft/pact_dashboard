@@ -8,6 +8,7 @@ import {
   getUnsyncedLocations,
   markLocationsSynced,
   getOfflineStats,
+  cleanExpiredCache,
   type PendingSyncAction,
 } from './offline-db';
 
@@ -17,6 +18,9 @@ export interface SyncProgress {
   failed: number;
   current: string | null;
   isRunning: boolean;
+  phase: 'idle' | 'preparing' | 'site_visits' | 'locations' | 'pending_actions' | 'cleanup' | 'complete';
+  lastSyncAt: Date | null;
+  nextRetryAt: Date | null;
 }
 
 export interface SyncResult {
@@ -24,25 +28,73 @@ export interface SyncResult {
   synced: number;
   failed: number;
   errors: string[];
+  duration: number;
+  timestamp: Date;
+}
+
+export interface ConflictResolution {
+  strategy: 'server_wins' | 'client_wins' | 'last_write_wins' | 'manual';
+  conflictHandler?: (local: any, server: any) => any;
 }
 
 type SyncProgressCallback = (progress: SyncProgress) => void;
 type SyncCompleteCallback = (result: SyncResult) => void;
+type NetworkStatusCallback = (isOnline: boolean) => void;
+
+const MAX_RETRIES = 5;
+const BASE_RETRY_DELAY = 1000; // 1 second
+const MAX_RETRY_DELAY = 60000; // 60 seconds
+const SYNC_DEBOUNCE_MS = 2000; // 2 seconds
 
 class SyncManager {
   private isRunning = false;
   private progressCallbacks: Set<SyncProgressCallback> = new Set();
   private completeCallbacks: Set<SyncCompleteCallback> = new Set();
+  private networkCallbacks: Set<NetworkStatusCallback> = new Set();
+  private syncQueue: Promise<SyncResult> | null = null;
+  private debounceTimer: NodeJS.Timeout | null = null;
+  private retryTimer: NodeJS.Timeout | null = null;
+  private consecutiveFailures = 0;
+  private lastSyncResult: SyncResult | null = null;
+  
   private progress: SyncProgress = {
     total: 0,
     completed: 0,
     failed: 0,
     current: null,
     isRunning: false,
+    phase: 'idle',
+    lastSyncAt: null,
+    nextRetryAt: null,
   };
+
+  private conflictResolution: ConflictResolution = {
+    strategy: 'last_write_wins',
+  };
+
+  constructor() {
+    this.setupNetworkListeners();
+  }
+
+  private setupNetworkListeners() {
+    if (typeof window !== 'undefined') {
+      window.addEventListener('online', () => {
+        console.log('[SyncManager] Network restored');
+        this.networkCallbacks.forEach(cb => cb(true));
+        this.scheduleSyncWithDebounce();
+      });
+
+      window.addEventListener('offline', () => {
+        console.log('[SyncManager] Network lost');
+        this.networkCallbacks.forEach(cb => cb(false));
+        this.cancelPendingRetry();
+      });
+    }
+  }
 
   onProgress(callback: SyncProgressCallback): () => void {
     this.progressCallbacks.add(callback);
+    callback({ ...this.progress });
     return () => this.progressCallbacks.delete(callback);
   }
 
@@ -51,69 +103,188 @@ class SyncManager {
     return () => this.completeCallbacks.delete(callback);
   }
 
+  onNetworkChange(callback: NetworkStatusCallback): () => void {
+    this.networkCallbacks.add(callback);
+    return () => this.networkCallbacks.delete(callback);
+  }
+
+  setConflictResolution(resolution: ConflictResolution) {
+    this.conflictResolution = resolution;
+  }
+
   private notifyProgress() {
     this.progressCallbacks.forEach(cb => cb({ ...this.progress }));
   }
 
   private notifyComplete(result: SyncResult) {
+    this.lastSyncResult = result;
     this.completeCallbacks.forEach(cb => cb(result));
   }
 
-  async syncAll(): Promise<SyncResult> {
-    if (this.isRunning) {
-      return { success: false, synced: 0, failed: 0, errors: ['Sync already in progress'] };
+  private scheduleSyncWithDebounce() {
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer);
+    }
+    
+    this.debounceTimer = setTimeout(() => {
+      this.syncAll();
+    }, SYNC_DEBOUNCE_MS);
+  }
+
+  private cancelPendingRetry() {
+    if (this.retryTimer) {
+      clearTimeout(this.retryTimer);
+      this.retryTimer = null;
+    }
+    this.progress.nextRetryAt = null;
+    this.notifyProgress();
+  }
+
+  private scheduleRetry(failedCount: number) {
+    if (!navigator.onLine) return;
+    
+    const delay = Math.min(
+      BASE_RETRY_DELAY * Math.pow(2, this.consecutiveFailures),
+      MAX_RETRY_DELAY
+    );
+    
+    this.progress.nextRetryAt = new Date(Date.now() + delay);
+    this.notifyProgress();
+    
+    console.log(`[SyncManager] Scheduling retry in ${delay}ms (attempt ${this.consecutiveFailures + 1})`);
+    
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null;
+      this.syncAll();
+    }, delay);
+  }
+
+  private calculateRetryDelay(retryCount: number): number {
+    const jitter = Math.random() * 1000;
+    return Math.min(BASE_RETRY_DELAY * Math.pow(2, retryCount) + jitter, MAX_RETRY_DELAY);
+  }
+
+  async syncAll(force = false): Promise<SyncResult> {
+    if (this.isRunning && !force) {
+      console.log('[SyncManager] Sync already in progress, queuing...');
+      if (this.syncQueue) {
+        return this.syncQueue;
+      }
+      return { success: false, synced: 0, failed: 0, errors: ['Sync already in progress'], duration: 0, timestamp: new Date() };
     }
 
     if (!navigator.onLine) {
-      return { success: false, synced: 0, failed: 0, errors: ['No network connection'] };
+      return { success: false, synced: 0, failed: 0, errors: ['No network connection'], duration: 0, timestamp: new Date() };
     }
 
+    const startTime = Date.now();
     this.isRunning = true;
     const errors: string[] = [];
     let synced = 0;
     let failed = 0;
 
     try {
+      this.progress.phase = 'preparing';
+      this.progress.current = 'Preparing sync...';
+      this.notifyProgress();
+
       const stats = await getOfflineStats();
+      const totalItems = stats.pendingActions + stats.unsyncedVisits + stats.unsyncedLocations;
+      
+      if (totalItems === 0) {
+        console.log('[SyncManager] Nothing to sync');
+        this.consecutiveFailures = 0;
+        const result: SyncResult = {
+          success: true,
+          synced: 0,
+          failed: 0,
+          errors: [],
+          duration: Date.now() - startTime,
+          timestamp: new Date(),
+        };
+        this.progress = {
+          ...this.progress,
+          current: null,
+          isRunning: false,
+          phase: 'complete',
+          lastSyncAt: new Date(),
+          nextRetryAt: null,
+        };
+        this.notifyProgress();
+        this.notifyComplete(result);
+        return result;
+      }
+
       this.progress = {
-        total: stats.pendingActions + stats.unsyncedVisits + stats.unsyncedLocations,
+        total: totalItems,
         completed: 0,
         failed: 0,
         current: 'Starting sync...',
         isRunning: true,
+        phase: 'preparing',
+        lastSyncAt: this.progress.lastSyncAt,
+        nextRetryAt: null,
       };
       this.notifyProgress();
 
+      console.log(`[SyncManager] Starting sync: ${stats.unsyncedVisits} visits, ${stats.unsyncedLocations} locations, ${stats.pendingActions} actions`);
+
+      // Sync in priority order: site visits first (most important), then locations, then pending actions
+      this.progress.phase = 'site_visits';
       const siteVisitResult = await this.syncSiteVisits();
       synced += siteVisitResult.synced;
       failed += siteVisitResult.failed;
       errors.push(...siteVisitResult.errors);
 
+      this.progress.phase = 'locations';
       const locationResult = await this.syncLocations();
       synced += locationResult.synced;
       failed += locationResult.failed;
       errors.push(...locationResult.errors);
 
+      this.progress.phase = 'pending_actions';
       const pendingResult = await this.syncPendingActions();
       synced += pendingResult.synced;
       failed += pendingResult.failed;
       errors.push(...pendingResult.errors);
+
+      // Cleanup expired cache
+      this.progress.phase = 'cleanup';
+      this.progress.current = 'Cleaning up...';
+      this.notifyProgress();
+      
+      const cleanedCount = await cleanExpiredCache();
+      if (cleanedCount > 0) {
+        console.log(`[SyncManager] Cleaned ${cleanedCount} expired cache entries`);
+      }
 
       const result: SyncResult = {
         success: failed === 0,
         synced,
         failed,
         errors,
+        duration: Date.now() - startTime,
+        timestamp: new Date(),
       };
+
+      if (failed > 0) {
+        this.consecutiveFailures++;
+        this.scheduleRetry(failed);
+      } else {
+        this.consecutiveFailures = 0;
+      }
 
       this.progress = {
         ...this.progress,
         current: null,
         isRunning: false,
+        phase: 'complete',
+        lastSyncAt: new Date(),
       };
       this.notifyProgress();
       this.notifyComplete(result);
 
+      console.log(`[SyncManager] Sync complete: ${synced} synced, ${failed} failed in ${result.duration}ms`);
       return result;
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown sync error';
@@ -124,15 +295,27 @@ class SyncManager {
         synced,
         failed: failed + 1,
         errors,
+        duration: Date.now() - startTime,
+        timestamp: new Date(),
       };
       
-      this.progress.isRunning = false;
+      this.consecutiveFailures++;
+      this.scheduleRetry(1);
+      
+      this.progress = {
+        ...this.progress,
+        current: null,
+        isRunning: false,
+        phase: 'idle',
+      };
       this.notifyProgress();
       this.notifyComplete(result);
       
+      console.error('[SyncManager] Sync failed:', errorMsg);
       return result;
     } finally {
       this.isRunning = false;
+      this.syncQueue = null;
     }
   }
 
@@ -148,6 +331,28 @@ class SyncManager {
         this.notifyProgress();
 
         if (visit.status === 'started') {
+          // Check for conflicts first
+          const { data: serverData, error: fetchError } = await supabase
+            .from('mmp_site_entries')
+            .select('status, visit_started_at, updated_at')
+            .eq('id', visit.siteEntryId)
+            .single();
+
+          if (fetchError && fetchError.code !== 'PGRST116') {
+            throw fetchError;
+          }
+
+          // Resolve conflict using configured strategy
+          const shouldUpdate = this.resolveConflict(visit, serverData);
+          if (!shouldUpdate) {
+            console.log(`[SyncManager] Skipping visit ${visit.id} due to conflict resolution`);
+            await markSiteVisitSynced(visit.id);
+            synced++;
+            this.progress.completed++;
+            this.notifyProgress();
+            continue;
+          }
+
           const { error } = await supabase
             .from('mmp_site_entries')
             .update({
@@ -156,13 +361,22 @@ class SyncManager {
               additional_data: {
                 offline_start: true,
                 start_location: visit.startLocation,
+                synced_at: new Date().toISOString(),
               },
             })
             .eq('id', visit.siteEntryId);
 
           if (error) throw error;
         } else if (visit.status === 'completed') {
-          const updateData: any = {
+          const { data: existingEntry, error: fetchError } = await supabase
+            .from('mmp_site_entries')
+            .select('additional_data, status, updated_at')
+            .eq('id', visit.siteEntryId)
+            .single();
+
+          if (fetchError) throw fetchError;
+
+          const updateData: Record<string, any> = {
             status: 'Completed',
             visit_completed_at: visit.completedAt,
           };
@@ -170,14 +384,6 @@ class SyncManager {
           if (visit.notes) {
             updateData.notes = visit.notes;
           }
-
-          const { data: existingEntry, error: fetchError } = await supabase
-            .from('mmp_site_entries')
-            .select('additional_data')
-            .eq('id', visit.siteEntryId)
-            .single();
-
-          if (fetchError) throw fetchError;
 
           updateData.additional_data = {
             ...(existingEntry?.additional_data || {}),
@@ -204,10 +410,39 @@ class SyncManager {
         const errMsg = `Failed to sync ${visit.siteName}: ${error instanceof Error ? error.message : 'Unknown error'}`;
         errors.push(errMsg);
         console.error('[SyncManager]', errMsg);
+        
+        // Don't stop on individual failures, continue with next
+        await this.delay(500); // Brief delay before next attempt
       }
     }
 
     return { synced, failed, errors };
+  }
+
+  private resolveConflict(local: any, server: any): boolean {
+    if (!server) return true; // No server data, safe to update
+
+    switch (this.conflictResolution.strategy) {
+      case 'client_wins':
+        return true;
+      
+      case 'server_wins':
+        return false;
+      
+      case 'last_write_wins':
+        const localTime = new Date(local.startedAt || local.completedAt).getTime();
+        const serverTime = new Date(server.updated_at).getTime();
+        return localTime > serverTime;
+      
+      case 'manual':
+        if (this.conflictResolution.conflictHandler) {
+          return this.conflictResolution.conflictHandler(local, server);
+        }
+        return true;
+      
+      default:
+        return true;
+    }
   }
 
   private async syncLocations(): Promise<{ synced: number; failed: number; errors: string[] }> {
@@ -228,6 +463,7 @@ class SyncManager {
     const errors: string[] = [];
     const syncedIds: string[] = [];
 
+    // Get the most recent location
     const latestLocation = locations.reduce((latest, loc) => 
       loc.timestamp > latest.timestamp ? loc : latest
     );
@@ -276,9 +512,19 @@ class SyncManager {
     let failed = 0;
     const errors: string[] = [];
 
-    for (const action of actions) {
-      if (action.retries >= 3) {
+    // Sort by timestamp (oldest first) and retry count (lowest first)
+    const sortedActions = actions.sort((a, b) => {
+      if (a.retries !== b.retries) return a.retries - b.retries;
+      return a.timestamp - b.timestamp;
+    });
+
+    for (const action of sortedActions) {
+      if (action.retries >= MAX_RETRIES) {
         console.warn(`[SyncManager] Skipping action ${action.id} after max retries`);
+        await removeSyncAction(action.id);
+        failed++;
+        this.progress.failed++;
+        errors.push(`Action ${action.type} exceeded max retries and was discarded`);
         continue;
       }
 
@@ -287,6 +533,13 @@ class SyncManager {
         this.notifyProgress();
 
         await updateSyncActionStatus(action.id, 'syncing');
+
+        // Add retry delay with exponential backoff
+        if (action.retries > 0) {
+          const retryDelay = this.calculateRetryDelay(action.retries);
+          console.log(`[SyncManager] Retry ${action.retries} for ${action.type}, waiting ${retryDelay}ms`);
+          await this.delay(retryDelay);
+        }
 
         switch (action.type) {
           case 'site_visit_claim':
@@ -430,6 +683,7 @@ class SyncManager {
 
     if (error) throw error;
 
+    // Process wallet transaction for completed visit
     const fee = (existing?.enumerator_fee || 0) + (existing?.transport_fee || 0);
     if (fee > 0 && userId) {
       const { data: wallet } = await supabase
@@ -539,12 +793,40 @@ class SyncManager {
     if (error) throw error;
   }
 
+  private delay(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
   getProgress(): SyncProgress {
     return { ...this.progress };
   }
 
+  getLastResult(): SyncResult | null {
+    return this.lastSyncResult;
+  }
+
   isCurrentlySyncing(): boolean {
     return this.isRunning;
+  }
+
+  isOnline(): boolean {
+    return navigator.onLine;
+  }
+
+  async forceSync(): Promise<SyncResult> {
+    this.cancelPendingRetry();
+    this.consecutiveFailures = 0;
+    return this.syncAll(true);
+  }
+
+  destroy() {
+    this.cancelPendingRetry();
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer);
+    }
+    this.progressCallbacks.clear();
+    this.completeCallbacks.clear();
+    this.networkCallbacks.clear();
   }
 }
 
@@ -615,5 +897,21 @@ export function setupAutoSync(intervalMs: number = 30000) {
     window.removeEventListener('online', handleOnline);
     window.removeEventListener('offline', handleOffline);
     document.removeEventListener('visibilitychange', handleVisibility);
+  };
+}
+
+// Hook for React components
+export function useSyncManager() {
+  return {
+    syncAll: () => syncManager.syncAll(),
+    forceSync: () => syncManager.forceSync(),
+    getProgress: () => syncManager.getProgress(),
+    getLastResult: () => syncManager.getLastResult(),
+    isCurrentlySyncing: () => syncManager.isCurrentlySyncing(),
+    isOnline: () => syncManager.isOnline(),
+    onProgress: (cb: SyncProgressCallback) => syncManager.onProgress(cb),
+    onComplete: (cb: SyncCompleteCallback) => syncManager.onComplete(cb),
+    onNetworkChange: (cb: NetworkStatusCallback) => syncManager.onNetworkChange(cb),
+    setConflictResolution: (res: ConflictResolution) => syncManager.setConflictResolution(res),
   };
 }

@@ -10,13 +10,15 @@ import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { saveLocationOffline, addPendingSync, getOfflineStats } from '@/lib/offline-db';
-import { syncManager, setupAutoSync } from '@/lib/sync-manager';
+import { syncManager, setupAutoSync, type SyncResult } from '@/lib/sync-manager';
+import { OfflineBanner, SyncStatusBar } from './SyncStatusBar';
 
 interface MobileAppShellProps {
   children: React.ReactNode;
   onNetworkChange?: (isOnline: boolean) => void;
   onLocationUpdate?: (position: Position) => void;
   onPushReceived?: (notification: PushNotificationSchema) => void;
+  showSyncStatus?: boolean;
 }
 
 interface DiagnosticLog {
@@ -30,13 +32,17 @@ export function MobileAppShell({
   children, 
   onNetworkChange,
   onLocationUpdate,
-  onPushReceived 
+  onPushReceived,
+  showSyncStatus = true,
 }: MobileAppShellProps) {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [isNative] = useState(Capacitor.isNativePlatform());
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [showOfflineBanner, setShowOfflineBanner] = useState(false);
   const locationWatchId = useRef<string | null>(null);
   const diagnosticLogs = useRef<DiagnosticLog[]>([]);
+  const autoSyncCleanup = useRef<(() => void) | null>(null);
 
   const log = useCallback((level: DiagnosticLog['level'], message: string, details?: any) => {
     const logEntry: DiagnosticLog = {
@@ -74,6 +80,7 @@ export function MobileAppShell({
         'team': '/team-locations',
         'profile': '/profile',
         'settings': '/settings',
+        'signatures': '/signatures',
       };
 
       for (const [key, route] of Object.entries(routeMap)) {
@@ -111,36 +118,70 @@ export function MobileAppShell({
     }
   }, [isNative, handleDeepLink, log]);
 
+  const handleNetworkChange = useCallback(async (connected: boolean) => {
+    setIsOnline(connected);
+    onNetworkChange?.(connected);
+
+    if (connected) {
+      setShowOfflineBanner(true);
+      
+      // Get pending items count
+      const stats = await getOfflineStats();
+      const pendingCount = stats.pendingActions + stats.unsyncedVisits + stats.unsyncedLocations;
+      
+      if (pendingCount > 0) {
+        toast({
+          title: 'Back Online',
+          description: `${pendingCount} items ready to sync. Tap "Sync Now" to sync.`,
+        });
+      } else {
+        toast({
+          title: 'Back Online',
+          description: 'Connection restored.',
+        });
+      }
+      
+      // Hide banner after a delay
+      setTimeout(() => setShowOfflineBanner(false), 5000);
+    } else {
+      setShowOfflineBanner(true);
+      toast({
+        title: 'Offline Mode',
+        description: 'Your changes will be saved locally and synced when back online.',
+        variant: 'destructive',
+      });
+    }
+  }, [onNetworkChange, toast]);
+
   const initializeNetwork = useCallback(async () => {
-    if (!isNative) return;
+    if (!isNative) {
+      // Web fallback
+      const handleOnline = () => handleNetworkChange(true);
+      const handleOffline = () => handleNetworkChange(false);
+      
+      window.addEventListener('online', handleOnline);
+      window.addEventListener('offline', handleOffline);
+      
+      return () => {
+        window.removeEventListener('online', handleOnline);
+        window.removeEventListener('offline', handleOffline);
+      };
+    }
 
     try {
       const status = await Network.getStatus();
+      setIsOnline(status.connected);
       onNetworkChange?.(status.connected);
       log('info', 'Initial network status', status);
 
       Network.addListener('networkStatusChange', (status: ConnectionStatus) => {
         log('info', 'Network status changed', status);
-        onNetworkChange?.(status.connected);
-
-        if (status.connected) {
-          toast({
-            title: 'Back Online',
-            description: 'Syncing pending data...',
-          });
-          syncManager.syncAll();
-        } else {
-          toast({
-            title: 'Offline Mode',
-            description: 'Your changes will sync when back online',
-            variant: 'destructive',
-          });
-        }
+        handleNetworkChange(status.connected);
       });
     } catch (error) {
       log('error', 'Failed to initialize network monitoring', error);
     }
-  }, [isNative, onNetworkChange, toast, log]);
+  }, [isNative, onNetworkChange, handleNetworkChange, log]);
 
   const saveLocation = useCallback(async (position: Position) => {
     try {
@@ -150,9 +191,7 @@ export function MobileAppShell({
       const userId = session.session.user.id;
       const { latitude, longitude, accuracy } = position.coords;
 
-      const networkStatus = await Network.getStatus();
-      
-      if (networkStatus.connected) {
+      if (navigator.onLine) {
         const { error } = await supabase
           .from('profiles')
           .update({
@@ -184,26 +223,46 @@ export function MobileAppShell({
     }
   }, [onLocationUpdate, log]);
 
-  const initializeGPS = useCallback(async () => {
-    if (!isNative) return;
+  const requestLocationPermission = useCallback(async (): Promise<boolean> => {
+    if (!isNative) return true;
 
     try {
       const permissions = await Geolocation.checkPermissions();
       log('info', 'GPS permissions', permissions);
 
       if (permissions.location !== 'granted') {
+        // Show rationale before requesting
+        toast({
+          title: 'Location Access Required',
+          description: 'We need your location to track site visits and show your position on the team map.',
+        });
+
         const requested = await Geolocation.requestPermissions();
         if (requested.location !== 'granted') {
           log('warn', 'GPS permission denied');
           toast({
-            title: 'Location Access Required',
-            description: 'Enable location for site visit tracking',
+            title: 'Location Access Denied',
+            description: 'Some features may not work without location access. You can enable it in Settings.',
             variant: 'destructive',
           });
-          return;
+          return false;
         }
       }
 
+      return true;
+    } catch (error) {
+      log('error', 'Failed to request location permission', error);
+      return false;
+    }
+  }, [isNative, toast, log]);
+
+  const initializeGPS = useCallback(async () => {
+    if (!isNative) return;
+
+    const hasPermission = await requestLocationPermission();
+    if (!hasPermission) return;
+
+    try {
       locationWatchId.current = await Geolocation.watchPosition(
         {
           enableHighAccuracy: true,
@@ -225,7 +284,7 @@ export function MobileAppShell({
     } catch (error) {
       log('error', 'Failed to initialize GPS', error);
     }
-  }, [isNative, saveLocation, toast, log]);
+  }, [isNative, requestLocationPermission, saveLocation, log]);
 
   const initializePushNotifications = useCallback(async () => {
     if (!isNative) return;
@@ -235,6 +294,12 @@ export function MobileAppShell({
       log('info', 'Push permissions', permissions);
 
       if (permissions.receive !== 'granted') {
+        // Show rationale before requesting
+        toast({
+          title: 'Enable Notifications',
+          description: 'Get notified about new site visits, approvals, and important updates.',
+        });
+
         const requested = await PushNotifications.requestPermissions();
         if (requested.receive !== 'granted') {
           log('warn', 'Push notification permission denied');
@@ -252,7 +317,10 @@ export function MobileAppShell({
           if (session?.session?.user?.id) {
             await supabase
               .from('profiles')
-              .update({ push_token: token.value })
+              .update({ 
+                push_token: token.value,
+                push_token_updated_at: new Date().toISOString(),
+              })
               .eq('id', session.session.user.id);
           }
         } catch (error) {
@@ -268,19 +336,23 @@ export function MobileAppShell({
         log('info', 'Push notification received', notification);
         onPushReceived?.(notification);
 
-        LocalNotifications.schedule({
-          notifications: [
-            {
-              id: Math.floor(Math.random() * 100000),
-              title: notification.title || 'PACT Notification',
-              body: notification.body || '',
-              schedule: { at: new Date() },
-              sound: 'beep.wav',
-              smallIcon: 'ic_stat_icon_config_sample',
-              iconColor: '#1e40af',
-            },
-          ],
-        });
+        // Show local notification only if app is in background
+        // The native service handles foreground notifications
+        if (document.visibilityState === 'hidden') {
+          LocalNotifications.schedule({
+            notifications: [
+              {
+                id: Math.floor(Math.random() * 100000),
+                title: notification.title || 'PACT Notification',
+                body: notification.body || '',
+                schedule: { at: new Date() },
+                sound: 'beep.wav',
+                smallIcon: 'ic_notification',
+                iconColor: '#1e40af',
+              },
+            ],
+          });
+        }
       });
 
       PushNotifications.addListener('pushNotificationActionPerformed', (action: ActionPerformed) => {
@@ -295,6 +367,8 @@ export function MobileAppShell({
           navigate('/cost-approval');
         } else if (data?.type === 'wallet') {
           navigate('/wallet');
+        } else if (data?.type === 'sync') {
+          syncManager.forceSync();
         }
       });
 
@@ -302,7 +376,7 @@ export function MobileAppShell({
     } catch (error) {
       log('error', 'Failed to initialize push notifications', error);
     }
-  }, [isNative, navigate, onPushReceived, log]);
+  }, [isNative, navigate, onPushReceived, toast, log]);
 
   const initializeStatusBar = useCallback(async () => {
     if (!isNative) return;
@@ -328,9 +402,22 @@ export function MobileAppShell({
         log('info', 'App state changed', { isActive });
 
         if (isActive) {
+          // Refresh FCM token on app resume
+          try {
+            const { data: session } = await supabase.auth.getSession();
+            if (session?.session) {
+              // Token refresh will be handled by the native service
+              log('info', 'App resumed, checking for pending syncs');
+            }
+          } catch (error) {
+            log('error', 'Failed to refresh session on resume', error);
+          }
+
+          // Check for pending syncs
           const stats = await getOfflineStats();
           if (stats.pendingActions > 0 || stats.unsyncedVisits > 0) {
-            syncManager.syncAll();
+            log('info', 'Pending items found, triggering sync');
+            // Don't auto-sync, just update UI - let user decide
           }
         }
       });
@@ -339,8 +426,23 @@ export function MobileAppShell({
         log('info', 'App paused');
       });
 
-      App.addListener('resume', () => {
+      App.addListener('resume', async () => {
         log('info', 'App resumed');
+        
+        // Update online status
+        if (isNative) {
+          const status = await Network.getStatus();
+          setIsOnline(status.connected);
+        }
+      });
+
+      // Handle back button on Android
+      App.addListener('backButton', ({ canGoBack }) => {
+        if (canGoBack) {
+          window.history.back();
+        } else {
+          App.exitApp();
+        }
       });
 
       log('info', 'App lifecycle handlers initialized');
@@ -349,9 +451,22 @@ export function MobileAppShell({
     }
   }, [isNative, log]);
 
-  useEffect(() => {
-    if (!isNative) return;
+  const handleSyncComplete = useCallback((result: SyncResult) => {
+    if (result.success && result.synced > 0) {
+      toast({
+        title: 'Sync Complete',
+        description: `Successfully synced ${result.synced} items.`,
+      });
+    } else if (!result.success && result.errors.length > 0) {
+      toast({
+        title: 'Sync Issues',
+        description: `${result.failed} items failed to sync. Will retry automatically.`,
+        variant: 'destructive',
+      });
+    }
+  }, [toast]);
 
+  useEffect(() => {
     const initialize = async () => {
       log('info', 'Initializing mobile app shell...');
       
@@ -362,28 +477,26 @@ export function MobileAppShell({
       await initializePushNotifications();
       await initializeGPS();
 
-      const cleanupAutoSync = setupAutoSync();
+      // Setup auto sync with 60 second interval
+      autoSyncCleanup.current = setupAutoSync(60000);
 
       log('info', 'Mobile app shell initialized');
-
-      return cleanupAutoSync;
     };
 
-    let cleanupFn: (() => void) | undefined;
-    initialize().then(cleanup => {
-      cleanupFn = cleanup;
-    });
+    initialize();
 
     return () => {
-      cleanupFn?.();
+      autoSyncCleanup.current?.();
       
       if (locationWatchId.current) {
         Geolocation.clearWatch({ id: locationWatchId.current });
       }
 
-      App.removeAllListeners();
-      Network.removeAllListeners();
-      PushNotifications.removeAllListeners();
+      if (isNative) {
+        App.removeAllListeners();
+        Network.removeAllListeners();
+        PushNotifications.removeAllListeners();
+      }
     };
   }, [
     isNative,
@@ -416,7 +529,28 @@ export function MobileAppShell({
     return () => observer.disconnect();
   }, [isNative, log]);
 
-  return <>{children}</>;
+  return (
+    <div className="flex flex-col h-full">
+      {/* Offline Banner */}
+      {showOfflineBanner && <OfflineBanner />}
+      
+      {/* Main Content */}
+      <div className="flex-1 overflow-auto">
+        {children}
+      </div>
+      
+      {/* Sync Status Bar - Fixed at bottom on mobile */}
+      {showSyncStatus && isNative && (
+        <div className="fixed bottom-16 left-0 right-0 z-40 px-4 pb-2">
+          <SyncStatusBar 
+            compact={false}
+            showDetails={true}
+            onSyncComplete={handleSyncComplete}
+          />
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function useDiagnosticLogs() {
