@@ -243,7 +243,7 @@ export class MobileErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoun
                         key={index} 
                         className={`text-xs p-1 border-b last:border-0 ${
                           log.level === 'error' ? 'text-destructive' :
-                          log.level === 'warn' ? 'text-yellow-600 dark:text-yellow-400' :
+                          log.level === 'warn' ? 'text-black dark:text-white font-medium' :
                           'text-muted-foreground'
                         }`}
                       >
