@@ -11,7 +11,8 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { saveLocationOffline, addPendingSync, getOfflineStats } from '@/lib/offline-db';
 import { syncManager, setupAutoSync, type SyncResult } from '@/lib/sync-manager';
-import { OfflineBanner, SyncStatusBar } from './SyncStatusBar';
+import { OfflineBanner } from './SyncStatusBar';
+import { UberSyncIndicator } from './UberSyncIndicator';
 import { ActiveVisitOverlay } from './ActiveVisitOverlay';
 import { useActiveVisit } from '@/context/ActiveVisitContext';
 import { SyncProgressToast } from './SyncProgressToast';
@@ -560,15 +561,12 @@ export function MobileAppShell({
         {children}
       </div>
       
-      {/* Sync Status Bar - Fixed at bottom on all mobile devices */}
+      {/* Uber-style Sync Indicator - Always visible at bottom */}
       {showSyncStatus && (
-        <div className="fixed bottom-16 left-0 right-0 z-40 px-4 pb-2 safe-area-bottom">
-          <SyncStatusBar 
-            compact={false}
-            showDetails={true}
-            onSyncComplete={handleSyncComplete}
-          />
-        </div>
+        <UberSyncIndicator 
+          autoSyncInterval={30000}
+          onSyncComplete={handleSyncComplete}
+        />
       )}
       
       {/* Active Visit Overlay - Uber-style persistent bottom sheet */}
