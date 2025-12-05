@@ -89,7 +89,7 @@ const MobileAppHeader = ({
 
   return (
     <>
-    <header className="px-4 h-16 flex items-center justify-between bg-gradient-to-r from-blue-600 to-purple-600 shadow-md relative z-50">
+    <header className="px-4 h-16 flex items-center justify-between bg-black dark:bg-black shadow-md relative z-50">
       <div className="flex items-center gap-2">
         <Button 
           variant="ghost" 
@@ -114,7 +114,7 @@ const MobileAppHeader = ({
           >
             <Bell className="h-5 w-5" />
             {hasNotifications && (
-              <Badge className="absolute -top-1 -right-1 h-4 w-4 p-0 flex items-center justify-center bg-red-500">
+              <Badge className="absolute -top-1 -right-1 h-4 w-4 p-0 flex items-center justify-center bg-white text-black">
                 <span className="sr-only">New notifications</span>
               </Badge>
             )}
@@ -128,7 +128,7 @@ const MobileAppHeader = ({
             >
               <Avatar className="h-full w-full">
                 <AvatarImage src={currentUser?.avatar} alt={currentUser?.name || ''} />
-                <AvatarFallback className="bg-gradient-to-br from-blue-500 to-blue-700 text-white">{currentUser?.name ? getInitials(currentUser.name) : "FO"}</AvatarFallback>
+                <AvatarFallback className="bg-white text-black font-semibold">{currentUser?.name ? getInitials(currentUser.name) : "FO"}</AvatarFallback>
               </Avatar>
             </button>
           </DropdownMenuTrigger>
@@ -154,18 +154,18 @@ const MobileAppHeader = ({
     </header>
 
     <Sheet open={open} onOpenChange={setOpen}>
-      <SheetContent side="left" className="w-[85vw] p-0">
-        <SheetHeader className="flex items-center justify-between px-4 py-4 border-b">
-  <SheetTitle className="text-lg font-semibold">Menu</SheetTitle>
+      <SheetContent side="left" className="w-[85vw] p-0 bg-white dark:bg-black border-r border-gray-200 dark:border-gray-800">
+        <SheetHeader className="flex items-center justify-between px-4 py-4 border-b border-gray-200 dark:border-gray-800 bg-black">
+  <SheetTitle className="text-lg font-semibold text-white">Menu</SheetTitle>
   <button
     type="button"
     aria-label="Close menu"
-    className="p-2 rounded-md hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+    className="p-2 rounded-full hover:bg-white/10 focus:outline-none"
     onClick={() => setOpen(false)}
   >
     <svg
       xmlns="http://www.w3.org/2000/svg"
-      className="h-5 w-5 text-gray-600"
+      className="h-5 w-5 text-white"
       fill="none"
       viewBox="0 0 24 24"
       stroke="currentColor"
@@ -178,7 +178,7 @@ const MobileAppHeader = ({
           <div className="px-2 py-3 space-y-4">
             {menuGroups.map((group) => (
               <div key={group.id}>
-                <div className="px-2 text-[11px] uppercase tracking-wide font-semibold text-blue-600 dark:text-blue-300 mb-2">
+                <div className="px-2 text-[11px] uppercase tracking-wide font-semibold text-gray-500 dark:text-gray-400 mb-2">
                   {group.label}
                 </div>
                 <div className="flex flex-col gap-1">
@@ -187,9 +187,9 @@ const MobileAppHeader = ({
                       key={item.id}
                       to={item.url}
                       onClick={() => setOpen(false)}
-                      className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm hover:bg-blue-50 dark:hover:bg-blue-900/30 ${location.pathname === item.url ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300' : ''}`}
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-full text-sm transition-colors ${location.pathname === item.url ? 'bg-black text-white dark:bg-white dark:text-black font-medium' : 'hover:bg-gray-100 dark:hover:bg-gray-900 text-gray-700 dark:text-gray-300'}`}
                     >
-                      <item.icon className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                      <item.icon className="h-4 w-4" />
                       <span className="truncate">{item.title}</span>
                     </Link>
                   ))}

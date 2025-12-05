@@ -95,7 +95,7 @@ const MobileNavigation = React.memo(() => {
   return (
     <>
       <nav 
-        className="fixed bottom-0 left-0 right-0 z-50 shadow-lg backdrop-blur-md bg-slate-900/90 dark:bg-slate-950/90 border-t border-slate-700/50"
+        className="fixed bottom-0 left-0 right-0 z-50 shadow-lg bg-white dark:bg-black border-t border-gray-200 dark:border-gray-800"
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       >
         <div className="grid grid-cols-5 h-[56px]">
@@ -107,12 +107,11 @@ const MobileNavigation = React.memo(() => {
                 data-testid={`button-nav-${item.label.toLowerCase()}`}
                 className={`flex flex-col items-center justify-center gap-0.5 transition-all duration-150 relative overflow-visible min-h-[52px] touch-manipulation select-none active:scale-95 px-1 ${
                   active 
-                    ? 'text-blue-400' 
-                    : 'text-gray-400 hover:text-white'
+                    ? 'text-black dark:text-white' 
+                    : 'text-gray-400 dark:text-gray-500'
                 }`}
                 onClick={() => handleNavigation(item.path)}
                 onTouchStart={() => {
-                  // Add haptic feedback simulation for mobile devices
                   if (navigator.vibrate) {
                     navigator.vibrate(10);
                   }
@@ -123,16 +122,16 @@ const MobileNavigation = React.memo(() => {
                 }}
               >
                 <div className="relative">
-                  <item.icon className={`h-6 w-6 ${active ? 'drop-shadow-[0_0_6px_rgba(59,130,246,0.5)]' : ''}`} />
+                  <item.icon className={`h-6 w-6 ${active ? 'stroke-[2.5px]' : ''}`} />
                   {item.badge && item.badge > 0 && (
-                    <span className="absolute -top-1 -right-2 bg-red-500 text-white text-[9px] rounded-full min-w-[14px] h-[14px] flex items-center justify-center shadow-sm z-10 px-0.5">
+                    <span className="absolute -top-1 -right-2 bg-black dark:bg-white text-white dark:text-black text-[9px] rounded-full min-w-[14px] h-[14px] flex items-center justify-center shadow-sm z-10 px-0.5">
                       {item.badge > 99 ? '99+' : item.badge}
                     </span>
                   )}
                 </div>
                 <span className="text-[11px] font-medium leading-tight">{item.label}</span>
                 {active && (
-                  <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-10 h-0.5 bg-blue-500 rounded-t-full" />
+                  <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-10 h-0.5 bg-black dark:bg-white rounded-t-full" />
                 )}
               </button>
             );
@@ -143,11 +142,10 @@ const MobileNavigation = React.memo(() => {
       <Sheet open={isMoreOpen} onOpenChange={setIsMoreOpen}>
         <SheetContent 
           side="bottom" 
-          className="h-[70vh] bg-gradient-to-b from-slate-900 to-slate-950 border-t border-blue-500/30"
+          className="h-[70vh] bg-white dark:bg-black border-t border-gray-200 dark:border-gray-800"
         >
-          <SheetHeader className="border-b border-blue-500/20 pb-4">
-            <SheetTitle className="text-xl font-bold text-white flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-blue-400" />
+          <SheetHeader className="border-b border-gray-200 dark:border-gray-800 pb-4">
+            <SheetTitle className="text-xl font-bold text-black dark:text-white flex items-center gap-2">
               More Features
             </SheetTitle>
           </SheetHeader>
@@ -159,14 +157,13 @@ const MobileNavigation = React.memo(() => {
                   <button
                     key={index}
                     data-testid={`button-more-${item.label.toLowerCase()}`}
-                    className={`flex flex-col items-center justify-center min-h-[84px] p-4 rounded-xl transition-all duration-200 touch-manipulation select-none active:scale-95 ${
+                    className={`flex flex-col items-center justify-center min-h-[84px] p-4 rounded-2xl transition-all duration-200 touch-manipulation select-none active:scale-95 ${
                       active
-                        ? 'bg-gradient-to-br from-blue-500/30 to-purple-500/30 shadow-lg shadow-blue-500/20 border border-blue-400/30'
-                        : 'bg-slate-800/50 hover:bg-slate-700/50 border border-slate-700 active:bg-slate-600/50'
+                        ? 'bg-black dark:bg-white text-white dark:text-black'
+                        : 'bg-gray-100 dark:bg-gray-900 hover:bg-gray-200 dark:hover:bg-gray-800'
                     }`}
                     onClick={() => handleNavigation(item.path)}
                     onTouchStart={() => {
-                      // Add haptic feedback simulation for mobile devices
                       if (navigator.vibrate) {
                         navigator.vibrate(10);
                       }
@@ -180,16 +177,13 @@ const MobileNavigation = React.memo(() => {
                       <item.icon 
                         className={`h-7 w-7 ${
                           active 
-                            ? 'text-blue-400 drop-shadow-[0_0_10px_rgba(59,130,246,0.6)]' 
-                            : 'text-gray-400'
+                            ? 'text-white dark:text-black' 
+                            : 'text-gray-600 dark:text-gray-400'
                         }`} 
                       />
-                      {active && (
-                        <Sparkles className="absolute -top-1 -right-1 h-3 w-3 text-yellow-400 animate-pulse" />
-                      )}
                     </div>
                     <span className={`text-[11px] font-medium text-center leading-tight ${
-                      active ? 'text-white' : 'text-gray-300'
+                      active ? 'text-white dark:text-black' : 'text-gray-700 dark:text-gray-300'
                     }`}>
                       {item.label}
                     </span>
