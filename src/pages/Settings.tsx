@@ -47,6 +47,240 @@ import { TwoFactorSetup } from "@/components/auth/TwoFactorSetup";
 import { useMFA } from "@/hooks/use-mfa";
 import { Badge } from "@/components/ui/badge";
 import { NotificationSettings as NotificationSettingsComponent } from "@/components/settings/NotificationSettings";
+import { useBiometric } from "@/hooks/use-biometric";
+import { useDevice } from "@/hooks/use-device";
+import { Fingerprint } from "lucide-react";
+
+function BiometricSettingsSection() {
+  const { isNative } = useDevice();
+  const { 
+    status, 
+    isLoading, 
+    storeCredentials, 
+    clearCredentials, 
+    refreshStatus 
+  } = useBiometric();
+  const { toast } = useToast();
+  const [isEnabling, setIsEnabling] = useState(false);
+  const [isDisabling, setIsDisabling] = useState(false);
+
+  if (!isNative) {
+    return (
+      <div className="pt-4 border-t">
+        <div className="p-4 bg-muted/50 rounded-lg">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <Fingerprint className="h-5 w-5 text-muted-foreground" />
+              <div className="space-y-1">
+                <Label className="text-base font-medium">Biometric Login</Label>
+                <p className="text-sm text-muted-foreground">
+                  Use fingerprint or face recognition for quick login
+                </p>
+              </div>
+            </div>
+            <Badge variant="secondary" className="min-h-[28px] px-3">
+              <Smartphone className="h-3 w-3 mr-1" />
+              Mobile Only
+            </Badge>
+          </div>
+          <p className="text-xs text-muted-foreground mt-3">
+            Biometric authentication is only available in the PACT mobile app.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const handleEnableBiometric = async () => {
+    setIsEnabling(true);
+    try {
+      await refreshStatus();
+      
+      if (!status.isAvailable) {
+        toast({
+          title: "Biometric Not Available",
+          description: status.errorMessage || "Your device doesn't support biometric authentication.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (!status.isEnrolled) {
+        toast({
+          title: "No Biometrics Enrolled",
+          description: "Please set up fingerprint or face recognition in your device settings first.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      toast({
+        title: "Biometric Enabled",
+        description: "You can now use fingerprint or face recognition to log in.",
+        variant: "default",
+      });
+      await refreshStatus();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to enable biometric authentication.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsEnabling(false);
+    }
+  };
+
+  const handleDisableBiometric = async () => {
+    setIsDisabling(true);
+    try {
+      await clearCredentials();
+      toast({
+        title: "Biometric Disabled",
+        description: "Biometric login has been disabled for your account.",
+        variant: "default",
+      });
+      await refreshStatus();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to disable biometric authentication.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDisabling(false);
+    }
+  };
+
+  return (
+    <div className="pt-4 border-t">
+      <div className="p-4 bg-muted/50 rounded-lg min-h-[80px]">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <Fingerprint className="h-5 w-5 text-muted-foreground" />
+            <div className="space-y-1">
+              <Label className="text-base font-medium">Biometric Login</Label>
+              <p className="text-sm text-muted-foreground">
+                {status.biometricType === 'face' 
+                  ? 'Use Face ID for quick login' 
+                  : status.biometricType === 'iris'
+                  ? 'Use Iris scan for quick login'
+                  : 'Use fingerprint for quick login'}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {isLoading ? (
+              <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
+            ) : status.hasStoredCredentials ? (
+              <Badge variant="default" className="bg-green-500 hover:bg-green-600 min-h-[28px] px-3">
+                <CheckCircle className="h-3 w-3 mr-1" />
+                Enabled
+              </Badge>
+            ) : status.isAvailable ? (
+              <Badge variant="secondary" className="min-h-[28px] px-3">
+                <XCircle className="h-3 w-3 mr-1" />
+                Disabled
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="min-h-[28px] px-3 text-amber-600 border-amber-300">
+                <AlertCircle className="h-3 w-3 mr-1" />
+                Not Available
+              </Badge>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {status.isAvailable && !status.isEnrolled && (
+        <div className="mt-3 p-3 border rounded-lg bg-amber-50 dark:bg-amber-900/20">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5" />
+            <p className="text-sm text-amber-800 dark:text-amber-200">
+              No biometrics enrolled on this device. Please set up fingerprint or face recognition in your device settings.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {status.isAvailable && status.isEnrolled && (
+        <div className="mt-3">
+          {status.hasStoredCredentials ? (
+            <div className="p-4 border rounded-lg bg-green-50 dark:bg-green-900/20">
+              <div className="flex items-start gap-3">
+                <CheckCircle className="h-5 w-5 text-green-600 dark:text-green-400 mt-0.5" />
+                <div className="space-y-2">
+                  <p className="font-medium text-green-800 dark:text-green-200">
+                    Biometric login is active
+                  </p>
+                  <p className="text-sm text-green-700 dark:text-green-300">
+                    You can use {status.biometricType === 'face' ? 'Face ID' : status.biometricType === 'iris' ? 'Iris scan' : 'your fingerprint'} to quickly log in to the app.
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleDisableBiometric}
+                    disabled={isDisabling}
+                    className="mt-2 min-h-[36px] px-4"
+                    data-testid="button-disable-biometric"
+                  >
+                    {isDisabling ? (
+                      <>
+                        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                        Disabling...
+                      </>
+                    ) : (
+                      <>
+                        <XCircle className="mr-2 h-4 w-4" />
+                        Disable Biometric Login
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="p-4 border rounded-lg">
+              <div className="flex items-start gap-3">
+                <Fingerprint className="h-5 w-5 text-muted-foreground mt-0.5" />
+                <div className="space-y-2">
+                  <p className="font-medium">Enable quick login</p>
+                  <p className="text-sm text-muted-foreground">
+                    Set up biometric authentication for faster, more secure access to the app without entering your password.
+                  </p>
+                  <Button
+                    onClick={handleEnableBiometric}
+                    disabled={isEnabling}
+                    className="mt-2 min-h-[44px] px-6"
+                    data-testid="button-enable-biometric"
+                  >
+                    {isEnabling ? (
+                      <>
+                        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                        Setting up...
+                      </>
+                    ) : (
+                      <>
+                        <Fingerprint className="mr-2 h-4 w-4" />
+                        Enable Biometric Login
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {!status.isAvailable && status.errorMessage && (
+        <div className="mt-3 p-3 border rounded-lg bg-muted/50">
+          <p className="text-sm text-muted-foreground">{status.errorMessage}</p>
+        </div>
+      )}
+    </div>
+  );
+}
 
 const Settings = () => {
   const { toast } = useToast();
@@ -1014,6 +1248,8 @@ const Settings = () => {
                   </div>
                 </div>
               )}
+
+              <BiometricSettingsSection />
 
               <div className="pt-4 border-t">
                 <h4 className="text-sm font-medium mb-3">Supported Authenticator Apps</h4>

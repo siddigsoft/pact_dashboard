@@ -46,7 +46,8 @@ export function MobileBottomNav({ notificationCount = 0, className }: MobileBott
     <>
       <nav 
         className={cn(
-          "fixed bottom-0 left-0 right-0 z-40 bg-background border-t",
+          "fixed bottom-0 left-0 right-0 z-40",
+          "bg-white dark:bg-black border-t border-gray-200 dark:border-gray-800",
           "sm:hidden",
           className
         )}
@@ -67,15 +68,15 @@ export function MobileBottomNav({ notificationCount = 0, className }: MobileBott
                   "flex flex-col items-center justify-center flex-1 h-full gap-0.5 relative",
                   "transition-colors touch-manipulation",
                   active 
-                    ? "text-primary" 
-                    : "text-muted-foreground active:text-foreground"
+                    ? "text-black dark:text-white" 
+                    : "text-gray-400 dark:text-gray-500 active:text-black dark:active:text-white"
                 )}
                 data-testid={`nav-${item.label.toLowerCase()}`}
               >
                 <div className="relative">
                   <Icon className={cn("h-5 w-5", active && "stroke-[2.5px]")} />
                   {showBadge && (
-                    <span className="absolute -top-1 -right-1 h-4 min-w-4 flex items-center justify-center rounded-full bg-destructive text-destructive-foreground text-[10px] font-medium px-1">
+                    <span className="absolute -top-1 -right-1 h-4 min-w-4 flex items-center justify-center rounded-full bg-black dark:bg-white text-white dark:text-black text-[10px] font-medium px-1">
                       {notificationCount > 99 ? '99+' : notificationCount}
                     </span>
                   )}
@@ -87,7 +88,7 @@ export function MobileBottomNav({ notificationCount = 0, className }: MobileBott
                   {item.label}
                 </span>
                 {active && (
-                  <div className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-primary rounded-full" />
+                  <div className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-black dark:bg-white rounded-full" />
                 )}
               </button>
             );
