@@ -12,6 +12,7 @@ export { PageTransition, FadeIn, StaggerChildren, StaggerItem, SlideIn, ScaleIn,
 export { MobileAuthScreen } from './MobileAuthScreen';
 export { PasswordStrengthIndicator } from './PasswordStrengthIndicator';
 export { MobileAvatarEditor, AvatarWithBadge, AvatarGroup } from './MobileAvatarEditor';
+export { BiometricPrompt, BiometricButton, BiometricSetup } from './BiometricPrompt';
 
 // Form Components
 export { 
@@ -27,6 +28,7 @@ export { MobileSearchBar, FullscreenSearch } from './MobileSearchBar';
 export { MobileDatePicker, MobileTimePicker, MobileDateTimePicker } from './MobileDateTimePicker';
 export { MobileChipSelector, MobileFilterChips, AddableChipInput } from './MobileChipSelector';
 export { MobileInputAccessory, NumericKeypad, PinInput, OTPInput } from './MobileInputAccessory';
+export { MobileSignaturePad, SignaturePreview, SignatureModal } from './MobileSignaturePad';
 
 // List Components
 export { MobileListItem, MobileListSection, MobileSelectableList, MobileMenuItem, InfoRow, InfoCard } from './MobileListItem';
@@ -55,6 +57,7 @@ export { SyncProgressRing } from './SyncProgressRing';
 export { OfflineStatusBanner, ConnectionStatusIndicator } from './OfflineStatusBanner';
 export { OfflineStatusBar, OfflineIndicator } from './OfflineStatusBar';
 export { NetworkQualityIndicator, NetworkStatusBar } from './NetworkQualityIndicator';
+export { OfflineQueueBadge, OfflineQueuePanel, SyncIndicator, LastSyncInfo } from './OfflineQueueBadge';
 
 // Action Components
 export { MobileActionButton, MobileIconButton, MobileFAB } from './MobileActionButton';
@@ -76,3 +79,48 @@ export { MobileSettingsPanel, ThemeToggleSetting, defaultSettingsGroups } from '
 
 // Error Components
 export { MobileErrorBoundary, RetryButton } from './ErrorBoundary';
+
+// Map & Location Components
+export { MobileMapView, MiniMapPreview } from './MobileMapView';
+export { MobileLocationPicker, LocationButton, LocationPreview } from './MobileLocationPicker';
+
+// Media Components
+export { MobileCamera, CameraButton, PhotoThumbnail } from './MobileCamera';
+export { MobileVoiceRecorder, VoiceMessagePlayer } from './MobileVoiceRecorder';
+export { MobileQRScanner, QRScanButton } from './MobileQRScanner';
+export { MobileFileUpload, CompactFileUpload } from './MobileFileUpload';
+
+// Communication Components
+export { MobileChatBubble, ChatInput, ChatList, TypingIndicator } from './MobileChat';
+export { MobileNotificationCenter, NotificationBadge, NotificationToast } from './MobileNotificationCenter';
+
+// Timeline & Activity Components
+export { MobileTimeline, ActivityFeed, VisitTimeline } from './MobileTimeline';
+
+// Financial Components
+export { MobileWalletCard, TransactionList, WalletStats, BalanceAlert } from './MobileWalletCard';
+export { MobileApprovalCard, ApprovalList, ApprovalBadge } from './MobileApprovalCard';
+
+// Filter Components
+export { MobileFilterPanel, FilterButton, defaultFilterSections } from './MobileFilterPanel';
+
+// Rating Components
+export { 
+  MobileStarRating, 
+  MobileThumbsRating, 
+  MobileEmojiRating, 
+  MobileSliderRating, 
+  RatingDisplay 
+} from './MobileRating';
+
+// Internationalization Components
+export { 
+  LanguageProvider, 
+  useLanguage, 
+  MobileLanguageSwitcher, 
+  RTLWrapper, 
+  RTLFlex,
+  languages,
+  defaultTranslations
+} from './MobileLanguageSwitcher';
+export type { Language, Direction, LanguageConfig } from './MobileLanguageSwitcher';
