@@ -148,11 +148,11 @@ const menuSections: MenuSection[] = [
     ]
   },
   {
-    id: 'settings',
+    id: 'settings-section',
     title: 'Settings',
     items: [
-      { id: 'settings', icon: Settings, label: 'Settings', path: '/settings', description: 'App settings' },
-      { id: 'documentation', icon: HelpCircle, label: 'Help & Docs', path: '/documentation', description: 'User guide' },
+      { id: 'app-settings', icon: Settings, label: 'Settings', path: '/settings', description: 'App settings' },
+      { id: 'help-docs', icon: HelpCircle, label: 'Help & Docs', path: '/documentation', description: 'User guide' },
     ]
   },
 ];
@@ -164,8 +164,10 @@ export function MobileMoreMenu({ isOpen, onClose }: MobileMoreMenuProps) {
 
   const handleNavigate = (path: string) => {
     hapticPresets.buttonPress();
-    navigate(path);
     onClose();
+    setTimeout(() => {
+      navigate(path);
+    }, 50);
   };
 
   const handleLogout = async () => {

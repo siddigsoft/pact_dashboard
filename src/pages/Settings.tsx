@@ -50,6 +50,8 @@ import { NotificationSettings as NotificationSettingsComponent } from "@/compone
 import { useBiometric } from "@/hooks/use-biometric";
 import { useDevice } from "@/hooks/use-device";
 import { Fingerprint } from "lucide-react";
+import { useViewMode } from "@/context/ViewModeContext";
+import { MobileSettingsScreen } from "@/components/mobile/MobileSettingsScreen";
 
 function BiometricSettingsSection() {
   const { isNative } = useDevice();
@@ -418,8 +420,10 @@ function BiometricSettingsSection() {
 }
 
 const Settings = () => {
+  const { viewMode } = useViewMode();
+  const isMobile = viewMode === 'mobile';
   const { toast } = useToast();
-  const { currentUser, updateUser } = useUser();
+  const { currentUser, updateUser, logout } = useUser();
   const {
     userSettings,
     notificationSettings,
@@ -435,6 +439,22 @@ const Settings = () => {
     updateDashboardPreferences,
     loading
   } = useSettings();
+
+  if (isMobile) {
+    return (
+      <MobileSettingsScreen
+        user={{
+          name: currentUser?.name || 'User',
+          email: currentUser?.email || '',
+          avatarUrl: currentUser?.avatar,
+          role: currentUser?.role || 'User',
+        }}
+        onLogout={async () => {
+          await logout();
+        }}
+      />
+    );
+  }
 
   const { mfaEnabled, loading: mfaLoading, checkMFAStatus, unenrollMFA } = useMFA();
 
