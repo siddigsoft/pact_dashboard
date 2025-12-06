@@ -45,7 +45,7 @@ import { MobileDeviceInfo, DeviceTrustBadge } from './MobileDeviceInfo';
 import { MobileBatteryStatus } from './MobileBatteryStatus';
 import { MobilePerformancePanel, PerformanceBadge } from './MobilePerformancePanel';
 import { MobileLanguageSwitcher, useLanguage } from './MobileLanguageSwitcher';
-import { useSettings } from '@/context/settings/SettingsContext';
+import { useSettingsSafe } from '@/context/settings/SettingsContext';
 import { useBiometric } from '@/hooks/use-biometric';
 import { useToast } from '@/hooks/use-toast';
 import { useMobilePermissions } from '@/hooks/use-mobile-permissions';
@@ -75,14 +75,13 @@ export function MobileSettingsScreen({
   const navigate = useNavigate();
   const { toast } = useToast();
   const { language, setLanguage, direction } = useLanguage();
-  const { 
-    dataVisibilitySettings, 
-    updateDataVisibilitySettings,
-    notificationSettings,
-    updateNotificationSettings,
-    appearanceSettings,
-    updateAppearanceSettings
-  } = useSettings();
+  const settings = useSettingsSafe();
+  const dataVisibilitySettings = settings?.dataVisibilitySettings;
+  const updateDataVisibilitySettings = settings?.updateDataVisibilitySettings ?? (async () => {});
+  const notificationSettings = settings?.notificationSettings;
+  const updateNotificationSettings = settings?.updateNotificationSettings ?? (async () => {});
+  const appearanceSettings = settings?.appearanceSettings;
+  const updateAppearanceSettings = settings?.updateAppearanceSettings ?? (async () => {});
   const { status: biometricStatus, storeCredentials, clearCredentials, refreshStatus } = useBiometric();
   const { permissions, checkAllPermissions, resetSetup, isChecking } = useMobilePermissions();
   const { 
@@ -123,23 +122,44 @@ export function MobileSettingsScreen({
     setIsDark(newDark);
     document.documentElement.classList.toggle('dark', newDark);
     localStorage.setItem('theme', newDark ? 'dark' : 'light');
-    updateAppearanceSettings({ darkMode: newDark, theme: newDark ? 'dark' : 'light' });
-  }, [isDark, updateAppearanceSettings]);
+    if (settings) {
+      updateAppearanceSettings({ darkMode: newDark, theme: newDark ? 'dark' : 'light' });
+    }
+  }, [isDark, settings, updateAppearanceSettings]);
 
   const handleNotificationsToggle = useCallback((enabled: boolean) => {
     hapticPresets.toggle();
-    updateNotificationSettings({ ...notificationSettings, enabled });
-  }, [notificationSettings, updateNotificationSettings]);
+    if (!settings) {
+      toast({ title: "Settings unavailable", description: "Please try again later.", variant: "destructive" });
+      return;
+    }
+    const currentSettings = notificationSettings ?? {
+      enabled: true,
+      email: false,
+      sound: false,
+      browserPush: false,
+      vibration: false,
+      categories: { assignments: true, approvals: true, financial: true, team: true, system: true },
+      quietHours: { enabled: false, startHour: 22, endHour: 7 },
+      frequency: 'instant' as const,
+      autoDeleteDays: 30,
+    };
+    updateNotificationSettings({ ...currentSettings, enabled });
+  }, [settings, notificationSettings, updateNotificationSettings, toast]);
 
   const handleLocationSharingToggle = useCallback((enabled: boolean) => {
     hapticPresets.toggle();
+    if (!settings) {
+      toast({ title: "Settings unavailable", description: "Please try again later.", variant: "destructive" });
+      return;
+    }
     updateDataVisibilitySettings({
       options: {
-        ...dataVisibilitySettings?.options,
+        ...(dataVisibilitySettings?.options ?? {}),
         shareLocationWithTeam: enabled
       }
     });
-  }, [dataVisibilitySettings, updateDataVisibilitySettings]);
+  }, [settings, dataVisibilitySettings, updateDataVisibilitySettings, toast]);
 
   const handleBiometricToggle = useCallback(async (enabled: boolean) => {
     hapticPresets.toggle();
@@ -201,7 +221,7 @@ export function MobileSettingsScreen({
         }
       />
 
-      <div className="px-4 py-4 space-y-6">
+      <div className="px-4 py-4 pb-24 space-y-6">
         <Card className="p-4">
           <button
             onClick={() => {
@@ -613,7 +633,7 @@ export function MobileSettingsScreen({
         </SettingsSection>
 
         <p className="text-xs text-center text-black/40 dark:text-white/40 py-4">
-          PACT Workflow v1.0.0
+          PACT Command Center v1.0.0
         </p>
       </div>
 

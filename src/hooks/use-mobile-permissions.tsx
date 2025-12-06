@@ -508,7 +508,10 @@ export function useMobilePermissions() {
 
   useEffect(() => {
     const handleAppStateChange = async () => {
+      console.log('[Permissions] App resumed, checking location...');
       const locationStatus = await checkLocationOnly();
+      console.log('[Permissions] Location status after resume:', locationStatus);
+      setPermissions(prev => ({ ...prev, location: locationStatus }));
       if (locationStatus !== 'granted') {
         setIsLocationBlocked(true);
       } else {

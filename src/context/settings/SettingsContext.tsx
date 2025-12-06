@@ -456,3 +456,9 @@ export const useSettings = () => {
   }
   return context;
 };
+
+// Safe hook that returns null if outside provider - use for optional settings access
+export const useSettingsSafe = () => {
+  const context = useContext(SettingsContext);
+  return context ?? null;
+};
