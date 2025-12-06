@@ -226,7 +226,7 @@ export function MobileSettingsScreen({
         }
       />
 
-      <div className="px-4 py-4 pb-24 space-y-6">
+      <div className="px-4 py-4 pb-32 space-y-6">
         <Card className="p-4">
           <button
             onClick={() => {
@@ -675,15 +675,6 @@ export function MobileSettingsScreen({
             }}
           />
           <SettingsRow
-            icon={<LogOut className="w-5 h-5" />}
-            label="Sign Out"
-            textColor="text-destructive"
-            onClick={() => {
-              hapticPresets.buttonPress();
-              setShowLogoutDialog(true);
-            }}
-          />
-          <SettingsRow
             icon={<Trash2 className="w-5 h-5" />}
             label="Delete Account"
             textColor="text-destructive"
@@ -695,7 +686,22 @@ export function MobileSettingsScreen({
           />
         </SettingsSection>
 
-        <p className="text-xs text-center text-black/40 dark:text-white/40 py-4">
+        {/* Sign Out Button - Prominent placement */}
+        <Button
+          variant="outline"
+          className="w-full min-h-12 rounded-full border-destructive text-destructive hover:bg-destructive hover:text-white dark:border-destructive dark:text-destructive"
+          onClick={() => {
+            hapticPresets.buttonPress();
+            setShowLogoutDialog(true);
+          }}
+          data-testid="button-sign-out"
+          aria-label="Sign out of your account"
+        >
+          <LogOut className="w-5 h-5 mr-2" />
+          Sign Out
+        </Button>
+
+        <p className="text-xs text-center text-black/40 dark:text-white/40 py-4 pb-8">
           PACT Command Center v1.0.0
         </p>
       </div>
