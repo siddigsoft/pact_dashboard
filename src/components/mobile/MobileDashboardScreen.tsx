@@ -187,6 +187,7 @@ export function MobileDashboardScreen({
                 }}
                 className="text-xs"
                 data-testid="button-view-all-visits"
+                aria-label="View all upcoming visits"
               >
                 View All
                 <ChevronRight className="w-4 h-4 ml-1" />
@@ -217,8 +218,9 @@ export function MobileDashboardScreen({
                     hapticPresets.buttonPress();
                     navigate('/site-visits/new');
                   }}
-                  className="mt-4 rounded-full"
+                  className="mt-4"
                   data-testid="button-schedule-visit"
+                  aria-label="Schedule a new site visit"
                 >
                   <Plus className="w-4 h-4 mr-2" />
                   Schedule Visit
@@ -268,31 +270,37 @@ function QuickActions({ onNewVisit, onViewWallet, onViewCalendar }: QuickActions
   return (
     <div className="flex gap-3">
       <motion.button
-        whileTap={{ scale: 0.95 }}
+        whileTap={{ scale: 0.97 }}
+        transition={{ type: 'spring', stiffness: 400, damping: 25 }}
         onClick={onNewVisit}
-        className="flex-1 flex flex-col items-center gap-2 p-4 bg-black dark:bg-white rounded-2xl"
+        className="flex-1 flex flex-col items-center gap-2 p-4 min-h-[72px] bg-black dark:bg-white rounded-2xl active:bg-black/90 dark:active:bg-white/90"
         data-testid="quick-action-new-visit"
+        aria-label="Start a new site visit"
       >
         <Plus className="w-6 h-6 text-white dark:text-black" />
-        <span className="text-xs font-medium text-white dark:text-black">New Visit</span>
+        <span className="text-xs font-semibold text-white dark:text-black">New Visit</span>
       </motion.button>
       <motion.button
-        whileTap={{ scale: 0.95 }}
+        whileTap={{ scale: 0.97 }}
+        transition={{ type: 'spring', stiffness: 400, damping: 25 }}
         onClick={onViewWallet}
-        className="flex-1 flex flex-col items-center gap-2 p-4 bg-black/5 dark:bg-white/5 rounded-2xl"
+        className="flex-1 flex flex-col items-center gap-2 p-4 min-h-[72px] bg-black/5 dark:bg-white/5 rounded-2xl active:bg-black/10 dark:active:bg-white/10"
         data-testid="quick-action-wallet"
+        aria-label="View wallet balance"
       >
         <Wallet className="w-6 h-6 text-black dark:text-white" />
-        <span className="text-xs font-medium text-black dark:text-white">Wallet</span>
+        <span className="text-xs font-semibold text-black dark:text-white">Wallet</span>
       </motion.button>
       <motion.button
-        whileTap={{ scale: 0.95 }}
+        whileTap={{ scale: 0.97 }}
+        transition={{ type: 'spring', stiffness: 400, damping: 25 }}
         onClick={onViewCalendar}
-        className="flex-1 flex flex-col items-center gap-2 p-4 bg-black/5 dark:bg-white/5 rounded-2xl"
+        className="flex-1 flex flex-col items-center gap-2 p-4 min-h-[72px] bg-black/5 dark:bg-white/5 rounded-2xl active:bg-black/10 dark:active:bg-white/10"
         data-testid="quick-action-calendar"
+        aria-label="Open calendar"
       >
         <Calendar className="w-6 h-6 text-black dark:text-white" />
-        <span className="text-xs font-medium text-black dark:text-white">Calendar</span>
+        <span className="text-xs font-semibold text-black dark:text-white">Calendar</span>
       </motion.button>
     </div>
   );
@@ -363,9 +371,11 @@ function VisitCard({ visit, onClick }: VisitCardProps) {
   return (
     <motion.button
       whileTap={{ scale: 0.98 }}
+      transition={{ type: 'spring', stiffness: 400, damping: 25 }}
       onClick={onClick}
       className="w-full text-left"
       data-testid={`visit-card-${visit.id}`}
+      aria-label={`Visit ${visit.siteName}, ${visit.status.replace('_', ' ')}, scheduled for ${formatTime(visit.scheduledTime)}`}
     >
       <Card className="p-4">
         <div className="flex items-start gap-3">
