@@ -28,7 +28,7 @@ import { cn } from '@/lib/utils';
 import { hapticPresets } from '@/lib/haptics';
 import { MobileHeader } from './MobileHeader';
 import { MobileBottomSheet } from './MobileBottomSheet';
-import { LogoutConfirmDialog } from './MobileConfirmDialog';
+import { LogoutConfirmDialog, MobileConfirmDialog } from './MobileConfirmDialog';
 import { MobileDeviceInfo, DeviceTrustBadge } from './MobileDeviceInfo';
 import { MobileBatteryStatus } from './MobileBatteryStatus';
 import { MobilePerformancePanel, PerformanceBadge } from './MobilePerformancePanel';
@@ -36,6 +36,8 @@ import { MobileLanguageSwitcher, useLanguage } from './MobileLanguageSwitcher';
 import { useSettings } from '@/context/settings/SettingsContext';
 import { useBiometric } from '@/hooks/use-biometric';
 import { useToast } from '@/hooks/use-toast';
+import { useMobilePermissions } from '@/hooks/use-mobile-permissions';
+import { Camera, Mic, BellRing, HardDrive, CheckCircle, XCircle, RefreshCw } from 'lucide-react';
 
 interface UserProfile {
   name: string;
@@ -69,6 +71,7 @@ export function MobileSettingsScreen({
     updateAppearanceSettings
   } = useSettings();
   const { status: biometricStatus, storeCredentials, clearCredentials, refreshStatus } = useBiometric();
+  const { permissions, checkAllPermissions, resetSetup, isChecking } = useMobilePermissions();
   
   const [isDark, setIsDark] = useState(false);
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
@@ -76,6 +79,7 @@ export function MobileSettingsScreen({
   const [showDeviceInfo, setShowDeviceInfo] = useState(false);
   const [showPerformance, setShowPerformance] = useState(false);
   const [showLanguage, setShowLanguage] = useState(false);
+  const [showPermissions, setShowPermissions] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   // Derive state from settings context
@@ -94,7 +98,7 @@ export function MobileSettingsScreen({
     setIsDark(newDark);
     document.documentElement.classList.toggle('dark', newDark);
     localStorage.setItem('theme', newDark ? 'dark' : 'light');
-    updateAppearanceSettings({ darkMode: newDark });
+    updateAppearanceSettings({ darkMode: newDark, theme: newDark ? 'dark' : 'light' });
   }, [isDark, updateAppearanceSettings]);
 
   const handleNotificationsToggle = useCallback((enabled: boolean) => {
@@ -165,6 +169,7 @@ export function MobileSettingsScreen({
               navigate('/help');
             }}
             data-testid="button-help"
+            aria-label="Open help center"
           >
             <HelpCircle className="w-5 h-5" />
           </Button>
@@ -180,6 +185,7 @@ export function MobileSettingsScreen({
             }}
             className="flex items-center gap-4 w-full"
             data-testid="button-profile"
+            aria-label="View and edit your profile"
           >
             <div className="w-14 h-14 bg-black dark:bg-white rounded-full flex items-center justify-center">
               {defaultUser.avatarUrl ? (
@@ -281,6 +287,85 @@ export function MobileSettingsScreen({
             onClick={() => {
               hapticPresets.buttonPress();
               navigate('/security');
+            }}
+          />
+        </SettingsSection>
+
+        <SettingsSection title="App Permissions">
+          <SettingsRow
+            icon={<MapPin className="w-5 h-5" />}
+            label="Location"
+            description="Required for site visits"
+            ariaLabel="View location permission status"
+            rightContent={
+              <Badge 
+                variant={permissions.location === 'granted' ? 'default' : 'destructive'}
+                className="min-h-[24px]"
+              >
+                {permissions.location === 'granted' ? (
+                  <><CheckCircle className="w-3 h-3 mr-1" /> Granted</>
+                ) : (
+                  <><XCircle className="w-3 h-3 mr-1" /> Denied</>
+                )}
+              </Badge>
+            }
+            onClick={() => {
+              hapticPresets.buttonPress();
+              setShowPermissions(true);
+            }}
+          />
+          <SettingsRow
+            icon={<Camera className="w-5 h-5" />}
+            label="Camera"
+            description="For photos and documents"
+            ariaLabel="View camera permission status"
+            rightContent={
+              <Badge 
+                variant={permissions.camera === 'granted' ? 'secondary' : 'outline'}
+                className="min-h-[24px]"
+              >
+                {permissions.camera === 'granted' ? 'Granted' : permissions.camera === 'denied' ? 'Denied' : 'Not Set'}
+              </Badge>
+            }
+            onClick={() => {
+              hapticPresets.buttonPress();
+              setShowPermissions(true);
+            }}
+          />
+          <SettingsRow
+            icon={<Mic className="w-5 h-5" />}
+            label="Microphone"
+            description="For voice notes"
+            ariaLabel="View microphone permission status"
+            rightContent={
+              <Badge 
+                variant={permissions.microphone === 'granted' ? 'secondary' : 'outline'}
+                className="min-h-[24px]"
+              >
+                {permissions.microphone === 'granted' ? 'Granted' : permissions.microphone === 'denied' ? 'Denied' : 'Not Set'}
+              </Badge>
+            }
+            onClick={() => {
+              hapticPresets.buttonPress();
+              setShowPermissions(true);
+            }}
+          />
+          <SettingsRow
+            icon={<BellRing className="w-5 h-5" />}
+            label="Notifications"
+            description="For alerts and updates"
+            ariaLabel="View notifications permission status"
+            rightContent={
+              <Badge 
+                variant={permissions.notifications === 'granted' ? 'secondary' : 'outline'}
+                className="min-h-[24px]"
+              >
+                {permissions.notifications === 'granted' ? 'Granted' : permissions.notifications === 'denied' ? 'Denied' : 'Not Set'}
+              </Badge>
+            }
+            onClick={() => {
+              hapticPresets.buttonPress();
+              setShowPermissions(true);
             }}
           />
         </SettingsSection>
@@ -407,13 +492,139 @@ export function MobileSettingsScreen({
         title="Language"
       >
         <div className="p-4">
-          <MobileLanguageSwitcher 
-            variant="list"
-            onLanguageChange={(lang) => {
-              setLanguage(lang);
-              setShowLanguage(false);
-            }}
-          />
+          <MobileLanguageSwitcher variant="list" />
+          <Button 
+            className="w-full mt-4 rounded-full"
+            onClick={() => setShowLanguage(false)}
+            data-testid="button-close-language"
+            aria-label="Done selecting language"
+          >
+            Done
+          </Button>
+        </div>
+      </MobileBottomSheet>
+
+      <MobileBottomSheet
+        isOpen={showPermissions}
+        onClose={() => setShowPermissions(false)}
+        title="App Permissions"
+      >
+        <div className="p-4 space-y-4">
+          <p className="text-sm text-black/60 dark:text-white/60">
+            Manage app permissions to ensure all features work correctly.
+          </p>
+          
+          <div className="space-y-3">
+            <div className="flex items-center justify-between p-3 bg-black/5 dark:bg-white/5 rounded-xl">
+              <div className="flex items-center gap-3">
+                <MapPin className="w-5 h-5 text-black/60 dark:text-white/60" />
+                <div>
+                  <p className="text-sm font-medium text-black dark:text-white">Location</p>
+                  <p className="text-xs text-black/50 dark:text-white/50">Required for site visits</p>
+                </div>
+              </div>
+              <Badge 
+                variant={permissions.location === 'granted' ? 'default' : 'destructive'}
+                data-testid="badge-permission-location"
+              >
+                {permissions.location === 'granted' ? 'Granted' : 'Denied'}
+              </Badge>
+            </div>
+
+            <div className="flex items-center justify-between p-3 bg-black/5 dark:bg-white/5 rounded-xl">
+              <div className="flex items-center gap-3">
+                <Camera className="w-5 h-5 text-black/60 dark:text-white/60" />
+                <div>
+                  <p className="text-sm font-medium text-black dark:text-white">Camera</p>
+                  <p className="text-xs text-black/50 dark:text-white/50">Photos and documents</p>
+                </div>
+              </div>
+              <Badge 
+                variant={permissions.camera === 'granted' ? 'secondary' : 'outline'}
+                data-testid="badge-permission-camera"
+              >
+                {permissions.camera === 'granted' ? 'Granted' : permissions.camera === 'denied' ? 'Denied' : 'Not Set'}
+              </Badge>
+            </div>
+
+            <div className="flex items-center justify-between p-3 bg-black/5 dark:bg-white/5 rounded-xl">
+              <div className="flex items-center gap-3">
+                <Mic className="w-5 h-5 text-black/60 dark:text-white/60" />
+                <div>
+                  <p className="text-sm font-medium text-black dark:text-white">Microphone</p>
+                  <p className="text-xs text-black/50 dark:text-white/50">Voice notes</p>
+                </div>
+              </div>
+              <Badge 
+                variant={permissions.microphone === 'granted' ? 'secondary' : 'outline'}
+                data-testid="badge-permission-microphone"
+              >
+                {permissions.microphone === 'granted' ? 'Granted' : permissions.microphone === 'denied' ? 'Denied' : 'Not Set'}
+              </Badge>
+            </div>
+
+            <div className="flex items-center justify-between p-3 bg-black/5 dark:bg-white/5 rounded-xl">
+              <div className="flex items-center gap-3">
+                <BellRing className="w-5 h-5 text-black/60 dark:text-white/60" />
+                <div>
+                  <p className="text-sm font-medium text-black dark:text-white">Notifications</p>
+                  <p className="text-xs text-black/50 dark:text-white/50">Alerts and updates</p>
+                </div>
+              </div>
+              <Badge 
+                variant={permissions.notifications === 'granted' ? 'secondary' : 'outline'}
+                data-testid="badge-permission-notifications"
+              >
+                {permissions.notifications === 'granted' ? 'Granted' : permissions.notifications === 'denied' ? 'Denied' : 'Not Set'}
+              </Badge>
+            </div>
+          </div>
+
+          <div className="pt-4 space-y-3">
+            <Button
+              variant="outline"
+              className="w-full rounded-full"
+              onClick={async () => {
+                hapticPresets.buttonPress();
+                await checkAllPermissions();
+                toast({
+                  title: "Permissions Refreshed",
+                  description: "Permission status has been updated.",
+                });
+              }}
+              disabled={isChecking}
+              data-testid="button-refresh-permissions"
+              aria-label="Refresh permission status"
+            >
+              {isChecking ? (
+                <><RefreshCw className="w-4 h-4 mr-2 animate-spin" /> Checking...</>
+              ) : (
+                <><RefreshCw className="w-4 h-4 mr-2" /> Refresh Status</>
+              )}
+            </Button>
+
+            <Button
+              variant="destructive"
+              className="w-full rounded-full"
+              onClick={() => {
+                hapticPresets.warning();
+                resetSetup();
+                setShowPermissions(false);
+                toast({
+                  title: "Permission Setup Reset",
+                  description: "You'll be prompted for permissions again on next app launch.",
+                });
+              }}
+              data-testid="button-reset-permissions"
+              aria-label="Reset permission setup"
+            >
+              Reset Permission Setup
+            </Button>
+          </div>
+
+          <p className="text-xs text-center text-black/40 dark:text-white/40 pt-2">
+            To change permissions, go to your device Settings and find PACT in the Apps section.
+          </p>
         </div>
       </MobileBottomSheet>
 
@@ -466,6 +677,7 @@ interface SettingsRowProps {
   rightContent?: React.ReactNode;
   textColor?: string;
   onClick?: () => void;
+  ariaLabel?: string;
 }
 
 function SettingsRow({
@@ -476,6 +688,7 @@ function SettingsRow({
   rightContent,
   textColor,
   onClick,
+  ariaLabel,
 }: SettingsRowProps) {
   const content = (
     <div className="flex items-center gap-3 p-4">
@@ -506,6 +719,7 @@ function SettingsRow({
         onClick={onClick}
         className="w-full text-left active:bg-black/5 dark:active:bg-white/5"
         data-testid={`settings-row-${label.toLowerCase().replace(/\s/g, '-')}`}
+        aria-label={ariaLabel || `${label} settings`}
       >
         {content}
       </button>
