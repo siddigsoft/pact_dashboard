@@ -1,8 +1,11 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useMobilePermissions } from '@/hooks/use-mobile-permissions';
 import { useDevice } from '@/hooks/use-device';
 import { MobilePermissionOnboarding } from './MobilePermissionOnboarding';
 import { LocationBlocker } from './LocationBlocker';
+
+// Key used by both hook and guard for consistency
+const PERMISSION_SETUP_KEY = 'pact_permission_setup_complete';
 
 interface MobilePermissionGuardProps {
   children: React.ReactNode;
@@ -16,31 +19,47 @@ export function MobilePermissionGuard({ children }: MobilePermissionGuardProps) 
     isLocationBlocked, 
     isChecking,
     checkAllPermissions,
+    markSetupComplete,
   } = useMobilePermissions();
   
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showBlocker, setShowBlocker] = useState(false);
-  const onboardingCompletedRef = useRef(false);
+  
+  // Check localStorage directly on mount to avoid race conditions
+  const [localSetupComplete, setLocalSetupComplete] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(PERMISSION_SETUP_KEY) === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  // Sync with hook's setupComplete when it updates
+  useEffect(() => {
+    if (setupComplete === true) {
+      setLocalSetupComplete(true);
+    }
+  }, [setupComplete]);
 
   useEffect(() => {
-    // Skip if onboarding was just completed - don't re-show it
-    if (onboardingCompletedRef.current) {
-      console.log('[PermissionGuard] Onboarding was completed, not re-showing');
-      return;
-    }
+    // Use localSetupComplete for immediate localStorage-backed decision
+    const isSetupDone = localSetupComplete || setupComplete === true;
     
-    if (setupComplete === null || isChecking) {
-      console.log('[PermissionGuard] Still checking, setupComplete:', setupComplete, 'isChecking:', isChecking);
+    if (setupComplete === null && !localSetupComplete) {
+      // Still initializing and no localStorage value
+      if (!isChecking) {
+        console.log('[PermissionGuard] Waiting for initialization...');
+      }
       return;
     }
 
-    console.log('[PermissionGuard] State update - isNative:', isNative, 'setupComplete:', setupComplete, 'isLocationBlocked:', isLocationBlocked, 'location:', permissions.location);
+    console.log('[PermissionGuard] State update - isNative:', isNative, 'setupComplete:', setupComplete, 'localSetupComplete:', localSetupComplete, 'isLocationBlocked:', isLocationBlocked, 'location:', permissions.location);
 
-    if (isNative && !setupComplete) {
+    if (isNative && !isSetupDone) {
       console.log('[PermissionGuard] Showing onboarding');
       setShowOnboarding(true);
       setShowBlocker(false);
-    } else if (isNative && setupComplete && (isLocationBlocked || permissions.location !== 'granted')) {
+    } else if (isNative && isSetupDone && (isLocationBlocked || permissions.location !== 'granted')) {
       console.log('[PermissionGuard] Showing location blocker');
       setShowOnboarding(false);
       setShowBlocker(true);
@@ -49,18 +68,21 @@ export function MobilePermissionGuard({ children }: MobilePermissionGuardProps) 
       setShowOnboarding(false);
       setShowBlocker(false);
     }
-  }, [isNative, setupComplete, isLocationBlocked, isChecking, permissions.location]);
+  }, [isNative, setupComplete, localSetupComplete, isLocationBlocked, isChecking, permissions.location]);
 
   const handleOnboardingComplete = useCallback(async () => {
     console.log('[PermissionGuard] handleOnboardingComplete called');
     
-    // Mark that onboarding was completed - prevents re-showing
-    onboardingCompletedRef.current = true;
+    // Persist to localStorage via the hook - this is the source of truth
+    markSetupComplete();
+    
+    // Also update local state for immediate UI response
+    setLocalSetupComplete(true);
     setShowOnboarding(false);
     
     console.log('[PermissionGuard] Onboarding hidden, checking location...');
     
-    // Quick location check with timeout
+    // Quick location check with timeout - don't block the UI
     try {
       const newPermissions = await Promise.race([
         checkAllPermissions(),
@@ -86,7 +108,7 @@ export function MobilePermissionGuard({ children }: MobilePermissionGuardProps) 
         setShowBlocker(true);
       }
     }
-  }, [checkAllPermissions, permissions.location]);
+  }, [markSetupComplete, checkAllPermissions, permissions.location]);
 
   const handleRetryLocation = useCallback(async () => {
     const newPermissions = await checkAllPermissions();

@@ -3672,46 +3672,47 @@ const MMP = () => {
             {canClaimSites && (
               <TabsContent value="enumerator">
                 <div className="mb-4">
-                  <div className="text-sm font-medium text-muted-foreground mb-3">View:</div>
-                  <div className="overflow-x-auto pb-2">
-                    <div className="flex gap-2 min-w-max">
+                  <div className="text-sm font-medium text-muted-foreground mb-2">View:</div>
+                  <div className="flex flex-wrap gap-2">
                     <Button 
                       variant={enumeratorSubTab === 'availableSites' ? 'default' : 'outline'} 
+                      size="sm"
                       onClick={() => setEnumeratorSubTab('availableSites')} 
-                      className={`h-12 text-sm font-medium ${enumeratorSubTab === 'availableSites' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : 'hover:bg-gray-50'}`}
+                      className={`flex items-center gap-1.5 flex-shrink-0 ${enumeratorSubTab === 'availableSites' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : 'hover:bg-gray-50'}`}
+                      data-testid="tab-available-sites"
+                      aria-label="View available sites"
                     >
-                      <div className="flex flex-col items-center gap-1">
-                        <span>Available Sites</span>
-                        <Badge variant="secondary" className="text-xs">{Object.values(enumeratorGroupedByStates).flat().length}</Badge>
-                      </div>
+                      <span className="whitespace-nowrap">Claimable</span>
+                      <Badge variant="secondary" className="text-xs">{Object.values(enumeratorGroupedByStates).flat().length}</Badge>
                     </Button>
                     <Button 
                       variant={enumeratorSubTab === 'smartAssigned' ? 'default' : 'outline'} 
+                      size="sm"
                       onClick={() => setEnumeratorSubTab('smartAssigned')} 
-                      className={`h-12 text-sm font-medium ${enumeratorSubTab === 'smartAssigned' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : 'hover:bg-gray-50'}`}
+                      className={`flex items-center gap-1.5 flex-shrink-0 ${enumeratorSubTab === 'smartAssigned' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : 'hover:bg-gray-50'}`}
+                      data-testid="tab-smart-assigned"
+                      aria-label="View smart assigned sites"
                     >
-                      <div className="flex flex-col items-center gap-1">
-                        <span>Smart Assigned</span>
-                        <Badge variant="secondary" className="text-xs">{enumeratorSmartAssigned.length}</Badge>
-                      </div>
+                      <span className="whitespace-nowrap">Assigned</span>
+                      <Badge variant="secondary" className="text-xs">{enumeratorSmartAssigned.length}</Badge>
                     </Button>
                     <Button 
                       variant={enumeratorSubTab === 'mySites' ? 'default' : 'outline'} 
+                      size="sm"
                       onClick={() => setEnumeratorSubTab('mySites')} 
-                      className={`h-12 text-sm font-medium ${enumeratorSubTab === 'mySites' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : 'hover:bg-gray-50'}`}
+                      className={`flex items-center gap-1.5 flex-shrink-0 ${enumeratorSubTab === 'mySites' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : 'hover:bg-gray-50'}`}
+                      data-testid="tab-my-sites"
+                      aria-label="View my sites"
                     >
-                      <div className="flex flex-col items-center gap-1">
-                        <span>My Sites</span>
-                        <Badge variant="secondary" className="text-xs">{enumeratorMySites.length}</Badge>
-                      </div>
+                      <span className="whitespace-nowrap">My Sites</span>
+                      <Badge variant="secondary" className="text-xs">{enumeratorMySites.length}</Badge>
                     </Button>
                   </div>
-                  </div>
+
                   {enumeratorSubTab === 'mySites' && (
-                    <div className="mt-4">
+                    <div className="mt-3">
                       <div className="text-sm font-medium text-muted-foreground mb-2">Subcategories:</div>
-                      <div className="overflow-x-auto pb-2">
-                        <div className="flex gap-2 min-w-max">
+                      <div className="flex flex-wrap gap-2">
                           <Button 
                             variant={mySitesSubTab === 'pending' ? 'default' : 'outline'} 
                             size="sm" 
@@ -3777,7 +3778,6 @@ const MMP = () => {
                               {enumeratorMySites.length}
                             </Badge>
                           </Button>
-                        </div>
                       </div>
                     </div>
                   )}

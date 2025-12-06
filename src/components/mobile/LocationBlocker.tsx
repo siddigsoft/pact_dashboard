@@ -68,29 +68,29 @@ export function LocationBlocker({ onRetry }: LocationBlockerProps) {
   }, [checkAllPermissions, onRetry]);
 
   return (
-    <div className="fixed inset-0 bg-white dark:bg-black z-[100] flex flex-col safe-area-top safe-area-bottom">
-      <div className="flex-1 flex flex-col items-center justify-center px-6">
+    <div className="fixed inset-0 bg-white dark:bg-black z-[100] flex flex-col safe-area-top safe-area-bottom overflow-y-auto">
+      <div className="flex-1 flex flex-col items-center justify-center px-4 py-6">
         <motion.div
           initial={{ scale: 0.8, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ type: 'spring', damping: 20, duration: 0.5 }}
-          className="flex flex-col items-center text-center"
+          className="flex flex-col items-center text-center w-full max-w-xs"
         >
           <motion.div 
-            className="relative mb-8"
-            animate={{ y: [0, -8, 0] }}
+            className="relative mb-6"
+            animate={{ y: [0, -6, 0] }}
             transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
           >
-            <div className="w-32 h-32 rounded-full bg-black dark:bg-white flex items-center justify-center">
-              <MapPin className="w-16 h-16 text-white dark:text-black" />
+            <div className="w-24 h-24 rounded-full bg-black dark:bg-white flex items-center justify-center">
+              <MapPin className="w-12 h-12 text-white dark:text-black" />
             </div>
             
             <motion.div
-              className="absolute -top-1 -right-1 w-10 h-10 rounded-full bg-black dark:bg-white border-4 border-white dark:border-black flex items-center justify-center"
+              className="absolute -top-1 -right-1 w-8 h-8 rounded-full bg-black dark:bg-white border-3 border-white dark:border-black flex items-center justify-center"
               animate={{ scale: [1, 1.1, 1] }}
               transition={{ duration: 1.5, repeat: Infinity }}
             >
-              <AlertTriangle className="w-5 h-5 text-white dark:text-black" />
+              <AlertTriangle className="w-4 h-4 text-white dark:text-black" />
             </motion.div>
           </motion.div>
 
@@ -98,16 +98,17 @@ export function LocationBlocker({ onRetry }: LocationBlockerProps) {
             initial={{ y: 20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ delay: 0.2 }}
+            className="w-full"
           >
             <h1 
-              className="text-2xl font-bold text-black dark:text-white mb-3"
+              className="text-xl font-bold text-black dark:text-white mb-2"
               data-testid="text-location-blocked-title"
             >
               Location Access Required
             </h1>
 
             <p 
-              className="text-base text-black/60 dark:text-white/60 max-w-sm leading-relaxed mb-6"
+              className="text-sm text-black/60 dark:text-white/60 leading-relaxed mb-4"
               data-testid="text-location-blocked-description"
             >
               PACT needs continuous location access to track field visits and verify your activities.
@@ -118,26 +119,26 @@ export function LocationBlocker({ onRetry }: LocationBlockerProps) {
             initial={{ y: 20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ delay: 0.3 }}
-            className="bg-black/5 dark:bg-white/5 rounded-2xl p-5 mb-6 max-w-sm w-full"
+            className="bg-black/5 dark:bg-white/5 rounded-xl p-4 mb-4 w-full"
           >
-            <h3 className="font-semibold text-black dark:text-white mb-3 text-left">
+            <h3 className="font-semibold text-sm text-black dark:text-white mb-2 text-left">
               How to enable:
             </h3>
-            <ol className="text-sm text-black/70 dark:text-white/70 text-left space-y-3">
-              <li className="flex items-start gap-3">
-                <span className="w-6 h-6 rounded-full bg-black dark:bg-white text-white dark:text-black text-xs font-bold flex items-center justify-center flex-shrink-0">1</span>
+            <ol className="text-xs text-black/70 dark:text-white/70 text-left space-y-2">
+              <li className="flex items-start gap-2">
+                <span className="w-5 h-5 rounded-full bg-black dark:bg-white text-white dark:text-black text-xs font-bold flex items-center justify-center flex-shrink-0">1</span>
                 <span>Tap <strong>"Open Settings"</strong> below</span>
               </li>
-              <li className="flex items-start gap-3">
-                <span className="w-6 h-6 rounded-full bg-black dark:bg-white text-white dark:text-black text-xs font-bold flex items-center justify-center flex-shrink-0">2</span>
+              <li className="flex items-start gap-2">
+                <span className="w-5 h-5 rounded-full bg-black dark:bg-white text-white dark:text-black text-xs font-bold flex items-center justify-center flex-shrink-0">2</span>
                 <span>Select <strong>"Permissions"</strong></span>
               </li>
-              <li className="flex items-start gap-3">
-                <span className="w-6 h-6 rounded-full bg-black dark:bg-white text-white dark:text-black text-xs font-bold flex items-center justify-center flex-shrink-0">3</span>
+              <li className="flex items-start gap-2">
+                <span className="w-5 h-5 rounded-full bg-black dark:bg-white text-white dark:text-black text-xs font-bold flex items-center justify-center flex-shrink-0">3</span>
                 <span>Tap <strong>"Location"</strong></span>
               </li>
-              <li className="flex items-start gap-3">
-                <span className="w-6 h-6 rounded-full bg-black dark:bg-white text-white dark:text-black text-xs font-bold flex items-center justify-center flex-shrink-0">4</span>
+              <li className="flex items-start gap-2">
+                <span className="w-5 h-5 rounded-full bg-black dark:bg-white text-white dark:text-black text-xs font-bold flex items-center justify-center flex-shrink-0">4</span>
                 <span>Choose <strong>"Allow all the time"</strong></span>
               </li>
             </ol>
@@ -147,9 +148,9 @@ export function LocationBlocker({ onRetry }: LocationBlockerProps) {
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="mb-6 px-4 py-3 bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-xl max-w-sm"
+              className="mb-4 px-3 py-2 bg-black/5 dark:bg-white/5 border border-black/10 dark:border-white/10 rounded-lg w-full"
             >
-              <p className="text-sm text-black/70 dark:text-white/70">
+              <p className="text-xs text-black/70 dark:text-white/70">
                 If the permission dialog doesn't appear, please use the Settings button to enable it manually.
               </p>
             </motion.div>
@@ -161,18 +162,18 @@ export function LocationBlocker({ onRetry }: LocationBlockerProps) {
         initial={{ y: 30, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ delay: 0.4 }}
-        className="px-6 pb-8 flex flex-col gap-3"
+        className="px-4 pb-6 flex flex-col gap-2"
       >
         <Button
           size="lg"
           onClick={handleOpenSettings}
-          className="w-full h-14 rounded-full !bg-black dark:!bg-white !text-white dark:!text-black font-semibold text-lg gap-2 hover:!bg-black/90 dark:hover:!bg-white/90"
+          className="w-full h-12 rounded-full !bg-black dark:!bg-white !text-white dark:!text-black font-semibold text-base gap-2 hover:!bg-black/90 dark:hover:!bg-white/90"
           data-testid="button-open-settings"
           aria-label="Open device settings"
         >
-          <Settings className="w-5 h-5" />
+          <Settings className="w-4 h-4" />
           Open Settings
-          <ChevronRight className="w-5 h-5 ml-auto" />
+          <ChevronRight className="w-4 h-4 ml-auto" />
         </Button>
 
         <Button
@@ -180,7 +181,7 @@ export function LocationBlocker({ onRetry }: LocationBlockerProps) {
           variant="outline"
           onClick={handleCheckAgain}
           disabled={isRetrying}
-          className="w-full h-14 rounded-full !border-2 !border-black dark:!border-white !text-black dark:!text-white font-semibold text-lg gap-2 !bg-transparent hover:!bg-black/5 dark:hover:!bg-white/5"
+          className="w-full h-12 rounded-full !border-2 !border-black dark:!border-white !text-black dark:!text-white font-semibold text-base gap-2 !bg-transparent hover:!bg-black/5 dark:hover:!bg-white/5"
           data-testid="button-check-location"
           aria-label="Check if location is enabled"
         >
@@ -189,11 +190,11 @@ export function LocationBlocker({ onRetry }: LocationBlockerProps) {
               animate={{ rotate: 360 }}
               transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
             >
-              <RefreshCw className="w-5 h-5" />
+              <RefreshCw className="w-4 h-4" />
             </motion.div>
           ) : (
             <>
-              <RefreshCw className="w-5 h-5" />
+              <RefreshCw className="w-4 h-4" />
               I've Enabled It
             </>
           )}
@@ -201,19 +202,19 @@ export function LocationBlocker({ onRetry }: LocationBlockerProps) {
 
         <Button
           variant="ghost"
-          size="lg"
+          size="default"
           onClick={handleRetry}
           disabled={isRetrying}
-          className="w-full h-12 rounded-full text-black/60 dark:text-white/60 font-medium"
+          className="w-full rounded-full text-black/60 dark:text-white/60 font-medium text-sm"
           data-testid="button-retry-location"
           aria-label="Try requesting location again"
         >
           Request Permission Again
         </Button>
 
-        <div className="flex items-center justify-center gap-2 mt-2">
-          <Shield className="w-4 h-4 text-black/40 dark:text-white/40" />
-          <p className="text-xs text-black/40 dark:text-white/40">
+        <div className="flex items-center justify-center gap-2 mt-1">
+          <Shield className="w-3 h-3 text-black/40 dark:text-white/40 flex-shrink-0" />
+          <p className="text-[10px] text-black/40 dark:text-white/40 text-center">
             Your location is encrypted and only shared during active visits
           </p>
         </div>
