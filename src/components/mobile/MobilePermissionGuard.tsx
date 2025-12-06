@@ -55,15 +55,23 @@ export function MobilePermissionGuard({ children }: MobilePermissionGuardProps) 
 
     console.log('[PermissionGuard] State update - isNative:', isNative, 'setupComplete:', setupComplete, 'localSetupComplete:', localSetupComplete, 'isLocationBlocked:', isLocationBlocked, 'location:', permissions.location);
 
+    // Don't make decisions while still checking permissions
+    if (isChecking) {
+      console.log('[PermissionGuard] Still checking permissions, waiting...');
+      return;
+    }
+
     if (isNative && !isSetupDone) {
       console.log('[PermissionGuard] Showing onboarding');
       setShowOnboarding(true);
       setShowBlocker(false);
-    } else if (isNative && isSetupDone && (isLocationBlocked || permissions.location !== 'granted')) {
-      console.log('[PermissionGuard] Showing location blocker');
+    } else if (isNative && isSetupDone && permissions.location === 'denied') {
+      // Only show blocker if permission is explicitly DENIED (not unknown/prompt)
+      console.log('[PermissionGuard] Showing location blocker - permission denied');
       setShowOnboarding(false);
       setShowBlocker(true);
     } else {
+      // Default: show main app (trust that setup is complete)
       console.log('[PermissionGuard] Showing main app');
       setShowOnboarding(false);
       setShowBlocker(false);
