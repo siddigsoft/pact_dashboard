@@ -175,10 +175,16 @@ export function useMobilePermissions() {
       setIsLocationBlocked(true);
     } else {
       setIsLocationBlocked(false);
+      // Mark setup as complete when location permission is granted
+      if (!setupComplete) {
+        console.log('[Permissions] Location granted - marking setup complete');
+        localStorage.setItem(PERMISSION_SETUP_KEY, 'true');
+        setSetupComplete(true);
+      }
     }
     
     return newPermissions;
-  }, [isNative]);
+  }, [isNative, setupComplete]);
 
   const requestPermission = async (type: PermissionType): Promise<PermissionResult> => {
     try {
