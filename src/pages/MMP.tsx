@@ -2104,8 +2104,10 @@ const MMP = () => {
             availableSitesQuery = availableSitesQuery.or(conditions.join(','));
           }
         } else {
-          // If no state/locality is set, log a warning but still try to load all dispatched sites
-          console.warn('⚠️ Data collector has no stateId or localityId set. Loading all dispatched sites.');
+          // If no state/locality is set, do NOT load all sites - this is a misconfiguration
+          // Return empty result to prevent showing all sites to users without proper assignment
+          console.warn('⚠️ Data collector has no stateId or localityId set. No available sites will be shown.');
+          availableSitesQuery = availableSitesQuery.eq('id', 'NEVER_MATCH_NO_GEO_ASSIGNMENT');
         }
         
         availableSitesQuery = availableSitesQuery
