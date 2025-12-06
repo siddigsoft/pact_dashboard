@@ -1,3 +1,5 @@
+export type ImageQualityPreset = 'low' | 'medium' | 'high' | 'original';
+
 interface CompressionOptions {
   maxWidth?: number;
   maxHeight?: number;
@@ -11,6 +13,17 @@ const defaultOptions: CompressionOptions = {
   quality: 0.7,
   mimeType: 'image/jpeg',
 };
+
+export const QUALITY_PRESETS: Record<ImageQualityPreset, CompressionOptions> = {
+  low: { maxWidth: 800, maxHeight: 800, quality: 0.5 },
+  medium: { maxWidth: 1200, maxHeight: 1200, quality: 0.7 },
+  high: { maxWidth: 1920, maxHeight: 1920, quality: 0.85 },
+  original: { maxWidth: 4096, maxHeight: 4096, quality: 1 },
+};
+
+export function getCompressionOptionsForQuality(preset: ImageQualityPreset): CompressionOptions {
+  return QUALITY_PRESETS[preset];
+}
 
 export async function compressImage(
   file: File | Blob,
