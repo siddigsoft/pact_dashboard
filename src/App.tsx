@@ -149,7 +149,7 @@ const AuthGuard = ({ children }) => {
 
   if (
     !currentUser &&
-    !['/auth', '/login', '/register', '/registration-success', '/forgot-password'].includes(location.pathname) &&
+    !['/', '/auth', '/login', '/register', '/registration-success', '/forgot-password', '/documentation'].includes(location.pathname) &&
     !location.pathname.startsWith('/demo/')
   ) {
     return <Navigate to="/auth" replace />;
