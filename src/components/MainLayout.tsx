@@ -40,7 +40,7 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
     if (path === '/users') return 'Team Members';
     if (path.startsWith('/projects')) return 'Projects';
     if (path === '/archive') return 'Archives';
-    return 'PACT Platform';
+    return 'PACT Command Center';
   };
 
   useEffect(() => {

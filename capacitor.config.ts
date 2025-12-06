@@ -2,7 +2,7 @@ import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.pact.workflow',
-  appName: 'PACT Workflow',
+  appName: 'PACT Command Center',
   webDir: 'dist',
  
   server: process.env.CAPACITOR_REMOTE_URL
