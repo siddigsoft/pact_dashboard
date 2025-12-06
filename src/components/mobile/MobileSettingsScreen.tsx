@@ -116,6 +116,11 @@ export function MobileSettingsScreen({
     setIsDark(dark);
   }, [appearanceSettings?.darkMode]);
 
+  // Load permissions on mount so status is immediately visible
+  useEffect(() => {
+    checkAllPermissions();
+  }, [checkAllPermissions]);
+
   const handleThemeToggle = useCallback(() => {
     hapticPresets.toggle();
     const newDark = !isDark;
@@ -200,7 +205,7 @@ export function MobileSettingsScreen({
   };
 
   return (
-    <div className={cn("min-h-screen bg-gray-50 dark:bg-neutral-950 pb-safe", className)} data-testid="mobile-settings">
+    <div className={cn("min-h-screen bg-white dark:bg-black pb-safe", className)} data-testid="mobile-settings">
       <MobileHeader
         title="Settings"
         showBack
@@ -250,7 +255,12 @@ export function MobileSettingsScreen({
               <p className="text-sm text-black/60 dark:text-white/60">
                 {defaultUser.email}
               </p>
-              <Badge variant="secondary" className="mt-1 text-xs">
+              <Badge 
+                variant="outline" 
+                className="mt-1 text-xs min-h-[24px] rounded-full px-3 bg-white text-black dark:bg-black dark:text-white border-black/20 dark:border-white/20"
+                data-testid="badge-user-role"
+                aria-label={`User role: ${defaultUser.role}`}
+              >
                 {defaultUser.role}
               </Badge>
             </div>
@@ -344,13 +354,22 @@ export function MobileSettingsScreen({
             ariaLabel="View location permission status"
             rightContent={
               <Badge 
-                variant={permissions.location === 'granted' ? 'default' : 'destructive'}
-                className="min-h-[24px]"
+                variant="outline"
+                className={cn(
+                  "min-h-[28px] rounded-full px-3",
+                  permissions.location === 'granted' 
+                    ? "bg-black text-white dark:bg-white dark:text-black border-black dark:border-white" 
+                    : "bg-white text-black dark:bg-black dark:text-white border-black/20 dark:border-white/20"
+                )}
+                data-testid="badge-permission-location-inline"
+                aria-label={`Location permission ${permissions.location}`}
               >
                 {permissions.location === 'granted' ? (
                   <><CheckCircle className="w-3 h-3 mr-1" /> Granted</>
-                ) : (
+                ) : permissions.location === 'denied' ? (
                   <><XCircle className="w-3 h-3 mr-1" /> Denied</>
+                ) : (
+                  'Not Set'
                 )}
               </Badge>
             }
@@ -366,8 +385,15 @@ export function MobileSettingsScreen({
             ariaLabel="View camera permission status"
             rightContent={
               <Badge 
-                variant={permissions.camera === 'granted' ? 'secondary' : 'outline'}
-                className="min-h-[24px]"
+                variant="outline"
+                className={cn(
+                  "min-h-[28px] rounded-full px-3",
+                  permissions.camera === 'granted' 
+                    ? "bg-black text-white dark:bg-white dark:text-black border-black dark:border-white" 
+                    : "bg-white text-black dark:bg-black dark:text-white border-black/20 dark:border-white/20"
+                )}
+                data-testid="badge-permission-camera-inline"
+                aria-label={`Camera permission ${permissions.camera}`}
               >
                 {permissions.camera === 'granted' ? 'Granted' : permissions.camera === 'denied' ? 'Denied' : 'Not Set'}
               </Badge>
@@ -384,8 +410,15 @@ export function MobileSettingsScreen({
             ariaLabel="View microphone permission status"
             rightContent={
               <Badge 
-                variant={permissions.microphone === 'granted' ? 'secondary' : 'outline'}
-                className="min-h-[24px]"
+                variant="outline"
+                className={cn(
+                  "min-h-[28px] rounded-full px-3",
+                  permissions.microphone === 'granted' 
+                    ? "bg-black text-white dark:bg-white dark:text-black border-black dark:border-white" 
+                    : "bg-white text-black dark:bg-black dark:text-white border-black/20 dark:border-white/20"
+                )}
+                data-testid="badge-permission-microphone-inline"
+                aria-label={`Microphone permission ${permissions.microphone}`}
               >
                 {permissions.microphone === 'granted' ? 'Granted' : permissions.microphone === 'denied' ? 'Denied' : 'Not Set'}
               </Badge>
@@ -402,8 +435,15 @@ export function MobileSettingsScreen({
             ariaLabel="View notifications permission status"
             rightContent={
               <Badge 
-                variant={permissions.notifications === 'granted' ? 'secondary' : 'outline'}
-                className="min-h-[24px]"
+                variant="outline"
+                className={cn(
+                  "min-h-[28px] rounded-full px-3",
+                  permissions.notifications === 'granted' 
+                    ? "bg-black text-white dark:bg-white dark:text-black border-black dark:border-white" 
+                    : "bg-white text-black dark:bg-black dark:text-white border-black/20 dark:border-white/20"
+                )}
+                data-testid="badge-permission-notifications-inline"
+                aria-label={`Notifications permission ${permissions.notifications}`}
               >
                 {permissions.notifications === 'granted' ? 'Granted' : permissions.notifications === 'denied' ? 'Denied' : 'Not Set'}
               </Badge>
@@ -455,7 +495,12 @@ export function MobileSettingsScreen({
               : 'Not synced yet'}
             rightContent={
               extendedSettings.syncStatus.pendingItemsCount > 0 ? (
-                <Badge variant="secondary" className="min-h-[24px]">
+                <Badge 
+                  variant="outline" 
+                  className="min-h-[28px] rounded-full px-3 bg-black text-white dark:bg-white dark:text-black border-black dark:border-white"
+                  data-testid="badge-sync-pending"
+                  aria-label={`${extendedSettings.syncStatus.pendingItemsCount} items pending sync`}
+                >
                   {extendedSettings.syncStatus.pendingItemsCount} pending
                 </Badge>
               ) : null
@@ -481,15 +526,23 @@ export function MobileSettingsScreen({
             ariaLabel="Configure battery optimization for background GPS"
             description="Disable for reliable GPS tracking"
             rightContent={
-              extendedSettings.batteryOptimization.isOptimizationDisabled ? (
-                <Badge variant="secondary" className="min-h-[24px]">
-                  <CheckCircle className="w-3 h-3 mr-1" /> Disabled
-                </Badge>
-              ) : (
-                <Badge variant="outline" className="min-h-[24px]">
-                  Enabled
-                </Badge>
-              )
+              <Badge 
+                variant="outline" 
+                className={cn(
+                  "min-h-[28px] rounded-full px-3",
+                  extendedSettings.batteryOptimization.isOptimizationDisabled
+                    ? "bg-black text-white dark:bg-white dark:text-black border-black dark:border-white"
+                    : "bg-white text-black dark:bg-black dark:text-white border-black/20 dark:border-white/20"
+                )}
+                data-testid="badge-battery-optimization"
+                aria-label={`Battery optimization ${extendedSettings.batteryOptimization.isOptimizationDisabled ? 'disabled' : 'enabled'}`}
+              >
+                {extendedSettings.batteryOptimization.isOptimizationDisabled ? (
+                  <><CheckCircle className="w-3 h-3 mr-1" /> Disabled</>
+                ) : (
+                  'Enabled'
+                )}
+              </Badge>
             }
             onClick={() => {
               hapticPresets.buttonPress();
@@ -515,7 +568,12 @@ export function MobileSettingsScreen({
             label="Font Size"
             ariaLabel="Adjust font size"
             rightContent={
-              <Badge variant="secondary" className="min-h-[24px] capitalize">
+              <Badge 
+                variant="outline" 
+                className="min-h-[28px] rounded-full px-3 bg-white text-black dark:bg-black dark:text-white border-black/20 dark:border-white/20 capitalize"
+                data-testid="badge-font-size"
+                aria-label={`Font size ${extendedSettings.accessibility.fontSize}`}
+              >
                 {extendedSettings.accessibility.fontSize}
               </Badge>
             }
@@ -563,7 +621,12 @@ export function MobileSettingsScreen({
             label="Haptic Feedback"
             ariaLabel="Configure haptic feedback intensity"
             rightContent={
-              <Badge variant="secondary" className="min-h-[24px] capitalize">
+              <Badge 
+                variant="outline" 
+                className="min-h-[28px] rounded-full px-3 bg-white text-black dark:bg-black dark:text-white border-black/20 dark:border-white/20 capitalize"
+                data-testid="badge-haptic-intensity"
+                aria-label={`Haptic feedback intensity ${extendedSettings.hapticIntensity}`}
+              >
                 {extendedSettings.hapticIntensity}
               </Badge>
             }
@@ -689,7 +752,7 @@ export function MobileSettingsScreen({
           </p>
           
           <div className="space-y-3">
-            <div className="flex items-center justify-between p-3 bg-black/5 dark:bg-white/5 rounded-xl">
+            <div className="flex items-center justify-between p-3 bg-black/5 dark:bg-white/5 rounded-xl min-h-11">
               <div className="flex items-center gap-3">
                 <MapPin className="w-5 h-5 text-black/60 dark:text-white/60" />
                 <div>
@@ -698,14 +761,21 @@ export function MobileSettingsScreen({
                 </div>
               </div>
               <Badge 
-                variant={permissions.location === 'granted' ? 'default' : 'destructive'}
+                variant="outline"
+                className={cn(
+                  "min-h-[28px] rounded-full px-3",
+                  permissions.location === 'granted' 
+                    ? "bg-black text-white dark:bg-white dark:text-black border-black dark:border-white" 
+                    : "bg-white text-black dark:bg-black dark:text-white border-black/20 dark:border-white/20"
+                )}
                 data-testid="badge-permission-location"
+                aria-label={`Location permission ${permissions.location}`}
               >
-                {permissions.location === 'granted' ? 'Granted' : 'Denied'}
+                {permissions.location === 'granted' ? 'Granted' : permissions.location === 'denied' ? 'Denied' : 'Not Set'}
               </Badge>
             </div>
 
-            <div className="flex items-center justify-between p-3 bg-black/5 dark:bg-white/5 rounded-xl">
+            <div className="flex items-center justify-between p-3 bg-black/5 dark:bg-white/5 rounded-xl min-h-11">
               <div className="flex items-center gap-3">
                 <Camera className="w-5 h-5 text-black/60 dark:text-white/60" />
                 <div>
@@ -714,14 +784,21 @@ export function MobileSettingsScreen({
                 </div>
               </div>
               <Badge 
-                variant={permissions.camera === 'granted' ? 'secondary' : 'outline'}
+                variant="outline"
+                className={cn(
+                  "min-h-[28px] rounded-full px-3",
+                  permissions.camera === 'granted' 
+                    ? "bg-black text-white dark:bg-white dark:text-black border-black dark:border-white" 
+                    : "bg-white text-black dark:bg-black dark:text-white border-black/20 dark:border-white/20"
+                )}
                 data-testid="badge-permission-camera"
+                aria-label={`Camera permission ${permissions.camera}`}
               >
                 {permissions.camera === 'granted' ? 'Granted' : permissions.camera === 'denied' ? 'Denied' : 'Not Set'}
               </Badge>
             </div>
 
-            <div className="flex items-center justify-between p-3 bg-black/5 dark:bg-white/5 rounded-xl">
+            <div className="flex items-center justify-between p-3 bg-black/5 dark:bg-white/5 rounded-xl min-h-11">
               <div className="flex items-center gap-3">
                 <Mic className="w-5 h-5 text-black/60 dark:text-white/60" />
                 <div>
@@ -730,14 +807,21 @@ export function MobileSettingsScreen({
                 </div>
               </div>
               <Badge 
-                variant={permissions.microphone === 'granted' ? 'secondary' : 'outline'}
+                variant="outline"
+                className={cn(
+                  "min-h-[28px] rounded-full px-3",
+                  permissions.microphone === 'granted' 
+                    ? "bg-black text-white dark:bg-white dark:text-black border-black dark:border-white" 
+                    : "bg-white text-black dark:bg-black dark:text-white border-black/20 dark:border-white/20"
+                )}
                 data-testid="badge-permission-microphone"
+                aria-label={`Microphone permission ${permissions.microphone}`}
               >
                 {permissions.microphone === 'granted' ? 'Granted' : permissions.microphone === 'denied' ? 'Denied' : 'Not Set'}
               </Badge>
             </div>
 
-            <div className="flex items-center justify-between p-3 bg-black/5 dark:bg-white/5 rounded-xl">
+            <div className="flex items-center justify-between p-3 bg-black/5 dark:bg-white/5 rounded-xl min-h-11">
               <div className="flex items-center gap-3">
                 <BellRing className="w-5 h-5 text-black/60 dark:text-white/60" />
                 <div>
@@ -746,8 +830,15 @@ export function MobileSettingsScreen({
                 </div>
               </div>
               <Badge 
-                variant={permissions.notifications === 'granted' ? 'secondary' : 'outline'}
+                variant="outline"
+                className={cn(
+                  "min-h-[28px] rounded-full px-3",
+                  permissions.notifications === 'granted' 
+                    ? "bg-black text-white dark:bg-white dark:text-black border-black dark:border-white" 
+                    : "bg-white text-black dark:bg-black dark:text-white border-black/20 dark:border-white/20"
+                )}
                 data-testid="badge-permission-notifications"
+                aria-label={`Notifications permission ${permissions.notifications}`}
               >
                 {permissions.notifications === 'granted' ? 'Granted' : permissions.notifications === 'denied' ? 'Denied' : 'Not Set'}
               </Badge>
@@ -1134,11 +1225,11 @@ function SettingsRow({
   ariaLabel,
 }: SettingsRowProps) {
   const content = (
-    <div className="flex items-center gap-3 p-4">
-      <div className={cn("text-black/60 dark:text-white/60", textColor)}>
+    <div className="flex items-center gap-3 px-4 min-h-11">
+      <div className={cn("text-black/70 dark:text-white/70", textColor)}>
         {icon}
       </div>
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 py-3">
         <p className={cn("text-sm font-medium text-black dark:text-white", textColor)}>
           {label}
         </p>
@@ -1151,7 +1242,7 @@ function SettingsRow({
       {rightContent}
       {action}
       {onClick && !action && (
-        <ChevronRight className="w-4 h-4 text-black/20 dark:text-white/20" />
+        <ChevronRight className="w-5 h-5 text-black/30 dark:text-white/30" />
       )}
     </div>
   );
@@ -1160,7 +1251,7 @@ function SettingsRow({
     return (
       <button
         onClick={onClick}
-        className="w-full text-left active:bg-black/5 dark:active:bg-white/5"
+        className="w-full text-left min-h-11 active:bg-black/5 dark:active:bg-white/5 transition-colors"
         data-testid={`settings-row-${label.toLowerCase().replace(/\s/g, '-')}`}
         aria-label={ariaLabel || `${label} settings`}
       >
@@ -1169,5 +1260,12 @@ function SettingsRow({
     );
   }
 
-  return <div data-testid={`settings-row-${label.toLowerCase().replace(/\s/g, '-')}`}>{content}</div>;
+  return (
+    <div 
+      className="min-h-11" 
+      data-testid={`settings-row-${label.toLowerCase().replace(/\s/g, '-')}`}
+    >
+      {content}
+    </div>
+  );
 }
