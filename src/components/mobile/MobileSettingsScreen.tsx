@@ -19,11 +19,23 @@ import {
   Activity,
   Palette,
   Smartphone,
+  Battery,
+  Wifi,
+  WifiOff,
+  Image,
+  HardDrive,
+  Eye,
+  Type,
+  Vibrate,
+  Clock,
+  Cloud,
+  Zap,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
+import { Slider } from '@/components/ui/slider';
 import { cn } from '@/lib/utils';
 import { hapticPresets } from '@/lib/haptics';
 import { MobileHeader } from './MobileHeader';
@@ -37,7 +49,8 @@ import { useSettings } from '@/context/settings/SettingsContext';
 import { useBiometric } from '@/hooks/use-biometric';
 import { useToast } from '@/hooks/use-toast';
 import { useMobilePermissions } from '@/hooks/use-mobile-permissions';
-import { Camera, Mic, BellRing, HardDrive, CheckCircle, XCircle, RefreshCw } from 'lucide-react';
+import { useMobileExtendedSettings, FontSize, HapticIntensity, ImageQuality } from '@/hooks/use-mobile-extended-settings';
+import { Camera, Mic, BellRing, CheckCircle, XCircle, RefreshCw } from 'lucide-react';
 
 interface UserProfile {
   name: string;
@@ -72,6 +85,14 @@ export function MobileSettingsScreen({
   } = useSettings();
   const { status: biometricStatus, storeCredentials, clearCredentials, refreshStatus } = useBiometric();
   const { permissions, checkAllPermissions, resetSetup, isChecking } = useMobilePermissions();
+  const { 
+    settings: extendedSettings, 
+    updateDataUsage, 
+    updateAccessibility, 
+    updateHapticIntensity,
+    updateBatteryOptimization,
+    clearCache 
+  } = useMobileExtendedSettings();
   
   const [isDark, setIsDark] = useState(false);
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
@@ -80,7 +101,11 @@ export function MobileSettingsScreen({
   const [showPerformance, setShowPerformance] = useState(false);
   const [showLanguage, setShowLanguage] = useState(false);
   const [showPermissions, setShowPermissions] = useState(false);
+  const [showDataUsage, setShowDataUsage] = useState(false);
+  const [showAccessibility, setShowAccessibility] = useState(false);
+  const [showSyncStatus, setShowSyncStatus] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isClearingCache, setIsClearingCache] = useState(false);
 
   // Derive state from settings context
   const notificationsEnabled = notificationSettings?.enabled ?? true;
@@ -400,6 +425,135 @@ export function MobileSettingsScreen({
           />
         </SettingsSection>
 
+        <SettingsSection title="Data & Sync">
+          <SettingsRow
+            icon={<Cloud className="w-5 h-5" />}
+            label="Sync Status"
+            ariaLabel="View sync status and history"
+            description={extendedSettings.syncStatus.lastSyncTime 
+              ? `Last synced: ${new Date(extendedSettings.syncStatus.lastSyncTime).toLocaleString()}`
+              : 'Not synced yet'}
+            rightContent={
+              extendedSettings.syncStatus.pendingItemsCount > 0 ? (
+                <Badge variant="secondary" className="min-h-[24px]">
+                  {extendedSettings.syncStatus.pendingItemsCount} pending
+                </Badge>
+              ) : null
+            }
+            onClick={() => {
+              hapticPresets.buttonPress();
+              setShowSyncStatus(true);
+            }}
+          />
+          <SettingsRow
+            icon={<Wifi className="w-5 h-5" />}
+            label="Data Usage"
+            ariaLabel="Configure data usage and sync settings"
+            description="Wi-Fi sync, image quality, cache"
+            onClick={() => {
+              hapticPresets.buttonPress();
+              setShowDataUsage(true);
+            }}
+          />
+          <SettingsRow
+            icon={<Battery className="w-5 h-5" />}
+            label="Battery Optimization"
+            ariaLabel="Configure battery optimization for background GPS"
+            description="Disable for reliable GPS tracking"
+            rightContent={
+              extendedSettings.batteryOptimization.isOptimizationDisabled ? (
+                <Badge variant="secondary" className="min-h-[24px]">
+                  <CheckCircle className="w-3 h-3 mr-1" /> Disabled
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="min-h-[24px]">
+                  Enabled
+                </Badge>
+              )
+            }
+            onClick={() => {
+              hapticPresets.buttonPress();
+              updateBatteryOptimization({ hasSeenGuidance: true });
+              if (typeof window !== 'undefined' && 'Capacitor' in window) {
+                toast({
+                  title: "Battery Optimization",
+                  description: "Open your device Settings > Apps > PACT > Battery > Unrestricted to allow background GPS.",
+                });
+              } else {
+                toast({
+                  title: "Battery Optimization",
+                  description: "This feature is only available on the mobile app.",
+                });
+              }
+            }}
+          />
+        </SettingsSection>
+
+        <SettingsSection title="Accessibility">
+          <SettingsRow
+            icon={<Type className="w-5 h-5" />}
+            label="Font Size"
+            ariaLabel="Adjust font size"
+            rightContent={
+              <Badge variant="secondary" className="min-h-[24px] capitalize">
+                {extendedSettings.accessibility.fontSize}
+              </Badge>
+            }
+            onClick={() => {
+              hapticPresets.buttonPress();
+              setShowAccessibility(true);
+            }}
+          />
+          <SettingsRow
+            icon={<Eye className="w-5 h-5" />}
+            label="High Contrast"
+            ariaLabel="Toggle high contrast mode"
+            description="Increase visual contrast"
+            action={
+              <Switch
+                checked={extendedSettings.accessibility.highContrast}
+                onCheckedChange={(checked) => {
+                  hapticPresets.toggle();
+                  updateAccessibility({ highContrast: checked });
+                }}
+                data-testid="switch-high-contrast"
+                aria-label="Toggle high contrast mode"
+              />
+            }
+          />
+          <SettingsRow
+            icon={<Zap className="w-5 h-5" />}
+            label="Reduced Motion"
+            ariaLabel="Toggle reduced motion for animations"
+            description="Minimize animations"
+            action={
+              <Switch
+                checked={extendedSettings.accessibility.reducedMotion}
+                onCheckedChange={(checked) => {
+                  hapticPresets.toggle();
+                  updateAccessibility({ reducedMotion: checked });
+                }}
+                data-testid="switch-reduced-motion"
+                aria-label="Toggle reduced motion"
+              />
+            }
+          />
+          <SettingsRow
+            icon={<Vibrate className="w-5 h-5" />}
+            label="Haptic Feedback"
+            ariaLabel="Configure haptic feedback intensity"
+            rightContent={
+              <Badge variant="secondary" className="min-h-[24px] capitalize">
+                {extendedSettings.hapticIntensity}
+              </Badge>
+            }
+            onClick={() => {
+              hapticPresets.buttonPress();
+              setShowAccessibility(true);
+            }}
+          />
+        </SettingsSection>
+
         <SettingsSection title="Support">
           <SettingsRow
             icon={<HelpCircle className="w-5 h-5" />}
@@ -625,6 +779,275 @@ export function MobileSettingsScreen({
           <p className="text-xs text-center text-black/40 dark:text-white/40 pt-2">
             To change permissions, go to your device Settings and find PACT in the Apps section.
           </p>
+        </div>
+      </MobileBottomSheet>
+
+      <MobileBottomSheet
+        isOpen={showDataUsage}
+        onClose={() => setShowDataUsage(false)}
+        title="Data Usage"
+      >
+        <div className="p-4 space-y-6">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-black dark:text-white">Sync on Wi-Fi Only</p>
+                <p className="text-xs text-black/50 dark:text-white/50">Save mobile data by syncing only on Wi-Fi</p>
+              </div>
+              <Switch
+                checked={extendedSettings.dataUsage.syncOnWifiOnly}
+                onCheckedChange={(checked) => {
+                  hapticPresets.toggle();
+                  updateDataUsage({ syncOnWifiOnly: checked });
+                }}
+                data-testid="switch-wifi-sync"
+                aria-label="Toggle Wi-Fi only sync"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-black dark:text-white">Image Quality</p>
+              <p className="text-xs text-black/50 dark:text-white/50">Lower quality uses less data</p>
+              <div className="flex gap-2 flex-wrap">
+                {(['low', 'medium', 'high', 'original'] as ImageQuality[]).map((quality) => (
+                  <Button
+                    key={quality}
+                    variant={extendedSettings.dataUsage.imageQuality === quality ? 'default' : 'outline'}
+                    size="sm"
+                    className="rounded-full capitalize"
+                    onClick={() => {
+                      hapticPresets.buttonPress();
+                      updateDataUsage({ imageQuality: quality });
+                    }}
+                    data-testid={`button-quality-${quality}`}
+                    aria-label={`Set image quality to ${quality}`}
+                  >
+                    {quality}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium text-black dark:text-white">Cache Limit</p>
+                <Badge variant="secondary">{extendedSettings.dataUsage.cacheLimitMB} MB</Badge>
+              </div>
+              <Slider
+                value={[extendedSettings.dataUsage.cacheLimitMB]}
+                onValueChange={(value) => updateDataUsage({ cacheLimitMB: value[0] })}
+                min={100}
+                max={2000}
+                step={100}
+                className="w-full"
+                data-testid="slider-cache-limit"
+                aria-label="Cache limit slider"
+              />
+              <div className="flex justify-between text-xs text-black/40 dark:text-white/40">
+                <span>100 MB</span>
+                <span>2 GB</span>
+              </div>
+            </div>
+
+            <Button
+              variant="outline"
+              className="w-full rounded-full"
+              onClick={async () => {
+                setIsClearingCache(true);
+                hapticPresets.buttonPress();
+                const result = await clearCache();
+                setIsClearingCache(false);
+                toast({
+                  title: result.success ? "Cache Cleared" : "Error",
+                  description: result.success ? "All cached data has been removed." : "Failed to clear cache.",
+                  variant: result.success ? "default" : "destructive",
+                });
+              }}
+              disabled={isClearingCache}
+              data-testid="button-clear-cache"
+              aria-label="Clear cached data"
+            >
+              {isClearingCache ? 'Clearing...' : 'Clear Cache'}
+            </Button>
+          </div>
+        </div>
+      </MobileBottomSheet>
+
+      <MobileBottomSheet
+        isOpen={showAccessibility}
+        onClose={() => setShowAccessibility(false)}
+        title="Accessibility"
+      >
+        <div className="p-4 space-y-6">
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-black dark:text-white">Font Size</p>
+            <div className="flex gap-2 flex-wrap">
+              {(['small', 'medium', 'large', 'extra-large'] as FontSize[]).map((size) => (
+                <Button
+                  key={size}
+                  variant={extendedSettings.accessibility.fontSize === size ? 'default' : 'outline'}
+                  size="sm"
+                  className="rounded-full capitalize"
+                  onClick={() => {
+                    hapticPresets.buttonPress();
+                    updateAccessibility({ fontSize: size });
+                  }}
+                  data-testid={`button-font-${size}`}
+                  aria-label={`Set font size to ${size}`}
+                >
+                  {size.replace('-', ' ')}
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-black dark:text-white">Haptic Feedback Intensity</p>
+            <div className="flex gap-2 flex-wrap">
+              {(['off', 'light', 'medium', 'strong'] as HapticIntensity[]).map((intensity) => (
+                <Button
+                  key={intensity}
+                  variant={extendedSettings.hapticIntensity === intensity ? 'default' : 'outline'}
+                  size="sm"
+                  className="rounded-full capitalize"
+                  onClick={() => {
+                    hapticPresets.buttonPress();
+                    updateHapticIntensity(intensity);
+                  }}
+                  data-testid={`button-haptic-${intensity}`}
+                  aria-label={`Set haptic intensity to ${intensity}`}
+                >
+                  {intensity}
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-black dark:text-white">High Contrast</p>
+                <p className="text-xs text-black/50 dark:text-white/50">Increase visual contrast</p>
+              </div>
+              <Switch
+                checked={extendedSettings.accessibility.highContrast}
+                onCheckedChange={(checked) => {
+                  hapticPresets.toggle();
+                  updateAccessibility({ highContrast: checked });
+                }}
+                data-testid="switch-high-contrast-sheet"
+                aria-label="Toggle high contrast"
+              />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-black dark:text-white">Reduced Motion</p>
+                <p className="text-xs text-black/50 dark:text-white/50">Minimize animations</p>
+              </div>
+              <Switch
+                checked={extendedSettings.accessibility.reducedMotion}
+                onCheckedChange={(checked) => {
+                  hapticPresets.toggle();
+                  updateAccessibility({ reducedMotion: checked });
+                }}
+                data-testid="switch-reduced-motion-sheet"
+                aria-label="Toggle reduced motion"
+              />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-black dark:text-white">Screen Reader Optimized</p>
+                <p className="text-xs text-black/50 dark:text-white/50">Optimize for assistive technology</p>
+              </div>
+              <Switch
+                checked={extendedSettings.accessibility.screenReaderOptimized}
+                onCheckedChange={(checked) => {
+                  hapticPresets.toggle();
+                  updateAccessibility({ screenReaderOptimized: checked });
+                }}
+                data-testid="switch-screen-reader"
+                aria-label="Toggle screen reader optimization"
+              />
+            </div>
+          </div>
+        </div>
+      </MobileBottomSheet>
+
+      <MobileBottomSheet
+        isOpen={showSyncStatus}
+        onClose={() => setShowSyncStatus(false)}
+        title="Sync Status"
+      >
+        <div className="p-4 space-y-4">
+          <div className="p-4 bg-black/5 dark:bg-white/5 rounded-xl space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-black/60 dark:text-white/60">Last Synced</span>
+              <span className="text-sm font-medium text-black dark:text-white">
+                {extendedSettings.syncStatus.lastSyncTime 
+                  ? new Date(extendedSettings.syncStatus.lastSyncTime).toLocaleString()
+                  : 'Never'}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-black/60 dark:text-white/60">Pending Items</span>
+              <Badge variant={extendedSettings.syncStatus.pendingItemsCount > 0 ? 'secondary' : 'outline'}>
+                {extendedSettings.syncStatus.pendingItemsCount}
+              </Badge>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-black/60 dark:text-white/60">Status</span>
+              <Badge variant={extendedSettings.syncStatus.isSyncing ? 'default' : 'secondary'}>
+                {extendedSettings.syncStatus.isSyncing ? 'Syncing...' : 'Idle'}
+              </Badge>
+            </div>
+          </div>
+
+          {extendedSettings.syncStatus.syncHistory.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-black dark:text-white">Recent Sync History</p>
+              <div className="space-y-2 max-h-48 overflow-y-auto">
+                {extendedSettings.syncStatus.syncHistory.slice(0, 10).map((entry) => (
+                  <div 
+                    key={entry.id}
+                    className="flex items-center justify-between p-2 bg-black/5 dark:bg-white/5 rounded-lg text-xs"
+                  >
+                    <div className="flex items-center gap-2">
+                      {entry.success ? (
+                        <CheckCircle className="w-3 h-3 text-green-500" />
+                      ) : (
+                        <XCircle className="w-3 h-3 text-red-500" />
+                      )}
+                      <span className="text-black/60 dark:text-white/60">
+                        {new Date(entry.timestamp).toLocaleString()}
+                      </span>
+                    </div>
+                    <span className="text-black dark:text-white">
+                      {entry.itemsSynced} items
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <Button
+            variant="outline"
+            className="w-full rounded-full"
+            onClick={() => {
+              hapticPresets.buttonPress();
+              toast({
+                title: "Sync Started",
+                description: "Syncing your data in the background.",
+              });
+            }}
+            data-testid="button-manual-sync"
+            aria-label="Start manual sync"
+          >
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Sync Now
+          </Button>
         </div>
       </MobileBottomSheet>
 

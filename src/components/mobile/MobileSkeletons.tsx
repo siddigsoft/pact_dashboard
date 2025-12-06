@@ -201,3 +201,76 @@ export function FullPageSkeleton() {
     </div>
   );
 }
+
+export function SettingsRowSkeleton({ className }: SkeletonProps) {
+  return (
+    <div className={cn("flex items-center gap-3 p-4 border-b border-black/5 dark:border-white/5", className)}>
+      <Skeleton className="h-5 w-5 rounded" />
+      <div className="flex-1 space-y-2">
+        <Skeleton className="h-4 w-1/3" />
+        <Skeleton className="h-3 w-1/2" />
+      </div>
+      <Skeleton className="h-5 w-5 rounded" />
+    </div>
+  );
+}
+
+export function SettingsSectionSkeleton({ 
+  rowCount = 4,
+  className 
+}: { 
+  rowCount?: number;
+  className?: string;
+}) {
+  return (
+    <div className={cn("space-y-1", className)}>
+      <Skeleton className="h-4 w-24 mb-2 ml-4" />
+      {Array.from({ length: rowCount }).map((_, i) => (
+        <SettingsRowSkeleton key={i} />
+      ))}
+    </div>
+  );
+}
+
+interface PullToRefreshIndicatorProps {
+  isRefreshing: boolean;
+  progress?: number;
+  className?: string;
+}
+
+export function PullToRefreshIndicator({ 
+  isRefreshing,
+  progress = 0,
+  className 
+}: PullToRefreshIndicatorProps) {
+  if (!isRefreshing && progress === 0) return null;
+
+  return (
+    <div 
+      className={cn(
+        "flex items-center justify-center py-4 transition-all duration-200",
+        className
+      )}
+      role="status"
+      aria-live="polite"
+      data-testid="pull-to-refresh-indicator"
+    >
+      <div 
+        className={cn(
+          "w-6 h-6 border-2 border-black dark:border-white rounded-full",
+          isRefreshing 
+            ? "border-t-transparent animate-spin" 
+            : "border-t-transparent"
+        )}
+        style={{ 
+          opacity: isRefreshing ? 1 : Math.min(progress / 100, 1),
+          transform: `rotate(${progress * 3.6}deg)`
+        }}
+        aria-hidden="true"
+      />
+      {isRefreshing && (
+        <span className="sr-only">Refreshing content</span>
+      )}
+    </div>
+  );
+}
