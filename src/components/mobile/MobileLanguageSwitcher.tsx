@@ -80,10 +80,20 @@ export function LanguageProvider({
   );
 }
 
+// Default fallback values when LanguageProvider is not available
+const defaultLanguageValue: LanguageContextValue = {
+  language: 'en',
+  direction: 'ltr',
+  setLanguage: () => {},
+  t: (key: string) => key,
+  isRTL: false,
+};
+
 export function useLanguage() {
   const context = useContext(LanguageContext);
+  // Return safe defaults instead of throwing - prevents crashes when provider is missing
   if (!context) {
-    throw new Error('useLanguage must be used within a LanguageProvider');
+    return defaultLanguageValue;
   }
   return context;
 }
