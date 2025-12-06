@@ -312,7 +312,7 @@ export function MobileAuthScreen({ onAuthSuccess }: MobileAuthScreenProps) {
                     aria-invalid={!!errors.email && touched.email}
                     aria-describedby={errors.email ? "email-error" : undefined}
                     className={cn(
-                      "h-12 pl-12 text-sm rounded-xl bg-gray-100 dark:bg-neutral-800 border-0 text-black dark:text-white placeholder:text-black/40 dark:placeholder:text-white/40 transition-all",
+                      "h-12 pl-14 text-sm rounded-xl bg-gray-100 dark:bg-neutral-800 border-0 text-black dark:text-white placeholder:text-black/40 dark:placeholder:text-white/40 transition-all",
                       errors.email && touched.email && "ring-2 ring-destructive/50"
                     )}
                     data-testid="input-mobile-email"
@@ -347,7 +347,7 @@ export function MobileAuthScreen({ onAuthSuccess }: MobileAuthScreenProps) {
                     aria-invalid={!!errors.password && touched.password}
                     aria-describedby={errors.password ? "password-error" : undefined}
                     className={cn(
-                      "h-12 pl-12 pr-12 text-sm rounded-xl bg-gray-100 dark:bg-neutral-800 border-0 text-black dark:text-white placeholder:text-black/40 dark:placeholder:text-white/40 transition-all",
+                      "h-12 pl-14 pr-12 text-sm rounded-xl bg-gray-100 dark:bg-neutral-800 border-0 text-black dark:text-white placeholder:text-black/40 dark:placeholder:text-white/40 transition-all",
                       errors.password && touched.password && "ring-2 ring-destructive/50"
                     )}
                     data-testid="input-mobile-password"
