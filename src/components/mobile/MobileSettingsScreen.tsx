@@ -30,6 +30,7 @@ import {
   Clock,
   Cloud,
   Zap,
+  Lock,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -103,6 +104,10 @@ export function MobileSettingsScreen({
   const [showDataUsage, setShowDataUsage] = useState(false);
   const [showAccessibility, setShowAccessibility] = useState(false);
   const [showSyncStatus, setShowSyncStatus] = useState(false);
+  const [showSecurityInfo, setShowSecurityInfo] = useState(false);
+  const [showHelpInfo, setShowHelpInfo] = useState(false);
+  const [showTermsInfo, setShowTermsInfo] = useState(false);
+  const [showAboutInfo, setShowAboutInfo] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isClearingCache, setIsClearingCache] = useState(false);
 
@@ -339,9 +344,10 @@ export function MobileSettingsScreen({
           <SettingsRow
             icon={<Shield className="w-5 h-5" />}
             label="Security Settings"
+            description="2FA and password options"
             onClick={() => {
               hapticPresets.buttonPress();
-              navigate('/security');
+              setShowSecurityInfo(true);
             }}
           />
         </SettingsSection>
@@ -641,17 +647,19 @@ export function MobileSettingsScreen({
           <SettingsRow
             icon={<HelpCircle className="w-5 h-5" />}
             label="Help Center"
+            description="FAQ and support"
             onClick={() => {
               hapticPresets.buttonPress();
-              navigate('/help');
+              setShowHelpInfo(true);
             }}
           />
           <SettingsRow
             icon={<FileText className="w-5 h-5" />}
             label="Terms of Service"
+            description="Legal information"
             onClick={() => {
               hapticPresets.buttonPress();
-              navigate('/terms');
+              setShowTermsInfo(true);
             }}
           />
           <SettingsRow
@@ -660,7 +668,7 @@ export function MobileSettingsScreen({
             description="Version 1.0.0"
             onClick={() => {
               hapticPresets.buttonPress();
-              navigate('/about');
+              setShowAboutInfo(true);
             }}
           />
         </SettingsSection>
@@ -701,7 +709,7 @@ export function MobileSettingsScreen({
           Sign Out
         </Button>
 
-        <p className="text-xs text-center text-black/40 dark:text-white/40 py-4 pb-8">
+        <p className="text-xs text-center text-black/40 dark:text-white/40 py-4 pb-32">
           PACT Command Center v1.0.0
         </p>
       </div>
@@ -1165,6 +1173,109 @@ export function MobileSettingsScreen({
             <RefreshCw className="w-4 h-4 mr-2" />
             Sync Now
           </Button>
+        </div>
+      </MobileBottomSheet>
+
+      {/* Security Info Sheet */}
+      <MobileBottomSheet
+        isOpen={showSecurityInfo}
+        onClose={() => setShowSecurityInfo(false)}
+        title="Security Settings"
+      >
+        <div className="p-4 space-y-4">
+          <div className="flex items-center gap-3 p-3 bg-black/5 dark:bg-white/5 rounded-xl">
+            <Shield className="w-6 h-6 text-black dark:text-white" />
+            <div>
+              <p className="font-medium text-black dark:text-white">Two-Factor Authentication</p>
+              <p className="text-xs text-black/60 dark:text-white/60">Manage 2FA settings in the web portal</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 p-3 bg-black/5 dark:bg-white/5 rounded-xl">
+            <Lock className="w-6 h-6 text-black dark:text-white" />
+            <div>
+              <p className="font-medium text-black dark:text-white">Password Settings</p>
+              <p className="text-xs text-black/60 dark:text-white/60">Change password from your profile</p>
+            </div>
+          </div>
+          <p className="text-xs text-black/50 dark:text-white/50 text-center">
+            Advanced security options are available in the web dashboard
+          </p>
+        </div>
+      </MobileBottomSheet>
+
+      {/* Help Info Sheet */}
+      <MobileBottomSheet
+        isOpen={showHelpInfo}
+        onClose={() => setShowHelpInfo(false)}
+        title="Help Center"
+      >
+        <div className="p-4 space-y-4">
+          <div className="flex items-center gap-3 p-3 bg-black/5 dark:bg-white/5 rounded-xl">
+            <HelpCircle className="w-6 h-6 text-black dark:text-white" />
+            <div>
+              <p className="font-medium text-black dark:text-white">Contact Support</p>
+              <p className="text-xs text-black/60 dark:text-white/60">support@pact.org</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 p-3 bg-black/5 dark:bg-white/5 rounded-xl">
+            <FileText className="w-6 h-6 text-black dark:text-white" />
+            <div>
+              <p className="font-medium text-black dark:text-white">Documentation</p>
+              <p className="text-xs text-black/60 dark:text-white/60">Access guides and tutorials</p>
+            </div>
+          </div>
+          <p className="text-xs text-black/50 dark:text-white/50 text-center">
+            Full documentation available in the web portal
+          </p>
+        </div>
+      </MobileBottomSheet>
+
+      {/* Terms Info Sheet */}
+      <MobileBottomSheet
+        isOpen={showTermsInfo}
+        onClose={() => setShowTermsInfo(false)}
+        title="Terms of Service"
+      >
+        <div className="p-4 space-y-4">
+          <p className="text-sm text-black/80 dark:text-white/80 leading-relaxed">
+            By using PACT Command Center, you agree to our terms of service and privacy policy.
+          </p>
+          <div className="p-3 bg-black/5 dark:bg-white/5 rounded-xl">
+            <p className="text-xs text-black/60 dark:text-white/60">
+              Your data is encrypted and securely stored. Location data is only shared during active site visits with your consent.
+            </p>
+          </div>
+          <p className="text-xs text-black/50 dark:text-white/50 text-center">
+            Full legal documents at pact.org/terms
+          </p>
+        </div>
+      </MobileBottomSheet>
+
+      {/* About Info Sheet */}
+      <MobileBottomSheet
+        isOpen={showAboutInfo}
+        onClose={() => setShowAboutInfo(false)}
+        title="About PACT Command Center"
+      >
+        <div className="p-4 space-y-4">
+          <div className="text-center py-4">
+            <div className="w-16 h-16 rounded-2xl bg-black dark:bg-white mx-auto mb-3 flex items-center justify-center">
+              <MapPin className="w-8 h-8 text-white dark:text-black" />
+            </div>
+            <h3 className="text-lg font-bold text-black dark:text-white">PACT Command Center</h3>
+            <p className="text-sm text-black/60 dark:text-white/60">Version 1.0.0</p>
+          </div>
+          <div className="p-3 bg-black/5 dark:bg-white/5 rounded-xl text-center">
+            <p className="text-xs text-black/70 dark:text-white/70">
+              Field Operations Management Platform
+            </p>
+            <p className="text-xs text-black/50 dark:text-white/50 mt-1">
+              Built with security and efficiency in mind
+            </p>
+          </div>
+          <p className="text-xs text-black/40 dark:text-white/40 text-center">
+            2024 PACT Consultancy. All rights reserved.
+          </p>
         </div>
       </MobileBottomSheet>
 
