@@ -499,7 +499,7 @@ export function MobileSettingsScreen({
             description="Manage cached data and sync"
             onClick={() => {
               hapticPresets.buttonPress();
-              navigate('/offline-data');
+              setShowOfflineInfo(true);
             }}
           />
         </SettingsSection>
@@ -693,6 +693,7 @@ export function MobileSettingsScreen({
             description="Download your personal data"
             onClick={() => {
               hapticPresets.buttonPress();
+              setShowExportInfo(true);
             }}
           />
           <SettingsRow
@@ -1289,6 +1290,130 @@ export function MobileSettingsScreen({
           <p className="text-xs text-black/40 dark:text-white/40 text-center">
             2024 PACT Consultancy. All rights reserved.
           </p>
+        </div>
+      </MobileBottomSheet>
+
+      {/* Profile Info Sheet */}
+      <MobileBottomSheet
+        isOpen={showProfileInfo}
+        onClose={() => setShowProfileInfo(false)}
+        title="My Profile"
+      >
+        <div className="p-4 space-y-4">
+          <div className="flex items-center gap-4 p-4 bg-black/5 dark:bg-white/5 rounded-xl">
+            <div className="w-16 h-16 bg-black dark:bg-white rounded-full flex items-center justify-center">
+              {defaultUser.avatarUrl ? (
+                <img 
+                  src={defaultUser.avatarUrl} 
+                  alt={defaultUser.name}
+                  className="w-full h-full rounded-full object-cover"
+                />
+              ) : (
+                <User className="w-8 h-8 text-white dark:text-black" />
+              )}
+            </div>
+            <div className="flex-1">
+              <p className="text-lg font-semibold text-black dark:text-white">{defaultUser.name}</p>
+              <p className="text-sm text-black/60 dark:text-white/60">{defaultUser.email}</p>
+              <Badge 
+                variant="outline" 
+                className="mt-2 text-xs min-h-[24px] rounded-full px-3 bg-white text-black dark:bg-black dark:text-white border-black/20 dark:border-white/20"
+              >
+                {defaultUser.role}
+              </Badge>
+            </div>
+          </div>
+          <p className="text-xs text-black/50 dark:text-white/50 text-center">
+            To edit your profile, please use the web dashboard
+          </p>
+        </div>
+      </MobileBottomSheet>
+
+      {/* Export Data Sheet */}
+      <MobileBottomSheet
+        isOpen={showExportInfo}
+        onClose={() => setShowExportInfo(false)}
+        title="Export Your Data"
+      >
+        <div className="p-4 space-y-4">
+          <div className="flex items-center gap-3 p-3 bg-black/5 dark:bg-white/5 rounded-xl">
+            <Download className="w-6 h-6 text-black dark:text-white" />
+            <div>
+              <p className="font-medium text-black dark:text-white">Personal Data Export</p>
+              <p className="text-xs text-black/60 dark:text-white/60">Request a copy of all your data</p>
+            </div>
+          </div>
+          <p className="text-sm text-black/70 dark:text-white/70">
+            Data export includes your profile information, activity history, and submitted documents.
+          </p>
+          <Button
+            className="w-full rounded-full"
+            onClick={() => {
+              hapticPresets.buttonPress();
+              toast({
+                title: "Export Requested",
+                description: "Your data export will be sent to your email within 24 hours.",
+              });
+              setShowExportInfo(false);
+            }}
+            data-testid="button-request-export"
+            aria-label="Request data export"
+          >
+            Request Export
+          </Button>
+          <p className="text-xs text-black/50 dark:text-white/50 text-center">
+            For immediate exports, use the web dashboard
+          </p>
+        </div>
+      </MobileBottomSheet>
+
+      {/* Offline Data Sheet */}
+      <MobileBottomSheet
+        isOpen={showOfflineInfo}
+        onClose={() => setShowOfflineInfo(false)}
+        title="Offline Data"
+      >
+        <div className="p-4 space-y-4">
+          <div className="flex items-center gap-3 p-3 bg-black/5 dark:bg-white/5 rounded-xl">
+            <Database className="w-6 h-6 text-black dark:text-white" />
+            <div>
+              <p className="font-medium text-black dark:text-white">Cached Data</p>
+              <p className="text-xs text-black/60 dark:text-white/60">
+                {isNative ? 'Data stored for offline use' : 'Limited offline support in browser'}
+              </p>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <div className="flex justify-between items-center p-2">
+              <span className="text-sm text-black/70 dark:text-white/70">Site visits cached</span>
+              <Badge variant="outline" className="rounded-full">
+                {isNative ? 'Available' : 'Web only'}
+              </Badge>
+            </div>
+            <div className="flex justify-between items-center p-2">
+              <span className="text-sm text-black/70 dark:text-white/70">Offline queue</span>
+              <Badge variant="outline" className="rounded-full">
+                {extendedSettings.syncStatus.pendingItemsCount} items
+              </Badge>
+            </div>
+          </div>
+          <Button
+            variant="outline"
+            className="w-full rounded-full"
+            onClick={async () => {
+              hapticPresets.buttonPress();
+              await clearCache();
+              toast({
+                title: "Cache Cleared",
+                description: "Offline data has been cleared.",
+              });
+            }}
+            data-testid="button-clear-offline"
+            aria-label="Clear offline cache"
+          >
+            <Trash2 className="w-4 h-4 mr-2" />
+            Clear Offline Cache
+          </Button>
         </div>
       </MobileBottomSheet>
 

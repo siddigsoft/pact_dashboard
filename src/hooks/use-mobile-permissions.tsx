@@ -107,10 +107,27 @@ export function useMobilePermissions() {
       }
       if (type === 'microphone') {
         try {
+          // Try navigator.permissions first (non-intrusive check)
           if ('permissions' in navigator) {
-            const result = await navigator.permissions.query({ name: 'microphone' as PermissionName });
-            console.log('[Permissions] Microphone check result:', result.state);
-            return result.state as PermissionStatus;
+            try {
+              const result = await navigator.permissions.query({ name: 'microphone' as PermissionName });
+              console.log('[Permissions] Microphone check result:', result.state);
+              if (result.state === 'granted') return 'granted';
+              if (result.state === 'denied') return 'denied';
+              return 'prompt';
+            } catch {
+              // Some browsers don't support microphone permission query
+            }
+          }
+          // Fallback: check if mediaDevices is available (indicates capability)
+          if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const hasAudio = devices.some(d => d.kind === 'audioinput');
+            console.log('[Permissions] Has audio input device:', hasAudio);
+            // If devices have labels, permission was previously granted
+            const hasLabels = devices.some(d => d.kind === 'audioinput' && d.label);
+            if (hasLabels) return 'granted';
+            return hasAudio ? 'prompt' : 'denied';
           }
           return 'prompt';
         } catch (error) {

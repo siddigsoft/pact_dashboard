@@ -36,14 +36,22 @@ export function MobileTabBar({
     const container = containerRef.current;
     if (!container || activeIndex === -1) return;
 
-    const activeButton = container.children[activeIndex] as HTMLElement;
+    // Skip the motion.div indicator (first child) when getting the active button
+    // For default variant, motion.div is the first child
+    const buttonStartIndex = variant === 'default' ? 1 : 0;
+    const activeButton = container.children[buttonStartIndex + activeIndex] as HTMLElement;
+    
     if (activeButton) {
+      // Use getBoundingClientRect for RTL-safe positioning
+      const containerRect = container.getBoundingClientRect();
+      const buttonRect = activeButton.getBoundingClientRect();
+      
       setIndicatorStyle({
-        left: activeButton.offsetLeft,
-        width: activeButton.offsetWidth,
+        left: buttonRect.left - containerRect.left + container.scrollLeft,
+        width: buttonRect.width,
       });
     }
-  }, [activeTab, tabs]);
+  }, [activeTab, tabs, variant]);
 
   const handleTabClick = useCallback((tab: Tab) => {
     if (tab.disabled) return;
@@ -103,7 +111,7 @@ export function MobileTabBar({
         ref={containerRef}
         className={cn(
           "relative flex gap-4 border-b border-black/10 dark:border-white/10 overflow-x-auto scrollbar-hide",
-          fullWidth && "justify-around gap-0",
+          fullWidth && "justify-around gap-2",
           className
         )}
         data-testid="mobile-tab-bar"
@@ -149,7 +157,8 @@ export function MobileTabBar({
     <div 
       ref={containerRef}
       className={cn(
-        "relative flex p-1 bg-black/5 dark:bg-white/5 rounded-xl overflow-x-auto scrollbar-hide",
+        "relative flex p-1 gap-1 bg-black/5 dark:bg-white/5 rounded-xl overflow-x-auto scrollbar-hide",
+        fullWidth && "justify-around",
         className
       )}
       data-testid="mobile-tab-bar"
