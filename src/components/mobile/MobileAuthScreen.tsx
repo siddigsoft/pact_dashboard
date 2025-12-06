@@ -293,31 +293,26 @@ export function MobileAuthScreen({ onAuthSuccess }: MobileAuthScreenProps) {
             <form onSubmit={handleLogin} className="space-y-4">
               {/* Email Field */}
               <div className="space-y-1.5">
-                <Label htmlFor="email" className="text-xs font-semibold text-black/60 dark:text-white/60 uppercase tracking-wider">
+                <Label htmlFor="email" className="flex items-center gap-2 text-xs font-semibold text-black/60 dark:text-white/60 uppercase tracking-wider">
+                  <Mail className="h-3.5 w-3.5" />
                   Email
                 </Label>
-                <div className="relative">
-                  <Mail className={cn(
-                    "absolute left-4 top-1/2 transform -translate-y-1/2 h-4 w-4 transition-colors",
-                    errors.email && touched.email ? "text-destructive" : "text-black/40 dark:text-white/40"
-                  )} />
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="example@email.com"
-                    value={email}
-                    onChange={(e) => handleEmailChange(e.target.value)}
-                    onBlur={() => handleBlur('email')}
-                    autoComplete="email"
-                    aria-invalid={!!errors.email && touched.email}
-                    aria-describedby={errors.email ? "email-error" : undefined}
-                    className={cn(
-                      "h-12 pl-14 text-sm rounded-xl bg-gray-100 dark:bg-neutral-800 border-0 text-black dark:text-white placeholder:text-black/40 dark:placeholder:text-white/40 transition-all",
-                      errors.email && touched.email && "ring-2 ring-destructive/50"
-                    )}
-                    data-testid="input-mobile-email"
-                  />
-                </div>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="example@email.com"
+                  value={email}
+                  onChange={(e) => handleEmailChange(e.target.value)}
+                  onBlur={() => handleBlur('email')}
+                  autoComplete="email"
+                  aria-invalid={!!errors.email && touched.email}
+                  aria-describedby={errors.email ? "email-error" : undefined}
+                  className={cn(
+                    "h-12 text-sm rounded-xl bg-gray-100 dark:bg-neutral-800 border-0 text-black dark:text-white placeholder:text-black/40 dark:placeholder:text-white/40 transition-all",
+                    errors.email && touched.email && "ring-2 ring-destructive/50"
+                  )}
+                  data-testid="input-mobile-email"
+                />
                 {errors.email && touched.email && (
                   <p id="email-error" className="flex items-center gap-1 text-xs text-destructive" role="alert">
                     <AlertCircle className="h-3 w-3" />
@@ -328,18 +323,15 @@ export function MobileAuthScreen({ onAuthSuccess }: MobileAuthScreenProps) {
 
               {/* Password Field */}
               <div className="space-y-1.5">
-                <Label htmlFor="password" className="text-xs font-semibold text-black/60 dark:text-white/60 uppercase tracking-wider">
+                <Label htmlFor="password" className="flex items-center gap-2 text-xs font-semibold text-black/60 dark:text-white/60 uppercase tracking-wider">
+                  <Lock className="h-3.5 w-3.5" />
                   Password
                 </Label>
                 <div className="relative">
-                  <Lock className={cn(
-                    "absolute left-4 top-1/2 transform -translate-y-1/2 h-4 w-4 transition-colors",
-                    errors.password && touched.password ? "text-destructive" : "text-black/40 dark:text-white/40"
-                  )} />
                   <Input
                     id="password"
                     type={showPassword ? 'text' : 'password'}
-                    placeholder="Your password"
+                    placeholder="Enter your password"
                     value={password}
                     onChange={(e) => handlePasswordChange(e.target.value)}
                     onBlur={() => handleBlur('password')}
@@ -347,7 +339,7 @@ export function MobileAuthScreen({ onAuthSuccess }: MobileAuthScreenProps) {
                     aria-invalid={!!errors.password && touched.password}
                     aria-describedby={errors.password ? "password-error" : undefined}
                     className={cn(
-                      "h-12 pl-14 pr-12 text-sm rounded-xl bg-gray-100 dark:bg-neutral-800 border-0 text-black dark:text-white placeholder:text-black/40 dark:placeholder:text-white/40 transition-all",
+                      "h-12 pr-12 text-sm rounded-xl bg-gray-100 dark:bg-neutral-800 border-0 text-black dark:text-white placeholder:text-black/40 dark:placeholder:text-white/40 transition-all",
                       errors.password && touched.password && "ring-2 ring-destructive/50"
                     )}
                     data-testid="input-mobile-password"
@@ -358,11 +350,11 @@ export function MobileAuthScreen({ onAuthSuccess }: MobileAuthScreenProps) {
                       hapticPresets.buttonPress();
                       setShowPassword(!showPassword);
                     }}
-                    className="absolute right-4 top-1/2 transform -translate-y-1/2 text-black/40 dark:text-white/40 touch-manipulation"
+                    className="absolute right-4 top-1/2 transform -translate-y-1/2 min-h-11 min-w-11 flex items-center justify-center text-black/40 dark:text-white/40 touch-manipulation"
                     aria-label={showPassword ? 'Hide password' : 'Show password'}
                     data-testid="button-toggle-password"
                   >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                   </button>
                 </div>
                 {errors.password && touched.password && (
