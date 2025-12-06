@@ -304,7 +304,7 @@ export function MobileAuthScreen({ onAuthSuccess }: MobileAuthScreenProps) {
                   <Input
                     id="email"
                     type="email"
-                    placeholder="Enter your email"
+                    placeholder="example@email.com"
                     value={email}
                     onChange={(e) => handleEmailChange(e.target.value)}
                     onBlur={() => handleBlur('email')}
@@ -339,7 +339,7 @@ export function MobileAuthScreen({ onAuthSuccess }: MobileAuthScreenProps) {
                   <Input
                     id="password"
                     type={showPassword ? 'text' : 'password'}
-                    placeholder="Enter your password"
+                    placeholder="Your password"
                     value={password}
                     onChange={(e) => handlePasswordChange(e.target.value)}
                     onBlur={() => handleBlur('password')}
