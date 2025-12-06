@@ -39,16 +39,16 @@ const ToastViewport = React.forwardRef<
 ToastViewport.displayName = ToastPrimitives.Viewport.displayName
 
 const toastVariants = cva(
-  "group pointer-events-auto relative flex w-full items-center justify-between overflow-hidden rounded-lg border p-6 shadow-lg transition-all",
+  "group pointer-events-auto relative flex w-full items-center justify-between overflow-hidden rounded-2xl border p-6 shadow-xl transition-all backdrop-blur-md",
   {
     variants: {
       variant: {
-        default: "border-slate-700 bg-slate-900/95 text-white font-medium shadow-xl backdrop-blur-md border-opacity-60",
-        success: "border-green-700 bg-green-800 text-green-50 font-semibold shadow-xl",
-        destructive: "border-red-700 bg-red-800 text-red-50 font-semibold shadow-xl",
-        warning: "border-amber-700 bg-amber-800 text-amber-50 font-semibold shadow-xl",
-        info: "border-blue-700 bg-blue-800 text-blue-50 font-semibold shadow-xl",
-        siddig: "border-slate-700 bg-slate-900/95 text-white font-medium shadow-xl backdrop-blur-md border-opacity-60",
+        default: "border-white/20 bg-black/95 text-white font-medium",
+        success: "border-white/20 bg-black/95 text-white font-semibold",
+        destructive: "border-white/30 bg-black text-white font-semibold",
+        warning: "border-white/20 bg-black/90 text-white font-semibold",
+        info: "border-white/20 bg-black/95 text-white font-medium",
+        siddig: "border-white/20 bg-black/95 text-white font-medium",
       },
     },
     defaultVariants: {
@@ -93,20 +93,18 @@ const ToastIcon = ({ variant }: { variant?: "default" | "success" | "destructive
 
 const ToastAction = React.forwardRef<
   React.ElementRef<typeof ToastPrimitives.Action>,
-  React.ComponentPropsWithoutRef<typeof ToastPrimitives.Action>
+  React.ComponentPropsWithoutRef<typeof ToastPrimitives.Action> & { "data-testid"?: string; "aria-label"?: string }
 >(({ className, ...props }, ref) => (
   <ToastPrimitives.Action
     ref={ref}
     className={cn(
-      "inline-flex h-8 shrink-0 items-center justify-center rounded-md border px-3 text-sm font-medium transition-colors",
-      "border-transparent bg-primary text-primary-foreground hover:bg-primary/90",
-      "group-[.success]:bg-green-500 group-[.success]:text-white group-[.success]:hover:bg-green-600",
-      "group-[.destructive]:bg-red-500 group-[.destructive]:text-white group-[.destructive]:hover:bg-red-600",
-      "group-[.warning]:bg-amber-500 group-[.warning]:text-white group-[.warning]:hover:bg-amber-600",
-      "group-[.info]:bg-blue-500 group-[.info]:text-white group-[.info]:hover:bg-blue-600",
-      "mt-2 sm:mt-0 cursor-pointer", // Added cursor-pointer for better UX
+      "inline-flex min-h-11 min-w-[88px] shrink-0 items-center justify-center rounded-full border px-5 text-sm font-medium transition-all duration-200",
+      "border-white/30 bg-white text-black hover:bg-white/90 active:scale-[0.98]",
+      "mt-2 sm:mt-0 cursor-pointer",
       className
     )}
+    data-testid={props["data-testid"] || "button-toast-action"}
+    aria-label={props["aria-label"] || "Toast action"}
     {...props}
   />
 ))
@@ -119,14 +117,16 @@ const ToastClose = React.forwardRef<
   <ToastPrimitives.Close
     ref={ref}
     className={cn(
-      "absolute right-1 top-1 rounded-md p-1 opacity-0 transition-opacity hover:opacity-100 focus:opacity-100 group-hover:opacity-100",
-      "text-gray-300 hover:text-white",
+      "absolute right-2 top-2 rounded-full min-h-11 min-w-11 flex items-center justify-center opacity-0 transition-all duration-200 hover:opacity-100 hover:bg-white/10 focus:opacity-100 group-hover:opacity-100",
+      "text-white/70 hover:text-white",
       className
     )}
     toast-close=""
+    data-testid="button-toast-close"
+    aria-label="Close notification"
     {...props}
   >
-    <X className="h-4 w-4" />
+    <X className="h-5 w-5" />
   </ToastPrimitives.Close>
 ))
 ToastClose.displayName = ToastPrimitives.Close.displayName
