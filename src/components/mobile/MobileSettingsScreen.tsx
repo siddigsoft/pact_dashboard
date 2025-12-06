@@ -51,6 +51,7 @@ import { useBiometric } from '@/hooks/use-biometric';
 import { useToast } from '@/hooks/use-toast';
 import { useMobilePermissions } from '@/hooks/use-mobile-permissions';
 import { useMobileExtendedSettings, FontSize, HapticIntensity, ImageQuality } from '@/hooks/use-mobile-extended-settings';
+import { useDevice } from '@/hooks/use-device';
 import { Camera, Mic, BellRing, CheckCircle, XCircle, RefreshCw } from 'lucide-react';
 
 interface UserProfile {
@@ -85,6 +86,7 @@ export function MobileSettingsScreen({
   const updateAppearanceSettings = settings?.updateAppearanceSettings ?? (async () => {});
   const { status: biometricStatus, storeCredentials, clearCredentials, refreshStatus } = useBiometric();
   const { permissions, checkAllPermissions, resetSetup, isChecking } = useMobilePermissions();
+  const { isNative } = useDevice();
   const { 
     settings: extendedSettings, 
     updateDataUsage, 
@@ -108,6 +110,9 @@ export function MobileSettingsScreen({
   const [showHelpInfo, setShowHelpInfo] = useState(false);
   const [showTermsInfo, setShowTermsInfo] = useState(false);
   const [showAboutInfo, setShowAboutInfo] = useState(false);
+  const [showProfileInfo, setShowProfileInfo] = useState(false);
+  const [showExportInfo, setShowExportInfo] = useState(false);
+  const [showOfflineInfo, setShowOfflineInfo] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isClearingCache, setIsClearingCache] = useState(false);
 
@@ -221,7 +226,7 @@ export function MobileSettingsScreen({
             size="icon"
             onClick={() => {
               hapticPresets.buttonPress();
-              navigate('/help');
+              setShowHelpInfo(true);
             }}
             data-testid="button-help"
             aria-label="Open help center"
@@ -236,7 +241,7 @@ export function MobileSettingsScreen({
           <button
             onClick={() => {
               hapticPresets.buttonPress();
-              navigate('/profile');
+              setShowProfileInfo(true);
             }}
             className="flex items-center gap-4 w-full"
             data-testid="button-profile"
@@ -468,6 +473,14 @@ export function MobileSettingsScreen({
             rightContent={<DeviceTrustBadge />}
             onClick={() => {
               hapticPresets.buttonPress();
+              if (!isNative) {
+                toast({
+                  title: "Not Available",
+                  description: "Device information is only available in the mobile app.",
+                  variant: "destructive",
+                });
+                return;
+              }
               setShowDeviceInfo(true);
             }}
           />
