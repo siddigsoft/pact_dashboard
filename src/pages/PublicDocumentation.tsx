@@ -110,7 +110,7 @@ export default function PublicDocumentation() {
             <BookOpen className="h-10 w-10 text-primary" />
           </div>
           <h1 className="text-3xl font-bold text-foreground mb-2">
-            PACT Platform Documentation
+            PACT Command Center Documentation
           </h1>
           <p className="text-muted-foreground max-w-2xl mx-auto">
             Comprehensive documentation for the PACT Workflow Platform - Field Operations Command Center
@@ -163,7 +163,7 @@ export default function PublicDocumentation() {
               <Card>
                 <CardHeader>
                   <CardTitle>Key Benefits</CardTitle>
-                  <CardDescription>Why use PACT Platform</CardDescription>
+                  <CardDescription>Why use PACT Command Center</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">

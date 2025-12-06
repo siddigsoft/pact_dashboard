@@ -126,7 +126,7 @@ const Auth = () => {
                       data-testid="img-auth-logo"
                     />
                     <div>
-                      <h2 className="text-xl font-bold tracking-tight">PACT Platform</h2>
+                      <h2 className="text-xl font-bold tracking-tight">PACT Command Center</h2>
                       <p className="text-xs text-muted-foreground">
                         Field Operations Command Center
                       </p>

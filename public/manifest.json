@@ -1,11 +1,11 @@
 {
-  "name": "PACT Workflow Platform",
+  "name": "PACT Command Center",
   "short_name": "PACT",
-  "description": "Field Operations Command Center for MMP Management",
+  "description": "Field Operations Management for MMP Coordination",
   "start_url": "/dashboard",
   "display": "standalone",
-  "background_color": "#1e40af",
-  "theme_color": "#1e40af",
+  "background_color": "#000000",
+  "theme_color": "#000000",
   "orientation": "portrait-primary",
   "icons": [
     {
