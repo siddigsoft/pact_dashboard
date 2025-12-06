@@ -277,7 +277,8 @@ export function MobileCallOverlay({
             {callState === 'incoming' ? (
               <div className="flex items-center justify-center gap-8">
                 <motion.button
-                  whileTap={{ scale: 0.9 }}
+                  whileTap={{ scale: 0.95 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 30 }}
                   onClick={handleDecline}
                   className="w-16 h-16 rounded-full bg-destructive flex items-center justify-center"
                   data-testid="button-decline-call"
@@ -287,7 +288,8 @@ export function MobileCallOverlay({
                 </motion.button>
 
                 <motion.button
-                  whileTap={{ scale: 0.9 }}
+                  whileTap={{ scale: 0.95 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 30 }}
                   onClick={handleAccept}
                   className="w-16 h-16 rounded-full bg-white flex items-center justify-center"
                   data-testid="button-accept-call"
@@ -300,7 +302,8 @@ export function MobileCallOverlay({
               <div className="space-y-6">
                 <div className="flex items-center justify-center gap-6">
                   <motion.button
-                    whileTap={{ scale: 0.9 }}
+                    whileTap={{ scale: 0.95 }}
+                    transition={{ type: "spring", stiffness: 400, damping: 30 }}
                     onClick={handleMuteToggle}
                     className={cn(
                       "w-14 h-14 rounded-full flex items-center justify-center",
@@ -313,7 +316,8 @@ export function MobileCallOverlay({
                   </motion.button>
 
                   <motion.button
-                    whileTap={{ scale: 0.9 }}
+                    whileTap={{ scale: 0.95 }}
+                    transition={{ type: "spring", stiffness: 400, damping: 30 }}
                     onClick={handleSpeakerToggle}
                     className={cn(
                       "w-14 h-14 rounded-full flex items-center justify-center",
@@ -327,7 +331,8 @@ export function MobileCallOverlay({
 
                   {showVideo && (
                     <motion.button
-                      whileTap={{ scale: 0.9 }}
+                      whileTap={{ scale: 0.95 }}
+                      transition={{ type: "spring", stiffness: 400, damping: 30 }}
                       onClick={handleVideoToggle}
                       className={cn(
                         "w-14 h-14 rounded-full flex items-center justify-center",
@@ -343,7 +348,8 @@ export function MobileCallOverlay({
 
                 <div className="flex justify-center">
                   <motion.button
-                    whileTap={{ scale: 0.9 }}
+                    whileTap={{ scale: 0.95 }}
+                    transition={{ type: "spring", stiffness: 400, damping: 30 }}
                     onClick={handleEnd}
                     className="w-16 h-16 rounded-full bg-destructive flex items-center justify-center"
                     data-testid="button-end-call"
@@ -356,7 +362,8 @@ export function MobileCallOverlay({
             ) : (
               <div className="flex justify-center">
                 <motion.button
-                  whileTap={{ scale: 0.9 }}
+                  whileTap={{ scale: 0.95 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 30 }}
                   onClick={handleEnd}
                   className="w-16 h-16 rounded-full bg-destructive flex items-center justify-center"
                   data-testid="button-end-call"
