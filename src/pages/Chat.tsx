@@ -136,23 +136,25 @@ const Chat: React.FC = () => {
 
   return (
     <div className="container mx-auto p-4 max-w-6xl uber-font" data-testid="chat-page">
-      <div className="flex items-center justify-between gap-3 mb-4">
+      <div className="flex items-center justify-between gap-3 mb-5">
         <div className="flex items-center gap-3">
           <Button 
             variant="ghost" 
             size="icon"
-            className="uber-icon-btn"
+            className="h-10 w-10 rounded-full hover:bg-primary/10 transition-colors"
             onClick={() => navigate(-1)}
             data-testid="button-go-back"
           >
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
-            <h1 className="uber-heading text-xl flex items-center gap-2" data-testid="text-page-title">
-              <MessageSquare className="h-5 w-5 text-primary" />
+            <h1 className="text-xl font-bold tracking-tight flex items-center gap-2.5" data-testid="text-page-title">
+              <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center shadow-sm">
+                <MessageSquare className="h-4 w-4 text-primary-foreground" />
+              </div>
               Messages
             </h1>
-            <p className="text-xs text-muted-foreground">Chat with your team</p>
+            <p className="text-xs text-muted-foreground mt-0.5 ml-10">Connect with your team</p>
           </div>
         </div>
         
@@ -160,7 +162,7 @@ const Chat: React.FC = () => {
           <Button
             variant="outline"
             size="sm"
-            className="gap-1.5 rounded-full"
+            className="gap-1.5 rounded-full border-border/50 hover:border-primary/30 hover:bg-primary/5 transition-all"
             onClick={() => setShowTemplates(true)}
             data-testid="button-templates"
           >
@@ -170,7 +172,7 @@ const Chat: React.FC = () => {
           <Button
             variant="outline"
             size="sm"
-            className="gap-1.5 rounded-full"
+            className="gap-1.5 rounded-full border-border/50 hover:border-primary/30 hover:bg-primary/5 transition-all"
             onClick={() => navigate('/notifications')}
             data-testid="button-notifications"
           >
@@ -203,8 +205,8 @@ const Chat: React.FC = () => {
         </Card>
       )}
 
-      <div className="flex h-[calc(100vh-12rem)] overflow-hidden uber-card-elevated bg-card dark:bg-gray-900">
-        <div className={`${isMobile ? 'w-full md:w-80' : 'w-80'} h-full border-r bg-card dark:bg-gray-900`}>
+      <div className="flex h-[calc(100vh-12rem)] overflow-hidden rounded-2xl border border-border/50 shadow-lg bg-card dark:bg-gray-900">
+        <div className={`${isMobile ? 'w-full md:w-80' : 'w-80'} h-full border-r border-border/50 bg-card dark:bg-gray-900`}>
           <ChatSidebar />
         </div>
         <div className="flex-1 h-full overflow-hidden bg-gradient-to-b from-muted/30 to-muted/10 dark:from-gray-950 dark:to-gray-900">
@@ -212,11 +214,19 @@ const Chat: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex items-center justify-center gap-2 mt-4">
+      <div className="flex items-center justify-center gap-2 mt-5">
         {FEATURED_TEMPLATES.map((template) => (
           <button
             key={template.id}
-            className={`uber-pill gap-1.5 ${template.color === 'bg-amber-500' ? 'uber-pill-warning' : template.color === 'bg-pink-500' ? 'uber-pill-danger' : template.color === 'bg-blue-500' ? 'uber-pill-dark' : 'uber-pill-success'}`}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all shadow-sm hover:shadow-md hover:scale-105 ${
+              template.color === 'bg-amber-500' 
+                ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400 hover:bg-amber-500/20' 
+                : template.color === 'bg-pink-500' 
+                ? 'bg-pink-500/10 text-pink-700 dark:text-pink-400 hover:bg-pink-500/20' 
+                : template.color === 'bg-blue-500' 
+                ? 'bg-blue-500/10 text-blue-700 dark:text-blue-400 hover:bg-blue-500/20' 
+                : 'bg-green-500/10 text-green-700 dark:text-green-400 hover:bg-green-500/20'
+            }`}
             onClick={() => handleSelectTemplate(template.text)}
             data-testid={`featured-template-${template.id}`}
           >
