@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, 
@@ -10,14 +10,20 @@ import {
   CheckCircle,
   BarChart,
   FileText,
-  Bell
+  Bell,
+  AlertTriangle,
+  Cloud,
+  CloudOff,
+  Loader2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { hapticPresets } from '@/lib/haptics';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useUser } from '@/context/user/UserContext';
 import { AppRole } from '@/types';
 import { MobileMoreMenu } from './MobileMoreMenu';
+import { EmergencySOS } from './EmergencySOS';
+import { useSyncStatus } from './SyncStatusBar';
 
 interface NavItem {
   icon: React.ElementType;
@@ -32,6 +38,9 @@ interface MobileBottomNavProps {
   pendingApprovals?: number;
   chatUnread?: number;
   className?: string;
+  showSyncStatus?: boolean;
+  showSOSButton?: boolean;
+  onOpenSyncQueue?: () => void;
 }
 
 const getNavItemsForRole = (hasRole: (role: AppRole) => boolean): NavItem[] => {
@@ -78,11 +87,23 @@ const getNavItemsForRole = (hasRole: (role: AppRole) => boolean): NavItem[] => {
   return items;
 };
 
-export function MobileBottomNav({ notificationCount = 0, pendingApprovals = 0, chatUnread = 0, className }: MobileBottomNavProps) {
+export function MobileBottomNav({ 
+  notificationCount = 0, 
+  pendingApprovals = 0, 
+  chatUnread = 0, 
+  className,
+  showSyncStatus = true,
+  showSOSButton = true,
+  onOpenSyncQueue
+}: MobileBottomNavProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { hasRole } = useUser();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [showSOS, setShowSOS] = useState(false);
+  
+  // Sync status hook
+  const { isOnline, isSyncing, pendingCount } = useSyncStatus();
 
   const navItems = getNavItemsForRole(hasRole);
 
@@ -186,6 +207,81 @@ export function MobileBottomNav({ notificationCount = 0, pendingApprovals = 0, c
             );
           })}
 
+          {/* Sync Status Indicator */}
+          {showSyncStatus && (
+            <button
+              onClick={() => {
+                hapticPresets.buttonPress();
+                onOpenSyncQueue?.();
+              }}
+              className={cn(
+                "flex flex-col items-center justify-center flex-1 h-full gap-0.5 relative",
+                "transition-colors touch-manipulation",
+                !isOnline 
+                  ? "text-destructive" 
+                  : pendingCount > 0 
+                    ? "text-black dark:text-white" 
+                    : "text-black/40 dark:text-white/40"
+              )}
+              data-testid="nav-sync"
+              aria-label={!isOnline ? 'Offline' : pendingCount > 0 ? `${pendingCount} pending sync` : 'Synced'}
+            >
+              <motion.div 
+                className="relative"
+                whileTap={{ scale: 0.9 }}
+                transition={{ duration: 0.1 }}
+              >
+                {!isOnline ? (
+                  <CloudOff className="h-5 w-5" />
+                ) : isSyncing ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <Cloud className="h-5 w-5" />
+                )}
+                {pendingCount > 0 && isOnline && !isSyncing && (
+                  <motion.span 
+                    className="absolute -top-1 -right-1.5 h-4 min-w-4 flex items-center justify-center rounded-full bg-black dark:bg-white text-white dark:text-black text-[10px] font-bold px-1"
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ type: 'spring', stiffness: 500, damping: 15 }}
+                    data-testid="badge-sync-pending"
+                    aria-label={`${pendingCount} pending`}
+                  >
+                    {pendingCount > 99 ? '99+' : pendingCount}
+                  </motion.span>
+                )}
+              </motion.div>
+              <span className="text-[10px] font-medium">
+                {!isOnline ? 'Offline' : isSyncing ? 'Syncing' : 'Sync'}
+              </span>
+            </button>
+          )}
+
+          {/* SOS Button */}
+          {showSOSButton && (
+            <button
+              onClick={() => {
+                hapticPresets.buttonPress();
+                setShowSOS(true);
+              }}
+              className={cn(
+                "flex flex-col items-center justify-center flex-1 h-full gap-0.5 relative",
+                "transition-colors touch-manipulation",
+                "text-destructive active:text-destructive/80"
+              )}
+              data-testid="nav-sos"
+              aria-label="Emergency SOS"
+            >
+              <motion.div 
+                whileTap={{ scale: 0.9 }}
+                transition={{ duration: 0.1 }}
+              >
+                <AlertTriangle className="h-5 w-5" />
+              </motion.div>
+              <span className="text-[10px] font-medium">SOS</span>
+            </button>
+          )}
+
           <button
             onClick={handleOpenMenu}
             className={cn(
@@ -212,6 +308,9 @@ export function MobileBottomNav({ notificationCount = 0, pendingApprovals = 0, c
       <div className="h-16 sm:hidden" aria-hidden="true" />
 
       <MobileMoreMenu isOpen={isMenuOpen} onClose={() => setIsMenuOpen(false)} />
+      
+      {/* Emergency SOS Modal */}
+      <EmergencySOS isVisible={showSOS} onClose={() => setShowSOS(false)} />
     </>
   );
 }

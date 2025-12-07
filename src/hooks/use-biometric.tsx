@@ -243,6 +243,7 @@ export function useBiometric(): UseBiometricReturn {
     success: boolean;
     credentials?: BiometricCredentials;
     error?: string;
+    requiresReauth?: boolean;
   }> => {
     const hasCredentials = await checkStoredCredentialsExist();
     if (!hasCredentials) {
@@ -250,6 +251,33 @@ export function useBiometric(): UseBiometricReturn {
         success: false,
         error: 'No saved credentials. Please log in with email and password first.',
       };
+    }
+
+    // Verify device trust before proceeding with biometric auth
+    try {
+      const { verifyDeviceTrust } = await import('@/lib/device-trust');
+      // Get stored username to check device trust
+      const { NativeBiometric } = await import('capacitor-native-biometric');
+      const storedCreds = await NativeBiometric.getCredentials({ server: CREDENTIAL_SERVER });
+      
+      if (storedCreds.username) {
+        const trustResult = await verifyDeviceTrust(storedCreds.username);
+        
+        if (!trustResult.isTrusted) {
+          console.warn('[Biometric] Device trust verification failed:', trustResult.reason);
+          return {
+            success: false,
+            error: trustResult.reason || 'Device verification failed. Please sign in with your password.',
+            requiresReauth: true,
+          };
+        }
+        
+        console.log('[Biometric] Device trust verified, score:', trustResult.trustScore);
+      }
+    } catch (trustError) {
+      // If device trust module fails, log but continue with biometric auth
+      // This provides defense-in-depth without breaking functionality
+      console.warn('[Biometric] Device trust check failed, proceeding with caution:', trustError);
     }
 
     const authResult = await authenticate({
@@ -346,6 +374,16 @@ export async function saveCredentials(
       server: CREDENTIAL_SERVER,
     });
     
+    // Register device trust when saving credentials
+    try {
+      const { registerTrustedDevice } = await import('@/lib/device-trust');
+      await registerTrustedDevice(credentials.username);
+      console.log('[Biometric] Device trust registered for user');
+    } catch (trustError) {
+      // Log but don't fail - device trust is defense in depth
+      console.warn('[Biometric] Failed to register device trust:', trustError);
+    }
+    
     console.log('[Biometric] Credentials saved');
     return { success: true };
   } catch (error: any) {
@@ -392,8 +430,29 @@ export async function deleteCredentials(): Promise<{ success: boolean; error?: s
       return { success: false, error: 'Not running in native environment' };
     }
 
+    // Get username before deleting to revoke device trust
+    let username: string | null = null;
+    try {
+      const { NativeBiometric } = await import('capacitor-native-biometric');
+      const storedCreds = await NativeBiometric.getCredentials({ server: CREDENTIAL_SERVER });
+      username = storedCreds.username || null;
+    } catch {
+      // Continue with deletion even if we can't get username
+    }
+
     const { NativeBiometric } = await import('capacitor-native-biometric');
     await NativeBiometric.deleteCredentials({ server: CREDENTIAL_SERVER });
+    
+    // Revoke device trust when deleting credentials
+    if (username) {
+      try {
+        const { revokeDeviceTrust } = await import('@/lib/device-trust');
+        revokeDeviceTrust(username);
+        console.log('[Biometric] Device trust revoked for user');
+      } catch (trustError) {
+        console.warn('[Biometric] Failed to revoke device trust:', trustError);
+      }
+    }
     
     console.log('[Biometric] Credentials deleted');
     return { success: true };
