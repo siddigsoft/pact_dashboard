@@ -31,6 +31,7 @@ const ChatWindow: React.FC = () => {
   const [messageText, setMessageText] = useState('');
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploadingFiles, setUploadingFiles] = useState<Record<string, boolean>>({});
+  const [isTyping, setIsTyping] = useState(false);
   const { currentUser } = useUser();
   const { toast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -38,6 +39,15 @@ const ChatWindow: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const chatMessages = activeChat ? getChatMessages(activeChat.id) || [] : [];
+
+  // Simulate typing indicator
+  useEffect(() => {
+    if (messageText.length > 0) {
+      setIsTyping(true);
+      const timer = setTimeout(() => setIsTyping(false), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [messageText]);
   
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -191,108 +201,115 @@ const ChatWindow: React.FC = () => {
 
   if (!activeChat) {
     return (
-      <div className="h-full flex flex-col items-center justify-center p-6 text-center" data-testid="no-chat-selected">
-        <div className="bg-card dark:bg-gray-800 p-8 rounded-2xl shadow-sm max-w-sm">
-          <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
-            <MessageSquare className="h-8 w-8 text-primary" />
+      <div className="h-full flex flex-col items-center justify-center p-6 text-center bg-gradient-to-b from-background via-background to-muted/20" data-testid="no-chat-selected">
+        <div className="relative">
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-primary/5 rounded-full blur-3xl" />
+          <div className="relative bg-card dark:bg-gray-800/80 backdrop-blur-sm p-10 rounded-3xl border border-border/50 shadow-xl max-w-sm">
+            <div className="h-20 w-20 rounded-2xl bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center mx-auto mb-6 shadow-lg shadow-primary/20">
+              <MessageSquare className="h-10 w-10 text-primary-foreground" />
+            </div>
+            <h2 className="text-xl font-bold mb-3 tracking-tight">Select a conversation</h2>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              Choose a chat from the sidebar or start a new conversation with your team
+            </p>
           </div>
-          <h2 className="text-lg font-semibold mb-2">Select a conversation</h2>
-          <p className="text-sm text-muted-foreground">
-            Choose a chat from the sidebar or start a new conversation
-          </p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-full" data-testid="chat-window">
-      <div className="py-2.5 px-4 flex items-center justify-between border-b bg-card dark:bg-gray-900">
+    <div className="flex flex-col h-full bg-gradient-to-b from-muted/20 via-background to-background" data-testid="chat-window">
+      <div className="py-3 px-4 flex items-center justify-between border-b bg-card/95 dark:bg-gray-900/95 backdrop-blur-md sticky top-0 z-10">
         <div className="flex items-center gap-3">
           <Button
             variant="ghost"
             size="icon"
-            className="md:hidden h-8 w-8"
+            className="md:hidden uber-icon-btn"
             onClick={() => setActiveChat(null)}
             data-testid="button-back"
           >
-            <ArrowLeft className="h-4 w-4" />
+            <ArrowLeft className="h-5 w-5" />
           </Button>
           
-          <div className="relative">
+          <div className="relative group cursor-pointer">
             {activeChat.type === 'private' ? (
-              <Avatar className="h-10 w-10">
-                <AvatarFallback className="bg-gradient-to-br from-blue-500 to-blue-600 text-white font-medium">
+              <Avatar className="h-11 w-11 ring-2 ring-offset-2 ring-offset-background ring-primary/20 transition-all group-hover:ring-primary/40">
+                <AvatarFallback className="bg-gradient-to-br from-primary/90 to-primary text-primary-foreground font-semibold text-sm">
                   {activeChat.name.charAt(0).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
             ) : (
-              <Avatar className="h-10 w-10">
+              <Avatar className="h-11 w-11 ring-2 ring-offset-2 ring-offset-background ring-purple-400/20">
                 <AvatarFallback className="bg-gradient-to-br from-purple-500 to-purple-600 text-white">
                   <Users className="h-5 w-5" />
                 </AvatarFallback>
               </Avatar>
             )}
             {activeChat.type === 'private' && (
-              <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-card" />
+              <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 rounded-full border-2 border-card shadow-sm">
+                <div className="w-full h-full rounded-full bg-green-400 animate-ping opacity-75" />
+              </div>
             )}
           </div>
           
-          <div>
-            <h3 className="font-medium text-sm leading-tight" data-testid="text-chat-name">{activeChat.name}</h3>
-            <p className="text-xs text-muted-foreground">
+          <div className="min-w-0">
+            <h3 className="font-semibold text-sm leading-tight truncate" data-testid="text-chat-name">{activeChat.name}</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
               {activeChat.type === 'group' 
                 ? `${activeChat.participants.length} participants` 
                 : (
-                  <span className="flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                    Online
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-green-500 shadow-sm shadow-green-500/50" />
+                    <span className="text-green-600 dark:text-green-400 font-medium">Active now</span>
                   </span>
                 )}
             </p>
           </div>
         </div>
         
-        <div className="flex items-center gap-0.5">
-          <Button variant="ghost" size="icon" className="h-8 w-8" data-testid="button-call">
-            <Phone className="h-4 w-4" />
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="icon" className="uber-icon-btn" data-testid="button-call">
+            <Phone className="h-4.5 w-4.5" />
           </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8" data-testid="button-video">
-            <Video className="h-4 w-4" />
+          <Button variant="ghost" size="icon" className="uber-icon-btn" data-testid="button-video">
+            <Video className="h-4.5 w-4.5" />
           </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8" data-testid="button-more">
-            <MoreVertical className="h-4 w-4" />
+          <Button variant="ghost" size="icon" className="uber-icon-btn" data-testid="button-more">
+            <MoreVertical className="h-4.5 w-4.5" />
           </Button>
         </div>
       </div>
       
-      <ScrollArea className="flex-1 p-4">
-        <div className="space-y-3 pb-4">
+      <ScrollArea className="flex-1 px-4 py-6">
+        <div className="space-y-4 pb-4">
           {chatMessages.length > 0 ? (
-            chatMessages.map((message) => {
+            chatMessages.map((message, index) => {
               const isOwnMessage = message.senderId === currentUser?.id;
+              const showAvatar = !isOwnMessage && (index === 0 || chatMessages[index - 1]?.senderId === currentUser?.id);
               
               return (
                 <div
                   key={message.id}
-                  className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}
+                  className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'} animate-in fade-in-0 slide-in-from-bottom-2 duration-300`}
                   data-testid={`message-${message.id}`}
+                  style={{ animationDelay: `${Math.min(index * 50, 300)}ms` }}
                 >
-                  <div className={`flex items-end gap-2 max-w-[75%] ${isOwnMessage ? 'flex-row-reverse' : ''}`}>
+                  <div className={`flex items-end gap-2.5 max-w-[80%] ${isOwnMessage ? 'flex-row-reverse' : ''}`}>
                     {!isOwnMessage && (
-                      <Avatar className="h-7 w-7">
-                        <AvatarFallback className="bg-gradient-to-br from-gray-400 to-gray-500 text-white text-xs">
+                      <Avatar className={`h-8 w-8 shrink-0 ${showAvatar ? 'visible' : 'invisible'}`}>
+                        <AvatarFallback className="bg-gradient-to-br from-gray-400 to-gray-500 text-white text-xs font-medium">
                           {activeChat.name.charAt(0).toUpperCase()}
                         </AvatarFallback>
                       </Avatar>
                     )}
                     
                     <div
-                      className={`rounded-2xl px-3.5 py-2 ${
+                      className={`relative group ${
                         isOwnMessage
-                          ? 'bg-primary text-primary-foreground rounded-br-md'
-                          : 'bg-card dark:bg-gray-800 text-foreground rounded-bl-md border'
-                      }`}
+                          ? 'bg-gradient-to-br from-primary to-primary/90 text-primary-foreground rounded-2xl rounded-br-sm shadow-md shadow-primary/10'
+                          : 'bg-card dark:bg-gray-800/90 text-foreground rounded-2xl rounded-bl-sm border border-border/50 shadow-sm'
+                      } px-4 py-2.5 transition-all hover:shadow-lg`}
                     >
                       {message.attachments && (
                         <div className="mb-2 space-y-2">
