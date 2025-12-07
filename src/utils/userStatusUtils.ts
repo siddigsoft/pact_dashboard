@@ -13,6 +13,34 @@ export interface UserStatusInfo {
 const ONLINE_THRESHOLD_MINUTES = 5;
 
 export const getUserStatus = (user: User): UserStatusInfo => {
+  const avail = (user.availability || '').toLowerCase();
+  if (avail === 'offline') {
+    return {
+      type: 'offline',
+      color: 'bg-gray-400 dark:bg-gray-600',
+      badgeVariant: 'outline',
+      label: 'Offline'
+    };
+  }
+
+  if (avail === 'busy') {
+    return {
+      type: 'same-day',
+      color: 'bg-orange-500',
+      badgeVariant: 'secondary',
+      label: 'Busy'
+    };
+  }
+
+  if (avail === 'online') {
+    return {
+      type: 'online',
+      color: 'bg-green-500',
+      badgeVariant: 'default',
+      label: 'Online'
+    };
+  }
+
   const lastSeenTime = user.location?.lastUpdated || user.lastActive;
   
   if (lastSeenTime) {
