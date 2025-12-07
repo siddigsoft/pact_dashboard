@@ -714,17 +714,19 @@ const MMPDetailView = () => {
       
 
       {/* Move file management to the top of the page */}
-      {(canArchive || canDelete || canApprove) && (
+      {(canArchive || canDelete || canApprove || canForward) && (
         <div className="mb-6">
           <MMPFileManagement
             mmpFile={mmpFile}
             canArchive={canArchive}
             canDelete={canDelete}
             canApprove={canApprove}
+            canForward={canForward}
             onArchive={handleArchive}
             onDelete={handleDelete}
             onResetApproval={handleReset}
             onApprove={handleApprove}
+            onForward={() => setForwardOpen(true)}
           />
         </div>
       )}
