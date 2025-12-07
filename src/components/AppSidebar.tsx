@@ -32,7 +32,10 @@
     Banknote,
     ClipboardCheck,
     BookOpen,
-    FileSignature
+    FileSignature,
+    Phone,
+    MessageSquare,
+    Bell
   } from "lucide-react";
   import { useSiteVisitReminders } from "@/hooks/use-site-visit-reminders";
   import Logo from "../assets/logo.png";
@@ -96,7 +99,10 @@
     Eye,
     EyeOff,
     BookOpen,
-    FileSignature
+    FileSignature,
+    Phone,
+    MessageSquare,
+    Bell
   };
 
 
@@ -151,6 +157,18 @@
     }
     if (overviewItems.length) groups.push({ id: 'overview', label: "Overview", order: 1, items: overviewItems });
 
+    const communicationItems: MenuGroup['items'] = [];
+    if (!isHidden('/chat')) {
+      communicationItems.push({ id: 'chat', title: "Chat", url: "/chat", icon: MessageSquare, priority: 1, isPinned: isPinned('/chat') });
+    }
+    if (!isHidden('/calls')) {
+      communicationItems.push({ id: 'calls', title: "Calls", url: "/calls", icon: Phone, priority: 2, isPinned: isPinned('/calls') });
+    }
+    if (!isHidden('/notifications')) {
+      communicationItems.push({ id: 'notifications', title: "Notifications", url: "/notifications", icon: Bell, priority: 3, isPinned: isPinned('/notifications') });
+    }
+    if (communicationItems.length) groups.push({ id: 'communication', label: "Communication", order: 1.5, items: communicationItems });
+
     const planningItems: MenuGroup['items'] = [];
     if (!isHidden('/projects') && (isAdmin || isICT || perms.projects)) {
       planningItems.push({ id: 'projects', title: "Projects", url: "/projects", icon: FolderKanban, priority: 1, isPinned: isPinned('/projects') });
@@ -190,10 +208,13 @@
       dataItems.push({ id: 'data-visibility', title: "Data Visibility", url: "/data-visibility", icon: Link2, priority: 1, isPinned: isPinned('/data-visibility') });
     }
     if (!isHidden('/reports') && ((isAdmin || perms.reports) && !isICT)) {
-      dataItems.push({ id: 'reports', title: "Reports", url: "/reports", icon: Calendar, priority: 2, isPinned: isPinned('/reports') });
+      dataItems.push({ id: 'reports', title: "Reports", url: "/reports", icon: BarChart3, priority: 2, isPinned: isPinned('/reports') });
+    }
+    if (!isHidden('/calendar')) {
+      dataItems.push({ id: 'calendar', title: "Calendar", url: "/calendar", icon: Calendar, priority: 3, isPinned: isPinned('/calendar') });
     }
     if (!isHidden('/tracker-preparation-plan') && (isAdmin || isICT)) {
-      dataItems.push({ id: 'tracker-plan', title: "Tracker Preparation", url: "/tracker-preparation-plan", icon: BarChart3, priority: 3, isPinned: isPinned('/tracker-preparation-plan') });
+      dataItems.push({ id: 'tracker-plan', title: "Tracker Preparation", url: "/tracker-preparation-plan", icon: BarChart3, priority: 4, isPinned: isPinned('/tracker-preparation-plan') });
     }
     if (dataItems.length) groups.push({ id: 'reports', label: "Data & Reports", order: 5, items: dataItems });
 
