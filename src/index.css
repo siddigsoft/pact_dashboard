@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@200;300;400;500;600;700;800&family=Merriweather:wght@400;700&family=Fira+Code:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@400;500;600;700&family=Playfair+Display:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 @import './styles/mobile-only-theme.css';
 @import './styles/whatsapp-notifications.css';
 
@@ -100,40 +100,44 @@
   }
 }
 
-/* Typography Layer - Compact & Professional */
+/* Typography Layer - Premium Font System */
 @layer base {
   h1 {
-    @apply text-2xl font-semibold leading-tight tracking-tight;
-    font-family: 'Inter', system-ui, sans-serif;
-    letter-spacing: -0.02em;
+    @apply text-2xl font-semibold leading-tight;
+    font-family: 'Poppins', system-ui, sans-serif;
+    letter-spacing: -0.025em;
   }
 
   h2 {
-    @apply text-xl font-semibold leading-snug tracking-tight;
-    font-family: 'Inter', system-ui, sans-serif;
-    letter-spacing: -0.01em;
+    @apply text-xl font-semibold leading-snug;
+    font-family: 'Poppins', system-ui, sans-serif;
+    letter-spacing: -0.02em;
   }
 
   h3 {
     @apply text-lg font-medium leading-snug;
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: 'Poppins', system-ui, sans-serif;
+    letter-spacing: -0.01em;
   }
 
   h4 {
     @apply text-base font-medium;
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: 'Poppins', system-ui, sans-serif;
   }
 
   h5 {
     @apply text-sm font-medium;
+    font-family: 'Poppins', system-ui, sans-serif;
   }
 
   h6 {
     @apply text-xs font-medium;
+    font-family: 'Poppins', system-ui, sans-serif;
   }
 
   p {
     @apply leading-relaxed text-sm;
+    font-family: 'Inter', system-ui, sans-serif;
   }
 
   small {
@@ -141,7 +145,7 @@
   }
 
   strong, b {
-    @apply font-medium;
+    @apply font-semibold;
   }
 
   em, i {
@@ -149,11 +153,29 @@
   }
 
   code {
-    @apply bg-muted px-1 py-0.5 rounded text-xs font-mono;
+    @apply bg-muted px-1.5 py-0.5 rounded text-xs;
+    font-family: 'JetBrains Mono', monospace;
   }
 
   pre {
-    @apply bg-muted p-2.5 rounded-md overflow-x-auto font-mono text-xs;
+    @apply bg-muted p-3 rounded-md overflow-x-auto text-xs;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* Monospace utility for IDs, codes, technical data */
+  .font-mono {
+    font-family: 'JetBrains Mono', monospace !important;
+    font-feature-settings: 'liga' 0;
+  }
+
+  /* Display font utility for impactful headings */
+  .font-display {
+    font-family: 'Poppins', system-ui, sans-serif !important;
+  }
+
+  /* Elegant serif for premium/luxury sections */
+  .font-serif {
+    font-family: 'Playfair Display', Georgia, serif !important;
   }
 }
 
