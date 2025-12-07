@@ -87,9 +87,10 @@ const CostSubmission = () => {
 
   // PROJECT TEAM MEMBERSHIP FILTER
   // Filter submissions to only show those from projects the user belongs to
+  // Non-admin users with no project assignments see nothing (empty array)
   const submissions = useMemo(() => {
     if (isAdminOrSuperUser) return supervisorFilteredSubmissions;
-    if (userProjectIds.length === 0) return supervisorFilteredSubmissions; // Let RLS handle if no projects
+    if (userProjectIds.length === 0) return []; // No project memberships = no data
     return supervisorFilteredSubmissions.filter(s => 
       !s.projectId || userProjectIds.includes(s.projectId)
     );
@@ -104,9 +105,10 @@ const CostSubmission = () => {
       : siteVisits.filter(visit => visit.assignedTo === currentUser?.id && visit.status === 'completed');
 
   // Apply project filter to site visits
+  // Non-admin users with no project assignments see nothing (empty array)
   const availableSiteVisits = useMemo(() => {
     if (isAdminOrSuperUser) return baseAvailableSiteVisits;
-    if (userProjectIds.length === 0) return baseAvailableSiteVisits;
+    if (userProjectIds.length === 0) return []; // No project memberships = no data
     return baseAvailableSiteVisits.filter(visit => {
       const projectId = (visit as any).projectId || (visit as any).mmpDetails?.projectId;
       return !projectId || userProjectIds.includes(projectId);
