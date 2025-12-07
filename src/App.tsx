@@ -19,6 +19,7 @@ const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const MMP = lazy(() => import('./pages/MMP'));
 const MMPUpload = lazy(() => import('./pages/MMPUpload'));
+const MMPDetail = lazy(() => import('./pages/MMPDetail'));
 const MMPDetailView = lazy(() => import('./pages/MMPDetailView'));
 const MMPVerification = lazy(() => import('./pages/MMPVerification'));
 const MMPDetailedVerification = lazy(() => import('./pages/MMPDetailedVerification'));
@@ -175,7 +176,7 @@ const AppRoutes = () => {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/mmp" element={<MMP />} />
         <Route path="/mmp/upload" element={<MMPUpload />} />
-        <Route path="/mmp/:id" element={<MMPDetailView />} />
+        <Route path="/mmp/:id" element={<MMPDetail />} />
         <Route path="/mmp/:id/view" element={<MMPDetailView />} />
         <Route path="/mmp/:id/edit" element={<EditMMP />} />
         <Route path="/mmp/edit/:id" element={<EditMMP />} />
