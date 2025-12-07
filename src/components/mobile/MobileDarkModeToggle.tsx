@@ -65,7 +65,7 @@ export function MobileDarkModeToggle({
       <button
         onClick={cycleTheme}
         className={cn(
-          "w-10 h-10 rounded-full flex items-center justify-center",
+          "w-11 h-11 rounded-full flex items-center justify-center",
           "bg-black/5 dark:bg-white/10",
           "text-black dark:text-white",
           "active:scale-95 transition-all touch-manipulation",
@@ -92,7 +92,7 @@ export function MobileDarkModeToggle({
       <button
         onClick={cycleTheme}
         className={cn(
-          "h-10 px-4 rounded-full flex items-center gap-2",
+          "h-11 px-4 rounded-full flex items-center gap-2",
           "bg-black/5 dark:bg-white/10",
           "text-black dark:text-white",
           "active:scale-95 transition-all touch-manipulation",
@@ -133,7 +133,7 @@ export function MobileDarkModeToggle({
             key={mode}
             onClick={() => setSpecificTheme(mode)}
             className={cn(
-              "relative flex items-center justify-center w-10 h-10 rounded-full",
+              "relative flex items-center justify-center w-11 h-11 rounded-full",
               "transition-all touch-manipulation",
               theme === mode 
                 ? "text-black dark:text-white" 
