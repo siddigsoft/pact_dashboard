@@ -339,18 +339,18 @@
     return (
       <Sidebar collapsible="icon" className="border-r bg-white dark:bg-gray-900">
         <SidebarHeader className="border-b">
-          <div className="flex h-16 items-center gap-3 px-4">
-            <img src={Logo} alt="PACT Logo" className="h-14 w-14 shrink-0 object-contain" />
+          <div className="flex h-12 items-center gap-2 px-3">
+            <img src={Logo} alt="PACT Logo" className="h-10 w-10 shrink-0 object-contain" />
             <SidebarTrigger className="ml-auto" data-testid="button-sidebar-trigger" />
           </div>
         </SidebarHeader>
 
-        <SidebarContent className="px-3 py-4">
+        <SidebarContent className="px-2 py-2">
           {menuGroups.map((group, index) => {
             const isCollapsed = collapsedGroups.has(group.id);
             
             return (
-              <Collapsible key={group.id} open={!isCollapsed} className={index > 0 ? "mt-1" : ""}>
+              <Collapsible key={group.id} open={!isCollapsed} className={index > 0 ? "mt-0.5" : ""}>
                 <SidebarGroup>
                   <CollapsibleTrigger asChild>
                     <SidebarGroupLabel 
@@ -364,14 +364,14 @@
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <SidebarGroupContent>
-                      <SidebarMenu className="space-y-1 mt-1">
+                      <SidebarMenu className="space-y-0.5 mt-0.5">
                         {group.items.map((item) => (
                           <SidebarMenuItem key={item.id}>
                             <SidebarMenuButton
                               asChild
                               isActive={pathname === item.url}
                               tooltip={item.title}
-                              className={`h-7 px-3 rounded-lg text-sm font-medium transition-all duration-200 
+                              className={`h-6 px-2 rounded-md text-sm font-medium transition-all duration-200 
                                 ${
                                   pathname === item.url
                                     ? "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 font-semibold"
@@ -403,7 +403,7 @@
           })}
         </SidebarContent>
 
-        <SidebarFooter className="border-t p-3">
+        <SidebarFooter className="border-t p-2">
           {currentUser && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
