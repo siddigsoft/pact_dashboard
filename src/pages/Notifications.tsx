@@ -309,36 +309,35 @@ const Notifications: React.FC = () => {
 
   return (
     <div className="uber-page uber-font" data-testid="notifications-page">
-      <div className="uber-page-content max-w-3xl">
-        <div className="flex items-center gap-3 mb-4 uber-slide-in-down">
-          <Button 
-            variant="ghost" 
-            size="icon"
-            className="uber-icon-btn"
-            onClick={() => navigate(-1)}
-            data-testid="button-go-back"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <div className="flex-1">
-            <div className="flex items-center gap-2">
-              <Bell className="h-5 w-5 text-primary" />
-              <h1 className="uber-heading text-xl" data-testid="text-page-title">Notifications</h1>
-            {unreadCount > 0 && (
-              <span className="uber-pill uber-pill-danger text-[10px]" data-testid="badge-unread">
-                {unreadCount} new
-              </span>
-            )}
+      <div className="uber-page-content">
+        <div className="uber-page-header uber-slide-in-down">
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => navigate(-1)}
+              className="uber-icon-btn"
+              data-testid="button-go-back"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </button>
+            <div>
+              <h1 className="text-2xl uber-heading" data-testid="text-page-title">Notifications</h1>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-xs text-muted-foreground uber-text">Stay updated on activities</span>
+                {unreadCount > 0 && (
+                  <span className="uber-pill uber-pill-danger text-[10px]" data-testid="badge-unread">
+                    {unreadCount} new
+                  </span>
+                )}
+              </div>
+            </div>
           </div>
-          <p className="text-xs text-muted-foreground">Stay updated on activities</p>
-        </div>
-        <Dialog open={showSendDialog} onOpenChange={setShowSendDialog}>
-          <DialogTrigger asChild>
-            <Button size="sm" className="gap-1.5 h-8" data-testid="button-send-notification">
-              <Plus className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Send</span>
-            </Button>
-          </DialogTrigger>
+          <div className="flex items-center gap-2">
+            <Dialog open={showSendDialog} onOpenChange={setShowSendDialog}>
+              <DialogTrigger asChild>
+                <button className="uber-icon-btn" data-testid="button-send-notification">
+                  <Plus className="h-5 w-5" />
+                </button>
+              </DialogTrigger>
           <DialogContent className="max-w-lg">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
@@ -422,7 +421,8 @@ const Notifications: React.FC = () => {
               </div>
             </div>
           </DialogContent>
-        </Dialog>
+            </Dialog>
+          </div>
         </div>
 
         <div className="flex gap-2 overflow-x-auto pb-3 mb-3 uber-slide-in-up uber-stagger-1">
@@ -444,198 +444,164 @@ const Notifications: React.FC = () => {
           ))}
         </div>
 
-        <div className="flex items-center gap-2 mb-4 uber-slide-in-up uber-stagger-2">
-          <div className="relative flex-1">
-            <Search className="absolute left-4 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search notifications..."
-              className="uber-search pl-10"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              data-testid="input-search"
-            />
+        <div className="relative uber-slide-in-up uber-stagger-2">
+          <Search className="absolute left-4 top-3.5 h-5 w-5 text-muted-foreground" />
+          <input
+            type="text"
+            placeholder="Search notifications..."
+            className="uber-search pl-12"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            data-testid="input-search"
+          />
+        </div>
+
+        <div className="uber-tabs uber-slide-in-up uber-stagger-3">
+          <button 
+            className={`uber-tab flex-1 ${activeTab === 'all' ? 'uber-tab-active' : ''}`}
+            onClick={() => setActiveTab('all')}
+            data-testid="tab-all"
+          >
+            All
+          </button>
+          <button 
+            className={`uber-tab flex-1 ${activeTab === 'unread' ? 'uber-tab-active' : ''}`}
+            onClick={() => setActiveTab('unread')}
+            data-testid="tab-unread"
+          >
+            Unread
+            {unreadCount > 0 && (
+              <span className="uber-pill uber-pill-danger ml-2 text-[10px]">{unreadCount}</span>
+            )}
+          </button>
+        </div>
+
+        <div className="uber-section-header uber-slide-in-up uber-stagger-4">
+          <span className="text-xs text-muted-foreground uber-text">
+            {filteredNotifications.length} notification{filteredNotifications.length !== 1 ? 's' : ''}
+          </span>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={markAllAsRead} 
+              disabled={unreadCount === 0}
+              className="uber-icon-btn p-2 disabled:opacity-50"
+              data-testid="button-mark-all-read"
+            >
+              <CheckCheck className="h-4 w-4" />
+            </button>
+            <button 
+              onClick={handleClearAll}
+              className="uber-icon-btn p-2 text-red-500"
+              data-testid="button-clear-all"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
           </div>
-          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'all' | 'unread')}>
-            <TabsList className="h-8">
-              <TabsTrigger value="all" className="text-xs h-7 px-2" data-testid="tab-all">
-                All
-              </TabsTrigger>
-              <TabsTrigger value="unread" className="text-xs h-7 px-2" data-testid="tab-unread">
-                Unread
-                {unreadCount > 0 && (
-                  <Badge variant="destructive" className="h-4 ml-1 px-1 text-[9px]">
-                    {unreadCount}
-                  </Badge>
-                )}
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
         </div>
 
-        <div className="flex items-center justify-between gap-2 mb-3 uber-slide-in-up uber-stagger-3">
-        <span className="text-xs text-muted-foreground">
-          {filteredNotifications.length} notification{filteredNotifications.length !== 1 ? 's' : ''}
-        </span>
-        <div className="flex items-center gap-1.5">
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            onClick={markAllAsRead} 
-            disabled={unreadCount === 0}
-            className="h-7 text-xs gap-1"
-            data-testid="button-mark-all-read"
-          >
-            <CheckCheck className="h-3 w-3" />
-            Mark all read
-          </Button>
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            onClick={handleClearAll}
-            className="h-7 text-xs gap-1 text-destructive hover:text-destructive"
-            data-testid="button-clear-all"
-          >
-            <Trash2 className="h-3 w-3" />
-            Clear
-          </Button>
-        </div>
-      </div>
-
-      {filteredNotifications.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center">
+        {filteredNotifications.length === 0 ? (
+          <div className="uber-card-elevated text-center py-12 uber-slide-in-up uber-stagger-5">
             <Bell className="h-12 w-12 mx-auto text-muted-foreground/30 mb-4" />
-            <p className="font-medium text-muted-foreground">
+            <p className="uber-heading text-muted-foreground">
               {searchQuery ? 'No matching notifications' : activeTab === 'unread' ? 'No unread notifications' : 'No notifications yet'}
             </p>
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="text-sm text-muted-foreground uber-text mt-1">
               {searchQuery ? 'Try a different search term' : activeTab === 'unread' ? 'You\'re all caught up!' : 'Activities will appear here'}
             </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <ScrollArea className="h-[calc(100vh-320px)]">
-          <div className="space-y-4 pb-4">
-            {Object.entries(groupedNotifications).map(([dateGroup, items]) => {
-              if (items.length === 0) return null;
-              
-              return (
-                <div key={dateGroup}>
-                  <div className="flex items-center gap-2 mb-2 px-1">
-                    <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                      {dateGroup}
-                    </span>
-                    <div className="flex-1 h-px bg-border" />
-                    <Badge variant="secondary" className="h-4 text-[10px]">
-                      {items.length}
-                    </Badge>
-                  </div>
-                  
-                  <div className="space-y-1.5">
-                    {items.map((n) => (
-                      <button
-                        key={n.id}
-                        onClick={() => handleOpen(n.id, n.link)}
-                        className="w-full text-left group"
-                        data-testid={`notification-${n.id}`}
-                      >
-                        <Card className={`transition-all ${
-                          !n.isRead 
-                            ? 'border-primary/30 bg-primary/5 dark:bg-primary/10' 
-                            : 'hover:bg-muted/50'
-                        }`}>
-                          <CardContent className="py-3 px-4">
-                            <div className="flex items-start gap-3">
-                              <div className={`p-2 rounded-lg shrink-0 ${getNotificationColor(n.title)}`}>
-                                {getNotificationIcon(n.type, n.title)}
-                              </div>
-                              
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-start justify-between gap-2">
-                                  <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-2">
-                                      <span className={`text-sm font-medium truncate ${!n.isRead ? 'text-foreground' : 'text-muted-foreground'}`}>
-                                        {n.title}
-                                      </span>
-                                      {n.link && (
-                                        <LinkIcon className="h-3 w-3 text-primary shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
-                                      )}
-                                    </div>
-                                    {n.message && (
-                                      <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
-                                        {n.message}
-                                      </p>
-                                    )}
-                                  </div>
-                                  
-                                  <div className="flex items-center gap-2 shrink-0">
-                                    {!n.isRead && (
-                                      <div className="w-2 h-2 rounded-full bg-primary" />
-                                    )}
-                                    <span className="text-[10px] text-muted-foreground whitespace-nowrap">
-                                      {formatNotificationDate(n.createdAt)}
+          </div>
+        ) : (
+          <ScrollArea className="h-[calc(100vh-400px)] uber-slide-in-up uber-stagger-5">
+            <div className="space-y-4 pb-4">
+              {Object.entries(groupedNotifications).map(([dateGroup, items]) => {
+                if (items.length === 0) return null;
+                
+                return (
+                  <div key={dateGroup}>
+                    <div className="uber-section-header mb-2">
+                      <span className="text-xs uber-heading text-muted-foreground uppercase tracking-wide">
+                        {dateGroup}
+                      </span>
+                      <span className="uber-pill uber-pill-light text-[10px]">
+                        {items.length}
+                      </span>
+                    </div>
+                    
+                    <div className="space-y-1.5">
+                      {items.map((n) => (
+                        <button
+                          key={n.id}
+                          onClick={() => handleOpen(n.id, n.link)}
+                          className={`uber-notification-card ${!n.isRead ? 'unread' : ''}`}
+                          data-testid={`notification-${n.id}`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className={`p-2 rounded-xl shrink-0 ${getNotificationColor(n.title)}`}>
+                              {getNotificationIcon(n.type, n.title)}
+                            </div>
+                            
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <span className={`uber-heading text-sm truncate ${!n.isRead ? 'text-foreground' : 'text-muted-foreground'}`}>
+                                      {n.title}
                                     </span>
+                                    {n.link && (
+                                      <LinkIcon className="h-3 w-3 text-primary shrink-0" />
+                                    )}
                                   </div>
+                                  {n.message && (
+                                    <p className="text-xs text-muted-foreground uber-text mt-0.5 line-clamp-2">
+                                      {n.message}
+                                    </p>
+                                  )}
                                 </div>
                                 
-                                <div className="flex items-center gap-2 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                  <Button variant="ghost" size="sm" className="h-6 text-xs gap-1 px-2">
-                                    <MessageSquare className="h-3 w-3" />
-                                    Reply
-                                  </Button>
-                                  <Button variant="ghost" size="sm" className="h-6 text-xs gap-1 px-2">
-                                    <Archive className="h-3 w-3" />
-                                    Archive
-                                  </Button>
-                                  <Button variant="ghost" size="sm" className="h-6 text-xs gap-1 px-2">
-                                    <Star className="h-3 w-3" />
-                                    Star
-                                  </Button>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  {!n.isRead && (
+                                    <div className="w-2 h-2 rounded-full bg-foreground" />
+                                  )}
+                                  <span className="text-[10px] text-muted-foreground uber-text whitespace-nowrap">
+                                    {formatNotificationDate(n.createdAt)}
+                                  </span>
                                 </div>
                               </div>
                             </div>
-                          </CardContent>
-                        </Card>
-                      </button>
-                    ))}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        </ScrollArea>
-      )}
+                );
+              })}
+            </div>
+          </ScrollArea>
+        )}
 
-        <div className="flex items-center justify-center gap-3 mt-4 pt-4 border-t uber-slide-in-up uber-stagger-5">
-          <Button 
-            variant="outline" 
-            size="sm" 
-            className="gap-1.5"
+        <div className="flex items-center justify-center gap-3 mt-4 pt-4 border-t uber-slide-in-up uber-stagger-6">
+          <button
             onClick={() => navigate('/chat')}
+            className="uber-btn uber-btn-outline"
             data-testid="button-go-to-messages"
           >
-            <MessageSquare className="h-3.5 w-3.5" />
+            <MessageSquare className="h-4 w-4" />
             Messages
-          </Button>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            className="gap-1.5"
+          </button>
+          <button
             onClick={() => navigate('/calls')}
+            className="uber-btn uber-btn-outline"
             data-testid="button-go-to-calls"
           >
-            <Phone className="h-3.5 w-3.5" />
+            <Phone className="h-4 w-4" />
             Calls
-          </Button>
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            className="gap-1.5"
+          </button>
+          <button
+            className="uber-btn uber-btn-ghost"
             data-testid="button-notification-settings"
           >
-            <Settings className="h-3.5 w-3.5" />
+            <Settings className="h-4 w-4" />
             Settings
-          </Button>
+          </button>
         </div>
       </div>
     </div>
