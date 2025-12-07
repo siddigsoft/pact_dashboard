@@ -8,6 +8,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { 
   Search, 
   Phone, 
@@ -28,12 +29,34 @@ import {
   Star,
   UserPlus,
   MoreVertical,
-  Info
+  Info,
+  MessageSquare,
+  Bell,
+  Send,
+  X,
+  Calendar,
+  AlertCircle,
+  CheckCircle
 } from 'lucide-react';
 import { useUser } from '@/context/user/UserContext';
 import { useAppContext } from '@/context/AppContext';
 import { useCommunication } from '@/context/communications/CommunicationContext';
 import { useCallSounds } from '@/hooks/useCallSounds';
+
+const MESSAGE_TEMPLATES = [
+  { id: 1, label: "I'll call back", text: "Sorry I missed your call. I'll call you back shortly." },
+  { id: 2, label: "In a meeting", text: "I'm currently in a meeting. Can I call you back in an hour?" },
+  { id: 3, label: "Can you text?", text: "Can't talk right now. Please send me a message instead." },
+  { id: 4, label: "Urgent?", text: "Is this urgent? I'll be available in 30 minutes." },
+  { id: 5, label: "Call tomorrow", text: "Let's schedule a call for tomorrow. What time works for you?" },
+];
+
+const NOTIFICATION_TEMPLATES = [
+  { id: 1, label: "Call reminder", title: "Missed Call Follow-up", message: "Please call back when available" },
+  { id: 2, label: "Meeting request", title: "Meeting Request", message: "Would like to schedule a call to discuss" },
+  { id: 3, label: "Urgent callback", title: "Urgent: Please Call Back", message: "Important matter requires your attention" },
+  { id: 4, label: "Check-in", title: "Quick Check-in", message: "Just wanted to touch base with you" },
+];
 
 const Calls = () => {
   const { currentUser } = useAppContext();
@@ -46,6 +69,11 @@ const Calls = () => {
   const [isSpeakerOn, setIsSpeakerOn] = useState(true);
   const [callDuration, setCallDuration] = useState(0);
   const [favorites, setFavorites] = useState<string[]>([]);
+  const [showMissedCallDialog, setShowMissedCallDialog] = useState(false);
+  const [missedCallUser, setMissedCallUser] = useState<{ id: string; name: string; avatar?: string } | null>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState<string>('');
+  const [customMessage, setCustomMessage] = useState('');
+  const [activeFollowupTab, setActiveFollowupTab] = useState<'message' | 'notification'>('message');
   
   const { stopSounds } = useCallSounds(callState.status);
   
@@ -102,6 +130,30 @@ const Calls = () => {
     if (user) {
       initiateCall(user);
     }
+  };
+
+  const handleMissedCallAction = (userId: string, userName: string, avatar?: string) => {
+    setMissedCallUser({ id: userId, name: userName, avatar });
+    setShowMissedCallDialog(true);
+    setSelectedTemplate('');
+    setCustomMessage('');
+  };
+
+  const handleSendMessage = () => {
+    const messageToSend = customMessage || selectedTemplate;
+    if (messageToSend && missedCallUser) {
+      navigate(`/chat?userId=${missedCallUser.id}&message=${encodeURIComponent(messageToSend)}`);
+    }
+    setShowMissedCallDialog(false);
+  };
+
+  const handleSendNotification = () => {
+    const template = NOTIFICATION_TEMPLATES.find(t => t.title === selectedTemplate);
+    if (template && missedCallUser) {
+      console.log('Sending notification:', { userId: missedCallUser.id, ...template, customMessage });
+      navigate('/notifications');
+    }
+    setShowMissedCallDialog(false);
   };
 
   const toggleFavorite = (userId: string) => {
@@ -592,6 +644,28 @@ const Calls = () => {
                         </div>
                         
                         <div className="flex items-center gap-1">
+                          {isMissed && (
+                            <>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity text-blue-600"
+                                onClick={() => handleMissedCallAction(call.recipientId, recipient.name, recipient.avatar)}
+                                data-testid={`button-message-${call.id}`}
+                              >
+                                <MessageSquare className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity text-amber-600"
+                                onClick={() => handleMissedCallAction(call.recipientId, recipient.name, recipient.avatar)}
+                                data-testid={`button-notify-${call.id}`}
+                              >
+                                <Bell className="h-4 w-4" />
+                              </Button>
+                            </>
+                          )}
                           <Button
                             size="icon"
                             variant="ghost"
@@ -627,6 +701,172 @@ const Calls = () => {
           </Tabs>
         </>
       )}
+
+      <Dialog open={showMissedCallDialog} onOpenChange={setShowMissedCallDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-3">
+              {missedCallUser && (
+                <>
+                  <Avatar className="h-10 w-10">
+                    <AvatarImage src={missedCallUser.avatar} alt={missedCallUser.name} />
+                    <AvatarFallback className="bg-gradient-to-br from-red-500 to-red-600 text-white">
+                      {getInitials(missedCallUser.name)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <div className="font-semibold">{missedCallUser.name}</div>
+                    <div className="text-xs text-muted-foreground font-normal flex items-center gap-1">
+                      <PhoneMissed className="h-3 w-3 text-red-500" />
+                      Missed call
+                    </div>
+                  </div>
+                </>
+              )}
+            </DialogTitle>
+            <DialogDescription>
+              Send a quick follow-up message or notification
+            </DialogDescription>
+          </DialogHeader>
+
+          <Tabs value={activeFollowupTab} onValueChange={(v) => setActiveFollowupTab(v as 'message' | 'notification')}>
+            <TabsList className="grid w-full grid-cols-2 h-9">
+              <TabsTrigger value="message" className="text-xs gap-1.5" data-testid="tab-message-followup">
+                <MessageSquare className="h-3.5 w-3.5" />
+                Send Message
+              </TabsTrigger>
+              <TabsTrigger value="notification" className="text-xs gap-1.5" data-testid="tab-notification-followup">
+                <Bell className="h-3.5 w-3.5" />
+                Send Notification
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="message" className="mt-4 space-y-3">
+              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Quick Replies</div>
+              <div className="flex flex-wrap gap-2">
+                {MESSAGE_TEMPLATES.map((template) => (
+                  <Button
+                    key={template.id}
+                    variant={selectedTemplate === template.text ? "default" : "outline"}
+                    size="sm"
+                    className="text-xs h-7"
+                    onClick={() => {
+                      setSelectedTemplate(template.text);
+                      setCustomMessage('');
+                    }}
+                    data-testid={`template-message-${template.id}`}
+                  >
+                    {template.label}
+                  </Button>
+                ))}
+              </div>
+              
+              <div className="space-y-2">
+                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Or type your message</div>
+                <textarea
+                  placeholder="Type a custom message..."
+                  className="w-full min-h-[80px] p-3 rounded-lg border bg-muted/50 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  value={customMessage}
+                  onChange={(e) => {
+                    setCustomMessage(e.target.value);
+                    setSelectedTemplate('');
+                  }}
+                  data-testid="input-custom-message"
+                />
+              </div>
+
+              {(selectedTemplate || customMessage) && (
+                <Card className="bg-primary/5 border-primary/20">
+                  <CardContent className="py-3 px-4">
+                    <div className="text-xs text-muted-foreground mb-1">Preview:</div>
+                    <div className="text-sm">{customMessage || selectedTemplate}</div>
+                  </CardContent>
+                </Card>
+              )}
+
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" onClick={() => setShowMissedCallDialog(false)} data-testid="button-cancel-message">
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={handleSendMessage}
+                  disabled={!selectedTemplate && !customMessage}
+                  className="gap-2"
+                  data-testid="button-send-message"
+                >
+                  <Send className="h-4 w-4" />
+                  Send Message
+                </Button>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="notification" className="mt-4 space-y-3">
+              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Notification Templates</div>
+              <div className="space-y-2">
+                {NOTIFICATION_TEMPLATES.map((template) => (
+                  <button
+                    key={template.id}
+                    className={`w-full text-left p-3 rounded-lg border transition-colors ${
+                      selectedTemplate === template.title 
+                        ? 'border-primary bg-primary/5' 
+                        : 'hover:bg-muted/50'
+                    }`}
+                    onClick={() => setSelectedTemplate(template.title)}
+                    data-testid={`template-notification-${template.id}`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className={`p-2 rounded-lg ${
+                        template.id === 3 
+                          ? 'bg-red-500/10 text-red-600' 
+                          : template.id === 2 
+                            ? 'bg-blue-500/10 text-blue-600' 
+                            : 'bg-amber-500/10 text-amber-600'
+                      }`}>
+                        {template.id === 3 ? <AlertCircle className="h-4 w-4" /> : 
+                         template.id === 2 ? <Calendar className="h-4 w-4" /> : 
+                         <Bell className="h-4 w-4" />}
+                      </div>
+                      <div>
+                        <div className="font-medium text-sm">{template.title}</div>
+                        <div className="text-xs text-muted-foreground">{template.message}</div>
+                      </div>
+                      {selectedTemplate === template.title && (
+                        <CheckCircle className="h-4 w-4 text-primary ml-auto" />
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              <div className="space-y-2">
+                <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Additional Note (optional)</div>
+                <textarea
+                  placeholder="Add a note..."
+                  className="w-full min-h-[60px] p-3 rounded-lg border bg-muted/50 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  value={customMessage}
+                  onChange={(e) => setCustomMessage(e.target.value)}
+                  data-testid="input-notification-note"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <Button variant="outline" onClick={() => setShowMissedCallDialog(false)} data-testid="button-cancel-notification">
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={handleSendNotification}
+                  disabled={!selectedTemplate}
+                  className="gap-2"
+                  data-testid="button-send-notification"
+                >
+                  <Bell className="h-4 w-4" />
+                  Send Notification
+                </Button>
+              </div>
+            </TabsContent>
+          </Tabs>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
