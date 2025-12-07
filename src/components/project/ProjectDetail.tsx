@@ -155,6 +155,31 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
               <div className="flex items-start gap-2 flex-wrap">
                 <h1 className="text-xl font-semibold">{project.name}</h1>
                 {getStatusBadge(project.status)}
+                {project.budget && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-green-500/10 text-green-700 dark:text-green-300 px-2 py-0.5 text-xs font-medium">
+                    <DollarSign className="h-3 w-3" />
+                    {(() => {
+                      const budget = project.budget as any;
+                      const hasCents =
+                        typeof budget.totalBudgetCents === 'number' ||
+                        typeof budget.total_budget_cents === 'number';
+                      const totalCents = hasCents
+                        ? (budget.totalBudgetCents ?? budget.total_budget_cents)
+                        : undefined;
+                      const total =
+                        !hasCents && typeof budget.total === 'number'
+                          ? budget.total
+                          : typeof totalCents === 'number'
+                          ? totalCents / 100
+                          : 0;
+                      const currency = budget.currency || 'SDG';
+                      return `${currency} ${total.toLocaleString('en-US', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}`;
+                    })()}
+                  </span>
+                )}
               </div>
               <div className="flex items-center flex-wrap gap-3 text-sm text-muted-foreground">
                 <span className="flex items-center gap-1">
