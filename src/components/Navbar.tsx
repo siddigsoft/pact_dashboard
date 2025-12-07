@@ -87,51 +87,8 @@ const Navbar = () => {
 			{/* Brand */}
 			<NavBrand />
 
-			{/* Global Search - Hidden on smaller screens */}
-			<div className="mx-4 flex-1 max-w-md relative hidden sm:block">
-				<form onSubmit={handleGlobalSearch}>
-					<div className="relative">
-						<input
-							type="search"
-							value={globalSearch}
-							onChange={e => {
-								setGlobalSearch(e.target.value);
-								setShowDropdown(true);
-							}}
-							onFocus={() => setShowDropdown(true)}
-							onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
-							placeholder="Search anything…"
-							className="w-full rounded-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-2 pl-10 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-							aria-label="Global search"
-							autoComplete="off"
-						/>
-						<Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-					</div>
-				</form>
-				{showDropdown && globalSearch && (
-					<div className="absolute z-50 mt-1 w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg max-h-60 overflow-auto">
-						{filteredFeatures.length > 0 ? (
-							<ul>
-								{filteredFeatures.map(f => (
-									<li key={f.path}>
-										<button
-											type="button"
-											className="w-full text-left px-4 py-2 hover:bg-blue-50 dark:hover:bg-blue-900 text-gray-900 dark:text-gray-100"
-											onMouseDown={() => handleFeatureClick(f.path)}
-										>
-											{f.name}
-										</button>
-									</li>
-								))}
-							</ul>
-						) : (
-							<div className="px-4 py-2 text-muted-foreground text-sm">
-								No features found.
-							</div>
-						)}
-					</div>
-				)}
-			</div>
+			
+			
 
 			<div className="ml-auto flex items-center space-x-1">
 				{/* Theme Toggle */}
