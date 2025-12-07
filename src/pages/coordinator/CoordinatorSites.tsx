@@ -2080,12 +2080,41 @@ const CoordinatorSites: React.FC = () => {
       // Show locality permit upload dialog
       setLocalityPermitUploadDialogOpen(true);
     } else {
-      // No permit - just go back, no access
-      setSelectedLocalityForWorkflow(null);
+      // Ask if work can proceed without the local permit
+      setWorkWithoutPermitDialogOpen(true);
     }
   };
 
 
+
+  const handleLocalityProceedWithoutPermit = async () => {
+    setWorkWithoutPermitDialogOpen(false);
+    if (!selectedLocalityForWorkflow) return;
+    try {
+      const { error } = await supabase
+        .from('mmp_site_entries')
+        .update({ status: 'permits_attached' })
+        .eq('state', selectedLocalityForWorkflow.state)
+        .eq('locality', selectedLocalityForWorkflow.locality);
+
+      if (error) {
+        console.warn('Failed to update site statuses to permits_attached (no local permit):', error);
+      }
+
+      toast({
+        title: 'Proceeding Without Local Permit',
+        description: `Sites in ${selectedLocalityForWorkflow.locality} are now ready for verification.`,
+      });
+
+      // Refresh data and move to Permits Attached tab
+      loadSites();
+      setActiveTab('permits_attached');
+    } catch (e) {
+      console.warn('Error proceeding without local permit:', e);
+    } finally {
+      setSelectedLocalityForWorkflow(null);
+    }
+  };
 
   const handlePermitUploaded = async () => {
     await fetchPermits();
@@ -3670,19 +3699,18 @@ const CoordinatorSites: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Permit Question Dialog */}
+      {/* Permit Requirement Dialog */}
       <Dialog open={permitQuestionDialogOpen} onOpenChange={setPermitQuestionDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Local Permit Required</DialogTitle>
+            <DialogTitle>Locality Permit Requirement</DialogTitle>
             <DialogDescription>
-              Do you have the local permit for <strong>{selectedLocalityForWorkflow?.locality}, {selectedLocalityForWorkflow?.state}</strong>?
+              Do you require a local permit in <strong>{selectedLocalityForWorkflow?.state}</strong>?
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
             <p className="text-sm text-muted-foreground">
-              Local permits are required to work on sites in this locality. If you have the permit, you can upload it now and access the sites.
-              If not, you cannot access sites in this locality.
+              If you require a local permit, you can upload it now to access the sites. If not, we'll ask if you can proceed without the permit.
             </p>
           </div>
           <DialogFooter>
@@ -3690,13 +3718,47 @@ const CoordinatorSites: React.FC = () => {
               variant="outline" 
               onClick={() => handlePermitQuestionResponse(false)}
             >
-              No, I don't have the permit
+              No
             </Button>
             <Button 
               onClick={() => handlePermitQuestionResponse(true)}
               className="bg-blue-600 hover:bg-blue-700"
             >
-              Yes, I have the permit
+              Yes, upload permit
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Work Without Local Permit Dialog */}
+      <Dialog open={workWithoutPermitDialogOpen} onOpenChange={setWorkWithoutPermitDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Work Without Local Permit</DialogTitle>
+            <DialogDescription>
+              Are you able to do the work without the required local permit for <strong>{selectedLocalityForWorkflow?.locality}, {selectedLocalityForWorkflow?.state}</strong>?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm text-muted-foreground">
+              If you can proceed without the local permit, sites in this locality will be unlocked for verification.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setWorkWithoutPermitDialogOpen(false);
+                setSelectedLocalityForWorkflow(null);
+              }}
+            >
+              No, wait for permit
+            </Button>
+            <Button 
+              onClick={handleLocalityProceedWithoutPermit}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              Yes, proceed without permit
             </Button>
           </DialogFooter>
         </DialogContent>
