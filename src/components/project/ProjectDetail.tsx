@@ -284,6 +284,22 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
                 <CardContent className="p-3 pt-0 space-y-3">
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                     <div className="space-y-0.5">
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide">Project ID</p>
+                      <div className="flex items-center gap-1.5">
+                        <Tag className="h-3.5 w-3.5 text-muted-foreground" />
+                        <span className="text-sm font-mono">{project.projectCode}</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-0.5">
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide">Project Manager</p>
+                      <div className="flex items-center gap-1.5">
+                        <UserCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                        <span className="text-sm">{project.team?.projectManager || 'Not assigned'}</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-0.5">
                       <p className="text-xs text-muted-foreground uppercase tracking-wide">Type</p>
                       <div className="flex items-center gap-1.5">
                         <Layers className="h-3.5 w-3.5 text-muted-foreground" />
