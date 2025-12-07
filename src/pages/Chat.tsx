@@ -10,6 +10,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { UberCommunicationNav, UberNavSpacer } from '@/components/mobile/UberCommunicationNav';
 import { 
   ArrowLeft, 
   MessageSquare, 
@@ -298,7 +299,10 @@ const Chat: React.FC = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+        <UberNavSpacer />
       </div>
+      <UberCommunicationNav chatUnread={3} />
     </div>
   );
 };
