@@ -15,7 +15,8 @@ import {
   Clock3,
   FileText,
   Plus,
-  Loader2
+  Loader2,
+  ArrowLeft
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -116,16 +117,28 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 p-3 md:p-4">
+      {/* Back Navigation */}
+      <Button 
+        variant="ghost" 
+        size="sm" 
+        onClick={() => navigate('/projects')}
+        className="gap-1.5 -ml-2"
+        data-testid="button-back-projects"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Back to Projects
+      </Button>
+
       {/* Project header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold">{project.name}</h1>
+            <h1 className="text-xl font-semibold">{project.name}</h1>
             {getStatusBadge(project.status)}
           </div>
-          <div className="flex items-center text-sm text-muted-foreground mt-1">
-            <Tag className="h-4 w-4 mr-1" /> {project.projectCode}
+          <div className="flex items-center text-xs text-muted-foreground mt-1">
+            <Tag className="h-3 w-3 mr-1" /> {project.projectCode}
           </div>
         </div>
         
