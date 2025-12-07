@@ -2,10 +2,10 @@ import React, { useEffect, useRef, useCallback, useState, useMemo } from 'react'
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Card, CardContent } from '@/components/ui/card';
-import { MapPin, RefreshCw, Wifi, WifiOff, Loader2, Filter, Maximize2, Minimize2, X } from 'lucide-react';
+import { MapPin, RefreshCw, Wifi, WifiOff, Loader2, Filter, Maximize2, Minimize2, X, Users } from 'lucide-react';
 import { User } from '@/types/user';
 import { SiteVisit } from '@/types/siteVisit';
-import { formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow, format } from 'date-fns';
 import { getUserStatus } from '@/utils/userStatusUtils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -267,35 +267,89 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({
           ? `<img src="${user.avatar}" alt="${userName}" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover; border: 2px solid ${markerColor};" onerror="this.style.display='none'" />`
           : `<div style="width: 40px; height: 40px; border-radius: 50%; background: ${markerColor}; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 14px;">${userName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}</div>`;
 
+        const exactTimeText = lastSeenTime 
+          ? format(new Date(lastSeenTime), 'MMM d, yyyy h:mm a')
+          : 'Never';
+        
+        const phoneNumber = (user as any).phone || '';
+        const userEmail = (user as any).email || '';
+        const currentAssignment = (user as any).currentAssignment || (user as any).currentTask || '';
+
         const popupContent = `
-          <div style="min-width: 260px;">
-            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+          <div style="min-width: 280px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
               ${avatarHtml}
-              <div>
-                <strong style="font-size: 14px; display: block;">${userName}</strong>
-                <span style="font-size: 11px; color: #666;">${user.roles?.[0] || user.role || 'Team Member'}</span>
+              <div style="flex: 1;">
+                <strong style="font-size: 15px; display: block; color: #1a1a1a;">${userName}</strong>
+                <span style="font-size: 12px; color: #666;">${user.roles?.[0] || user.role || 'Team Member'}</span>
               </div>
             </div>
-            <div style="background: #f8f9fa; border-radius: 6px; padding: 10px; margin-bottom: 8px;">
-              <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px;">
-                <span style="width: 10px; height: 10px; background: ${markerColor}; border-radius: 50%; display: inline-block;"></span>
-                <span style="font-size: 12px; font-weight: 500;">${userStatus.label}</span>
+            
+            <div style="background: linear-gradient(135deg, #f8f9fa 0%, #f1f3f5 100%); border-radius: 8px; padding: 12px; margin-bottom: 10px;">
+              <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                <span style="width: 12px; height: 12px; background: ${markerColor}; border-radius: 50%; display: inline-block; box-shadow: 0 0 0 2px rgba(255,255,255,0.8);"></span>
+                <span style="font-size: 13px; font-weight: 600; color: #333;">${userStatus.label}</span>
               </div>
-              <div style="font-size: 11px; color: #666;">
-                Last seen: ${lastSeenText}
+              <div style="font-size: 12px; color: #555; display: flex; align-items: center; gap: 6px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="opacity: 0.7;">
+                  <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
+                </svg>
+                <span>${lastSeenText}</span>
+              </div>
+              <div style="font-size: 11px; color: #888; margin-top: 4px; padding-left: 20px;">
+                ${exactTimeText}
               </div>
             </div>
-            <div style="font-size: 12px; margin-bottom: 6px;">
-              <strong style="color: #444;">GPS Accuracy:</strong> 
+            
+            ${currentAssignment ? `
+              <div style="background: #e8f4fd; border-radius: 6px; padding: 10px; margin-bottom: 10px; border-left: 3px solid #3b82f6;">
+                <div style="font-size: 11px; color: #3b82f6; font-weight: 600; margin-bottom: 4px;">CURRENT TASK</div>
+                <div style="font-size: 12px; color: #1e40af;">${currentAssignment}</div>
+              </div>
+            ` : ''}
+            
+            <div style="font-size: 12px; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${accuracyInfo.color}" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/>
+              </svg>
+              <span style="color: #444;">GPS:</span> 
               <span style="color: ${accuracyInfo.color}; font-weight: 600;">
                 ${accuracyInfo.value} (${accuracyInfo.label})
               </span>
             </div>
+            
             ${user.location?.address ? `
-              <div style="font-size: 11px; color: #666; padding-top: 8px; border-top: 1px solid #e5e7eb;">
+              <div style="font-size: 11px; color: #666; padding: 8px 0; border-top: 1px solid #e5e7eb; margin-bottom: 10px;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: inline-block; vertical-align: middle; margin-right: 4px; opacity: 0.6;">
+                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
+                </svg>
                 ${user.location.address}
               </div>
             ` : ''}
+            
+            <div style="display: flex; gap: 8px; padding-top: 8px; border-top: 1px solid #e5e7eb;">
+              ${phoneNumber ? `
+                <a href="tel:${phoneNumber}" 
+                   style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 12px; background: #22c55e; color: white; border-radius: 6px; text-decoration: none; font-size: 12px; font-weight: 500; transition: background 0.2s;"
+                   onmouseover="this.style.background='#16a34a'" 
+                   onmouseout="this.style.background='#22c55e'">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+                  </svg>
+                  Call
+                </a>
+              ` : ''}
+              <a href="${phoneNumber ? `https://wa.me/${phoneNumber.replace(/[^0-9]/g, '')}` : `mailto:${userEmail}`}" 
+                 target="_blank"
+                 style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 12px; background: #3b82f6; color: white; border-radius: 6px; text-decoration: none; font-size: 12px; font-weight: 500; transition: background 0.2s;"
+                 onmouseover="this.style.background='#2563eb'" 
+                 onmouseout="this.style.background='#3b82f6'">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </svg>
+                Message
+              </a>
+            </div>
           </div>
         `;
 
@@ -686,6 +740,16 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({
               </Button>
             </div>
             <div className="flex items-center gap-3 flex-wrap">
+              {/* Prominent Online Counter */}
+              <Badge 
+                variant="default" 
+                className="text-xs gap-1.5 bg-green-500 text-white border-green-600 shadow-sm"
+                data-testid="badge-online-count"
+              >
+                <Users className="h-3 w-3" />
+                <span className="font-semibold">{onlineWithLocation.length}</span>
+                <span className="opacity-90">Online Now</span>
+              </Badge>
               {avgAccuracy !== null && !isNaN(avgAccuracy) && (
                 <Badge variant="outline" className="text-xs gap-1">
                   <span>Avg GPS:</span>
