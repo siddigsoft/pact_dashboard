@@ -24,6 +24,7 @@ import {
   Mic,
   MicOff,
   Volume2,
+  VolumeX,
   Star,
   UserPlus,
   MoreVertical,
@@ -32,6 +33,7 @@ import {
 import { useUser } from '@/context/user/UserContext';
 import { useAppContext } from '@/context/AppContext';
 import { useCommunication } from '@/context/communications/CommunicationContext';
+import { useCallSounds } from '@/hooks/useCallSounds';
 
 const Calls = () => {
   const { currentUser } = useAppContext();
@@ -44,6 +46,8 @@ const Calls = () => {
   const [isSpeakerOn, setIsSpeakerOn] = useState(true);
   const [callDuration, setCallDuration] = useState(0);
   const [favorites, setFavorites] = useState<string[]>([]);
+  
+  const { stopSounds } = useCallSounds(callState.status);
   
   const callHistory = [
     { id: 'c1', recipientId: 'usr2', direction: 'outgoing', duration: 124, timestamp: new Date(Date.now() - 3600000 * 2).toISOString(), status: 'completed' },
