@@ -202,8 +202,9 @@ const Calls = () => {
   );
 
   return (
-    <div className="container mx-auto p-4 space-y-4 max-w-4xl uber-font" data-testid="calls-page">
-      <div className="uber-page-header">
+    <div className="uber-page uber-font" data-testid="calls-page">
+      <div className="uber-page-content">
+      <div className="uber-page-header uber-slide-in-down">
         <div className="flex items-center gap-4">
           <button 
             onClick={() => navigate(-1)}
@@ -249,12 +250,12 @@ const Calls = () => {
       </div>
 
       {onlineUsers.length > 0 && !isCallActive && (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm uber-heading text-muted-foreground uppercase tracking-wide">Online Now</h3>
+        <div className="space-y-3 uber-slide-in-up uber-stagger-1">
+          <div className="uber-section-header">
+            <h3 className="uber-section-title">Online Now</h3>
             <span className="uber-pill uber-pill-success">{onlineUsers.length} active</span>
           </div>
-          <div className="flex gap-3 overflow-x-auto pb-2">
+          <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
             {onlineUsers.slice(0, 8).map((user) => {
               const location = getUserLocation(user.id);
               return (
@@ -448,7 +449,7 @@ const Calls = () => {
           
           <ScrollArea className="h-[calc(100vh-400px)]">
             {activeTab === 'contacts' && (
-              <div className="space-y-1">
+              <div className="space-y-1 uber-slide-in-up">
                 {filteredUsers.map((user) => {
                   const status = getUserOnlineStatus(user.id);
                   const isFavorite = favorites.includes(user.id);
@@ -518,7 +519,7 @@ const Calls = () => {
             )}
 
             {activeTab === 'history' && (
-              <div className="space-y-1">
+              <div className="space-y-1 uber-slide-in-up">
                 {callHistory.map((call) => {
                   const user = users.find(u => u.id === call.recipientId);
                   if (!user) return null;
@@ -721,7 +722,7 @@ const Calls = () => {
 
       {!isCallActive && onlineUsers.length > 0 && (
         <button 
-          className="uber-fab"
+          className="uber-fab uber-scale-in"
           onClick={() => {
             const firstOnlineUser = onlineUsers[0];
             if (firstOnlineUser) {
@@ -734,6 +735,7 @@ const Calls = () => {
           <Phone className="h-6 w-6" />
         </button>
       )}
+      </div>
     </div>
   );
 };
