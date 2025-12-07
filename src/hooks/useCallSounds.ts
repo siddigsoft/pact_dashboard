@@ -4,33 +4,71 @@ type SoundType = 'ringback' | 'ringtone' | 'connected' | 'ended';
 
 class CallSoundManager {
   private audioContext: AudioContext | null = null;
-  private oscillator: OscillatorNode | null = null;
-  private gainNode: GainNode | null = null;
   private ringInterval: NodeJS.Timeout | null = null;
   private isPlaying = false;
 
   private getAudioContext(): AudioContext {
-    if (!this.audioContext) {
+    if (!this.audioContext || this.audioContext.state === 'closed') {
       this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+    if (this.audioContext.state === 'suspended') {
+      this.audioContext.resume();
     }
     return this.audioContext;
   }
 
-  private playTone(frequency: number, duration: number, volume: number = 0.3): void {
-    const ctx = this.getAudioContext();
-    
-    const oscillator = ctx.createOscillator();
-    const gainNode = ctx.createGain();
-    
-    oscillator.connect(gainNode);
-    gainNode.connect(ctx.destination);
-    
-    oscillator.frequency.value = frequency;
-    oscillator.type = 'sine';
-    gainNode.gain.value = volume;
-    
-    oscillator.start(ctx.currentTime);
-    oscillator.stop(ctx.currentTime + duration);
+  private playTone(frequency: number, duration: number, volume: number = 0.3, type: OscillatorType = 'sine'): void {
+    try {
+      const ctx = this.getAudioContext();
+      
+      const oscillator = ctx.createOscillator();
+      const gainNode = ctx.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(ctx.destination);
+      
+      oscillator.frequency.value = frequency;
+      oscillator.type = type;
+      
+      gainNode.gain.setValueAtTime(0, ctx.currentTime);
+      gainNode.gain.linearRampToValueAtTime(volume, ctx.currentTime + 0.01);
+      gainNode.gain.linearRampToValueAtTime(0, ctx.currentTime + duration);
+      
+      oscillator.start(ctx.currentTime);
+      oscillator.stop(ctx.currentTime + duration + 0.05);
+    } catch (e) {
+      console.warn('Audio playback failed:', e);
+    }
+  }
+
+  private playDualTone(freq1: number, freq2: number, duration: number, volume: number = 0.15): void {
+    try {
+      const ctx = this.getAudioContext();
+      
+      const osc1 = ctx.createOscillator();
+      const osc2 = ctx.createOscillator();
+      const gainNode = ctx.createGain();
+      
+      osc1.connect(gainNode);
+      osc2.connect(gainNode);
+      gainNode.connect(ctx.destination);
+      
+      osc1.frequency.value = freq1;
+      osc2.frequency.value = freq2;
+      osc1.type = 'sine';
+      osc2.type = 'sine';
+      
+      gainNode.gain.setValueAtTime(0, ctx.currentTime);
+      gainNode.gain.linearRampToValueAtTime(volume, ctx.currentTime + 0.02);
+      gainNode.gain.linearRampToValueAtTime(0, ctx.currentTime + duration);
+      
+      osc1.start(ctx.currentTime);
+      osc2.start(ctx.currentTime);
+      osc1.stop(ctx.currentTime + duration + 0.05);
+      osc2.stop(ctx.currentTime + duration + 0.05);
+    } catch (e) {
+      console.warn('Audio playback failed:', e);
+    }
   }
 
   playRingback(): void {
@@ -38,16 +76,12 @@ class CallSoundManager {
     this.isPlaying = true;
     
     const playRingbackSequence = () => {
-      this.playTone(440, 0.4, 0.2);
-      setTimeout(() => {
-        if (this.isPlaying) {
-          this.playTone(440, 0.4, 0.2);
-        }
-      }, 500);
+      if (!this.isPlaying) return;
+      this.playDualTone(440, 480, 1.0, 0.12);
     };
     
     playRingbackSequence();
-    this.ringInterval = setInterval(playRingbackSequence, 3000);
+    this.ringInterval = setInterval(playRingbackSequence, 4000);
   }
 
   playRingtone(): void {
@@ -55,32 +89,40 @@ class CallSoundManager {
     this.isPlaying = true;
     
     const playRingtoneSequence = () => {
-      const frequencies = [784, 659, 784, 659];
-      frequencies.forEach((freq, i) => {
+      if (!this.isPlaying) return;
+      
+      const melody = [
+        { freq: 880, delay: 0 },
+        { freq: 988, delay: 100 },
+        { freq: 880, delay: 200 },
+        { freq: 784, delay: 350 },
+        { freq: 880, delay: 500 },
+        { freq: 988, delay: 600 },
+      ];
+      
+      melody.forEach(({ freq, delay }) => {
         setTimeout(() => {
           if (this.isPlaying) {
-            this.playTone(freq, 0.15, 0.25);
+            this.playTone(freq, 0.08, 0.2, 'sine');
           }
-        }, i * 200);
+        }, delay);
       });
     };
     
     playRingtoneSequence();
-    this.ringInterval = setInterval(playRingtoneSequence, 1500);
+    this.ringInterval = setInterval(playRingtoneSequence, 1200);
   }
 
   playConnected(): void {
     this.stop();
-    this.playTone(523, 0.1, 0.15);
-    setTimeout(() => this.playTone(659, 0.1, 0.15), 120);
-    setTimeout(() => this.playTone(784, 0.15, 0.15), 240);
+    this.playTone(523, 0.08, 0.15);
+    setTimeout(() => this.playTone(659, 0.08, 0.15), 100);
+    setTimeout(() => this.playTone(784, 0.12, 0.18), 200);
   }
 
   playEnded(): void {
     this.stop();
-    this.playTone(392, 0.15, 0.15);
-    setTimeout(() => this.playTone(330, 0.15, 0.15), 180);
-    setTimeout(() => this.playTone(262, 0.2, 0.15), 360);
+    this.playDualTone(480, 620, 0.5, 0.1);
   }
 
   stop(): void {
@@ -88,12 +130,6 @@ class CallSoundManager {
     if (this.ringInterval) {
       clearInterval(this.ringInterval);
       this.ringInterval = null;
-    }
-    if (this.oscillator) {
-      try {
-        this.oscillator.stop();
-      } catch (e) {}
-      this.oscillator = null;
     }
   }
 
@@ -149,9 +185,7 @@ export function useCallSounds(callStatus: string) {
     }
 
     return () => {
-      if (callStatus === 'idle' || callStatus === 'ended') {
-        soundManager.stop();
-      }
+      soundManager.stop();
     };
   }, [callStatus]);
 
