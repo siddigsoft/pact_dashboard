@@ -147,7 +147,15 @@ export { MobileGeofenceMonitor, GeofenceStatusBadge, ProximityAlert } from './Mo
 // Screen Components
 export { MobileDashboardScreen } from './MobileDashboardScreen';
 export { MobileSettingsScreen } from './MobileSettingsScreen';
+export { SplashScreen, useSplashScreen } from './SplashScreen';
 
 // App Shortcuts & Navigation
 export { MobileAppShortcuts, QuickActionFab, defaultShortcuts } from './MobileAppShortcuts';
 export type { AppShortcut } from './MobileAppShortcuts';
+
+// Floating Action Button
+export { FloatingActionButton } from './FloatingActionButton';
+export type { FABAction } from './FloatingActionButton';
+
+// Theme Toggle
+export { MobileDarkModeToggle, QuickThemeToggle } from './MobileDarkModeToggle';
