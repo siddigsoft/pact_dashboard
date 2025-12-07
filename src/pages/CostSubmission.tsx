@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { useSiteVisitContext } from "@/context/siteVisit/SiteVisitContext";
 import { useUserCostSubmissions, useCostSubmissions, useCostSubmissionContext } from "@/context/costApproval/CostSubmissionContext";
 import { useAppContext } from "@/context/AppContext";
 import { useUser } from "@/context/user/UserContext";
+import { useUserProjects } from "@/hooks/useUserProjects";
 import { AppRole } from "@/types";
 import CostSubmissionForm from "@/components/cost-submission/CostSubmissionForm";
 import CostSubmissionHistory from "@/components/cost-submission/CostSubmissionHistory";
@@ -19,6 +20,7 @@ const CostSubmission = () => {
   const { currentUser, roles } = useAppContext();
   const { users } = useUser();
   const { siteVisits } = useSiteVisitContext();
+  const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
   
   // Check if user is admin or supervisor
   const isAdmin = roles?.includes('admin' as AppRole) || currentUser?.role === 'admin';
@@ -79,16 +81,37 @@ const CostSubmission = () => {
     { submissions: userSubmissionsQuery.submissions || [], isLoading: userSubmissionsQuery.isLoading };
   
   // Apply supervisor filtering
-  const submissions = canViewTeamSubmissions 
+  const supervisorFilteredSubmissions = canViewTeamSubmissions 
     ? filterSubmissionsForSupervisor(rawSubmissions)
     : rawSubmissions;
 
+  // PROJECT TEAM MEMBERSHIP FILTER
+  // Filter submissions to only show those from projects the user belongs to
+  const submissions = useMemo(() => {
+    if (isAdminOrSuperUser) return supervisorFilteredSubmissions;
+    if (userProjectIds.length === 0) return supervisorFilteredSubmissions; // Let RLS handle if no projects
+    return supervisorFilteredSubmissions.filter(s => 
+      !s.projectId || userProjectIds.includes(s.projectId)
+    );
+  }, [supervisorFilteredSubmissions, userProjectIds, isAdminOrSuperUser]);
+
   // Admins see all completed site visits, supervisors see their team's, data collectors see only their own
-  const availableSiteVisits = isAdmin 
+  // Also apply project team membership filter for non-admins
+  const baseAvailableSiteVisits = isAdmin 
     ? siteVisits.filter(visit => visit.status === 'completed')
     : isSupervisor && teamMemberIds.length > 0
       ? siteVisits.filter(visit => visit.status === 'completed' && teamMemberIds.includes(visit.assignedTo || ''))
       : siteVisits.filter(visit => visit.assignedTo === currentUser?.id && visit.status === 'completed');
+
+  // Apply project filter to site visits
+  const availableSiteVisits = useMemo(() => {
+    if (isAdminOrSuperUser) return baseAvailableSiteVisits;
+    if (userProjectIds.length === 0) return baseAvailableSiteVisits;
+    return baseAvailableSiteVisits.filter(visit => {
+      const projectId = (visit as any).projectId || (visit as any).mmpDetails?.projectId;
+      return !projectId || userProjectIds.includes(projectId);
+    });
+  }, [baseAvailableSiteVisits, userProjectIds, isAdminOrSuperUser]);
 
   const submissionStats = {
     total: submissions.length,
