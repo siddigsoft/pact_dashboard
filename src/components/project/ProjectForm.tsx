@@ -95,7 +95,9 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
   const projectManagerUsers = users?.filter(u => 
     u.roles?.some(r => {
       const role = r.toLowerCase();
-      return role.includes('manager') || role === 'admin' || role === 'supervisor';
+      const isFieldTeam = role === 'supervisor' || role === 'coordinator' || role === 'datacollector' || role === 'data collector';
+      const isPMRole = role.includes('projectmanager') || role.includes('project manager') || role === 'pm' || role === 'fieldopmanager' || role === 'admin';
+      return isPMRole && !isFieldTeam;
     })
   ) || [];
   const [selectedCountry, setSelectedCountry] = useState<string>(initialData?.location?.country || '');
