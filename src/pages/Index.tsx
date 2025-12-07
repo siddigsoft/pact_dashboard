@@ -329,38 +329,65 @@ const Index = () => {
 
         {/* Footer */}
         <footer className="bg-muted/10">
-          <div className="container mx-auto px-4 py-12">
-            <div className="mb-8 text-center max-w-4xl mx-auto">
-              <img src={PactLogo} alt="PACT" className="h-14 w-14 mb-5 mx-auto" />
-              <h3 className="text-2xl font-bold mb-3">Built for the Field, Designed for Reliability</h3>
-              <p className="text-base text-muted-foreground leading-relaxed mb-6">
-                The <strong className="text-foreground">PACT Command Center Platform</strong> delivers powerful capabilities across web and mobile applications, 
+          <div className="container mx-auto px-4 py-10">
+            <div className="mb-6 text-center max-w-4xl mx-auto">
+              <img src={PactLogo} alt="PACT" className="h-12 w-12 mb-4 mx-auto" />
+              <h3 className="text-xl font-semibold tracking-tight mb-2" style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' }}>
+                Built for the Field, Designed for Reliability
+              </h3>
+              <p className="text-sm text-muted-foreground leading-snug mb-6 max-w-2xl mx-auto" style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' }}>
+                The <strong className="text-foreground font-medium">PACT Command Center Platform</strong> delivers powerful capabilities across web and mobile applications, 
                 ensuring seamless operations whether you're in the office or in the field.
               </p>
-              <div className="text-left space-y-5 max-w-3xl mx-auto">
-                <div>
-                  <h4 className="text-base font-semibold text-foreground mb-2">Web Platform</h4>
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    The web-based <strong className="text-foreground">Command Center</strong> provides comprehensive oversight with 
-                    <strong className="text-foreground"> real-time dashboard analytics</strong>, 
-                    <strong className="text-foreground"> role-based access control</strong>, and 
-                    <strong className="text-foreground"> live team tracking</strong>. 
-                    Upload and manage Monthly Monitoring Plans, assign site visits to field teams, monitor progress with visual workflows, 
-                    and generate detailed reports.
-                  </p>
-                </div>
-                <div>
-                  <h4 className="text-base font-semibold text-foreground mb-2">Mobile Application</h4>
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    The mobile application empowers field teams with <strong className="text-foreground">full offline functionality</strong> - 
-                    capture site visits, update data, and complete tasks even without internet connectivity. 
-                    All changes automatically <strong className="text-foreground">sync when back online</strong>, ensuring no data is ever lost.
-                  </p>
-                </div>
+              
+              <div className="grid md:grid-cols-2 gap-4 max-w-3xl mx-auto mb-6">
+                <Card className="text-left">
+                  <CardContent className="p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 rounded-lg bg-blue-500/10 dark:bg-blue-500/20 shrink-0">
+                        <Radio className="w-4 h-4 text-blue-500" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h4 className="text-sm font-semibold mb-1 flex items-center gap-2 tracking-tight" style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' }}>
+                          Web Platform
+                          <Badge variant="secondary" className="text-[9px] px-1.5 py-0">Full Access</Badge>
+                        </h4>
+                        <p className="text-xs text-muted-foreground leading-snug" style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' }}>
+                          Comprehensive oversight with <strong className="text-foreground font-medium">real-time analytics</strong>, 
+                          <strong className="text-foreground font-medium"> role-based access</strong>, and 
+                          <strong className="text-foreground font-medium"> live tracking</strong>. 
+                          Manage MMPs, assign visits, and generate reports.
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+                
+                <Card className="text-left">
+                  <CardContent className="p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="p-2 rounded-lg bg-orange-500/10 dark:bg-orange-500/20 shrink-0">
+                        <MapPin className="w-4 h-4 text-orange-500" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h4 className="text-sm font-semibold mb-1 flex items-center gap-2 tracking-tight" style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' }}>
+                          Mobile App
+                          <Badge variant="secondary" className="text-[9px] px-1.5 py-0">Offline Ready</Badge>
+                        </h4>
+                        <p className="text-xs text-muted-foreground leading-snug" style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' }}>
+                          Field teams with <strong className="text-foreground font-medium">full offline functionality</strong> - 
+                          capture visits and complete tasks without connectivity. 
+                          <strong className="text-foreground font-medium"> Auto-sync when online</strong>.
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
               </div>
             </div>
-            <div className="pt-6 text-center border-t">
-              <p className="text-sm text-muted-foreground" data-testid="text-copyright">
+            
+            <div className="pt-4 text-center border-t">
+              <p className="text-xs text-muted-foreground tracking-wide" style={{ fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' }} data-testid="text-copyright">
                 &copy; {new Date().getFullYear()} PACT Consultancy. All rights reserved.
               </p>
             </div>
