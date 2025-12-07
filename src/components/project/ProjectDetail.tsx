@@ -19,9 +19,12 @@ import {
   UserCircle,
   DollarSign,
   Target,
-  TrendingUp
+  TrendingUp,
+  Wallet
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useBudget } from '@/context/budget/BudgetContext';
+import { ProjectBudgetCard } from '@/components/budget/BudgetCard';
 
 import { Project } from '@/types/project';
 import { Button } from '@/components/ui/button';
@@ -114,6 +117,8 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
 }) => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('overview');
+  const { getProjectBudget, loading: budgetLoading } = useBudget();
+  const projectBudget = getProjectBudget(project.id);
 
   // Helper function to safely format dates
   const formatDate = (dateString: string) => {
@@ -338,10 +343,11 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
       
       {/* Project content */}
       <Tabs defaultValue="overview" value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid grid-cols-3 w-full md:w-[360px]">
+        <TabsList className="grid grid-cols-4 w-full md:w-[480px]">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="activities">Activities</TabsTrigger>
           <TabsTrigger value="team">Team</TabsTrigger>
+          <TabsTrigger value="budget">Budget</TabsTrigger>
         </TabsList>
         
         <TabsContent value="overview" className="space-y-4 mt-4">
@@ -595,6 +601,40 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
               </p>
               <Button className="mt-4" onClick={() => navigate(`/projects/${project.id}/team`)}>
                 <Plus className="h-4 w-4 mr-2" /> Add Team Members
+              </Button>
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="budget" className="space-y-4 mt-4">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-base font-semibold">Project Budget</h2>
+            {!projectBudget && (
+              <Button size="sm" onClick={() => navigate('/budget')}>
+                <Plus className="h-4 w-4 mr-1.5" /> Create Budget
+              </Button>
+            )}
+          </div>
+          
+          {budgetLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : projectBudget ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <ProjectBudgetCard budget={projectBudget} projectName={project.name} />
+            </div>
+          ) : (
+            <div className="text-center py-12 border border-dashed rounded-lg border-border">
+              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-muted mb-4">
+                <Wallet className="h-6 w-6 text-muted-foreground" />
+              </div>
+              <h3 className="text-lg font-medium">No budget assigned</h3>
+              <p className="text-muted-foreground mt-1 max-w-md mx-auto">
+                Create a budget for this project to track spending and allocations
+              </p>
+              <Button className="mt-4" onClick={() => navigate('/budget')}>
+                <Plus className="h-4 w-4 mr-2" /> Create Project Budget
               </Button>
             </div>
           )}
