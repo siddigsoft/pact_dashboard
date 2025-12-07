@@ -7,6 +7,7 @@ import MMPVerification from '@/pages/MMPVerification';
 import MMPDetailedVerification from '@/pages/MMPDetailedVerification';
 import MMPVerificationPage from '@/pages/MMPVerificationPage';
 import MMPPermitMessagePage from '@/pages/mmp/MMPPermitMessagePage';
+import MMPDetail from '@/pages/MMPDetail';
 import MMPDetailView from '@/pages/MMPDetailView';
 import EditMMP from '@/pages/EditMMP';
 import ReviewAssignCoordinators from '@/pages/ReviewAssignCoordinators';
@@ -20,7 +21,7 @@ const MMPRoutes: React.FC = () => {
       <Route path="/:id/detailed-verification" element={<MMPDetailedVerification />} />
       <Route path="/:id/verification" element={<MMPVerificationPage />} />
       <Route path="/:id/permit-message" element={<MMPPermitMessagePage />} />
-      <Route path="/:id" element={<MMPDetailView />} />
+      <Route path="/:id" element={<MMPDetail />} />
       <Route path="/:id/view" element={<MMPDetailView />} />
       <Route path="/:id/edit" element={<EditMMP />} />
       <Route path="/:id/review-assign-coordinators" element={<ReviewAssignCoordinators />} />

@@ -3099,9 +3099,10 @@ const MMP = () => {
             {!canClaimSites && (
               <TabsContent value="new">
                 {isFOM && (
-                  <div className="mb-4 overflow-x-auto pb-2">
+                  <div className="mb-4">
                     <div className="text-sm font-medium text-muted-foreground mb-2">Subcategory:</div>
-                    <div className="flex gap-2 min-w-max">
+                    <div className="overflow-x-auto pb-2">
+                      <div className="flex gap-2 min-w-max">
                         <Button variant={newFomSubTab === 'pending' ? 'default' : 'outline'} size="sm" onClick={() => setNewFomSubTab('pending')} className={`${newFomSubTab === 'pending' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} flex-shrink-0 whitespace-nowrap`}>
                           MMPs Pending Verification
                           <Badge variant="secondary" className="ml-2">{newFomSubcategories.pending.length}</Badge>
@@ -3111,6 +3112,7 @@ const MMP = () => {
                           <Badge variant="secondary" className="ml-2">{newFomSubcategories.verified.length}</Badge>
                         </Button>
                       </div>
+                    </div>
                   </div>
                 )}
                 <MMPList mmpFiles={isFOM ? newFomSubcategories[newFomSubTab] : categorizedMMPs.new} />
@@ -3120,9 +3122,10 @@ const MMP = () => {
             {!canClaimSites && (
               <TabsContent value="forwarded">
                 {(isAdmin || isICT || isFOM) && (
-                  <div className="mb-4 overflow-x-auto pb-2">
+                  <div className="mb-4">
                     <div className="text-sm font-medium text-muted-foreground mb-2">Subcategory:</div>
-                    <div className="flex gap-2 min-w-max">
+                    <div className="overflow-x-auto pb-2">
+                      <div className="flex gap-2 min-w-max">
                         <Button variant={forwardedSubTab === 'pending' ? 'default' : 'outline'} size="sm" onClick={() => setForwardedSubTab('pending')} className={`${forwardedSubTab === 'pending' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} flex-shrink-0 whitespace-nowrap`}>
                           {isFOM ? 'Sites Pending Verification' : 'MMPs Pending Verification'}
                           <Badge variant="secondary" className="ml-2">{forwardedSubcategories.pending.length}</Badge>
@@ -3132,6 +3135,7 @@ const MMP = () => {
                           <Badge variant="secondary" className="ml-2">{forwardedSubcategories.verified.length}</Badge>
                         </Button>
                       </div>
+                    </div>
                   </div>
                 )}
                 <MMPList mmpFiles={(isAdmin || isICT || isFOM) ? forwardedSubcategories[forwardedSubTab] : categorizedMMPs.forwarded} />
@@ -3147,8 +3151,9 @@ const MMP = () => {
 
             <TabsContent value="verified">
               {(isAdmin || isICT || isFOM || isCoordinator) && (
-                <div className="mb-4 flex gap-2 overflow-x-auto pb-2">
+                <div className="mb-4">
                   <div className="text-sm font-medium text-muted-foreground mb-2">Subcategory:</div>
+                  <div className="flex gap-2 overflow-x-auto pb-2">
                     <Button variant={verifiedSubTab === 'newSites' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('newSites')} className={`${verifiedSubTab === 'newSites' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} text-xs whitespace-nowrap flex-shrink-0`}>
                       New Sites
                       <Badge variant="secondary" className="ml-1 text-xs">
@@ -3187,6 +3192,7 @@ const MMP = () => {
                       Rejected
                       <Badge variant="secondary" className="ml-1 text-xs">{rejectedCount}</Badge>
                     </Button>
+                  </div>
                 </div>
               )}
               {verifiedSubTab !== 'approvedCosted' && verifiedSubTab !== 'dispatched' && verifiedSubTab !== 'smartAssigned' && verifiedSubTab !== 'accepted' && verifiedSubTab !== 'ongoing' && verifiedSubTab !== 'completed' && verifiedSubTab !== 'rejected' && <MMPList mmpFiles={verifiedVisibleMMPs} />}
@@ -3303,7 +3309,7 @@ const MMP = () => {
                       </CardContent>
                     </Card>
                   ) : (
-                    <>
+                    <div>
                       <div className="flex items-center justify-between mb-4">
                         <h3 className="text-lg font-semibold">Approved & Costed Site Entries</h3>
                         <Badge variant="secondary">{approvedCostedSiteEntries.length} entries</Badge>
@@ -3463,7 +3469,7 @@ const MMP = () => {
                           }
                         }}
                       />
-                    </>
+                    </div>
                   )}
                 </div>
               )}
