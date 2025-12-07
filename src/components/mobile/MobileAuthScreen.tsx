@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,6 +28,8 @@ import { TwoFactorChallenge } from '@/components/auth/TwoFactorChallenge';
 import mapBackground from '@assets/generated_images/minimalist_city_map_background.png';
 import PactLogo from '@/assets/logo.png';
 
+const LOGIN_TIMEOUT_MS = 30000; // 30 seconds timeout for login
+
 interface MobileAuthScreenProps {
   onAuthSuccess?: () => void;
 }
@@ -52,9 +54,27 @@ export function MobileAuthScreen({ onAuthSuccess }: MobileAuthScreenProps) {
   const [showBiometricPrompt, setShowBiometricPrompt] = useState(false);
   const [showMFAChallenge, setShowMFAChallenge] = useState(false);
   const [pendingCredentials, setPendingCredentials] = useState<{email: string; password: string} | null>(null);
+  const [mapLoaded, setMapLoaded] = useState(false);
+  const loginTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const biometricAvailable = biometric.status.isAvailable || 
     localStorage.getItem('pact_biometric_token') !== null;
+
+  // Lazy load map background
+  useEffect(() => {
+    const img = new Image();
+    img.onload = () => setMapLoaded(true);
+    img.src = mapBackground;
+  }, []);
+
+  // Cleanup login timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (loginTimeoutRef.current) {
+        clearTimeout(loginTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -132,11 +152,28 @@ export function MobileAuthScreen({ onAuthSuccess }: MobileAuthScreenProps) {
     setIsLoading(true);
     hapticPresets.buttonPress();
 
+    // Set login timeout
+    loginTimeoutRef.current = setTimeout(() => {
+      setIsLoading(false);
+      hapticPresets.error();
+      toast({
+        title: 'Sign in timed out',
+        description: 'The request took too long. Please try again.',
+        variant: 'destructive',
+      });
+    }, LOGIN_TIMEOUT_MS);
+
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,
       });
+
+      // Clear timeout on response
+      if (loginTimeoutRef.current) {
+        clearTimeout(loginTimeoutRef.current);
+        loginTimeoutRef.current = null;
+      }
 
       if (error) throw error;
 
@@ -171,6 +208,11 @@ export function MobileAuthScreen({ onAuthSuccess }: MobileAuthScreenProps) {
       onAuthSuccess?.();
       navigate('/dashboard');
     } catch (error: any) {
+      // Clear timeout on error
+      if (loginTimeoutRef.current) {
+        clearTimeout(loginTimeoutRef.current);
+        loginTimeoutRef.current = null;
+      }
       hapticPresets.error();
       toast({
         title: 'Sign in failed',
@@ -336,17 +378,26 @@ export function MobileAuthScreen({ onAuthSuccess }: MobileAuthScreenProps) {
   };
 
   return (
-    <div className="relative min-h-screen w-full overflow-hidden bg-black">
-      {/* Map Background - Uber style monochrome */}
+    <div className="relative min-h-screen w-full overflow-hidden bg-black" role="main" aria-label="Sign in page">
+      {/* Live Region for Screen Reader Announcements */}
+      <div aria-live="polite" aria-atomic="true" className="sr-only">
+        {isLoading && 'Signing in, please wait...'}
+        {!isOnline && 'You are currently offline. Please check your internet connection.'}
+      </div>
+      {/* Map Background - Uber style monochrome (lazy loaded) */}
       <div 
-        className="absolute inset-0 opacity-20"
+        className={cn(
+          "absolute inset-0 transition-opacity duration-500",
+          mapLoaded ? "opacity-20" : "opacity-0"
+        )}
         style={{
-          backgroundImage: `url(${mapBackground})`,
+          backgroundImage: mapLoaded ? `url(${mapBackground})` : 'none',
           backgroundSize: 'cover',
           backgroundPosition: 'center',
           backgroundRepeat: 'no-repeat',
           filter: 'grayscale(100%)',
         }}
+        aria-hidden="true"
       />
 
       {/* Grid Pattern Overlay */}
@@ -456,14 +507,14 @@ export function MobileAuthScreen({ onAuthSuccess }: MobileAuthScreenProps) {
           </button>
 
           <div className="pt-8 px-6 pb-6 pb-safe">
-            <div className="text-center mb-6">
+            <header className="text-center mb-6">
               <h2 className="text-xl font-bold text-black dark:text-white">Welcome Back</h2>
-              <p className="text-black/50 dark:text-white/50 text-sm mt-1">
+              <p className="text-black/50 dark:text-white/50 text-sm mt-1" id="form-description">
                 Sign in to continue your mission
               </p>
-            </div>
+            </header>
 
-            <form onSubmit={handleLogin} className="space-y-4">
+            <form onSubmit={handleLogin} className="space-y-4" aria-describedby="form-description" aria-label="Sign in form">
               {/* Email Field */}
               <div className="space-y-1.5">
                 <Label htmlFor="email" className="flex items-center gap-2 text-xs font-semibold text-black/60 dark:text-white/60 uppercase tracking-wider">
