@@ -50,6 +50,62 @@ interface ProjectDetailProps {
   deleting?: boolean;
 }
 
+const getBudgetSummary = (budget: any) => {
+  if (!budget) return null;
+
+  const parseNumber = (value: any): number | null => {
+    if (value === null || value === undefined) return null;
+    if (typeof value === 'number' && !Number.isNaN(value)) return value;
+    if (typeof value === 'string') {
+      const n = Number(value);
+      return Number.isNaN(n) ? null : n;
+    }
+    return null;
+  };
+
+  const totalCents = parseNumber(
+    budget.totalBudgetCents !== undefined
+      ? budget.totalBudgetCents
+      : budget.total_budget_cents,
+  );
+
+  const total = (() => {
+    if (totalCents !== null) return totalCents / 100;
+    const rawTotal = parseNumber(budget.total);
+    return rawTotal;
+  })();
+
+  const allocatedCents = parseNumber(
+    budget.allocatedBudgetCents !== undefined
+      ? budget.allocatedBudgetCents
+      : budget.allocated_budget_cents,
+  );
+
+  const allocated = (() => {
+    if (allocatedCents !== null) return allocatedCents / 100;
+    const rawAllocated = parseNumber(budget.allocated);
+    return rawAllocated;
+  })();
+
+  const remainingCents = parseNumber(
+    budget.remainingBudgetCents !== undefined
+      ? budget.remainingBudgetCents
+      : budget.remaining_budget_cents,
+  );
+
+  const remaining = (() => {
+    if (remainingCents !== null) return remainingCents / 100;
+    const rawRemaining = parseNumber(budget.remaining);
+    if (rawRemaining !== null) return rawRemaining;
+    if (total !== null && allocated !== null) return total - allocated;
+    return null;
+  })();
+
+  const currency = budget.currency || 'SDG';
+
+  return { total, allocated, remaining, currency };
+};
+
 const ProjectDetail: React.FC<ProjectDetailProps> = ({
   project,
   onEdit,
@@ -132,6 +188,8 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
 
   const daysRemaining = getDaysRemaining();
 
+  const budgetSummary = project.budget ? getBudgetSummary(project.budget) : null;
+
   return (
     <div className="space-y-4 p-3 md:p-4">
       {/* Back Navigation */}
@@ -155,6 +213,15 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
               <div className="flex items-start gap-2 flex-wrap">
                 <h1 className="text-xl font-semibold">{project.name}</h1>
                 {getStatusBadge(project.status)}
+                {budgetSummary && budgetSummary.total != null && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-green-500/10 text-green-700 dark:text-green-300 px-2 py-0.5 text-xs font-medium">
+                    <DollarSign className="h-3 w-3" />
+                    {`${budgetSummary.currency} ${budgetSummary.total.toLocaleString('en-US', {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}`}
+                  </span>
+                )}
               </div>
               <div className="flex items-center flex-wrap gap-3 text-sm text-muted-foreground">
                 <span className="flex items-center gap-1">
@@ -200,14 +267,19 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
                   </div>
                 )}
 
-                {project.budget && (
+                {budgetSummary && budgetSummary.total != null && (
                   <div className="flex items-center gap-2 text-sm">
                     <div className="w-8 h-8 rounded-md bg-green-500/20 flex items-center justify-center">
                       <DollarSign className="h-4 w-4 text-green-600 dark:text-green-400" />
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground">Budget</p>
-                      <p className="font-semibold">{project.budget.total.toLocaleString()}</p>
+                      <p className="font-semibold">
+                        {`${budgetSummary.currency} ${budgetSummary.total.toLocaleString('en-US', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}`}
+                      </p>
                     </div>
                   </div>
                 )}
@@ -323,12 +395,15 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
                       </div>
                     </div>
                     
-                    {project.budget && (
+                    {budgetSummary && budgetSummary.total != null && (
                       <div className="space-y-0.5">
                         <p className="text-xs text-muted-foreground uppercase tracking-wide">Budget</p>
                         <div className="flex items-center gap-1.5">
                           <BarChart className="h-3.5 w-3.5 text-muted-foreground" />
-                          <span className="text-sm">{project.budget.total.toLocaleString()} {project.budget.currency}</span>
+                          <span className="text-sm">{`${budgetSummary.currency} ${budgetSummary.total.toLocaleString('en-US', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}`}</span>
                         </div>
                       </div>
                     )}
@@ -386,16 +461,28 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
                   />
                 </div>
                 
-                {project.budget && (
+                {budgetSummary && budgetSummary.total != null && budgetSummary.allocated != null && budgetSummary.total > 0 && (
                   <div className="space-y-1.5">
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Budget Used</span>
                       <span className="font-medium">
-                        {Math.round((project.budget.allocated / project.budget.total) * 100) || 0}%
+                        {(() => {
+                          const total = budgetSummary.total || 0;
+                          const allocated = budgetSummary.allocated || 0;
+                          return total > 0
+                            ? Math.round((allocated / total) * 100)
+                            : 0;
+                        })()}%
                       </span>
                     </div>
                     <Progress 
-                      value={Math.round((project.budget.allocated / project.budget.total) * 100) || 0} 
+                      value={(() => {
+                        const total = budgetSummary.total || 0;
+                        const allocated = budgetSummary.allocated || 0;
+                        return total > 0
+                          ? Math.round((allocated / total) * 100)
+                          : 0;
+                      })()} 
                       className="h-2" 
                     />
                   </div>
