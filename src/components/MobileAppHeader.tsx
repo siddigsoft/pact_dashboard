@@ -146,44 +146,44 @@ const MobileAppHeader = ({
 
   return (
     <>
-    <header className="px-4 h-16 flex items-center justify-between bg-black dark:bg-black shadow-md relative z-50">
-      <div className="flex items-center gap-2">
+    <header className="px-2 h-10 flex items-center justify-between bg-black dark:bg-black shadow-md relative z-50">
+      <div className="flex items-center gap-1">
         <Button 
           variant="ghost" 
           size="icon" 
           onClick={() => setOpen(true)}
-          className="h-9 w-9 text-white hover:bg-white/10"
+          className="h-7 w-7 text-white hover:bg-white/10"
           data-testid="button-open-menu"
           aria-label="Open navigation menu"
         >
-          <Menu className="h-5 w-5" />
+          <Menu className="h-4 w-4" />
         </Button>
-        <h1 className="text-xl font-semibold text-white truncate max-w-[180px]">
+        <h1 className="text-base font-semibold text-white truncate max-w-[150px]">
           {title}
         </h1>
       </div>
       
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1">
         {/* Always-visible Sync Button */}
         <Button
           variant="ghost"
           size="icon"
           onClick={handleSync}
           disabled={!isOnline || isSyncing}
-          className="relative h-9 w-9 text-white hover:bg-white/10"
+          className="relative h-7 w-7 text-white hover:bg-white/10"
           data-testid="button-sync-header"
           aria-label={isOnline ? (isSyncing ? 'Syncing data' : `Sync now${pendingCount > 0 ? ` (${pendingCount} pending)` : ''}`) : 'Offline - sync unavailable'}
         >
           {!isOnline ? (
-            <WifiOff className="h-5 w-5 text-destructive" />
+            <WifiOff className="h-4 w-4 text-destructive" />
           ) : isSyncing ? (
-            <RefreshCw className="h-5 w-5 animate-spin" />
+            <RefreshCw className="h-4 w-4 animate-spin" />
           ) : (
-            <RefreshCw className="h-5 w-5" />
+            <RefreshCw className="h-4 w-4" />
           )}
           {/* Pending count badge */}
           {isOnline && pendingCount > 0 && !isSyncing && (
-            <Badge className="absolute -top-1 -right-1 h-4 min-w-4 px-1 p-0 flex items-center justify-center bg-white text-black text-[10px]">
+            <Badge className="absolute -top-1 -right-1 h-3.5 min-w-3.5 px-0.5 p-0 flex items-center justify-center bg-white text-black text-[9px]">
               {pendingCount > 9 ? '9+' : pendingCount}
             </Badge>
           )}
@@ -193,14 +193,14 @@ const MobileAppHeader = ({
           <Button 
             variant="ghost" 
             size="icon" 
-            className="relative h-9 w-9 text-white hover:bg-white/10"
+            className="relative h-7 w-7 text-white hover:bg-white/10"
             data-testid="button-notifications"
             aria-label="View notifications"
             onClick={() => navigate('/notifications')}
           >
-            <Bell className="h-5 w-5" />
+            <Bell className="h-4 w-4" />
             {hasNotifications && (
-              <Badge className="absolute -top-1 -right-1 h-4 w-4 p-0 flex items-center justify-center bg-white text-black">
+              <Badge className="absolute -top-1 -right-1 h-3.5 w-3.5 p-0 flex items-center justify-center bg-white text-black">
                 <span className="sr-only">New notifications</span>
               </Badge>
             )}
@@ -210,13 +210,13 @@ const MobileAppHeader = ({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button 
-              className="rounded-full h-9 w-9 p-1 border border-white/30 hover:bg-white/10 cursor-pointer transition-colors"
+              className="rounded-full h-7 w-7 p-0.5 border border-white/30 hover:bg-white/10 cursor-pointer transition-colors"
               data-testid="button-user-menu"
               aria-label="Open user menu"
             >
               <Avatar className="h-full w-full">
                 <AvatarImage src={currentUser?.avatar} alt={currentUser?.name || ''} />
-                <AvatarFallback className="bg-white text-black font-semibold">{currentUser?.name ? getInitials(currentUser.name) : "FO"}</AvatarFallback>
+                <AvatarFallback className="bg-white text-black font-semibold text-[10px]">{currentUser?.name ? getInitials(currentUser.name) : "FO"}</AvatarFallback>
               </Avatar>
             </button>
           </DropdownMenuTrigger>
@@ -242,9 +242,9 @@ const MobileAppHeader = ({
     </header>
 
     <Sheet open={open} onOpenChange={setOpen}>
-      <SheetContent side="left" className="w-[85vw] p-0 bg-white dark:bg-black border-r border-gray-200 dark:border-gray-800">
-        <SheetHeader className="flex items-center justify-between px-4 py-4 border-b border-gray-200 dark:border-gray-800 bg-black">
-  <SheetTitle className="text-lg font-semibold text-white">Menu</SheetTitle>
+      <SheetContent side="left" className="w-[75vw] p-0 bg-white dark:bg-black border-r border-gray-200 dark:border-gray-800">
+        <SheetHeader className="flex items-center justify-between px-2 py-2 border-b border-gray-200 dark:border-gray-800 bg-black">
+  <SheetTitle className="text-sm font-semibold text-white">Menu</SheetTitle>
   <button
     type="button"
     aria-label="Close menu"
@@ -263,22 +263,22 @@ const MobileAppHeader = ({
     </svg>
   </button>
 </SheetHeader>
-        <ScrollArea className="h-[calc(100vh-56px-64px)] pb-safe">
-          <div className="px-2 py-3 space-y-4">
+        <ScrollArea className="h-[calc(100vh-40px-48px)] pb-safe">
+          <div className="px-1 py-1 space-y-2">
             {menuGroups.map((group) => (
               <div key={group.id}>
-                <div className="px-2 text-[11px] uppercase tracking-wide font-semibold text-gray-500 dark:text-gray-400 mb-2">
+                <div className="px-1 text-[10px] uppercase tracking-wide font-semibold text-gray-500 dark:text-gray-400 mb-1">
                   {group.label}
                 </div>
-                <div className="flex flex-col gap-1">
+                <div className="flex flex-col gap-0.5">
                   {group.items.map((item) => (
                     <Link
                       key={item.id}
                       to={item.url}
                       onClick={() => setOpen(false)}
-                      className={`flex items-center gap-3 px-3 py-2.5 rounded-full text-sm transition-colors ${location.pathname === item.url ? 'bg-black text-white dark:bg-white dark:text-black font-medium' : 'hover:bg-gray-100 dark:hover:bg-gray-900 text-gray-700 dark:text-gray-300'}`}
+                      className={`flex items-center gap-2 px-2 py-1.5 rounded-full text-xs transition-colors ${location.pathname === item.url ? 'bg-black text-white dark:bg-white dark:text-black font-medium' : 'hover:bg-gray-100 dark:hover:bg-gray-900 text-gray-700 dark:text-gray-300'}`}
                     >
-                      <item.icon className="h-4 w-4" />
+                      <item.icon className="h-3.5 w-3.5" />
                       <span className="truncate">{item.title}</span>
                     </Link>
                   ))}
