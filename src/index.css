@@ -497,7 +497,8 @@
   .uber-heading {
     font-family: 'Manrope', system-ui, sans-serif;
     font-weight: 700;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
   }
 
   .uber-text {
@@ -553,7 +554,7 @@
   }
 
   .uber-card-elevated {
-    @apply rounded-2xl bg-card shadow-lg border-0;
+    @apply rounded-2xl bg-card shadow-lg border border-border/20;
   }
 
   /* Uber Status Indicators */
@@ -620,10 +621,11 @@
     @apply bg-muted;
   }
 
-  /* Uber Search */
+  /* Uber Search - Enhanced */
   .uber-search {
-    @apply w-full px-4 py-3 rounded-full bg-muted border-0 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-foreground/20;
+    @apply w-full px-5 py-3.5 rounded-full bg-muted/80 border-0 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-foreground/20 shadow-sm;
     font-family: 'Manrope', system-ui, sans-serif;
+    backdrop-filter: blur(8px);
   }
 
   /* Uber Avatar Ring */
@@ -644,9 +646,11 @@
     @apply h-px bg-border/50 my-2;
   }
 
-  /* Uber Page Header */
+  /* Uber Page Header - Enhanced with sticky and backdrop */
   .uber-page-header {
-    @apply flex items-center justify-between py-4;
+    @apply flex items-center justify-between py-4 px-1 sticky top-0 z-40;
+    background: linear-gradient(to bottom, hsl(var(--background)) 0%, hsl(var(--background) / 0.95) 100%);
+    backdrop-filter: blur(12px);
   }
 
   /* Uber Tab Style */
@@ -676,17 +680,18 @@
     @apply absolute -top-1 -right-1 min-w-[1.25rem] h-5 px-1 rounded-full bg-amber-500 text-white text-[10px] font-bold flex items-center justify-center shadow-sm;
   }
 
-  /* Uber Icon Button */
+  /* Uber Icon Button - Enhanced styling */
   .uber-icon-btn {
-    @apply p-3 rounded-full bg-muted transition-all;
+    @apply p-3 rounded-full bg-muted/80 transition-all duration-200 shadow-sm;
+    backdrop-filter: blur(8px);
   }
 
   .uber-icon-btn:hover {
-    @apply bg-muted/80 scale-105;
+    @apply bg-muted scale-105 shadow-md;
   }
 
   .uber-icon-btn:active {
-    @apply scale-95;
+    @apply scale-95 bg-muted;
   }
 
   /* Uber Live Indicator */
@@ -828,10 +833,11 @@
   /* Uber Page Container with smooth transitions */
   .uber-page {
     @apply min-h-screen bg-background;
+    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   }
 
   .uber-page-content {
-    @apply container mx-auto p-4 space-y-4 max-w-4xl;
+    @apply container mx-auto p-4 space-y-5 max-w-4xl;
   }
 
   /* Enhanced Uber Contact Card */
