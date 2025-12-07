@@ -150,30 +150,30 @@ const Index = () => {
 
       <div className="relative z-10">
         {/* Hero Section - Full Width */}
-        <section className="container mx-auto px-4 pt-20 pb-16 md:pt-32 md:pb-24">
-          <div className="max-w-5xl mx-auto text-center space-y-8">
+        <section className="container mx-auto px-4 pt-16 pb-12 md:pt-24 md:pb-16">
+          <div className="max-w-4xl mx-auto text-center space-y-6">
             {/* Logo & Status Badge */}
-            <div className="flex flex-col items-center gap-4">
+            <div className="flex flex-col items-center gap-3">
               <img
                 src={PactLogo}
                 alt="PACT Logo"
                 data-testid="img-logo"
-                className="h-20 w-20 md:h-24 md:w-24"
+                className="h-14 w-14 md:h-16 md:w-16"
               />
               <Badge 
                 variant="secondary" 
-                className="gap-2"
+                className="gap-1.5 text-xs"
                 data-testid="badge-status"
               >
-                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
                 System Operational
               </Badge>
             </div>
 
             {/* Hero Headline */}
-            <div className="space-y-6">
+            <div className="space-y-4">
               <h1 
-                className="text-5xl md:text-6xl lg:text-7xl font-extrabold tracking-tight"
+                className="text-3xl md:text-4xl lg:text-5xl font-bold tracking-tight"
                 data-testid="heading-hero"
               >
                 <span className="bg-gradient-to-r from-blue-600 via-orange-600 to-purple-600 dark:from-blue-400 dark:via-orange-400 dark:to-purple-400 bg-clip-text text-transparent">
@@ -186,7 +186,7 @@ const Index = () => {
               </h1>
               
               <p 
-                className="text-xl md:text-2xl text-muted-foreground max-w-3xl mx-auto"
+                className="text-base md:text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed"
                 data-testid="text-hero-description"
               >
                 Real-time monitoring, seamless coordination, and data-driven insights 
@@ -196,23 +196,23 @@ const Index = () => {
             </div>
 
             {/* CTA Buttons */}
-            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center pt-4">
+            <div className="flex flex-col sm:flex-row gap-3 justify-center items-center pt-2">
               <Button
                 size="lg"
                 onClick={handleGetStarted}
                 disabled={isNavigating}
                 data-testid="button-get-started"
-                className="gap-2 text-lg px-8 relative"
+                className="gap-2"
               >
                 {isNavigating ? (
                   <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <Loader2 className="w-4 h-4 animate-spin" />
                     Loading...
                   </>
                 ) : (
                   <>
                     Get Started
-                    <ArrowRight className="w-5 h-5" />
+                    <ArrowRight className="w-4 h-4" />
                   </>
                 )}
               </Button>
@@ -222,23 +222,23 @@ const Index = () => {
 
         {/* Live KPI Ribbon */}
         <section className="border-y bg-muted/30 backdrop-blur-sm">
-          <div className="container mx-auto px-4 py-6">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+          <div className="container mx-auto px-4 py-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {kpiData.map((kpi, index) => {
                 const Icon = kpi.icon;
                 return (
                   <div 
                     key={index}
-                    className="flex flex-col items-center gap-2"
+                    className="flex flex-col items-center gap-1"
                     data-testid={`kpi-${kpi.label.toLowerCase().replace(/\s+/g, '-')}`}
                   >
-                    <div className="flex items-center gap-2">
-                      <Icon className="w-5 h-5 text-muted-foreground" />
-                      <span className="text-2xl md:text-3xl font-bold">{kpi.value}</span>
+                    <div className="flex items-center gap-1.5">
+                      <Icon className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-xl md:text-2xl font-semibold">{kpi.value}</span>
                     </div>
-                    <div className="text-center">
-                      <p className="text-sm text-muted-foreground">{kpi.label}</p>
-                      <Badge variant="secondary" className="text-xs mt-1">
+                    <div className="text-center flex items-center gap-1.5">
+                      <p className="text-xs text-muted-foreground">{kpi.label}</p>
+                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
                         {kpi.trend}
                       </Badge>
                     </div>
@@ -250,45 +250,45 @@ const Index = () => {
         </section>
 
         {/* Workflow Timeline */}
-        <section className="container mx-auto px-4 py-16 md:py-24">
+        <section className="container mx-auto px-4 py-10 md:py-14">
           <div className="max-w-4xl mx-auto">
-            <div className="text-center mb-12">
-              <Badge variant="secondary" className="mb-4" data-testid="badge-how-it-works">
+            <div className="text-center mb-8">
+              <Badge variant="secondary" className="mb-3 text-xs" data-testid="badge-how-it-works">
                 How It Works
               </Badge>
               <h2 
-                className="text-3xl md:text-4xl font-bold mb-4"
+                className="text-2xl md:text-3xl font-semibold mb-2"
                 data-testid="heading-workflow"
               >
                 Streamlined Workflow in 3 Steps
               </h2>
-              <p className="text-muted-foreground text-lg">
+              <p className="text-muted-foreground text-sm">
                 From planning to execution, manage your entire operation seamlessly
               </p>
             </div>
 
-            <div className="grid md:grid-cols-3 gap-6">
+            <div className="grid md:grid-cols-3 gap-4">
               {workflows.map((workflow, index) => {
                 const Icon = workflow.icon;
                 return (
                   <Card 
                     key={index}
-                    className="relative hover-elevate"
+                    className="relative"
                     data-testid={`card-workflow-${workflow.step}`}
                   >
-                    <CardContent className="p-6">
-                      <div className="flex flex-col items-center text-center space-y-4">
-                        <div className={`p-4 rounded-full bg-muted ${workflow.color}`}>
-                          <Icon className="w-8 h-8" />
+                    <CardContent className="p-4">
+                      <div className="flex flex-col items-center text-center space-y-3">
+                        <div className={`p-3 rounded-full bg-muted ${workflow.color}`}>
+                          <Icon className="w-5 h-5" />
                         </div>
-                        <div className="space-y-2">
-                          <Badge variant="outline" className="font-mono">
+                        <div className="space-y-1.5">
+                          <Badge variant="outline" className="font-mono text-[10px] px-1.5">
                             {workflow.step}
                           </Badge>
-                          <h3 className="text-xl font-semibold">
+                          <h3 className="text-base font-medium">
                             {workflow.title}
                           </h3>
-                          <p className="text-sm text-muted-foreground">
+                          <p className="text-xs text-muted-foreground leading-relaxed">
                             {workflow.description}
                           </p>
                         </div>
@@ -303,22 +303,22 @@ const Index = () => {
 
         {/* Features Grid */}
         <section className="border-y bg-muted/20">
-          <div className="container mx-auto px-4 py-16">
-            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto">
+          <div className="container mx-auto px-4 py-8">
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 max-w-5xl mx-auto">
               {features.map((feature, index) => {
                 const Icon = feature.icon;
                 return (
                   <div 
                     key={index}
-                    className="flex flex-col items-center text-center gap-3"
+                    className="flex flex-col items-center text-center gap-2"
                     data-testid={`feature-${feature.label.toLowerCase().replace(/\s+/g, '-')}`}
                   >
-                    <div className="p-3 rounded-md bg-background border">
-                      <Icon className="w-6 h-6 text-primary" />
+                    <div className="p-2 rounded-md bg-background border">
+                      <Icon className="w-4 h-4 text-primary" />
                     </div>
                     <div>
-                      <p className="font-semibold">{feature.label}</p>
-                      <p className="text-sm text-muted-foreground">{feature.description}</p>
+                      <p className="text-sm font-medium">{feature.label}</p>
+                      <p className="text-xs text-muted-foreground">{feature.description}</p>
                     </div>
                   </div>
                 );
@@ -329,42 +329,38 @@ const Index = () => {
 
         {/* Footer */}
         <footer className="border-t bg-muted/10">
-          <div className="container mx-auto px-4 py-12">
-            <div className="mb-8 text-center max-w-4xl mx-auto">
-              <img src={PactLogo} alt="PACT" className="h-16 w-16 mb-6 mx-auto" />
-              <h3 className="text-xl font-bold mb-4">Built for the Field, Designed for Reliability</h3>
-              <p className="text-sm text-muted-foreground leading-relaxed mb-6">
+          <div className="container mx-auto px-4 py-8">
+            <div className="mb-6 text-center max-w-3xl mx-auto">
+              <img src={PactLogo} alt="PACT" className="h-10 w-10 mb-4 mx-auto" />
+              <h3 className="text-base font-medium mb-2">Built for the Field, Designed for Reliability</h3>
+              <p className="text-xs text-muted-foreground leading-relaxed mb-4">
                 The <strong className="text-foreground">PACT Command Center Platform</strong> delivers powerful capabilities across web and mobile applications, 
                 ensuring seamless operations whether you're in the office or in the field.
               </p>
-              <div className="text-left space-y-4 max-w-3xl mx-auto">
+              <div className="text-left space-y-3 max-w-2xl mx-auto">
                 <div>
-                  <h4 className="text-sm font-semibold text-foreground mb-2">🖥️ Web Platform</h4>
-                  <p className="text-sm text-muted-foreground leading-relaxed">
+                  <h4 className="text-xs font-medium text-foreground mb-1">Web Platform</h4>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
                     The web-based <strong className="text-foreground">Command Center</strong> provides comprehensive oversight with 
                     <strong className="text-foreground"> real-time dashboard analytics</strong>, 
                     <strong className="text-foreground"> role-based access control</strong>, and 
                     <strong className="text-foreground"> live team tracking</strong>. 
                     Upload and manage Monthly Monitoring Plans, assign site visits to field teams, monitor progress with visual workflows, 
-                    and generate detailed reports. Advanced <strong className="text-foreground">financial tracking</strong> and 
-                    <strong className="text-foreground"> budget management</strong> tools ensure complete visibility into project costs and resource allocation.
+                    and generate detailed reports.
                   </p>
                 </div>
                 <div>
-                  <h4 className="text-sm font-semibold text-foreground mb-2">📱 Mobile Application</h4>
-                  <p className="text-sm text-muted-foreground leading-relaxed">
+                  <h4 className="text-xs font-medium text-foreground mb-1">Mobile Application</h4>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
                     The mobile application empowers field teams with <strong className="text-foreground">full offline functionality</strong> - 
                     capture site visits, update data, and complete tasks even without internet connectivity. 
-                    All changes automatically <strong className="text-foreground">sync when back online</strong>, ensuring no data is ever lost. 
-                    Advanced <strong className="text-foreground">interactive maps with real-time GPS tracking</strong> help teams navigate efficiently, while 
-                    <strong className="text-foreground"> geofencing technology</strong> automatically triggers location-based actions and verifies site arrivals. 
-                    Whether in remote areas or underground facilities, your teams stay productive and connected.
+                    All changes automatically <strong className="text-foreground">sync when back online</strong>, ensuring no data is ever lost.
                   </p>
                 </div>
               </div>
             </div>
-            <div className="border-t pt-8 text-center">
-              <p className="text-sm text-muted-foreground" data-testid="text-copyright">
+            <div className="border-t pt-4 text-center">
+              <p className="text-xs text-muted-foreground" data-testid="text-copyright">
                 &copy; {new Date().getFullYear()} PACT Consultancy. All rights reserved.
               </p>
             </div>
