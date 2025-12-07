@@ -32,28 +32,28 @@ const ProjectsPage = () => {
   }, [projects]);
 
   return (
-    <div className="min-h-screen bg-background p-4 md:p-8 space-y-6">
+    <div className="min-h-screen bg-background p-3 md:p-4 space-y-4">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center">
-            <FolderKanban className="h-6 w-6 text-white" />
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <div className="w-10 h-10 rounded-md bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center">
+            <FolderKanban className="h-5 w-5 text-white" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold">Projects</h1>
-            <p className="text-sm text-muted-foreground">
-              Manage project planning and activity management
+            <h1 className="text-xl font-semibold">Projects</h1>
+            <p className="text-xs text-muted-foreground">
+              Manage project planning and activities
             </p>
           </div>
         </div>
-        <Button onClick={() => navigate('/projects/create')} data-testid="button-create-project">
-          <Plus className="h-4 w-4 mr-2" />
+        <Button size="sm" onClick={() => navigate('/projects/create')} data-testid="button-create-project">
+          <Plus className="h-4 w-4 mr-1.5" />
           Create Project
         </Button>
       </div>
 
       {/* Statistics Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <GradientStatCard
           title="Total Projects"
           value={projectStats.total}
@@ -92,7 +92,7 @@ const ProjectsPage = () => {
       </div>
       
       {/* Project List */}
-      <div className="bg-card rounded-lg border p-6">
+      <div className="bg-card rounded-md border p-4">
         <ProjectList 
           projects={projects} 
           onViewProject={handleViewProject}

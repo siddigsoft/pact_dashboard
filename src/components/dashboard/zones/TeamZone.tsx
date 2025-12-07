@@ -137,18 +137,18 @@ export const TeamZone: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background p-3 sm:p-4 md:p-6 lg:p-8 space-y-4 sm:space-y-6">
+    <div className="min-h-screen bg-background p-3 md:p-4 space-y-4">
       {/* Modern Tech Header */}
-      <div className="relative overflow-hidden rounded-lg border border-border/50 bg-gradient-to-r from-green-500/5 via-blue-500/5 to-background p-4 shadow-sm">
-        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-lg bg-green-500/10 border border-green-500/20 flex-shrink-0">
-              <Users className="h-5 w-5 sm:h-6 sm:w-6 text-green-600 dark:text-green-400" />
+      <div className="relative overflow-hidden rounded-md border border-border/50 bg-muted/30 p-3">
+        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <div className="flex items-center justify-center w-9 h-9 rounded-md bg-green-500/10 border border-green-500/20 flex-shrink-0">
+              <Users className="h-4 w-4 text-green-600 dark:text-green-400" />
             </div>
             <div className="min-w-0 flex-1">
-              <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold truncate">Team Coordination</h2>
-              <p className="text-xs sm:text-sm text-muted-foreground uppercase tracking-wide">
-                {isSupervisor && hubName ? `${hubName} Hub - ` : ''}Field team locations and communication
+              <h2 className="text-lg font-semibold truncate">Team Coordination</h2>
+              <p className="text-[11px] text-muted-foreground">
+                {isSupervisor && hubName ? `${hubName} Hub - ` : ''}Field team locations
               </p>
             </div>
           </div>
