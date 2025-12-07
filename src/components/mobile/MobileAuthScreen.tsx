@@ -24,6 +24,7 @@ import { hapticPresets } from '@/lib/haptics';
 import { cn } from '@/lib/utils';
 import { useBiometric, saveCredentials } from '@/hooks/use-biometric';
 import { BiometricPrompt } from '@/components/mobile/BiometricPrompt';
+import { TwoFactorChallenge } from '@/components/auth/TwoFactorChallenge';
 import mapBackground from '@assets/generated_images/minimalist_city_map_background.png';
 import PactLogo from '@/assets/logo.png';
 
@@ -49,6 +50,8 @@ export function MobileAuthScreen({ onAuthSuccess }: MobileAuthScreenProps) {
   const [errors, setErrors] = useState<FormErrors>({});
   const [touched, setTouched] = useState<{email?: boolean; password?: boolean}>({});
   const [showBiometricPrompt, setShowBiometricPrompt] = useState(false);
+  const [showMFAChallenge, setShowMFAChallenge] = useState(false);
+  const [pendingCredentials, setPendingCredentials] = useState<{email: string; password: string} | null>(null);
 
   const biometricAvailable = biometric.status.isAvailable || 
     localStorage.getItem('pact_biometric_token') !== null;
@@ -137,6 +140,15 @@ export function MobileAuthScreen({ onAuthSuccess }: MobileAuthScreenProps) {
 
       if (error) throw error;
 
+      const { data: aalData } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      
+      if (aalData && aalData.currentLevel === 'aal1' && aalData.nextLevel === 'aal2') {
+        setPendingCredentials({ email: email.trim(), password });
+        setShowMFAChallenge(true);
+        setIsLoading(false);
+        return;
+      }
+
       hapticPresets.success();
       toast({
         title: 'Welcome back!',
@@ -168,6 +180,50 @@ export function MobileAuthScreen({ onAuthSuccess }: MobileAuthScreenProps) {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleMFASuccess = async () => {
+    hapticPresets.success();
+    toast({
+      title: 'Welcome back!',
+      description: 'Two-factor authentication successful',
+    });
+
+    const { data: sessionData } = await supabase.auth.getSession();
+    
+    if (sessionData.session?.refresh_token && pendingCredentials) {
+      localStorage.setItem('pact_biometric_email', pendingCredentials.email);
+      localStorage.setItem('pact_biometric_token', sessionData.session.refresh_token);
+      
+      if (biometric.status.isAvailable) {
+        await biometric.storeCredentials({
+          username: pendingCredentials.email,
+          password: pendingCredentials.password,
+        });
+        await biometric.refreshStatus();
+      }
+    }
+
+    setShowMFAChallenge(false);
+    setPendingCredentials(null);
+    onAuthSuccess?.();
+    navigate('/dashboard');
+  };
+
+  const handleMFACancel = async () => {
+    await supabase.auth.signOut();
+    setShowMFAChallenge(false);
+    setPendingCredentials(null);
+    hapticPresets.buttonPress();
+  };
+
+  const handleMFAError = (error: string) => {
+    hapticPresets.error();
+    toast({
+      title: 'Verification failed',
+      description: error,
+      variant: 'destructive',
+    });
   };
 
   const handleBiometricLogin = async () => {
@@ -390,7 +446,7 @@ export function MobileAuthScreen({ onAuthSuccess }: MobileAuthScreenProps) {
           {/* Swipe Handle - Uber style black circle */}
           <button 
             onClick={handleExpandToggle}
-            className="absolute -top-4 left-1/2 transform -translate-x-1/2 w-10 h-10 rounded-full bg-black dark:bg-white flex items-center justify-center shadow-xl touch-manipulation active:scale-95 transition-transform"
+            className="absolute -top-5 left-1/2 transform -translate-x-1/2 w-11 h-11 rounded-full bg-black dark:bg-white flex items-center justify-center shadow-xl touch-manipulation active:scale-95 transition-transform"
             data-testid="button-expand-login"
             aria-label={isExpanded ? 'Collapse login form' : 'Expand login form'}
           >
@@ -549,6 +605,18 @@ export function MobileAuthScreen({ onAuthSuccess }: MobileAuthScreenProps) {
         subtitle="Verify your identity to continue"
         fallbackLabel="Use Email & Password"
       />
+
+      {showMFAChallenge && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+          <div className="w-full max-w-md">
+            <TwoFactorChallenge
+              onSuccess={handleMFASuccess}
+              onCancel={handleMFACancel}
+              onError={handleMFAError}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
