@@ -189,6 +189,38 @@ const SiteVisits = () => {
     fetchHubName();
   }, [isSupervisor, supervisorHubId]);
 
+  // State for user's project team memberships
+  const [userProjectIds, setUserProjectIds] = useState<string[]>([]);
+
+  // Check if user can view all projects (admins, ICT, FOM don't need team membership filter)
+  const canViewAllProjects = useMemo(() => {
+    return hasAnyRole(['admin', 'Admin', 'ict', 'ICT', 'fom', 'Field Operation Manager (FOM)', 'Field Operations Manager']);
+  }, [hasAnyRole]);
+
+  // Fetch user's project team memberships
+  useEffect(() => {
+    if (!currentUser?.id || canViewAllProjects) {
+      setUserProjectIds([]);
+      return;
+    }
+    const fetchUserProjects = async () => {
+      const { data, error } = await supabase
+        .from('team_members')
+        .select('project_id')
+        .eq('user_id', currentUser.id);
+      
+      if (error) {
+        console.error('Error fetching user project memberships:', error);
+        return;
+      }
+      
+      const projectIds = data?.map(tm => tm.project_id).filter(Boolean) as string[] || [];
+      console.log(`👥 User is a team member in ${projectIds.length} projects:`, projectIds);
+      setUserProjectIds(projectIds);
+    };
+    fetchUserProjects();
+  }, [currentUser?.id, canViewAllProjects]);
+
   // Get user's geographic assignment from profile (state and locality)
   // Works for both data collectors and coordinators who can claim sites within their locality
   const userGeographicInfo = useMemo(() => {
@@ -265,7 +297,10 @@ const SiteVisits = () => {
     
     // For field workers (data collectors and coordinators), apply special filtering logic:
     // - "dispatched" status: show ONLY dispatched visits matching user's state AND locality
+    //   This is where geographic filtering applies - users can only SEE and CLAIM sites in their locality
     // - "assigned", "accepted", "ongoing", "completed": filter by assignedTo === currentUser.id
+    //   No additional geo filter here - users must see work assigned to them regardless of location
+    //   (ClaimSiteButton/AcceptSiteButton enforce locality rules at claim time, not view time)
     // - Other statuses or "all": filter by assignedTo === currentUser.id
     let filtered: SiteVisit[];
     
@@ -387,6 +422,29 @@ const SiteVisits = () => {
       );
     }
 
+    // Apply project team membership filter
+    // Users can only see sites from projects they're team members of (unless they can view all projects)
+    // Exception: Field workers (data collectors, coordinators) can see dispatched sites in their locality even without project membership
+    if (!canViewAllProjects) {
+      const beforeCount = filtered.length;
+      filtered = filtered.filter(visit => {
+        const projectId = visit.mmpDetails?.projectId;
+        const isDispatched = visit.status?.toLowerCase() === 'dispatched';
+        
+        // Field workers can see dispatched sites in their locality (already filtered by geography)
+        // This is the ONLY exception to the project membership rule
+        if (isFieldWorker && isDispatched) return true;
+        
+        // All other sites require project membership
+        // If visit has no project ID, we can't verify membership, so hide it
+        if (!projectId) return false;
+        
+        // Check if user is a team member of this project
+        return userProjectIds.includes(projectId);
+      });
+      console.log(`👥 Project team filter: ${filtered.length} of ${beforeCount} sites visible (user is in ${userProjectIds.length} projects)`);
+    }
+
     filtered.sort((a, b) => {
       switch (sortBy) {
         case "dueDate":
@@ -416,7 +474,7 @@ const SiteVisits = () => {
       }
       setSelectedVisit(selected || null);
     }
-  }, [currentUser, siteVisits, statusFilter, searchTerm, sortBy, view, hubParam, regionParam, monthParam, isFieldWorker, canViewAllSiteVisits, isSupervisor, supervisorHubName]);
+  }, [currentUser, siteVisits, statusFilter, searchTerm, sortBy, view, hubParam, regionParam, monthParam, isFieldWorker, canViewAllSiteVisits, isSupervisor, supervisorHubName, canViewAllProjects, userProjectIds]);
 
   const handleRemoveFilter = (filterType: string) => {
     setActiveFilters(prev => ({

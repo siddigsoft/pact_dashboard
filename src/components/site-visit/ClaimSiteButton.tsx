@@ -1,18 +1,22 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/context/user/UserContext';
-import { Hand, Loader2, CheckCircle, Wallet, Car, User, AlertCircle, Banknote } from 'lucide-react';
+import { Hand, Loader2, CheckCircle, Wallet, Car, User, AlertCircle, Banknote, ShieldX, MapPinOff } from 'lucide-react';
 import { useClaimFeeCalculation, type ClaimFeeBreakdown } from '@/hooks/use-claim-fee-calculation';
 import { CLASSIFICATION_LABELS, CLASSIFICATION_COLORS } from '@/types/classification';
+import { useClassification } from '@/context/classification/ClassificationContext';
+import { getStateName, getLocalityName } from '@/data/sudanStates';
 
 interface ClaimSiteButtonProps {
   siteId: string;
   siteName: string;
   userId: string;
+  state?: string;
+  locality?: string;
   onClaimed?: () => void;
   disabled?: boolean;
   variant?: 'default' | 'outline' | 'ghost';
@@ -24,6 +28,8 @@ export function ClaimSiteButton({
   siteId,
   siteName,
   userId,
+  state,
+  locality,
   onClaimed,
   disabled = false,
   variant = 'default',
@@ -37,12 +43,95 @@ export function ClaimSiteButton({
   const { toast } = useToast();
   const { currentUser } = useUser();
   const { calculateFeeForClaim, loading: calculatingFee } = useClaimFeeCalculation();
+  const { getUserClassification } = useClassification();
 
   const isFieldWorker = currentUser?.role === 'dataCollector' || 
                         currentUser?.role === 'datacollector' || 
                         currentUser?.role === 'coordinator';
   
   const canSeeBreakdown = !isFieldWorker;
+
+  // PERMISSION CHECK 1: User must have an active classification to claim sites
+  const userClassification = useMemo(() => {
+    if (!currentUser?.id) return null;
+    return getUserClassification(currentUser.id);
+  }, [currentUser?.id, getUserClassification]);
+  
+  const hasClassification = !!userClassification;
+  
+  // PERMISSION CHECK 2: Site must be in user's assigned locality
+  const localityCheck = useMemo(() => {
+    if (!currentUser || !isFieldWorker) {
+      // Non-field workers (admin, FOM, etc) can claim any site
+      return { canClaim: true, reason: null };
+    }
+    
+    const userStateId = currentUser.stateId;
+    const userLocalityId = currentUser.localityId;
+    
+    // User must have geographic assignment
+    if (!userStateId) {
+      return { 
+        canClaim: false, 
+        reason: 'Your profile has no state assigned. Contact your supervisor.' 
+      };
+    }
+    
+    const userStateName = getStateName(userStateId)?.toLowerCase().trim() || '';
+    const userLocalityName = userLocalityId ? getLocalityName(userStateId, userLocalityId)?.toLowerCase().trim() : '';
+    
+    const siteState = (state || '').toLowerCase().trim();
+    const siteLocality = (locality || '').toLowerCase().trim();
+    
+    // Check state match
+    const stateMatches = siteState === userStateName || 
+                         siteState.includes(userStateName) || 
+                         userStateName.includes(siteState);
+    
+    if (!stateMatches) {
+      return { 
+        canClaim: false, 
+        reason: `This site is in ${state || 'unknown state'}, but you are assigned to ${getStateName(userStateId) || 'unknown'}.` 
+      };
+    }
+    
+    // If user has locality assigned, check locality match
+    if (userLocalityId && userLocalityName) {
+      const localityMatches = siteLocality === userLocalityName || 
+                              siteLocality.includes(userLocalityName) || 
+                              userLocalityName.includes(siteLocality);
+      
+      if (!localityMatches) {
+        return { 
+          canClaim: false, 
+          reason: `This site is in ${locality || 'unknown locality'}, but you are assigned to ${getLocalityName(userStateId, userLocalityId) || 'unknown'}.` 
+        };
+      }
+    }
+    
+    return { canClaim: true, reason: null };
+  }, [currentUser, isFieldWorker, state, locality]);
+
+  // Combined permission check for field workers
+  const canClaimSite = useMemo(() => {
+    // Non-field workers can claim (they are typically assigning, not claiming)
+    if (!isFieldWorker) return { allowed: true, reason: null };
+    
+    // Field workers need classification
+    if (!hasClassification) {
+      return { 
+        allowed: false, 
+        reason: 'You must have an active classification to claim sites. Contact your supervisor to get classified.' 
+      };
+    }
+    
+    // Field workers need matching locality
+    if (!localityCheck.canClaim) {
+      return { allowed: false, reason: localityCheck.reason };
+    }
+    
+    return { allowed: true, reason: null };
+  }, [isFieldWorker, hasClassification, localityCheck]);
 
   const handleInitiateClaim = async () => {
     if (claiming || claimed || disabled) return;
@@ -144,6 +233,47 @@ export function ClaimSiteButton({
       >
         <CheckCircle className="h-4 w-4 mr-2" />
         Claimed
+      </Button>
+    );
+  }
+
+  // Show blocked button if user cannot claim due to permission restrictions
+  if (!canClaimSite.allowed && isFieldWorker) {
+    const isClassificationIssue = !hasClassification;
+    const isLocalityIssue = !localityCheck.canClaim;
+    
+    return (
+      <Button
+        variant="outline"
+        size={size}
+        className={`bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800 cursor-not-allowed ${className}`}
+        disabled
+        onClick={() => {
+          toast({
+            title: 'Cannot Claim Site',
+            description: canClaimSite.reason || 'You do not have permission to claim this site.',
+            variant: 'destructive'
+          });
+        }}
+        data-testid={`button-blocked-${siteId}`}
+        title={canClaimSite.reason || 'Cannot claim this site'}
+      >
+        {isClassificationIssue ? (
+          <>
+            <ShieldX className="h-4 w-4 mr-2" />
+            No Classification
+          </>
+        ) : isLocalityIssue ? (
+          <>
+            <MapPinOff className="h-4 w-4 mr-2" />
+            Wrong Location
+          </>
+        ) : (
+          <>
+            <AlertCircle className="h-4 w-4 mr-2" />
+            Cannot Claim
+          </>
+        )}
       </Button>
     );
   }
