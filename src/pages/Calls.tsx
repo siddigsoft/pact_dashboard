@@ -719,13 +719,21 @@ const Calls = () => {
         </DialogContent>
       </Dialog>
 
-      <button 
-        className="uber-fab"
-        onClick={() => {}}
-        data-testid="fab-new-call"
-      >
-        <Phone className="h-6 w-6" />
-      </button>
+      {!isCallActive && onlineUsers.length > 0 && (
+        <button 
+          className="uber-fab"
+          onClick={() => {
+            const firstOnlineUser = onlineUsers[0];
+            if (firstOnlineUser) {
+              handleStartCall(firstOnlineUser.id);
+            }
+          }}
+          data-testid="fab-new-call"
+          title="Quick call to available contact"
+        >
+          <Phone className="h-6 w-6" />
+        </button>
+      )}
     </div>
   );
 };

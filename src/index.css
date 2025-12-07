@@ -588,15 +588,23 @@
   }
 
   .uber-pill-success {
-    @apply bg-green-500/10 text-green-600 dark:text-green-400;
+    @apply bg-green-500/20 text-green-700 dark:bg-green-500/25 dark:text-green-300 font-semibold;
   }
 
   .uber-pill-warning {
-    @apply bg-amber-500/10 text-amber-600 dark:text-amber-400;
+    @apply bg-amber-500/20 text-amber-700 dark:bg-amber-500/25 dark:text-amber-300 font-semibold;
   }
 
   .uber-pill-danger {
-    @apply bg-red-500/10 text-red-600 dark:text-red-400;
+    @apply bg-red-500/20 text-red-700 dark:bg-red-500/25 dark:text-red-300 font-semibold;
+  }
+
+  .uber-pill-info {
+    @apply bg-blue-500/20 text-blue-700 dark:bg-blue-500/25 dark:text-blue-300 font-semibold;
+  }
+
+  .uber-pill-purple {
+    @apply bg-purple-500/20 text-purple-700 dark:bg-purple-500/25 dark:text-purple-300 font-semibold;
   }
 
   /* Uber List Item */
@@ -657,7 +665,15 @@
 
   /* Uber Notification Dot */
   .uber-notification-dot {
-    @apply absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center;
+    @apply absolute -top-1 -right-1 min-w-[1.25rem] h-5 px-1 rounded-full bg-red-600 text-white text-[10px] font-bold flex items-center justify-center shadow-sm;
+  }
+
+  .uber-notification-dot-success {
+    @apply absolute -top-1 -right-1 min-w-[1.25rem] h-5 px-1 rounded-full bg-green-600 text-white text-[10px] font-bold flex items-center justify-center shadow-sm;
+  }
+
+  .uber-notification-dot-warning {
+    @apply absolute -top-1 -right-1 min-w-[1.25rem] h-5 px-1 rounded-full bg-amber-500 text-white text-[10px] font-bold flex items-center justify-center shadow-sm;
   }
 
   /* Uber Icon Button */
