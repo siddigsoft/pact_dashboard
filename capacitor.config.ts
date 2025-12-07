@@ -1,7 +1,7 @@
 import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.pact.workflow',
+  appId: 'com.pact.commandcenter',
   appName: 'PACT Command Center',
   webDir: 'dist',
  
