@@ -170,23 +170,24 @@ const Index = () => {
               </Badge>
             </div>
 
-            {/* Hero Headline */}
-            <div className="space-y-4">
+            {/* Hero Headline - Style: hero-headline-section */}
+            <div className="space-y-5">
               <h1 
-                className="text-3xl md:text-4xl lg:text-5xl font-bold tracking-tight"
+                className="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight leading-tight"
                 data-testid="heading-hero"
               >
-                <span className="bg-gradient-to-r from-blue-600 via-orange-600 to-purple-600 dark:from-blue-400 dark:via-orange-400 dark:to-purple-400 bg-clip-text text-transparent">
+                {/* Style: command-center-gradient-text */}
+                <span className="command-center-gradient-text bg-gradient-to-r from-blue-600 via-orange-500 to-purple-600 dark:from-blue-400 dark:via-orange-400 dark:to-purple-400 bg-clip-text text-transparent inline-block pb-1">
                   Command Center
                 </span>
                 <br />
-                <span className="text-foreground">
+                <span className="text-foreground text-3xl md:text-4xl lg:text-5xl font-bold">
                   for Field Operations
                 </span>
               </h1>
               
               <p 
-                className="text-base md:text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed"
+                className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed"
                 data-testid="text-hero-description"
               >
                 Real-time monitoring, seamless coordination, and data-driven insights 
@@ -195,27 +196,27 @@ const Index = () => {
               </p>
             </div>
 
-            {/* CTA Buttons */}
-            <div className="flex flex-col sm:flex-row gap-3 justify-center items-center pt-2">
-              <Button
-                size="lg"
+            {/* CTA Buttons - Style: cta-button-section */}
+            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center pt-4">
+              {/* Style: get-started-gradient-button - To modify: change bg-gradient colors, shadow, or remove transition classes */}
+              <button
                 onClick={handleGetStarted}
                 disabled={isNavigating}
                 data-testid="button-get-started"
-                className="gap-2"
+                className="get-started-gradient-button group relative inline-flex items-center justify-center gap-2.5 px-8 py-3.5 text-base font-semibold text-white rounded-lg bg-gradient-to-r from-blue-600 via-orange-500 to-purple-600 hover:from-blue-500 hover:via-orange-400 hover:to-purple-500 shadow-lg shadow-orange-500/25 dark:shadow-orange-400/20 transition-all duration-300 hover:shadow-xl hover:shadow-orange-500/30 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed disabled:hover:scale-100"
               >
                 {isNavigating ? (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Loading...
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <span>Loading...</span>
                   </>
                 ) : (
                   <>
-                    Get Started
-                    <ArrowRight className="w-4 h-4" />
+                    <span>Get Started</span>
+                    <ArrowRight className="w-5 h-5 transition-transform duration-300 group-hover:translate-x-1" />
                   </>
                 )}
-              </Button>
+              </button>
             </div>
           </div>
         </section>
