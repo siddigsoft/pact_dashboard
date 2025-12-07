@@ -91,6 +91,37 @@ const ProjectList: React.FC<ProjectListProps> = ({
     }
   };
 
+  // Safe budget parsing helper
+  const getBudgetSummary = (budget: any) => {
+    if (!budget) return null;
+
+    const parseNumber = (value: any): number | null => {
+      if (value === null || value === undefined) return null;
+      if (typeof value === 'number' && !Number.isNaN(value)) return value;
+      if (typeof value === 'string') {
+        const n = Number(value);
+        return Number.isNaN(n) ? null : n;
+      }
+      return null;
+    };
+
+    const totalCents = parseNumber(
+      budget.totalBudgetCents !== undefined
+        ? budget.totalBudgetCents
+        : budget.total_budget_cents,
+    );
+
+    const total = (() => {
+      if (totalCents !== null) return totalCents / 100;
+      const rawTotal = parseNumber(budget.total);
+      return rawTotal;
+    })();
+
+    const currency = budget.currency || 'SDG';
+
+    return total !== null ? { total, currency } : null;
+  };
+
   const getTypeBadge = (type: string) => {
     switch (type) {
       case 'infrastructure':
@@ -256,14 +287,20 @@ const ProjectList: React.FC<ProjectListProps> = ({
                 )}
 
                 {/* Budget */}
-                {project.budget && (
-                  <div className="flex items-center gap-2 text-sm">
-                    <DollarSign className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                    <span className="text-muted-foreground truncate">
-                      {project.budget.total.toLocaleString()} {project.budget.currency}
-                    </span>
-                  </div>
-                )}
+                {(() => {
+                  const budgetSummary = getBudgetSummary(project.budget);
+                  return budgetSummary ? (
+                    <div className="flex items-center gap-2 text-sm">
+                      <DollarSign className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                      <span className="text-muted-foreground truncate">
+                        {budgetSummary.currency} {budgetSummary.total.toLocaleString('en-US', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
+                      </span>
+                    </div>
+                  ) : null;
+                })()}
 
                 {/* Description preview */}
                 {project.description && (
