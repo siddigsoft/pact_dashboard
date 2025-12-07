@@ -8,7 +8,8 @@ import { Button } from '@/components/ui/button';
 import { useUser } from '@/context/user/UserContext';
 import { formatDistanceToNow } from 'date-fns';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
-import { Avatar } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
 import { 
   Search, 
   Users, 
@@ -16,7 +17,10 @@ import {
   Plus, 
   Calendar,
   MapPin,
-  File
+  File,
+  Image,
+  Mic,
+  Paperclip
 } from 'lucide-react';
 
 interface ChatItemProps {
@@ -26,82 +30,107 @@ interface ChatItemProps {
 }
 
 const ChatItem: React.FC<ChatItemProps> = ({ chat, isActive, onClick }) => {
+  const getLastMessageIcon = () => {
+    if (!chat.lastMessage) return null;
+    switch (chat.lastMessage.contentType) {
+      case 'image': return <Image className="h-3 w-3" />;
+      case 'file': return <Paperclip className="h-3 w-3" />;
+      case 'location': return <MapPin className="h-3 w-3" />;
+      case 'audio': return <Mic className="h-3 w-3" />;
+      default: return null;
+    }
+  };
+
+  const getLastMessageText = () => {
+    if (!chat.lastMessage?.content) {
+      return chat.type === 'private' ? 'No messages yet' : `${chat.participants.length} participants`;
+    }
+    switch (chat.lastMessage.contentType) {
+      case 'image': return 'Photo';
+      case 'file': return 'File';
+      case 'location': return 'Location';
+      case 'audio': return 'Voice message';
+      default: return chat.lastMessage.content;
+    }
+  };
+
   return (
-    <div 
-      className={`p-3 rounded-md cursor-pointer transition-colors ${
+    <button 
+      className={`w-full p-3 rounded-lg text-left transition-all ${
         isActive 
-          ? 'bg-primary/10 border-l-4 border-primary' 
-          : 'hover:bg-muted'
+          ? 'bg-primary/10 dark:bg-primary/20' 
+          : 'hover:bg-muted/50 dark:hover:bg-gray-800'
       }`}
       onClick={onClick}
+      data-testid={`chat-item-${chat.id}`}
     >
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
+      <div className="flex items-start gap-3">
+        <div className="relative">
           {chat.type === 'private' ? (
-            <div className="w-10 h-10 bg-primary/20 rounded-full flex items-center justify-center text-primary">
-              {chat.name.charAt(0).toUpperCase()}
-            </div>
+            <Avatar className="h-11 w-11">
+              <AvatarFallback className="bg-gradient-to-br from-blue-500 to-blue-600 text-white font-medium">
+                {chat.name.charAt(0).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
           ) : chat.type === 'state-group' ? (
-            <div className="w-10 h-10 bg-green-500/20 rounded-full flex items-center justify-center text-green-500">
-              <MapPin size={18} />
-            </div>
+            <Avatar className="h-11 w-11">
+              <AvatarFallback className="bg-gradient-to-br from-green-500 to-green-600 text-white">
+                <MapPin className="h-5 w-5" />
+              </AvatarFallback>
+            </Avatar>
           ) : (
-            <div className="w-10 h-10 bg-secondary/20 rounded-full flex items-center justify-center text-secondary">
-              <Users size={18} />
+            <Avatar className="h-11 w-11">
+              <AvatarFallback className="bg-gradient-to-br from-purple-500 to-purple-600 text-white">
+                <Users className="h-5 w-5" />
+              </AvatarFallback>
+            </Avatar>
+          )}
+          {chat.type === 'private' && (
+            <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-background" />
+          )}
+        </div>
+        
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className={`font-medium text-sm truncate ${
+              chat.unreadCount > 0 ? 'text-foreground' : 'text-muted-foreground'
+            }`}>
+              {chat.name}
+            </h3>
+            <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+              {formatDistanceToNow(new Date(chat.lastMessage?.timestamp || chat.createdAt), { 
+                addSuffix: false 
+              })}
+            </span>
+          </div>
+
+          {chat.relatedEntityType && (
+            <div className="flex items-center text-[10px] text-muted-foreground mt-0.5">
+              {chat.relatedEntityType === 'mmpFile' && <File className="h-2.5 w-2.5 mr-1" />}
+              {chat.relatedEntityType === 'siteVisit' && <MapPin className="h-2.5 w-2.5 mr-1" />}
+              {chat.relatedEntityType === 'project' && <Calendar className="h-2.5 w-2.5 mr-1" />}
+              <span>
+                {chat.relatedEntityType === 'mmpFile' && 'MMP File'}
+                {chat.relatedEntityType === 'siteVisit' && 'Site Visit'}
+                {chat.relatedEntityType === 'project' && 'Project'}
+              </span>
             </div>
           )}
           
-          <div className="flex-1">
-            <div className="flex items-center justify-between">
-              <h3 className={`font-medium text-sm ${chat.unreadCount > 0 ? 'text-foreground font-semibold' : 'text-muted-foreground'}`}>
-                {chat.name}
-              </h3>
-              {chat.unreadCount > 0 && (
-                <span className="bg-primary text-white text-xs rounded-full px-2 py-0.5 ml-2">
-                  {chat.unreadCount}
-                </span>
-              )}
-            </div>
-
-            {chat.relatedEntityType && (
-              <div className="flex items-center text-xs text-muted-foreground mt-1">
-                {chat.relatedEntityType === 'mmpFile' && <File size={12} className="mr-1" />}
-                {chat.relatedEntityType === 'siteVisit' && <MapPin size={12} className="mr-1" />}
-                {chat.relatedEntityType === 'project' && <Calendar size={12} className="mr-1" />}
-                <span>
-                  {chat.relatedEntityType === 'mmpFile' && 'MMP File'}
-                  {chat.relatedEntityType === 'siteVisit' && 'Site Visit'}
-                  {chat.relatedEntityType === 'project' && 'Project'}
-                </span>
-              </div>
-            )}
-            
-            <p className="text-xs text-muted-foreground mt-1 truncate max-w-[200px]">
-              {chat.lastMessage?.content 
-                ? (chat.lastMessage.contentType === 'image' 
-                    ? '📷 Image' 
-                    : chat.lastMessage.contentType === 'file' 
-                    ? '📎 File' 
-                    : chat.lastMessage.contentType === 'location'
-                    ? '📍 Location'
-                    : chat.lastMessage.contentType === 'audio'
-                    ? '🎤 Audio'
-                    : chat.lastMessage.content)
-                : (chat.type === 'private' 
-                    ? 'No messages yet' 
-                    : `${chat.participants.length} participants`)}
+          <div className="flex items-center justify-between mt-1">
+            <p className="text-xs text-muted-foreground truncate flex items-center gap-1">
+              {getLastMessageIcon()}
+              <span className="truncate">{getLastMessageText()}</span>
             </p>
+            {chat.unreadCount > 0 && (
+              <Badge variant="default" className="h-5 min-w-5 px-1.5 text-[10px] font-semibold">
+                {chat.unreadCount > 99 ? '99+' : chat.unreadCount}
+              </Badge>
+            )}
           </div>
         </div>
-        
-        <div className="text-xs text-muted-foreground whitespace-nowrap">
-          {formatDistanceToNow(new Date(chat.lastMessage?.timestamp || chat.createdAt), { 
-            addSuffix: true,
-            includeSeconds: true
-          })}
-        </div>
       </div>
-    </div>
+    </button>
   );
 };
 
@@ -126,7 +155,6 @@ const ChatSidebar: React.FC = () => {
       }
     } catch (error) {
       console.error('Error starting chat:', error);
-      // Error is already handled in createChat with toast
     }
   };
   
@@ -136,39 +164,40 @@ const ChatSidebar: React.FC = () => {
       )
     : chats;
 
+  const unreadCount = chats.reduce((acc, chat) => acc + (chat.unreadCount || 0), 0);
+
   return (
-    <div className="w-full h-full flex flex-col border-r">
-      <div className="p-4 border-b">
-        <h2 className="text-lg font-semibold mb-4">Messages</h2>
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search chats..."
-              className="pl-8"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+    <div className="w-full h-full flex flex-col">
+      <div className="p-3 border-b bg-card dark:bg-gray-900">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <h2 className="text-base font-semibold" data-testid="text-messages-title">Messages</h2>
+            {unreadCount > 0 && (
+              <Badge variant="destructive" className="h-5 text-[10px]" data-testid="badge-unread-count">
+                {unreadCount}
+              </Badge>
+            )}
           </div>
           <Dialog open={isNewChatOpen} onOpenChange={setIsNewChatOpen}>
             <DialogTrigger asChild>
-              <Button size="icon" variant="outline" className="h-10 w-10">
-                <Plus size={18} />
+              <Button size="icon" variant="ghost" className="h-8 w-8" data-testid="button-new-chat">
+                <Plus className="h-4 w-4" />
               </Button>
             </DialogTrigger>
             <DialogContent>
               <DialogHeader>
-                <DialogTitle>Start a new chat</DialogTitle>
-                <DialogDescription>Select a user to start a conversation</DialogDescription>
+                <DialogTitle>New Message</DialogTitle>
+                <DialogDescription>Select someone to start a conversation</DialogDescription>
               </DialogHeader>
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <div className="relative">
-                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                   <Input
-                    placeholder="Search users..."
-                    className="pl-8"
+                    placeholder="Search contacts..."
+                    className="pl-9"
                     value={userSearch}
                     onChange={(e) => setUserSearch(e.target.value)}
+                    data-testid="input-search-users"
                   />
                 </div>
                 <ScrollArea className="h-64">
@@ -176,26 +205,33 @@ const ChatSidebar: React.FC = () => {
                     {filteredUsersList.map(u => (
                       <button
                         key={u.id}
-                        className="w-full flex items-center gap-3 p-2 rounded-md hover:bg-muted text-left"
+                        className="w-full flex items-center gap-3 p-2.5 rounded-lg hover:bg-muted dark:hover:bg-gray-800 text-left transition-colors"
                         onClick={() => handleStartChatWith(u.id, u.fullName || u.name || u.username || 'Chat')}
+                        data-testid={`user-item-${u.id}`}
                       >
-                        <Avatar className="h-8 w-8">
-                          <div className="bg-primary/20 w-full h-full rounded-full flex items-center justify-center text-primary">
-                            {(u.fullName || u.name || u.username || 'U').charAt(0).toUpperCase()}
-                          </div>
-                        </Avatar>
-                        <div className="flex-1">
-                          <div className="text-sm font-medium">
+                        <div className="relative">
+                          <Avatar className="h-10 w-10">
+                            <AvatarFallback className="bg-gradient-to-br from-blue-500 to-blue-600 text-white text-sm">
+                              {(u.fullName || u.name || u.username || 'U').charAt(0).toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-background" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium truncate">
                             {u.fullName || u.name || u.username || 'User'}
                           </div>
-                          <div className="text-xs text-muted-foreground">
-                            {u.role || ''}
+                          <div className="text-xs text-muted-foreground truncate">
+                            {u.role || 'Team Member'}
                           </div>
                         </div>
                       </button>
                     ))}
                     {filteredUsersList.length === 0 && (
-                      <div className="text-sm text-muted-foreground p-3">No users found</div>
+                      <div className="py-8 text-center">
+                        <Users className="h-8 w-8 mx-auto text-muted-foreground/40 mb-2" />
+                        <p className="text-sm text-muted-foreground">No contacts found</p>
+                      </div>
                     )}
                   </div>
                 </ScrollArea>
@@ -203,10 +239,21 @@ const ChatSidebar: React.FC = () => {
             </DialogContent>
           </Dialog>
         </div>
+        
+        <div className="relative">
+          <Search className="absolute left-3 top-2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search conversations..."
+            className="pl-9 h-8 text-sm bg-muted/50 dark:bg-gray-800 border-0"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            data-testid="input-search-chats"
+          />
+        </div>
       </div>
       
       <ScrollArea className="flex-1">
-        <div className="p-2 space-y-1">
+        <div className="p-2 space-y-0.5">
           {filteredChats.length > 0 ? (
             filteredChats.map(chat => (
               <ChatItem 
@@ -217,10 +264,13 @@ const ChatSidebar: React.FC = () => {
               />
             ))
           ) : (
-            <div className="py-8 text-center">
-              <MessageSquare className="h-8 w-8 mx-auto text-muted-foreground/50" />
-              <p className="text-muted-foreground mt-2">
-                {searchQuery ? 'No chats found' : 'No chats yet'}
+            <div className="py-12 text-center">
+              <MessageSquare className="h-10 w-10 mx-auto text-muted-foreground/30 mb-3" />
+              <p className="text-sm font-medium text-muted-foreground">
+                {searchQuery ? 'No chats found' : 'No conversations yet'}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {searchQuery ? 'Try a different search' : 'Start a new message to begin'}
               </p>
             </div>
           )}

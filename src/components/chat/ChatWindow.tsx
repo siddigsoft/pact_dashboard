@@ -4,11 +4,25 @@ import { useChat } from '@/context/chat/ChatContextSupabase';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Avatar } from '@/components/ui/avatar';
-import { formatDistanceToNow } from 'date-fns';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { formatDistanceToNow, format, isToday, isYesterday } from 'date-fns';
 import { useUser } from '@/context/user/UserContext';
-import { Send, Info, ArrowLeft, MoreVertical, Paperclip, Users, X, Image as ImageIcon, File, Loader2 } from 'lucide-react';
-import { ChatMessage } from '@/types';
+import { 
+  Send, 
+  ArrowLeft, 
+  MoreVertical, 
+  Paperclip, 
+  Users, 
+  X, 
+  File, 
+  Loader2,
+  Phone,
+  Video,
+  Smile,
+  Check,
+  CheckCheck,
+  MessageSquare
+} from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { uploadChatAttachment, getContentTypeFromFile, formatFileSize, ChatAttachment } from '@/utils/chatUpload';
 
@@ -23,15 +37,12 @@ const ChatWindow: React.FC = () => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
-  // Get messages for the active chat
   const chatMessages = activeChat ? getChatMessages(activeChat.id) || [] : [];
   
-  // Auto scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages]);
 
-  // Cleanup object URLs when component unmounts or files change
   useEffect(() => {
     return () => {
       selectedFiles.forEach(file => {
@@ -45,11 +56,10 @@ const ChatWindow: React.FC = () => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
 
-    // Validate files
     const validFiles: File[] = [];
     for (const file of files) {
       const isImage = file.type.startsWith('image/');
-      const maxSize = isImage ? 10 * 1024 * 1024 : 25 * 1024 * 1024; // 10MB for images, 25MB for files
+      const maxSize = isImage ? 10 * 1024 * 1024 : 25 * 1024 * 1024;
       
       if (file.size > maxSize) {
         toast({
@@ -66,7 +76,6 @@ const ChatWindow: React.FC = () => {
       setSelectedFiles(prev => [...prev, ...validFiles]);
     }
 
-    // Reset input
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -85,7 +94,6 @@ const ChatWindow: React.FC = () => {
     if (!hasText && !hasFiles) return;
 
     try {
-      // If there are files, upload them first
       if (hasFiles) {
         const attachments: ChatAttachment[] = [];
         
@@ -110,7 +118,7 @@ const ChatWindow: React.FC = () => {
               delete updated[fileId];
               return updated;
             });
-            return; // Don't send message if upload fails
+            return;
           } finally {
             setUploadingFiles(prev => {
               const updated = { ...prev };
@@ -120,7 +128,6 @@ const ChatWindow: React.FC = () => {
           }
         }
 
-        // Send message with attachments
         if (attachments.length > 0) {
           const contentType = getContentTypeFromFile(selectedFiles[0]);
           const attachmentsData = attachments.map(att => ({
@@ -132,18 +139,16 @@ const ChatWindow: React.FC = () => {
 
           await sendMessage(
             activeChat.id,
-            messageText || (contentType === 'image' ? '📷 Image' : '📎 File'),
+            messageText || (contentType === 'image' ? 'Photo' : 'File'),
             contentType,
             attachmentsData,
             { fileCount: attachments.length }
           );
         }
       } else {
-        // Send text message only
         await sendMessage(activeChat.id, messageText, 'text');
       }
 
-      // Clear form
       setMessageText('');
       setSelectedFiles([]);
       if (textareaRef.current) {
@@ -166,7 +171,6 @@ const ChatWindow: React.FC = () => {
     }
   };
   
-  // Auto-resize textarea
   const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setMessageText(e.target.value);
     if (textareaRef.current) {
@@ -175,17 +179,26 @@ const ChatWindow: React.FC = () => {
     }
   };
 
-  // If no chat is selected
+  const formatMessageTime = (timestamp: string) => {
+    const date = new Date(timestamp);
+    if (isToday(date)) {
+      return format(date, 'HH:mm');
+    } else if (isYesterday(date)) {
+      return 'Yesterday ' + format(date, 'HH:mm');
+    }
+    return format(date, 'MMM d, HH:mm');
+  };
+
   if (!activeChat) {
     return (
-      <div className="h-full flex flex-col items-center justify-center p-6 text-center bg-gray-50">
-        <div className="bg-white p-8 rounded-lg shadow-sm max-w-md">
+      <div className="h-full flex flex-col items-center justify-center p-6 text-center" data-testid="no-chat-selected">
+        <div className="bg-card dark:bg-gray-800 p-8 rounded-2xl shadow-sm max-w-sm">
           <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
-            <Users size={32} className="text-primary" />
+            <MessageSquare className="h-8 w-8 text-primary" />
           </div>
-          <h2 className="text-xl font-semibold mb-2">Select a conversation</h2>
-          <p className="text-muted-foreground mb-4">
-            Choose a chat from the sidebar or start a new conversation to begin messaging
+          <h2 className="text-lg font-semibold mb-2">Select a conversation</h2>
+          <p className="text-sm text-muted-foreground">
+            Choose a chat from the sidebar or start a new conversation
           </p>
         </div>
       </div>
@@ -193,58 +206,68 @@ const ChatWindow: React.FC = () => {
   }
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Chat header */}
-      <div className="py-3 px-4 flex items-center justify-between border-b bg-white">
-        <div className="flex items-center">
+    <div className="flex flex-col h-full" data-testid="chat-window">
+      <div className="py-2.5 px-4 flex items-center justify-between border-b bg-card dark:bg-gray-900">
+        <div className="flex items-center gap-3">
           <Button
             variant="ghost"
             size="icon"
-            className="md:hidden mr-2"
+            className="md:hidden h-8 w-8"
             onClick={() => setActiveChat(null)}
+            data-testid="button-back"
           >
-            <ArrowLeft size={18} />
+            <ArrowLeft className="h-4 w-4" />
           </Button>
           
-          <div className="flex items-center gap-3">
+          <div className="relative">
             {activeChat.type === 'private' ? (
-              <Avatar className="h-9 w-9">
-                <div className="bg-primary/20 w-full h-full rounded-full flex items-center justify-center text-primary font-medium">
+              <Avatar className="h-10 w-10">
+                <AvatarFallback className="bg-gradient-to-br from-blue-500 to-blue-600 text-white font-medium">
                   {activeChat.name.charAt(0).toUpperCase()}
-                </div>
+                </AvatarFallback>
               </Avatar>
             ) : (
-              <Avatar className="h-9 w-9">
-                <div className="bg-secondary/20 w-full h-full rounded-full flex items-center justify-center">
-                  <Users size={16} className="text-secondary" />
-                </div>
+              <Avatar className="h-10 w-10">
+                <AvatarFallback className="bg-gradient-to-br from-purple-500 to-purple-600 text-white">
+                  <Users className="h-5 w-5" />
+                </AvatarFallback>
               </Avatar>
             )}
-            
-            <div>
-              <h3 className="font-medium leading-tight">{activeChat.name}</h3>
-              <p className="text-xs text-muted-foreground">
-                {activeChat.type === 'group' 
-                  ? `${activeChat.participants.length} participants` 
-                  : 'Online'}
-              </p>
-            </div>
+            {activeChat.type === 'private' && (
+              <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-card" />
+            )}
+          </div>
+          
+          <div>
+            <h3 className="font-medium text-sm leading-tight" data-testid="text-chat-name">{activeChat.name}</h3>
+            <p className="text-xs text-muted-foreground">
+              {activeChat.type === 'group' 
+                ? `${activeChat.participants.length} participants` 
+                : (
+                  <span className="flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                    Online
+                  </span>
+                )}
+            </p>
           </div>
         </div>
         
-        <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon">
-            <Info size={18} />
+        <div className="flex items-center gap-0.5">
+          <Button variant="ghost" size="icon" className="h-8 w-8" data-testid="button-call">
+            <Phone className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="icon">
-            <MoreVertical size={18} />
+          <Button variant="ghost" size="icon" className="h-8 w-8" data-testid="button-video">
+            <Video className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-8 w-8" data-testid="button-more">
+            <MoreVertical className="h-4 w-4" />
           </Button>
         </div>
       </div>
       
-      {/* Messages area */}
       <ScrollArea className="flex-1 p-4">
-        <div className="space-y-4 pb-4">
+        <div className="space-y-3 pb-4">
           {chatMessages.length > 0 ? (
             chatMessages.map((message) => {
               const isOwnMessage = message.senderId === currentUser?.id;
@@ -253,100 +276,102 @@ const ChatWindow: React.FC = () => {
                 <div
                   key={message.id}
                   className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}
+                  data-testid={`message-${message.id}`}
                 >
-                  <div
-                    className={`max-w-[75%] rounded-lg p-3 ${
-                      isOwnMessage
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-gray-100 text-foreground'
-                    }`}
-                  >
+                  <div className={`flex items-end gap-2 max-w-[75%] ${isOwnMessage ? 'flex-row-reverse' : ''}`}>
                     {!isOwnMessage && (
-                      <p className="text-xs font-medium mb-1">
-                        {message.senderId === 'usr1' ? 'You' : activeChat.name}
-                      </p>
+                      <Avatar className="h-7 w-7">
+                        <AvatarFallback className="bg-gradient-to-br from-gray-400 to-gray-500 text-white text-xs">
+                          {activeChat.name.charAt(0).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
                     )}
                     
-                    {/* Display attachments (images/files) */}
-                    {message.attachments && (
-                      <div className="mb-2 space-y-2">
-                        {(() => {
-                          // Handle both array and object formats
-                          const attachmentsArray = Array.isArray(message.attachments) 
-                            ? message.attachments 
-                            : message.attachments.url 
-                              ? [message.attachments] 
-                              : [];
-                          
-                          return attachmentsArray.map((attachment: any, idx: number) => {
-                            const isImage = message.contentType === 'image' || attachment.type?.startsWith('image/');
+                    <div
+                      className={`rounded-2xl px-3.5 py-2 ${
+                        isOwnMessage
+                          ? 'bg-primary text-primary-foreground rounded-br-md'
+                          : 'bg-card dark:bg-gray-800 text-foreground rounded-bl-md border'
+                      }`}
+                    >
+                      {message.attachments && (
+                        <div className="mb-2 space-y-2">
+                          {(() => {
+                            const attachmentsArray = Array.isArray(message.attachments) 
+                              ? message.attachments 
+                              : message.attachments.url 
+                                ? [message.attachments] 
+                                : [];
                             
-                            if (isImage && attachment.url) {
-                              return (
-                                <div key={idx} className="rounded-lg overflow-hidden max-w-full">
-                                  <img
-                                    src={attachment.url}
-                                    alt={attachment.name || 'Image'}
-                                    className="max-w-full h-auto max-h-64 object-contain rounded cursor-pointer"
-                                    loading="lazy"
-                                    onClick={() => window.open(attachment.url, '_blank')}
-                                  />
-                                </div>
-                              );
-                            } else if (attachment.url) {
-                              return (
-                                <a
-                                  key={idx}
-                                  href={attachment.url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className={`flex items-center gap-2 p-2 rounded hover:opacity-80 transition-opacity ${
-                                    isOwnMessage 
-                                      ? 'bg-white/20' 
-                                      : 'bg-black/10'
-                                  }`}
-                                >
-                                  <File size={16} />
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium truncate">{attachment.name || 'File'}</p>
-                                    {attachment.size && (
-                                      <p className="text-xs opacity-70">{formatFileSize(attachment.size)}</p>
-                                    )}
+                            return attachmentsArray.map((attachment: any, idx: number) => {
+                              const isImage = message.contentType === 'image' || attachment.type?.startsWith('image/');
+                              
+                              if (isImage && attachment.url) {
+                                return (
+                                  <div key={idx} className="rounded-lg overflow-hidden">
+                                    <img
+                                      src={attachment.url}
+                                      alt={attachment.name || 'Image'}
+                                      className="max-w-full h-auto max-h-64 object-contain rounded cursor-pointer"
+                                      loading="lazy"
+                                      onClick={() => window.open(attachment.url, '_blank')}
+                                    />
                                   </div>
-                                </a>
-                              );
-                            }
-                            return null;
-                          });
-                        })()}
+                                );
+                              } else if (attachment.url) {
+                                return (
+                                  <a
+                                    key={idx}
+                                    href={attachment.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className={`flex items-center gap-2 p-2 rounded-lg hover:opacity-80 transition-opacity ${
+                                      isOwnMessage ? 'bg-white/20' : 'bg-muted'
+                                    }`}
+                                  >
+                                    <File className="h-4 w-4" />
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-medium truncate">{attachment.name || 'File'}</p>
+                                      {attachment.size && (
+                                        <p className="text-xs opacity-70">{formatFileSize(attachment.size)}</p>
+                                      )}
+                                    </div>
+                                  </a>
+                                );
+                              }
+                              return null;
+                            });
+                          })()}
+                        </div>
+                      )}
+                      
+                      {message.content && message.contentType !== 'image' && (
+                        <p className="text-sm break-words">{message.content}</p>
+                      )}
+                      
+                      <div className={`flex items-center gap-1 mt-1 ${isOwnMessage ? 'justify-end' : ''}`}>
+                        <span className="text-[10px] opacity-60">
+                          {formatMessageTime(message.timestamp)}
+                        </span>
+                        {isOwnMessage && (
+                          <CheckCheck className="h-3 w-3 opacity-60" />
+                        )}
                       </div>
-                    )}
-                    
-                    {/* Display text content */}
-                    {message.content && (
-                      <p className="text-sm break-words">{message.content}</p>
-                    )}
-                    
-                    <p className="text-xs mt-1 opacity-70 text-right">
-                      {formatDistanceToNow(new Date(message.timestamp), {
-                        addSuffix: true,
-                        includeSeconds: true,
-                      })}
-                    </p>
+                    </div>
                   </div>
                 </div>
               );
             })
           ) : (
-            <div className="flex flex-col items-center justify-center py-12">
-              <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center mb-3">
-                <Users size={24} className="text-primary" />
+            <div className="flex flex-col items-center justify-center py-16">
+              <div className="h-14 w-14 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+                <MessageSquare className="h-7 w-7 text-primary" />
               </div>
               <p className="font-medium">Start your conversation</p>
-              <p className="text-sm text-muted-foreground mt-1">
+              <p className="text-sm text-muted-foreground mt-1 text-center">
                 {activeChat.type === 'private'
-                  ? `Send your first message to ${activeChat.name}`
-                  : `Send your first message to the ${activeChat.name} group`}
+                  ? `Send a message to ${activeChat.name}`
+                  : `Say hello to ${activeChat.name}`}
               </p>
             </div>
           )}
@@ -354,16 +379,15 @@ const ChatWindow: React.FC = () => {
         </div>
       </ScrollArea>
       
-      {/* Selected files preview */}
       {selectedFiles.length > 0 && (
-        <div className="px-3 py-2 bg-gray-50 border-t border-b">
+        <div className="px-3 py-2 bg-muted/50 dark:bg-gray-800 border-t">
           <div className="flex flex-wrap gap-2">
             {selectedFiles.map((file, index) => (
               <div
                 key={index}
-                className="flex items-center gap-2 bg-white border rounded-lg p-2 text-sm"
+                className="flex items-center gap-2 bg-card dark:bg-gray-700 border rounded-lg p-2 text-sm"
               >
-                    {file.type.startsWith('image/') ? (
+                {file.type.startsWith('image/') ? (
                   <div className="relative">
                     <img
                       src={URL.createObjectURL(file)}
@@ -377,8 +401,8 @@ const ChatWindow: React.FC = () => {
                     )}
                   </div>
                 ) : (
-                  <div className="w-12 h-12 bg-gray-100 rounded flex items-center justify-center">
-                    <File size={20} className="text-gray-600" />
+                  <div className="w-12 h-12 bg-muted rounded flex items-center justify-center">
+                    <File className="h-5 w-5 text-muted-foreground" />
                   </div>
                 )}
                 <div className="flex-1 min-w-0">
@@ -391,8 +415,9 @@ const ChatWindow: React.FC = () => {
                   className="h-6 w-6"
                   onClick={() => removeSelectedFile(index)}
                   disabled={Object.values(uploadingFiles).some(v => v)}
+                  data-testid={`button-remove-file-${index}`}
                 >
-                  <X size={14} />
+                  <X className="h-3 w-3" />
                 </Button>
               </div>
             ))}
@@ -400,9 +425,8 @@ const ChatWindow: React.FC = () => {
         </div>
       )}
 
-      {/* Message input */}
-      <div className="p-3 bg-white border-t">
-        <div className="flex gap-2">
+      <div className="p-3 bg-card dark:bg-gray-900 border-t">
+        <div className="flex items-end gap-2">
           <input
             ref={fileInputRef}
             type="file"
@@ -413,37 +437,48 @@ const ChatWindow: React.FC = () => {
             id="chat-file-input"
           />
           <Button
-            variant="outline"
+            variant="ghost"
             size="icon"
-            className="h-10 w-10"
+            className="h-9 w-9 shrink-0"
             onClick={() => fileInputRef.current?.click()}
             disabled={isSendingMessage || Object.values(uploadingFiles).some(v => v)}
+            data-testid="button-attach"
           >
-            <Paperclip size={18} />
+            <Paperclip className="h-4 w-4" />
           </Button>
           
-          <div className="flex-1 flex items-end">
+          <div className="flex-1 relative">
             <Textarea
               ref={textareaRef}
               placeholder="Type a message..."
-              className="resize-none min-h-[40px] max-h-[120px] py-2"
+              className="resize-none min-h-[36px] max-h-[120px] py-2 pr-10 text-sm bg-muted/50 dark:bg-gray-800 border-0"
               value={messageText}
               onChange={handleTextareaChange}
               onKeyDown={handleKeyDown}
               disabled={isSendingMessage || Object.values(uploadingFiles).some(v => v)}
+              data-testid="input-message"
             />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute right-1 bottom-1 h-7 w-7"
+              data-testid="button-emoji"
+            >
+              <Smile className="h-4 w-4 text-muted-foreground" />
+            </Button>
           </div>
           
           <Button 
             size="icon" 
-            className="h-10 w-10"
+            className="h-9 w-9 shrink-0"
             onClick={handleSendMessage}
             disabled={(!messageText.trim() && selectedFiles.length === 0) || isSendingMessage || Object.values(uploadingFiles).some(v => v)}
+            data-testid="button-send"
           >
             {isSendingMessage || Object.values(uploadingFiles).some(v => v) ? (
-              <Loader2 size={18} className="animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
-              <Send size={18} />
+              <Send className="h-4 w-4" />
             )}
           </Button>
         </div>
