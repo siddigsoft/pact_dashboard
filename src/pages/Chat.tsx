@@ -26,7 +26,8 @@ import {
   FileText,
   Send,
   Sparkles,
-  Star
+  Star,
+  Bell
 } from 'lucide-react';
 
 const QUICK_REPLY_CATEGORIES = [
@@ -136,52 +137,40 @@ const Chat: React.FC = () => {
 
   return (
     <div className="uber-page uber-font" data-testid="chat-page">
-      <div className="uber-page-content max-w-6xl">
-        <div className="flex items-center justify-between gap-3 mb-5 uber-slide-in-down">
-          <div className="flex items-center gap-3">
-            <Button 
-              variant="ghost" 
-              size="icon"
-              className="uber-icon-btn"
+      <div className="uber-page-content">
+        <div className="uber-page-header uber-slide-in-down">
+          <div className="flex items-center gap-4">
+            <button 
               onClick={() => navigate(-1)}
+              className="uber-icon-btn"
               data-testid="button-go-back"
             >
               <ArrowLeft className="h-5 w-5" />
-            </Button>
+            </button>
             <div>
-              <h1 className="uber-heading text-xl flex items-center gap-2.5" data-testid="text-page-title">
-                <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center shadow-sm">
-                  <MessageSquare className="h-4 w-4 text-primary-foreground" />
-                </div>
+              <h1 className="text-2xl uber-heading" data-testid="text-page-title">
                 Messages
               </h1>
-              <p className="text-xs text-muted-foreground mt-0.5 ml-10">Connect with your team</p>
+              <p className="text-xs text-muted-foreground uber-text mt-1">Connect with your team</p>
             </div>
           </div>
-        
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-1.5 rounded-full border-border/50 hover:border-primary/30 hover:bg-primary/5 transition-all"
-            onClick={() => setShowTemplates(true)}
-            data-testid="button-templates"
-          >
-            <Sparkles className="h-3.5 w-3.5 text-amber-500" />
-            <span className="hidden sm:inline">Templates</span>
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-1.5 rounded-full border-border/50 hover:border-primary/30 hover:bg-primary/5 transition-all"
-            onClick={() => navigate('/notifications')}
-            data-testid="button-notifications"
-          >
-            <AlertCircle className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Notify</span>
-          </Button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowTemplates(true)}
+              className="uber-icon-btn"
+              data-testid="button-templates"
+            >
+              <Sparkles className="h-5 w-5 text-amber-500" />
+            </button>
+            <button 
+              onClick={() => navigate('/notifications')}
+              className="uber-icon-btn relative"
+              data-testid="button-notifications"
+            >
+              <Bell className="h-5 w-5" />
+            </button>
+          </div>
         </div>
-      </div>
       
       {prefilledMessage && (
         <Card className="mb-4 border-primary/30 bg-primary/5 uber-slide-in-up uber-stagger-1">
@@ -206,12 +195,14 @@ const Chat: React.FC = () => {
         </Card>
       )}
 
-      <div className="flex h-[calc(100vh-12rem)] overflow-hidden rounded-2xl border border-border/50 shadow-lg bg-card dark:bg-gray-900 uber-slide-in-up uber-stagger-2">
-        <div className={`${isMobile ? 'w-full md:w-80' : 'w-80'} h-full border-r border-border/50 bg-card dark:bg-gray-900`}>
-          <ChatSidebar />
-        </div>
-        <div className="flex-1 h-full overflow-hidden bg-gradient-to-b from-muted/30 to-muted/10 dark:from-gray-950 dark:to-gray-900">
-          <ChatWindow />
+      <div className="uber-card-elevated overflow-hidden rounded-2xl uber-slide-in-up uber-stagger-2">
+        <div className="flex h-[calc(100vh-280px)]">
+          <div className={`${isMobile ? 'w-full md:w-80' : 'w-80'} h-full border-r border-border/30`}>
+            <ChatSidebar />
+          </div>
+          <div className="flex-1 h-full overflow-hidden bg-muted/20">
+            <ChatWindow />
+          </div>
         </div>
       </div>
 
@@ -219,14 +210,14 @@ const Chat: React.FC = () => {
         {FEATURED_TEMPLATES.map((template) => (
           <button
             key={template.id}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all shadow-sm hover:shadow-md hover:scale-105 ${
+            className={`uber-pill transition-all hover:scale-105 ${
               template.color === 'bg-amber-500' 
-                ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400 hover:bg-amber-500/20' 
+                ? 'uber-pill-warning' 
                 : template.color === 'bg-pink-500' 
-                ? 'bg-pink-500/10 text-pink-700 dark:text-pink-400 hover:bg-pink-500/20' 
+                ? 'uber-pill-danger' 
                 : template.color === 'bg-blue-500' 
-                ? 'bg-blue-500/10 text-blue-700 dark:text-blue-400 hover:bg-blue-500/20' 
-                : 'bg-green-500/10 text-green-700 dark:text-green-400 hover:bg-green-500/20'
+                ? 'uber-pill-info' 
+                : 'uber-pill-success'
             }`}
             onClick={() => handleSelectTemplate(template.text)}
             data-testid={`featured-template-${template.id}`}

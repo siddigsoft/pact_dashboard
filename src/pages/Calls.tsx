@@ -1,14 +1,9 @@
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Search, 
   Phone, 
@@ -293,7 +288,7 @@ const Calls = () => {
       )}
       
       {isCallActive && callState.recipient && (
-        <Card className="uber-card-elevated overflow-hidden border-0">
+        <div className="uber-card-elevated overflow-hidden">
           <div className={`relative ${
             isConnected 
               ? 'bg-foreground' 
@@ -301,7 +296,7 @@ const Calls = () => {
                 ? 'bg-green-600'
                 : 'bg-foreground'
           }`}>
-            <CardContent className="relative py-12 px-6">
+            <div className="relative py-12 px-6">
               <div className="flex flex-col items-center space-y-6">
                 <div className="relative">
                   <Avatar className="h-28 w-28 ring-4 ring-white/20">
@@ -409,9 +404,9 @@ const Calls = () => {
                   )}
                 </div>
               </div>
-            </CardContent>
+            </div>
           </div>
-        </Card>
+        </div>
       )}
       
       {!isCallActive && (
