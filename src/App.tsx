@@ -176,7 +176,7 @@ const AppRoutes = () => {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/mmp" element={<MMP />} />
         <Route path="/mmp/upload" element={<MMPUpload />} />
-        <Route path="/mmp/:id" element={<MMPDetail />} />
+        <Route path="/mmp/:id" element={<MMPDetailView />} />
         <Route path="/mmp/:id/view" element={<MMPDetailView />} />
         <Route path="/mmp/:id/edit" element={<EditMMP />} />
         <Route path="/mmp/edit/:id" element={<EditMMP />} />
