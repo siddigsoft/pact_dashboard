@@ -149,7 +149,7 @@ export function MobileBottomNav({
         data-testid="mobile-bottom-nav"
         aria-label="Main navigation"
       >
-        <div className="flex items-center justify-around h-16 px-1">
+        <div className="flex items-center justify-around h-12 px-0.5">
           {navItems.map((item) => {
             const Icon = item.icon;
             const active = isActive(item.path);
@@ -305,7 +305,7 @@ export function MobileBottomNav({
         </div>
       </nav>
 
-      <div className="h-16 sm:hidden" aria-hidden="true" />
+      <div className="h-12 sm:hidden" aria-hidden="true" />
 
       <MobileMoreMenu isOpen={isMenuOpen} onClose={() => setIsMenuOpen(false)} />
       
@@ -316,5 +316,5 @@ export function MobileBottomNav({
 }
 
 export function MobileNavSpacer() {
-  return <div className="h-16 sm:hidden" aria-hidden="true" />;
+  return <div className="h-12 sm:hidden" aria-hidden="true" />;
 }

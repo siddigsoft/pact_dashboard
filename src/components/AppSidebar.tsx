@@ -359,28 +359,28 @@
 
     return (
       <Sidebar collapsible="icon" className="border-r bg-white dark:bg-gray-900">
-        <SidebarHeader className="border-b py-1">
-          <div className="flex h-8 items-center gap-1.5 px-2">
-            <img src={Logo} alt="PACT Logo" className="h-7 w-7 shrink-0 object-contain" />
-            <SidebarTrigger className="ml-auto h-6 w-6" data-testid="button-sidebar-trigger" />
+        <SidebarHeader className="border-b py-0.5">
+          <div className="flex h-6 items-center gap-1 px-1">
+            <img src={Logo} alt="PACT Logo" className="h-5 w-5 shrink-0 object-contain" />
+            <SidebarTrigger className="ml-auto h-5 w-5" data-testid="button-sidebar-trigger" />
           </div>
         </SidebarHeader>
 
-        <SidebarContent className="px-1.5 py-1">
+        <SidebarContent className="px-0.5 py-0.5">
           {menuGroups.map((group, index) => {
             const isCollapsed = collapsedGroups.has(group.id);
             
             return (
-              <Collapsible key={group.id} open={!isCollapsed} className={index > 0 ? "mt-0" : ""}>
-                <SidebarGroup className="py-0.5">
+              <Collapsible key={group.id} open={!isCollapsed} className="">
+                <SidebarGroup className="py-0">
                   <CollapsibleTrigger asChild>
                     <SidebarGroupLabel 
-                      className="px-1.5 py-0.5 h-5 text-[10px] uppercase tracking-wide font-semibold text-blue-600 dark:text-blue-300 cursor-pointer flex items-center justify-between hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors"
+                      className="px-1 py-0 h-4 text-[9px] uppercase tracking-wide font-semibold text-blue-600 dark:text-blue-300 cursor-pointer flex items-center justify-between hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors"
                       onClick={() => toggleGroupCollapse(group.id)}
                       data-testid={`group-label-${group.id}`}
                     >
                       <span>{group.label}</span>
-                      <ChevronDown className={`h-2.5 w-2.5 transition-transform duration-200 ${isCollapsed ? '-rotate-90' : ''}`} />
+                      <ChevronDown className={`h-2 w-2 transition-transform duration-200 ${isCollapsed ? '-rotate-90' : ''}`} />
                     </SidebarGroupLabel>
                   </CollapsibleTrigger>
                   <CollapsibleContent>
@@ -392,16 +392,16 @@
                               asChild
                               isActive={pathname === item.url}
                               tooltip={item.title}
-                              className={`h-7 px-1.5 rounded text-xs font-medium transition-all duration-200 
+                              className={`h-6 px-1 rounded text-[11px] font-medium transition-all duration-200 
                                 ${
                                   pathname === item.url
                                     ? "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 font-semibold"
                                     : "hover:bg-blue-50 dark:hover:bg-blue-800"
                                 }`}
                             >
-                              <Link to={item.url} className="flex items-center gap-2" data-testid={`nav-link-${item.id}`}>
+                              <Link to={item.url} className="flex items-center gap-1.5" data-testid={`nav-link-${item.id}`}>
                                 <item.icon
-                                  className={`h-3.5 w-3.5 ${
+                                  className={`h-3 w-3 ${
                                     pathname === item.url
                                       ? "text-blue-700 dark:text-blue-300"
                                       : "text-blue-600 dark:text-blue-400"
@@ -409,7 +409,7 @@
                                 />
                                 <span className="truncate flex-1">{item.title}</span>
                                 {item.isPinned && (
-                                  <Pin className="h-2.5 w-2.5 text-amber-500" />
+                                  <Pin className="h-2 w-2 text-amber-500" />
                                 )}
                               </Link>
                             </SidebarMenuButton>
@@ -424,26 +424,26 @@
           })}
         </SidebarContent>
 
-        <SidebarFooter className="border-t p-1.5">
+        <SidebarFooter className="border-t p-0.5">
           {currentUser && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
-                  className="w-full justify-start gap-2 px-1.5 py-1 h-auto hover:bg-blue-50 dark:hover:bg-gray-800"
+                  className="w-full justify-start gap-1.5 px-1 py-0.5 h-auto hover:bg-blue-50 dark:hover:bg-gray-800"
                   data-testid="button-user-menu"
                 >
-                  <Avatar className="h-7 w-7">
+                  <Avatar className="h-5 w-5">
                     <AvatarImage src={currentUser.avatar} alt={currentUser.name} />
-                    <AvatarFallback className="bg-blue-600 text-white text-[10px]">
+                    <AvatarFallback className="bg-blue-600 text-white text-[8px]">
                       {getInitials(currentUser.name)}
                     </AvatarFallback>
                   </Avatar>
-                  <div className="flex flex-col items-start text-left text-xs leading-tight group-data-[collapsible=icon]:hidden">
+                  <div className="flex flex-col items-start text-left text-[10px] leading-tight group-data-[collapsible=icon]:hidden">
                     <span className="font-semibold text-gray-900 dark:text-gray-100">{currentUser.name}</span>
-                    <span className="text-[10px] text-gray-500 dark:text-gray-400">{getPrimaryRole()}</span>
+                    <span className="text-[9px] text-gray-500 dark:text-gray-400">{getPrimaryRole()}</span>
                   </div>
-                  <ChevronUp className="ml-auto h-3 w-3 text-muted-foreground group-data-[collapsible=icon]:hidden" />
+                  <ChevronUp className="ml-auto h-2.5 w-2.5 text-muted-foreground group-data-[collapsible=icon]:hidden" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent side="top" align="end" className="w-56">
