@@ -56,10 +56,10 @@ const ChatItem: React.FC<ChatItemProps> = ({ chat, isActive, onClick }) => {
 
   return (
     <button 
-      className={`w-full p-3 rounded-lg text-left transition-all ${
+      className={`w-full p-3 rounded-xl text-left transition-all duration-200 group ${
         isActive 
-          ? 'bg-primary/10 dark:bg-primary/20' 
-          : 'hover:bg-muted/50 dark:hover:bg-gray-800'
+          ? 'bg-primary/10 dark:bg-primary/20 shadow-sm ring-1 ring-primary/20' 
+          : 'hover:bg-muted/60 dark:hover:bg-gray-800/80'
       }`}
       onClick={onClick}
       data-testid={`chat-item-${chat.id}`}
@@ -67,37 +67,39 @@ const ChatItem: React.FC<ChatItemProps> = ({ chat, isActive, onClick }) => {
       <div className="flex items-start gap-3">
         <div className="relative">
           {chat.type === 'private' ? (
-            <Avatar className="h-11 w-11">
-              <AvatarFallback className="bg-gradient-to-br from-blue-500 to-blue-600 text-white font-medium">
+            <Avatar className={`h-12 w-12 ring-2 ring-offset-2 ring-offset-background transition-all ${isActive ? 'ring-primary/30' : 'ring-transparent group-hover:ring-primary/20'}`}>
+              <AvatarFallback className="bg-gradient-to-br from-blue-500 to-blue-600 text-white font-semibold text-sm">
                 {chat.name.charAt(0).toUpperCase()}
               </AvatarFallback>
             </Avatar>
           ) : chat.type === 'state-group' ? (
-            <Avatar className="h-11 w-11">
+            <Avatar className={`h-12 w-12 ring-2 ring-offset-2 ring-offset-background transition-all ${isActive ? 'ring-green-400/30' : 'ring-transparent group-hover:ring-green-400/20'}`}>
               <AvatarFallback className="bg-gradient-to-br from-green-500 to-green-600 text-white">
                 <MapPin className="h-5 w-5" />
               </AvatarFallback>
             </Avatar>
           ) : (
-            <Avatar className="h-11 w-11">
+            <Avatar className={`h-12 w-12 ring-2 ring-offset-2 ring-offset-background transition-all ${isActive ? 'ring-purple-400/30' : 'ring-transparent group-hover:ring-purple-400/20'}`}>
               <AvatarFallback className="bg-gradient-to-br from-purple-500 to-purple-600 text-white">
                 <Users className="h-5 w-5" />
               </AvatarFallback>
             </Avatar>
           )}
           {chat.type === 'private' && (
-            <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-background" />
+            <div className="absolute bottom-0.5 right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-background shadow-sm">
+              <div className="w-full h-full rounded-full bg-green-400 animate-pulse" />
+            </div>
           )}
         </div>
         
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 py-0.5">
           <div className="flex items-center justify-between gap-2">
-            <h3 className={`font-medium text-sm truncate ${
-              chat.unreadCount > 0 ? 'text-foreground' : 'text-muted-foreground'
+            <h3 className={`font-semibold text-sm truncate transition-colors ${
+              chat.unreadCount > 0 ? 'text-foreground' : isActive ? 'text-foreground' : 'text-foreground/80'
             }`}>
               {chat.name}
             </h3>
-            <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+            <span className={`text-[10px] whitespace-nowrap ${chat.unreadCount > 0 ? 'text-primary font-medium' : 'text-muted-foreground'}`}>
               {formatDistanceToNow(new Date(chat.lastMessage?.timestamp || chat.createdAt), { 
                 addSuffix: false 
               })}
@@ -117,13 +119,13 @@ const ChatItem: React.FC<ChatItemProps> = ({ chat, isActive, onClick }) => {
             </div>
           )}
           
-          <div className="flex items-center justify-between mt-1">
-            <p className="text-xs text-muted-foreground truncate flex items-center gap-1">
+          <div className="flex items-center justify-between mt-1.5 gap-2">
+            <p className={`text-xs truncate flex items-center gap-1.5 ${chat.unreadCount > 0 ? 'text-foreground/70 font-medium' : 'text-muted-foreground'}`}>
               {getLastMessageIcon()}
               <span className="truncate">{getLastMessageText()}</span>
             </p>
             {chat.unreadCount > 0 && (
-              <Badge variant="default" className="h-5 min-w-5 px-1.5 text-[10px] font-semibold">
+              <Badge variant="default" className="h-5 min-w-5 px-1.5 text-[10px] font-bold rounded-full shadow-sm">
                 {chat.unreadCount > 99 ? '99+' : chat.unreadCount}
               </Badge>
             )}
@@ -168,20 +170,20 @@ const ChatSidebar: React.FC = () => {
 
   return (
     <div className="w-full h-full flex flex-col">
-      <div className="p-3 border-b bg-card dark:bg-gray-900">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <h2 className="text-base font-semibold" data-testid="text-messages-title">Messages</h2>
+      <div className="p-4 border-b bg-card/95 dark:bg-gray-900/95 backdrop-blur-md">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2.5">
+            <h2 className="text-lg font-bold tracking-tight" data-testid="text-messages-title">Messages</h2>
             {unreadCount > 0 && (
-              <Badge variant="destructive" className="h-5 text-[10px]" data-testid="badge-unread-count">
+              <Badge variant="destructive" className="h-5 px-2 text-[10px] font-bold rounded-full shadow-sm" data-testid="badge-unread-count">
                 {unreadCount}
               </Badge>
             )}
           </div>
           <Dialog open={isNewChatOpen} onOpenChange={setIsNewChatOpen}>
             <DialogTrigger asChild>
-              <Button size="icon" variant="ghost" className="h-8 w-8" data-testid="button-new-chat">
-                <Plus className="h-4 w-4" />
+              <Button size="icon" variant="ghost" className="h-9 w-9 rounded-full hover:bg-primary/10 transition-colors" data-testid="button-new-chat">
+                <Plus className="h-5 w-5" />
               </Button>
             </DialogTrigger>
             <DialogContent>
@@ -241,10 +243,10 @@ const ChatSidebar: React.FC = () => {
         </div>
         
         <div className="relative">
-          <Search className="absolute left-3 top-2 h-4 w-4 text-muted-foreground" />
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search conversations..."
-            className="pl-9 h-8 text-sm bg-muted/50 dark:bg-gray-800 border-0"
+            className="pl-10 h-10 text-sm bg-muted/50 dark:bg-gray-800/80 border border-border/30 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary/30 transition-all"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             data-testid="input-search-chats"
@@ -253,7 +255,7 @@ const ChatSidebar: React.FC = () => {
       </div>
       
       <ScrollArea className="flex-1">
-        <div className="p-2 space-y-0.5">
+        <div className="p-2 space-y-1">
           {filteredChats.length > 0 ? (
             filteredChats.map(chat => (
               <ChatItem 
@@ -264,13 +266,15 @@ const ChatSidebar: React.FC = () => {
               />
             ))
           ) : (
-            <div className="py-12 text-center">
-              <MessageSquare className="h-10 w-10 mx-auto text-muted-foreground/30 mb-3" />
-              <p className="text-sm font-medium text-muted-foreground">
+            <div className="py-16 text-center px-4">
+              <div className="h-16 w-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center">
+                <MessageSquare className="h-8 w-8 text-primary/40" />
+              </div>
+              <p className="text-sm font-semibold text-foreground/80">
                 {searchQuery ? 'No chats found' : 'No conversations yet'}
               </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                {searchQuery ? 'Try a different search' : 'Start a new message to begin'}
+              <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
+                {searchQuery ? 'Try a different search term' : 'Start a new message to connect with your team'}
               </p>
             </div>
           )}

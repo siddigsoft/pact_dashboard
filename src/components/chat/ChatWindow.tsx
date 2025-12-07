@@ -488,7 +488,7 @@ const ChatWindow: React.FC = () => {
         </div>
       )}
 
-      <div className="p-3 bg-card dark:bg-gray-900 border-t">
+      <div className="p-3 bg-card/95 dark:bg-gray-900/95 backdrop-blur-md border-t shadow-sm">
         <div className="flex items-end gap-2">
           <input
             ref={fileInputRef}
@@ -502,19 +502,19 @@ const ChatWindow: React.FC = () => {
           <Button
             variant="ghost"
             size="icon"
-            className="h-9 w-9 shrink-0"
+            className="h-10 w-10 shrink-0 rounded-full hover:bg-primary/10 transition-colors"
             onClick={() => fileInputRef.current?.click()}
             disabled={isSendingMessage || Object.values(uploadingFiles).some(v => v)}
             data-testid="button-attach"
           >
-            <Paperclip className="h-4 w-4" />
+            <Paperclip className="h-5 w-5 text-muted-foreground" />
           </Button>
           
           <div className="flex-1 relative">
             <Textarea
               ref={textareaRef}
               placeholder="Type a message..."
-              className="resize-none min-h-[36px] max-h-[120px] py-2 pr-10 text-sm bg-muted/50 dark:bg-gray-800 border-0"
+              className="resize-none min-h-[44px] max-h-[120px] py-3 pl-4 pr-12 text-sm bg-muted/60 dark:bg-gray-800/80 border border-border/30 rounded-2xl focus:ring-2 focus:ring-primary/20 focus:border-primary/30 transition-all"
               value={messageText}
               onChange={handleTextareaChange}
               onKeyDown={handleKeyDown}
@@ -524,24 +524,28 @@ const ChatWindow: React.FC = () => {
             <Button
               variant="ghost"
               size="icon"
-              className="absolute right-1 bottom-1 h-7 w-7"
+              className="absolute right-2 bottom-1.5 h-8 w-8 rounded-full hover:bg-primary/10"
               data-testid="button-emoji"
             >
-              <Smile className="h-4 w-4 text-muted-foreground" />
+              <Smile className="h-5 w-5 text-muted-foreground" />
             </Button>
           </div>
           
           <Button 
             size="icon" 
-            className="h-9 w-9 shrink-0"
+            className={`h-10 w-10 shrink-0 rounded-full shadow-md transition-all ${
+              messageText.trim() || selectedFiles.length > 0
+                ? 'bg-gradient-to-br from-primary to-primary/90 hover:shadow-lg hover:scale-105'
+                : ''
+            }`}
             onClick={handleSendMessage}
             disabled={(!messageText.trim() && selectedFiles.length === 0) || isSendingMessage || Object.values(uploadingFiles).some(v => v)}
             data-testid="button-send"
           >
             {isSendingMessage || Object.values(uploadingFiles).some(v => v) ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Loader2 className="h-5 w-5 animate-spin" />
             ) : (
-              <Send className="h-4 w-4" />
+              <Send className="h-5 w-5" />
             )}
           </Button>
         </div>
