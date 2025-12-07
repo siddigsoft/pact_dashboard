@@ -21,6 +21,8 @@ interface TeamLocationMapProps {
   lastRefresh?: Date;
   onForceRefresh?: () => void;
   onlineUserIds?: Set<string>;
+  onCallUser?: (user: User) => void;
+  onMessageUser?: (user: User) => void;
 }
 
 const AUTO_REFRESH_INTERVAL = 15000;
@@ -32,7 +34,9 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({
   connectionStatus = 'disconnected',
   lastRefresh,
   onForceRefresh,
-  onlineUserIds = new Set()
+  onlineUserIds = new Set(),
+  onCallUser,
+  onMessageUser
 }) => {
   const mapRef = useRef<L.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -328,27 +332,30 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({
             ` : ''}
             
             <div style="display: flex; gap: 8px; padding-top: 8px; border-top: 1px solid #e5e7eb;">
-              ${phoneNumber ? `
-                <a href="tel:${phoneNumber}" 
-                   style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 12px; background: #22c55e; color: white; border-radius: 6px; text-decoration: none; font-size: 12px; font-weight: 500; transition: background 0.2s;"
-                   onmouseover="this.style.background='#16a34a'" 
-                   onmouseout="this.style.background='#22c55e'">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
-                  </svg>
-                  Call
-                </a>
-              ` : ''}
-              <a href="${phoneNumber ? `https://wa.me/${phoneNumber.replace(/[^0-9]/g, '')}` : `mailto:${userEmail}`}" 
-                 target="_blank"
-                 style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 12px; background: #3b82f6; color: white; border-radius: 6px; text-decoration: none; font-size: 12px; font-weight: 500; transition: background 0.2s;"
+              <button 
+                 class="map-call-btn"
+                 data-user-id="${user.id}"
+                 data-testid="button-map-call-${user.id}"
+                 style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 12px; background: #22c55e; color: white; border-radius: 6px; border: none; font-size: 12px; font-weight: 500; cursor: pointer; transition: background 0.2s;"
+                 onmouseover="this.style.background='#16a34a'" 
+                 onmouseout="this.style.background='#22c55e'">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+                </svg>
+                Call
+              </button>
+              <button 
+                 class="map-message-btn"
+                 data-user-id="${user.id}"
+                 data-testid="button-map-message-${user.id}"
+                 style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 12px; background: #3b82f6; color: white; border-radius: 6px; border: none; font-size: 12px; font-weight: 500; cursor: pointer; transition: background 0.2s;"
                  onmouseover="this.style.background='#2563eb'" 
                  onmouseout="this.style.background='#3b82f6'">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
                 </svg>
                 Message
-              </a>
+              </button>
             </div>
           </div>
         `;
@@ -490,6 +497,49 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({
       }, 200);
     }
   }, []);
+
+  useEffect(() => {
+    const handleMapButtonClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      const callBtn = target.closest('.map-call-btn');
+      const messageBtn = target.closest('.map-message-btn');
+      
+      if (callBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        const userId = callBtn.getAttribute('data-user-id');
+        if (userId && onCallUser) {
+          const user = users.find(u => u.id === userId);
+          if (user) {
+            onCallUser(user);
+          }
+        }
+      }
+      
+      if (messageBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        const userId = messageBtn.getAttribute('data-user-id');
+        if (userId && onMessageUser) {
+          const user = users.find(u => u.id === userId);
+          if (user) {
+            onMessageUser(user);
+          }
+        }
+      }
+    };
+
+    const container = mapContainerRef.current;
+    if (container) {
+      container.addEventListener('click', handleMapButtonClick);
+    }
+
+    return () => {
+      if (container) {
+        container.removeEventListener('click', handleMapButtonClick);
+      }
+    };
+  }, [users, onCallUser, onMessageUser]);
 
   // Initialize fullscreen map
   const initializeFullscreenMap = useCallback(() => {
