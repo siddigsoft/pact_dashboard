@@ -428,7 +428,7 @@ export function useRealtimeTeamLocations({
 
   return {
     teamLocations,
-    onlineUserIds,
+    onlineUserIds: Array.from(onlineUserIds),
     isConnected,
     connectionStatus,
     lastRefresh,

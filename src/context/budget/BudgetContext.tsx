@@ -266,8 +266,12 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
       };
 
       if (updates.totalBudgetCents !== undefined) dbUpdates.total_budget_cents = updates.totalBudgetCents;
+      if (updates.allocatedBudgetCents !== undefined) dbUpdates.allocated_budget_cents = updates.allocatedBudgetCents;
+      if (updates.remainingBudgetCents !== undefined) dbUpdates.remaining_budget_cents = updates.remainingBudgetCents;
+      if (updates.budgetPeriod !== undefined) dbUpdates.budget_period = updates.budgetPeriod;
+      if (updates.fiscalYear !== undefined) dbUpdates.fiscal_year = updates.fiscalYear;
       if (updates.status) dbUpdates.status = updates.status;
-      if (updates.budgetNotes) dbUpdates.budget_notes = updates.budgetNotes;
+      if (updates.budgetNotes !== undefined) dbUpdates.budget_notes = updates.budgetNotes;
       if (updates.categoryAllocations) dbUpdates.category_allocations = updates.categoryAllocations;
 
       const { error } = await supabase
