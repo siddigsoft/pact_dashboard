@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { UberCommunicationNav, UberNavSpacer } from '@/components/mobile/UberCommunicationNav';
 import { 
   Search, 
   Phone, 
@@ -726,11 +727,15 @@ const Calls = () => {
           }}
           data-testid="fab-new-call"
           title="Quick call to available contact"
+          style={{ bottom: '5rem' }}
         >
           <Phone className="h-6 w-6" />
         </button>
       )}
+
+        <UberNavSpacer />
       </div>
+      <UberCommunicationNav callsMissed={2} notificationCount={3} />
     </div>
   );
 };

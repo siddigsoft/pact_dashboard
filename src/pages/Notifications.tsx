@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
+import { UberCommunicationNav, UberNavSpacer } from '@/components/mobile/UberCommunicationNav';
 import { 
   Bell, 
   CheckCheck, 
@@ -578,32 +579,9 @@ const Notifications: React.FC = () => {
           </ScrollArea>
         )}
 
-        <div className="flex items-center justify-center gap-3 mt-4 pt-4 border-t uber-slide-in-up uber-stagger-6">
-          <button
-            onClick={() => navigate('/chat')}
-            className="uber-btn uber-btn-outline"
-            data-testid="button-go-to-messages"
-          >
-            <MessageSquare className="h-4 w-4" />
-            Messages
-          </button>
-          <button
-            onClick={() => navigate('/calls')}
-            className="uber-btn uber-btn-outline"
-            data-testid="button-go-to-calls"
-          >
-            <Phone className="h-4 w-4" />
-            Calls
-          </button>
-          <button
-            className="uber-btn uber-btn-ghost"
-            data-testid="button-notification-settings"
-          >
-            <Settings className="h-4 w-4" />
-            Settings
-          </button>
-        </div>
+        <UberNavSpacer />
       </div>
+      <UberCommunicationNav notificationCount={unreadCount} />
     </div>
   );
 };
