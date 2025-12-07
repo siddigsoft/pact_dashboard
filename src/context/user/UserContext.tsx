@@ -260,6 +260,58 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   useEffect(() => {
+    const channel = supabase
+      .channel('profiles-updates')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'profiles' },
+        (payload) => {
+          const updated: any = (payload as any).new;
+          if (!updated || !updated.id) return;
+
+          let locationData: any | undefined = undefined;
+          if (updated.location !== undefined) {
+            try {
+              locationData = typeof updated.location === 'string'
+                ? JSON.parse(updated.location)
+                : updated.location;
+            } catch (e) {
+              console.warn('Failed to parse profile.location from realtime payload');
+            }
+          }
+
+          setAppUsers(prev => prev.map(u => {
+            if (u.id !== updated.id) return u;
+            return {
+              ...u,
+              availability: updated.availability ?? u.availability,
+              location: locationData !== undefined ? { ...(u.location || {}), ...locationData } : u.location,
+            };
+          }));
+
+          setCurrentUser(prev => {
+            if (!prev || prev.id !== updated.id) return prev;
+            const next = {
+              ...prev,
+              availability: updated.availability ?? prev.availability,
+              location: locationData !== undefined ? { ...(prev.location || {}), ...locationData } : prev.location,
+            } as User;
+            try {
+              localStorage.setItem('PACTCurrentUser', JSON.stringify(next));
+              localStorage.setItem(`user-${next.id}`, JSON.stringify(next));
+            } catch {}
+            return next;
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      try { supabase.removeChannel(channel); } catch {}
+    };
+  }, []);
+
+  useEffect(() => {
     const activityInterval = setInterval(() => {
       if (currentUser) {
         setCurrentUser(prev => {
