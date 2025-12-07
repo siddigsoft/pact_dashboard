@@ -25,7 +25,9 @@ import {
   MicOff,
   Volume2,
   Star,
-  UserPlus
+  UserPlus,
+  MoreVertical,
+  Info
 } from 'lucide-react';
 import { useUser } from '@/context/user/UserContext';
 import { useAppContext } from '@/context/AppContext';
@@ -69,6 +71,13 @@ const Calls = () => {
       return date.toLocaleDateString([], { weekday: 'short' });
     }
     return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  };
+
+  const getOnlineStatus = (userId: string) => {
+    const rand = userId.charCodeAt(0) % 3;
+    if (rand === 0) return 'online';
+    if (rand === 1) return 'away';
+    return 'offline';
   };
   
   const filteredUsers = users.filter(user => 
@@ -120,8 +129,16 @@ const Calls = () => {
   const getInitials = (name: string) => 
     name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
 
+  const StatusDot = ({ status }: { status: string }) => (
+    <div className={`w-3 h-3 rounded-full border-2 border-background ${
+      status === 'online' ? 'bg-green-500' : 
+      status === 'away' ? 'bg-amber-500' : 
+      'bg-gray-400'
+    }`} />
+  );
+
   return (
-    <div className="container mx-auto p-4 space-y-4 max-w-4xl">
+    <div className="container mx-auto p-4 space-y-4 max-w-4xl" data-testid="calls-page">
       <div className="flex items-center gap-3">
         <Button 
           variant="ghost" 
@@ -132,52 +149,72 @@ const Calls = () => {
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div>
-          <h1 className="text-xl font-bold" data-testid="text-page-title">Calls</h1>
+          <h1 className="text-xl font-bold flex items-center gap-2" data-testid="text-page-title">
+            <Phone className="h-5 w-5 text-primary" />
+            Calls
+          </h1>
           <p className="text-xs text-muted-foreground">Voice and video calls</p>
         </div>
       </div>
       
       {isCallActive && callState.recipient && (
-        <Card className="border-2 border-primary/30 bg-gradient-to-br from-primary/5 to-primary/10">
+        <Card className="border-2 border-primary/30 bg-gradient-to-br from-primary/5 via-primary/10 to-primary/5 dark:from-primary/10 dark:via-primary/15 dark:to-primary/10">
           <CardContent className="py-8">
             <div className="flex flex-col items-center space-y-6">
               <div className="relative">
-                <Avatar className="h-24 w-24 ring-4 ring-primary/20">
+                <Avatar className="h-28 w-28 ring-4 ring-primary/20">
                   <AvatarImage src={callState.recipient.avatar} alt={callState.recipient.name} />
-                  <AvatarFallback className="bg-primary text-primary-foreground text-2xl">
+                  <AvatarFallback className="bg-gradient-to-br from-blue-500 to-blue-600 text-white text-3xl">
                     {getInitials(callState.recipient.name)}
                   </AvatarFallback>
                 </Avatar>
                 {(isOutgoing || isIncoming) && (
-                  <div className="absolute inset-0 rounded-full border-4 border-primary animate-ping opacity-30" />
+                  <>
+                    <div className="absolute inset-0 rounded-full border-4 border-primary animate-ping opacity-20" />
+                    <div className="absolute inset-0 rounded-full border-2 border-primary animate-pulse opacity-40" />
+                  </>
                 )}
                 {isConnected && (
-                  <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
-                    <Phone className="h-3 w-3 text-white" />
+                  <div className="absolute -bottom-1 -right-1 w-8 h-8 bg-green-500 rounded-full flex items-center justify-center ring-4 ring-background">
+                    <Phone className="h-4 w-4 text-white" />
                   </div>
                 )}
               </div>
               
               <div className="text-center">
-                <h3 className="text-xl font-semibold">{callState.recipient.name}</h3>
+                <h3 className="text-2xl font-semibold">{callState.recipient.name}</h3>
                 <p className="text-sm text-muted-foreground mt-1">
-                  {isIncoming && 'Incoming call...'}
-                  {isOutgoing && 'Calling...'}
+                  {isIncoming && (
+                    <span className="flex items-center justify-center gap-2">
+                      <PhoneIncoming className="h-4 w-4 text-blue-500 animate-bounce" />
+                      Incoming call...
+                    </span>
+                  )}
+                  {isOutgoing && (
+                    <span className="flex items-center justify-center gap-2">
+                      <span className="flex gap-0.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: '0ms' }} />
+                        <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: '150ms' }} />
+                        <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: '300ms' }} />
+                      </span>
+                      Calling
+                    </span>
+                  )}
                   {isConnected && (
-                    <span className="text-green-600 dark:text-green-400 font-medium">
+                    <span className="text-green-600 dark:text-green-400 font-medium text-lg">
                       {formatDuration(callDuration)}
                     </span>
                   )}
                 </p>
               </div>
               
-              <div className="flex items-center justify-center gap-4">
+              <div className="flex items-center justify-center gap-3">
                 {isIncoming && (
                   <>
                     <Button 
                       variant="destructive" 
                       size="icon"
-                      className="h-14 w-14 rounded-full"
+                      className="h-14 w-14 rounded-full shadow-lg"
                       onClick={rejectCall}
                       data-testid="button-reject-call"
                     >
@@ -185,7 +222,7 @@ const Calls = () => {
                     </Button>
                     <Button 
                       size="icon"
-                      className="h-14 w-14 rounded-full bg-green-500 hover:bg-green-600"
+                      className="h-14 w-14 rounded-full bg-green-500 hover:bg-green-600 shadow-lg"
                       onClick={acceptCall}
                       data-testid="button-accept-call"
                     >
@@ -198,7 +235,7 @@ const Calls = () => {
                   <Button 
                     variant="destructive" 
                     size="icon"
-                    className="h-14 w-14 rounded-full"
+                    className="h-14 w-14 rounded-full shadow-lg"
                     onClick={endCall}
                     data-testid="button-cancel-call"
                   >
@@ -209,7 +246,7 @@ const Calls = () => {
                 {isConnected && (
                   <>
                     <Button 
-                      variant={isMuted ? "destructive" : "outline"}
+                      variant={isMuted ? "destructive" : "secondary"}
                       size="icon"
                       className="h-12 w-12 rounded-full"
                       onClick={() => setIsMuted(!isMuted)}
@@ -219,17 +256,7 @@ const Calls = () => {
                     </Button>
                     
                     <Button 
-                      variant="destructive" 
-                      size="icon"
-                      className="h-14 w-14 rounded-full"
-                      onClick={endCall}
-                      data-testid="button-end-call"
-                    >
-                      <PhoneOff className="h-6 w-6" />
-                    </Button>
-                    
-                    <Button 
-                      variant={isVideoEnabled ? "default" : "outline"}
+                      variant={isVideoEnabled ? "default" : "secondary"}
                       size="icon"
                       className="h-12 w-12 rounded-full"
                       onClick={() => setIsVideoEnabled(!isVideoEnabled)}
@@ -239,13 +266,32 @@ const Calls = () => {
                     </Button>
                     
                     <Button 
-                      variant={isSpeakerOn ? "default" : "outline"}
+                      variant="destructive" 
+                      size="icon"
+                      className="h-14 w-14 rounded-full shadow-lg"
+                      onClick={endCall}
+                      data-testid="button-end-call"
+                    >
+                      <PhoneOff className="h-6 w-6" />
+                    </Button>
+                    
+                    <Button 
+                      variant={isSpeakerOn ? "default" : "secondary"}
                       size="icon"
                       className="h-12 w-12 rounded-full"
                       onClick={() => setIsSpeakerOn(!isSpeakerOn)}
                       data-testid="button-toggle-speaker"
                     >
                       <Volume2 className="h-5 w-5" />
+                    </Button>
+                    
+                    <Button 
+                      variant="secondary"
+                      size="icon"
+                      className="h-12 w-12 rounded-full"
+                      data-testid="button-more-options"
+                    >
+                      <MoreVertical className="h-5 w-5" />
                     </Button>
                   </>
                 )}
@@ -259,31 +305,37 @@ const Calls = () => {
         <>
           {favoriteUsers.length > 0 && (
             <div className="space-y-2">
-              <h3 className="text-sm font-medium text-muted-foreground px-1">Quick Dial</h3>
-              <div className="flex gap-3 overflow-x-auto pb-2">
-                {favoriteUsers.slice(0, 5).map((user) => (
-                  <button
-                    key={user.id}
-                    onClick={() => handleStartCall(user.id)}
-                    className="flex flex-col items-center gap-1 min-w-[60px] group"
-                    data-testid={`quickdial-${user.id}`}
-                  >
-                    <div className="relative">
-                      <Avatar className="h-12 w-12 ring-2 ring-primary/20 group-hover:ring-primary/50 transition-all">
-                        <AvatarImage src={user.avatar} alt={user.name} />
-                        <AvatarFallback className="bg-primary/10 text-sm">
-                          {getInitials(user.name)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Phone className="h-2 w-2 text-white" />
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide px-1">Quick Dial</h3>
+              <div className="flex gap-4 overflow-x-auto pb-2 px-1">
+                {favoriteUsers.slice(0, 6).map((user) => {
+                  const status = getOnlineStatus(user.id);
+                  return (
+                    <button
+                      key={user.id}
+                      onClick={() => handleStartCall(user.id)}
+                      className="flex flex-col items-center gap-1.5 min-w-[64px] group"
+                      data-testid={`quickdial-${user.id}`}
+                    >
+                      <div className="relative">
+                        <Avatar className="h-14 w-14 ring-2 ring-transparent group-hover:ring-primary/50 transition-all">
+                          <AvatarImage src={user.avatar} alt={user.name} />
+                          <AvatarFallback className="bg-gradient-to-br from-blue-500 to-blue-600 text-white">
+                            {getInitials(user.name)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="absolute bottom-0 right-0">
+                          <StatusDot status={status} />
+                        </div>
+                        <div className="absolute inset-0 flex items-center justify-center rounded-full bg-primary/0 group-hover:bg-primary/20 transition-colors">
+                          <Phone className="h-5 w-5 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </div>
                       </div>
-                    </div>
-                    <span className="text-xs text-muted-foreground truncate max-w-[60px]">
-                      {user.name.split(' ')[0]}
-                    </span>
-                  </button>
-                ))}
+                      <span className="text-xs text-muted-foreground truncate max-w-[64px] group-hover:text-foreground transition-colors">
+                        {user.name.split(' ')[0]}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -296,7 +348,7 @@ const Calls = () => {
               </TabsTrigger>
               <TabsTrigger value="history" className="text-xs gap-1.5" data-testid="tab-history">
                 <Clock className="h-3.5 w-3.5" />
-                History
+                Recent
               </TabsTrigger>
             </TabsList>
             
@@ -304,7 +356,7 @@ const Calls = () => {
               <Search className="absolute left-3 top-2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search contacts..."
-                className="pl-9 h-8 text-sm"
+                className="pl-9 h-8 text-sm bg-muted/50 dark:bg-gray-800 border-0"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 data-testid="input-search"
@@ -312,57 +364,83 @@ const Calls = () => {
             </div>
             
             <TabsContent value="contacts" className="mt-0">
-              <ScrollArea className="h-[calc(100vh-320px)]">
-                <div className="space-y-1">
-                  {filteredUsers.map((user) => (
-                    <div 
-                      key={user.id} 
-                      className="flex items-center justify-between gap-3 p-2.5 rounded-lg hover:bg-muted/50 transition-colors group"
-                      data-testid={`contact-${user.id}`}
-                    >
-                      <div className="flex items-center gap-3 min-w-0 flex-1">
-                        <Avatar className="h-10 w-10">
-                          <AvatarImage src={user.avatar} alt={user.name} />
-                          <AvatarFallback className="bg-primary/10 text-sm">
-                            {getInitials(user.name)}
-                          </AvatarFallback>
-                        </Avatar>
-                        
-                        <div className="min-w-0 flex-1">
-                          <div className="font-medium text-sm truncate" data-testid={`text-name-${user.id}`}>
-                            {user.name}
+              <ScrollArea className="h-[calc(100vh-340px)]">
+                <div className="space-y-0.5">
+                  {filteredUsers.map((user) => {
+                    const status = getOnlineStatus(user.id);
+                    const isFavorite = favorites.includes(user.id);
+                    
+                    return (
+                      <div 
+                        key={user.id} 
+                        className="flex items-center justify-between gap-3 p-2.5 rounded-lg hover:bg-muted/50 dark:hover:bg-gray-800 transition-colors group"
+                        data-testid={`contact-${user.id}`}
+                      >
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <div className="relative">
+                            <Avatar className="h-11 w-11">
+                              <AvatarImage src={user.avatar} alt={user.name} />
+                              <AvatarFallback className="bg-gradient-to-br from-blue-500 to-blue-600 text-white text-sm">
+                                {getInitials(user.name)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="absolute bottom-0 right-0">
+                              <StatusDot status={status} />
+                            </div>
                           </div>
-                          <div className="text-xs text-muted-foreground truncate">{user.role}</div>
+                          
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-sm truncate" data-testid={`text-name-${user.id}`}>
+                                {user.name}
+                              </span>
+                              {status === 'online' && (
+                                <Badge variant="secondary" className="h-4 text-[9px] px-1.5 bg-green-500/10 text-green-600 dark:text-green-400">
+                                  Online
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="text-xs text-muted-foreground truncate">{user.role}</div>
+                          </div>
+                        </div>
+                        
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className={`h-8 w-8 ${isFavorite ? 'text-amber-500' : 'opacity-0 group-hover:opacity-100'} transition-opacity`}
+                            onClick={(e) => { e.stopPropagation(); toggleFavorite(user.id); }}
+                            data-testid={`button-favorite-${user.id}`}
+                          >
+                            <Star className={`h-4 w-4 ${isFavorite ? 'fill-current' : ''}`} />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() => handleStartCall(user.id)}
+                            data-testid={`button-video-call-${user.id}`}
+                          >
+                            <Video className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            onClick={() => handleStartCall(user.id)}
+                            size="sm"
+                            className="gap-1.5 h-8"
+                            data-testid={`button-call-${user.id}`}
+                          >
+                            <Phone className="h-3.5 w-3.5" />
+                            Call
+                          </Button>
                         </div>
                       </div>
-                      
-                      <div className="flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className={`h-8 w-8 ${favorites.includes(user.id) ? 'text-amber-500' : 'opacity-0 group-hover:opacity-100'}`}
-                          onClick={(e) => { e.stopPropagation(); toggleFavorite(user.id); }}
-                          data-testid={`button-favorite-${user.id}`}
-                        >
-                          <Star className={`h-4 w-4 ${favorites.includes(user.id) ? 'fill-current' : ''}`} />
-                        </Button>
-                        <Button
-                          onClick={() => handleStartCall(user.id)}
-                          size="sm"
-                          className="gap-1.5 h-8"
-                          data-testid={`button-call-${user.id}`}
-                        >
-                          <Phone className="h-3.5 w-3.5" />
-                          Call
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                   
                   {filteredUsers.length === 0 && (
                     <div className="py-12 text-center">
-                      <Users className="h-10 w-10 mx-auto text-muted-foreground/40 mb-3" />
-                      <p className="text-sm text-muted-foreground">No contacts found</p>
+                      <Users className="h-10 w-10 mx-auto text-muted-foreground/30 mb-3" />
+                      <p className="text-sm font-medium text-muted-foreground">No contacts found</p>
                       <p className="text-xs text-muted-foreground mt-1">Try a different search</p>
                     </div>
                   )}
@@ -371,38 +449,38 @@ const Calls = () => {
             </TabsContent>
             
             <TabsContent value="history" className="mt-0">
-              <ScrollArea className="h-[calc(100vh-320px)]">
-                <div className="space-y-1">
+              <ScrollArea className="h-[calc(100vh-340px)]">
+                <div className="space-y-0.5">
                   {callHistory.map((call) => {
                     const recipient = users.find(u => u.id === call.recipientId);
                     if (!recipient) return null;
                     
                     const isMissed = call.status === 'missed';
-                    const isIncoming = call.direction === 'incoming';
+                    const isIncomingCall = call.direction === 'incoming';
                     
                     return (
                       <div 
                         key={call.id} 
-                        className="flex items-center justify-between gap-3 p-2.5 rounded-lg hover:bg-muted/50 transition-colors"
+                        className="flex items-center justify-between gap-3 p-2.5 rounded-lg hover:bg-muted/50 dark:hover:bg-gray-800 transition-colors group"
                         data-testid={`history-${call.id}`}
                       >
                         <div className="flex items-center gap-3 min-w-0 flex-1">
                           <div className="relative">
-                            <Avatar className="h-10 w-10">
+                            <Avatar className="h-11 w-11">
                               <AvatarImage src={recipient.avatar} alt={recipient.name} />
-                              <AvatarFallback className="bg-primary/10 text-sm">
+                              <AvatarFallback className="bg-gradient-to-br from-blue-500 to-blue-600 text-white text-sm">
                                 {getInitials(recipient.name)}
                               </AvatarFallback>
                             </Avatar>
-                            <div className={`absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full flex items-center justify-center ${
-                              isMissed ? 'bg-red-500' : isIncoming ? 'bg-blue-500' : 'bg-green-500'
+                            <div className={`absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full flex items-center justify-center ${
+                              isMissed ? 'bg-red-500' : isIncomingCall ? 'bg-blue-500' : 'bg-green-500'
                             }`}>
                               {isMissed ? (
-                                <PhoneMissed className="h-2 w-2 text-white" />
-                              ) : isIncoming ? (
-                                <PhoneIncoming className="h-2 w-2 text-white" />
+                                <PhoneMissed className="h-2.5 w-2.5 text-white" />
+                              ) : isIncomingCall ? (
+                                <PhoneIncoming className="h-2.5 w-2.5 text-white" />
                               ) : (
-                                <PhoneOutgoing className="h-2 w-2 text-white" />
+                                <PhoneOutgoing className="h-2.5 w-2.5 text-white" />
                               )}
                             </div>
                           </div>
@@ -411,35 +489,50 @@ const Calls = () => {
                             <div className={`font-medium text-sm truncate ${isMissed ? 'text-red-600 dark:text-red-400' : ''}`}>
                               {recipient.name}
                             </div>
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                               <span>{formatTime(call.timestamp)}</span>
                               {!isMissed && (
                                 <>
-                                  <span>-</span>
+                                  <span className="text-muted-foreground/50">-</span>
                                   <span>{formatDuration(call.duration)}</span>
                                 </>
+                              )}
+                              {isMissed && (
+                                <Badge variant="secondary" className="h-4 text-[9px] px-1.5 bg-red-500/10 text-red-600 dark:text-red-400">
+                                  Missed
+                                </Badge>
                               )}
                             </div>
                           </div>
                         </div>
                         
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-8 w-8"
-                          onClick={() => handleStartCall(call.recipientId)}
-                          data-testid={`button-callback-${call.id}`}
-                        >
-                          <Phone className="h-4 w-4" />
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                            data-testid={`button-info-${call.id}`}
+                          >
+                            <Info className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8"
+                            onClick={() => handleStartCall(call.recipientId)}
+                            data-testid={`button-callback-${call.id}`}
+                          >
+                            <Phone className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
                     );
                   })}
                   
                   {callHistory.length === 0 && (
                     <div className="py-12 text-center">
-                      <Clock className="h-10 w-10 mx-auto text-muted-foreground/40 mb-3" />
-                      <p className="text-sm text-muted-foreground">No call history</p>
+                      <Clock className="h-10 w-10 mx-auto text-muted-foreground/30 mb-3" />
+                      <p className="text-sm font-medium text-muted-foreground">No call history</p>
                       <p className="text-xs text-muted-foreground mt-1">Your calls will appear here</p>
                     </div>
                   )}
