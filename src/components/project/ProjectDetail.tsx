@@ -207,7 +207,17 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground">Budget</p>
-                      <p className="font-semibold">{project.budget.total.toLocaleString()}</p>
+                      <p className="font-semibold">
+                        {typeof project.budget === 'object' && project.budget !== null
+                          ? (() => {
+                              const budget = project.budget as any;
+                              const totalCents = budget.totalBudgetCents || budget.total_budget_cents || 0;
+                              const totalSDG = totalCents / 100;
+                              return `SDG ${totalSDG.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                            })()
+                          : 'No Budget'
+                        }
+                      </p>
                     </div>
                   </div>
                 )}
