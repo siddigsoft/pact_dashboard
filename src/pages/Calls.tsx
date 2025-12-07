@@ -162,146 +162,227 @@ const Calls = () => {
       </div>
       
       {isCallActive && callState.recipient && (
-        <Card className="border-2 border-primary/30 bg-gradient-to-br from-primary/5 via-primary/10 to-primary/5 dark:from-primary/10 dark:via-primary/15 dark:to-primary/10">
-          <CardContent className="py-8">
-            <div className="flex flex-col items-center space-y-6">
-              <div className="relative">
-                <Avatar className="h-28 w-28 ring-4 ring-primary/20">
-                  <AvatarImage src={callState.recipient.avatar} alt={callState.recipient.name} />
-                  <AvatarFallback className="bg-gradient-to-br from-blue-500 to-blue-600 text-white text-3xl">
-                    {getInitials(callState.recipient.name)}
-                  </AvatarFallback>
-                </Avatar>
-                {(isOutgoing || isIncoming) && (
-                  <>
-                    <div className="absolute inset-0 rounded-full border-4 border-primary animate-ping opacity-20" />
-                    <div className="absolute inset-0 rounded-full border-2 border-primary animate-pulse opacity-40" />
-                  </>
-                )}
-                {isConnected && (
-                  <div className="absolute -bottom-1 -right-1 w-8 h-8 bg-green-500 rounded-full flex items-center justify-center ring-4 ring-background">
-                    <Phone className="h-4 w-4 text-white" />
-                  </div>
-                )}
+        <Card className="overflow-hidden border-0 shadow-2xl">
+          <div className={`relative ${
+            isConnected 
+              ? 'bg-gradient-to-br from-green-600 via-green-700 to-emerald-800' 
+              : isIncoming 
+                ? 'bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800'
+                : 'bg-gradient-to-br from-primary via-primary/90 to-primary/80'
+          }`}>
+            <div className="absolute inset-0 bg-black/20" />
+            
+            {(isOutgoing || isIncoming) && (
+              <div className="absolute inset-0 overflow-hidden">
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 rounded-full border border-white/10 animate-ping" style={{ animationDuration: '2s' }} />
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-72 h-72 rounded-full border border-white/15 animate-ping" style={{ animationDuration: '2s', animationDelay: '0.5s' }} />
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 rounded-full border border-white/20 animate-ping" style={{ animationDuration: '2s', animationDelay: '1s' }} />
               </div>
-              
-              <div className="text-center">
-                <h3 className="text-2xl font-semibold">{callState.recipient.name}</h3>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {isIncoming && (
-                    <span className="flex items-center justify-center gap-2">
-                      <PhoneIncoming className="h-4 w-4 text-blue-500 animate-bounce" />
-                      Incoming call...
-                    </span>
-                  )}
-                  {isOutgoing && (
-                    <span className="flex items-center justify-center gap-2">
-                      <span className="flex gap-0.5">
-                        <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: '0ms' }} />
-                        <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: '150ms' }} />
-                        <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" style={{ animationDelay: '300ms' }} />
-                      </span>
-                      Calling
-                    </span>
-                  )}
+            )}
+            
+            <CardContent className="relative py-10 px-6">
+              <div className="flex flex-col items-center space-y-6">
+                <div className="relative">
+                  <div className={`absolute -inset-3 rounded-full ${
+                    isConnected 
+                      ? 'bg-green-400/30' 
+                      : isIncoming 
+                        ? 'bg-blue-400/30 animate-pulse' 
+                        : 'bg-white/20 animate-pulse'
+                  }`} />
+                  <div className={`absolute -inset-6 rounded-full ${
+                    isConnected 
+                      ? 'bg-green-400/10' 
+                      : isIncoming 
+                        ? 'bg-blue-400/10' 
+                        : 'bg-white/10'
+                  }`} />
+                  <Avatar className="h-32 w-32 ring-4 ring-white/30 relative z-10">
+                    <AvatarImage src={callState.recipient.avatar} alt={callState.recipient.name} />
+                    <AvatarFallback className="bg-white/20 text-white text-4xl font-medium">
+                      {getInitials(callState.recipient.name)}
+                    </AvatarFallback>
+                  </Avatar>
+                  
                   {isConnected && (
-                    <span className="text-green-600 dark:text-green-400 font-medium text-lg">
-                      {formatDuration(callDuration)}
-                    </span>
+                    <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-0.5 z-20">
+                      {[...Array(5)].map((_, i) => (
+                        <div 
+                          key={i}
+                          className="w-1 bg-white rounded-full animate-pulse"
+                          style={{ 
+                            height: `${8 + Math.random() * 16}px`,
+                            animationDelay: `${i * 100}ms`,
+                            animationDuration: '0.5s'
+                          }}
+                        />
+                      ))}
+                    </div>
                   )}
-                </p>
-              </div>
-              
-              <div className="flex items-center justify-center gap-3">
-                {isIncoming && (
-                  <>
-                    <Button 
-                      variant="destructive" 
-                      size="icon"
-                      className="h-14 w-14 rounded-full shadow-lg"
-                      onClick={rejectCall}
-                      data-testid="button-reject-call"
-                    >
-                      <PhoneOff className="h-6 w-6" />
-                    </Button>
-                    <Button 
-                      size="icon"
-                      className="h-14 w-14 rounded-full bg-green-500 hover:bg-green-600 shadow-lg"
-                      onClick={acceptCall}
-                      data-testid="button-accept-call"
-                    >
-                      <Phone className="h-6 w-6" />
-                    </Button>
-                  </>
-                )}
+                </div>
                 
-                {isOutgoing && (
-                  <Button 
-                    variant="destructive" 
-                    size="icon"
-                    className="h-14 w-14 rounded-full shadow-lg"
-                    onClick={endCall}
-                    data-testid="button-cancel-call"
-                  >
-                    <PhoneOff className="h-6 w-6" />
-                  </Button>
-                )}
+                <div className="text-center text-white z-10">
+                  <h3 className="text-2xl font-semibold drop-shadow-lg">{callState.recipient.name}</h3>
+                  
+                  {isIncoming && (
+                    <div className="mt-2">
+                      <div className="flex items-center justify-center gap-2 text-blue-100">
+                        <PhoneIncoming className="h-4 w-4 animate-bounce" />
+                        <span className="text-sm font-medium">Incoming Call</span>
+                      </div>
+                      <p className="text-xs text-white/70 mt-1">Tap to answer</p>
+                    </div>
+                  )}
+                  
+                  {isOutgoing && (
+                    <div className="mt-2">
+                      <div className="flex items-center justify-center gap-2 text-white/90">
+                        <span className="text-sm">Ringing</span>
+                        <span className="flex gap-0.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-white animate-bounce" style={{ animationDelay: '0ms' }} />
+                          <span className="w-1.5 h-1.5 rounded-full bg-white animate-bounce" style={{ animationDelay: '150ms' }} />
+                          <span className="w-1.5 h-1.5 rounded-full bg-white animate-bounce" style={{ animationDelay: '300ms' }} />
+                        </span>
+                      </div>
+                      <p className="text-xs text-white/60 mt-1">Waiting for answer</p>
+                    </div>
+                  )}
+                  
+                  {isConnected && (
+                    <div className="mt-2">
+                      <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-sm rounded-full px-4 py-1.5">
+                        <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                        <span className="text-xl font-mono font-semibold tracking-wider">
+                          {formatDuration(callDuration)}
+                        </span>
+                      </div>
+                      <p className="text-xs text-white/70 mt-2">Call in progress</p>
+                    </div>
+                  )}
+                </div>
                 
-                {isConnected && (
-                  <>
-                    <Button 
-                      variant={isMuted ? "destructive" : "secondary"}
-                      size="icon"
-                      className="h-12 w-12 rounded-full"
-                      onClick={() => setIsMuted(!isMuted)}
-                      data-testid="button-toggle-mute"
-                    >
-                      {isMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
-                    </Button>
-                    
-                    <Button 
-                      variant={isVideoEnabled ? "default" : "secondary"}
-                      size="icon"
-                      className="h-12 w-12 rounded-full"
-                      onClick={() => setIsVideoEnabled(!isVideoEnabled)}
-                      data-testid="button-toggle-video"
-                    >
-                      {isVideoEnabled ? <Video className="h-5 w-5" /> : <VideoOff className="h-5 w-5" />}
-                    </Button>
-                    
-                    <Button 
-                      variant="destructive" 
-                      size="icon"
-                      className="h-14 w-14 rounded-full shadow-lg"
-                      onClick={endCall}
-                      data-testid="button-end-call"
-                    >
-                      <PhoneOff className="h-6 w-6" />
-                    </Button>
-                    
-                    <Button 
-                      variant={isSpeakerOn ? "default" : "secondary"}
-                      size="icon"
-                      className="h-12 w-12 rounded-full"
-                      onClick={() => setIsSpeakerOn(!isSpeakerOn)}
-                      data-testid="button-toggle-speaker"
-                    >
-                      <Volume2 className="h-5 w-5" />
-                    </Button>
-                    
-                    <Button 
-                      variant="secondary"
-                      size="icon"
-                      className="h-12 w-12 rounded-full"
-                      data-testid="button-more-options"
-                    >
-                      <MoreVertical className="h-5 w-5" />
-                    </Button>
-                  </>
-                )}
+                <div className="flex items-center justify-center gap-4 pt-4 z-10">
+                  {isIncoming && (
+                    <>
+                      <div className="flex flex-col items-center gap-2">
+                        <Button 
+                          variant="destructive" 
+                          size="icon"
+                          className="h-16 w-16 rounded-full shadow-xl bg-red-500 hover:bg-red-600 border-2 border-red-400/50"
+                          onClick={rejectCall}
+                          data-testid="button-reject-call"
+                        >
+                          <PhoneOff className="h-7 w-7" />
+                        </Button>
+                        <span className="text-xs text-white/80">Decline</span>
+                      </div>
+                      <div className="flex flex-col items-center gap-2">
+                        <Button 
+                          size="icon"
+                          className="h-16 w-16 rounded-full shadow-xl bg-green-500 hover:bg-green-600 border-2 border-green-400/50 animate-pulse"
+                          onClick={acceptCall}
+                          data-testid="button-accept-call"
+                        >
+                          <Phone className="h-7 w-7" />
+                        </Button>
+                        <span className="text-xs text-white/80">Accept</span>
+                      </div>
+                    </>
+                  )}
+                  
+                  {isOutgoing && (
+                    <div className="flex flex-col items-center gap-2">
+                      <Button 
+                        variant="destructive" 
+                        size="icon"
+                        className="h-16 w-16 rounded-full shadow-xl bg-red-500 hover:bg-red-600 border-2 border-red-400/50"
+                        onClick={endCall}
+                        data-testid="button-cancel-call"
+                      >
+                        <PhoneOff className="h-7 w-7" />
+                      </Button>
+                      <span className="text-xs text-white/80">Cancel</span>
+                    </div>
+                  )}
+                  
+                  {isConnected && (
+                    <>
+                      <div className="flex flex-col items-center gap-1.5">
+                        <Button 
+                          size="icon"
+                          className={`h-12 w-12 rounded-full shadow-lg transition-all ${
+                            isMuted 
+                              ? 'bg-red-500 hover:bg-red-600 text-white' 
+                              : 'bg-white/20 hover:bg-white/30 text-white backdrop-blur-sm'
+                          }`}
+                          onClick={() => setIsMuted(!isMuted)}
+                          data-testid="button-toggle-mute"
+                        >
+                          {isMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+                        </Button>
+                        <span className="text-[10px] text-white/70">{isMuted ? 'Unmute' : 'Mute'}</span>
+                      </div>
+                      
+                      <div className="flex flex-col items-center gap-1.5">
+                        <Button 
+                          size="icon"
+                          className={`h-12 w-12 rounded-full shadow-lg transition-all ${
+                            isVideoEnabled 
+                              ? 'bg-white text-green-700' 
+                              : 'bg-white/20 hover:bg-white/30 text-white backdrop-blur-sm'
+                          }`}
+                          onClick={() => setIsVideoEnabled(!isVideoEnabled)}
+                          data-testid="button-toggle-video"
+                        >
+                          {isVideoEnabled ? <Video className="h-5 w-5" /> : <VideoOff className="h-5 w-5" />}
+                        </Button>
+                        <span className="text-[10px] text-white/70">Video</span>
+                      </div>
+                      
+                      <div className="flex flex-col items-center gap-1.5">
+                        <Button 
+                          size="icon"
+                          className="h-16 w-16 rounded-full shadow-xl bg-red-500 hover:bg-red-600 border-2 border-red-400/50"
+                          onClick={endCall}
+                          data-testid="button-end-call"
+                        >
+                          <PhoneOff className="h-7 w-7 text-white" />
+                        </Button>
+                        <span className="text-[10px] text-white/70">End</span>
+                      </div>
+                      
+                      <div className="flex flex-col items-center gap-1.5">
+                        <Button 
+                          size="icon"
+                          className={`h-12 w-12 rounded-full shadow-lg transition-all ${
+                            isSpeakerOn 
+                              ? 'bg-white text-green-700' 
+                              : 'bg-white/20 hover:bg-white/30 text-white backdrop-blur-sm'
+                          }`}
+                          onClick={() => setIsSpeakerOn(!isSpeakerOn)}
+                          data-testid="button-toggle-speaker"
+                        >
+                          {isSpeakerOn ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />}
+                        </Button>
+                        <span className="text-[10px] text-white/70">Speaker</span>
+                      </div>
+                      
+                      <div className="flex flex-col items-center gap-1.5">
+                        <Button 
+                          size="icon"
+                          className="h-12 w-12 rounded-full shadow-lg bg-white/20 hover:bg-white/30 text-white backdrop-blur-sm"
+                          data-testid="button-more-options"
+                        >
+                          <MoreVertical className="h-5 w-5" />
+                        </Button>
+                        <span className="text-[10px] text-white/70">More</span>
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
-            </div>
-          </CardContent>
+            </CardContent>
+          </div>
         </Card>
       )}
       
