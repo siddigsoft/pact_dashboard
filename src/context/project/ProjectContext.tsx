@@ -3,7 +3,6 @@ import { Project, ProjectActivity, SubActivity, ProjectTeamMember } from '@/type
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { validateProject } from '@/utils/projectValidation';
-import { mapProjectToDbProject, mapDbProjectToProject } from '@/utils/projectMapping';
 
 interface ProjectContextProps {
   projects: Project[];
