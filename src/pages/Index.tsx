@@ -173,21 +173,21 @@ const Index = () => {
             {/* Hero Headline - Style: hero-headline-section */}
             <div className="space-y-5">
               <h1 
-                className="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight leading-tight"
+                className="font-display tracking-tight leading-tight"
                 data-testid="heading-hero"
               >
-                {/* Style: command-center-gradient-text */}
-                <span className="command-center-gradient-text bg-gradient-to-r from-blue-600 via-orange-500 to-purple-600 dark:from-blue-400 dark:via-orange-400 dark:to-purple-400 bg-clip-text text-transparent inline-block pb-1">
+                {/* Style: command-center-gradient-text - Uses font-display (Plus Jakarta Sans) */}
+                <span className="command-center-gradient-text text-4xl md:text-5xl lg:text-6xl font-extrabold bg-gradient-to-r from-blue-600 via-orange-500 to-purple-600 dark:from-blue-400 dark:via-orange-400 dark:to-purple-400 bg-clip-text text-transparent inline-block pb-1">
                   Command Center
                 </span>
                 <br />
-                <span className="text-foreground text-3xl md:text-4xl lg:text-5xl font-bold">
+                <span className="text-foreground text-2xl md:text-3xl lg:text-4xl font-semibold">
                   for Field Operations
                 </span>
               </h1>
               
               <p 
-                className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed"
+                className="font-sans text-base md:text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed"
                 data-testid="text-hero-description"
               >
                 Real-time monitoring, seamless coordination, and data-driven insights 
@@ -198,12 +198,12 @@ const Index = () => {
 
             {/* CTA Buttons - Style: cta-button-section */}
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center pt-4">
-              {/* Style: get-started-gradient-button - To modify: change bg-gradient colors, shadow, or remove transition classes */}
+              {/* Style: get-started-gradient-button - Uses font-sans (Inter) */}
               <button
                 onClick={handleGetStarted}
                 disabled={isNavigating}
                 data-testid="button-get-started"
-                className="get-started-gradient-button group relative inline-flex items-center justify-center gap-2.5 px-8 py-3.5 text-base font-semibold text-white rounded-lg bg-gradient-to-r from-blue-600 via-orange-500 to-purple-600 hover:from-blue-500 hover:via-orange-400 hover:to-purple-500 shadow-lg shadow-orange-500/25 dark:shadow-orange-400/20 transition-all duration-300 hover:shadow-xl hover:shadow-orange-500/30 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed disabled:hover:scale-100"
+                className="get-started-gradient-button font-sans group relative inline-flex items-center justify-center gap-2.5 px-8 py-3.5 text-base font-semibold text-white rounded-lg bg-gradient-to-r from-blue-600 via-orange-500 to-purple-600 hover:from-blue-500 hover:via-orange-400 hover:to-purple-500 shadow-lg shadow-orange-500/25 dark:shadow-orange-400/20 transition-all duration-300 hover:shadow-xl hover:shadow-orange-500/30 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed disabled:hover:scale-100"
               >
                 {isNavigating ? (
                   <>
@@ -235,10 +235,10 @@ const Index = () => {
                   >
                     <div className="flex items-center gap-1.5">
                       <Icon className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-xl md:text-2xl font-semibold">{kpi.value}</span>
+                      <span className="font-display text-xl md:text-2xl font-semibold">{kpi.value}</span>
                     </div>
                     <div className="text-center flex items-center gap-1.5">
-                      <p className="text-xs text-muted-foreground">{kpi.label}</p>
+                      <p className="font-sans text-xs text-muted-foreground">{kpi.label}</p>
                       <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
                         {kpi.trend}
                       </Badge>
@@ -258,12 +258,12 @@ const Index = () => {
                 How It Works
               </Badge>
               <h2 
-                className="text-2xl md:text-3xl font-semibold mb-2"
+                className="font-display text-2xl md:text-3xl font-semibold mb-2"
                 data-testid="heading-workflow"
               >
                 Streamlined Workflow in 3 Steps
               </h2>
-              <p className="text-muted-foreground text-sm">
+              <p className="font-sans text-muted-foreground text-sm">
                 From planning to execution, manage your entire operation seamlessly
               </p>
             </div>
@@ -286,10 +286,10 @@ const Index = () => {
                           <Badge variant="outline" className="font-mono text-[10px] px-1.5">
                             {workflow.step}
                           </Badge>
-                          <h3 className="text-base font-medium">
+                          <h3 className="font-display text-base font-medium">
                             {workflow.title}
                           </h3>
-                          <p className="text-xs text-muted-foreground leading-relaxed">
+                          <p className="font-sans text-xs text-muted-foreground leading-relaxed">
                             {workflow.description}
                           </p>
                         </div>
@@ -318,8 +318,8 @@ const Index = () => {
                       <Icon className="w-4 h-4 text-primary" />
                     </div>
                     <div>
-                      <p className="text-sm font-medium">{feature.label}</p>
-                      <p className="text-xs text-muted-foreground">{feature.description}</p>
+                      <p className="font-display text-sm font-medium">{feature.label}</p>
+                      <p className="font-sans text-xs text-muted-foreground">{feature.description}</p>
                     </div>
                   </div>
                 );
@@ -333,14 +333,14 @@ const Index = () => {
           <div className="container mx-auto px-4 py-8">
             <div className="mb-6 text-center max-w-3xl mx-auto">
               <img src={PactLogo} alt="PACT" className="h-10 w-10 mb-4 mx-auto" />
-              <h3 className="text-base font-medium mb-2">Built for the Field, Designed for Reliability</h3>
-              <p className="text-xs text-muted-foreground leading-relaxed mb-4">
+              <h3 className="font-display text-base font-medium mb-2">Built for the Field, Designed for Reliability</h3>
+              <p className="font-sans text-xs text-muted-foreground leading-relaxed mb-4">
                 The <strong className="text-foreground">PACT Command Center Platform</strong> delivers powerful capabilities across web and mobile applications, 
                 ensuring seamless operations whether you're in the office or in the field.
               </p>
-              <div className="text-left space-y-3 max-w-2xl mx-auto">
+              <div className="font-sans text-left space-y-3 max-w-2xl mx-auto">
                 <div>
-                  <h4 className="text-xs font-medium text-foreground mb-1">Web Platform</h4>
+                  <h4 className="font-display text-xs font-medium text-foreground mb-1">Web Platform</h4>
                   <p className="text-xs text-muted-foreground leading-relaxed">
                     The web-based <strong className="text-foreground">Command Center</strong> provides comprehensive oversight with 
                     <strong className="text-foreground"> real-time dashboard analytics</strong>, 
@@ -351,7 +351,7 @@ const Index = () => {
                   </p>
                 </div>
                 <div>
-                  <h4 className="text-xs font-medium text-foreground mb-1">Mobile Application</h4>
+                  <h4 className="font-display text-xs font-medium text-foreground mb-1">Mobile Application</h4>
                   <p className="text-xs text-muted-foreground leading-relaxed">
                     The mobile application empowers field teams with <strong className="text-foreground">full offline functionality</strong> - 
                     capture site visits, update data, and complete tasks even without internet connectivity. 
@@ -361,7 +361,7 @@ const Index = () => {
               </div>
             </div>
             <div className="border-t pt-4 text-center">
-              <p className="text-xs text-muted-foreground" data-testid="text-copyright">
+              <p className="font-sans text-xs text-muted-foreground" data-testid="text-copyright">
                 &copy; {new Date().getFullYear()} PACT Consultancy. All rights reserved.
               </p>
             </div>
