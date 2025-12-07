@@ -402,7 +402,7 @@
                             >
                               <Link to={item.url} className="flex items-center gap-1.5" data-testid={`nav-link-${item.id}`}>
                                 <item.icon
-                                  className={`h-5 w-5 ${
+                                  className={`h-6 w-6 ${
                                     pathname === item.url
                                       ? "text-blue-700 dark:text-blue-300"
                                       : "text-blue-600 dark:text-blue-400"
