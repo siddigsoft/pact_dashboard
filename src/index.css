@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@400;500;600;700&family=Playfair+Display:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@400;500;600;700&family=Playfair+Display:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700;800&display=swap');
 @import './styles/mobile-only-theme.css';
 @import './styles/whatsapp-notifications.css';
 
@@ -485,6 +485,231 @@
 
   .tech-metric-card {
     @apply relative overflow-hidden rounded-lg border border-cyan-500/20 bg-gradient-to-br from-cyan-950/5 to-transparent p-3;
+  }
+
+  /* ==================== UBER-STYLE DESIGN SYSTEM ==================== */
+  
+  /* Uber Typography */
+  .uber-font {
+    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif !important;
+  }
+
+  .uber-heading {
+    font-family: 'Manrope', system-ui, sans-serif;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+
+  .uber-text {
+    font-family: 'Manrope', system-ui, sans-serif;
+    font-weight: 500;
+  }
+
+  /* Uber Button Styles */
+  .uber-btn {
+    @apply px-6 py-3 rounded-full font-semibold transition-all duration-200;
+    font-family: 'Manrope', system-ui, sans-serif;
+  }
+
+  .uber-btn-primary {
+    @apply bg-foreground text-background;
+  }
+
+  .uber-btn-primary:hover {
+    @apply opacity-90;
+  }
+
+  .uber-btn-secondary {
+    @apply bg-muted text-foreground;
+  }
+
+  .uber-btn-secondary:hover {
+    @apply bg-muted/80;
+  }
+
+  .uber-btn-outline {
+    @apply border-2 border-foreground bg-transparent text-foreground;
+  }
+
+  .uber-btn-outline:hover {
+    @apply bg-foreground text-background;
+  }
+
+  .uber-btn-ghost {
+    @apply bg-transparent text-foreground;
+  }
+
+  .uber-btn-ghost:hover {
+    @apply bg-muted/50;
+  }
+
+  /* Uber Card Styles */
+  .uber-card {
+    @apply rounded-2xl bg-card border-0 shadow-sm transition-all duration-300;
+  }
+
+  .uber-card:hover {
+    @apply shadow-md;
+  }
+
+  .uber-card-elevated {
+    @apply rounded-2xl bg-card shadow-lg border-0;
+  }
+
+  /* Uber Status Indicators */
+  .uber-status-online {
+    @apply w-3 h-3 rounded-full bg-green-500 ring-2 ring-background;
+  }
+
+  .uber-status-away {
+    @apply w-3 h-3 rounded-full bg-amber-500 ring-2 ring-background;
+  }
+
+  .uber-status-offline {
+    @apply w-3 h-3 rounded-full bg-gray-400 ring-2 ring-background;
+  }
+
+  .uber-status-busy {
+    @apply w-3 h-3 rounded-full bg-red-500 ring-2 ring-background;
+  }
+
+  /* Uber Pill/Badge Styles */
+  .uber-pill {
+    @apply inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold;
+    font-family: 'Manrope', system-ui, sans-serif;
+  }
+
+  .uber-pill-dark {
+    @apply bg-foreground text-background;
+  }
+
+  .uber-pill-light {
+    @apply bg-muted text-foreground;
+  }
+
+  .uber-pill-success {
+    @apply bg-green-500/10 text-green-600 dark:text-green-400;
+  }
+
+  .uber-pill-warning {
+    @apply bg-amber-500/10 text-amber-600 dark:text-amber-400;
+  }
+
+  .uber-pill-danger {
+    @apply bg-red-500/10 text-red-600 dark:text-red-400;
+  }
+
+  /* Uber List Item */
+  .uber-list-item {
+    @apply flex items-center gap-4 p-4 rounded-xl transition-colors;
+  }
+
+  .uber-list-item:hover {
+    @apply bg-muted/50;
+  }
+
+  .uber-list-item-active {
+    @apply bg-muted;
+  }
+
+  /* Uber Search */
+  .uber-search {
+    @apply w-full px-4 py-3 rounded-full bg-muted border-0 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-foreground/20;
+    font-family: 'Manrope', system-ui, sans-serif;
+  }
+
+  /* Uber Avatar Ring */
+  .uber-avatar-ring {
+    @apply ring-2 ring-offset-2 ring-offset-background;
+  }
+
+  .uber-avatar-online {
+    @apply ring-green-500;
+  }
+
+  .uber-avatar-away {
+    @apply ring-amber-500;
+  }
+
+  /* Uber Divider */
+  .uber-divider {
+    @apply h-px bg-border/50 my-2;
+  }
+
+  /* Uber Page Header */
+  .uber-page-header {
+    @apply flex items-center justify-between py-4;
+  }
+
+  /* Uber Tab Style */
+  .uber-tabs {
+    @apply flex gap-2 p-1 rounded-full bg-muted;
+  }
+
+  .uber-tab {
+    @apply px-4 py-2 rounded-full text-sm font-medium transition-all;
+    font-family: 'Manrope', system-ui, sans-serif;
+  }
+
+  .uber-tab-active {
+    @apply bg-background shadow-sm;
+  }
+
+  /* Uber Notification Dot */
+  .uber-notification-dot {
+    @apply absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center;
+  }
+
+  /* Uber Icon Button */
+  .uber-icon-btn {
+    @apply p-3 rounded-full bg-muted transition-all;
+  }
+
+  .uber-icon-btn:hover {
+    @apply bg-muted/80 scale-105;
+  }
+
+  .uber-icon-btn:active {
+    @apply scale-95;
+  }
+
+  /* Uber Live Indicator */
+  .uber-live-indicator {
+    @apply inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-green-500/10 text-green-600 text-[10px] font-semibold uppercase tracking-wide;
+  }
+
+  .uber-live-indicator::before {
+    content: '';
+    @apply w-2 h-2 rounded-full bg-green-500 animate-pulse;
+  }
+
+  /* Uber Floating Action Button */
+  .uber-fab {
+    @apply fixed bottom-6 right-6 w-14 h-14 rounded-full bg-foreground text-background shadow-xl flex items-center justify-center transition-transform z-50;
+  }
+
+  .uber-fab:hover {
+    @apply scale-110;
+  }
+
+  .uber-fab:active {
+    @apply scale-95;
+  }
+
+  /* Pulse animation for live status */
+  @keyframes uber-pulse {
+    0%, 100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.7;
+      transform: scale(1.1);
+    }
+  }
+
+  .uber-animate-pulse {
+    animation: uber-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   }
 }
 
