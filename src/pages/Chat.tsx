@@ -135,19 +135,20 @@ const Chat: React.FC = () => {
   };
 
   return (
-    <div className="container mx-auto p-4 max-w-6xl" data-testid="chat-page">
+    <div className="container mx-auto p-4 max-w-6xl uber-font" data-testid="chat-page">
       <div className="flex items-center justify-between gap-3 mb-4">
         <div className="flex items-center gap-3">
           <Button 
             variant="ghost" 
             size="icon"
+            className="uber-icon-btn"
             onClick={() => navigate(-1)}
             data-testid="button-go-back"
           >
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div>
-            <h1 className="text-xl font-bold flex items-center gap-2" data-testid="text-page-title">
+            <h1 className="uber-heading text-xl flex items-center gap-2" data-testid="text-page-title">
               <MessageSquare className="h-5 w-5 text-primary" />
               Messages
             </h1>
@@ -159,7 +160,7 @@ const Chat: React.FC = () => {
           <Button
             variant="outline"
             size="sm"
-            className="gap-1.5 h-8"
+            className="gap-1.5 rounded-full"
             onClick={() => setShowTemplates(true)}
             data-testid="button-templates"
           >
@@ -169,7 +170,7 @@ const Chat: React.FC = () => {
           <Button
             variant="outline"
             size="sm"
-            className="gap-1.5 h-8"
+            className="gap-1.5 rounded-full"
             onClick={() => navigate('/notifications')}
             data-testid="button-notifications"
           >
@@ -202,7 +203,7 @@ const Chat: React.FC = () => {
         </Card>
       )}
 
-      <div className="flex h-[calc(100vh-12rem)] overflow-hidden rounded-xl border shadow-sm bg-card dark:bg-gray-900">
+      <div className="flex h-[calc(100vh-12rem)] overflow-hidden uber-card-elevated bg-card dark:bg-gray-900">
         <div className={`${isMobile ? 'w-full md:w-80' : 'w-80'} h-full border-r bg-card dark:bg-gray-900`}>
           <ChatSidebar />
         </div>
@@ -213,17 +214,15 @@ const Chat: React.FC = () => {
 
       <div className="flex items-center justify-center gap-2 mt-4">
         {FEATURED_TEMPLATES.map((template) => (
-          <Button
+          <button
             key={template.id}
-            variant="outline"
-            size="sm"
-            className="gap-1.5 h-7 text-xs rounded-full"
+            className={`uber-pill gap-1.5 ${template.color === 'bg-amber-500' ? 'uber-pill-warning' : template.color === 'bg-pink-500' ? 'uber-pill-danger' : template.color === 'bg-blue-500' ? 'uber-pill-dark' : 'uber-pill-success'}`}
             onClick={() => handleSelectTemplate(template.text)}
             data-testid={`featured-template-${template.id}`}
           >
-            <template.icon className={`h-3 w-3 ${template.color === 'bg-amber-500' ? 'text-amber-500' : template.color === 'bg-pink-500' ? 'text-pink-500' : template.color === 'bg-blue-500' ? 'text-blue-500' : 'text-green-500'}`} />
+            <template.icon className="h-3 w-3" />
             {template.text}
-          </Button>
+          </button>
         ))}
       </div>
 

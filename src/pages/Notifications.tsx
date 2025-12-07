@@ -308,11 +308,12 @@ const Notifications: React.FC = () => {
   };
 
   return (
-    <div className="container mx-auto p-4 max-w-3xl" data-testid="notifications-page">
+    <div className="container mx-auto p-4 max-w-3xl uber-font" data-testid="notifications-page">
       <div className="flex items-center gap-3 mb-4">
         <Button 
           variant="ghost" 
           size="icon"
+          className="uber-icon-btn"
           onClick={() => navigate(-1)}
           data-testid="button-go-back"
         >
@@ -321,11 +322,11 @@ const Notifications: React.FC = () => {
         <div className="flex-1">
           <div className="flex items-center gap-2">
             <Bell className="h-5 w-5 text-primary" />
-            <h1 className="text-xl font-bold" data-testid="text-page-title">Notifications</h1>
+            <h1 className="uber-heading text-xl" data-testid="text-page-title">Notifications</h1>
             {unreadCount > 0 && (
-              <Badge variant="destructive" className="h-5 text-[10px]" data-testid="badge-unread">
+              <span className="uber-pill uber-pill-danger text-[10px]" data-testid="badge-unread">
                 {unreadCount} new
-              </Badge>
+              </span>
             )}
           </div>
           <p className="text-xs text-muted-foreground">Stay updated on activities</p>
@@ -425,31 +426,29 @@ const Notifications: React.FC = () => {
 
       <div className="flex gap-2 overflow-x-auto pb-3 mb-3">
         {NOTIFICATION_CATEGORIES.map((category) => (
-          <Button
+          <button
             key={category.id}
-            variant={selectedCategory === category.id ? "default" : "outline"}
-            size="sm"
-            className="gap-1.5 h-7 text-xs whitespace-nowrap shrink-0"
+            className={`uber-pill gap-1.5 whitespace-nowrap shrink-0 ${selectedCategory === category.id ? 'uber-pill-dark' : 'uber-pill-light'}`}
             onClick={() => setSelectedCategory(category.id)}
             data-testid={`category-${category.id}`}
           >
             <category.icon className={`h-3 w-3 ${selectedCategory !== category.id ? category.color : ''}`} />
             {category.label}
             {categoryCounts[category.id] > 0 && (
-              <Badge variant="secondary" className="h-4 px-1 text-[9px] ml-1">
+              <span className="bg-white/20 dark:bg-black/20 px-1.5 py-0.5 rounded-full text-[9px] ml-1">
                 {categoryCounts[category.id]}
-              </Badge>
+              </span>
             )}
-          </Button>
+          </button>
         ))}
       </div>
 
       <div className="flex items-center gap-2 mb-4">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-2 h-4 w-4 text-muted-foreground" />
+          <Search className="absolute left-4 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search notifications..."
-            className="pl-9 h-8 text-sm bg-muted/50 dark:bg-gray-800 border-0"
+            className="uber-search pl-10"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             data-testid="input-search"
