@@ -116,7 +116,7 @@ const Calls = () => {
   };
 
   const getUserLocation = (userId: string) => {
-    return teamLocations.find(loc => loc.userId === userId);
+    return teamLocations.find(loc => loc.id === userId);
   };
   
   const filteredUsers = users.filter(user => 
