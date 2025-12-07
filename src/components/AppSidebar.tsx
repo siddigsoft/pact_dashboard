@@ -363,7 +363,7 @@
         <SidebarHeader className="border-b py-0.5">
           <div className="flex h-6 items-center gap-1 px-1">
             <img src={Logo} alt="PACT Logo" className="h-5 w-5 shrink-0 object-contain" />
-            <SidebarTrigger className="ml-auto h-5 w-5" data-testid="button-sidebar-trigger" />
+            <SidebarTrigger className="ml-auto h-8 w-8" data-testid="button-sidebar-trigger" />
           </div>
         </SidebarHeader>
 
