@@ -8,7 +8,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
-import { UberCommunicationNav, UberNavSpacer } from '@/components/mobile/UberCommunicationNav';
 import { 
   Bell, 
   CheckCheck, 
@@ -579,9 +578,7 @@ const Notifications: React.FC = () => {
           </ScrollArea>
         )}
 
-        <UberNavSpacer />
       </div>
-      <UberCommunicationNav notificationCount={unreadCount} />
     </div>
   );
 };
