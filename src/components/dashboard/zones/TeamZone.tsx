@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Users, MapPin, MessageSquare, UserCircle, LayoutGrid, Table as TableIcon, Building2 } from 'lucide-react';
 import { TeamCommunication } from '../TeamCommunication';
@@ -14,6 +14,8 @@ import { TeamMemberTable } from '../TeamMemberTable';
 import { User } from '@/types/user';
 import { useAppContext } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
+import { useCall } from '@/context/communications/CallContext';
+import { useCommunication } from '@/context/communications/CommunicationContext';
 
 export const TeamZone: React.FC = () => {
   const [activeTab, setActiveTab] = useState('overview');
@@ -25,6 +27,8 @@ export const TeamZone: React.FC = () => {
   const { users } = useUser();
   const { siteVisits } = useSiteVisitContext();
   const { currentUser, roles } = useAppContext();
+  const { initiateCall } = useCall();
+  const { openChatForEntity } = useCommunication();
 
   // Check if current user is a supervisor (not admin/ict)
   const isSupervisor = useMemo(() => {
@@ -135,6 +139,14 @@ export const TeamZone: React.FC = () => {
   const handleMemberClick = (user: User) => {
     navigate(`/users/${user.id}`);
   };
+
+  const handleCallUser = useCallback((user: User) => {
+    initiateCall(user);
+  }, [initiateCall]);
+
+  const handleMessageUser = useCallback((user: User) => {
+    openChatForEntity(user.id, 'chat');
+  }, [openChatForEntity]);
 
   return (
     <div className="min-h-screen bg-background p-3 md:p-4 space-y-4">
@@ -260,6 +272,8 @@ export const TeamZone: React.FC = () => {
           <TeamLocationMap 
             users={assignableTeamMembers} 
             siteVisits={siteVisits || []}
+            onCallUser={handleCallUser}
+            onMessageUser={handleMessageUser}
           />
         </TabsContent>
 
