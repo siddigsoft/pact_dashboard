@@ -14,7 +14,8 @@ import {
   CheckCircle,
   AlertCircle,
   Clock3,
-  Layers
+  Layers,
+  UserCircle
 } from 'lucide-react';
 
 import { Project } from '@/types/project';
@@ -215,6 +216,15 @@ const ProjectList: React.FC<ProjectListProps> = ({
                       <span className="text-muted-foreground">Type: {getTypeBadge(project.projectType)}</span>
                     </div>
                     
+                    {project.team?.projectManager && (
+                      <div className="flex items-center space-x-2 text-sm">
+                        <UserCircle className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-muted-foreground">
+                          PM: <span className="font-medium text-foreground">{project.team.projectManager}</span>
+                        </span>
+                      </div>
+                    )}
+
                     {project.location?.region && (
                       <div className="flex items-center space-x-2 text-sm">
                         <svg className="h-4 w-4 text-muted-foreground" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
