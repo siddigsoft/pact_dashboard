@@ -7,12 +7,14 @@ export type CallSignal = {
   to: string;
   fromName: string;
   fromAvatar?: string;
+  callId: string;
+  callToken: string;
   payload?: any;
   timestamp: number;
 };
 
 export type CallEventHandler = {
-  onIncomingCall: (callerId: string, callerName: string, callerAvatar?: string) => void;
+  onIncomingCall: (callerId: string, callerName: string, callerAvatar?: string, callId?: string) => void;
   onCallAccepted: () => void;
   onCallRejected: () => void;
   onCallEnded: () => void;
@@ -29,6 +31,16 @@ const ICE_SERVERS: RTCConfiguration = {
   ],
 };
 
+const generateSecureToken = (): string => {
+  const array = new Uint8Array(32);
+  crypto.getRandomValues(array);
+  return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
+};
+
+const generateCallId = (): string => {
+  return `call_${Date.now()}_${generateSecureToken().substring(0, 16)}`;
+};
+
 class WebRTCService {
   private peerConnection: RTCPeerConnection | null = null;
   private localStream: MediaStream | null = null;
@@ -41,6 +53,13 @@ class WebRTCService {
   private pendingIceCandidates: RTCIceCandidate[] = [];
   private isInitiator: boolean = false;
   private targetUserId: string | null = null;
+  
+  private currentCallId: string | null = null;
+  private currentCallToken: string | null = null;
+  private callChannels: Map<string, RealtimeChannel> = new Map();
+  
+  private callPresenceChannel: RealtimeChannel | null = null;
+  private userPresenceChannel: RealtimeChannel | null = null;
 
   async initialize(userId: string, userName: string, userAvatar?: string, handlers?: CallEventHandler) {
     this.currentUserId = userId;
@@ -51,6 +70,81 @@ class WebRTCService {
     }
 
     await this.setupSignalingChannel();
+    await this.setupUserPresence();
+  }
+
+  private async setupUserPresence() {
+    if (!this.currentUserId) return;
+
+    if (this.userPresenceChannel) {
+      await supabase.removeChannel(this.userPresenceChannel);
+    }
+
+    this.userPresenceChannel = supabase
+      .channel('user-call-presence')
+      .on('presence', { event: 'sync' }, () => {
+        // Presence sync handled
+      })
+      .on('presence', { event: 'leave' }, async ({ leftPresences }) => {
+        // If peer left during active call, end it
+        if (this.currentCallId && this.targetUserId) {
+          const peerLeft = leftPresences.some((p: any) => p.userId === this.targetUserId);
+          if (peerLeft) {
+            this.eventHandlers?.onCallEnded();
+            this.cleanup();
+          }
+        }
+      });
+
+    await this.userPresenceChannel.subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        await this.userPresenceChannel?.track({
+          odayUserId: this.currentUserId,
+          online: true,
+          inCall: false,
+          callId: null,
+        });
+      }
+    });
+  }
+
+  private async updateUserPresence(inCall: boolean, callId: string | null = null) {
+    if (!this.userPresenceChannel || !this.currentUserId) return;
+    
+    await this.userPresenceChannel.track({
+      userId: this.currentUserId,
+      online: true,
+      inCall,
+      callId,
+      callToken: null,
+    });
+  }
+
+  private async updateUserPresenceWithToken(inCall: boolean, callId: string | null, callToken: string | null) {
+    if (!this.userPresenceChannel || !this.currentUserId) return;
+    
+    await this.userPresenceChannel.track({
+      userId: this.currentUserId,
+      online: true,
+      inCall,
+      callId,
+      callToken,
+    });
+  }
+
+  private async checkUserBusy(userId: string): Promise<boolean> {
+    if (!this.userPresenceChannel) return false;
+    
+    const presenceState = this.userPresenceChannel.presenceState();
+    for (const key in presenceState) {
+      const presences = presenceState[key] as any[];
+      for (const p of presences) {
+        if (p.userId === userId && p.inCall) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   setEventHandlers(handlers: CallEventHandler) {
@@ -64,22 +158,89 @@ class WebRTCService {
       await supabase.removeChannel(this.signalingChannel);
     }
 
+    const channelName = `calls:${this.currentUserId}:${generateSecureToken().substring(0, 8)}`;
+    
     this.signalingChannel = supabase
-      .channel(`calls:${this.currentUserId}`)
+      .channel(channelName)
       .on('broadcast', { event: 'call-signal' }, async ({ payload }) => {
         const signal = payload as CallSignal;
+        
         if (signal.to !== this.currentUserId) return;
+        
+        const isAuthorized = await this.validateSignal(signal);
+        if (!isAuthorized) {
+          console.warn('[WebRTC] Unauthorized signal rejected:', signal.type);
+          return;
+        }
+        
         await this.handleSignal(signal);
       })
       .subscribe();
   }
 
+  private async validateSignal(signal: CallSignal): Promise<boolean> {
+    if (signal.type === 'call-request') {
+      // Verify caller is not spoofing by checking their presence
+      const callerInCall = await this.verifyUserInCall(signal.from, signal.callId, signal.callToken);
+      if (!callerInCall) {
+        console.warn('[WebRTC] Call request from user not in presence:', signal.from);
+        return false;
+      }
+      return true;
+    }
+
+    if (!signal.callId || !signal.callToken) {
+      console.warn('[WebRTC] Missing callId or callToken');
+      return false;
+    }
+
+    // Verify signal matches our current call
+    if (this.currentCallId && signal.callId === this.currentCallId) {
+      // Verify sender is in presence with matching call data
+      const senderVerified = await this.verifyUserInCall(signal.from, signal.callId, signal.callToken);
+      if (senderVerified) {
+        return true;
+      }
+      
+      // Also accept if token matches what we have (for our own initiated call)
+      if (signal.callToken === this.currentCallToken) {
+        return true;
+      }
+    }
+
+    console.warn('[WebRTC] Token validation failed for call:', signal.callId);
+    return false;
+  }
+
+  private async verifyUserInCall(userId: string, callId: string, callToken: string): Promise<boolean> {
+    if (!this.userPresenceChannel) return false;
+    
+    const presenceState = this.userPresenceChannel.presenceState();
+    for (const key in presenceState) {
+      const presences = presenceState[key] as any[];
+      for (const p of presences) {
+        if (p.userId === userId && p.inCall && p.callId === callId && p.callToken === callToken) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   private async handleSignal(signal: CallSignal) {
-    console.log('[WebRTC] Received signal:', signal.type, 'from:', signal.from);
+    console.log('[WebRTC] Received signal:', signal.type, 'from:', signal.from, 'callId:', signal.callId);
 
     switch (signal.type) {
       case 'call-request':
-        this.eventHandlers?.onIncomingCall(signal.from, signal.fromName, signal.fromAvatar);
+        if (this.currentCallId) {
+          await this.sendBusySignal(signal.from, signal.callId, signal.callToken);
+          return;
+        }
+        this.currentCallId = signal.callId;
+        this.currentCallToken = signal.callToken;
+        // Update presence to mark as receiving call (pending state)
+        await this.updateUserPresenceWithToken(true, signal.callId, signal.callToken);
+        this.eventHandlers?.onIncomingCall(signal.from, signal.fromName, signal.fromAvatar, signal.callId);
         break;
 
       case 'call-accepted':
@@ -118,14 +279,31 @@ class WebRTCService {
     }
   }
 
-  private async sendSignal(signal: Omit<CallSignal, 'from' | 'fromName' | 'fromAvatar' | 'timestamp'>) {
+  private async sendBusySignal(to: string, callId: string, callToken: string) {
+    await this.sendSignalToUser(to, {
+      type: 'call-busy',
+      to,
+      callId,
+      callToken,
+    });
+  }
+
+  private async sendSignalToUser(
+    targetUserId: string, 
+    signal: Omit<CallSignal, 'from' | 'fromName' | 'fromAvatar' | 'timestamp'>
+  ) {
     if (!this.currentUserId) return;
 
-    const targetChannel = supabase.channel(`calls:${signal.to}`);
+    const channelName = `calls:${targetUserId}:signal:${signal.callId}`;
     
-    await targetChannel.subscribe();
+    let channel = this.callChannels.get(channelName);
+    if (!channel) {
+      channel = supabase.channel(channelName);
+      await channel.subscribe();
+      this.callChannels.set(channelName, channel);
+    }
     
-    await targetChannel.send({
+    await channel.send({
       type: 'broadcast',
       event: 'call-signal',
       payload: {
@@ -136,23 +314,51 @@ class WebRTCService {
         timestamp: Date.now(),
       } as CallSignal,
     });
+  }
 
-    await supabase.removeChannel(targetChannel);
+  private async sendSignal(signal: Omit<CallSignal, 'from' | 'fromName' | 'fromAvatar' | 'timestamp' | 'callId' | 'callToken'>) {
+    if (!this.currentUserId || !this.currentCallId || !this.currentCallToken) return;
+
+    await this.sendSignalToUser(signal.to, {
+      ...signal,
+      callId: this.currentCallId,
+      callToken: this.currentCallToken,
+    });
   }
 
   async initiateCall(targetUserId: string): Promise<boolean> {
     if (!this.currentUserId) return false;
 
+    if (this.currentCallId) {
+      console.warn('[WebRTC] Already in a call');
+      return false;
+    }
+
+    // Check if target user is already in a call via presence
+    const targetBusy = await this.checkUserBusy(targetUserId);
+    if (targetBusy) {
+      console.log('[WebRTC] Target user is busy');
+      this.eventHandlers?.onCallBusy();
+      return false;
+    }
+
+    this.currentCallId = generateCallId();
+    this.currentCallToken = generateSecureToken();
     this.isInitiator = true;
     this.targetUserId = targetUserId;
+
+    // Update our presence to show we're in a call with token for verification
+    await this.updateUserPresenceWithToken(true, this.currentCallId, this.currentCallToken);
 
     try {
       await this.setupLocalStream();
       await this.createPeerConnection();
 
-      await this.sendSignal({
+      await this.sendSignalToUser(targetUserId, {
         type: 'call-request',
         to: targetUserId,
+        callId: this.currentCallId,
+        callToken: this.currentCallToken,
       });
 
       return true;
@@ -171,6 +377,10 @@ class WebRTCService {
       await this.setupLocalStream();
       await this.createPeerConnection();
 
+      // Update presence to show we're in the call with our own token
+      const responseToken = generateSecureToken();
+      await this.updateUserPresenceWithToken(true, this.currentCallId, responseToken);
+
       await this.sendSignal({
         type: 'call-accepted',
         to: callerId,
@@ -186,6 +396,7 @@ class WebRTCService {
       type: 'call-rejected',
       to: callerId,
     });
+    this.cleanup();
   }
 
   async endCall() {
@@ -335,6 +546,14 @@ class WebRTCService {
     return this.remoteStream;
   }
 
+  getCurrentCallId(): string | null {
+    return this.currentCallId;
+  }
+
+  isInCall(): boolean {
+    return this.currentCallId !== null;
+  }
+
   cleanup() {
     if (this.localStream) {
       this.localStream.getTracks().forEach((track) => track.stop());
@@ -346,10 +565,20 @@ class WebRTCService {
       this.peerConnection = null;
     }
 
+    for (const channel of this.callChannels.values()) {
+      supabase.removeChannel(channel);
+    }
+    this.callChannels.clear();
+
+    // Update presence to show we're no longer in a call
+    this.updateUserPresence(false, null);
+
     this.remoteStream = null;
     this.targetUserId = null;
     this.isInitiator = false;
     this.pendingIceCandidates = [];
+    this.currentCallId = null;
+    this.currentCallToken = null;
   }
 
   destroy() {
@@ -357,6 +586,10 @@ class WebRTCService {
     if (this.signalingChannel) {
       supabase.removeChannel(this.signalingChannel);
       this.signalingChannel = null;
+    }
+    if (this.userPresenceChannel) {
+      supabase.removeChannel(this.userPresenceChannel);
+      this.userPresenceChannel = null;
     }
     this.currentUserId = null;
     this.eventHandlers = null;

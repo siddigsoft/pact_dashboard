@@ -27,11 +27,11 @@ def getVersionName = { ->
 }
 
 android {
-    namespace "com.pact.workflow"
+    namespace "com.pact.commandcenter"
     compileSdk rootProject.ext.compileSdkVersion
     
     defaultConfig {
-        applicationId "com.pact.workflow"
+        applicationId "com.pact.commandcenter"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode getVersionCode()

@@ -468,11 +468,22 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({
 
     return () => {
       clearTimeout(timer);
+      // Clean up main map
+      if (markersLayerRef.current) {
+        markersLayerRef.current.clearLayers();
+        markersLayerRef.current = null;
+      }
       if (mapRef.current) {
+        mapRef.current.off();
         mapRef.current.remove();
         mapRef.current = null;
-        markersLayerRef.current = null;
         isMapInitializedRef.current = false;
+      }
+      // Clean up fullscreen map
+      if (fullscreenMapRef.current) {
+        fullscreenMapRef.current.off();
+        fullscreenMapRef.current.remove();
+        fullscreenMapRef.current = null;
       }
     };
   }, [initializeMap]);

@@ -1,4 +1,4 @@
-package com.pact.workflow;
+package com.pact.commandcenter;
 
 import android.os.Bundle;
 import androidx.core.view.WindowCompat;
@@ -9,29 +9,23 @@ public class MainActivity extends BridgeActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         
-        // Enable edge-to-edge display - content extends behind system bars
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         
-        // Make status bar and navigation bar transparent
-        // Let the Capacitor StatusBar plugin handle icon appearance based on theme
         getWindow().setStatusBarColor(android.graphics.Color.TRANSPARENT);
         getWindow().setNavigationBarColor(android.graphics.Color.TRANSPARENT);
         
-        // Create notification channels on app startup
         createNotificationChannels();
     }
     
     @Override
     public void onResume() {
         super.onResume();
-        // Notify FCM service that app is in foreground
         PACTFirebaseMessagingService.setAppForeground(true);
     }
     
     @Override
     public void onPause() {
         super.onPause();
-        // Notify FCM service that app is in background
         PACTFirebaseMessagingService.setAppForeground(false);
     }
     
@@ -42,7 +36,6 @@ public class MainActivity extends BridgeActivity {
             
             if (manager == null) return;
             
-            // Default notification channel
             android.app.NotificationChannel defaultChannel = new android.app.NotificationChannel(
                 "pact_notifications",
                 "PACT Notifications",
@@ -53,7 +46,6 @@ public class MainActivity extends BridgeActivity {
             defaultChannel.setShowBadge(true);
             manager.createNotificationChannel(defaultChannel);
             
-            // High priority channel for urgent notifications
             android.app.NotificationChannel urgentChannel = new android.app.NotificationChannel(
                 "pact_urgent",
                 "Urgent Notifications",
@@ -65,7 +57,6 @@ public class MainActivity extends BridgeActivity {
             urgentChannel.setBypassDnd(true);
             manager.createNotificationChannel(urgentChannel);
             
-            // Location tracking channel
             android.app.NotificationChannel locationChannel = new android.app.NotificationChannel(
                 "pact_location_service",
                 "Location Tracking",
