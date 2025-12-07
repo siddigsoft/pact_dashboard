@@ -221,7 +221,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             fullName: profile.full_name || existingUser.fullName,
             phone: profile.phone || existingUser.phone,
             employeeId: profile.employee_id || existingUser.employeeId,
-            lastActive: existingUser.lastActive || new Date().toISOString(),
+            lastActive: profile.last_active_at || existingUser.lastActive || new Date().toISOString(),
             isApproved: profile.status === 'approved' || false,
             availability: profile.availability || existingUser.availability || 'offline',
             createdAt: profile.created_at || existingUser.createdAt || new Date().toISOString(),
@@ -285,6 +285,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             return {
               ...u,
               availability: updated.availability ?? u.availability,
+              lastActive: updated.last_active_at ?? u.lastActive,
               location: locationData !== undefined ? { ...(u.location || {}), ...locationData } : u.location,
             };
           }));
@@ -294,6 +295,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const next = {
               ...prev,
               availability: updated.availability ?? prev.availability,
+              lastActive: updated.last_active_at ?? prev.lastActive,
               location: locationData !== undefined ? { ...(prev.location || {}), ...locationData } : prev.location,
             } as User;
             try {
@@ -314,11 +316,13 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     const activityInterval = setInterval(() => {
       if (currentUser) {
+        const now = new Date().toISOString();
+        
         setCurrentUser(prev => {
           if (!prev) return prev;
           const updated = {
             ...prev,
-            lastActive: new Date().toISOString()
+            lastActive: now
           };
           
           localStorage.setItem('PACTCurrentUser', JSON.stringify(updated));
@@ -329,14 +333,20 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setAppUsers(prev => 
           prev.map(user => 
             user.id === currentUser.id 
-              ? { ...user, lastActive: new Date().toISOString() }
+              ? { ...user, lastActive: now }
               : user
           )
         );
+
+        supabase
+          .from('profiles')
+          .update({ last_active_at: now })
+          .eq('id', currentUser.id)
+          .then(({ error }) => {
+            if (error) console.warn('Failed to update last_active_at:', error);
+          });
       }
       
-      // Note: Removed random availability simulation - availability should only change 
-      // when users explicitly update their status or based on real session activity
     }, 60000);
     
     return () => clearInterval(activityInterval);
