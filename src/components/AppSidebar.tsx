@@ -53,7 +53,8 @@
     SidebarMenuItem, 
     SidebarMenuButton, 
     SidebarTrigger,
-    SidebarRail
+    SidebarRail,
+    SidebarResizeHandle
   } from "@/components/ui/sidebar";
   import { AppRole } from "@/types";
   import { useAuthorization } from "@/hooks/use-authorization";
@@ -477,6 +478,7 @@
         </SidebarFooter>
 
         <SidebarRail />
+        <SidebarResizeHandle />
       </Sidebar>
     );
   };
