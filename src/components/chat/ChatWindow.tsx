@@ -1,6 +1,8 @@
 
 import React, { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useChat } from '@/context/chat/ChatContextSupabase';
+import { useCommunication } from '@/context/communications/CommunicationContext';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -27,18 +29,48 @@ import { useToast } from '@/hooks/use-toast';
 import { uploadChatAttachment, getContentTypeFromFile, formatFileSize, ChatAttachment } from '@/utils/chatUpload';
 
 const ChatWindow: React.FC = () => {
+  const navigate = useNavigate();
   const { activeChat, getChatMessages, sendMessage, setActiveChat, isSendingMessage } = useChat();
+  const { initiateCall } = useCommunication();
   const [messageText, setMessageText] = useState('');
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploadingFiles, setUploadingFiles] = useState<Record<string, boolean>>({});
   const [isTyping, setIsTyping] = useState(false);
-  const { currentUser } = useUser();
+  const { currentUser, users } = useUser();
   const { toast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const chatMessages = activeChat ? getChatMessages(activeChat.id) || [] : [];
+
+  // Get the target user for private chats
+  const getTargetUser = () => {
+    if (!activeChat || activeChat.type !== 'private') return null;
+    const targetUserId = activeChat.participants.find(id => id !== currentUser?.id);
+    if (!targetUserId) return null;
+    return users.find(u => u.id === targetUserId);
+  };
+
+  const targetUser = getTargetUser();
+
+  // Handle call initiation
+  const handleCall = (isVideo: boolean = false) => {
+    if (!targetUser) {
+      toast({
+        title: 'Cannot call',
+        description: activeChat?.type === 'group' ? 'Group calls are not supported yet' : 'User not found',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
+    // Pass the full user object to initiateCall
+    initiateCall(targetUser);
+    
+    // Navigate to calls page to see the call interface
+    navigate('/calls');
+  };
 
   // Simulate typing indicator
   useEffect(() => {
@@ -269,10 +301,24 @@ const ChatWindow: React.FC = () => {
         </div>
         
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="icon" className="uber-icon-btn" data-testid="button-call">
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="uber-icon-btn" 
+            onClick={() => handleCall(false)}
+            disabled={!targetUser}
+            data-testid="button-call"
+          >
             <Phone className="h-4.5 w-4.5" />
           </Button>
-          <Button variant="ghost" size="icon" className="uber-icon-btn" data-testid="button-video">
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="uber-icon-btn" 
+            onClick={() => handleCall(true)}
+            disabled={!targetUser}
+            data-testid="button-video"
+          >
             <Video className="h-4.5 w-4.5" />
           </Button>
           <Button variant="ghost" size="icon" className="uber-icon-btn" data-testid="button-more">
