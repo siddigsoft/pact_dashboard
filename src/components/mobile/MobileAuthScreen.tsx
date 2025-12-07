@@ -39,6 +39,7 @@ interface FormErrors {
 export function MobileAuthScreen({ onAuthSuccess }: MobileAuthScreenProps) {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const biometric = useBiometric();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -48,7 +49,9 @@ export function MobileAuthScreen({ onAuthSuccess }: MobileAuthScreenProps) {
   const [errors, setErrors] = useState<FormErrors>({});
   const [touched, setTouched] = useState<{email?: boolean; password?: boolean}>({});
   const [showBiometricPrompt, setShowBiometricPrompt] = useState(false);
-  const [biometricAvailable, setBiometricAvailable] = useState(false);
+
+  const biometricAvailable = biometric.status.isAvailable || 
+    localStorage.getItem('pact_biometric_token') !== null;
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -61,20 +64,6 @@ export function MobileAuthScreen({ onAuthSuccess }: MobileAuthScreenProps) {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, []);
-
-  useEffect(() => {
-    const checkBiometric = async () => {
-      if ('PublicKeyCredential' in window) {
-        try {
-          const available = await (window as any).PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
-          setBiometricAvailable(available);
-        } catch {
-          setBiometricAvailable(false);
-        }
-      }
-    };
-    checkBiometric();
   }, []);
 
   const validateEmail = (value: string): string | undefined => {
@@ -157,6 +146,14 @@ export function MobileAuthScreen({ onAuthSuccess }: MobileAuthScreenProps) {
       if (data.session?.refresh_token) {
         localStorage.setItem('pact_biometric_email', email.trim());
         localStorage.setItem('pact_biometric_token', data.session.refresh_token);
+        
+        if (biometric.status.isAvailable) {
+          await biometric.storeCredentials({
+            username: email.trim(),
+            password: password,
+          });
+          await biometric.refreshStatus();
+        }
       }
 
       onAuthSuccess?.();
@@ -191,21 +188,46 @@ export function MobileAuthScreen({ onAuthSuccess }: MobileAuthScreenProps) {
 
   const handleBiometricSuccess = async () => {
     setShowBiometricPrompt(false);
-    
-    const savedEmail = localStorage.getItem('pact_biometric_email');
-    const savedToken = localStorage.getItem('pact_biometric_token');
-    
-    if (!savedEmail || !savedToken) {
-      toast({
-        title: 'Credentials expired',
-        description: 'Please sign in with email and password',
-        variant: 'destructive',
-      });
-      return;
-    }
-
     setIsLoading(true);
+    
     try {
+      await biometric.refreshStatus();
+      
+      if (biometric.status.isAvailable) {
+        const result = await biometric.authenticateAndGetCredentials();
+        
+        if (result.success && result.credentials) {
+          const { data, error } = await supabase.auth.signInWithPassword({
+            email: result.credentials.username,
+            password: result.credentials.password,
+          });
+
+          if (error) throw error;
+
+          if (data.session?.refresh_token) {
+            localStorage.setItem('pact_biometric_email', result.credentials.username);
+            localStorage.setItem('pact_biometric_token', data.session.refresh_token);
+          }
+
+          hapticPresets.success();
+          toast({
+            title: 'Welcome back!',
+            description: 'Signed in with biometrics',
+          });
+          onAuthSuccess?.();
+          navigate('/dashboard');
+          return;
+        } else if (result.error) {
+          console.log('[Biometric] Auth failed:', result.error);
+        }
+      }
+      
+      const savedToken = localStorage.getItem('pact_biometric_token');
+      
+      if (!savedToken) {
+        throw new Error('No saved credentials');
+      }
+
       const { data, error } = await supabase.auth.refreshSession({
         refresh_token: savedToken,
       });
@@ -214,6 +236,10 @@ export function MobileAuthScreen({ onAuthSuccess }: MobileAuthScreenProps) {
         localStorage.removeItem('pact_biometric_email');
         localStorage.removeItem('pact_biometric_token');
         throw error;
+      }
+
+      if (data.session?.refresh_token) {
+        localStorage.setItem('pact_biometric_token', data.session.refresh_token);
       }
 
       hapticPresets.success();
