@@ -260,7 +260,12 @@ const ProjectList: React.FC<ProjectListProps> = ({
                   <div className="flex items-center gap-2 text-sm">
                     <DollarSign className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
                     <span className="text-muted-foreground truncate">
-                      {project.budget.total.toLocaleString()} {project.budget.currency}
+                      {(() => {
+                        const budget = project.budget as any;
+                        const totalCents = budget.totalBudgetCents || budget.total_budget_cents || budget.total || 0;
+                        const totalSDG = typeof totalCents === 'number' ? totalCents / 100 : 0;
+                        return `SDG ${totalSDG.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                      })()}
                     </span>
                   </div>
                 )}
