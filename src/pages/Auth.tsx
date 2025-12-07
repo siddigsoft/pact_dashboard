@@ -114,7 +114,7 @@ const Auth = () => {
         <Card className="overflow-hidden border-2 shadow-2xl" data-testid="card-auth-container">
           <div className="grid lg:grid-cols-2">
             {/* Left Hero Column - Compact */}
-            <div className="hidden lg:flex flex-col justify-between p-8 bg-gradient-to-br from-muted/50 to-muted/30 border-r">
+            <div className="hidden lg:flex flex-col justify-between p-8 bg-gradient-to-br from-muted/50 to-muted/30">
               <div className="space-y-6">
                 {/* Logo & Branding */}
                 <div className="space-y-3">
@@ -144,7 +144,7 @@ const Auth = () => {
                 </div>
 
                 {/* Platform Stats */}
-                <div className="grid grid-cols-3 gap-3 py-4 border-y">
+                <div className="grid grid-cols-3 gap-3 py-4">
                   {platformStats.map((stat, index) => {
                     const Icon = stat.icon;
                     return (
