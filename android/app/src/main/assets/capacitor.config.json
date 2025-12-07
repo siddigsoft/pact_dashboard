@@ -1,6 +1,6 @@
 {
 	"appId": "com.pact.workflow",
-	"appName": "PACT Workflow",
+	"appName": "PACT Command Center",
 	"webDir": "dist",
 	"server": {
 		"allowNavigation": [
