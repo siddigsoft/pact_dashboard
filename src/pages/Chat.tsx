@@ -135,28 +135,29 @@ const Chat: React.FC = () => {
   };
 
   return (
-    <div className="container mx-auto p-4 max-w-6xl uber-font" data-testid="chat-page">
-      <div className="flex items-center justify-between gap-3 mb-5">
-        <div className="flex items-center gap-3">
-          <Button 
-            variant="ghost" 
-            size="icon"
-            className="h-10 w-10 rounded-full hover:bg-primary/10 transition-colors"
-            onClick={() => navigate(-1)}
-            data-testid="button-go-back"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <div>
-            <h1 className="text-xl font-bold tracking-tight flex items-center gap-2.5" data-testid="text-page-title">
-              <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center shadow-sm">
-                <MessageSquare className="h-4 w-4 text-primary-foreground" />
-              </div>
-              Messages
-            </h1>
-            <p className="text-xs text-muted-foreground mt-0.5 ml-10">Connect with your team</p>
+    <div className="uber-page uber-font" data-testid="chat-page">
+      <div className="uber-page-content max-w-6xl">
+        <div className="flex items-center justify-between gap-3 mb-5 uber-slide-in-down">
+          <div className="flex items-center gap-3">
+            <Button 
+              variant="ghost" 
+              size="icon"
+              className="uber-icon-btn"
+              onClick={() => navigate(-1)}
+              data-testid="button-go-back"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <div>
+              <h1 className="uber-heading text-xl flex items-center gap-2.5" data-testid="text-page-title">
+                <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center shadow-sm">
+                  <MessageSquare className="h-4 w-4 text-primary-foreground" />
+                </div>
+                Messages
+              </h1>
+              <p className="text-xs text-muted-foreground mt-0.5 ml-10">Connect with your team</p>
+            </div>
           </div>
-        </div>
         
         <div className="flex items-center gap-2">
           <Button
@@ -183,7 +184,7 @@ const Chat: React.FC = () => {
       </div>
       
       {prefilledMessage && (
-        <Card className="mb-4 border-primary/30 bg-primary/5">
+        <Card className="mb-4 border-primary/30 bg-primary/5 uber-slide-in-up uber-stagger-1">
           <CardContent className="py-3 px-4">
             <div className="flex items-start gap-3">
               <div className="p-2 rounded-lg bg-primary/10">
@@ -205,7 +206,7 @@ const Chat: React.FC = () => {
         </Card>
       )}
 
-      <div className="flex h-[calc(100vh-12rem)] overflow-hidden rounded-2xl border border-border/50 shadow-lg bg-card dark:bg-gray-900">
+      <div className="flex h-[calc(100vh-12rem)] overflow-hidden rounded-2xl border border-border/50 shadow-lg bg-card dark:bg-gray-900 uber-slide-in-up uber-stagger-2">
         <div className={`${isMobile ? 'w-full md:w-80' : 'w-80'} h-full border-r border-border/50 bg-card dark:bg-gray-900`}>
           <ChatSidebar />
         </div>
@@ -214,7 +215,7 @@ const Chat: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex items-center justify-center gap-2 mt-5">
+      <div className="flex items-center justify-center gap-2 mt-5 uber-slide-in-up uber-stagger-3">
         {FEATURED_TEMPLATES.map((template) => (
           <button
             key={template.id}
@@ -306,6 +307,7 @@ const Chat: React.FC = () => {
           </div>
         </DialogContent>
       </Dialog>
+      </div>
     </div>
   );
 };

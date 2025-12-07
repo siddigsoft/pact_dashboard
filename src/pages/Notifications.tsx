@@ -308,21 +308,22 @@ const Notifications: React.FC = () => {
   };
 
   return (
-    <div className="container mx-auto p-4 max-w-3xl uber-font" data-testid="notifications-page">
-      <div className="flex items-center gap-3 mb-4">
-        <Button 
-          variant="ghost" 
-          size="icon"
-          className="uber-icon-btn"
-          onClick={() => navigate(-1)}
-          data-testid="button-go-back"
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <div className="flex-1">
-          <div className="flex items-center gap-2">
-            <Bell className="h-5 w-5 text-primary" />
-            <h1 className="uber-heading text-xl" data-testid="text-page-title">Notifications</h1>
+    <div className="uber-page uber-font" data-testid="notifications-page">
+      <div className="uber-page-content max-w-3xl">
+        <div className="flex items-center gap-3 mb-4 uber-slide-in-down">
+          <Button 
+            variant="ghost" 
+            size="icon"
+            className="uber-icon-btn"
+            onClick={() => navigate(-1)}
+            data-testid="button-go-back"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div className="flex-1">
+            <div className="flex items-center gap-2">
+              <Bell className="h-5 w-5 text-primary" />
+              <h1 className="uber-heading text-xl" data-testid="text-page-title">Notifications</h1>
             {unreadCount > 0 && (
               <span className="uber-pill uber-pill-danger text-[10px]" data-testid="badge-unread">
                 {unreadCount} new
@@ -422,10 +423,10 @@ const Notifications: React.FC = () => {
             </div>
           </DialogContent>
         </Dialog>
-      </div>
+        </div>
 
-      <div className="flex gap-2 overflow-x-auto pb-3 mb-3">
-        {NOTIFICATION_CATEGORIES.map((category) => (
+        <div className="flex gap-2 overflow-x-auto pb-3 mb-3 uber-slide-in-up uber-stagger-1">
+          {NOTIFICATION_CATEGORIES.map((category) => (
           <button
             key={category.id}
             className={`uber-pill gap-1.5 whitespace-nowrap shrink-0 ${selectedCategory === category.id ? 'uber-pill-dark' : 'uber-pill-light'}`}
@@ -439,39 +440,39 @@ const Notifications: React.FC = () => {
                 {categoryCounts[category.id]}
               </span>
             )}
-          </button>
-        ))}
-      </div>
-
-      <div className="flex items-center gap-2 mb-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-4 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search notifications..."
-            className="uber-search pl-10"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            data-testid="input-search"
-          />
+            </button>
+          ))}
         </div>
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'all' | 'unread')}>
-          <TabsList className="h-8">
-            <TabsTrigger value="all" className="text-xs h-7 px-2" data-testid="tab-all">
-              All
-            </TabsTrigger>
-            <TabsTrigger value="unread" className="text-xs h-7 px-2" data-testid="tab-unread">
-              Unread
-              {unreadCount > 0 && (
-                <Badge variant="destructive" className="h-4 ml-1 px-1 text-[9px]">
-                  {unreadCount}
-                </Badge>
-              )}
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-      </div>
 
-      <div className="flex items-center justify-between gap-2 mb-3">
+        <div className="flex items-center gap-2 mb-4 uber-slide-in-up uber-stagger-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-4 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search notifications..."
+              className="uber-search pl-10"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              data-testid="input-search"
+            />
+          </div>
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'all' | 'unread')}>
+            <TabsList className="h-8">
+              <TabsTrigger value="all" className="text-xs h-7 px-2" data-testid="tab-all">
+                All
+              </TabsTrigger>
+              <TabsTrigger value="unread" className="text-xs h-7 px-2" data-testid="tab-unread">
+                Unread
+                {unreadCount > 0 && (
+                  <Badge variant="destructive" className="h-4 ml-1 px-1 text-[9px]">
+                    {unreadCount}
+                  </Badge>
+                )}
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
+
+        <div className="flex items-center justify-between gap-2 mb-3 uber-slide-in-up uber-stagger-3">
         <span className="text-xs text-muted-foreground">
           {filteredNotifications.length} notification{filteredNotifications.length !== 1 ? 's' : ''}
         </span>
@@ -605,36 +606,37 @@ const Notifications: React.FC = () => {
         </ScrollArea>
       )}
 
-      <div className="flex items-center justify-center gap-3 mt-4 pt-4 border-t">
-        <Button 
-          variant="outline" 
-          size="sm" 
-          className="gap-1.5"
-          onClick={() => navigate('/chat')}
-          data-testid="button-go-to-messages"
-        >
-          <MessageSquare className="h-3.5 w-3.5" />
-          Messages
-        </Button>
-        <Button 
-          variant="outline" 
-          size="sm" 
-          className="gap-1.5"
-          onClick={() => navigate('/calls')}
-          data-testid="button-go-to-calls"
-        >
-          <Phone className="h-3.5 w-3.5" />
-          Calls
-        </Button>
-        <Button 
-          variant="ghost" 
-          size="sm" 
-          className="gap-1.5"
-          data-testid="button-notification-settings"
-        >
-          <Settings className="h-3.5 w-3.5" />
-          Settings
-        </Button>
+        <div className="flex items-center justify-center gap-3 mt-4 pt-4 border-t uber-slide-in-up uber-stagger-5">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="gap-1.5"
+            onClick={() => navigate('/chat')}
+            data-testid="button-go-to-messages"
+          >
+            <MessageSquare className="h-3.5 w-3.5" />
+            Messages
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="gap-1.5"
+            onClick={() => navigate('/calls')}
+            data-testid="button-go-to-calls"
+          >
+            <Phone className="h-3.5 w-3.5" />
+            Calls
+          </Button>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="gap-1.5"
+            data-testid="button-notification-settings"
+          >
+            <Settings className="h-3.5 w-3.5" />
+            Settings
+          </Button>
+        </div>
       </div>
     </div>
   );
