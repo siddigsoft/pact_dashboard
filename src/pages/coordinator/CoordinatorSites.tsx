@@ -480,6 +480,8 @@ const CoordinatorSites: React.FC = () => {
   const [approvedSitesCount, setApprovedSitesCount] = useState(0);
   const [completedSitesCount, setCompletedSitesCount] = useState(0);
   const [rejectedSitesCount, setRejectedSitesCount] = useState(0);
+  // Loading guard to prevent concurrent loads
+  const [isLoadingRef] = useState({ current: false });
   
   // Subcategory counts for new sites tabs
   const [statePermitRequiredCount, setStatePermitRequiredCount] = useState(0);
@@ -774,11 +776,17 @@ const CoordinatorSites: React.FC = () => {
     setSurveyToolFilter('all');
     // Reset expanded localities when tab changes
     setExpandedPermitsAttachedLocalities(new Set());
-  }, [currentUser?.id, activeTab, userProjectIds, isAdminOrSuperUser]);
+  }, [currentUser?.id, activeTab]);
 
   const loadSites = async () => {
     if (!currentUser?.id) return;
-    
+
+    // Prevent concurrent loads
+    if (isLoadingRef.current) {
+      console.log('Load already in progress, skipping...');
+      return;
+    }
+
     // Non-admin users with no project assignments should see nothing
     if (!isAdminOrSuperUser && userProjectIds.length === 0) {
       setSites([]);
@@ -786,7 +794,8 @@ const CoordinatorSites: React.FC = () => {
       setLoading(false);
       return;
     }
-    
+
+    isLoadingRef.current = true;
     setLoading(true);
     try {
       // Load forwarded entries with mmp_file join to get project_id for filtering
@@ -813,11 +822,13 @@ const CoordinatorSites: React.FC = () => {
         if (fallbackError) throw fallbackError;
         
         // Continue with fallback data
-        processEntries(fallbackEntries || [], currentUser.id);
+        const { allSites } = await processEntries(fallbackEntries || [], currentUser.id);
+        await rebuildLocalityDataInternal(allSites);
         return;
       }
       
-      processEntries(allEntries || [], currentUser.id);
+      const { allSites } = await processEntries(allEntries || [], currentUser.id);
+      await rebuildLocalityDataInternal(allSites);
     } catch (error) {
       console.error('Error loading sites:', error);
       toast({
@@ -827,6 +838,7 @@ const CoordinatorSites: React.FC = () => {
       });
     } finally {
       setLoading(false);
+      isLoadingRef.current = false;
     }
   };
 
@@ -1024,6 +1036,7 @@ const CoordinatorSites: React.FC = () => {
         }
       });
       setSiteVisitDates(visitDates);
+      return { allSites, statesArray };
     } catch (error) {
       console.error('Error loading sites:', error);
       toast({
@@ -1031,16 +1044,14 @@ const CoordinatorSites: React.FC = () => {
         description: 'Failed to load sites. Please try again.',
         variant: 'destructive'
       });
-    } finally {
-      setLoading(false);
+      throw error;
     }
   };
 
-  // Rebuild locality/permit aggregates without refetching sites to avoid
-  // re-triggering the main loading spinner. Runs when metadata changes.
-  const rebuildLocalityData = async () => {
+  // Rebuild locality/permit aggregates based on provided sites
+  const rebuildLocalityDataInternal = async (sitesData: SiteVisit[]) => {
     try {
-      if (!sites || sites.length === 0) {
+      if (!sitesData || sitesData.length === 0) {
         setLocalitiesData([]);
         setStatePermitRequiredCount(0);
         setLocalPermitRequiredCount(0);
@@ -1048,7 +1059,7 @@ const CoordinatorSites: React.FC = () => {
       }
 
       const statesMap = new Map<string, any>();
-      sites.forEach((site: any) => {
+      sitesData.forEach((site: any) => {
         const stateKey = site.state;
         if (!statesMap.has(stateKey)) {
           statesMap.set(stateKey, {
@@ -1079,7 +1090,7 @@ const CoordinatorSites: React.FC = () => {
       });
 
       const uniqueMmpIds = Array.from(new Set(
-        sites.map((s: any) => s.mmp_file_id).filter(Boolean)
+        sitesData.map((s: any) => s.mmp_file_id).filter(Boolean)
       ));
 
       let mmpFilesMap = new Map<string, any>();
@@ -1176,19 +1187,27 @@ const CoordinatorSites: React.FC = () => {
     } catch {}
   };
 
-  useEffect(() => {
-    // Only recompute aggregates when metadata changes; do not refetch sites
-    rebuildLocalityData();
-  }, [sites, permits, hubStates, localities]);
 
   useEffect(() => {
     let debounceId: number | null = null;
+    let lastReloadTime = 0;
+    const MIN_RELOAD_INTERVAL = 3000; // 3 seconds
+
     const scheduleReload = () => {
-      if (debounceId) window.clearTimeout(debounceId);
-      debounceId = window.setTimeout(() => {
+      const now = Date.now();
+      const timeSinceLast = now - lastReloadTime;
+      if (timeSinceLast < MIN_RELOAD_INTERVAL) {
+        if (debounceId) window.clearTimeout(debounceId);
+        debounceId = window.setTimeout(() => {
+          lastReloadTime = Date.now();
+          loadSites();
+          debounceId = null;
+        }, MIN_RELOAD_INTERVAL - timeSinceLast);
+      } else {
+        if (debounceId) window.clearTimeout(debounceId);
+        lastReloadTime = now;
         loadSites();
-        debounceId = null;
-      }, 1000); // Increased debounce to 1s to reduce rapid reloads
+      }
     };
 
     const channel = supabase
@@ -1197,7 +1216,6 @@ const CoordinatorSites: React.FC = () => {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'mmp_site_entries' },
         (payload) => {
-          // Only reload if change is relevant to current user
           if ((payload.new as any)?.forwarded_to_user_id === currentUser?.id ||
               (payload.old as any)?.forwarded_to_user_id === currentUser?.id) {
             scheduleReload();
@@ -1211,6 +1229,25 @@ const CoordinatorSites: React.FC = () => {
       if (debounceId) window.clearTimeout(debounceId);
     };
   }, [currentUser?.id]);
+
+  // Loading timeout safeguard
+  useEffect(() => {
+    if (loading) {
+      const timeout = setTimeout(() => {
+        if (loading) {
+          console.warn('Loading timeout reached, forcing completion');
+          setLoading(false);
+          isLoadingRef.current = false;
+          toast({
+            title: 'Loading Timeout',
+            description: 'Data loading took too long. Please refresh the page.',
+            variant: 'destructive'
+          });
+        }
+      }, 30000);
+      return () => clearTimeout(timeout);
+    }
+  }, [loading]);
 
   const handleVerifySite = async (siteId: string, notes?: string) => {
     try {
