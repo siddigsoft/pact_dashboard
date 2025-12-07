@@ -328,69 +328,39 @@ const Index = () => {
         </section>
 
         {/* Footer */}
-        <footer className="bg-gradient-to-b from-muted/30 to-muted/50">
+        <footer className="bg-muted/10">
           <div className="container mx-auto px-4 py-12">
             <div className="mb-8 text-center max-w-4xl mx-auto">
-              <div className="flex items-center justify-center gap-3 mb-4">
-                <img src={PactLogo} alt="PACT" className="h-12 w-12" />
-                <div className="text-left">
-                  <h3 className="text-xl font-bold tracking-tight">Built for the Field</h3>
-                  <p className="text-sm text-muted-foreground">Designed for Reliability</p>
-                </div>
-              </div>
-              <p className="text-sm text-muted-foreground leading-relaxed mb-8 max-w-2xl mx-auto">
+              <img src={PactLogo} alt="PACT" className="h-14 w-14 mb-5 mx-auto" />
+              <h3 className="text-2xl font-bold mb-3">Built for the Field, Designed for Reliability</h3>
+              <p className="text-base text-muted-foreground leading-relaxed mb-6">
                 The <strong className="text-foreground">PACT Command Center Platform</strong> delivers powerful capabilities across web and mobile applications, 
                 ensuring seamless operations whether you're in the office or in the field.
               </p>
-              
-              <div className="grid md:grid-cols-2 gap-6 max-w-3xl mx-auto">
-                <Card className="text-left">
-                  <CardContent className="p-5">
-                    <div className="flex items-start gap-3">
-                      <div className="p-2 rounded-lg bg-blue-500/10 dark:bg-blue-500/20">
-                        <Radio className="w-5 h-5 text-blue-500" />
-                      </div>
-                      <div className="flex-1">
-                        <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
-                          Web Platform
-                          <Badge variant="secondary" className="text-[10px]">Full Access</Badge>
-                        </h4>
-                        <p className="text-xs text-muted-foreground leading-relaxed">
-                          Comprehensive oversight with <strong className="text-foreground">real-time dashboard analytics</strong>, 
-                          <strong className="text-foreground"> role-based access control</strong>, and 
-                          <strong className="text-foreground"> live team tracking</strong>. 
-                          Manage MMPs, assign site visits, and generate detailed reports.
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-                
-                <Card className="text-left">
-                  <CardContent className="p-5">
-                    <div className="flex items-start gap-3">
-                      <div className="p-2 rounded-lg bg-orange-500/10 dark:bg-orange-500/20">
-                        <MapPin className="w-5 h-5 text-orange-500" />
-                      </div>
-                      <div className="flex-1">
-                        <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
-                          Mobile Application
-                          <Badge variant="secondary" className="text-[10px]">Offline Ready</Badge>
-                        </h4>
-                        <p className="text-xs text-muted-foreground leading-relaxed">
-                          Empowers field teams with <strong className="text-foreground">full offline functionality</strong> - 
-                          capture site visits, update data, and complete tasks without connectivity. 
-                          <strong className="text-foreground"> Auto-sync when online</strong>.
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+              <div className="text-left space-y-5 max-w-3xl mx-auto">
+                <div>
+                  <h4 className="text-base font-semibold text-foreground mb-2">Web Platform</h4>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    The web-based <strong className="text-foreground">Command Center</strong> provides comprehensive oversight with 
+                    <strong className="text-foreground"> real-time dashboard analytics</strong>, 
+                    <strong className="text-foreground"> role-based access control</strong>, and 
+                    <strong className="text-foreground"> live team tracking</strong>. 
+                    Upload and manage Monthly Monitoring Plans, assign site visits to field teams, monitor progress with visual workflows, 
+                    and generate detailed reports.
+                  </p>
+                </div>
+                <div>
+                  <h4 className="text-base font-semibold text-foreground mb-2">Mobile Application</h4>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    The mobile application empowers field teams with <strong className="text-foreground">full offline functionality</strong> - 
+                    capture site visits, update data, and complete tasks even without internet connectivity. 
+                    All changes automatically <strong className="text-foreground">sync when back online</strong>, ensuring no data is ever lost.
+                  </p>
+                </div>
               </div>
             </div>
-            
             <div className="pt-6 text-center border-t">
-              <p className="text-xs text-muted-foreground" data-testid="text-copyright">
+              <p className="text-sm text-muted-foreground" data-testid="text-copyright">
                 &copy; {new Date().getFullYear()} PACT Consultancy. All rights reserved.
               </p>
             </div>
