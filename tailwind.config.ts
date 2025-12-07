@@ -19,9 +19,9 @@ export default {
     extend: {
       fontFamily: {
         sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'system-ui', 'sans-serif'],
-        display: ['Plus Jakarta Sans', 'system-ui', 'sans-serif'],
-        serif: ['Merriweather', 'Georgia', 'serif'],
-        mono: ['Fira Code', 'Courier New', 'monospace'],
+        display: ['Poppins', 'system-ui', 'sans-serif'],
+        serif: ['Playfair Display', 'Georgia', 'serif'],
+        mono: ['JetBrains Mono', 'Fira Code', 'Courier New', 'monospace'],
       },
       colors: {
         border: "hsl(var(--border))",
