@@ -7,6 +7,25 @@
   "client": [
     {
       "client_info": {
+        "mobilesdk_app_id": "1:254377984264:android:commandcenter23acbd",
+        "android_client_info": {
+          "package_name": "com.pact.commandcenter"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAYCWyv8ysOXbfJKaOHiW6INS3DR1J7z8w"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
         "mobilesdk_app_id": "1:254377984264:android:f5102d9ca6afed6623acbd",
         "android_client_info": {
           "package_name": "com.pact.workflow"
