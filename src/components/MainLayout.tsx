@@ -82,7 +82,7 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
             )}
             {/* Global Refresh Bar - Available on all pages */}
             <GlobalRefreshBar />
-            <div className={`flex-1 ${isMobile ? 'px-3 pb-16 pt-2' : 'p-4 md:p-6 lg:p-8'} ${isMobile ? 'bg-gray-50 dark:bg-gray-900 scroll-container' : 'bg-slate-50/70 dark:bg-gray-900/70'} overflow-y-auto relative z-0 min-w-0 min-h-0`}>
+            <div className={`flex-1 ${isMobile ? 'px-2 pb-14 pt-1' : 'p-2 md:p-3 lg:p-4'} ${isMobile ? 'bg-gray-50 dark:bg-gray-900 scroll-container' : 'bg-slate-50/70 dark:bg-gray-900/70'} overflow-y-auto relative z-0 min-w-0 min-h-0`}>
               {children || <Outlet />}
             </div>
             {isMobile && <MobileBottomNav />}
