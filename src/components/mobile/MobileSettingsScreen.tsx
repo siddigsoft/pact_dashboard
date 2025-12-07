@@ -215,7 +215,7 @@ export function MobileSettingsScreen({
   };
 
   return (
-    <div className={cn("min-h-screen bg-white dark:bg-black pb-safe", className)} data-testid="mobile-settings">
+    <div className={cn("flex flex-col h-screen bg-white dark:bg-black", className)} data-testid="mobile-settings">
       <MobileHeader
         title="Settings"
         showBack
@@ -236,7 +236,7 @@ export function MobileSettingsScreen({
         }
       />
 
-      <div className="px-4 py-4 pb-32 space-y-6">
+      <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4 pb-32 space-y-6">
         <Card className="p-4">
           <button
             onClick={() => {
