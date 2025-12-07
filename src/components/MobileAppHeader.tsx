@@ -158,7 +158,7 @@ const MobileAppHeader = ({
         >
           <Menu className="h-5 w-5" />
         </Button>
-        <h1 className="text-lg font-semibold text-white truncate max-w-[180px]">
+        <h1 className="text-xl font-semibold text-white truncate max-w-[180px]">
           {title}
         </h1>
       </div>
