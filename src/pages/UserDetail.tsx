@@ -350,13 +350,6 @@ const UserDetail: React.FC = () => {
   return (
     <div className="container max-w-5xl mx-auto p-3 sm:p-4 md:p-6 lg:p-8 space-y-4 sm:space-y-6 md:space-y-8">
       <div className="flex items-center justify-between mb-2">
-        <Button 
-          variant="outline" 
-          onClick={() => navigate("/users")}
-          className="min-h-[44px] px-4"
-        >
-          <ArrowLeft className="mr-2 h-4 w-4" /> Back to Users
-        </Button>
         {isAdmin && !editMode && (
           <Button onClick={handleEdit} variant="outline" className="min-h-[44px] px-4">
             <Edit className="h-4 w-4 mr-1" />
