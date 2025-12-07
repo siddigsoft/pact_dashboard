@@ -25,6 +25,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useBudget } from '@/context/budget/BudgetContext';
 import { ProjectBudgetCard } from '@/components/budget/BudgetCard';
+import { EditProjectBudgetDialog } from '@/components/budget/EditProjectBudgetDialog';
 
 import { Project } from '@/types/project';
 import { Button } from '@/components/ui/button';
@@ -117,7 +118,8 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
 }) => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('overview');
-  const { getProjectBudget, loading: budgetLoading } = useBudget();
+  const [editBudgetOpen, setEditBudgetOpen] = useState(false);
+  const { getProjectBudget, loading: budgetLoading, refreshProjectBudgets } = useBudget();
   const projectBudget = getProjectBudget(project.id);
 
   // Helper function to safely format dates
@@ -609,6 +611,11 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
         <TabsContent value="budget" className="space-y-4 mt-4">
           <div className="flex items-center justify-between gap-2">
             <h2 className="text-base font-semibold">Project Budget</h2>
+            {projectBudget && (
+              <Button size="sm" variant="outline" onClick={() => setEditBudgetOpen(true)} data-testid="button-edit-budget">
+                <Edit className="h-4 w-4 mr-1.5" /> Edit Budget
+              </Button>
+            )}
             {!projectBudget && (
               <Button size="sm" onClick={() => navigate('/budget')}>
                 <Plus className="h-4 w-4 mr-1.5" /> Create Budget
@@ -621,9 +628,18 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
           ) : projectBudget ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <ProjectBudgetCard budget={projectBudget} projectName={project.name} />
-            </div>
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <ProjectBudgetCard budget={projectBudget} projectName={project.name} />
+              </div>
+              <EditProjectBudgetDialog
+                budget={projectBudget}
+                projectName={project.name}
+                open={editBudgetOpen}
+                onOpenChange={setEditBudgetOpen}
+                onSuccess={() => refreshProjectBudgets()}
+              />
+            </>
           ) : (
             <div className="text-center py-12 border border-dashed rounded-lg border-border">
               <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-muted mb-4">
