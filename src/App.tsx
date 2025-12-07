@@ -19,7 +19,6 @@ const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const MMP = lazy(() => import('./pages/MMP'));
 const MMPUpload = lazy(() => import('./pages/MMPUpload'));
-const MMPDetail = lazy(() => import('./pages/MMPDetail'));
 const MMPDetailView = lazy(() => import('./pages/MMPDetailView'));
 const MMPVerification = lazy(() => import('./pages/MMPVerification'));
 const MMPDetailedVerification = lazy(() => import('./pages/MMPDetailedVerification'));
