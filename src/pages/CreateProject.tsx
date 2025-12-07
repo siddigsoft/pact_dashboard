@@ -61,7 +61,10 @@ const CreateProject = () => {
   };
 
   const handleCreateBudget = async () => {
-    if (!createdProject || !totalBudget || parseFloat(totalBudget) <= 0) return;
+    if (!createdProject || !totalBudget || parseFloat(totalBudget) <= 0) {
+      console.warn('Budget creation validation failed:', { createdProject, totalBudget });
+      return;
+    }
 
     setBudgetLoading(true);
     try {
@@ -77,15 +80,19 @@ const CreateProject = () => {
         ? `${fiscalYear}-01-01` 
         : budgetPeriod === 'monthly'
         ? new Date().toISOString().split('T')[0]
+        : budgetPeriod === 'quarterly'
+        ? new Date().toISOString().split('T')[0]
         : undefined;
 
       const periodEnd = budgetPeriod === 'annual'
         ? `${fiscalYear}-12-31`
         : budgetPeriod === 'monthly'
         ? new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString().split('T')[0]
+        : budgetPeriod === 'quarterly'
+        ? new Date(new Date().setMonth(new Date().getMonth() + 3)).toISOString().split('T')[0]
         : undefined;
 
-      await createProjectBudget({
+      const budgetInput = {
         projectId: createdProject.id,
         totalBudgetCents,
         budgetPeriod,
@@ -94,10 +101,21 @@ const CreateProject = () => {
         categoryAllocations,
         fiscalYear: parseInt(fiscalYear),
         budgetNotes,
-      });
+      };
 
-      setShowBudgetDialog(false);
-      navigate(`/projects/${createdProject.id}`);
+      console.log('Creating budget with data:', budgetInput);
+
+      const result = await createProjectBudget(budgetInput);
+      
+      if (result) {
+        console.log('Budget created successfully:', result);
+        setShowBudgetDialog(false);
+        navigate(`/projects/${createdProject.id}`);
+      } else {
+        console.error('Budget creation returned null');
+      }
+    } catch (error) {
+      console.error('Error creating budget:', error);
     } finally {
       setBudgetLoading(false);
     }
