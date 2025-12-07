@@ -20,8 +20,9 @@ interface Stroke {
 interface MobileSignaturePadProps {
   onSave?: (signature: string) => void;
   onClear?: () => void;
-  width?: number;
-  height?: number;
+  width?: number | 'auto';
+  height?: number | 'auto';
+  aspectRatio?: number;
   strokeColor?: string;
   strokeWidth?: number;
   backgroundColor?: string;
@@ -35,8 +36,9 @@ interface MobileSignaturePadProps {
 export function MobileSignaturePad({
   onSave,
   onClear,
-  width = 300,
-  height = 200,
+  width = 'auto',
+  height = 'auto',
+  aspectRatio = 1.5,
   strokeColor = '#000000',
   strokeWidth = 3,
   backgroundColor = 'transparent',
@@ -47,11 +49,33 @@ export function MobileSignaturePad({
   className,
 }: MobileSignaturePadProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [strokes, setStrokes] = useState<Stroke[]>([]);
   const [currentStroke, setCurrentStroke] = useState<Point[]>([]);
   const [isEmpty, setIsEmpty] = useState(true);
+  const [canvasSize, setCanvasSize] = useState({ width: 300, height: 200 });
   const lastPoint = useRef<Point | null>(null);
+
+  useEffect(() => {
+    const updateCanvasSize = () => {
+      if (containerRef.current) {
+        const containerWidth = containerRef.current.offsetWidth;
+        const newWidth = width === 'auto' ? containerWidth : width;
+        const newHeight = height === 'auto' ? Math.round(containerWidth / aspectRatio) : height;
+        setCanvasSize({ width: newWidth, height: newHeight });
+      }
+    };
+
+    updateCanvasSize();
+    window.addEventListener('resize', updateCanvasSize);
+    window.addEventListener('orientationchange', updateCanvasSize);
+    
+    return () => {
+      window.removeEventListener('resize', updateCanvasSize);
+      window.removeEventListener('orientationchange', updateCanvasSize);
+    };
+  }, [width, height, aspectRatio]);
 
   const getCanvasContext = useCallback(() => {
     const canvas = canvasRef.current;
@@ -198,23 +222,24 @@ export function MobileSignaturePad({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    canvas.width = width * 2;
-    canvas.height = height * 2;
+    canvas.width = canvasSize.width * 2;
+    canvas.height = canvasSize.height * 2;
     ctx.scale(2, 2);
-  }, [width, height]);
+    redrawCanvas();
+  }, [canvasSize.width, canvasSize.height, redrawCanvas]);
 
   return (
-    <div className={cn("flex flex-col gap-3", className)} data-testid="signature-pad">
+    <div ref={containerRef} className={cn("flex flex-col gap-3 w-full", className)} data-testid="signature-pad">
       <div 
         className={cn(
-          "relative rounded-2xl border-2 border-dashed border-black/20 dark:border-white/20 overflow-hidden touch-none",
+          "relative rounded-2xl border-2 border-dashed border-black/20 dark:border-white/20 overflow-hidden touch-none w-full",
           disabled && "opacity-50 cursor-not-allowed"
         )}
-        style={{ width, height, backgroundColor }}
+        style={{ height: canvasSize.height, backgroundColor }}
       >
         <canvas
           ref={canvasRef}
-          style={{ width, height }}
+          style={{ width: '100%', height: canvasSize.height }}
           className="cursor-crosshair"
           onTouchStart={handleStart}
           onTouchMove={handleMove}

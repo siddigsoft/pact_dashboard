@@ -238,15 +238,14 @@ export function SearchHeader({
             data-testid="input-search"
           />
           {value && (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6"
+            <button
               onClick={() => onSearch('')}
+              className="p-1 rounded-full text-black/40 dark:text-white/40 active:scale-95 transition-transform touch-manipulation"
               data-testid="button-clear"
+              aria-label="Clear search"
             >
               <X className="h-4 w-4" />
-            </Button>
+            </button>
           )}
         </div>
       </div>
