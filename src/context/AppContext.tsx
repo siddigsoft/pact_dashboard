@@ -7,6 +7,7 @@ import { AppRole, ResourceType, ActionType } from '@/types/roles';
 import { ProjectProvider } from './project/ProjectContext';
 import { ChatProvider } from './chat/ChatContextSupabase';
 import { CommunicationProvider } from './communications/CommunicationContext';
+import { CallProvider } from './communications/CallContext';
 import { NavigationProvider } from './NavigationContext';
 import { ViewModeProvider } from './ViewModeContext';
 import { ArchiveProvider } from './archive/ArchiveContext';
@@ -20,6 +21,7 @@ import { DownPaymentProvider } from './downPayment/DownPaymentContext';
 import { SuperAdminProvider } from './superAdmin/SuperAdminContext';
 import { ActiveVisitProvider } from './ActiveVisitContext';
 import BrowserNotificationListener from '@/components/BrowserNotificationListener';
+import GlobalCallOverlay from '@/components/communication/GlobalCallOverlay';
 
 interface CompositeContextType {
   currentUser: ReturnType<typeof useUser>['currentUser'];
@@ -148,8 +150,11 @@ export const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children
                                       <ActiveVisitProvider>
                                         <ChatProvider>
                                           <CommunicationProvider>
-                                            <BrowserNotificationListener />
-                                            {children}
+                                            <CallProvider>
+                                              <BrowserNotificationListener />
+                                              <GlobalCallOverlay />
+                                              {children}
+                                            </CallProvider>
                                           </CommunicationProvider>
                                         </ChatProvider>
                                       </ActiveVisitProvider>
