@@ -375,7 +375,7 @@
                 <SidebarGroup className="py-0">
                   <CollapsibleTrigger asChild>
                     <SidebarGroupLabel 
-                      className="px-1.5 py-0.5 h-5 text-[11px] uppercase tracking-wide font-semibold text-blue-600 dark:text-blue-300 cursor-pointer flex items-center justify-between hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors"
+                      className="px-1.5 py-0.5 h-5 text-[10px] uppercase tracking-wide font-semibold text-blue-600 dark:text-blue-300 cursor-pointer flex items-center justify-between hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors"
                       onClick={() => toggleGroupCollapse(group.id)}
                       data-testid={`group-label-${group.id}`}
                     >
@@ -392,7 +392,7 @@
                               asChild
                               isActive={pathname === item.url}
                               tooltip={item.title}
-                              className={`h-7 px-1.5 rounded text-[13px] font-medium transition-all duration-200 
+                              className={`h-7 px-1.5 rounded text-[12px] font-medium transition-all duration-200 
                                 ${
                                   pathname === item.url
                                     ? "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 font-semibold"
@@ -439,9 +439,9 @@
                       {getInitials(currentUser.name)}
                     </AvatarFallback>
                   </Avatar>
-                  <div className="flex flex-col items-start text-left text-[12px] leading-tight group-data-[collapsible=icon]:hidden">
+                  <div className="flex flex-col items-start text-left text-[11px] leading-tight group-data-[collapsible=icon]:hidden">
                     <span className="font-semibold text-gray-900 dark:text-gray-100">{currentUser.name}</span>
-                    <span className="text-[11px] text-gray-500 dark:text-gray-400">{getPrimaryRole()}</span>
+                    <span className="text-[10px] text-gray-500 dark:text-gray-400">{getPrimaryRole()}</span>
                   </div>
                   <ChevronUp className="ml-auto h-2.5 w-2.5 text-muted-foreground group-data-[collapsible=icon]:hidden" />
                 </Button>
