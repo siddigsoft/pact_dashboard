@@ -105,9 +105,67 @@ const SiteEditForm: React.FC<SiteEditFormProps> = ({ site, onSave, onCancel, hub
                      (site.activity_at_site ? [site.activity_at_site] : [])
   });
   const [visitDate, setVisitDate] = React.useState<Date | undefined>(undefined);
+  const [expectedStartDate, setExpectedStartDate] = React.useState<Date | undefined>(undefined);
+  const [expectedEndDate, setExpectedEndDate] = React.useState<Date | undefined>(undefined);
   const [customValues, setCustomValues] = React.useState({
     survey_tool: ''
   });
+
+  React.useEffect(() => {
+    try {
+      if (site?.visit_date) {
+        const vd = new Date(site.visit_date);
+        if (!isNaN(vd.getTime())) setVisitDate(vd);
+      }
+      const ev = (site as any)?.additional_data?.expected_visit;
+      if (ev) {
+        if (ev.start_date) {
+          const sd = new Date(ev.start_date);
+          if (!isNaN(sd.getTime())) setExpectedStartDate(sd);
+        }
+        if (ev.end_date) {
+          const ed = new Date(ev.end_date);
+          if (!isNaN(ed.getTime())) setExpectedEndDate(ed);
+        }
+      }
+    } catch {}
+  }, [site]);
+
+  const isDMActivity = React.useMemo(() => {
+    const a = `${formData?.main_activity || ''} ${formData?.activity || ''}`.toUpperCase();
+    return a.includes('GFA') || a.includes('CBT') || a.includes('EBSFP');
+  }, [formData?.main_activity, formData?.activity]);
+
+  const validateExpectedForVerify = () => {
+    if (isDMActivity) {
+      if (!expectedStartDate || !expectedEndDate) {
+        toast({
+          title: 'Expected period required',
+          description: 'Please select the expected period (start and end dates) for distribution (DM activities).',
+          variant: 'destructive'
+        });
+        return false;
+      }
+      if (!visitDate) {
+        toast({ title: 'Expected visit date required', description: 'Please select the expected visit date.', variant: 'destructive' });
+        return false;
+      }
+      const d0 = new Date(expectedStartDate);
+      const d1 = new Date(expectedEndDate);
+      const dv = new Date(visitDate);
+      d0.setHours(0,0,0,0); d1.setHours(23,59,59,999); dv.setHours(12,0,0,0);
+      if (dv < d0 || dv > d1) {
+        toast({ title: 'Date out of range', description: 'Expected visit date must fall within the selected expected period.', variant: 'destructive' });
+        return false;
+      }
+      return true;
+    }
+    if (!visitDate) {
+      toast({ title: 'Expected visit date required', description: 'Please select the expected visit date.', variant: 'destructive' });
+      return false;
+    }
+    return true;
+  };
 
   // Get filtered states for selected hub
   const selectedHub = hubs.find(h => h.name === formData.hub_office);
@@ -142,194 +200,48 @@ const SiteEditForm: React.FC<SiteEditFormProps> = ({ site, onSave, onCancel, hub
         </div>
       )}
 
+      {/* Site Details Summary */}
+      <div className="border rounded-md p-3 bg-muted/30 mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+          <div><span className="text-muted-foreground">Site Name:</span> <span className="font-medium">{formData.site_name}</span></div>
+          <div><span className="text-muted-foreground">Site ID:</span> <span className="font-medium">{formData.site_code}</span></div>
+          <div><span className="text-muted-foreground">Locality:</span> <span className="font-medium">{formData.locality}</span></div>
+          <div><span className="text-muted-foreground">State:</span> <span className="font-medium">{formData.state}</span></div>
+          <div><span className="text-muted-foreground">Hub:</span> <span className="font-medium">{formData.hub_office}</span></div>
+          <div><span className="text-muted-foreground">CP name:</span> <span className="font-medium">{formData.cp_name || '-'}</span></div>
+          <div className="md:col-span-3"><span className="text-muted-foreground">Activity at the site:</span> <span className="font-medium">{Array.isArray(formData.activity_at_site) && formData.activity_at_site.length > 0 ? formData.activity_at_site.join(', ') : (formData.main_activity || formData.activity || '-')}</span></div>
+          <div className="md:col-span-3"><span className="text-muted-foreground">Activity Details:</span> <span className="font-medium">{formData.activity || formData.main_activity || '-'}</span></div>
+          <div><span className="text-muted-foreground">Visit by:</span> <span className="font-medium">{formData.monitoring_by || '-'}</span></div>
+          <div><span className="text-muted-foreground">Tool to be used:</span> <span className="font-medium">{formData.survey_tool || '-'}</span></div>
+          <div><span className="text-muted-foreground">Use Market Diversion Monitoring:</span> <span className="font-medium">{formData.use_market_diversion ? 'Yes' : 'No'}</span></div>
+          <div><span className="text-muted-foreground">Use Warehouse Monitoring:</span> <span className="font-medium">{formData.use_warehouse_monitoring ? 'Yes' : 'No'}</span></div>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <Label htmlFor="site_name">Site Name</Label>
-          <Input
-            id="site_name"
-            value={formData.site_name}
-            onChange={(e) => setFormData({ ...formData, site_name: e.target.value })}
-            required
-          />
-        </div>
-        <div>
-          <Label htmlFor="site_code">Site Code</Label>
-          <Input
-            id="site_code"
-            value={formData.site_code}
-            onChange={(e) => setFormData({ ...formData, site_code: e.target.value })}
-            required
-          />
-        </div>
-        <div className="md:col-span-2">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Expected Visit Dates */}
+        {isDMActivity ? (
+          <>
             <div>
-              <Label htmlFor="hub_office">Hub Office</Label>
-              <div className="space-y-2">
-                <Select
-                  value={formData.hub_office}
-                  onValueChange={(value) => {
-                    // Clear state and locality when hub changes
-                    setFormData({ ...formData, hub_office: value, state: '', locality: '' });
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select hub office" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {hubs.map((hub) => (
-                      <SelectItem key={hub.id} value={hub.name}>
-                        {hub.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              <Label>Expected Period Start <span className="text-red-500">*</span></Label>
+              <DatePicker date={expectedStartDate} onSelect={setExpectedStartDate} className="w-full" />
             </div>
-            {formData.hub_office && (
-              <div>
-                <Label htmlFor="state">State</Label>
-                <Select
-                  value={formData.state}
-                  onValueChange={(value) => setFormData({ ...formData, state: value, locality: '' })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select state" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {hubStateOptions.map((state) => (
-                      <SelectItem key={state.state_id} value={state.state_name}>
-                        {state.state_name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            {formData.state && (
-              <div>
-                <Label htmlFor="locality">Locality</Label>
-                <Select
-                  value={formData.locality}
-                  onValueChange={(value) => setFormData({ ...formData, locality: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select locality" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {localityOptions.map((locality) => (
-                      <SelectItem key={locality.id} value={locality.name}>
-                        {locality.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+            <div>
+              <Label>Expected Period End <span className="text-red-500">*</span></Label>
+              <DatePicker date={expectedEndDate} onSelect={setExpectedEndDate} className="w-full" />
+            </div>
+            <div className="md:col-span-2">
+              <Label>Expected Visit Date <span className="text-red-500">*</span></Label>
+              <DatePicker date={visitDate} onSelect={setVisitDate} className="w-full" />
+              <p className="text-xs text-muted-foreground mt-1">Must be within the expected period above.</p>
+            </div>
+          </>
+        ) : (
+          <div>
+            <Label>Expected Visit Date <span className="text-red-500">*</span></Label>
+            <DatePicker date={visitDate} onSelect={setVisitDate} className="w-full" />
           </div>
-        </div>
-        <div>
-          <Label htmlFor="cp_name">CP Name</Label>
-          <Input
-            id="cp_name"
-            value={formData.cp_name || ''}
-            onChange={(e) => setFormData({ ...formData, cp_name: e.target.value })}
-          />
-        </div>
-        <div>
-          <Label htmlFor="activity_at_site">Activity at Site</Label>
-          <div className="space-y-2">
-            {ACTIVITY_OPTIONS.map((activity) => (
-              <div key={activity} className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  id={`activity-${activity}`}
-                  checked={formData.activity_at_site?.includes(activity) || false}
-                  onChange={(e) => {
-                    const isChecked = e.target.checked;
-                    setFormData(prev => ({
-                      ...prev,
-                      activity_at_site: isChecked
-                        ? [...(prev.activity_at_site || []), activity]
-                        : (prev.activity_at_site || []).filter(a => a !== activity)
-                    }));
-                  }}
-                />
-                <Label htmlFor={`activity-${activity}`} className="text-sm font-normal">
-                  {activity}
-                </Label>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div>
-          <Label htmlFor="monitoring_by">Monitoring By</Label>
-          <Select
-            value={formData.monitoring_by || ''}
-            onValueChange={(value) => setFormData({ ...formData, monitoring_by: value })}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select monitoring organization" />
-            </SelectTrigger>
-            <SelectContent>
-              {MONITORING_BY_OPTIONS.map((org) => (
-                <SelectItem key={org} value={org}>
-                  {org}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div>
-          <Label htmlFor="survey_tool">Survey Tool</Label>
-          <div className="space-y-2">
-            <Select
-              value={isCustomValue('survey_tool', formData.survey_tool || '') ? 'Other' : (formData.survey_tool || '')}
-              onValueChange={(value) => {
-                if (value === 'Other') {
-                  setCustomValues(prev => ({ ...prev, survey_tool: formData.survey_tool || '' }));
-                }
-                setFormData({ ...formData, survey_tool: value });
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select survey tool" />
-              </SelectTrigger>
-              <SelectContent>
-                {SURVEY_TOOL_OPTIONS.map((tool) => (
-                  <SelectItem key={tool} value={tool}>
-                    {tool}
-                  </SelectItem>
-                ))}
-                <SelectItem value="Other">Other (Custom)</SelectItem>
-              </SelectContent>
-            </Select>
-            {formData.survey_tool === 'Other' && (
-              <Input
-                placeholder="Enter custom survey tool"
-                value={customValues.survey_tool}
-                onChange={(e) => setCustomValues(prev => ({ ...prev, survey_tool: e.target.value }))}
-              />
-            )}
-          </div>
-        </div>
-        <div>
-          <Label>Visit Date <span className="text-red-500">*</span></Label>
-          <DatePicker
-            date={visitDate}
-            onSelect={setVisitDate}
-            className="w-full"
-          />
-        </div>
-        <div className="md:col-span-2">
-          <Label htmlFor="comments">Comments</Label>
-          <Textarea
-            id="comments"
-            value={formData.comments}
-            onChange={(e) => setFormData({ ...formData, comments: e.target.value })}
-            rows={3}
-          />
-        </div>
+        )}
       </div>
 
       <DialogFooter>
@@ -338,26 +250,26 @@ const SiteEditForm: React.FC<SiteEditFormProps> = ({ site, onSave, onCancel, hub
           <Button 
             type="button"
             onClick={() => {
-              // Validate that visit date is required
-              if (!visitDate) {
-                toast({
-                  title: 'Validation Error',
-                  description: 'Visit date is required. Please select a visit date before verifying.',
-                  variant: 'destructive'
-                });
-                return;
-              }
+              if (!validateExpectedForVerify()) return;
+              const expected_visit = isDMActivity ? {
+                type: 'range',
+                start_date: expectedStartDate ? expectedStartDate.toISOString().split('T')[0] : null,
+                end_date: expectedEndDate ? expectedEndDate.toISOString().split('T')[0] : null,
+                expected_date: visitDate ? visitDate.toISOString().split('T')[0] : null,
+              } : {
+                type: 'single',
+                expected_date: visitDate ? visitDate.toISOString().split('T')[0] : null,
+              };
               const updatedSite = {
                 ...formData,
                 visit_date: visitDate ? visitDate.toISOString().split('T')[0] : null,
-                // Use custom values if "Other" was selected
+                additional_data: { ...(formData as any)?.additional_data, expected_visit },
                 hub_office: formData.hub_office,
                 monitoring_by: formData.monitoring_by,
                 survey_tool: formData.survey_tool === 'Other' ? customValues.survey_tool : formData.survey_tool,
               };
               onSave(updatedSite, true);
             }}
-            disabled={!visitDate}
             className="bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <CheckCircle className="h-4 w-4 mr-2" />
@@ -399,26 +311,26 @@ const SiteEditForm: React.FC<SiteEditFormProps> = ({ site, onSave, onCancel, hub
               type="button" 
               variant="outline"
               onClick={() => {
-                // Validate that visit date is required
-                if (!visitDate) {
-                  toast({
-                    title: 'Validation Error',
-                    description: 'Visit date is required. Please select a visit date before re-verifying.',
-                    variant: 'destructive'
-                  });
-                  return;
-                }
+                if (!validateExpectedForVerify()) return;
+                const expected_visit = isDMActivity ? {
+                  type: 'range',
+                  start_date: expectedStartDate ? expectedStartDate.toISOString().split('T')[0] : null,
+                  end_date: expectedEndDate ? expectedEndDate.toISOString().split('T')[0] : null,
+                  expected_date: visitDate ? visitDate.toISOString().split('T')[0] : null,
+                } : {
+                  type: 'single',
+                  expected_date: visitDate ? visitDate.toISOString().split('T')[0] : null,
+                };
                 const updatedSite = {
                   ...formData,
                   visit_date: visitDate ? visitDate.toISOString().split('T')[0] : null,
-                  // Use custom values if "Other" was selected
+                  additional_data: { ...(formData as any)?.additional_data, expected_visit },
                   hub_office: formData.hub_office,
                   monitoring_by: formData.monitoring_by,
                   survey_tool: formData.survey_tool === 'Other' ? customValues.survey_tool : formData.survey_tool,
                 };
                 onSave(updatedSite, true);
               }}
-              disabled={!visitDate}
               className="bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <CheckCircle className="h-4 w-4 mr-2" />
@@ -461,26 +373,26 @@ const SiteEditForm: React.FC<SiteEditFormProps> = ({ site, onSave, onCancel, hub
               type="button" 
               variant="outline"
               onClick={() => {
-                // Validate that visit date is required
-                if (!visitDate) {
-                  toast({
-                    title: 'Validation Error',
-                    description: 'Visit date is required. Please select a visit date before verifying.',
-                    variant: 'destructive'
-                  });
-                  return;
-                }
+                if (!validateExpectedForVerify()) return;
+                const expected_visit = isDMActivity ? {
+                  type: 'range',
+                  start_date: expectedStartDate ? expectedStartDate.toISOString().split('T')[0] : null,
+                  end_date: expectedEndDate ? expectedEndDate.toISOString().split('T')[0] : null,
+                  expected_date: visitDate ? visitDate.toISOString().split('T')[0] : null,
+                } : {
+                  type: 'single',
+                  expected_date: visitDate ? visitDate.toISOString().split('T')[0] : null,
+                };
                 const updatedSite = {
                   ...formData,
                   visit_date: visitDate ? visitDate.toISOString().split('T')[0] : null,
-                  // Use custom values if "Other" was selected
+                  additional_data: { ...(formData as any)?.additional_data, expected_visit },
                   hub_office: formData.hub_office,
                   monitoring_by: formData.monitoring_by,
                   survey_tool: formData.survey_tool === 'Other' ? customValues.survey_tool : formData.survey_tool,
                 };
                 onSave(updatedSite, true);
               }}
-              disabled={!visitDate}
               className="bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <CheckCircle className="h-4 w-4 mr-2" />
@@ -3367,10 +3279,8 @@ const CoordinatorSites: React.FC = () => {
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Edit Site Details</DialogTitle>
-            <p className="text-sm text-muted-foreground">
-              Review and edit site information. Changes will be saved automatically.
-            </p>
+            <DialogTitle>Site Verification</DialogTitle>
+            <p className="text-sm text-muted-foreground">Review site details and set the expected dates required for verification.</p>
           </DialogHeader>
           {selectedSiteForEdit && (
             <SiteEditForm
@@ -3393,6 +3303,10 @@ const CoordinatorSites: React.FC = () => {
                     use_warehouse_monitoring: updatedSite.use_warehouse_monitoring,
                     visit_date: updatedSite.visit_date,
                     comments: updatedSite.comments,
+                    additional_data: {
+                      ...((selectedSiteForEdit as any)?.additional_data || {}),
+                      ...((updatedSite as any)?.additional_data || {})
+                    },
                   };
 
                   // Only set verification fields if shouldVerify is true
