@@ -1,4 +1,4 @@
-package com.pact.workflow;
+package com.pact.commandcenter;
 
 import android.Manifest;
 import android.app.Notification;
@@ -33,9 +33,8 @@ public class LocationForegroundService extends Service {
     private LocationListener locationListener;
     private boolean isTracking = false;
     
-    // Location update interval (in milliseconds)
-    private static final long UPDATE_INTERVAL = 30000; // 30 seconds
-    private static final float MIN_DISPLACEMENT = 10f; // 10 meters
+    private static final long UPDATE_INTERVAL = 30000;
+    private static final float MIN_DISPLACEMENT = 10f;
     
     @Override
     public void onCreate() {
@@ -51,8 +50,7 @@ public class LocationForegroundService extends Service {
                       ", " + location.getLongitude() + 
                       " (accuracy: " + location.getAccuracy() + "m)");
                 
-                // Broadcast location to the app
-                Intent intent = new Intent("com.pact.workflow.LOCATION_UPDATE");
+                Intent intent = new Intent("com.pact.commandcenter.LOCATION_UPDATE");
                 intent.putExtra("latitude", location.getLatitude());
                 intent.putExtra("longitude", location.getLongitude());
                 intent.putExtra("accuracy", location.getAccuracy());
@@ -93,14 +91,12 @@ public class LocationForegroundService extends Service {
             }
         }
         
-        // Check permissions before starting
         if (!hasLocationPermission()) {
             Log.e(TAG, "Location permission not granted, stopping service");
             stopSelf();
             return START_NOT_STICKY;
         }
         
-        // Start as foreground service
         Notification notification = createNotification();
         
         try {
@@ -147,7 +143,6 @@ public class LocationForegroundService extends Service {
         }
         
         try {
-            // Try GPS provider first, fall back to network
             String provider = LocationManager.GPS_PROVIDER;
             if (!locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
                 if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
@@ -166,7 +161,6 @@ public class LocationForegroundService extends Service {
                 locationListener
             );
             
-            // Also request network updates for better accuracy
             if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER) && 
                 !provider.equals(LocationManager.NETWORK_PROVIDER)) {
                 locationManager.requestLocationUpdates(
@@ -233,14 +227,12 @@ public class LocationForegroundService extends Service {
             this, 0, notificationIntent, flags
         );
         
-        // Stop action
         Intent stopIntent = new Intent(this, LocationForegroundService.class);
         stopIntent.setAction("STOP");
         PendingIntent stopPendingIntent = PendingIntent.getService(
             this, 1, stopIntent, flags
         );
         
-        // Try to use custom icon, fall back to system icon
         int iconId = getResources().getIdentifier(
             "ic_notification", "drawable", getPackageName()
         );

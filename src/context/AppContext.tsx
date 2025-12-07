@@ -1,4 +1,4 @@
-import React, { createContext, useContext } from 'react';
+import React, { createContext, useContext, useMemo, useCallback } from 'react';
 import { UserProvider, useUser } from './user/UserContext';
 import { MMPProvider, useMMP } from './mmp/MMPContext';
 import { NotificationProvider, useNotifications } from './notifications/NotificationContext';
@@ -84,14 +84,13 @@ const CompositeContextProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const notificationContext = useNotifications();
   const roleManagement = useRoleManagement();
   
-  // Legacy hasPermission(action: string) removed: use useAuthorization() or hasGranularPermission() instead.
-
-  const hasGranularPermission = (resource: ResourceType, action: ActionType): boolean => {
+  // Memoized utility functions to prevent recreation on each render
+  const hasGranularPermission = useCallback((resource: ResourceType, action: ActionType): boolean => {
     if (!userContext.currentUser) return false;
     return roleManagement.hasPermission(userContext.currentUser.id, resource, action);
-  };
+  }, [userContext.currentUser, roleManagement]);
   
-  const calculateDistanceFee = (latitude: number, longitude: number): number => {
+  const calculateDistanceFee = useCallback((latitude: number, longitude: number): number => {
     const baseLatitude = 15.5007;
     const baseLongitude = 32.5599;
     
@@ -100,9 +99,10 @@ const CompositeContextProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const distance = Math.sqrt(latDiff * latDiff + lngDiff * lngDiff);
     
     return Math.round(distance * 50);
-  };
+  }, []);
   
-  const contextValue: CompositeContextType = {
+  // Memoized context value to prevent unnecessary re-renders
+  const contextValue = useMemo<CompositeContextType>(() => ({
     ...userContext,
     ...mmpContext,
     ...siteVisitContext,
@@ -119,7 +119,14 @@ const CompositeContextProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     verificationEmail: userContext.verificationEmail,
     resendVerificationEmail: userContext.resendVerificationEmail,
     clearEmailVerificationNotice: userContext.clearEmailVerificationNotice,
-  };
+  }), [
+    userContext,
+    mmpContext,
+    siteVisitContext,
+    notificationContext,
+    hasGranularPermission,
+    calculateDistanceFee,
+  ]);
   
   return (
     <AppContext.Provider value={contextValue}>

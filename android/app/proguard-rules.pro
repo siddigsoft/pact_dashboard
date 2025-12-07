@@ -1,4 +1,4 @@
-# PACT Workflow ProGuard Rules
+# PACT Command Center ProGuard Rules
 # Optimized for Capacitor + Firebase + Android
 
 # ==== General Android Rules ====
@@ -41,7 +41,7 @@
 
 # Firebase Messaging
 -keep class com.google.firebase.messaging.** { *; }
--keep class com.pact.workflow.PACTFirebaseMessagingService { *; }
+-keep class com.pact.commandcenter.PACTFirebaseMessagingService { *; }
 
 # Firebase Crashlytics
 -keepattributes SourceFile,LineNumberTable
@@ -53,9 +53,9 @@
 
 # ==== PACT Application Rules ====
 # Keep main activity and services
--keep class com.pact.workflow.MainActivity { *; }
--keep class com.pact.workflow.LocationForegroundService { *; }
--keep class com.pact.workflow.PACTFirebaseMessagingService { *; }
+-keep class com.pact.commandcenter.MainActivity { *; }
+-keep class com.pact.commandcenter.LocationForegroundService { *; }
+-keep class com.pact.commandcenter.PACTFirebaseMessagingService { *; }
 
 # Keep any native methods
 -keepclasseswithmembernames class * {

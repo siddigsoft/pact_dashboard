@@ -1,4 +1,4 @@
-package com.pact.workflow;
+package com.pact.commandcenter;
 
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -46,18 +46,15 @@ public class PACTFirebaseMessagingService extends FirebaseMessagingService {
         String route = null;
         String type = null;
 
-        // Extract notification data
         if (remoteMessage.getNotification() != null) {
             title = remoteMessage.getNotification().getTitle();
             body = remoteMessage.getNotification().getBody();
         }
 
-        // Extract data payload
         Map<String, String> data = remoteMessage.getData();
         if (data.size() > 0) {
             Log.d(TAG, "Message data payload: " + data);
             
-            // Override with data payload if present
             if (data.containsKey("title")) {
                 title = data.get("title");
             }
@@ -74,17 +71,13 @@ public class PACTFirebaseMessagingService extends FirebaseMessagingService {
                 type = data.get("type");
             }
             
-            // Handle silent data-only messages
             if (title == null && body == null) {
                 handleDataOnlyMessage(data);
                 return;
             }
         }
 
-        // Show notification if we have content
         if (title != null || body != null) {
-            // Don't show notification if app is in foreground and it's not urgent
-            // Let the web layer handle foreground notifications to avoid duplicates
             if (isAppInForeground && !"high".equals(priority) && !"urgent".equals(priority)) {
                 Log.d(TAG, "App in foreground, skipping system notification for non-urgent message");
                 return;
@@ -102,23 +95,19 @@ public class PACTFirebaseMessagingService extends FirebaseMessagingService {
         
         switch (action) {
             case "sync":
-                // Trigger background sync
                 Log.d(TAG, "Sync action received - broadcasting to app");
-                Intent syncIntent = new Intent("com.pact.workflow.SYNC_REQUESTED");
+                Intent syncIntent = new Intent("com.pact.commandcenter.SYNC_REQUESTED");
                 sendBroadcast(syncIntent);
                 break;
                 
             case "location_update":
-                // Request location update
                 Log.d(TAG, "Location update action received");
-                Intent locationIntent = new Intent("com.pact.workflow.LOCATION_UPDATE_REQUESTED");
+                Intent locationIntent = new Intent("com.pact.commandcenter.LOCATION_UPDATE_REQUESTED");
                 sendBroadcast(locationIntent);
                 break;
                 
             case "token_refresh":
-                // Force token refresh
                 Log.d(TAG, "Token refresh action received");
-                // Token will be refreshed automatically by Firebase
                 break;
                 
             default:
@@ -131,11 +120,9 @@ public class PACTFirebaseMessagingService extends FirebaseMessagingService {
         super.onNewToken(token);
         Log.d(TAG, "New FCM token received");
         
-        // Save token locally for persistence
         saveTokenLocally(token);
         
-        // Notify the app about the new token
-        Intent intent = new Intent("com.pact.workflow.FCM_TOKEN_REFRESHED");
+        Intent intent = new Intent("com.pact.commandcenter.FCM_TOKEN_REFRESHED");
         intent.putExtra("token", token);
         sendBroadcast(intent);
         
@@ -172,7 +159,6 @@ public class PACTFirebaseMessagingService extends FirebaseMessagingService {
         Intent intent = new Intent(this, MainActivity.class);
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         
-        // Add routing data to intent
         if (route != null) {
             intent.putExtra("route", route);
         }
@@ -180,7 +166,6 @@ public class PACTFirebaseMessagingService extends FirebaseMessagingService {
             intent.putExtra("type", type);
         }
         
-        // Add all data to intent
         for (Map.Entry<String, String> entry : data.entrySet()) {
             intent.putExtra(entry.getKey(), entry.getValue());
         }
@@ -195,7 +180,6 @@ public class PACTFirebaseMessagingService extends FirebaseMessagingService {
             this, requestCode, intent, flags
         );
 
-        // Choose channel based on priority
         String channelId = "high".equals(priority) || "urgent".equals(priority) 
             ? CHANNEL_HIGH_ID : CHANNEL_ID;
 
@@ -207,10 +191,9 @@ public class PACTFirebaseMessagingService extends FirebaseMessagingService {
             .setContentText(body != null ? body : "")
             .setAutoCancel(true)
             .setSound(defaultSoundUri)
-            .setColor(Color.parseColor("#1e40af")) // Brand blue color
+            .setColor(Color.parseColor("#1e40af"))
             .setContentIntent(pendingIntent);
         
-        // Set priority based on message priority
         if ("high".equals(priority) || "urgent".equals(priority)) {
             builder.setPriority(NotificationCompat.PRIORITY_HIGH);
             builder.setDefaults(NotificationCompat.DEFAULT_ALL);
@@ -218,7 +201,6 @@ public class PACTFirebaseMessagingService extends FirebaseMessagingService {
             builder.setPriority(NotificationCompat.PRIORITY_DEFAULT);
         }
         
-        // Add big text style for longer messages
         if (body != null && body.length() > 50) {
             builder.setStyle(new NotificationCompat.BigTextStyle().bigText(body));
         }
@@ -227,7 +209,6 @@ public class PACTFirebaseMessagingService extends FirebaseMessagingService {
             (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         
         if (notificationManager != null) {
-            // Use unique ID based on timestamp and hash to prevent notification replacement
             int notificationId = (int) (System.currentTimeMillis() % Integer.MAX_VALUE);
             notificationManager.notify(notificationId, builder.build());
             Log.d(TAG, "Notification displayed with ID: " + notificationId);
@@ -235,19 +216,16 @@ public class PACTFirebaseMessagingService extends FirebaseMessagingService {
     }
     
     private int getNotificationIcon() {
-        // Try to use custom notification icon first
         int iconId = getResources().getIdentifier(
             "ic_notification", "drawable", getPackageName()
         );
         
-        // Fall back to app icon if custom icon not found
         if (iconId == 0) {
             iconId = getResources().getIdentifier(
                 "ic_launcher", "mipmap", getPackageName()
             );
         }
         
-        // Final fallback to system icon
         if (iconId == 0) {
             iconId = android.R.drawable.ic_dialog_info;
         }
@@ -262,7 +240,6 @@ public class PACTFirebaseMessagingService extends FirebaseMessagingService {
             
             if (notificationManager == null) return;
             
-            // Default channel
             NotificationChannel defaultChannel = new NotificationChannel(
                 CHANNEL_ID,
                 CHANNEL_NAME,
@@ -274,7 +251,6 @@ public class PACTFirebaseMessagingService extends FirebaseMessagingService {
             defaultChannel.setLightColor(Color.parseColor("#1e40af"));
             notificationManager.createNotificationChannel(defaultChannel);
             
-            // High priority channel
             NotificationChannel highChannel = new NotificationChannel(
                 CHANNEL_HIGH_ID,
                 CHANNEL_HIGH_NAME,
@@ -295,8 +271,7 @@ public class PACTFirebaseMessagingService extends FirebaseMessagingService {
     public void onDeletedMessages() {
         super.onDeletedMessages();
         Log.d(TAG, "FCM messages were deleted on the server");
-        // Optionally sync data when messages are deleted
-        Intent syncIntent = new Intent("com.pact.workflow.SYNC_REQUESTED");
+        Intent syncIntent = new Intent("com.pact.commandcenter.SYNC_REQUESTED");
         sendBroadcast(syncIntent);
     }
 }

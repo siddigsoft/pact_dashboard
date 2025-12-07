@@ -1,9 +1,9 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">PACT Workflow</string>
-    <string name="title_activity_main">PACT Workflow</string>
-    <string name="package_name">com.pact.workflow</string>
-    <string name="custom_url_scheme">com.pact.workflow</string>
+    <string name="app_name">PACT Command Center</string>
+    <string name="title_activity_main">PACT Command Center</string>
+    <string name="package_name">com.pact.commandcenter</string>
+    <string name="custom_url_scheme">com.pact.commandcenter</string>
     
     <!-- App Shortcuts -->
     <string name="shortcut_new_visit_short">New Visit</string>

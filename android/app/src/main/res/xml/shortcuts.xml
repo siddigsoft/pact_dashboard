@@ -11,8 +11,8 @@
         android:shortcutDisabledMessage="@string/shortcut_disabled">
         <intent
             android:action="android.intent.action.VIEW"
-            android:targetPackage="com.pact.workflow"
-            android:targetClass="com.pact.workflow.MainActivity"
+            android:targetPackage="com.pact.commandcenter"
+            android:targetClass="com.pact.commandcenter.MainActivity"
             android:data="pact://app/site-visits/new" />
         <categories android:name="android.shortcut.conversation" />
     </shortcut>
@@ -27,8 +27,8 @@
         android:shortcutDisabledMessage="@string/shortcut_disabled">
         <intent
             android:action="android.intent.action.VIEW"
-            android:targetPackage="com.pact.workflow"
-            android:targetClass="com.pact.workflow.MainActivity"
+            android:targetPackage="com.pact.commandcenter"
+            android:targetClass="com.pact.commandcenter.MainActivity"
             android:data="pact://app/scan" />
     </shortcut>
 
@@ -42,8 +42,8 @@
         android:shortcutDisabledMessage="@string/shortcut_disabled">
         <intent
             android:action="android.intent.action.VIEW"
-            android:targetPackage="com.pact.workflow"
-            android:targetClass="com.pact.workflow.MainActivity"
+            android:targetPackage="com.pact.commandcenter"
+            android:targetClass="com.pact.commandcenter.MainActivity"
             android:data="pact://app/wallet" />
     </shortcut>
 
@@ -57,8 +57,8 @@
         android:shortcutDisabledMessage="@string/shortcut_disabled">
         <intent
             android:action="android.intent.action.VIEW"
-            android:targetPackage="com.pact.workflow"
-            android:targetClass="com.pact.workflow.MainActivity"
+            android:targetPackage="com.pact.commandcenter"
+            android:targetClass="com.pact.commandcenter.MainActivity"
             android:data="pact://app/approvals" />
     </shortcut>
 
