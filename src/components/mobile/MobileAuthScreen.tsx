@@ -15,12 +15,15 @@ import {
   WifiOff,
   Shield,
   AlertCircle,
-  Loader2
+  Loader2,
+  ScanFace
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { hapticPresets } from '@/lib/haptics';
 import { cn } from '@/lib/utils';
+import { useBiometric, saveCredentials } from '@/hooks/use-biometric';
+import { BiometricPrompt } from '@/components/mobile/BiometricPrompt';
 import mapBackground from '@assets/generated_images/minimalist_city_map_background.png';
 import PactLogo from '@/assets/logo.png';
 
@@ -44,6 +47,8 @@ export function MobileAuthScreen({ onAuthSuccess }: MobileAuthScreenProps) {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [errors, setErrors] = useState<FormErrors>({});
   const [touched, setTouched] = useState<{email?: boolean; password?: boolean}>({});
+  const [showBiometricPrompt, setShowBiometricPrompt] = useState(false);
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -56,6 +61,20 @@ export function MobileAuthScreen({ onAuthSuccess }: MobileAuthScreenProps) {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
+  }, []);
+
+  useEffect(() => {
+    const checkBiometric = async () => {
+      if ('PublicKeyCredential' in window) {
+        try {
+          const available = await (window as any).PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+          setBiometricAvailable(available);
+        } catch {
+          setBiometricAvailable(false);
+        }
+      }
+    };
+    checkBiometric();
   }, []);
 
   const validateEmail = (value: string): string | undefined => {
@@ -135,6 +154,11 @@ export function MobileAuthScreen({ onAuthSuccess }: MobileAuthScreenProps) {
         description: 'Successfully signed in',
       });
 
+      if (data.session?.refresh_token) {
+        localStorage.setItem('pact_biometric_email', email.trim());
+        localStorage.setItem('pact_biometric_token', data.session.refresh_token);
+      }
+
       onAuthSuccess?.();
       navigate('/dashboard');
     } catch (error: any) {
@@ -151,10 +175,77 @@ export function MobileAuthScreen({ onAuthSuccess }: MobileAuthScreenProps) {
 
   const handleBiometricLogin = async () => {
     hapticPresets.buttonPress();
+    
+    const savedEmail = localStorage.getItem('pact_biometric_email');
+    if (!savedEmail) {
+      toast({
+        title: 'No saved credentials',
+        description: 'Please sign in with email first to enable biometric login',
+        variant: 'destructive',
+      });
+      return;
+    }
+    
+    setShowBiometricPrompt(true);
+  };
+
+  const handleBiometricSuccess = async () => {
+    setShowBiometricPrompt(false);
+    
+    const savedEmail = localStorage.getItem('pact_biometric_email');
+    const savedToken = localStorage.getItem('pact_biometric_token');
+    
+    if (!savedEmail || !savedToken) {
+      toast({
+        title: 'Credentials expired',
+        description: 'Please sign in with email and password',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase.auth.refreshSession({
+        refresh_token: savedToken,
+      });
+
+      if (error) {
+        localStorage.removeItem('pact_biometric_email');
+        localStorage.removeItem('pact_biometric_token');
+        throw error;
+      }
+
+      hapticPresets.success();
+      toast({
+        title: 'Welcome back!',
+        description: 'Signed in with biometrics',
+      });
+      onAuthSuccess?.();
+      navigate('/dashboard');
+    } catch (error: any) {
+      hapticPresets.error();
+      toast({
+        title: 'Biometric sign in failed',
+        description: 'Please sign in with email and password',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleBiometricError = (error: string) => {
     toast({
-      title: 'Biometric Login',
-      description: 'Checking saved credentials...',
+      title: 'Authentication failed',
+      description: error,
+      variant: 'destructive',
     });
+  };
+
+  const handleBiometricFallback = () => {
+    setShowBiometricPrompt(false);
+    setIsExpanded(true);
   };
 
   const handleExpandToggle = () => {
@@ -421,6 +512,17 @@ export function MobileAuthScreen({ onAuthSuccess }: MobileAuthScreenProps) {
           </div>
         </div>
       </div>
+
+      <BiometricPrompt
+        isOpen={showBiometricPrompt}
+        onClose={() => setShowBiometricPrompt(false)}
+        onSuccess={handleBiometricSuccess}
+        onError={handleBiometricError}
+        onFallback={handleBiometricFallback}
+        title="Sign In"
+        subtitle="Verify your identity to continue"
+        fallbackLabel="Use Email & Password"
+      />
     </div>
   );
 }
