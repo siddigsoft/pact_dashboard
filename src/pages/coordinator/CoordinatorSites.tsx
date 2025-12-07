@@ -221,11 +221,11 @@ const SiteEditForm: React.FC<SiteEditFormProps> = ({ site, onSave, onCancel, hub
         {isDMActivity ? (
           <>
             <div>
-              <Label>Expected Period Start <span className="text-red-500">*</span></Label>
+              <Label>Expected Distribution Start <span className="text-red-500">*</span></Label>
               <DatePicker date={expectedStartDate} onSelect={setExpectedStartDate} className="w-full" />
             </div>
             <div>
-              <Label>Expected Period End <span className="text-red-500">*</span></Label>
+              <Label>Expected Distribution End <span className="text-red-500">*</span></Label>
               <DatePicker date={expectedEndDate} onSelect={setExpectedEndDate} className="w-full" />
             </div>
             <div className="md:col-span-2">
@@ -3583,7 +3583,7 @@ const CoordinatorSites: React.FC = () => {
                 <>
                   <div>
                     <Label className="text-sm font-medium">
-                      Expected Period Start <span className="text-red-500">*</span>
+                      Expected Distribution Start <span className="text-red-500">*</span>
                     </Label>
                     <div className="mt-1">
                       <DatePicker
@@ -3595,7 +3595,7 @@ const CoordinatorSites: React.FC = () => {
                   </div>
                   <div>
                     <Label className="text-sm font-medium">
-                      Expected Period End <span className="text-red-500">*</span>
+                      Expected Distribution End <span className="text-red-500">*</span>
                     </Label>
                     <div className="mt-1">
                       <DatePicker
