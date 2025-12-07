@@ -240,38 +240,6 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
 
       if (error) throw error;
 
-      // Sync budget to projects table
-      const budgetData = {
-        id: data.id,
-        projectId: data.project_id,
-        totalBudgetCents: data.total_budget_cents,
-        allocatedBudgetCents: data.allocated_budget_cents,
-        spentBudgetCents: data.spent_budget_cents,
-        remainingBudgetCents: data.remaining_budget_cents,
-        budgetPeriod: data.budget_period,
-        periodStartDate: data.period_start_date,
-        periodEndDate: data.period_end_date,
-        categoryAllocations: data.category_allocations,
-        status: data.status,
-        approvedBy: data.approved_by,
-        approvedAt: data.approved_at,
-        fiscalYear: data.fiscal_year,
-        budgetNotes: data.budget_notes,
-        createdBy: data.created_by,
-        updatedBy: data.updated_by,
-        createdAt: data.created_at,
-        updatedAt: data.updated_at,
-      };
-
-      const { error: updateProjectError } = await supabase
-        .from('projects')
-        .update({ budget: budgetData })
-        .eq('id', input.projectId);
-
-      if (updateProjectError) {
-        console.warn('Failed to sync budget to projects table:', updateProjectError);
-      }
-
       toast({
         title: 'Success',
         description: 'Project budget created successfully',

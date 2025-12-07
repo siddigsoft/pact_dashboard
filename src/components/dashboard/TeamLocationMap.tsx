@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useCallback, useState, useMemo } from 'react'
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Card, CardContent } from '@/components/ui/card';
-import { MapPin, RefreshCw, Wifi, WifiOff, Loader2, Filter, Maximize2, Minimize2, X, Clock, Users } from 'lucide-react';
+import { MapPin, RefreshCw, Wifi, WifiOff, Loader2, Filter, Maximize2, Minimize2, X, Users } from 'lucide-react';
 import { User } from '@/types/user';
 import { SiteVisit } from '@/types/siteVisit';
 import { formatDistanceToNow, format } from 'date-fns';
@@ -10,7 +10,6 @@ import { getUserStatus } from '@/utils/userStatusUtils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 
 type StatusFilter = 'all' | 'online' | 'active-today' | 'offline' | 'sites';
 
@@ -50,7 +49,6 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({
   const [showSites, setShowSites] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const fullscreenMapRef = useRef<L.Map | null>(null);
-  const [selectedMember, setSelectedMember] = useState<User | null>(null);
 
   const getStatusColor = (user: User): string => {
     if (onlineUserIds.has(user.id)) {
@@ -363,7 +361,6 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({
         `;
 
         marker.bindPopup(popupContent);
-        marker.on('click', () => setSelectedMember(user));
         markersLayerRef.current?.addLayer(marker);
         bounds.extend([user.location.latitude, user.location.longitude]);
         hasValidBounds = true;
@@ -892,40 +889,6 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({
           </div>
         </CardContent>
       </Card>
-
-      <Dialog open={!!selectedMember} onOpenChange={(open) => !open && setSelectedMember(null)}>
-        <DialogContent className="sm:max-w-[420px]">
-          {selectedMember && (
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <Avatar className="h-12 w-12">
-                  <AvatarImage src={selectedMember.avatar} />
-                  <AvatarFallback>{(selectedMember.name || 'U').substring(0, 2).toUpperCase()}</AvatarFallback>
-                </Avatar>
-                <div>
-                  <div className="font-semibold">{selectedMember.name || selectedMember.fullName || 'Unknown'}</div>
-                  <div className="text-xs text-muted-foreground">{selectedMember.roles?.[0] || selectedMember.role || 'Team Member'}</div>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 text-sm">
-                <Badge>{getUserStatus(selectedMember).label}</Badge>
-                {selectedMember.location?.latitude && selectedMember.location?.longitude && (
-                  <div className="flex items-center gap-1 text-muted-foreground">
-                    <MapPin className="h-3 w-3" />
-                    <span>
-                      {selectedMember.location.latitude.toFixed(4)}, {selectedMember.location.longitude.toFixed(4)}
-                    </span>
-                  </div>
-                )}
-              </div>
-              <div className="text-xs text-muted-foreground flex items-center gap-1">
-                <Clock className="h-3 w-3" />
-                <span>Last active: {selectedMember.lastActive ? new Date(selectedMember.lastActive).toLocaleString() : 'Unknown'}</span>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
 
       {/* Fullscreen Map Dialog */}
       <Dialog open={isFullscreen} onOpenChange={(open) => !open && handleCloseFullscreen()}>

@@ -328,66 +328,39 @@ const Index = () => {
         </section>
 
         {/* Footer */}
-        <footer className="bg-muted/10">
-          <div className="container mx-auto px-4 py-12">
-            <div className="mb-8 text-center max-w-4xl mx-auto">
-              <img src={PactLogo} alt="PACT" className="h-14 w-14 mb-5 mx-auto" />
-              <h3 className="text-2xl font-bold mb-3" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>
-                Built for the Field, Designed for Reliability
-              </h3>
-              <p className="text-base text-muted-foreground leading-relaxed mb-8 max-w-2xl mx-auto" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>
+        <footer className="border-t bg-muted/10">
+          <div className="container mx-auto px-4 py-8">
+            <div className="mb-6 text-center max-w-3xl mx-auto">
+              <img src={PactLogo} alt="PACT" className="h-10 w-10 mb-4 mx-auto" />
+              <h3 className="text-base font-medium mb-2">Built for the Field, Designed for Reliability</h3>
+              <p className="text-xs text-muted-foreground leading-relaxed mb-4">
                 The <strong className="text-foreground">PACT Command Center Platform</strong> delivers powerful capabilities across web and mobile applications, 
                 ensuring seamless operations whether you're in the office or in the field.
               </p>
-              
-              <div className="grid md:grid-cols-2 gap-5 max-w-3xl mx-auto mb-8">
-                <Card className="text-left">
-                  <CardContent className="p-5">
-                    <div className="flex items-start gap-4">
-                      <div className="p-2.5 rounded-lg bg-blue-500/10 dark:bg-blue-500/20 shrink-0">
-                        <Radio className="w-5 h-5 text-blue-500" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h4 className="text-base font-bold mb-2 flex items-center gap-2" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>
-                          Web Platform
-                          <Badge variant="secondary" className="text-[10px]">Full Access</Badge>
-                        </h4>
-                        <p className="text-sm text-muted-foreground leading-relaxed" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>
-                          Comprehensive oversight with <strong className="text-foreground">real-time analytics</strong>, 
-                          <strong className="text-foreground"> role-based access</strong>, and 
-                          <strong className="text-foreground"> live tracking</strong>. 
-                          Manage MMPs, assign visits, and generate reports.
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-                
-                <Card className="text-left">
-                  <CardContent className="p-5">
-                    <div className="flex items-start gap-4">
-                      <div className="p-2.5 rounded-lg bg-orange-500/10 dark:bg-orange-500/20 shrink-0">
-                        <MapPin className="w-5 h-5 text-orange-500" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h4 className="text-base font-bold mb-2 flex items-center gap-2" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>
-                          Mobile App
-                          <Badge variant="secondary" className="text-[10px]">Offline Ready</Badge>
-                        </h4>
-                        <p className="text-sm text-muted-foreground leading-relaxed" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>
-                          Field teams with <strong className="text-foreground">full offline functionality</strong> - 
-                          capture visits and complete tasks without connectivity. 
-                          <strong className="text-foreground"> Auto-sync when online</strong>.
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+              <div className="text-left space-y-3 max-w-2xl mx-auto">
+                <div>
+                  <h4 className="text-xs font-medium text-foreground mb-1">Web Platform</h4>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    The web-based <strong className="text-foreground">Command Center</strong> provides comprehensive oversight with 
+                    <strong className="text-foreground"> real-time dashboard analytics</strong>, 
+                    <strong className="text-foreground"> role-based access control</strong>, and 
+                    <strong className="text-foreground"> live team tracking</strong>. 
+                    Upload and manage Monthly Monitoring Plans, assign site visits to field teams, monitor progress with visual workflows, 
+                    and generate detailed reports.
+                  </p>
+                </div>
+                <div>
+                  <h4 className="text-xs font-medium text-foreground mb-1">Mobile Application</h4>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    The mobile application empowers field teams with <strong className="text-foreground">full offline functionality</strong> - 
+                    capture site visits, update data, and complete tasks even without internet connectivity. 
+                    All changes automatically <strong className="text-foreground">sync when back online</strong>, ensuring no data is ever lost.
+                  </p>
+                </div>
               </div>
             </div>
-            
-            <div className="pt-5 text-center border-t">
-              <p className="text-sm text-muted-foreground" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }} data-testid="text-copyright">
+            <div className="border-t pt-4 text-center">
+              <p className="text-xs text-muted-foreground" data-testid="text-copyright">
                 &copy; {new Date().getFullYear()} PACT Consultancy. All rights reserved.
               </p>
             </div>
