@@ -81,6 +81,7 @@ const NotificationsPage = lazy(() => import('./pages/Notifications'));
 const Documentation = lazy(() => import('./pages/Documentation'));
 const PublicDocumentation = lazy(() => import('./pages/PublicDocumentation'));
 const SignaturesPage = lazy(() => import('./pages/Signatures'));
+const DocumentsPage = lazy(() => import('./pages/Documents'));
 
 // Components (keep these eagerly loaded as they're used immediately)
 import MainLayout from './components/MainLayout';
@@ -200,6 +201,7 @@ const AppRoutes = () => {
         <Route path="/reports" element={<Reports />} />
         <Route path="/documentation" element={<Documentation />} />
         <Route path="/public-documentation" element={<PublicDocumentation />} />
+        <Route path="/documents" element={<DocumentsPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/wallet" element={<WalletPage />} />

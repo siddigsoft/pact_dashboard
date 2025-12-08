@@ -8,6 +8,7 @@ import {
 } from '@/types/project';
 import { User } from '@/types';
 import { useUser } from '@/context/user/UserContext';
+import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -52,6 +53,7 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
   onTeamChange,
 }) => {
   const { users } = useUser();
+  const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedRole, setSelectedRole] = useState<ProjectRole>('dataCollector');
@@ -89,20 +91,42 @@ export const TeamCompositionManager: React.FC<TeamCompositionManagerProps> = ({
     setTeamMembers(updatedTeam);
     onTeamChange(updatedTeam);
     setDialogOpen(false);
+    
+    toast({
+      title: 'Team member added',
+      description: `${user.name} has been added to the project as ${selectedRole}.`,
+      variant: 'success',
+    });
   };
 
   const handleRemoveTeamMember = (userId: string) => {
+    const removedMember = teamMembers.find(member => member.userId === userId);
     const updatedTeam = teamMembers.filter(member => member.userId !== userId);
     setTeamMembers(updatedTeam);
     onTeamChange(updatedTeam);
+    
+    toast({
+      title: 'Team member removed',
+      description: removedMember ? `${removedMember.name} has been removed from the project.` : 'Team member removed successfully.',
+      variant: 'default',
+    });
   };
 
   const handleRoleChange = (userId: string, role: ProjectRole) => {
-    const updatedTeam = teamMembers.map(member => 
-      member.userId === userId ? { ...member, role } : member
+    const member = teamMembers.find(m => m.userId === userId);
+    const updatedTeam = teamMembers.map(m => 
+      m.userId === userId ? { ...m, role } : m
     );
     setTeamMembers(updatedTeam);
     onTeamChange(updatedTeam);
+    
+    if (member) {
+      toast({
+        title: 'Role updated',
+        description: `${member.name}'s role changed to ${role}.`,
+        variant: 'success',
+      });
+    }
   };
 
   const getWorkloadColor = (workload?: number): string => {
