@@ -23,7 +23,8 @@ import {
   Check,
   CheckCheck,
   Sparkles,
-  Clock
+  Clock,
+  RotateCcw
 } from 'lucide-react';
 
 const Chat: React.FC = () => {

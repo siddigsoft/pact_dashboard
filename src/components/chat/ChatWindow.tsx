@@ -23,7 +23,8 @@ import {
   Smile,
   Check,
   CheckCheck,
-  MessageSquare
+  MessageSquare,
+  RotateCcw
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { uploadChatAttachment, getContentTypeFromFile, formatFileSize, ChatAttachment } from '@/utils/chatUpload';
@@ -251,79 +252,77 @@ const ChatWindow: React.FC = () => {
   }
 
   return (
-    <div className="flex flex-col h-full bg-gradient-to-b from-muted/20 via-background to-background" data-testid="chat-window">
-      <div className="py-3 px-4 flex items-center justify-between border-b bg-card/95 dark:bg-gray-900/95 backdrop-blur-md sticky top-0 z-10">
+    <div className="flex flex-col h-full bg-white dark:bg-black" data-testid="chat-window">
+      <div className="px-4 py-3 flex items-center justify-between bg-black sticky top-0 z-10">
         <div className="flex items-center gap-3">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="md:hidden uber-icon-btn"
+          <button
+            className="md:hidden w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
             onClick={() => setActiveChat(null)}
             data-testid="button-back"
           >
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
+            <ArrowLeft className="h-4 w-4 text-white" />
+          </button>
           
           <div className="relative group cursor-pointer">
             {activeChat.type === 'private' ? (
-              <Avatar className="h-11 w-11 ring-2 ring-offset-2 ring-offset-background ring-primary/20 transition-all group-hover:ring-primary/40">
-                <AvatarFallback className="bg-gradient-to-br from-primary/90 to-primary text-primary-foreground font-semibold text-sm">
+              <Avatar className="h-10 w-10">
+                <AvatarFallback className="bg-white text-black font-bold text-sm">
                   {activeChat.name.charAt(0).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
             ) : (
-              <Avatar className="h-11 w-11 ring-2 ring-offset-2 ring-offset-background ring-purple-400/20">
-                <AvatarFallback className="bg-gradient-to-br from-purple-500 to-purple-600 text-white">
-                  <Users className="h-5 w-5" />
+              <Avatar className="h-10 w-10">
+                <AvatarFallback className="bg-white text-black">
+                  <Users className="h-4 w-4" />
                 </AvatarFallback>
               </Avatar>
             )}
             {activeChat.type === 'private' && (
-              <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 rounded-full border-2 border-card shadow-sm">
-                <div className="w-full h-full rounded-full bg-green-400 animate-ping opacity-75" />
-              </div>
+              <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-black" />
             )}
           </div>
           
           <div className="min-w-0">
-            <h3 className="font-semibold text-sm leading-tight truncate" data-testid="text-chat-name">{activeChat.name}</h3>
-            <p className="text-xs text-muted-foreground mt-0.5">
+            <h3 className="font-semibold text-sm text-white leading-tight truncate" data-testid="text-chat-name">{activeChat.name}</h3>
+            <p className="text-xs mt-0.5">
               {activeChat.type === 'group' 
-                ? `${activeChat.participants.length} participants` 
-                : (
-                  <span className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-green-500 shadow-sm shadow-green-500/50" />
-                    <span className="text-green-600 dark:text-green-400 font-medium">Active now</span>
-                  </span>
-                )}
+                ? <span className="text-white/60">{activeChat.participants.length} participants</span>
+                : <span className="text-green-400 font-medium">Active now</span>
+              }
             </p>
           </div>
         </div>
         
-        <div className="flex items-center gap-1">
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="uber-icon-btn" 
+        <div className="flex items-center gap-1.5">
+          <button 
+            className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors disabled:opacity-50"
             onClick={() => handleCall(false)}
             disabled={!targetUser}
             data-testid="button-call"
           >
-            <Phone className="h-4.5 w-4.5" />
-          </Button>
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="uber-icon-btn" 
+            <Phone className="h-4 w-4 text-white" />
+          </button>
+          <button 
+            className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors disabled:opacity-50"
             onClick={() => handleCall(true)}
             disabled={!targetUser}
             data-testid="button-video"
           >
-            <Video className="h-4.5 w-4.5" />
-          </Button>
-          <Button variant="ghost" size="icon" className="uber-icon-btn" data-testid="button-more">
-            <MoreVertical className="h-4.5 w-4.5" />
-          </Button>
+            <Video className="h-4 w-4 text-white" />
+          </button>
+          <button 
+            className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
+            onClick={() => window.location.reload()}
+            data-testid="button-refresh"
+          >
+            <RotateCcw className="h-4 w-4 text-white" />
+          </button>
+          <button 
+            className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
+            data-testid="button-more"
+          >
+            <MoreVertical className="h-4 w-4 text-white" />
+          </button>
         </div>
       </div>
       
