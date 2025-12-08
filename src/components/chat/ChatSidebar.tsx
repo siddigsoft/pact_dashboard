@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useChat } from '@/context/chat/ChatContextSupabase';
 import { Chat } from '@/types/chat';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -24,6 +24,8 @@ import {
   Mic,
   Paperclip
 } from 'lucide-react';
+
+const USERS_PAGE_SIZE = 10;
 
 const getUserStatusDisplay = (user: User) => {
   const status = getUserStatus(user);
@@ -169,11 +171,30 @@ const ChatSidebar: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isNewChatOpen, setIsNewChatOpen] = useState(false);
   const [userSearch, setUserSearch] = useState('');
+  const [userPage, setUserPage] = useState(1);
   const { currentUser, users } = useUser();
-  const availableUsers = users.filter(u => u.id !== currentUser?.id);
-  const filteredUsersList = userSearch 
-    ? availableUsers.filter(u => (u.fullName || u.name || u.username || '').toLowerCase().includes(userSearch.toLowerCase()))
-    : availableUsers;
+  const availableUsers = useMemo(
+    () => users.filter(u => u.id !== currentUser?.id),
+    [users, currentUser?.id]
+  );
+
+  const filteredUsersList = useMemo(() => {
+    return userSearch 
+      ? availableUsers.filter(u => (u.fullName || u.name || u.username || '').toLowerCase().includes(userSearch.toLowerCase()))
+      : availableUsers;
+  }, [availableUsers, userSearch]);
+
+  const paginatedUsers = useMemo(
+    () => filteredUsersList.slice(0, userPage * USERS_PAGE_SIZE),
+    [filteredUsersList, userPage]
+  );
+
+  const hasMoreUsers = paginatedUsers.length < filteredUsersList.length;
+
+  useEffect(() => {
+    // Reset pagination when search changes or dialog is reopened
+    setUserPage(1);
+  }, [userSearch, isNewChatOpen]);
 
   const handleStartChatWith = async (userId: string, displayName: string) => {
     try {
@@ -232,7 +253,7 @@ const ChatSidebar: React.FC = () => {
                 </div>
                 <ScrollArea className="h-64">
                   <div className="space-y-1">
-                    {filteredUsersList.map(u => (
+                    {paginatedUsers.map(u => (
                       <button
                         key={u.id}
                         className="w-full flex items-center gap-3 p-2.5 rounded-lg hover:bg-muted dark:hover:bg-gray-800 text-left transition-colors"
@@ -260,10 +281,23 @@ const ChatSidebar: React.FC = () => {
                         </div>
                       </button>
                     ))}
-                    {filteredUsersList.length === 0 && (
+                    {paginatedUsers.length === 0 && (
                       <div className="py-8 text-center">
                         <Users className="h-8 w-8 mx-auto text-muted-foreground/40 mb-2" />
                         <p className="text-sm text-muted-foreground">No contacts found</p>
+                      </div>
+                    )}
+                    {hasMoreUsers && (
+                      <div className="pt-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full"
+                          onClick={() => setUserPage(prev => prev + 1)}
+                          data-testid="button-load-more-contacts"
+                        >
+                          Load more ({paginatedUsers.length}/{filteredUsersList.length})
+                        </Button>
                       </div>
                     )}
                   </div>

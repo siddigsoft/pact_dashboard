@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppContext } from '@/context/AppContext';
 import { useViewMode } from '@/context/ViewModeContext';
@@ -39,6 +39,8 @@ const Chat: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeView, setActiveView] = useState<'list' | 'chat'>('list');
   const [activeTab, setActiveTab] = useState<'contacts' | 'conversations'>('conversations');
+  const [contactPage, setContactPage] = useState(1);
+  const CONTACTS_PAGE_SIZE = 10;
   const { chats, activeChat, setActiveChat, createChat, isLoading } = useChat();
   const { initiateCall } = useCommunication();
   const { users } = useUser();
@@ -125,13 +127,23 @@ const Chat: React.FC = () => {
     chat.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const filteredUsers = users.filter(user => 
+  const filteredUsers = useMemo(() => users.filter(user => 
     user.id !== currentUser?.id &&
     (user.name?.toLowerCase().includes(searchQuery.toLowerCase()) || 
      user.fullName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
      user.role?.toLowerCase().includes(searchQuery.toLowerCase()) ||
      user.email?.toLowerCase().includes(searchQuery.toLowerCase()))
+  ), [users, currentUser?.id, searchQuery]);
+
+  const paginatedContacts = useMemo(
+    () => filteredUsers.slice(0, contactPage * CONTACTS_PAGE_SIZE),
+    [filteredUsers, contactPage, CONTACTS_PAGE_SIZE]
   );
+  const hasMoreContacts = paginatedContacts.length < filteredUsers.length;
+
+  useEffect(() => {
+    setContactPage(1);
+  }, [searchQuery, activeTab]);
 
   const getInitials = (name: string) => 
     name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
@@ -309,7 +321,7 @@ const Chat: React.FC = () => {
             <ScrollArea className="flex-1 bg-white dark:bg-black">
               {activeTab === 'contacts' ? (
                 /* Contact List */
-                filteredUsers.length === 0 ? (
+                paginatedContacts.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-12 px-6">
                     <div className="w-16 h-16 rounded-full bg-black dark:bg-white flex items-center justify-center mb-4">
                       <Users className="h-8 w-8 text-white dark:text-black" />
@@ -319,7 +331,7 @@ const Chat: React.FC = () => {
                   </div>
                 ) : (
                   <div className="space-y-0.5 p-2">
-                    {filteredUsers.map((user) => {
+                    {paginatedContacts.map((user) => {
                       const userName = user.fullName || user.name || user.username || user.email || 'Unknown';
                       const userStatus = getUserStatusDisplay(user);
                       return (
@@ -351,6 +363,17 @@ const Chat: React.FC = () => {
                         </button>
                       );
                     })}
+                    {hasMoreContacts && (
+                      <div className="pt-2 px-0.5">
+                        <button
+                          className="w-full h-9 rounded-full border border-gray-200 dark:border-gray-800 text-sm font-semibold text-gray-700 dark:text-gray-200 bg-white dark:bg-black hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
+                          onClick={() => setContactPage(prev => prev + 1)}
+                          data-testid="button-load-more-contacts"
+                        >
+                          Load more ({paginatedContacts.length}/{filteredUsers.length})
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )
               ) : (
