@@ -251,7 +251,7 @@
       adminItems.push({ id: 'wallets', title: "Wallets", url: "/admin/wallets", icon: CreditCard, priority: 7, isPinned: isPinned('/admin/wallets') });
     }
     if (!isHidden('/withdrawal-approval') && (isAdmin || isFinancialAdmin || isSupervisor || isFOM)) {
-      adminItems.push({ id: 'withdrawal-approval', title: "Withdrawal Approval", url: "/withdrawal-approval", icon: ClipboardCheck, priority: 8, isPinned: isPinned('/withdrawal-approval') });
+      adminItems.push({ id: 'withdrawal-approval', title: "Supervisor Approval", url: "/withdrawal-approval", icon: ClipboardCheck, priority: 8, isPinned: isPinned('/withdrawal-approval') });
     }
     if (!isHidden('/down-payment-approval') && (isAdmin || isFinancialAdmin || isSupervisor)) {
       adminItems.push({ id: 'down-payment-approval', title: "Down-Payment Approval", url: "/down-payment-approval", icon: DollarSign, priority: 8.5, isPinned: isPinned('/down-payment-approval') });
