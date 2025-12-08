@@ -7,8 +7,10 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { formatDistanceToNow, format, isToday, isYesterday } from 'date-fns';
+import { formatDistanceToNow, format, isToday, isYesterday, parseISO } from 'date-fns';
 import { useUser } from '@/context/user/UserContext';
+import { getUserStatus } from '@/utils/userStatusUtils';
+import { User } from '@/types/user';
 import { 
   Send, 
   ArrowLeft, 
@@ -54,6 +56,28 @@ const ChatWindow: React.FC = () => {
   };
 
   const targetUser = getTargetUser();
+
+  const getTargetUserStatus = () => {
+    if (!targetUser) return null;
+    const status = getUserStatus(targetUser);
+    if (status.type === 'online') {
+      return { text: 'Online', color: 'text-green-400', dotColor: 'bg-green-500' };
+    }
+    const lastSeenTime = targetUser.location?.lastUpdated || targetUser.lastActive;
+    if (lastSeenTime) {
+      try {
+        const lastSeenDate = parseISO(lastSeenTime);
+        return { 
+          text: `Last seen ${formatDistanceToNow(lastSeenDate, { addSuffix: false })} ago`,
+          color: 'text-white/60',
+          dotColor: 'bg-gray-400'
+        };
+      } catch {
+        return { text: status.label, color: 'text-white/60', dotColor: 'bg-gray-400' };
+      }
+    }
+    return { text: status.label, color: 'text-white/60', dotColor: 'bg-gray-400' };
+  };
 
   // Handle call initiation
   const handleCall = (isVideo: boolean = false) => {
@@ -279,9 +303,10 @@ const ChatWindow: React.FC = () => {
                 </AvatarFallback>
               </Avatar>
             )}
-            {activeChat.type === 'private' && (
-              <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-black" />
-            )}
+            {activeChat.type === 'private' && (() => {
+              const status = getTargetUserStatus();
+              return <div className={`absolute bottom-0 right-0 w-3 h-3 ${status?.dotColor || 'bg-gray-400'} rounded-full border-2 border-black`} />;
+            })()}
           </div>
           
           <div className="min-w-0">
@@ -289,7 +314,10 @@ const ChatWindow: React.FC = () => {
             <p className="text-xs mt-0.5">
               {activeChat.type === 'group' 
                 ? <span className="text-white/60">{activeChat.participants.length} participants</span>
-                : <span className="text-green-400 font-medium">Active now</span>
+                : (() => {
+                    const status = getTargetUserStatus();
+                    return <span className={`font-medium ${status?.color || 'text-white/60'}`}>{status?.text || 'Offline'}</span>;
+                  })()
               }
             </p>
           </div>
