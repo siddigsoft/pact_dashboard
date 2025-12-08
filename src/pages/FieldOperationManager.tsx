@@ -1,12 +1,35 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useAppContext } from '@/context/AppContext';
-import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import type { MMPStatus } from '@/types';
-import jsPDF from 'jspdf'; // npm install jspdf
-import autoTable from 'jspdf-autotable'; // npm install jspdf-autotable
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { supabase } from '@/integrations/supabase/client';
+import { useUser } from '@/context/user/UserContext';
+import { cn } from '@/lib/utils';
+import {
+  FileText,
+  Users,
+  MapPin,
+  Clock,
+  CheckCircle2,
+  AlertCircle,
+  ChevronRight,
+  Search,
+  Filter,
+  Download,
+  X,
+  Calendar,
+  Building2,
+  Activity,
+  TrendingUp,
+  Eye,
+  Loader2
+} from 'lucide-react';
 
 const FIELD_OP_ROLE: import('@/types/roles').AppRole = 'Field Operation Manager (FOM)';
 
@@ -16,17 +39,6 @@ const CATEGORY_LABELS = [
   { key: 'pending', label: 'Pending' },
   { key: 'archived', label: 'Archived' },
 ];
-
-// --- Fixes and checklist for fetching MMP data from Supabase ---
-
-// 1. Make sure SUPABASE_URL and SUPABASE_ANON_KEY are set to your real project values (not placeholders).
-// 2. Confirm your table name is "mmp_files" and you have data in it.
-// 3. Ensure Row Level Security (RLS) is disabled or you have a SELECT policy for anon/public users.
-// 4. Use the correct Supabase client (do not create a new client if you already have one in your project).
-// 5. Log errors and data for debugging.
-
-import { supabase } from '@/integrations/supabase/client'; // Use your shared client, not createClient()
-import { useUser } from '@/context/user/UserContext';
 
 const FieldOperationManagerPage = () => {
   const { roles } = useAppContext();
@@ -45,15 +57,12 @@ const FieldOperationManagerPage = () => {
   const [selectedReportHubs, setSelectedReportHubs] = useState<string[]>([]);
   const [selectedReportMMPs, setSelectedReportMMPs] = useState<string[]>([]);
   const [reportPeriod, setReportPeriod] = useState<string[]>([]);
-
-  // Add state for download format
   const [downloadFormat, setDownloadFormat] = useState<'pdf' | 'docx' | 'excel'>('pdf');
+  const [activeView, setActiveView] = useState<'forwarded' | 'all' | 'sites'>('forwarded');
 
-  // Extract unique months from mmpFiles (format: 'YYYY-MM')
   const availableMonths = useMemo(() => {
     const monthsSet = new Set<string>();
     (mmpFiles || []).forEach(mmp => {
-      // Try to get month and year, fallback to uploadedAt
       let month = (mmp as any).month;
       let year = (mmp as any).year;
       if (!month || !year) {
@@ -69,11 +78,9 @@ const FieldOperationManagerPage = () => {
         monthsSet.add(`${year}-${mm}`);
       }
     });
-    // Sort descending (latest first)
     return Array.from(monthsSet).sort((a, b) => b.localeCompare(a));
   }, [mmpFiles]);
 
-  // Helper to check if a record matches selected months
   const matchesSelectedMonths = (mmp: any) => {
     if (!selectedMonths.length) return true;
     let month = mmp.month;
@@ -93,13 +100,16 @@ const FieldOperationManagerPage = () => {
     return false;
   };
 
-  // Check access: Admin or Field Operation Manager
   const allowed = hasAnyRole(['admin', 'Admin']) || hasAnyRole(['fom', 'Field Operation Manager (FOM)', FIELD_OP_ROLE]);
+  
   if (!allowed) {
     return (
-      <div className="max-w-xl mx-auto mt-20 p-8 bg-white rounded-xl shadow text-center">
-        <h2 className="text-2xl font-bold mb-2">Access Denied</h2>
-        <p className="text-gray-600">You do not have permission to view this page.</p>
+      <div className="min-h-screen bg-white dark:bg-black flex items-center justify-center p-4">
+        <div className="bg-black/5 dark:bg-white/5 rounded-2xl p-8 text-center max-w-md">
+          <AlertCircle className="h-12 w-12 text-black/40 dark:text-white/40 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-black dark:text-white mb-2">Access Denied</h2>
+          <p className="text-black/60 dark:text-white/60">You do not have permission to view this page.</p>
+        </div>
       </div>
     );
   }
@@ -119,7 +129,25 @@ const FieldOperationManagerPage = () => {
     return map;
   }, [mmpFiles]);
 
-  // Compute per-MMP summaries for the selected category (approved/pending/archived)
+  const stats = useMemo(() => {
+    const total = mmpFiles.length;
+    const approved = mmpFiles.filter(m => (m.status || '').toLowerCase() === 'approved').length;
+    const pending = mmpFiles.filter(m => {
+      const s = (m.status || '').toLowerCase();
+      return s === 'pending' || s === 'pendingreview' || s === 'pending_review';
+    }).length;
+    const totalSites = mmpFiles.reduce((acc, mmp) => {
+      const count = Array.isArray((mmp as any).sites)
+        ? (mmp as any).sites.length
+        : typeof (mmp as any).siteCount === 'number'
+          ? (mmp as any).siteCount
+          : 0;
+      return acc + count;
+    }, 0);
+    const uniqueHubs = Object.keys(sitesPerHub).length;
+    return { total, approved, pending, totalSites, uniqueHubs };
+  }, [mmpFiles, sitesPerHub]);
+
   const mmpSummaries = useMemo(() => {
     if (selectedCategory === 'all') return [];
     const summaries: Array<{
@@ -166,7 +194,6 @@ const FieldOperationManagerPage = () => {
     return summaries;
   }, [mmpFiles, selectedCategory]);
 
-  // Compute per-MMP summaries for all categories (for "All" tab)
   const allMmpSummaries = useMemo(() => {
     const summaries: Array<{
       mmpName: string;
@@ -213,15 +240,12 @@ const FieldOperationManagerPage = () => {
     return summaries;
   }, [mmpFiles]);
 
-  // Helper to normalize status for comparison
   const normalizeStatus = (status: MMPStatus) =>
     status?.replace(/_/g, '').toLowerCase();
 
-  // Filtered per-MMP summaries for selected category and search
   const filteredMmpSummaries = useMemo(() => {
     if (selectedCategory === 'all') return [];
     return mmpSummaries.filter(summary => {
-      // Find the original mmp record to check month/year
       const mmp = (mmpFiles || []).find(m =>
         (m.projectName || m.name || 'Unnamed MMP') === summary.mmpName &&
         (m.mmpId || 'N/A') === summary.mmpId
@@ -239,11 +263,9 @@ const FieldOperationManagerPage = () => {
     });
   }, [mmpSummaries, search, selectedCategory, selectedMonths, mmpFiles]);
 
-  // Filtered allMmpSummaries for "All" tab, search, and months
   const filteredAllMmpSummaries = useMemo(() => {
     if (selectedCategory !== 'all') return [];
     return allMmpSummaries.filter(summary => {
-      // Find the original mmp record to check month/year
       const mmp = (mmpFiles || []).find(m =>
         (m.projectName || m.name || 'Unnamed MMP') === summary.mmpName &&
         (m.mmpId || 'N/A') === summary.mmpId
@@ -262,7 +284,6 @@ const FieldOperationManagerPage = () => {
     });
   }, [allMmpSummaries, search, selectedCategory, selectedMonths, mmpFiles]);
 
-  // Get all unique hubs and MMPs for filter options
   const allHubs = useMemo(() => {
     const set = new Set<string>();
     (mmpFiles || []).forEach(mmp => {
@@ -271,6 +292,7 @@ const FieldOperationManagerPage = () => {
     });
     return Array.from(set);
   }, [mmpFiles]);
+
   const allMMPs = useMemo(() => {
     const set = new Set<string>();
     (mmpFiles || []).forEach(mmp => {
@@ -280,79 +302,30 @@ const FieldOperationManagerPage = () => {
     return Array.from(set);
   }, [mmpFiles]);
 
-  // Filtered data for report based on selected features
-  const reportData = useMemo(() => {
-    return Object.entries(sitesPerHub)
-      .filter(([hub]) => selectedReportHubs.length === 0 || selectedReportHubs.includes(hub))
-      .map(([hub, totalSites]) => {
-        // Find MMPs for this hub and period
-        const mmpList = (mmpFiles || []).filter(mmp => {
-          const mmpHub = (mmp as any).hub || (mmp as any).projectHub || (mmp as any).location?.hub;
-          const mmpName = (mmp as any).projectName || mmp.name || mmp.mmpId || mmp.id;
-          // Period filter
-          let month = (mmp as any).month;
-          let year = (mmp as any).year;
-          if (!month || !year) {
-            const dateStr = mmp.uploadedAt;
-            if (dateStr) {
-              const d = new Date(dateStr);
-              month = d.getMonth() + 1;
-              year = d.getFullYear();
-            }
-          }
-          const mm = month && year ? `${year}-${month.toString().padStart(2, '0')}` : '';
-          return (
-            mmpHub === hub &&
-            (selectedReportMMPs.length === 0 || selectedReportMMPs.includes(mmpName)) &&
-            (reportPeriod.length === 0 || reportPeriod.includes(mm))
-          );
-        });
-        return {
-          hub,
-          totalSites,
-          mmpList,
-        };
-      });
-  }, [sitesPerHub, mmpFiles, selectedReportHubs, selectedReportMMPs, reportPeriod]);
-
-  // Helper to get user info for report
   const getUserInfo = () => {
-    // Try to get the latest uploader from the MMPs list (if available)
     let userName = 'Unknown User';
     let userRole = 'Unknown Role';
-
-    // Find the most recent MMP with an uploader
     const latestMMP = (mmpFiles || []).find(
       (mmp: any) => mmp.uploadedBy && (typeof mmp.uploadedBy === 'object' || typeof mmp.uploadedBy === 'string')
     );
-
     if (latestMMP) {
       if (typeof latestMMP.uploadedBy === 'object' && latestMMP.uploadedBy !== null) {
-        userName =
-          latestMMP.uploadedBy.name ||
-          latestMMP.uploadedBy.fullName ||
-          latestMMP.uploadedBy.email ||
-          userName;
+        userName = latestMMP.uploadedBy.name || latestMMP.uploadedBy.fullName || latestMMP.uploadedBy.email || userName;
         userRole = latestMMP.uploadedBy.role || userRole;
       } else if (typeof latestMMP.uploadedBy === 'string') {
         userName = latestMMP.uploadedBy;
-        // Role may not be available if uploadedBy is a string
       }
     } else if (roles && roles.length > 0) {
       userRole = roles.join(', ');
       userName = roles.includes('Admin') ? 'Admin' : roles[0];
     }
-
     return { userName, userRole };
   };
 
-  // Generate PDF report
   const handleGeneratePDF = () => {
     const doc = new jsPDF();
     const now = new Date();
     const { userName, userRole } = getUserInfo();
-
-    // Compose period string
     const periodStr =
       reportPeriod.length === 0
         ? 'All Periods'
@@ -360,7 +333,6 @@ const FieldOperationManagerPage = () => {
           ? reportPeriod[0]
           : `${reportPeriod[0]} to ${reportPeriod[reportPeriod.length - 1]}`;
 
-    // Header
     doc.setFontSize(16);
     doc.text('MMP Sites Report', 14, 16);
     doc.setFontSize(10);
@@ -369,16 +341,13 @@ const FieldOperationManagerPage = () => {
     doc.text(`Period: ${periodStr}`, 14, 36);
     doc.text(`Generated on: ${now.toLocaleString()}`, 14, 42);
 
-    // For each MMP, show summary
     let y = 50;
     let grandTotal = 0;
     let grandCovered = 0;
     let grandNotCovered = 0;
 
-    // Filter MMPs based on selected report filters
     const filteredMMPs = (mmpFiles || []).filter(mmp => {
       const mmpName = (mmp as any).projectName || mmp.name || mmp.mmpId || mmp.id;
-      // Period filter
       let month = (mmp as any).month;
       let year = (mmp as any).year;
       if (!month || !year) {
@@ -406,14 +375,12 @@ const FieldOperationManagerPage = () => {
       const uploadDate = mmp.uploadedAt
         ? new Date(mmp.uploadedAt).toLocaleDateString()
         : '-';
-      // Get status
       let status: string = (mmp.status || '').toLowerCase();
       if (status === 'archived' || status === 'deleted') status = 'archived';
       else if (status === 'approved') status = 'approved';
       else if (status === 'pending' || status === 'pendingreview') status = 'pending';
       else status = status || 'pending';
 
-      // Sites
       const sites: any[] =
         Array.isArray((mmp as any).sites)
           ? (mmp as any).sites
@@ -436,7 +403,6 @@ const FieldOperationManagerPage = () => {
       grandCovered += covered;
       grandNotCovered += notCovered;
 
-      // MMP Section
       doc.setFontSize(13);
       doc.text(`${idx + 1}. MMP: ${mmpName} (${mmpId})`, 14, y);
       y += 6;
@@ -451,18 +417,12 @@ const FieldOperationManagerPage = () => {
         startY: y,
         theme: 'grid',
         styles: { fontSize: 10 },
-        didDrawPage: (data) => {},
       });
-      // Use autoTable.previous.finalY instead of doc.lastAutoTable.finalY
       // @ts-ignore
-      y = (doc as any).lastAutoTable?.finalY
-        // fallback for some versions of jspdf-autotable
-        ?? ((autoTable as any).previous && (autoTable as any).previous.finalY)
-        ?? (y + 20);
+      y = (doc as any).lastAutoTable?.finalY ?? ((autoTable as any).previous && (autoTable as any).previous.finalY) ?? (y + 20);
       y += 8;
     });
 
-    // Grand Total
     doc.setFontSize(12);
     doc.text('Grand Total (All MMPs):', 14, y);
     y += 4;
@@ -477,7 +437,6 @@ const FieldOperationManagerPage = () => {
     doc.save('mmp-sites-report.pdf');
   };
 
-  // Replace handleGenerateDocx with dynamic import (works with Vite for non-ESM packages)
   const handleGenerateDocx = async () => {
     try {
       const docx = await import('docx');
@@ -494,7 +453,6 @@ const FieldOperationManagerPage = () => {
             ? reportPeriod[0]
             : `${reportPeriod[0]} to ${reportPeriod[reportPeriod.length - 1]}`;
 
-      // Filter MMPs based on selected report filters
       const filteredMMPs = (mmpFiles || []).filter(mmp => {
         const mmpName = (mmp as any).projectName || mmp.name || mmp.mmpId || mmp.id;
         let month = (mmp as any).month;
@@ -527,150 +485,69 @@ const FieldOperationManagerPage = () => {
           children: [new TextRun({ text: 'MMP Sites Report', bold: true, size: 32 })],
           spacing: { after: 200 },
         }),
-        new Paragraph({
-          children: [
-            new TextRun({ text: `Generated by: ${userName}`, size: 20 }),
-          ],
-        }),
-        new Paragraph({
-          children: [
-            new TextRun({ text: `Account type: ${userRole}`, size: 20 }),
-          ],
-        }),
-        new Paragraph({
-          children: [
-            new TextRun({ text: `Period: ${periodStr}`, size: 20 }),
-          ],
-        }),
-        new Paragraph({
-          children: [
-            new TextRun({ text: `Generated on: ${now.toLocaleString()}`, size: 20 }),
-          ],
-          spacing: { after: 200 },
-        }),
+        new Paragraph({ children: [new TextRun({ text: `Generated by: ${userName}`, size: 20 })] }),
+        new Paragraph({ children: [new TextRun({ text: `Account type: ${userRole}`, size: 20 })] }),
+        new Paragraph({ children: [new TextRun({ text: `Period: ${periodStr}`, size: 20 })] }),
+        new Paragraph({ children: [new TextRun({ text: `Generated on: ${now.toLocaleString()}`, size: 20 })], spacing: { after: 200 } }),
       ];
 
       filteredMMPs.forEach((mmp, idx) => {
         const mmpName = (mmp as any).projectName || mmp.name || mmp.mmpId || mmp.id;
         const mmpId = mmp.mmpId || mmp.id || '';
-        const uploadDate = mmp.uploadedAt
-          ? new Date(mmp.uploadedAt).toLocaleDateString()
-          : '-';
-        // Get status
+        const uploadDate = mmp.uploadedAt ? new Date(mmp.uploadedAt).toLocaleDateString() : '-';
         let status: string = (mmp.status || '').toLowerCase();
         if (status === 'archived' || status === 'deleted') status = 'archived';
         else if (status === 'approved') status = 'approved';
-        else if (status === 'pending' || status === 'pendingreview') status = 'pending';
-        else status = status || 'pending';
+        else status = 'pending';
 
-        const sites: any[] =
-          Array.isArray((mmp as any).sites)
-            ? (mmp as any).sites
-            : Array.isArray((mmp as any).siteEntries)
-              ? (mmp as any).siteEntries
-              : [];
-
+        const sites: any[] = Array.isArray((mmp as any).sites) ? (mmp as any).sites : Array.isArray((mmp as any).siteEntries) ? (mmp as any).siteEntries : [];
         let covered = 0;
         let notCovered = 0;
         sites.forEach(site => {
-          const isCovered =
-            (typeof site.status === 'string' && site.status.toLowerCase() === 'covered') ||
-            site.covered === true;
+          const isCovered = (typeof site.status === 'string' && site.status.toLowerCase() === 'covered') || site.covered === true;
           if (isCovered) covered += 1;
           else notCovered += 1;
         });
         const total = sites.length;
-
         grandTotal += total;
         grandCovered += covered;
         grandNotCovered += notCovered;
 
         children.push(
-          new Paragraph({
-            children: [
-              new TextRun({ text: `${idx + 1}. MMP: ${mmpName} (${mmpId})`, bold: true, size: 26 }),
-            ],
-            spacing: { after: 80 },
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: `Status: ${status.charAt(0).toUpperCase() + status.slice(1)}`, size: 20 }),
-            ],
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: `Upload Date: ${uploadDate}`, size: 20 }),
-            ],
-            spacing: { after: 40 },
-          }),
+          new Paragraph({ children: [new TextRun({ text: `${idx + 1}. MMP: ${mmpName} (${mmpId})`, bold: true, size: 26 })], spacing: { after: 80 } }),
+          new Paragraph({ children: [new TextRun({ text: `Status: ${status.charAt(0).toUpperCase() + status.slice(1)}`, size: 20 })] }),
+          new Paragraph({ children: [new TextRun({ text: `Upload Date: ${uploadDate}`, size: 20 })], spacing: { after: 40 } }),
           new Table({
             rows: [
-              new TableRow({
-                children: [
-                  new TableCell({ children: [new Paragraph('Covered')] }),
-                  new TableCell({ children: [new Paragraph('Not Covered')] }),
-                  new TableCell({ children: [new Paragraph('Total')] }),
-                ],
-              }),
-              new TableRow({
-                children: [
-                  new TableCell({ children: [new Paragraph(covered.toString())] }),
-                  new TableCell({ children: [new Paragraph(notCovered.toString())] }),
-                  new TableCell({ children: [new Paragraph(total.toString())] }),
-                ],
-              }),
+              new TableRow({ children: [new TableCell({ children: [new Paragraph('Covered')] }), new TableCell({ children: [new Paragraph('Not Covered')] }), new TableCell({ children: [new Paragraph('Total')] })] }),
+              new TableRow({ children: [new TableCell({ children: [new Paragraph(covered.toString())] }), new TableCell({ children: [new Paragraph(notCovered.toString())] }), new TableCell({ children: [new Paragraph(total.toString())] })] }),
             ],
           }),
-          new Paragraph({ children: [], spacing: { after: 120 } })
+          new Paragraph({ children: [], spacing: { after: 200 } })
         );
       });
 
-      // Grand Total
       children.push(
-        new Paragraph({
-          children: [new TextRun({ text: 'Grand Total (All MMPs):', bold: true, size: 24 })],
-          spacing: { after: 40 },
-        }),
+        new Paragraph({ children: [new TextRun({ text: 'Grand Total (All MMPs)', bold: true, size: 24 })], spacing: { before: 200, after: 80 } }),
         new Table({
           rows: [
-            new TableRow({
-              children: [
-                new TableCell({ children: [new Paragraph('Covered')] }),
-                new TableCell({ children: [new Paragraph('Not Covered')] }),
-                new TableCell({ children: [new Paragraph('Total')] }),
-              ],
-            }),
-            new TableRow({
-              children: [
-                new TableCell({ children: [new Paragraph(grandCovered.toString())] }),
-                new TableCell({ children: [new Paragraph(grandNotCovered.toString())] }),
-                new TableCell({ children: [new Paragraph(grandTotal.toString())] }),
-              ],
-            }),
+            new TableRow({ children: [new TableCell({ children: [new Paragraph('Covered')] }), new TableCell({ children: [new Paragraph('Not Covered')] }), new TableCell({ children: [new Paragraph('Total')] })] }),
+            new TableRow({ children: [new TableCell({ children: [new Paragraph(grandCovered.toString())] }), new TableCell({ children: [new Paragraph(grandNotCovered.toString())] }), new TableCell({ children: [new Paragraph(grandTotal.toString())] })] }),
           ],
         })
       );
 
-      const doc = new Document({
-        sections: [
-          {
-            children,
-          },
-        ],
-      });
+      const doc = new Document({ sections: [{ children }] });
       const blob = await Packer.toBlob(doc);
       saveAs(blob, 'mmp-sites-report.docx');
-    } catch (err) {
-      alert('DOCX export requires the \"docx\" and \"file-saver\" packages. Please install them with:\\nnpm install docx file-saver');
+    } catch (error) {
+      console.error('Error generating DOCX:', error);
     }
   };
 
-  // Add Excel export (simple CSV)
   const handleGenerateExcel = () => {
-    // Filter MMPs based on selected report filters (same as PDF/DOCX)
     const filteredMMPs = (mmpFiles || []).filter(mmp => {
       const mmpName = (mmp as any).projectName || mmp.name || mmp.mmpId || mmp.id;
-      // Period filter
       let month = (mmp as any).month;
       let year = (mmp as any).year;
       if (!month || !year) {
@@ -693,48 +570,23 @@ const FieldOperationManagerPage = () => {
     });
 
     const { userName, userRole } = getUserInfo();
-    const periodStr =
-      reportPeriod.length === 0
-        ? 'All Periods'
-        : reportPeriod.length === 1
-          ? reportPeriod[0]
-          : `${reportPeriod[0]} to ${reportPeriod[reportPeriod.length - 1]}`;
+    const periodStr = reportPeriod.length === 0 ? 'All Periods' : reportPeriod.length === 1 ? reportPeriod[0] : `${reportPeriod[0]} to ${reportPeriod[reportPeriod.length - 1]}`;
 
-    let csv =
-      `MMP Sites Report\n` +
-      `Generated by:,${userName}\n` +
-      `Account type:,${userRole}\n` +
-      `Period:,${periodStr}\n` +
-      `Generated on:,${new Date().toLocaleString()}\n\n` +
-      'MMP Name,MMP ID,Status,Upload Date,Covered,Not Covered,Total\n';
+    let csv = `MMP Sites Report\nGenerated by:,${userName}\nAccount type:,${userRole}\nPeriod:,${periodStr}\nGenerated on:,${new Date().toLocaleString()}\n\nMMP Name,MMP ID,Status,Upload Date,Covered,Not Covered,Total\n`;
     let grandTotal = 0, grandCovered = 0, grandNotCovered = 0;
 
     filteredMMPs.forEach(mmp => {
       const mmpName = (mmp as any).projectName || mmp.name || mmp.mmpId || mmp.id;
       const mmpId = mmp.mmpId || mmp.id || '';
-      // Get status
       let status: string = (mmp.status || '').toLowerCase();
       if (status === 'archived' || status === 'deleted') status = 'archived';
       else if (status === 'approved') status = 'approved';
-      else if (status === 'pending' || status === 'pendingreview') status = 'pending';
-      else status = status || 'pending';
-
-      const uploadDate = mmp.uploadedAt
-        ? new Date(mmp.uploadedAt).toLocaleDateString()
-        : '-';
-
-      // Calculate covered, notCovered, total for this MMP
-      const sites: any[] =
-        Array.isArray((mmp as any).sites)
-          ? (mmp as any).sites
-          : Array.isArray((mmp as any).siteEntries)
-            ? (mmp as any).siteEntries
-            : [];
+      else status = 'pending';
+      const uploadDate = mmp.uploadedAt ? new Date(mmp.uploadedAt).toLocaleDateString() : '-';
+      const sites: any[] = Array.isArray((mmp as any).sites) ? (mmp as any).sites : Array.isArray((mmp as any).siteEntries) ? (mmp as any).siteEntries : [];
       let covered = 0, notCovered = 0;
       sites.forEach(site => {
-        const isCovered =
-          (typeof site.status === 'string' && site.status.toLowerCase() === 'covered') ||
-          site.covered === true;
+        const isCovered = (typeof site.status === 'string' && site.status.toLowerCase() === 'covered') || site.covered === true;
         if (isCovered) covered += 1;
         else notCovered += 1;
       });
@@ -742,13 +594,10 @@ const FieldOperationManagerPage = () => {
       grandTotal += total;
       grandCovered += covered;
       grandNotCovered += notCovered;
-
       csv += `"${mmpName}","${mmpId}","${status}","${uploadDate}",${covered},${notCovered},${total}\n`;
     });
-    // Add grand total
-    csv += `"Grand Total","","",${grandCovered},${grandNotCovered},${grandTotal}\n`;
+    csv += `"Grand Total","","","",${grandCovered},${grandNotCovered},${grandTotal}\n`;
 
-    // Download as .csv
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -760,101 +609,17 @@ const FieldOperationManagerPage = () => {
     URL.revokeObjectURL(url);
   };
 
-  // Add a reusable MultiSelectDropdown component for checkboxes in dropdowns
-  const MultiSelectDropdown = ({
-    label,
-    options,
-    selected,
-    setSelected,
-    allLabel = 'All',
-  }: {
-    label: string;
-    options: string[];
-    selected: string[];
-    setSelected: (v: string[]) => void;
-    allLabel?: string;
-  }) => {
-    const [open, setOpen] = useState(false);
-    const allChecked = options.length > 0 && selected.length === options.length;
-    const toggleAll = () => {
-      setSelected(allChecked ? [] : options);
-    };
-    const toggleOption = (opt: string) => {
-      setSelected(selected.includes(opt) ? selected.filter(o => o !== opt) : [...selected, opt]);
-    };
-    return (
-      <div className="relative w-full">
-        <button
-          type="button"
-          className="w-full px-3 py-2 rounded border border-blue-200 dark:border-blue-800 bg-white dark:bg-blue-950 text-blue-900 dark:text-blue-100 flex items-center justify-between"
-          onClick={() => setOpen(v => !v)}
-        >
-          <span>
-            {selected.length === 0
-              ? `Select ${label}`
-              : allChecked
-                ? `${allLabel} (${options.length})`
-                : selected.join(', ')}
-          </span>
-          <span className="ml-2">{open ? '▲' : '▼'}</span>
-        </button>
-        {open && (
-          <div className="absolute z-10 mt-1 w-full max-h-60 overflow-auto bg-white dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg shadow-lg">
-            <label className="flex items-center px-4 py-2 hover:bg-blue-50 dark:hover:bg-blue-900 cursor-pointer font-semibold">
-              <input
-                type="checkbox"
-                checked={allChecked}
-                onChange={toggleAll}
-                className="mr-2"
-              />
-              <span>{allLabel}</span>
-            </label>
-            {options.map(opt => (
-              <label
-                key={opt}
-                className="flex items-center px-4 py-2 hover:bg-blue-50 dark:hover:bg-blue-900 cursor-pointer"
-              >
-                <input
-                  type="checkbox"
-                  checked={selected.includes(opt)}
-                  onChange={() => toggleOption(opt)}
-                  className="mr-2"
-                />
-                <span>{opt}</span>
-              </label>
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  React.useEffect(() => {
+  useEffect(() => {
     setLoading(true);
     supabase
       .from('mmp_files')
-      .select(`
-        *,
-        project:projects(
-          id,
-          name,
-          project_code
-        )
-      `)
+      .select(`*, project:projects(id, name, project_code)`)
       .order('created_at', { ascending: false })
       .then(({ data, error }) => {
         if (error) {
-          console.error('Supabase error (with join), retrying without join:', error);
-          supabase
-            .from('mmp_files')
-            .select('*')
-            .order('created_at', { ascending: false })
+          supabase.from('mmp_files').select('*').order('created_at', { ascending: false })
             .then(({ data: fbData, error: fbError }) => {
-              if (fbError) {
-                console.error('Supabase fallback error:', fbError);
-                setLoading(false);
-                return;
-              }
+              if (fbError) { setLoading(false); return; }
               const mappedFb = (fbData || []).map((mmp: any) => ({
                 ...mmp,
                 sites: Array.isArray(mmp.site_entries) ? mmp.site_entries : [],
@@ -874,12 +639,6 @@ const FieldOperationManagerPage = () => {
             });
           return;
         }
-        if (!data || data.length === 0) {
-          console.warn('No MMP data returned from Supabase');
-        } else {
-          console.log('Fetched MMP data:', data);
-        }
-        // Map DB fields to frontend fields
         const mapped = (data || []).map((mmp: any) => ({
           ...mmp,
           sites: Array.isArray(mmp.site_entries) ? mmp.site_entries : [],
@@ -897,58 +656,35 @@ const FieldOperationManagerPage = () => {
         setMmpFiles(mapped);
         setLoading(false);
       });
-  }, [
-    // add dependencies if you want to refetch on filter changes
-  ]);
+  }, []);
 
-  // Load MMPs explicitly forwarded to the current FOM
-  React.useEffect(() => {
+  useEffect(() => {
     const loadForwarded = async () => {
-      if (!currentUser?.id) {
-        setForwardedMmpFiles([]);
-        return;
-      }
+      if (!currentUser?.id) { setForwardedMmpFiles([]); return; }
       setForwardedLoading(true);
       try {
         const { data, error } = await supabase
           .from('mmp_files')
-          .select(`
-            *,
-            project:projects(
-              id,
-              name,
-              project_code
-            )
-          `)
+          .select(`*, project:projects(id, name, project_code)`)
           .contains('workflow', { forwardedToFomIds: [currentUser.id] })
           .order('created_at', { ascending: false });
         if (error) {
-          // Fallback query without join - don't log RLS errors
-          const { data: fbData, error: fbErr } = await supabase
-            .from('mmp_files')
-            .select('*')
-            .contains('workflow', { forwardedToFomIds: [currentUser.id] })
-            .order('created_at', { ascending: false });
-          if (fbErr) {
-            // Silently fail - user may not have access to this data
-            setForwardedMmpFiles([]);
-          } else {
-            const mappedFb = (fbData || []).map((mmp: any) => ({
-              ...mmp,
-              sites: Array.isArray(mmp.site_entries) ? mmp.site_entries : [],
-              uploadedAt: mmp.uploaded_at,
-              uploadedBy: mmp.uploaded_by || 'Unknown',
-              hub: mmp.hub,
-              month: mmp.month,
-              projectId: mmp.project_id,
-              projectName: mmp.project_name || undefined,
-              mmpId: mmp.mmp_id || mmp.id,
-              status: mmp.status,
-              siteCount: typeof mmp.entries === 'number' ? mmp.entries : (Array.isArray(mmp.site_entries) ? mmp.site_entries.length : 0),
-              logs: mmp.workflow?.logs || [],
-            }));
-            setForwardedMmpFiles(mappedFb);
-          }
+          const { data: fbData } = await supabase.from('mmp_files').select('*').contains('workflow', { forwardedToFomIds: [currentUser.id] }).order('created_at', { ascending: false });
+          const mappedFb = (fbData || []).map((mmp: any) => ({
+            ...mmp,
+            sites: Array.isArray(mmp.site_entries) ? mmp.site_entries : [],
+            uploadedAt: mmp.uploaded_at,
+            uploadedBy: mmp.uploaded_by || 'Unknown',
+            hub: mmp.hub,
+            month: mmp.month,
+            projectId: mmp.project_id,
+            projectName: mmp.project_name || undefined,
+            mmpId: mmp.mmp_id || mmp.id,
+            status: mmp.status,
+            siteCount: typeof mmp.entries === 'number' ? mmp.entries : (Array.isArray(mmp.site_entries) ? mmp.site_entries.length : 0),
+            logs: mmp.workflow?.logs || [],
+          }));
+          setForwardedMmpFiles(mappedFb);
         } else {
           const mapped = (data || []).map((mmp: any) => ({
             ...mmp,
@@ -973,419 +709,466 @@ const FieldOperationManagerPage = () => {
     loadForwarded();
   }, [currentUser?.id]);
 
-  return (
-    <div className="min-h-screen py-10 px-2 md:px-8 bg-slate-50 dark:bg-gray-900 space-y-10">
-      <div className="max-w-5xl mx-auto">
-  <div className="bg-blue-700 dark:bg-blue-900 p-8 rounded-2xl shadow-xl border border-blue-100 dark:border-blue-900 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
-          <div>
-            <h1 className="text-3xl md:text-4xl font-extrabold text-white tracking-tight mb-2">
-              Field Operation Manager
-            </h1>
-            <p className="text-blue-100 dark:text-blue-200/80 font-medium">
-              Review and forward MMPs to related hubs before site-level execution.
-            </p>
-          </div>
+  const StatCard = ({ icon: Icon, label, value, subtext }: { icon: any; label: string; value: number | string; subtext?: string }) => (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="bg-black/5 dark:bg-white/5 rounded-2xl p-4 md:p-5"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <p className="text-xs md:text-sm text-black/60 dark:text-white/60 mb-1">{label}</p>
+          <p className="text-2xl md:text-3xl font-bold text-black dark:text-white" data-testid={`stat-${label.toLowerCase().replace(/\s+/g, '-')}`}>{value}</p>
+          {subtext && <p className="text-xs text-black/40 dark:text-white/40 mt-1">{subtext}</p>}
+        </div>
+        <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-black dark:bg-white flex items-center justify-center flex-shrink-0">
+          <Icon className="h-5 w-5 md:h-6 md:w-6 text-white dark:text-black" />
         </div>
       </div>
-      <div className="max-w-5xl mx-auto">
-        {/* Forwarded to me */}
-        <Card className="mb-10 p-8 bg-white/90 dark:bg-gray-900/90 rounded-2xl shadow-lg border border-emerald-200 dark:border-emerald-900">
-          <h2 className="text-2xl font-semibold mb-6 text-emerald-800 dark:text-emerald-200">Forwarded to You</h2>
-          <div className="overflow-x-auto rounded-lg">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="bg-emerald-50 dark:bg-emerald-950 text-emerald-900 dark:text-emerald-100">
-                  <th className="px-4 py-3 text-left font-semibold">MMP</th>
-                  <th className="px-4 py-3 text-left font-semibold">Project</th>
-                  <th className="px-4 py-3 text-left font-semibold">Forwarded</th>
-                  <th className="px-4 py-3 text-left font-semibold">Status</th>
-                  <th className="px-4 py-3"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {(forwardedMmpFiles || []).map(mmp => {
-                  const project = (mmp as any).projectName || (mmp as any).project?.name || '-';
-                  const forwardedAt = (mmp as any).workflow?.forwardedAt
-                    ? new Date((mmp as any).workflow.forwardedAt).toLocaleString()
-                    : '-';
-                  const status: MMPStatus | undefined = mmp.status;
-                  return (
-                    <tr key={`fwd-${mmp.id}`} className="border-b last:border-0 hover:bg-emerald-50/40 dark:hover:bg-emerald-900/40 transition">
-                      <td className="px-4 py-3 font-medium">{mmp.name || mmp.mmpId || mmp.id}</td>
-                      <td className="px-4 py-3">{project}</td>
-                      <td className="px-4 py-3">{forwardedAt}</td>
-                      <td className="px-4 py-3">
-                        <Badge variant={
-                          status && (status as any).toLowerCase?.() === 'approved' ? 'success' : 'outline'
-                        }>
-                          {status || ''}
-                        </Badge>
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <button
-                          className="text-emerald-700 dark:text-emerald-300 hover:underline text-xs font-semibold"
-                          onClick={() => navigate(`/mmp/${mmp.id}`)}
-                        >
-                          Open
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-                {(!forwardedMmpFiles || forwardedMmpFiles.length === 0) && (
-                  <tr>
-                    <td colSpan={5} className="text-center py-8 text-muted-foreground">
-                      {forwardedLoading ? 'Loading forwarded MMPs…' : 'No MMPs forwarded to you yet.'}
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+    </motion.div>
+  );
+
+  const MMPCard = ({ mmp, isForwarded = false }: { mmp: any; isForwarded?: boolean }) => {
+    const project = (mmp as any).projectName || (mmp as any).project?.name || '-';
+    const hub = (mmp as any).hub || (mmp as any).projectHub || '-';
+    const status: MMPStatus | undefined = mmp.status;
+    const siteCount = Array.isArray((mmp as any).sites) ? (mmp as any).sites.length : (mmp as any).siteCount || 0;
+    const uploadDate = mmp.uploadedAt ? new Date(mmp.uploadedAt).toLocaleDateString() : '-';
+    const forwardedAt = (mmp as any).workflow?.forwardedAt ? new Date((mmp as any).workflow.forwardedAt).toLocaleDateString() : null;
+
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="bg-black/5 dark:bg-white/5 rounded-2xl p-4 hover-elevate active-elevate-2 cursor-pointer touch-manipulation"
+        onClick={() => navigate(`/mmp/${mmp.id}`)}
+        data-testid={`card-mmp-${mmp.id}`}
+      >
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div className="flex-1 min-w-0">
+            <h3 className="font-semibold text-black dark:text-white truncate text-sm md:text-base">
+              {mmp.name || mmp.mmpId || mmp.id}
+            </h3>
+            <p className="text-xs text-black/60 dark:text-white/60 truncate">{project}</p>
           </div>
-        </Card>
-        <Card className="mb-10 p-8 bg-white/90 dark:bg-gray-900/90 rounded-2xl shadow-lg border border-blue-100 dark:border-blue-900">
-          <h2 className="text-2xl font-semibold mb-6 text-blue-800 dark:text-blue-200">Uploaded MMPs</h2>
-          <div className="overflow-x-auto rounded-lg">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="bg-blue-50 dark:bg-blue-950 text-blue-900 dark:text-blue-100">
-                  <th className="px-4 py-3 text-left font-semibold">MMP Name</th>
-                  <th className="px-4 py-3 text-left font-semibold">Project</th>
-                  <th className="px-4 py-3 text-left font-semibold">Month</th>
-                  <th className="px-4 py-3 text-left font-semibold">Upload Date</th>
-                  <th className="px-4 py-3 text-left font-semibold">Uploaded By</th>
-                  <th className="px-4 py-3 text-left font-semibold">Role</th>
-                  <th className="px-4 py-3 text-left font-semibold">Hub</th>
-                  <th className="px-4 py-3 text-left font-semibold">Total Sites</th>
-                  <th className="px-4 py-3 text-left font-semibold">Status</th>
-                  <th className="px-4 py-3 text-left font-semibold">Logs</th>
-                  <th className="px-4 py-3"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {(mmpFiles || []).map(mmp => {
-                  // Extract real information with proper fallbacks
-                  const uploadedBy = (mmp as any).uploadedBy;
-                  let uploadedByName = '-';
-                  let uploadedByRole = '-';
-                  if (typeof uploadedBy === 'object' && uploadedBy !== null) {
-                    uploadedByName = uploadedBy.name || uploadedBy.fullName || uploadedBy.email || '-';
-                    uploadedByRole = uploadedBy.role || '-';
-                  } else if (typeof uploadedBy === 'string') {
-                    uploadedByName = uploadedBy;
-                  }
+          <Badge
+            variant={
+              status && normalizeStatus(status) === 'approved' ? 'default' :
+              status && (normalizeStatus(status) === 'pendingreview' || normalizeStatus(status) === 'pending') ? 'secondary' :
+              'outline'
+            }
+            className={cn(
+              "text-xs flex-shrink-0",
+              status && normalizeStatus(status) === 'approved' && "bg-black dark:bg-white text-white dark:text-black"
+            )}
+          >
+            {status ? status.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ').trim() : 'Unknown'}
+          </Badge>
+        </div>
 
-                  // Fix: define hub, month, project and siteCount before using them
-                  const hub = (mmp as any).hub || (mmp as any).projectHub || (mmp as any).location?.hub || '-';
-                  const month = (mmp as any).month ? 
-                    new Date(2024, parseInt((mmp as any).month) - 1).toLocaleDateString('en-US', { month: 'long' }) : 
-                    '-';
-                  const project = (mmp as any).projectName || (mmp as any).project?.name || '-';
-                  let siteCount = 0;
-                  if (Array.isArray((mmp as any).sites)) siteCount = (mmp as any).sites.length;
-                  else if (Array.isArray((mmp as any).siteEntries)) siteCount = (mmp as any).siteEntries.length;
-                  else if (typeof (mmp as any).entries === 'number') siteCount = (mmp as any).entries;
-                  else if (typeof (mmp as any).processedEntries === 'number') siteCount = (mmp as any).processedEntries;
-                  else if (typeof (mmp as any).siteCount === 'number') siteCount = (mmp as any).siteCount;
-
-                  // Try to get logs from .logs, .modificationHistory, or .modification_history
-                  const logs = (mmp as any).logs
-                    || (mmp as any).modificationHistory
-                    || (mmp as any).modification_history
-                    || [];
-
-                  // Fix: use only camelCase 'uploadedAt'
-                  const uploadDate = mmp.uploadedAt
-                    ? new Date(mmp.uploadedAt).toLocaleDateString()
-                    : '-';
-
-                  // Fix: status is always MMPStatus or undefined, never '-'
-                  const status: MMPStatus | undefined = mmp.status;
-
-                  return (
-                    <tr key={mmp.id} className="border-b last:border-0 hover:bg-blue-50/40 dark:hover:bg-blue-900/40 transition">
-                      <td className="px-4 py-3 font-medium">{mmp.name || mmp.mmpId || mmp.id}</td>
-                      <td className="px-4 py-3">{project}</td>
-                      <td className="px-4 py-3">{month}</td>
-                      <td className="px-4 py-3">{uploadDate}</td>
-                      <td className="px-4 py-3">{uploadedByName}</td>
-                      <td className="px-4 py-3">
-                        <Badge variant={uploadedByRole === 'Admin' ? 'default' : 'outline'}>
-                          {uploadedByRole}
-                        </Badge>
-                      </td>
-                      <td className="px-4 py-3">{hub}</td>
-                      <td className="px-4 py-3">{siteCount}</td>
-                      <td className="px-4 py-3">
-                        <Badge variant={
-                          status && normalizeStatus(status) === 'pendingreview' ? 'outline' :
-                          status && normalizeStatus(status) === 'reviewed' ? 'default' :
-                          status && normalizeStatus(status) === 'approved' ? 'success' : 'secondary'
-                        }>
-                          {status
-                            ? status.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ').toUpperCase()
-                            : ''}
-                        </Badge>
-                      </td>
-                      <td className="px-4 py-3">
-                        <ul className="text-xs space-y-1">
-                          {(logs?.slice(-2) || []).map((log: any, idx: number) => (
-                            <li key={idx}>
-                              {log.action || log.type || 'Updated'}
-                              {log.by ? ` by ${log.by}` : ''}
-                              {log.date ? ` on ${new Date(log.date).toLocaleDateString()}` : ''}
-                            </li>
-                          ))}
-                        </ul>
-                      </td>
-                      <td className="px-4 py-3">
-                        <button
-                          className="text-blue-700 dark:text-blue-300 hover:underline text-xs font-semibold"
-                          onClick={() => navigate(`/mmp/${mmp.id}`)}
-                        >
-                          View
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-                {(!mmpFiles || mmpFiles.length === 0) && (
-                  <tr>
-                    <td colSpan={9} className="text-center py-8 text-muted-foreground">
-                      No MMPs uploaded yet.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <div className="flex items-center gap-1.5 text-black/60 dark:text-white/60">
+            <Building2 className="h-3.5 w-3.5" />
+            <span className="truncate">{hub}</span>
           </div>
-        </Card>
-        <Card className="p-8 bg-white/90 dark:bg-gray-900/90 rounded-2xl shadow-lg border border-blue-100 dark:border-blue-900">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6 gap-4">
-            <h2 className="text-2xl font-semibold text-blue-800 dark:text-blue-200">
-              Total Sites Per Hub
-            </h2>
-            {/* Search and Month Filter beside the title */}
-            <div className="flex flex-col md:flex-row gap-2 w-full md:w-auto relative">
-              <input
-                type="text"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="Search by MMP name, ID, or status..."
-                className="w-full md:w-80 px-4 py-2 rounded-lg border border-blue-200 dark:border-blue-800 bg-white dark:bg-blue-950 text-blue-900 dark:text-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-400"
-              />
-              <div className="relative">
-                <button
-                  type="button"
-                  className="w-full md:w-56 px-3 py-2 rounded-lg border border-blue-200 dark:border-blue-800 bg-white dark:bg-blue-950 text-blue-900 dark:text-blue-100 flex items-center justify-between"
-                  onClick={() => setShowMonthDropdown(v => !v)}
-                >
-                  {selectedMonths.length === 0
-                    ? 'Filter by Month'
-                    : selectedMonths.map(m => m).join(', ')}
-                  <span className="ml-2">{showMonthDropdown ? '▲' : '▼'}</span>
-                </button>
-                {showMonthDropdown && (
-                  <div className="absolute z-10 mt-1 w-full max-h-60 overflow-auto bg-white dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg shadow-lg">
-                    {availableMonths.length === 0 && (
-                      <div className="px-4 py-2 text-sm text-muted-foreground">No months</div>
+          <div className="flex items-center gap-1.5 text-black/60 dark:text-white/60">
+            <MapPin className="h-3.5 w-3.5" />
+            <span>{siteCount} sites</span>
+          </div>
+          <div className="flex items-center gap-1.5 text-black/60 dark:text-white/60">
+            <Calendar className="h-3.5 w-3.5" />
+            <span>{isForwarded && forwardedAt ? forwardedAt : uploadDate}</span>
+          </div>
+          <div className="flex items-center justify-end">
+            <ChevronRight className="h-4 w-4 text-black/40 dark:text-white/40" />
+          </div>
+        </div>
+      </motion.div>
+    );
+  };
+
+  const SiteSummaryCard = ({ summary }: { summary: any }) => (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="bg-black/5 dark:bg-white/5 rounded-2xl p-4"
+    >
+      <div className="mb-3">
+        <h3 className="font-semibold text-black dark:text-white text-sm truncate">{summary.mmpName}</h3>
+        <p className="text-xs text-black/40 dark:text-white/40">{summary.mmpId}</p>
+        {summary.status && (
+          <Badge
+            variant="outline"
+            className={cn(
+              "mt-2 text-xs",
+              summary.status === 'approved' && "border-black/20 dark:border-white/20 text-black dark:text-white",
+              summary.status === 'pending' && "border-black/20 dark:border-white/20 text-black/70 dark:text-white/70"
+            )}
+          >
+            {summary.status.charAt(0).toUpperCase() + summary.status.slice(1)}
+          </Badge>
+        )}
+      </div>
+      
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-black/60 dark:text-white/60">Covered</span>
+          <span className="text-lg font-bold text-black dark:text-white">{summary.covered}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-black/60 dark:text-white/60">Not Covered</span>
+          <span className="text-lg font-bold text-black/70 dark:text-white/70">{summary.notCovered}</span>
+        </div>
+        <div className="h-px bg-black/10 dark:bg-white/10 my-2" />
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-medium text-black dark:text-white">Total</span>
+          <span className="text-xl font-bold text-black dark:text-white">{summary.total}</span>
+        </div>
+      </div>
+    </motion.div>
+  );
+
+  const viewTabs = [
+    { key: 'forwarded', label: 'Forwarded', icon: FileText, count: forwardedMmpFiles.length },
+    { key: 'all', label: 'All MMPs', icon: Users, count: mmpFiles.length },
+    { key: 'sites', label: 'Site Coverage', icon: MapPin, count: null },
+  ];
+
+  return (
+    <div className="min-h-screen bg-white dark:bg-black safe-area-top safe-area-bottom">
+      <div className="max-w-6xl mx-auto px-4 py-6 md:py-10">
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-6 md:mb-8"
+        >
+          <h1 className="text-2xl md:text-4xl font-bold text-black dark:text-white mb-1">
+            Field Operations
+          </h1>
+          <p className="text-sm md:text-base text-black/60 dark:text-white/60">
+            Manage MMPs and monitor field team progress
+          </p>
+        </motion.div>
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6 md:mb-8">
+          <StatCard icon={FileText} label="Total MMPs" value={stats.total} />
+          <StatCard icon={CheckCircle2} label="Approved" value={stats.approved} />
+          <StatCard icon={Clock} label="Pending" value={stats.pending} />
+          <StatCard icon={MapPin} label="Total Sites" value={stats.totalSites} subtext={`${stats.uniqueHubs} hubs`} />
+        </div>
+
+        <div className="flex items-center gap-2 overflow-x-auto pb-2 mb-4 md:mb-6 scrollbar-hide">
+          {viewTabs.map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveView(tab.key as any)}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2.5 rounded-full font-medium text-sm whitespace-nowrap transition-all min-h-[44px] touch-manipulation",
+                activeView === tab.key
+                  ? "bg-black dark:bg-white text-white dark:text-black"
+                  : "bg-black/5 dark:bg-white/5 text-black/70 dark:text-white/70"
+              )}
+              data-testid={`tab-${tab.key}`}
+            >
+              <tab.icon className="h-4 w-4" />
+              {tab.label}
+              {tab.count !== null && (
+                <span className={cn(
+                  "text-xs px-1.5 py-0.5 rounded-full",
+                  activeView === tab.key
+                    ? "bg-white/20 dark:bg-black/20"
+                    : "bg-black/10 dark:bg-white/10"
+                )}>
+                  {tab.count}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        <AnimatePresence mode="wait">
+          {activeView === 'forwarded' && (
+            <motion.div
+              key="forwarded"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg md:text-xl font-semibold text-black dark:text-white">
+                  Forwarded to You
+                </h2>
+              </div>
+              
+              {forwardedLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-6 w-6 animate-spin text-black/40 dark:text-white/40" />
+                </div>
+              ) : forwardedMmpFiles.length === 0 ? (
+                <div className="bg-black/5 dark:bg-white/5 rounded-2xl p-8 text-center">
+                  <FileText className="h-12 w-12 text-black/20 dark:text-white/20 mx-auto mb-3" />
+                  <p className="text-black/60 dark:text-white/60">No MMPs forwarded to you yet</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
+                  {forwardedMmpFiles.map(mmp => (
+                    <MMPCard key={mmp.id} mmp={mmp} isForwarded />
+                  ))}
+                </div>
+              )}
+            </motion.div>
+          )}
+
+          {activeView === 'all' && (
+            <motion.div
+              key="all"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+            >
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
+                <h2 className="text-lg md:text-xl font-semibold text-black dark:text-white">
+                  All MMPs
+                </h2>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-black/40 dark:text-white/40" />
+                  <input
+                    type="text"
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    placeholder="Search MMPs..."
+                    className="w-full md:w-64 pl-9 pr-4 py-2.5 rounded-xl bg-black/5 dark:bg-white/5 text-black dark:text-white placeholder:text-black/40 dark:placeholder:text-white/40 border-0 focus:outline-none focus:ring-2 focus:ring-black/20 dark:focus:ring-white/20 text-sm min-h-[44px]"
+                    data-testid="input-search-mmps"
+                  />
+                </div>
+              </div>
+              
+              {loading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-6 w-6 animate-spin text-black/40 dark:text-white/40" />
+                </div>
+              ) : mmpFiles.length === 0 ? (
+                <div className="bg-black/5 dark:bg-white/5 rounded-2xl p-8 text-center">
+                  <FileText className="h-12 w-12 text-black/20 dark:text-white/20 mx-auto mb-3" />
+                  <p className="text-black/60 dark:text-white/60">No MMPs uploaded yet</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
+                  {mmpFiles
+                    .filter(mmp => {
+                      if (!search.trim()) return true;
+                      const q = search.toLowerCase();
+                      const name = (mmp.name || mmp.mmpId || '').toLowerCase();
+                      const project = ((mmp as any).projectName || '').toLowerCase();
+                      return name.includes(q) || project.includes(q);
+                    })
+                    .map(mmp => (
+                      <MMPCard key={mmp.id} mmp={mmp} />
+                    ))}
+                </div>
+              )}
+            </motion.div>
+          )}
+
+          {activeView === 'sites' && (
+            <motion.div
+              key="sites"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+            >
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
+                <h2 className="text-lg md:text-xl font-semibold text-black dark:text-white">
+                  Site Coverage
+                </h2>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-black/40 dark:text-white/40" />
+                    <input
+                      type="text"
+                      value={search}
+                      onChange={e => setSearch(e.target.value)}
+                      placeholder="Search..."
+                      className="w-full md:w-48 pl-9 pr-4 py-2.5 rounded-xl bg-black/5 dark:bg-white/5 text-black dark:text-white placeholder:text-black/40 dark:placeholder:text-white/40 border-0 focus:outline-none focus:ring-2 focus:ring-black/20 dark:focus:ring-white/20 text-sm min-h-[44px]"
+                      data-testid="input-search-sites"
+                    />
+                  </div>
+                  <Button
+                    onClick={() => setReportModalOpen(true)}
+                    className="bg-black dark:bg-white text-white dark:text-black rounded-xl min-h-[44px]"
+                    data-testid="button-generate-report"
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Report
+                  </Button>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 overflow-x-auto pb-3 mb-4 scrollbar-hide">
+                {CATEGORY_LABELS.map(cat => (
+                  <button
+                    key={cat.key}
+                    onClick={() => setSelectedCategory(cat.key as any)}
+                    className={cn(
+                      "px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all min-h-[40px] touch-manipulation",
+                      selectedCategory === cat.key
+                        ? "bg-black dark:bg-white text-white dark:text-black"
+                        : "bg-black/5 dark:bg-white/5 text-black/70 dark:text-white/70"
                     )}
-                    {availableMonths.map(month => (
-                      <label
-                        key={month}
-                        className="flex items-center px-4 py-2 hover:bg-blue-50 dark:hover:bg-blue-900 cursor-pointer"
+                    data-testid={`category-${cat.key}`}
+                  >
+                    {cat.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
+                {selectedCategory !== 'all' ? (
+                  filteredMmpSummaries.length > 0 ? (
+                    filteredMmpSummaries.map((summary, idx) => (
+                      <SiteSummaryCard key={summary.mmpId + idx} summary={summary} />
+                    ))
+                  ) : (
+                    <div className="col-span-full bg-black/5 dark:bg-white/5 rounded-2xl p-8 text-center">
+                      <Activity className="h-12 w-12 text-black/20 dark:text-white/20 mx-auto mb-3" />
+                      <p className="text-black/60 dark:text-white/60">No data available for this category</p>
+                    </div>
+                  )
+                ) : (
+                  filteredAllMmpSummaries.length > 0 ? (
+                    filteredAllMmpSummaries.map((summary, idx) => (
+                      <SiteSummaryCard key={summary.mmpId + summary.status + idx} summary={summary} />
+                    ))
+                  ) : (
+                    <div className="col-span-full bg-black/5 dark:bg-white/5 rounded-2xl p-8 text-center">
+                      <Activity className="h-12 w-12 text-black/20 dark:text-white/20 mx-auto mb-3" />
+                      <p className="text-black/60 dark:text-white/60">No data available</p>
+                    </div>
+                  )
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      <AnimatePresence>
+        {reportModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/50 backdrop-blur-sm p-4 safe-area-bottom"
+            onClick={() => setReportModalOpen(false)}
+          >
+            <motion.div
+              initial={{ y: 100, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 100, opacity: 0 }}
+              className="bg-white dark:bg-black border border-black/10 dark:border-white/10 rounded-t-3xl md:rounded-3xl w-full max-w-lg max-h-[85vh] overflow-y-auto"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="sticky top-0 bg-white dark:bg-black p-4 border-b border-black/10 dark:border-white/10 flex items-center justify-between">
+                <h3 className="text-lg font-bold text-black dark:text-white">Generate Report</h3>
+                <button
+                  onClick={() => setReportModalOpen(false)}
+                  className="w-10 h-10 rounded-full bg-black/5 dark:bg-white/5 flex items-center justify-center"
+                  data-testid="button-close-modal"
+                >
+                  <X className="h-5 w-5 text-black/60 dark:text-white/60" />
+                </button>
+              </div>
+
+              <div className="p-4 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-black dark:text-white mb-2">Period (Months)</label>
+                  <div className="flex flex-wrap gap-2">
+                    {availableMonths.length === 0 ? (
+                      <p className="text-sm text-black/40 dark:text-white/40">No months available</p>
+                    ) : (
+                      availableMonths.map(month => (
+                        <button
+                          key={month}
+                          onClick={() => setReportPeriod(prev => prev.includes(month) ? prev.filter(m => m !== month) : [...prev, month])}
+                          className={cn(
+                            "px-3 py-1.5 rounded-full text-xs font-medium transition-all",
+                            reportPeriod.includes(month)
+                              ? "bg-black dark:bg-white text-white dark:text-black"
+                              : "bg-black/5 dark:bg-white/5 text-black/70 dark:text-white/70"
+                          )}
+                        >
+                          {month}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-black dark:text-white mb-2">Hubs</label>
+                  <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
+                    {allHubs.length === 0 ? (
+                      <p className="text-sm text-black/40 dark:text-white/40">No hubs available</p>
+                    ) : (
+                      allHubs.map(hub => (
+                        <button
+                          key={hub}
+                          onClick={() => setSelectedReportHubs(prev => prev.includes(hub) ? prev.filter(h => h !== hub) : [...prev, hub])}
+                          className={cn(
+                            "px-3 py-1.5 rounded-full text-xs font-medium transition-all",
+                            selectedReportHubs.includes(hub)
+                              ? "bg-black dark:bg-white text-white dark:text-black"
+                              : "bg-black/5 dark:bg-white/5 text-black/70 dark:text-white/70"
+                          )}
+                        >
+                          {hub}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-black dark:text-white mb-2">Format</label>
+                  <div className="flex gap-2">
+                    {(['pdf', 'docx', 'excel'] as const).map(format => (
+                      <button
+                        key={format}
+                        onClick={() => setDownloadFormat(format)}
+                        className={cn(
+                          "flex-1 px-4 py-3 rounded-xl text-sm font-medium transition-all",
+                          downloadFormat === format
+                            ? "bg-black dark:bg-white text-white dark:text-black"
+                            : "bg-black/5 dark:bg-white/5 text-black/70 dark:text-white/70"
+                        )}
+                        data-testid={`format-${format}`}
                       >
-                        <input
-                          type="checkbox"
-                          checked={selectedMonths.includes(month)}
-                          onChange={e => {
-                            setSelectedMonths(prev =>
-                              e.target.checked
-                                ? [...prev, month]
-                                : prev.filter(m => m !== month)
-                            );
-                          }}
-                          className="mr-2"
-                        />
-                        <span>{month}</span>
-                      </label>
+                        {format.toUpperCase()}
+                      </button>
                     ))}
                   </div>
-                )}
-              </div>
-            </div>
-          </div>
-          {/* Category Tabs */}
-          <div className="flex gap-2 mb-6">
-            {CATEGORY_LABELS.map(cat => (
-              <button
-                key={cat.key}
-                className={`px-4 py-2 rounded-full font-semibold transition-all duration-150
-                  ${selectedCategory === cat.key
-                    ? 'bg-blue-700 text-white shadow'
-                    : 'bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-950 dark:text-blue-200 dark:hover:bg-blue-900'}
-                `}
-                onClick={() => setSelectedCategory(cat.key as any)}
-              >
-                {cat.label}
-              </button>
-            ))}
-            {/* Report Button */}
-            <button
-              className="ml-auto px-4 py-2 rounded-full bg-blue-700 text-white font-semibold shadow hover:bg-blue-800"
-              onClick={() => setReportModalOpen(true)}
-              type="button"
-            >
-              Generate Report
-            </button>
-          </div>
-          {/* Show per-MMP summary for selected category */}
-          {selectedCategory !== 'all' ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-              {filteredMmpSummaries.length > 0 ? (
-                filteredMmpSummaries.map((summary, idx) => (
-                  <div key={summary.mmpId + idx} className="bg-blue-100 dark:bg-blue-950 rounded-xl p-6 flex flex-col items-center shadow border border-blue-200 dark:border-blue-800">
-                    <div className="text-base font-semibold text-blue-900 dark:text-blue-200 mb-1">{summary.mmpName}</div>
-                    <div className="text-xs text-muted-foreground mb-2">{summary.mmpId}</div>
-                    <div className="flex flex-col gap-1 w-full">
-                      <div className="flex justify-between w-full">
-                        <span className="text-xs text-muted-foreground">Covered</span>
-                        <span className="text-xl font-bold text-green-700">{summary.covered}</span>
-                      </div>
-                      <div className="flex justify-between w-full">
-                        <span className="text-xs text-muted-foreground">Not Covered</span>
-                        <span className="text-xl font-bold text-amber-700">{summary.notCovered}</span>
-                      </div>
-                      <div className="flex justify-between w-full mt-2 border-t pt-2 border-blue-200 dark:border-blue-800">
-                        <span className="text-xs font-semibold">Total</span>
-                        <span className="text-lg font-extrabold text-blue-700 dark:text-blue-400">
-                          {summary.total}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="text-center text-muted-foreground col-span-full">No data available.</div>
-              )}
-            </div>
-          ) : (
-            // ALL: show all MMPs with their status, MMP name, and MMP ID
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-              {filteredAllMmpSummaries.length > 0 ? (
-                filteredAllMmpSummaries.map((summary, idx) => (
-                  <div key={summary.mmpId + summary.status + idx} className="bg-blue-100 dark:bg-blue-950 rounded-xl p-6 flex flex-col items-center shadow border border-blue-200 dark:border-blue-800">
-                    <div className="text-base font-semibold text-blue-900 dark:text-blue-200 mb-1">{summary.mmpName}</div>
-                    <div className="text-xs text-muted-foreground mb-1">{summary.mmpId}</div>
-                    <div className="text-xs mb-1">
-                      <span className={`px-2 py-0.5 rounded-full font-semibold
-                        ${summary.status === 'approved'
-                          ? 'bg-green-100 text-green-700'
-                          : summary.status === 'pending'
-                            ? 'bg-amber-100 text-amber-700'
-                            : 'bg-gray-200 text-gray-700'}
-                      `}>
-                        {summary.status.charAt(0).toUpperCase() + summary.status.slice(1)}
-                      </span>
-                    </div>
-                    <div className="flex flex-col gap-1 w-full">
-                      <div className="flex justify-between w-full">
-                        <span className="text-xs text-muted-foreground">Covered</span>
-                        <span className="text-xl font-bold text-green-700">{summary.covered}</span>
-                      </div>
-                      <div className="flex justify-between w-full">
-                        <span className="text-xs text-muted-foreground">Not Covered</span>
-                        <span className="text-xl font-bold text-amber-700">{summary.notCovered}</span>
-                      </div>
-                      <div className="flex justify-between w-full mt-2 border-t pt-2 border-blue-200 dark:border-blue-800">
-                        <span className="text-xs font-semibold">Total</span>
-                        <span className="text-lg font-extrabold text-blue-700 dark:text-blue-400">
-                          {summary.total}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="text-center text-muted-foreground col-span-full">No data available.</div>
-              )}
-            </div>
-          )}
-        </Card>
-        {/* Report Modal */}
-        {reportModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-            <div className="bg-white dark:bg-gray-900 rounded-xl shadow-xl p-8 max-w-lg w-full relative">
-              <button
-                className="absolute top-2 right-2 text-xl text-gray-400 hover:text-gray-700"
-                onClick={() => setReportModalOpen(false)}
-                aria-label="Close"
-              >
-                ×
-              </button>
-              <h3 className="text-xl font-bold mb-4">Generate Report</h3>
-              <div className="mb-4">
-                <label className="block font-semibold mb-1">Period (Months)</label>
-                <MultiSelectDropdown
-                  label="Months"
-                  options={availableMonths}
-                  selected={reportPeriod}
-                  setSelected={setReportPeriod}
-                  allLabel="All Months"
-                />
-              </div>
-              <div className="mb-4">
-                <label className="block font-semibold mb-1">Hubs</label>
-                <MultiSelectDropdown
-                  label="Hubs"
-                  options={allHubs}
-                  selected={selectedReportHubs}
-                  setSelected={setSelectedReportHubs}
-                  allLabel="All Hubs"
-                />
-              </div>
-              <div className="mb-4">
-                <label className="block font-semibold mb-1">MMPs</label>
-                <MultiSelectDropdown
-                  label="MMPs"
-                  options={allMMPs}
-                  selected={selectedReportMMPs}
-                  setSelected={setSelectedReportMMPs}
-                  allLabel="All MMPs"
-                />
-              </div>
-              <div className="mb-4">
-                <label className="block font-semibold mb-1">Download Format</label>
-                <select
-                  value={downloadFormat}
-                  onChange={e => setDownloadFormat(e.target.value as 'pdf' | 'docx' | 'excel')}
-                  className="w-full px-3 py-2 rounded border border-blue-200 dark:border-blue-800 bg-white dark:bg-blue-950"
-                >
-                  <option value="pdf">PDF</option>
-                  <option value="docx">DOCX</option>
-                  <option value="excel">Excel (CSV)</option>
-                </select>
-              </div>
-              <div className="flex gap-4 mt-6">
-                <button
-                  className="flex-1 px-4 py-2 rounded bg-blue-700 text-white font-semibold shadow hover:bg-blue-800"
+                </div>
+
+                <Button
                   onClick={() => {
                     if (downloadFormat === 'pdf') handleGeneratePDF();
                     else if (downloadFormat === 'docx') handleGenerateDocx();
                     else if (downloadFormat === 'excel') handleGenerateExcel();
+                    setReportModalOpen(false);
                   }}
+                  className="w-full bg-black dark:bg-white text-white dark:text-black rounded-xl py-6 text-base font-semibold min-h-[52px]"
+                  data-testid="button-download-report"
                 >
-                  Download
-                </button>
+                  <Download className="h-5 w-5 mr-2" />
+                  Download Report
+                </Button>
               </div>
-            </div>
-          </div>
+            </motion.div>
+          </motion.div>
         )}
-      </div>
+      </AnimatePresence>
     </div>
   );
 };
 
 export default FieldOperationManagerPage;
-
-
