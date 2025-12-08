@@ -93,20 +93,20 @@ const ChatItem: React.FC<ChatItemProps> = ({ chat, isActive, onClick, getTargetU
       <div className="flex items-start gap-3">
         <div className="relative">
           {chat.type === 'private' ? (
-            <Avatar className={`h-12 w-12 ring-2 ring-offset-2 ring-offset-background transition-all ${isActive ? 'ring-primary/30' : 'ring-transparent group-hover:ring-primary/20'}`}>
-              <AvatarFallback className="bg-gradient-to-br from-blue-500 to-blue-600 text-white font-semibold text-sm">
+            <Avatar className={`h-12 w-12 ring-2 ring-offset-2 ring-offset-background transition-all ${isActive ? 'ring-black/30 dark:ring-white/30' : 'ring-transparent group-hover:ring-black/20 dark:group-hover:ring-white/20'}`}>
+              <AvatarFallback className="bg-black dark:bg-white text-white dark:text-black font-semibold text-sm">
                 {chat.name.charAt(0).toUpperCase()}
               </AvatarFallback>
             </Avatar>
           ) : chat.type === 'state-group' ? (
-            <Avatar className={`h-12 w-12 ring-2 ring-offset-2 ring-offset-background transition-all ${isActive ? 'ring-green-400/30' : 'ring-transparent group-hover:ring-green-400/20'}`}>
-              <AvatarFallback className="bg-gradient-to-br from-green-500 to-green-600 text-white">
+            <Avatar className={`h-12 w-12 ring-2 ring-offset-2 ring-offset-background transition-all ${isActive ? 'ring-black/30 dark:ring-white/30' : 'ring-transparent group-hover:ring-black/20 dark:group-hover:ring-white/20'}`}>
+              <AvatarFallback className="bg-black dark:bg-white text-white dark:text-black">
                 <MapPin className="h-5 w-5" />
               </AvatarFallback>
             </Avatar>
           ) : (
-            <Avatar className={`h-12 w-12 ring-2 ring-offset-2 ring-offset-background transition-all ${isActive ? 'ring-purple-400/30' : 'ring-transparent group-hover:ring-purple-400/20'}`}>
-              <AvatarFallback className="bg-gradient-to-br from-purple-500 to-purple-600 text-white">
+            <Avatar className={`h-12 w-12 ring-2 ring-offset-2 ring-offset-background transition-all ${isActive ? 'ring-black/30 dark:ring-white/30' : 'ring-transparent group-hover:ring-black/20 dark:group-hover:ring-white/20'}`}>
+              <AvatarFallback className="bg-black dark:bg-white text-white dark:text-black">
                 <Users className="h-5 w-5" />
               </AvatarFallback>
             </Avatar>
@@ -219,7 +219,7 @@ const ChatSidebar: React.FC = () => {
 
   return (
     <div className="w-full h-full flex flex-col">
-      <div className="p-4 border-b bg-card/95 dark:bg-gray-900/95 backdrop-blur-md">
+      <div className="p-4 border-b bg-white dark:bg-black backdrop-blur-md">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2.5">
             <h2 className="text-lg font-bold tracking-tight" data-testid="text-messages-title">Messages</h2>
@@ -262,7 +262,7 @@ const ChatSidebar: React.FC = () => {
                       >
                         <div className="relative">
                           <Avatar className="h-10 w-10">
-                            <AvatarFallback className="bg-gradient-to-br from-blue-500 to-blue-600 text-white text-sm">
+                            <AvatarFallback className="bg-black dark:bg-white text-white dark:text-black text-sm font-semibold">
                               {(u.fullName || u.name || u.username || 'U').charAt(0).toUpperCase()}
                             </AvatarFallback>
                           </Avatar>
@@ -340,8 +340,8 @@ const ChatSidebar: React.FC = () => {
             ))
           ) : (
             <div className="py-16 text-center px-4">
-              <div className="h-16 w-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center">
-                <MessageSquare className="h-8 w-8 text-primary/40" />
+              <div className="h-16 w-16 mx-auto mb-4 rounded-2xl bg-black dark:bg-white flex items-center justify-center">
+                <MessageSquare className="h-8 w-8 text-white dark:text-black" />
               </div>
               <p className="text-sm font-semibold text-foreground/80">
                 {searchQuery ? 'No chats found' : 'No conversations yet'}
