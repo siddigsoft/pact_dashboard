@@ -149,7 +149,7 @@ const Chat: React.FC = () => {
   // MOBILE VIEW - Compact Uber Style
   if (isMobile) {
     return (
-      <div className="h-[100dvh] flex flex-col bg-white dark:bg-black" data-testid="chat-page">
+      <div className="h-full flex flex-col bg-white dark:bg-black" data-testid="chat-page">
         {activeView === 'list' ? (
           <div className="flex flex-col h-full">
             {/* Compact Header */}
@@ -398,7 +398,7 @@ const Chat: React.FC = () => {
 
   // WEB VIEW - Compact Uber Style
   return (
-    <div className="h-screen w-screen flex bg-white dark:bg-black" data-testid="chat-page">
+    <div className="h-full w-full flex bg-white dark:bg-black rounded-lg overflow-hidden" data-testid="chat-page">
       {/* Left Sidebar - Narrower */}
       <div className="w-[320px] h-full flex flex-col shrink-0 border-r border-gray-100 dark:border-gray-900">
         {/* Header */}
