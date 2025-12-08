@@ -345,7 +345,7 @@ export const sudanStates: SudanState[] = [
       { id: 'rn-al-buhaira', name: 'Al Buhaira', nameAr: 'البحيرة' },
       { id: 'rn-al-matama', name: 'Al Matama', nameAr: 'المتمة' },
       { id: 'rn-barbar', name: 'Barbar', nameAr: 'بربر' },
-      { id: 'rn-shendi', name: 'Shendi', nameAr: 'شندي' },
+      { id: 'rn-shandi', name: 'Shandi', nameAr: 'شندي' },
     ]
   },
 
