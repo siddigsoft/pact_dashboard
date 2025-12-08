@@ -505,6 +505,14 @@ export default function WithdrawalApproval() {
         </Button>
       </div>
 
+      <Alert>
+        <Info className="h-4 w-4" />
+        <AlertDescription>
+          <strong>Admin Approval (Tier 2):</strong> These requests have been reviewed and approved by supervisors. 
+          As an admin, you process final payment and complete the withdrawal transaction.
+        </AlertDescription>
+      </Alert>
+
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="bg-gradient-to-br from-amber-500/5 via-amber-500/10 to-orange-500/5 border-amber-500/20">
           <CardContent className="p-4">
