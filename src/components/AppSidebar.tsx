@@ -361,11 +361,10 @@
     return (
       <Sidebar collapsible="icon" className="border-r bg-white dark:bg-gray-900">
 
-        <SidebarHeader className="border-b py-0.5">
-          <div className="flex h-6 items-center gap-1 px-1">
-            <img src={Logo} alt="PACT Logo" className="h-5 w-5 shrink-0 object-contain" />
-            <SidebarTrigger className="ml-auto h-8 w-8" data-testid="button-sidebar-trigger" />
-
+        <SidebarHeader className="border-b py-0">
+          <div className="flex h-5 items-center gap-0.5 px-0.5">
+            <img src={Logo} alt="PACT Logo" className="h-4 w-4 shrink-0 object-contain" />
+            <SidebarTrigger className="ml-auto h-4 w-4" data-testid="button-sidebar-trigger" />
           </div>
         </SidebarHeader>
 
@@ -378,24 +377,24 @@
                 <SidebarGroup className="py-0 px-0">
                   <CollapsibleTrigger asChild>
                     <SidebarGroupLabel 
-                      className="px-1.5 py-1 h-8 text-[17px] uppercase tracking-wide font-semibold text-blue-600 dark:text-blue-300 cursor-pointer flex items-center justify-between hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors"
+                      className="px-1 py-0.5 h-6 text-[13px] uppercase tracking-wide font-semibold text-blue-600 dark:text-blue-300 cursor-pointer flex items-center justify-between hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors"
                       onClick={() => toggleGroupCollapse(group.id)}
                       data-testid={`group-label-${group.id}`}
                     >
                       <span>{group.label}</span>
-                      <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${isCollapsed ? '-rotate-90' : ''}`} />
+                      <ChevronDown className={`h-3 w-3 transition-transform duration-200 ${isCollapsed ? '-rotate-90' : ''}`} />
                     </SidebarGroupLabel>
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <SidebarGroupContent>
-                      <SidebarMenu className="space-y-1 mt-0.5">
+                      <SidebarMenu className="space-y-0">
                         {group.items.map((item) => (
                           <SidebarMenuItem key={item.id} className="py-0">
                             <SidebarMenuButton
                               asChild
                               isActive={pathname === item.url}
                               tooltip={item.title}
-                              className={`h-10 px-1.5 rounded text-[19px] font-medium transition-all duration-200 
+                              className={`h-7 px-1 rounded text-[13px] font-medium transition-all duration-200 
                                 ${
                                   pathname === item.url
                                     ? "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 font-semibold"
@@ -404,7 +403,7 @@
                             >
                               <Link to={item.url} className="flex items-center gap-1" data-testid={`nav-link-${item.id}`}>
                                 <item.icon
-                                  className={`h-6 w-6 ${
+                                  className={`h-4 w-4 ${
                                     pathname === item.url
                                       ? "text-blue-700 dark:text-blue-300"
                                       : "text-blue-600 dark:text-blue-400"
@@ -433,7 +432,7 @@
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
-                  className="w-full justify-start gap-1 px-0.5 py-0 h-auto hover:bg-blue-50 dark:hover:bg-gray-800"
+                  className="w-full justify-start gap-1 px-0.5 py-0 h-6 hover:bg-blue-50 dark:hover:bg-gray-800"
                   data-testid="button-user-menu"
                 >
                   <Avatar className="h-4 w-4">
@@ -442,9 +441,9 @@
                       {getInitials(currentUser.name)}
                     </AvatarFallback>
                   </Avatar>
-                  <div className="flex flex-col items-start text-left text-[18px] leading-tight group-data-[collapsible=icon]:hidden">
+                  <div className="flex flex-col items-start text-left text-[11px] leading-tight group-data-[collapsible=icon]:hidden">
                     <span className="font-semibold text-gray-900 dark:text-gray-100">{currentUser.name}</span>
-                    <span className="text-[17px] text-gray-500 dark:text-gray-400">{getPrimaryRole()}</span>
+                    <span className="text-[10px] text-gray-500 dark:text-gray-400">{getPrimaryRole()}</span>
                   </div>
                   <ChevronUp className="ml-auto h-2 w-2 text-muted-foreground group-data-[collapsible=icon]:hidden" />
                 </Button>
