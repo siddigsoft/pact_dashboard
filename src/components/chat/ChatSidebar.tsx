@@ -6,10 +6,12 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useUser } from '@/context/user/UserContext';
-import { formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow, parseISO } from 'date-fns';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
+import { getUserStatus } from '@/utils/userStatusUtils';
+import { User } from '@/types/user';
 import { 
   Search, 
   Users, 
@@ -23,13 +25,35 @@ import {
   Paperclip
 } from 'lucide-react';
 
+const getUserStatusDisplay = (user: User) => {
+  const status = getUserStatus(user);
+  if (status.type === 'online') {
+    return { text: 'Online', color: 'text-green-500', dotColor: 'bg-green-500' };
+  }
+  const lastSeenTime = user.location?.lastUpdated || user.lastActive;
+  if (lastSeenTime) {
+    try {
+      const lastSeenDate = parseISO(lastSeenTime);
+      return { 
+        text: `Last seen ${formatDistanceToNow(lastSeenDate, { addSuffix: false })} ago`,
+        color: 'text-gray-500',
+        dotColor: 'bg-gray-400'
+      };
+    } catch {
+      return { text: status.label, color: 'text-gray-500', dotColor: 'bg-gray-400' };
+    }
+  }
+  return { text: status.label, color: 'text-gray-500', dotColor: 'bg-gray-400' };
+};
+
 interface ChatItemProps {
   chat: Chat;
   isActive: boolean;
   onClick: () => void;
+  getTargetUserStatus?: () => { text: string; color: string; dotColor: string } | null;
 }
 
-const ChatItem: React.FC<ChatItemProps> = ({ chat, isActive, onClick }) => {
+const ChatItem: React.FC<ChatItemProps> = ({ chat, isActive, onClick, getTargetUserStatus }) => {
   const getLastMessageIcon = () => {
     if (!chat.lastMessage) return null;
     switch (chat.lastMessage.contentType) {
@@ -85,11 +109,15 @@ const ChatItem: React.FC<ChatItemProps> = ({ chat, isActive, onClick }) => {
               </AvatarFallback>
             </Avatar>
           )}
-          {chat.type === 'private' && (
-            <div className="absolute bottom-0.5 right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-background shadow-sm">
-              <div className="w-full h-full rounded-full bg-green-400 animate-pulse" />
-            </div>
-          )}
+          {chat.type === 'private' && (() => {
+            const status = getTargetUserStatus?.();
+            const dotColor = status?.dotColor || 'bg-gray-400';
+            return (
+              <div className={`absolute bottom-0.5 right-0.5 w-3 h-3 ${dotColor} rounded-full border-2 border-background shadow-sm`}>
+                {dotColor === 'bg-green-500' && <div className="w-full h-full rounded-full bg-green-400 animate-pulse" />}
+              </div>
+            );
+          })()}
         </div>
         
         <div className="flex-1 min-w-0 py-0.5">
@@ -217,14 +245,17 @@ const ChatSidebar: React.FC = () => {
                               {(u.fullName || u.name || u.username || 'U').charAt(0).toUpperCase()}
                             </AvatarFallback>
                           </Avatar>
-                          <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-background" />
+                          {(() => {
+                            const status = getUserStatusDisplay(u);
+                            return <div className={`absolute bottom-0 right-0 w-2.5 h-2.5 ${status.dotColor} rounded-full border-2 border-background`} />;
+                          })()}
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="text-sm font-medium truncate">
                             {u.fullName || u.name || u.username || 'User'}
                           </div>
-                          <div className="text-xs text-muted-foreground truncate">
-                            {u.role || 'Team Member'}
+                          <div className={`text-xs truncate ${getUserStatusDisplay(u).color}`}>
+                            {getUserStatusDisplay(u).text}
                           </div>
                         </div>
                       </button>
@@ -263,6 +294,14 @@ const ChatSidebar: React.FC = () => {
                 chat={chat}
                 isActive={activeChat?.id === chat.id}
                 onClick={() => setActiveChat(chat)}
+                getTargetUserStatus={() => {
+                  if (chat.type !== 'private') return null;
+                  const targetUserId = chat.participants.find(id => id !== currentUser?.id);
+                  if (!targetUserId) return null;
+                  const targetUser = users.find(u => u.id === targetUserId);
+                  if (!targetUser) return null;
+                  return getUserStatusDisplay(targetUser);
+                }}
               />
             ))
           ) : (

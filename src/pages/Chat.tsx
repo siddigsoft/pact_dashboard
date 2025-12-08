@@ -9,6 +9,9 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import ChatWindow from '@/components/chat/ChatWindow';
+import { getUserStatus } from '@/utils/userStatusUtils';
+import { formatDistanceToNow, parseISO } from 'date-fns';
+import { User } from '@/types/user';
 import { 
   ArrowLeft, 
   Search,
@@ -147,6 +150,36 @@ const Chat: React.FC = () => {
     return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
   };
 
+  const getUserStatusDisplay = (user: User) => {
+    const status = getUserStatus(user);
+    if (status.type === 'online') {
+      return { text: 'Online', color: 'text-green-500', dotColor: 'bg-green-500' };
+    }
+    const lastSeenTime = user.location?.lastUpdated || user.lastActive;
+    if (lastSeenTime) {
+      try {
+        const lastSeenDate = parseISO(lastSeenTime);
+        return { 
+          text: `Last seen ${formatDistanceToNow(lastSeenDate, { addSuffix: false })} ago`,
+          color: 'text-gray-500',
+          dotColor: 'bg-gray-400'
+        };
+      } catch {
+        return { text: status.label, color: 'text-gray-500', dotColor: 'bg-gray-400' };
+      }
+    }
+    return { text: status.label, color: 'text-gray-500', dotColor: 'bg-gray-400' };
+  };
+
+  const getChatUserStatus = (chat: any) => {
+    if (chat.type !== 'private') return null;
+    const targetUserId = chat.participants.find((id: string) => id !== currentUser?.id);
+    if (!targetUserId) return null;
+    const targetUser = users.find(u => u.id === targetUserId);
+    if (!targetUser) return null;
+    return getUserStatusDisplay(targetUser);
+  };
+
   // MOBILE VIEW - Compact Uber Style
   if (isMobile) {
     return (
@@ -242,6 +275,7 @@ const Chat: React.FC = () => {
                   <div className="space-y-0.5 p-2">
                     {filteredUsers.map((user) => {
                       const userName = user.fullName || user.name || user.username || user.email || 'Unknown';
+                      const userStatus = getUserStatusDisplay(user);
                       return (
                         <button
                           key={user.id}
@@ -250,15 +284,18 @@ const Chat: React.FC = () => {
                           className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors disabled:opacity-50"
                           data-testid={`contact-${user.id}`}
                         >
-                          <Avatar className="h-10 w-10">
-                            <AvatarImage src={user.avatar} alt={userName} />
-                            <AvatarFallback className="bg-black dark:bg-white text-white dark:text-black text-sm font-bold">
-                              {getInitials(userName)}
-                            </AvatarFallback>
-                          </Avatar>
+                          <div className="relative">
+                            <Avatar className="h-10 w-10">
+                              <AvatarImage src={user.avatar} alt={userName} />
+                              <AvatarFallback className="bg-black dark:bg-white text-white dark:text-black text-sm font-bold">
+                                {getInitials(userName)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 ${userStatus.dotColor} rounded-full border-2 border-white dark:border-black`} />
+                          </div>
                           <div className="flex-1 min-w-0 text-left">
                             <span className="font-semibold text-sm text-black dark:text-white truncate block">{userName}</span>
-                            <span className="text-xs text-gray-500 truncate block">{user.role || 'Team Member'}</span>
+                            <span className={`text-xs truncate block ${userStatus.color}`}>{userStatus.text}</span>
                           </div>
                           <div className="flex items-center gap-1">
                             <div className="w-8 h-8 rounded-full bg-black dark:bg-white flex items-center justify-center">
@@ -307,9 +344,10 @@ const Chat: React.FC = () => {
                               </span>
                             )}
                           </div>
-                          {chat.type === 'private' && (
-                            <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-white dark:border-black" />
-                          )}
+                          {chat.type === 'private' && (() => {
+                            const chatStatus = getChatUserStatus(chat);
+                            return <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 ${chatStatus?.dotColor || 'bg-gray-400'} rounded-full border-2 border-white dark:border-black`} />;
+                          })()}
                         </div>
                         <div className="flex-1 min-w-0 text-left">
                           <div className="flex items-center justify-between gap-2">
@@ -365,7 +403,10 @@ const Chat: React.FC = () => {
                       </div>
                       <div>
                         <h2 className="font-semibold text-white text-sm">{activeChat.name}</h2>
-                        <p className="text-[10px] text-green-400 font-medium">Active now</p>
+                        {(() => {
+                          const chatStatus = getChatUserStatus(activeChat);
+                          return <p className={`text-[10px] font-medium ${chatStatus?.color === 'text-green-500' ? 'text-green-400' : 'text-gray-400'}`}>{chatStatus?.text || 'Group chat'}</p>;
+                        })()}
                       </div>
                     </div>
                   )}
@@ -479,6 +520,7 @@ const Chat: React.FC = () => {
               <div className="py-1">
                 {filteredUsers.map((user) => {
                   const userName = user.fullName || user.name || user.username || user.email || 'Unknown';
+                  const userStatus = getUserStatusDisplay(user);
                   return (
                     <button
                       key={user.id}
@@ -487,15 +529,18 @@ const Chat: React.FC = () => {
                       className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors disabled:opacity-50"
                       data-testid={`contact-${user.id}`}
                     >
-                      <Avatar className="h-10 w-10">
-                        <AvatarImage src={user.avatar} alt={userName} />
-                        <AvatarFallback className="bg-primary text-primary-foreground text-sm font-medium">
-                          {getInitials(userName)}
-                        </AvatarFallback>
-                      </Avatar>
+                      <div className="relative">
+                        <Avatar className="h-10 w-10">
+                          <AvatarImage src={user.avatar} alt={userName} />
+                          <AvatarFallback className="bg-primary text-primary-foreground text-sm font-medium">
+                            {getInitials(userName)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 ${userStatus.dotColor} rounded-full border-2 border-card`} />
+                      </div>
                       <div className="flex-1 min-w-0 text-left">
                         <span className="font-medium text-sm text-foreground truncate block">{userName}</span>
-                        <span className="text-xs text-muted-foreground truncate block">{user.role || 'Team Member'}</span>
+                        <span className={`text-xs truncate block ${userStatus.color}`}>{userStatus.text}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
@@ -561,9 +606,10 @@ const Chat: React.FC = () => {
                           )}
                         </AvatarFallback>
                       </Avatar>
-                      {chat.type === 'private' && (
-                        <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-card" />
-                      )}
+                      {chat.type === 'private' && (() => {
+                        const chatStatus = getChatUserStatus(chat);
+                        return <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 ${chatStatus?.dotColor || 'bg-gray-400'} rounded-full border-2 border-card`} />;
+                      })()}
                     </div>
                     <div className="flex-1 min-w-0 text-left">
                       <div className="flex items-center justify-between gap-2">
