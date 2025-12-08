@@ -596,56 +596,7 @@ const Chat: React.FC = () => {
       {/* Right Panel - Chat Window */}
       <div className="flex-1 h-full flex flex-col bg-muted/30">
         {activeChat ? (
-          <>
-            {/* Chat Header */}
-            <div className="h-16 px-4 flex items-center justify-between bg-card border-b border-border shrink-0">
-              <div className="flex items-center gap-3">
-                <Avatar className="h-10 w-10">
-                  <AvatarFallback className="bg-primary text-primary-foreground text-sm font-medium">
-                    {activeChat.type === 'group' || activeChat.type === 'state-group' ? (
-                      <Users className="h-4 w-4" />
-                    ) : (
-                      activeChat.name.charAt(0).toUpperCase()
-                    )}
-                  </AvatarFallback>
-                </Avatar>
-                <div>
-                  <h2 className="font-semibold text-foreground">{activeChat.name}</h2>
-                  <p className="text-xs text-green-600 dark:text-green-400 font-medium flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                    {activeChat.type === 'private' ? 'Active now' : `${activeChat.participants.length} members`}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button 
-                  onClick={handleVoiceCall}
-                  className="w-9 h-9 rounded-full bg-muted flex items-center justify-center hover:bg-muted/80 transition-colors"
-                  data-testid="button-voice-call"
-                >
-                  <Phone className="h-4 w-4 text-foreground" />
-                </button>
-                <button 
-                  onClick={handleVideoCall}
-                  className="w-9 h-9 rounded-full bg-muted flex items-center justify-center hover:bg-muted/80 transition-colors"
-                  data-testid="button-video-call"
-                >
-                  <Video className="h-4 w-4 text-foreground" />
-                </button>
-                <button 
-                  className="w-9 h-9 rounded-full bg-muted flex items-center justify-center hover:bg-muted/80 transition-colors"
-                  data-testid="button-more-options"
-                >
-                  <MoreVertical className="h-4 w-4 text-foreground" />
-                </button>
-              </div>
-            </div>
-            
-            {/* Messages Area */}
-            <div className="flex-1 overflow-hidden">
-              <ChatWindow />
-            </div>
-          </>
+          <ChatWindow />
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center">
             <div className="text-center max-w-md px-6">
