@@ -79,12 +79,14 @@ const Calls = () => {
     connectionStatus 
   } = useRealtimeTeamLocations({ enabled: true });
   
-  const callHistory = [
-    { id: 'c1', recipientId: 'usr2', direction: 'outgoing', duration: 124, timestamp: new Date(Date.now() - 3600000 * 2).toISOString(), status: 'completed' },
-    { id: 'c2', recipientId: 'usr3', direction: 'incoming', duration: 67, timestamp: new Date(Date.now() - 3600000 * 5).toISOString(), status: 'missed' },
-    { id: 'c3', recipientId: 'usr4', direction: 'outgoing', duration: 245, timestamp: new Date(Date.now() - 86400000).toISOString(), status: 'completed' },
-    { id: 'c4', recipientId: 'usr5', direction: 'incoming', duration: 31, timestamp: new Date(Date.now() - 86400000 * 2).toISOString(), status: 'completed' },
-  ];
+  // Generate sample call history from actual users (excluding current user)
+  const otherUsers = users.filter(u => u.id !== currentUser?.id);
+  const callHistory = otherUsers.length > 0 ? [
+    { id: 'c1', recipientId: otherUsers[0]?.id, direction: 'outgoing' as const, duration: 124, timestamp: new Date(Date.now() - 3600000 * 2).toISOString(), status: 'completed' },
+    { id: 'c2', recipientId: otherUsers[1]?.id || otherUsers[0]?.id, direction: 'incoming' as const, duration: 0, timestamp: new Date(Date.now() - 3600000 * 5).toISOString(), status: 'missed' },
+    { id: 'c3', recipientId: otherUsers[2]?.id || otherUsers[0]?.id, direction: 'outgoing' as const, duration: 245, timestamp: new Date(Date.now() - 86400000).toISOString(), status: 'completed' },
+    { id: 'c4', recipientId: otherUsers[3]?.id || otherUsers[0]?.id, direction: 'incoming' as const, duration: 31, timestamp: new Date(Date.now() - 86400000 * 2).toISOString(), status: 'completed' },
+  ].filter(call => call.recipientId) : [];
   
   const formatDuration = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -505,81 +507,91 @@ const Calls = () => {
 
                 {activeTab === 'history' && (
                   <div className="space-y-0.5">
-                    {callHistory.map((call) => {
-                      const user = users.find(u => u.id === call.recipientId);
-                      if (!user) return null;
-                      
-                      const isMissed = call.status === 'missed';
-                      const status = getUserOnlineStatus(user.id);
-                      
-                      return (
-                        <div 
-                          key={call.id} 
-                          className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors"
-                          data-testid={`call-history-${call.id}`}
-                        >
-                          <div className="relative">
-                            <Avatar className="h-9 w-9">
-                              <AvatarImage src={user.avatar} alt={user.name} />
-                              <AvatarFallback className="bg-gray-200 dark:bg-gray-800 text-black dark:text-white text-xs font-bold">
-                                {getInitials(user.name)}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div className="absolute bottom-0 right-0">
-                              <UberStatusDot status={status} />
-                            </div>
-                          </div>
-                          
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-1.5">
-                              <span className={`font-semibold text-sm ${isMissed ? 'text-red-500' : 'text-black dark:text-white'}`}>
-                                {user.name}
-                              </span>
-                              {isMissed && (
-                                <span className="px-1 py-0.5 rounded bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-[9px] font-medium">Missed</span>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-1.5 text-xs text-gray-500">
-                              {call.direction === 'outgoing' ? (
-                                <PhoneOutgoing className="h-3 w-3" />
-                              ) : (
-                                <PhoneIncoming className="h-3 w-3" />
-                              )}
-                              <span>{formatTime(call.timestamp)}</span>
-                              {!isMissed && <span>{formatDuration(call.duration)}</span>}
-                            </div>
-                          </div>
-                          
-                          <div className="flex items-center gap-1">
-                            {isMissed && (
-                              <>
-                                <button
-                                  onClick={() => handleMissedCallAction(user.id, user.name, user.avatar)}
-                                  className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                                  data-testid={`missed-message-${call.id}`}
-                                >
-                                  <MessageSquare className="h-4 w-4 text-gray-600 dark:text-gray-400" />
-                                </button>
-                                <button
-                                  onClick={() => handleMissedCallAction(user.id, user.name, user.avatar)}
-                                  className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                                  data-testid={`missed-notify-${call.id}`}
-                                >
-                                  <Bell className="h-4 w-4 text-gray-600 dark:text-gray-400" />
-                                </button>
-                              </>
-                            )}
-                            <button
-                              onClick={() => handleStartCall(user.id)}
-                              className="h-8 px-3 rounded-full bg-black dark:bg-white text-white dark:text-black text-xs font-semibold flex items-center gap-1"
-                              data-testid={`callback-${call.id}`}
-                            >
-                              <Phone className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
+                    {callHistory.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-12 text-center" data-testid="empty-call-history">
+                        <div className="w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-4">
+                          <Phone className="h-8 w-8 text-gray-400" />
                         </div>
-                      );
-                    })}
+                        <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-1">No recent calls</h3>
+                        <p className="text-xs text-gray-500 max-w-[200px]">Your call history will appear here after you make or receive calls</p>
+                      </div>
+                    ) : (
+                      callHistory.map((call) => {
+                        const user = users.find(u => u.id === call.recipientId);
+                        if (!user) return null;
+                        
+                        const isMissed = call.status === 'missed';
+                        const status = getUserOnlineStatus(user.id);
+                        
+                        return (
+                          <div 
+                            key={call.id} 
+                            className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors"
+                            data-testid={`call-history-${call.id}`}
+                          >
+                            <div className="relative">
+                              <Avatar className="h-9 w-9">
+                                <AvatarImage src={user.avatar} alt={user.name} />
+                                <AvatarFallback className="bg-gray-200 dark:bg-gray-800 text-black dark:text-white text-xs font-bold">
+                                  {getInitials(user.name)}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div className="absolute bottom-0 right-0">
+                                <UberStatusDot status={status} />
+                              </div>
+                            </div>
+                            
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className={`font-semibold text-sm ${isMissed ? 'text-red-500' : 'text-black dark:text-white'}`}>
+                                  {user.name}
+                                </span>
+                                {isMissed && (
+                                  <span className="px-1 py-0.5 rounded bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-[9px] font-medium">Missed</span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                                {call.direction === 'outgoing' ? (
+                                  <PhoneOutgoing className="h-3 w-3" />
+                                ) : (
+                                  <PhoneIncoming className="h-3 w-3" />
+                                )}
+                                <span>{formatTime(call.timestamp)}</span>
+                                {!isMissed && <span>{formatDuration(call.duration)}</span>}
+                              </div>
+                            </div>
+                            
+                            <div className="flex items-center gap-1">
+                              {isMissed && (
+                                <>
+                                  <button
+                                    onClick={() => handleMissedCallAction(user.id, user.name, user.avatar)}
+                                    className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                                    data-testid={`missed-message-${call.id}`}
+                                  >
+                                    <MessageSquare className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleMissedCallAction(user.id, user.name, user.avatar)}
+                                    className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                                    data-testid={`missed-notify-${call.id}`}
+                                  >
+                                    <Bell className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                                  </button>
+                                </>
+                              )}
+                              <button
+                                onClick={() => handleStartCall(user.id)}
+                                className="h-8 px-3 rounded-full bg-black dark:bg-white text-white dark:text-black text-xs font-semibold flex items-center gap-1"
+                                data-testid={`callback-${call.id}`}
+                              >
+                                <Phone className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
                   </div>
                 )}
               </ScrollArea>
