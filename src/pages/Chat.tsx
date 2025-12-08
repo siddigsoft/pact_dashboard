@@ -396,106 +396,86 @@ const Chat: React.FC = () => {
     );
   }
 
-  // WEB VIEW - Compact Uber Style
+  // WEB VIEW - Clean Full-Width Layout
   return (
-    <div className="h-full w-full flex bg-white dark:bg-black rounded-lg overflow-hidden" data-testid="chat-page">
-      {/* Left Sidebar - Narrower */}
-      <div className="w-[320px] h-full flex flex-col shrink-0 border-r border-gray-100 dark:border-gray-900">
-        {/* Header */}
-        <div className="bg-black px-4 pt-4 pb-3">
-          <div className="flex items-center justify-between mb-2">
+    <div className="h-full w-full flex bg-background rounded-lg overflow-hidden border border-border" data-testid="chat-page">
+      {/* Left Panel - Conversation List */}
+      <div className="w-[340px] h-full flex flex-col shrink-0 border-r border-border bg-card">
+        {/* Header with Search */}
+        <div className="p-4 border-b border-border">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-lg font-semibold text-foreground">Messages</h2>
             <button 
-              onClick={() => navigate('/dashboard')} 
-              className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors" 
-              data-testid="button-go-back"
+              onClick={() => setActiveTab('contacts')}
+              className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center hover:opacity-90 transition-opacity"
+              data-testid="button-new-chat"
             >
-              <ArrowLeft className="h-4 w-4 text-white" />
+              <Plus className="h-4 w-4" />
             </button>
-            <div className="flex items-center gap-1.5">
-              <button 
-                onClick={() => navigate('/notifications')}
-                className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
-              >
-                <Bell className="h-4 w-4 text-white" />
-              </button>
-              <button 
-                onClick={() => setActiveTab('contacts')}
-                className="w-8 h-8 rounded-full bg-white flex items-center justify-center hover:bg-gray-100 transition-colors"
-                data-testid="button-new-chat"
-              >
-                <Plus className="h-4 w-4 text-black" />
-              </button>
-            </div>
           </div>
-          <h1 className="text-2xl font-bold text-white tracking-tight" data-testid="text-page-title">Messages</h1>
-          <p className="text-white/50 text-sm">
-            {activeTab === 'conversations' ? `${filteredChats.length} conversations` : `${filteredUsers.length} contacts`}
-          </p>
-        </div>
-
-        {/* Search */}
-        <div className="p-3 bg-white dark:bg-black">
+          
+          {/* Search */}
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <input
               type="text"
-              placeholder={activeTab === 'conversations' ? "Search messages" : "Search contacts"}
+              placeholder={activeTab === 'conversations' ? "Search messages..." : "Search contacts..."}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full h-9 pl-9 pr-9 rounded-xl bg-gray-100 dark:bg-gray-900 text-black dark:text-white placeholder:text-gray-500 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-black dark:focus:ring-white transition-all"
+              className="w-full h-10 pl-10 pr-10 rounded-lg bg-muted text-foreground placeholder:text-muted-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary transition-all"
               data-testid="input-search"
             />
             {searchQuery && (
               <button 
                 onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-gray-300 dark:bg-gray-700 flex items-center justify-center hover:bg-gray-400 dark:hover:bg-gray-600 transition-colors"
+                className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-muted-foreground/20 flex items-center justify-center hover:bg-muted-foreground/30 transition-colors"
               >
-                <X className="h-3 w-3 text-gray-600 dark:text-gray-300" />
+                <X className="h-3 w-3 text-muted-foreground" />
               </button>
             )}
           </div>
         </div>
 
         {/* Tabs */}
-        <div className="px-3 pb-3 bg-white dark:bg-black">
-          <div className="flex rounded-xl bg-gray-100 dark:bg-gray-900 p-0.5">
+        <div className="px-4 py-2 border-b border-border">
+          <div className="flex rounded-lg bg-muted p-1">
             <button 
-              className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 ${
-                activeTab === 'contacts' ? 'bg-black dark:bg-white text-white dark:text-black' : 'text-gray-600 dark:text-gray-400'
+              className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
+                activeTab === 'contacts' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
               }`}
               onClick={() => setActiveTab('contacts')}
               data-testid="tab-contacts"
             >
-              <Users className="h-3.5 w-3.5" />
+              <Users className="h-4 w-4" />
               Contacts
             </button>
             <button 
-              className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 ${
-                activeTab === 'conversations' ? 'bg-black dark:bg-white text-white dark:text-black' : 'text-gray-600 dark:text-gray-400'
+              className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
+                activeTab === 'conversations' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
               }`}
               onClick={() => setActiveTab('conversations')}
               data-testid="tab-conversations"
             >
-              <Clock className="h-3.5 w-3.5" />
+              <MessageSquare className="h-4 w-4" />
               Chats
             </button>
           </div>
         </div>
 
         {/* Content based on active tab */}
-        <ScrollArea className="flex-1 bg-white dark:bg-black">
+        <ScrollArea className="flex-1">
           {activeTab === 'contacts' ? (
             /* Contact List */
             filteredUsers.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 px-6">
-                <div className="w-16 h-16 rounded-full bg-black dark:bg-white flex items-center justify-center mb-4">
-                  <Users className="h-8 w-8 text-white dark:text-black" />
+                <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center mb-4">
+                  <Users className="h-7 w-7 text-muted-foreground" />
                 </div>
-                <p className="text-black dark:text-white font-semibold text-base">No contacts found</p>
-                <p className="text-gray-500 text-center text-sm mt-1">Try a different search term</p>
+                <p className="text-foreground font-medium">No contacts found</p>
+                <p className="text-muted-foreground text-center text-sm mt-1">Try a different search term</p>
               </div>
             ) : (
-              <div className="space-y-0.5 py-1">
+              <div className="py-1">
                 {filteredUsers.map((user) => {
                   const userName = user.fullName || user.name || user.username || user.email || 'Unknown';
                   return (
@@ -503,25 +483,25 @@ const Chat: React.FC = () => {
                       key={user.id}
                       onClick={() => handleStartChatWithUser(user.id)}
                       disabled={isLoading}
-                      className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors disabled:opacity-50"
+                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors disabled:opacity-50"
                       data-testid={`contact-${user.id}`}
                     >
                       <Avatar className="h-10 w-10">
                         <AvatarImage src={user.avatar} alt={userName} />
-                        <AvatarFallback className="bg-black dark:bg-white text-white dark:text-black text-sm font-bold">
+                        <AvatarFallback className="bg-primary text-primary-foreground text-sm font-medium">
                           {getInitials(userName)}
                         </AvatarFallback>
                       </Avatar>
                       <div className="flex-1 min-w-0 text-left">
-                        <span className="font-semibold text-sm text-black dark:text-white truncate block">{userName}</span>
-                        <span className="text-xs text-gray-500 truncate block">{user.role || 'Team Member'}</span>
+                        <span className="font-medium text-sm text-foreground truncate block">{userName}</span>
+                        <span className="text-xs text-muted-foreground truncate block">{user.role || 'Team Member'}</span>
                       </div>
-                      <div className="flex items-center gap-1">
-                        <div className="w-8 h-8 rounded-full bg-black dark:bg-white flex items-center justify-center">
-                          <MessageSquare className="h-4 w-4 text-white dark:text-black" />
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
+                          <MessageSquare className="h-4 w-4 text-primary-foreground" />
                         </div>
                         <div 
-                          className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center"
+                          className="w-8 h-8 rounded-full bg-muted flex items-center justify-center hover:bg-muted/80 transition-colors"
                           onClick={(e) => {
                             e.stopPropagation();
                             const targetUser = users.find(u => u.id === user.id);
@@ -531,7 +511,7 @@ const Chat: React.FC = () => {
                             }
                           }}
                         >
-                          <Phone className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                          <Phone className="h-4 w-4 text-muted-foreground" />
                         </div>
                       </div>
                     </button>
@@ -543,14 +523,14 @@ const Chat: React.FC = () => {
             /* Chat List */
             filteredChats.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 px-6">
-                <div className="w-16 h-16 rounded-full bg-black dark:bg-white flex items-center justify-center mb-4">
-                  <MessageSquare className="h-8 w-8 text-white dark:text-black" />
+                <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center mb-4">
+                  <MessageSquare className="h-7 w-7 text-muted-foreground" />
                 </div>
-                <p className="text-black dark:text-white font-semibold text-base">No messages yet</p>
-                <p className="text-gray-500 text-center text-sm mt-1">Your conversations will appear here</p>
+                <p className="text-foreground font-medium">No messages yet</p>
+                <p className="text-muted-foreground text-center text-sm mt-1">Your conversations will appear here</p>
                 <button 
                   onClick={() => setActiveTab('contacts')}
-                  className="mt-4 h-9 px-4 rounded-full bg-black dark:bg-white text-white dark:text-black font-semibold text-sm hover:opacity-90 transition-opacity flex items-center gap-1.5"
+                  className="mt-4 h-9 px-4 rounded-lg bg-primary text-primary-foreground font-medium text-sm hover:opacity-90 transition-opacity flex items-center gap-2"
                   data-testid="button-new-message"
                 >
                   <Plus className="h-4 w-4" />
@@ -563,57 +543,43 @@ const Chat: React.FC = () => {
                   <button
                     key={chat.id}
                     onClick={() => handleSelectChat(chat.id)}
-                    className={`w-full px-3 py-2.5 flex items-center gap-3 transition-all ${
+                    className={`w-full px-4 py-3 flex items-center gap-3 transition-all ${
                       activeChat?.id === chat.id 
-                        ? 'bg-black dark:bg-white' 
-                        : 'hover:bg-gray-50 dark:hover:bg-gray-900/50'
+                        ? 'bg-primary/10' 
+                        : 'hover:bg-muted/50'
                     }`}
                     data-testid={`chat-item-${chat.id}`}
                   >
                     <div className="relative">
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
-                        activeChat?.id === chat.id 
-                          ? 'bg-white dark:bg-black' 
-                          : 'bg-black dark:bg-white'
-                      }`}>
-                        {chat.type === 'group' || chat.type === 'state-group' ? (
-                          <Users className={`h-4 w-4 ${activeChat?.id === chat.id ? 'text-black dark:text-white' : 'text-white dark:text-black'}`} />
-                        ) : (
-                          <span className={`text-base font-bold ${activeChat?.id === chat.id ? 'text-black dark:text-white' : 'text-white dark:text-black'}`}>
-                            {chat.name.charAt(0).toUpperCase()}
-                          </span>
-                        )}
-                      </div>
+                      <Avatar className="h-10 w-10">
+                        <AvatarFallback className={`text-sm font-medium ${activeChat?.id === chat.id ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
+                          {chat.type === 'group' || chat.type === 'state-group' ? (
+                            <Users className="h-4 w-4" />
+                          ) : (
+                            chat.name.charAt(0).toUpperCase()
+                          )}
+                        </AvatarFallback>
+                      </Avatar>
                       {chat.type === 'private' && (
-                        <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 ${
-                          activeChat?.id === chat.id ? 'border-black dark:border-white' : 'border-white dark:border-black'
-                        }`} />
+                        <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-card" />
                       )}
                     </div>
                     <div className="flex-1 min-w-0 text-left">
                       <div className="flex items-center justify-between gap-2">
-                        <span className={`font-semibold text-sm truncate ${
-                          activeChat?.id === chat.id ? 'text-white dark:text-black' : 'text-black dark:text-white'
-                        }`}>{chat.name}</span>
-                        <span className={`text-xs font-medium shrink-0 ${
-                          activeChat?.id === chat.id ? 'text-white/60 dark:text-black/60' : 'text-gray-400'
-                        }`}>
+                        <span className="font-medium text-sm text-foreground truncate">{chat.name}</span>
+                        <span className="text-xs text-muted-foreground shrink-0">
                           {formatTime(chat.lastMessage?.timestamp)}
                         </span>
                       </div>
                       <div className="flex items-center justify-between gap-2 mt-0.5">
-                        <p className={`truncate text-xs flex items-center gap-1 ${
-                          activeChat?.id === chat.id ? 'text-white/70 dark:text-black/70' : 'text-gray-500'
-                        }`}>
+                        <p className="truncate text-xs text-muted-foreground flex items-center gap-1">
                           {chat.lastMessage?.senderId === currentUser?.id && (
-                            <CheckCheck className={`h-3 w-3 shrink-0 ${
-                              activeChat?.id === chat.id ? 'text-white/70 dark:text-black/70' : 'text-black dark:text-white'
-                            }`} />
+                            <CheckCheck className="h-3 w-3 shrink-0 text-primary" />
                           )}
                           {chat.lastMessage?.content || 'Start a conversation'}
                         </p>
                         {chat.unreadCount > 0 && activeChat?.id !== chat.id && (
-                          <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-black dark:bg-white text-white dark:text-black text-[10px] font-bold flex items-center justify-center">
+                          <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center">
                             {chat.unreadCount}
                           </span>
                         )}
@@ -628,54 +594,49 @@ const Chat: React.FC = () => {
       </div>
 
       {/* Right Panel - Chat Window */}
-      <div className="flex-1 h-full flex flex-col bg-gray-50 dark:bg-gray-950">
+      <div className="flex-1 h-full flex flex-col bg-muted/30">
         {activeChat ? (
           <>
-            {/* Chat Header - Compact */}
-            <div className="h-14 px-4 flex items-center justify-between bg-white dark:bg-black border-b border-gray-100 dark:border-gray-900 shrink-0">
+            {/* Chat Header */}
+            <div className="h-16 px-4 flex items-center justify-between bg-card border-b border-border shrink-0">
               <div className="flex items-center gap-3">
-                <div className="relative">
-                  <div className="w-9 h-9 rounded-full bg-black dark:bg-white flex items-center justify-center">
+                <Avatar className="h-10 w-10">
+                  <AvatarFallback className="bg-primary text-primary-foreground text-sm font-medium">
                     {activeChat.type === 'group' || activeChat.type === 'state-group' ? (
-                      <Users className="h-4 w-4 text-white dark:text-black" />
+                      <Users className="h-4 w-4" />
                     ) : (
-                      <span className="text-sm font-bold text-white dark:text-black">
-                        {activeChat.name.charAt(0).toUpperCase()}
-                      </span>
+                      activeChat.name.charAt(0).toUpperCase()
                     )}
-                  </div>
-                  {activeChat.type === 'private' && (
-                    <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-white dark:border-black" />
-                  )}
-                </div>
+                  </AvatarFallback>
+                </Avatar>
                 <div>
-                  <h2 className="font-semibold text-sm text-black dark:text-white">{activeChat.name}</h2>
+                  <h2 className="font-semibold text-foreground">{activeChat.name}</h2>
                   <p className="text-xs text-green-600 dark:text-green-400 font-medium flex items-center gap-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
                     {activeChat.type === 'private' ? 'Active now' : `${activeChat.participants.length} members`}
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-2">
                 <button 
                   onClick={handleVoiceCall}
-                  className="w-9 h-9 rounded-full bg-gray-100 dark:bg-gray-900 flex items-center justify-center hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
+                  className="w-9 h-9 rounded-full bg-muted flex items-center justify-center hover:bg-muted/80 transition-colors"
                   data-testid="button-voice-call"
                 >
-                  <Phone className="h-4 w-4 text-black dark:text-white" />
+                  <Phone className="h-4 w-4 text-foreground" />
                 </button>
                 <button 
                   onClick={handleVideoCall}
-                  className="w-9 h-9 rounded-full bg-gray-100 dark:bg-gray-900 flex items-center justify-center hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
+                  className="w-9 h-9 rounded-full bg-muted flex items-center justify-center hover:bg-muted/80 transition-colors"
                   data-testid="button-video-call"
                 >
-                  <Video className="h-4 w-4 text-black dark:text-white" />
+                  <Video className="h-4 w-4 text-foreground" />
                 </button>
                 <button 
-                  className="w-9 h-9 rounded-full bg-gray-100 dark:bg-gray-900 flex items-center justify-center hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
+                  className="w-9 h-9 rounded-full bg-muted flex items-center justify-center hover:bg-muted/80 transition-colors"
                   data-testid="button-more-options"
                 >
-                  <MoreVertical className="h-4 w-4 text-black dark:text-white" />
+                  <MoreVertical className="h-4 w-4 text-foreground" />
                 </button>
               </div>
             </div>
@@ -688,31 +649,21 @@ const Chat: React.FC = () => {
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center">
             <div className="text-center max-w-md px-6">
-              <div className="w-20 h-20 rounded-full bg-black dark:bg-white flex items-center justify-center mx-auto mb-6">
-                <Sparkles className="h-10 w-10 text-white dark:text-black" />
+              <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
+                <MessageSquare className="h-8 w-8 text-muted-foreground" />
               </div>
-              <h3 className="text-2xl font-bold text-black dark:text-white tracking-tight">Start messaging</h3>
-              <p className="text-gray-500 text-sm mt-2 leading-relaxed">
-                Select a conversation from the sidebar or choose a contact to start chatting
+              <h3 className="text-xl font-semibold text-foreground">Start a conversation</h3>
+              <p className="text-muted-foreground text-sm mt-2">
+                Select a chat or browse contacts to start messaging
               </p>
-              <div className="flex items-center justify-center gap-3 mt-6">
-                <button 
-                  onClick={() => setActiveTab('contacts')}
-                  className="h-10 px-5 rounded-full bg-black dark:bg-white text-white dark:text-black font-semibold text-sm flex items-center gap-1.5"
-                  data-testid="button-browse-contacts"
-                >
-                  <Users className="h-4 w-4" />
-                  Browse Contacts
-                </button>
-                <button 
-                  onClick={() => navigate('/calls')}
-                  className="h-10 px-5 rounded-full border-2 border-black dark:border-white text-black dark:text-white font-semibold text-sm hover:bg-black hover:text-white dark:hover:bg-white dark:hover:text-black transition-colors flex items-center gap-1.5"
-                  data-testid="button-go-calls"
-                >
-                  <Phone className="h-4 w-4" />
-                  View Calls
-                </button>
-              </div>
+              <button 
+                onClick={() => setActiveTab('contacts')}
+                className="mt-4 h-10 px-5 rounded-lg bg-primary text-primary-foreground font-medium text-sm flex items-center gap-2 mx-auto"
+                data-testid="button-browse-contacts"
+              >
+                <Users className="h-4 w-4" />
+                Browse Contacts
+              </button>
             </div>
           </div>
         )}
