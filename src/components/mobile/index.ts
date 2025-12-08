@@ -104,6 +104,8 @@ export { QuickMessagesBar, QuickMessagesPanel, QuickMessagesFab, defaultQuickMes
 export type { QuickMessage } from './MobileQuickMessages';
 export { MobileCallOverlay, CallNotification } from './MobileCallOverlay';
 export type { CallState, CallParticipant } from './MobileCallOverlay';
+export { MobilePushNotificationOverlay } from './MobilePushNotificationOverlay';
+export type { NotificationType } from './MobilePushNotificationOverlay';
 export { VoiceRecorder, VoiceNotePlayer, VoiceNotePreview, PushToTalkButton } from './MobileVoiceNotes';
 export type { VoiceNote } from './MobileVoiceNotes';
 export { SiteVisitCommPanel, FloatingCommBar, CommunicationHistory } from './MobileSiteVisitComm';
