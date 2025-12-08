@@ -519,20 +519,16 @@ const MMP = () => {
   // Handle accepting/claiming a site (works for both Smart Assigned and Available Sites)
   const handleAcceptSite = async (site: any) => {
     try {
-      console.log('🔄 Starting site acceptance/claim for site:', site.id, site.site_name);
-      
       const isDispatchedSite = site.status?.toLowerCase() === 'dispatched';
       
       if (isDispatchedSite && currentUser?.id) {
         // Use atomic claim RPC for dispatched sites (first-claim system)
-        console.log('📍 Using atomic claim RPC for dispatched site...');
         const { data: result, error: rpcError } = await supabase.rpc('claim_site_visit', {
           p_site_id: site.id,
           p_user_id: currentUser.id
         });
         
         if (rpcError) {
-          console.error('❌ Claim RPC failed:', rpcError);
           toast({
             title: 'Claim Failed',
             description: rpcError.message || 'Could not claim this site. It may have been claimed by another enumerator.',
@@ -544,7 +540,6 @@ const MMP = () => {
         const claimResult = result as { success: boolean; error?: string; message: string };
         
         if (!claimResult.success) {
-          console.error('❌ Claim rejected:', claimResult);
           let description = claimResult.message;
           
           if (claimResult.error === 'ALREADY_CLAIMED') {
@@ -560,8 +555,6 @@ const MMP = () => {
           });
           return;
         }
-        
-        console.log('✅ Site claimed successfully via RPC');
       } else {
         // Standard accept for Smart Assigned sites
         const now = new Date().toISOString();
@@ -576,11 +569,8 @@ const MMP = () => {
           .eq('id', site.id);
 
         if (error) {
-          console.error('❌ Database update failed:', error);
           throw error;
         }
-        
-        console.log('✅ Database update successful');
       }
 
       toast({
@@ -593,8 +583,6 @@ const MMP = () => {
       if (canClaimSites && currentUser?.id) {
         setLoadingEnumerator(true);
         try {
-          console.log('🔄 Reloading enumerator data after site acceptance...');
-
           // Convert collector's stateId/localityId to names for matching with site entries
           const collectorStateName = currentUser.stateId ? sudanStates.find(s => s.id === currentUser.stateId)?.name : undefined;
           const collectorLocalityName = currentUser.stateId && currentUser.localityId
@@ -651,27 +639,6 @@ const MMP = () => {
             mySitesQuery
           ]);
 
-          console.log('🔍 Query results after acceptance:');
-          console.log('  Available sites:', availableResult.data?.length || 0, 'found');
-          console.log('  Smart assigned:', smartAssignedResult.data?.length || 0, 'found');
-          console.log('  My sites:', mySitesResult.data?.length || 0, 'found');
-
-          // Check if the accepted site is still in available sites (it shouldn't be)
-          const acceptedSiteInAvailable = availableResult.data?.find(s => s.id === site.id);
-          if (acceptedSiteInAvailable) {
-            console.error('❌ BUG: Accepted site still appears in Available Sites!', acceptedSiteInAvailable);
-          } else {
-            console.log('✅ Good: Accepted site no longer appears in Available Sites');
-          }
-
-          // Check if the accepted site appears in My Sites (it should)
-          const acceptedSiteInMySites = mySitesResult.data?.find(s => s.id === site.id);
-          if (acceptedSiteInMySites) {
-            console.log('✅ Good: Accepted site appears in My Sites');
-          } else {
-            console.error('❌ BUG: Accepted site does not appear in My Sites!');
-          }
-
           // Format entries for display
           const formatEntries = (entries: any[]) => entries.map(entry => {
             const additionalData = entry.additional_data || {};
@@ -713,11 +680,6 @@ const MMP = () => {
           const smartAssignedEntries = rawSmartAssigned.filter(entry => !entry.cost_acknowledged);
           const mySitesEntries = formatEntries(mySitesResult.data || []);
 
-          console.log('📊 Final state after formatting:');
-          console.log('  Available entries:', availableEntries.length);
-          console.log('  Smart assigned entries:', smartAssignedEntries.length);
-          console.log('  My sites entries:', mySitesEntries.length);
-
           // Store all entries for reference
           setEnumeratorSiteEntries(availableEntries);
 
@@ -748,14 +710,11 @@ const MMP = () => {
               if (!byId.has(key)) byId.set(key, e);
             });
             setEnumeratorMySites(Array.from(byId.values()));
-            console.log('✅ Enumerator data reloaded successfully after site acceptance');
           } catch (e) {
-            console.error('❌ Error building My Sites union:', e);
             setEnumeratorMySites(mySitesEntries);
           }
 
         } catch (reloadError) {
-          console.error('❌ Failed to reload enumerator data:', reloadError);
           // Fallback to page reload if data reload fails
           window.location.reload();
         } finally {
@@ -1726,22 +1685,6 @@ const MMP = () => {
     enabled: canClaimSites
   });
 
-  // Debug: Log role checks
-  useEffect(() => {
-    if (currentUser) {
-      console.log('🔍 MMP Page - Current User:', currentUser);
-      console.log('🔍 User Role:', currentUser.role);
-      console.log('🔍 User Roles Array:', currentUser.roles);
-      console.log('🔍 isAdmin:', isAdmin);
-      console.log('🔍 isICT:', isICT);
-      console.log('🔍 isFOM:', isFOM);
-      console.log('🔍 isCoordinator:', isCoordinator);
-      console.log('🔍 isDataCollector:', isDataCollector);
-      console.log('🔍 canClaimSites:', canClaimSites);
-      console.log('🔍 canCreate:', canCreate);
-    }
-  }, [currentUser, isAdmin, isICT, isFOM, isCoordinator, isDataCollector, canClaimSites, canCreate]);
-
   // Set initial active tab based on role
   // Coordinators should see the enumerator tab (they can claim sites like data collectors)
   useEffect(() => {
@@ -2047,13 +1990,6 @@ const MMP = () => {
 
       setLoadingEnumerator(true);
       try {
-        console.log('🔍 Loading enumerator entries for user:', {
-          userId: currentUser.id,
-          stateId: currentUser.stateId,
-          localityId: currentUser.localityId,
-          role: currentUser.role
-        });
-
         // Load available sites in the enumerator's state or locality for "Available Sites" tab
         // These are sites with status "Dispatched" (bulk dispatched by state/locality)
         // Convert collector's stateId/localityId to names for matching with site entries
@@ -2061,27 +1997,6 @@ const MMP = () => {
         const collectorLocalityName = currentUser.stateId && currentUser.localityId
           ? sudanStates.find(s => s.id === currentUser.stateId)?.localities.find(l => l.id === currentUser.localityId)?.name
           : undefined;
-        
-        console.log('🔍 Collector location:', {
-          stateId: currentUser.stateId,
-          localityId: currentUser.localityId,
-          stateName: collectorStateName,
-          localityName: collectorLocalityName
-        });
-
-        // Debug: Check if there are any dispatched sites at all
-        const debugAllDispatchedQuery = supabase
-          .from('mmp_site_entries')
-          .select('id, site_name, state, locality, status, accepted_by')
-          .ilike('status', 'Dispatched')
-          .limit(10);
-        
-        const debugResult = await debugAllDispatchedQuery;
-        console.log('🔍 Debug - All dispatched sites (sample):', {
-          count: debugResult.data?.length || 0,
-          sample: debugResult.data,
-          error: debugResult.error
-        });
         
         // Build query for "Available Sites" - status = "Dispatched" (bulk dispatched)
         // These are unclaimed sites (accepted_by IS NULL) in the collector's area
@@ -2106,7 +2021,6 @@ const MMP = () => {
         } else {
           // If no state/locality is set, do NOT load all sites - this is a misconfiguration
           // Return empty result to prevent showing all sites to users without proper assignment
-          console.warn('⚠️ Data collector has no stateId or localityId set. No available sites will be shown.');
           availableSitesQuery = availableSitesQuery.eq('id', 'NEVER_MATCH_NO_GEO_ASSIGNMENT');
         }
         
@@ -2145,25 +2059,13 @@ const MMP = () => {
           mySitesQuery
         ]);
 
-        console.log('🔍 Query results:', {
-          availableCount: availableResult.data?.length || 0,
-          availableError: availableResult.error,
-          smartAssignedCount: smartAssignedResult.data?.length || 0,
-          smartAssignedError: smartAssignedResult.error,
-          mySitesCount: mySitesResult.data?.length || 0,
-          mySitesError: mySitesResult.error
-        });
-
         if (availableResult.error) {
-          console.error('❌ Available sites query error:', availableResult.error);
           throw availableResult.error;
         }
         if (smartAssignedResult.error) {
-          console.error('❌ Smart assigned query error:', smartAssignedResult.error);
           throw smartAssignedResult.error;
         }
         if (mySitesResult.error) {
-          console.error('❌ My sites query error:', mySitesResult.error);
           throw mySitesResult.error;
         }
 
