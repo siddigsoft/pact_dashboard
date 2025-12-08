@@ -5,7 +5,7 @@ import { useViewMode } from '@/context/ViewModeContext';
 import { useChat } from '@/context/chat/ChatContextSupabase';
 import { useCommunication } from '@/context/communications/CommunicationContext';
 import { useUser } from '@/context/user/UserContext';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import ChatWindow from '@/components/chat/ChatWindow';
@@ -22,7 +22,8 @@ import {
   X,
   Check,
   CheckCheck,
-  Sparkles
+  Sparkles,
+  Clock
 } from 'lucide-react';
 
 const Chat: React.FC = () => {
@@ -33,7 +34,8 @@ const Chat: React.FC = () => {
   const isMobile = viewMode === 'mobile';
   const [searchQuery, setSearchQuery] = useState('');
   const [activeView, setActiveView] = useState<'list' | 'chat'>('list');
-  const { chats, activeChat, setActiveChat } = useChat();
+  const [activeTab, setActiveTab] = useState<'contacts' | 'conversations'>('conversations');
+  const { chats, activeChat, setActiveChat, createChat, isLoading } = useChat();
   const { initiateCall } = useCommunication();
   const { users } = useUser();
 
@@ -56,6 +58,26 @@ const Chat: React.FC = () => {
   const handleBackToList = () => {
     setActiveView('list');
     setActiveChat(null);
+  };
+
+  const handleStartChatWithUser = async (userId: string) => {
+    const user = users.find(u => u.id === userId);
+    if (!user) return;
+
+    const userName = user.fullName || user.name || user.username || user.email || 'Unknown User';
+    
+    const chat = await createChat([userId], userName, 'private');
+    if (chat) {
+      setActiveChat(chat);
+      setActiveTab('conversations');
+      if (isMobile) {
+        setActiveView('chat');
+      }
+      toast({
+        title: 'Chat started',
+        description: `You can now message ${userName}`,
+      });
+    }
   };
 
   const getTargetUser = () => {
@@ -97,6 +119,17 @@ const Chat: React.FC = () => {
     chat.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const filteredUsers = users.filter(user => 
+    user.id !== currentUser?.id &&
+    (user.name?.toLowerCase().includes(searchQuery.toLowerCase()) || 
+     user.fullName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+     user.role?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+     user.email?.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
+
+  const getInitials = (name: string) => 
+    name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+
   const formatTime = (timestamp?: string) => {
     if (!timestamp) return '';
     const date = new Date(timestamp);
@@ -130,16 +163,25 @@ const Chat: React.FC = () => {
                   <ArrowLeft className="h-4 w-4 text-white" />
                 </button>
                 <div className="flex items-center gap-1.5">
-                  <button className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center">
+                  <button 
+                    onClick={() => navigate('/notifications')}
+                    className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center"
+                  >
                     <Bell className="h-4 w-4 text-white" />
                   </button>
-                  <button className="w-8 h-8 rounded-full bg-white flex items-center justify-center">
+                  <button 
+                    onClick={() => setActiveTab('contacts')}
+                    className="w-8 h-8 rounded-full bg-white flex items-center justify-center"
+                    data-testid="button-new-chat"
+                  >
                     <Plus className="h-4 w-4 text-black" />
                   </button>
                 </div>
               </div>
               <h1 className="text-xl font-bold text-white tracking-tight">Messages</h1>
-              <p className="text-white/60 text-xs">{filteredChats.length} conversations</p>
+              <p className="text-white/60 text-xs">
+                {activeTab === 'conversations' ? `${filteredChats.length} conversations` : `${filteredUsers.length} contacts`}
+              </p>
             </header>
             
             {/* Search */}
@@ -148,7 +190,7 @@ const Chat: React.FC = () => {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <input
                   type="text"
-                  placeholder="Search messages"
+                  placeholder={activeTab === 'conversations' ? "Search messages" : "Search contacts"}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="w-full h-9 pl-9 pr-3 rounded-xl bg-gray-100 dark:bg-gray-900 text-black dark:text-white placeholder:text-gray-500 text-sm font-medium focus:outline-none"
@@ -156,64 +198,143 @@ const Chat: React.FC = () => {
                 />
               </div>
             </div>
+
+            {/* Tabs */}
+            <div className="px-3 py-2 bg-white dark:bg-black">
+              <div className="flex rounded-xl bg-gray-100 dark:bg-gray-900 p-0.5">
+                <button 
+                  className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 ${
+                    activeTab === 'contacts' ? 'bg-black dark:bg-white text-white dark:text-black' : 'text-gray-600 dark:text-gray-400'
+                  }`}
+                  onClick={() => setActiveTab('contacts')}
+                  data-testid="tab-contacts"
+                >
+                  <Users className="h-3.5 w-3.5" />
+                  Contacts
+                </button>
+                <button 
+                  className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 ${
+                    activeTab === 'conversations' ? 'bg-black dark:bg-white text-white dark:text-black' : 'text-gray-600 dark:text-gray-400'
+                  }`}
+                  onClick={() => setActiveTab('conversations')}
+                  data-testid="tab-conversations"
+                >
+                  <Clock className="h-3.5 w-3.5" />
+                  Chats
+                </button>
+              </div>
+            </div>
             
-            {/* Chat List */}
+            {/* Content based on active tab */}
             <ScrollArea className="flex-1 bg-white dark:bg-black">
-              {filteredChats.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 px-6">
-                  <div className="w-16 h-16 rounded-full bg-black dark:bg-white flex items-center justify-center mb-4">
-                    <MessageSquare className="h-8 w-8 text-white dark:text-black" />
+              {activeTab === 'contacts' ? (
+                /* Contact List */
+                filteredUsers.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 px-6">
+                    <div className="w-16 h-16 rounded-full bg-black dark:bg-white flex items-center justify-center mb-4">
+                      <Users className="h-8 w-8 text-white dark:text-black" />
+                    </div>
+                    <p className="text-black dark:text-white font-semibold text-base">No contacts found</p>
+                    <p className="text-gray-500 text-center text-sm mt-1">Try a different search term</p>
                   </div>
-                  <p className="text-black dark:text-white font-semibold text-base">No messages</p>
-                  <p className="text-gray-500 text-center text-sm mt-1">Start a conversation with your team</p>
-                </div>
+                ) : (
+                  <div className="space-y-0.5 p-2">
+                    {filteredUsers.map((user) => {
+                      const userName = user.fullName || user.name || user.username || user.email || 'Unknown';
+                      return (
+                        <button
+                          key={user.id}
+                          onClick={() => handleStartChatWithUser(user.id)}
+                          disabled={isLoading}
+                          className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors disabled:opacity-50"
+                          data-testid={`contact-${user.id}`}
+                        >
+                          <Avatar className="h-10 w-10">
+                            <AvatarImage src={user.avatar} alt={userName} />
+                            <AvatarFallback className="bg-black dark:bg-white text-white dark:text-black text-sm font-bold">
+                              {getInitials(userName)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="flex-1 min-w-0 text-left">
+                            <span className="font-semibold text-sm text-black dark:text-white truncate block">{userName}</span>
+                            <span className="text-xs text-gray-500 truncate block">{user.role || 'Team Member'}</span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <div className="w-8 h-8 rounded-full bg-black dark:bg-white flex items-center justify-center">
+                              <MessageSquare className="h-4 w-4 text-white dark:text-black" />
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )
               ) : (
-                <div>
-                  {filteredChats.map((chat) => (
-                    <button
-                      key={chat.id}
-                      onClick={() => handleSelectChat(chat.id)}
-                      className="w-full px-3 py-2.5 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-900/50 active:bg-gray-100 dark:active:bg-gray-900 transition-colors border-b border-gray-50 dark:border-gray-900"
-                      data-testid={`chat-item-${chat.id}`}
+                /* Chat List */
+                filteredChats.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 px-6">
+                    <div className="w-16 h-16 rounded-full bg-black dark:bg-white flex items-center justify-center mb-4">
+                      <MessageSquare className="h-8 w-8 text-white dark:text-black" />
+                    </div>
+                    <p className="text-black dark:text-white font-semibold text-base">No messages</p>
+                    <p className="text-gray-500 text-center text-sm mt-1">Start a conversation with your team</p>
+                    <button 
+                      onClick={() => setActiveTab('contacts')}
+                      className="mt-4 h-9 px-4 rounded-full bg-black dark:bg-white text-white dark:text-black font-semibold text-sm flex items-center gap-1.5"
+                      data-testid="button-new-message"
                     >
-                      <div className="relative">
-                        <div className="w-10 h-10 rounded-full bg-black dark:bg-white flex items-center justify-center">
-                          {chat.type === 'group' || chat.type === 'state-group' ? (
-                            <Users className="h-4 w-4 text-white dark:text-black" />
-                          ) : (
-                            <span className="text-base font-bold text-white dark:text-black">
-                              {chat.name.charAt(0).toUpperCase()}
-                            </span>
-                          )}
-                        </div>
-                        {chat.type === 'private' && (
-                          <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-white dark:border-black" />
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0 text-left">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="font-semibold text-black dark:text-white text-sm truncate">{chat.name}</span>
-                          <span className="text-xs text-gray-400 font-medium shrink-0">
-                            {formatTime(chat.lastMessage?.timestamp)}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between gap-2 mt-0.5">
-                          <p className="text-gray-500 truncate text-xs flex items-center gap-1">
-                            {chat.lastMessage?.senderId === currentUser?.id && (
-                              <CheckCheck className="h-3 w-3 text-black dark:text-white shrink-0" />
-                            )}
-                            {chat.lastMessage?.content || 'Start chatting'}
-                          </p>
-                          {chat.unreadCount > 0 && (
-                            <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-black dark:bg-white text-white dark:text-black text-[10px] font-bold flex items-center justify-center">
-                              {chat.unreadCount}
-                            </span>
-                          )}
-                        </div>
-                      </div>
+                      <Plus className="h-4 w-4" />
+                      New Message
                     </button>
-                  ))}
-                </div>
+                  </div>
+                ) : (
+                  <div>
+                    {filteredChats.map((chat) => (
+                      <button
+                        key={chat.id}
+                        onClick={() => handleSelectChat(chat.id)}
+                        className="w-full px-3 py-2.5 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-gray-900/50 active:bg-gray-100 dark:active:bg-gray-900 transition-colors border-b border-gray-50 dark:border-gray-900"
+                        data-testid={`chat-item-${chat.id}`}
+                      >
+                        <div className="relative">
+                          <div className="w-10 h-10 rounded-full bg-black dark:bg-white flex items-center justify-center">
+                            {chat.type === 'group' || chat.type === 'state-group' ? (
+                              <Users className="h-4 w-4 text-white dark:text-black" />
+                            ) : (
+                              <span className="text-base font-bold text-white dark:text-black">
+                                {chat.name.charAt(0).toUpperCase()}
+                              </span>
+                            )}
+                          </div>
+                          {chat.type === 'private' && (
+                            <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-white dark:border-black" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0 text-left">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-semibold text-black dark:text-white text-sm truncate">{chat.name}</span>
+                            <span className="text-xs text-gray-400 font-medium shrink-0">
+                              {formatTime(chat.lastMessage?.timestamp)}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between gap-2 mt-0.5">
+                            <p className="text-gray-500 truncate text-xs flex items-center gap-1">
+                              {chat.lastMessage?.senderId === currentUser?.id && (
+                                <CheckCheck className="h-3 w-3 text-black dark:text-white shrink-0" />
+                              )}
+                              {chat.lastMessage?.content || 'Start chatting'}
+                            </p>
+                            {chat.unreadCount > 0 && (
+                              <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-black dark:bg-white text-white dark:text-black text-[10px] font-bold flex items-center justify-center">
+                                {chat.unreadCount}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )
               )}
             </ScrollArea>
           </div>
@@ -297,13 +418,19 @@ const Chat: React.FC = () => {
               >
                 <Bell className="h-4 w-4 text-white" />
               </button>
-              <button className="w-8 h-8 rounded-full bg-white flex items-center justify-center hover:bg-gray-100 transition-colors">
+              <button 
+                onClick={() => setActiveTab('contacts')}
+                className="w-8 h-8 rounded-full bg-white flex items-center justify-center hover:bg-gray-100 transition-colors"
+                data-testid="button-new-chat"
+              >
                 <Plus className="h-4 w-4 text-black" />
               </button>
             </div>
           </div>
           <h1 className="text-2xl font-bold text-white tracking-tight" data-testid="text-page-title">Messages</h1>
-          <p className="text-white/50 text-sm">{filteredChats.length} conversations</p>
+          <p className="text-white/50 text-sm">
+            {activeTab === 'conversations' ? `${filteredChats.length} conversations` : `${filteredUsers.length} contacts`}
+          </p>
         </div>
 
         {/* Search */}
@@ -312,7 +439,7 @@ const Chat: React.FC = () => {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
             <input
               type="text"
-              placeholder="Search messages"
+              placeholder={activeTab === 'conversations' ? "Search messages" : "Search contacts"}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full h-9 pl-9 pr-9 rounded-xl bg-gray-100 dark:bg-gray-900 text-black dark:text-white placeholder:text-gray-500 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-black dark:focus:ring-white transition-all"
@@ -329,85 +456,173 @@ const Chat: React.FC = () => {
           </div>
         </div>
 
-        {/* Chat List */}
+        {/* Tabs */}
+        <div className="px-3 pb-3 bg-white dark:bg-black">
+          <div className="flex rounded-xl bg-gray-100 dark:bg-gray-900 p-0.5">
+            <button 
+              className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 ${
+                activeTab === 'contacts' ? 'bg-black dark:bg-white text-white dark:text-black' : 'text-gray-600 dark:text-gray-400'
+              }`}
+              onClick={() => setActiveTab('contacts')}
+              data-testid="tab-contacts"
+            >
+              <Users className="h-3.5 w-3.5" />
+              Contacts
+            </button>
+            <button 
+              className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 ${
+                activeTab === 'conversations' ? 'bg-black dark:bg-white text-white dark:text-black' : 'text-gray-600 dark:text-gray-400'
+              }`}
+              onClick={() => setActiveTab('conversations')}
+              data-testid="tab-conversations"
+            >
+              <Clock className="h-3.5 w-3.5" />
+              Chats
+            </button>
+          </div>
+        </div>
+
+        {/* Content based on active tab */}
         <ScrollArea className="flex-1 bg-white dark:bg-black">
-          {filteredChats.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 px-6">
-              <div className="w-16 h-16 rounded-full bg-black dark:bg-white flex items-center justify-center mb-4">
-                <MessageSquare className="h-8 w-8 text-white dark:text-black" />
+          {activeTab === 'contacts' ? (
+            /* Contact List */
+            filteredUsers.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 px-6">
+                <div className="w-16 h-16 rounded-full bg-black dark:bg-white flex items-center justify-center mb-4">
+                  <Users className="h-8 w-8 text-white dark:text-black" />
+                </div>
+                <p className="text-black dark:text-white font-semibold text-base">No contacts found</p>
+                <p className="text-gray-500 text-center text-sm mt-1">Try a different search term</p>
               </div>
-              <p className="text-black dark:text-white font-semibold text-base">No messages yet</p>
-              <p className="text-gray-500 text-center text-sm mt-1">Your conversations will appear here</p>
-              <button className="mt-4 h-9 px-4 rounded-full bg-black dark:bg-white text-white dark:text-black font-semibold text-sm hover:opacity-90 transition-opacity flex items-center gap-1.5">
-                <Plus className="h-4 w-4" />
-                New Message
-              </button>
-            </div>
+            ) : (
+              <div className="space-y-0.5 py-1">
+                {filteredUsers.map((user) => {
+                  const userName = user.fullName || user.name || user.username || user.email || 'Unknown';
+                  return (
+                    <button
+                      key={user.id}
+                      onClick={() => handleStartChatWithUser(user.id)}
+                      disabled={isLoading}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors disabled:opacity-50"
+                      data-testid={`contact-${user.id}`}
+                    >
+                      <Avatar className="h-10 w-10">
+                        <AvatarImage src={user.avatar} alt={userName} />
+                        <AvatarFallback className="bg-black dark:bg-white text-white dark:text-black text-sm font-bold">
+                          {getInitials(userName)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0 text-left">
+                        <span className="font-semibold text-sm text-black dark:text-white truncate block">{userName}</span>
+                        <span className="text-xs text-gray-500 truncate block">{user.role || 'Team Member'}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div className="w-8 h-8 rounded-full bg-black dark:bg-white flex items-center justify-center">
+                          <MessageSquare className="h-4 w-4 text-white dark:text-black" />
+                        </div>
+                        <div 
+                          className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const targetUser = users.find(u => u.id === user.id);
+                            if (targetUser) {
+                              initiateCall(targetUser);
+                              navigate('/calls');
+                            }
+                          }}
+                        >
+                          <Phone className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )
           ) : (
-            <div className="py-1">
-              {filteredChats.map((chat) => (
-                <button
-                  key={chat.id}
-                  onClick={() => handleSelectChat(chat.id)}
-                  className={`w-full px-3 py-2.5 flex items-center gap-3 transition-all ${
-                    activeChat?.id === chat.id 
-                      ? 'bg-black dark:bg-white' 
-                      : 'hover:bg-gray-50 dark:hover:bg-gray-900/50'
-                  }`}
-                  data-testid={`chat-item-${chat.id}`}
+            /* Chat List */
+            filteredChats.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 px-6">
+                <div className="w-16 h-16 rounded-full bg-black dark:bg-white flex items-center justify-center mb-4">
+                  <MessageSquare className="h-8 w-8 text-white dark:text-black" />
+                </div>
+                <p className="text-black dark:text-white font-semibold text-base">No messages yet</p>
+                <p className="text-gray-500 text-center text-sm mt-1">Your conversations will appear here</p>
+                <button 
+                  onClick={() => setActiveTab('contacts')}
+                  className="mt-4 h-9 px-4 rounded-full bg-black dark:bg-white text-white dark:text-black font-semibold text-sm hover:opacity-90 transition-opacity flex items-center gap-1.5"
+                  data-testid="button-new-message"
                 >
-                  <div className="relative">
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
-                      activeChat?.id === chat.id 
-                        ? 'bg-white dark:bg-black' 
-                        : 'bg-black dark:bg-white'
-                    }`}>
-                      {chat.type === 'group' || chat.type === 'state-group' ? (
-                        <Users className={`h-4 w-4 ${activeChat?.id === chat.id ? 'text-black dark:text-white' : 'text-white dark:text-black'}`} />
-                      ) : (
-                        <span className={`text-base font-bold ${activeChat?.id === chat.id ? 'text-black dark:text-white' : 'text-white dark:text-black'}`}>
-                          {chat.name.charAt(0).toUpperCase()}
-                        </span>
-                      )}
-                    </div>
-                    {chat.type === 'private' && (
-                      <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 ${
-                        activeChat?.id === chat.id ? 'border-black dark:border-white' : 'border-white dark:border-black'
-                      }`} />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0 text-left">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className={`font-semibold text-sm truncate ${
-                        activeChat?.id === chat.id ? 'text-white dark:text-black' : 'text-black dark:text-white'
-                      }`}>{chat.name}</span>
-                      <span className={`text-xs font-medium shrink-0 ${
-                        activeChat?.id === chat.id ? 'text-white/60 dark:text-black/60' : 'text-gray-400'
-                      }`}>
-                        {formatTime(chat.lastMessage?.timestamp)}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between gap-2 mt-0.5">
-                      <p className={`truncate text-xs flex items-center gap-1 ${
-                        activeChat?.id === chat.id ? 'text-white/70 dark:text-black/70' : 'text-gray-500'
-                      }`}>
-                        {chat.lastMessage?.senderId === currentUser?.id && (
-                          <CheckCheck className={`h-3 w-3 shrink-0 ${
-                            activeChat?.id === chat.id ? 'text-white/70 dark:text-black/70' : 'text-black dark:text-white'
-                          }`} />
-                        )}
-                        {chat.lastMessage?.content || 'Start a conversation'}
-                      </p>
-                      {chat.unreadCount > 0 && activeChat?.id !== chat.id && (
-                        <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-black dark:bg-white text-white dark:text-black text-[10px] font-bold flex items-center justify-center">
-                          {chat.unreadCount}
-                        </span>
-                      )}
-                    </div>
-                  </div>
+                  <Plus className="h-4 w-4" />
+                  New Message
                 </button>
-              ))}
-            </div>
+              </div>
+            ) : (
+              <div className="py-1">
+                {filteredChats.map((chat) => (
+                  <button
+                    key={chat.id}
+                    onClick={() => handleSelectChat(chat.id)}
+                    className={`w-full px-3 py-2.5 flex items-center gap-3 transition-all ${
+                      activeChat?.id === chat.id 
+                        ? 'bg-black dark:bg-white' 
+                        : 'hover:bg-gray-50 dark:hover:bg-gray-900/50'
+                    }`}
+                    data-testid={`chat-item-${chat.id}`}
+                  >
+                    <div className="relative">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${
+                        activeChat?.id === chat.id 
+                          ? 'bg-white dark:bg-black' 
+                          : 'bg-black dark:bg-white'
+                      }`}>
+                        {chat.type === 'group' || chat.type === 'state-group' ? (
+                          <Users className={`h-4 w-4 ${activeChat?.id === chat.id ? 'text-black dark:text-white' : 'text-white dark:text-black'}`} />
+                        ) : (
+                          <span className={`text-base font-bold ${activeChat?.id === chat.id ? 'text-black dark:text-white' : 'text-white dark:text-black'}`}>
+                            {chat.name.charAt(0).toUpperCase()}
+                          </span>
+                        )}
+                      </div>
+                      {chat.type === 'private' && (
+                        <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 ${
+                          activeChat?.id === chat.id ? 'border-black dark:border-white' : 'border-white dark:border-black'
+                        }`} />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0 text-left">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className={`font-semibold text-sm truncate ${
+                          activeChat?.id === chat.id ? 'text-white dark:text-black' : 'text-black dark:text-white'
+                        }`}>{chat.name}</span>
+                        <span className={`text-xs font-medium shrink-0 ${
+                          activeChat?.id === chat.id ? 'text-white/60 dark:text-black/60' : 'text-gray-400'
+                        }`}>
+                          {formatTime(chat.lastMessage?.timestamp)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-2 mt-0.5">
+                        <p className={`truncate text-xs flex items-center gap-1 ${
+                          activeChat?.id === chat.id ? 'text-white/70 dark:text-black/70' : 'text-gray-500'
+                        }`}>
+                          {chat.lastMessage?.senderId === currentUser?.id && (
+                            <CheckCheck className={`h-3 w-3 shrink-0 ${
+                              activeChat?.id === chat.id ? 'text-white/70 dark:text-black/70' : 'text-black dark:text-white'
+                            }`} />
+                          )}
+                          {chat.lastMessage?.content || 'Start a conversation'}
+                        </p>
+                        {chat.unreadCount > 0 && activeChat?.id !== chat.id && (
+                          <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-black dark:bg-white text-white dark:text-black text-[10px] font-bold flex items-center justify-center">
+                            {chat.unreadCount}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )
           )}
         </ScrollArea>
       </div>
@@ -478,9 +693,17 @@ const Chat: React.FC = () => {
               </div>
               <h3 className="text-2xl font-bold text-black dark:text-white tracking-tight">Start messaging</h3>
               <p className="text-gray-500 text-sm mt-2 leading-relaxed">
-                Select a conversation from the sidebar to continue chatting with your team
+                Select a conversation from the sidebar or choose a contact to start chatting
               </p>
               <div className="flex items-center justify-center gap-3 mt-6">
+                <button 
+                  onClick={() => setActiveTab('contacts')}
+                  className="h-10 px-5 rounded-full bg-black dark:bg-white text-white dark:text-black font-semibold text-sm flex items-center gap-1.5"
+                  data-testid="button-browse-contacts"
+                >
+                  <Users className="h-4 w-4" />
+                  Browse Contacts
+                </button>
                 <button 
                   onClick={() => navigate('/calls')}
                   className="h-10 px-5 rounded-full border-2 border-black dark:border-white text-black dark:text-white font-semibold text-sm hover:bg-black hover:text-white dark:hover:bg-white dark:hover:text-black transition-colors flex items-center gap-1.5"
@@ -488,13 +711,6 @@ const Chat: React.FC = () => {
                 >
                   <Phone className="h-4 w-4" />
                   View Calls
-                </button>
-                <button 
-                  className="h-10 px-5 rounded-full bg-black dark:bg-white text-white dark:text-black font-semibold text-sm hover:opacity-90 transition-opacity flex items-center gap-1.5"
-                  data-testid="button-new-conversation"
-                >
-                  <Plus className="h-4 w-4" />
-                  New Chat
                 </button>
               </div>
             </div>
