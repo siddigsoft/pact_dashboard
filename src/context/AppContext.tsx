@@ -156,13 +156,13 @@ export const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children
                                     <SuperAdminProvider>
                                       <ActiveVisitProvider>
                                         <ChatProvider>
-                                          <CommunicationProvider>
-                                            <CallProvider>
+                                          <CallProvider>
+                                            <CommunicationProvider>
                                               <BrowserNotificationListener />
                                               <GlobalCallOverlay />
                                               {children}
-                                            </CallProvider>
-                                          </CommunicationProvider>
+                                            </CommunicationProvider>
+                                          </CallProvider>
                                         </ChatProvider>
                                       </ActiveVisitProvider>
                                     </SuperAdminProvider>
