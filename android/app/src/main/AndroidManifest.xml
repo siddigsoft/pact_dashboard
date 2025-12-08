@@ -124,4 +124,8 @@
     <!-- Microphone for voice notes and calls -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
+    
+    <!-- Phone calling permission for native dialer -->
+    <uses-permission android:name="android.permission.CALL_PHONE" />
+    <uses-feature android:name="android.hardware.telephony" android:required="false" />
 </manifest>
