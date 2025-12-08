@@ -255,13 +255,15 @@ const ChatWindow: React.FC = () => {
     <div className="flex flex-col h-full bg-white dark:bg-black" data-testid="chat-window">
       <div className="px-4 py-3 flex items-center justify-between bg-black sticky top-0 z-10">
         <div className="flex items-center gap-3">
-          <button
-            className="md:hidden w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
+          <Button
+            variant="ghost"
+            size="icon"
+            className="md:hidden rounded-full bg-white/10 hover:bg-white/20 text-white"
             onClick={() => setActiveChat(null)}
             data-testid="button-back"
           >
-            <ArrowLeft className="h-4 w-4 text-white" />
-          </button>
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
           
           <div className="relative group cursor-pointer">
             {activeChat.type === 'private' ? (
@@ -294,35 +296,43 @@ const ChatWindow: React.FC = () => {
         </div>
         
         <div className="flex items-center gap-1.5">
-          <button 
-            className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors disabled:opacity-50"
+          <Button 
+            variant="ghost"
+            size="icon"
+            className="rounded-full bg-white/10 hover:bg-white/20 text-white"
             onClick={() => handleCall(false)}
             disabled={!targetUser}
             data-testid="button-call"
           >
-            <Phone className="h-4 w-4 text-white" />
-          </button>
-          <button 
-            className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors disabled:opacity-50"
+            <Phone className="h-4 w-4" />
+          </Button>
+          <Button 
+            variant="ghost"
+            size="icon"
+            className="rounded-full bg-white/10 hover:bg-white/20 text-white"
             onClick={() => handleCall(true)}
             disabled={!targetUser}
             data-testid="button-video"
           >
-            <Video className="h-4 w-4 text-white" />
-          </button>
-          <button 
-            className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
+            <Video className="h-4 w-4" />
+          </Button>
+          <Button 
+            variant="ghost"
+            size="icon"
+            className="rounded-full bg-white/10 hover:bg-white/20 text-white"
             onClick={() => window.location.reload()}
             data-testid="button-refresh"
           >
-            <RotateCcw className="h-4 w-4 text-white" />
-          </button>
-          <button 
-            className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
+            <RotateCcw className="h-4 w-4" />
+          </Button>
+          <Button 
+            variant="ghost"
+            size="icon"
+            className="rounded-full bg-white/10 hover:bg-white/20 text-white"
             data-testid="button-more"
           >
-            <MoreVertical className="h-4 w-4 text-white" />
-          </button>
+            <MoreVertical className="h-4 w-4" />
+          </Button>
         </div>
       </div>
       
