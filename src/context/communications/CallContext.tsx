@@ -3,6 +3,7 @@ import { User } from '@/types';
 import { useUser } from '@/context/user/UserContext';
 import { useToast } from '@/hooks/use-toast';
 import webRTCService, { CallEventHandler } from '@/services/WebRTCService';
+import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 
 export type CallStatus = 'idle' | 'outgoing' | 'incoming' | 'connecting' | 'connected' | 'ended';
 
@@ -217,14 +218,36 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const rejectCall = useCallback(() => {
     if (callState.status !== 'incoming' || !incomingCallerId.current) return;
 
-    webRTCService.rejectCall(incomingCallerId.current);
+    const callerId = incomingCallerId.current;
+    const callerName = callState.participant?.name || 'Unknown';
+    
+    webRTCService.rejectCall(callerId);
+    
+    // Send missed call notification to the caller
+    if (currentUser) {
+      NotificationTriggerService.missedCall(
+        callerId,
+        currentUser.name || currentUser.fullName || 'User',
+        currentUser.id
+      );
+    }
+    
     resetCallState();
-  }, [callState.status, resetCallState]);
+  }, [callState.status, callState.participant, currentUser, resetCallState]);
 
   const endCall = useCallback(() => {
+    // Send call ended notification to the other participant
+    if (callState.participant && currentUser && callState.duration > 0) {
+      NotificationTriggerService.callEnded(
+        callState.participant.id,
+        currentUser.name || currentUser.fullName || 'User',
+        callState.duration
+      );
+    }
+    
     webRTCService.endCall();
     resetCallState();
-  }, [resetCallState]);
+  }, [callState.participant, callState.duration, currentUser, resetCallState]);
 
   const toggleMute = useCallback(() => {
     const isMuted = webRTCService.toggleMute();

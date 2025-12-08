@@ -1,6 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 
-export type NotificationCategory = 'assignments' | 'approvals' | 'financial' | 'team' | 'system' | 'signatures';
+export type NotificationCategory = 'assignments' | 'approvals' | 'financial' | 'team' | 'system' | 'signatures' | 'calls' | 'messages';
 export type NotificationPriority = 'low' | 'medium' | 'high' | 'urgent';
 
 interface TriggerNotificationOptions {
@@ -12,7 +12,9 @@ interface TriggerNotificationOptions {
   priority?: NotificationPriority;
   link?: string;
   relatedEntityId?: string;
-  relatedEntityType?: 'siteVisit' | 'mmpFile' | 'transaction' | 'chat' | 'signature' | 'document';
+  relatedEntityType?: 'siteVisit' | 'mmpFile' | 'transaction' | 'chat' | 'call' | 'signature' | 'document';
+  targetRoles?: string[];
+  projectId?: string;
 }
 
 interface QuietHoursSettings {
@@ -367,6 +369,189 @@ export const NotificationTriggerService = {
       type: 'info',
       category: 'signatures',
       priority: 'high'
+    });
+  },
+
+  // Call notifications
+  async missedCall(userId: string, callerName: string, callerId: string): Promise<void> {
+    await this.send({
+      userId,
+      title: 'Missed Call',
+      message: `You missed a call from ${callerName}`,
+      type: 'warning',
+      category: 'calls',
+      priority: 'high',
+      link: '/calls',
+      relatedEntityId: callerId,
+      relatedEntityType: 'call'
+    });
+  },
+
+  async incomingCall(userId: string, callerName: string, callerId: string): Promise<void> {
+    await this.send({
+      userId,
+      title: 'Incoming Call',
+      message: `${callerName} is calling you`,
+      type: 'info',
+      category: 'calls',
+      priority: 'urgent',
+      link: '/calls',
+      relatedEntityId: callerId,
+      relatedEntityType: 'call'
+    });
+  },
+
+  async callEnded(userId: string, participantName: string, duration: number): Promise<void> {
+    const mins = Math.floor(duration / 60);
+    const secs = duration % 60;
+    const durationStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+    
+    await this.send({
+      userId,
+      title: 'Call Ended',
+      message: `Call with ${participantName} ended (${durationStr})`,
+      type: 'info',
+      category: 'calls',
+      priority: 'low',
+      link: '/calls'
+    });
+  },
+
+  // Message notifications
+  async newMessage(userId: string, senderName: string, messagePreview: string, chatId?: string): Promise<void> {
+    await this.send({
+      userId,
+      title: 'New Message',
+      message: `${senderName}: ${messagePreview.slice(0, 50)}${messagePreview.length > 50 ? '...' : ''}`,
+      type: 'info',
+      category: 'messages',
+      priority: 'medium',
+      link: chatId ? `/chat?userId=${chatId}` : '/chat',
+      relatedEntityId: chatId,
+      relatedEntityType: 'chat'
+    });
+  },
+
+  async unreadMessages(userId: string, count: number): Promise<void> {
+    await this.send({
+      userId,
+      title: 'Unread Messages',
+      message: `You have ${count} unread message${count > 1 ? 's' : ''}`,
+      type: 'info',
+      category: 'messages',
+      priority: 'medium',
+      link: '/chat'
+    });
+  },
+
+  // Role-based notifications (sent to all users with specific roles)
+  async sendToRoles(
+    roles: string[], 
+    options: Omit<TriggerNotificationOptions, 'userId' | 'targetRoles'>,
+    projectId?: string
+  ): Promise<number> {
+    try {
+      // Fetch users with the specified roles
+      let query = supabase.from('profiles').select('id, role');
+      
+      if (roles.length > 0) {
+        query = query.in('role', roles);
+      }
+      
+      const { data: users, error } = await query;
+      
+      if (error) {
+        console.error('Failed to fetch users by roles:', error);
+        return 0;
+      }
+      
+      if (!users || users.length === 0) return 0;
+      
+      // If projectId is specified, filter by project membership
+      let targetUserIds = users.map(u => u.id);
+      
+      if (projectId) {
+        const { data: teamMembers } = await supabase
+          .from('team_members')
+          .select('user_id')
+          .eq('project_id', projectId);
+        
+        if (teamMembers) {
+          const projectUserIds = teamMembers.map(m => m.user_id);
+          targetUserIds = targetUserIds.filter(id => projectUserIds.includes(id));
+        }
+      }
+      
+      // Send notifications to all matching users
+      return await this.sendBulk(targetUserIds, {
+        ...options,
+        targetRoles: roles,
+        projectId
+      });
+    } catch (error) {
+      console.error('Failed to send role-based notifications:', error);
+      return 0;
+    }
+  },
+
+  // Project-specific notifications
+  async sendToProjectTeam(
+    projectId: string,
+    options: Omit<TriggerNotificationOptions, 'userId' | 'projectId'>
+  ): Promise<number> {
+    try {
+      const { data: teamMembers, error } = await supabase
+        .from('team_members')
+        .select('user_id')
+        .eq('project_id', projectId);
+      
+      if (error) {
+        console.error('Failed to fetch project team members:', error);
+        return 0;
+      }
+      
+      if (!teamMembers || teamMembers.length === 0) return 0;
+      
+      const userIds = teamMembers.map(m => m.user_id).filter((id): id is string => id !== null);
+      
+      return await this.sendBulk(userIds, {
+        ...options,
+        projectId
+      });
+    } catch (error) {
+      console.error('Failed to send project team notifications:', error);
+      return 0;
+    }
+  },
+
+  // System update notifications (sent to specific roles only)
+  async systemUpdate(
+    title: string, 
+    message: string, 
+    targetRoles?: string[],
+    projectId?: string
+  ): Promise<number> {
+    if (targetRoles && targetRoles.length > 0) {
+      return await this.sendToRoles(targetRoles, {
+        title,
+        message,
+        type: 'info',
+        category: 'system',
+        priority: 'medium'
+      }, projectId);
+    }
+    
+    // If no roles specified, send to all users
+    const { data: users } = await supabase.from('profiles').select('id').limit(100);
+    if (!users) return 0;
+    
+    return await this.sendBulk(users.map(u => u.id), {
+      title,
+      message,
+      type: 'info',
+      category: 'system',
+      priority: 'medium',
+      projectId
     });
   }
 };
