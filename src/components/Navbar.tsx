@@ -83,14 +83,13 @@ const Navbar = () => {
 
         return (
                 <div className="border-b bg-gradient-to-r from-white to-gray-50 dark:from-gray-950 dark:to-gray-900">
-                        <div className="flex h-12 items-center px-3 max-w-full">
+                        <div className="flex h-16 items-center px-3 max-w-full w-full flex-wrap gap-2 sm:gap-3 sm:flex-nowrap">
                         {/* Brand */}
-                        <NavBrand />
+                        <div className="flex items-center gap-2 w-full sm:w-auto">
+                                <NavBrand />
+                        </div>
 
-                        
-                        
-
-                        <div className="ml-auto flex items-center space-x-1">
+                        <div className="ml-auto flex items-center gap-1 sm:gap-2 flex-wrap sm:flex-nowrap justify-end">
                                 {/* Theme Toggle */}
                                 <Button
                                         variant="ghost"
