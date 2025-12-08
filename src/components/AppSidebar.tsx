@@ -388,8 +388,8 @@
                   <CollapsibleContent>
                     <SidebarGroupContent>
                       <SidebarMenu className="space-y-0">
-                        {group.items.map((item) => (
-                          <SidebarMenuItem key={item.id} className="py-0">
+                        {group.items.map((item, itemIndex) => (
+                          <SidebarMenuItem key={item.id} index={itemIndex} className="py-0">
                             <SidebarMenuButton
                               asChild
                               isActive={pathname === item.url}
