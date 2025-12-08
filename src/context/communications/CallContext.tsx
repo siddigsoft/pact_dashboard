@@ -110,6 +110,11 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
           title: 'Incoming Call',
           description: `${callerName} is calling you`,
         });
+        // Also save incoming call notification to database for persistence
+        if (currentUser) {
+          void NotificationTriggerService.incomingCall(currentUser.id, callerName, callerId)
+            .catch(err => console.error('Failed to send incoming call notification:', err));
+        }
       },
       onCallAccepted: () => {
         setCallState(prev => ({ ...prev, status: 'connecting' }));
