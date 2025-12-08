@@ -9,15 +9,23 @@ export interface OfflineStats {
   cachedItems: number;
 }
 
+export interface CacheStats {
+  staticCache: number;
+  apiCache: number;
+  dynamicCache: number;
+}
+
 export interface SyncStatusState {
   isOnline: boolean;
   isSyncing: boolean;
   progress: SyncProgress;
   lastResult: SyncResult | null;
   stats: OfflineStats | null;
+  cacheStats: CacheStats | null;
   pendingCount: number;
   justCameOnline: boolean;
   hasErrors: boolean;
+  isServingFromCache: boolean;
 }
 
 interface SyncStatusContextValue extends SyncStatusState {
@@ -25,6 +33,10 @@ interface SyncStatusContextValue extends SyncStatusState {
   forceSync: () => Promise<SyncResult>;
   refreshStats: () => Promise<void>;
   setConflictResolution: (resolution: ConflictResolution) => void;
+  registerBackgroundSync: (tag?: string) => Promise<boolean>;
+  clearApiCache: (pattern?: string) => Promise<void>;
+  invalidateCacheEntry: (url: string) => Promise<void>;
+  prefetchEndpoints: (urls: string[]) => Promise<void>;
 }
 
 const SyncStatusContext = createContext<SyncStatusContextValue | null>(null);
@@ -48,6 +60,8 @@ export function SyncStatusProvider({
   const [progress, setProgress] = useState<SyncProgress>(syncManager.getProgress());
   const [lastResult, setLastResult] = useState<SyncResult | null>(syncManager.getLastResult());
   const [stats, setStats] = useState<OfflineStats | null>(null);
+  const [cacheStats, setCacheStats] = useState<CacheStats | null>(null);
+  const [isServingFromCache, setIsServingFromCache] = useState(false);
 
   const refreshStats = useCallback(async () => {
     try {
@@ -58,11 +72,56 @@ export function SyncStatusProvider({
     }
   }, []);
 
+  const sendSWMessage = useCallback((message: any): Promise<any> => {
+    return new Promise((resolve) => {
+      if (!navigator.serviceWorker?.controller) {
+        resolve(null);
+        return;
+      }
+      const messageChannel = new MessageChannel();
+      messageChannel.port1.onmessage = (event) => resolve(event.data);
+      navigator.serviceWorker.controller.postMessage(message, [messageChannel.port2]);
+      setTimeout(() => resolve(null), 3000);
+    });
+  }, []);
+
+  const registerBackgroundSync = useCallback(async (tag = 'sync-pending-actions'): Promise<boolean> => {
+    try {
+      if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({ type: 'TRIGGER_SYNC', tag });
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('[SyncStatusContext] Failed to register background sync:', error);
+      return false;
+    }
+  }, []);
+
+  const clearApiCache = useCallback(async (pattern?: string): Promise<void> => {
+    if (navigator.serviceWorker?.controller) {
+      navigator.serviceWorker.controller.postMessage({ type: 'CLEAR_API_CACHE', pattern });
+    }
+  }, []);
+
+  const invalidateCacheEntry = useCallback(async (url: string): Promise<void> => {
+    if (navigator.serviceWorker?.controller) {
+      navigator.serviceWorker.controller.postMessage({ type: 'INVALIDATE_CACHE', url });
+    }
+  }, []);
+
+  const prefetchEndpoints = useCallback(async (urls: string[]): Promise<void> => {
+    if (navigator.serviceWorker?.controller) {
+      navigator.serviceWorker.controller.postMessage({ type: 'PREFETCH_API', urls });
+    }
+  }, []);
+
   useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true);
       setJustCameOnline(true);
       onNetworkChange?.(true);
+      registerBackgroundSync('sync-pending-actions');
       setTimeout(() => setJustCameOnline(false), ONLINE_NOTIFICATION_DURATION);
     };
 
@@ -72,8 +131,38 @@ export function SyncStatusProvider({
       onNetworkChange?.(false);
     };
 
+    const handleSWMessage = (event: MessageEvent) => {
+      const { type } = event.data || {};
+      
+      switch (type) {
+        case 'TRIGGER_SYNC_MANAGER':
+          syncManager.syncAll();
+          break;
+        case 'SERVING_FROM_CACHE':
+          setIsServingFromCache(true);
+          setTimeout(() => setIsServingFromCache(false), 3000);
+          break;
+        case 'SYNC_FALLBACK':
+          syncManager.syncAll();
+          break;
+        case 'MUTATION_SUCCESS':
+          refreshStats();
+          break;
+        case 'MUTATION_FAILED':
+          refreshStats();
+          if (!event.data.syncRegistered) {
+            registerBackgroundSync('sync-pending-actions');
+          }
+          break;
+      }
+    };
+
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
+    
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', handleSWMessage);
+    }
 
     const unsubProgress = syncManager.onProgress(setProgress);
     const unsubComplete = syncManager.onComplete((result) => {
@@ -83,16 +172,23 @@ export function SyncStatusProvider({
     });
 
     refreshStats();
+    sendSWMessage({ type: 'GET_CACHE_STATS' }).then((stats) => {
+      if (stats) setCacheStats(stats);
+    });
+    
     const statsInterval = setInterval(refreshStats, STATS_REFRESH_INTERVAL);
 
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.removeEventListener('message', handleSWMessage);
+      }
       unsubProgress();
       unsubComplete();
       clearInterval(statsInterval);
     };
-  }, [refreshStats, onSyncComplete, onNetworkChange]);
+  }, [refreshStats, onSyncComplete, onNetworkChange, registerBackgroundSync, sendSWMessage]);
 
   const sync = useCallback(async () => {
     return syncManager.syncAll();
@@ -118,13 +214,19 @@ export function SyncStatusProvider({
     progress,
     lastResult,
     stats,
+    cacheStats,
     pendingCount,
     justCameOnline,
     hasErrors,
+    isServingFromCache,
     sync,
     forceSync,
     refreshStats,
     setConflictResolution,
+    registerBackgroundSync,
+    clearApiCache,
+    invalidateCacheEntry,
+    prefetchEndpoints,
   };
 
   return (
