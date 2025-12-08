@@ -28,6 +28,7 @@ import { useMMP } from "@/context/mmp/MMPContext";
 import LeafletMapContainer from '@/components/map/LeafletMapContainer';
 import { sudanStates, getStateName, getLocalityName } from '@/data/sudanStates';
 import { supabase } from '@/integrations/supabase/client';
+import { useUserProjects } from '@/hooks/useUserProjects';
 
 const SiteVisits = () => {
   const { currentUser, hasRole } = useAppContext();
@@ -189,37 +190,14 @@ const SiteVisits = () => {
     fetchHubName();
   }, [isSupervisor, supervisorHubId]);
 
-  // State for user's project team memberships
-  const [userProjectIds, setUserProjectIds] = useState<string[]>([]);
+  // Get user's project team memberships from projects table (team.members, team.teamComposition)
+  const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
 
-  // Check if user can view all projects (admins, ICT, FOM don't need team membership filter)
+  // Check if user can view all projects (admins, ICT, FOM, super admins don't need team membership filter)
   const canViewAllProjects = useMemo(() => {
+    if (isAdminOrSuperUser) return true;
     return hasAnyRole(['admin', 'Admin', 'ict', 'ICT', 'fom', 'Field Operation Manager (FOM)', 'Field Operations Manager']);
-  }, [hasAnyRole]);
-
-  // Fetch user's project team memberships
-  useEffect(() => {
-    if (!currentUser?.id || canViewAllProjects) {
-      setUserProjectIds([]);
-      return;
-    }
-    const fetchUserProjects = async () => {
-      const { data, error } = await supabase
-        .from('team_members')
-        .select('project_id')
-        .eq('user_id', currentUser.id);
-      
-      if (error) {
-        console.error('Error fetching user project memberships:', error);
-        return;
-      }
-      
-      const projectIds = data?.map(tm => tm.project_id).filter(Boolean) as string[] || [];
-      console.log(`👥 User is a team member in ${projectIds.length} projects:`, projectIds);
-      setUserProjectIds(projectIds);
-    };
-    fetchUserProjects();
-  }, [currentUser?.id, canViewAllProjects]);
+  }, [hasAnyRole, isAdminOrSuperUser]);
 
   // Get user's geographic assignment from profile (state and locality)
   // Works for both data collectors and coordinators who can claim sites within their locality
