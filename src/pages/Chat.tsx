@@ -127,13 +127,22 @@ const Chat: React.FC = () => {
     chat.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const filteredUsers = useMemo(() => users.filter(user => 
-    user.id !== currentUser?.id &&
-    (user.name?.toLowerCase().includes(searchQuery.toLowerCase()) || 
-     user.fullName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-     user.role?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-     user.email?.toLowerCase().includes(searchQuery.toLowerCase()))
-  ), [users, currentUser?.id, searchQuery]);
+  const filteredUsers = useMemo(() => {
+    const filtered = users.filter(user => 
+      user.id !== currentUser?.id &&
+      (user.name?.toLowerCase().includes(searchQuery.toLowerCase()) || 
+       user.fullName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+       user.role?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+       user.email?.toLowerCase().includes(searchQuery.toLowerCase()))
+    );
+    return filtered.sort((a, b) => {
+      const aOnline = onlineUserIds.includes(a.id);
+      const bOnline = onlineUserIds.includes(b.id);
+      if (aOnline && !bOnline) return -1;
+      if (!aOnline && bOnline) return 1;
+      return 0;
+    });
+  }, [users, currentUser?.id, searchQuery, onlineUserIds]);
 
   const paginatedContacts = useMemo(
     () => filteredUsers.slice(0, contactPage * CONTACTS_PAGE_SIZE),

@@ -119,7 +119,13 @@ const Calls = () => {
     user.id !== currentUser?.id &&
     (user.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
      user.role.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  ).sort((a, b) => {
+    const aOnline = onlineUserIds.includes(a.id);
+    const bOnline = onlineUserIds.includes(b.id);
+    if (aOnline && !bOnline) return -1;
+    if (!aOnline && bOnline) return 1;
+    return 0;
+  });
 
   const favoriteUsers = filteredUsers.filter(user => favorites.includes(user.id));
   const onlineUsers = filteredUsers.filter(user => onlineUserIds.includes(user.id));
