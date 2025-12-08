@@ -27,6 +27,8 @@ interface CallContextType {
   rejectCall: () => void;
   endCall: () => void;
   toggleMute: () => void;
+  toggleVideo: () => Promise<void>;
+  isVideoEnabled: boolean;
   isCallActive: boolean;
 }
 
@@ -228,6 +230,13 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setCallState(prev => ({ ...prev, isMuted }));
   }, []);
 
+  const [isVideoEnabled, setIsVideoEnabled] = useState(false);
+
+  const toggleVideo = useCallback(async () => {
+    const videoOn = await webRTCService.toggleVideo();
+    setIsVideoEnabled(videoOn);
+  }, []);
+
   const isCallActive = callState.status !== 'idle' && callState.status !== 'ended';
 
   return (
@@ -239,6 +248,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         rejectCall,
         endCall,
         toggleMute,
+        toggleVideo,
+        isVideoEnabled,
         isCallActive,
       }}
     >

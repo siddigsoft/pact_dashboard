@@ -1,8 +1,7 @@
 
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState } from 'react';
 import { User, SiteVisit } from '@/types';
-import { useAppContext } from '@/context/AppContext';
-import webRTCService, { CallEventHandler } from '@/services/WebRTCService';
+import { useCall } from './CallContext';
 
 export type CallType = 'incoming' | 'outgoing' | 'connected';
 export type CallStatus = 'idle' | 'incoming' | 'outgoing' | 'connected' | 'ended';
@@ -48,129 +47,10 @@ const CommunicationContext = createContext<CommunicationContextProps | undefined
 export const CommunicationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   children 
 }) => {
-  const { currentUser } = useAppContext();
+  const callContext = useCall();
   const [isChatPanelOpen, setIsChatPanelOpen] = useState(false);
   const [isNotificationsPanelOpen, setIsNotificationsPanelOpen] = useState(false);
-  const [callState, setCallState] = useState<CallState>({
-    status: 'idle',
-    duration: 0
-  });
   const [activeAssignment, setActiveAssignment] = useState<SiteVisit | null>(null);
-  const [isWebRTCInitialized, setIsWebRTCInitialized] = useState(false);
-  const [incomingCallerId, setIncomingCallerId] = useState<string | null>(null);
-
-  const handleIncomingCall = useCallback((callerId: string, callerName: string, callerAvatar?: string, callId?: string) => {
-    console.log('[Communication] Incoming call from:', callerName, 'callId:', callId);
-    setIncomingCallerId(callerId);
-    setCallState({
-      status: 'incoming',
-      recipient: {
-        id: callerId,
-        name: callerName,
-        avatar: callerAvatar
-      },
-      duration: 0,
-      callId
-    });
-  }, []);
-
-  const handleCallAccepted = useCallback(() => {
-    console.log('[Communication] Call accepted');
-    setCallState(prev => ({
-      ...prev,
-      status: 'connected'
-    }));
-  }, []);
-
-  const handleCallRejected = useCallback(() => {
-    console.log('[Communication] Call rejected');
-    setCallState({
-      status: 'idle',
-      duration: 0
-    });
-    setIncomingCallerId(null);
-  }, []);
-
-  const handleCallEnded = useCallback(() => {
-    console.log('[Communication] Call ended');
-    setCallState({
-      status: 'idle',
-      duration: 0
-    });
-    setIncomingCallerId(null);
-  }, []);
-
-  const handleCallBusy = useCallback(() => {
-    console.log('[Communication] User is busy');
-    setCallState({
-      status: 'idle',
-      duration: 0
-    });
-  }, []);
-
-  const handleRemoteStream = useCallback((stream: MediaStream) => {
-    console.log('[Communication] Remote stream received');
-    setCallState(prev => ({
-      ...prev,
-      remoteStream: stream
-    }));
-    
-    const audio = new Audio();
-    audio.srcObject = stream;
-    audio.autoplay = true;
-    audio.play().catch(e => console.error('[Communication] Error playing audio:', e));
-  }, []);
-
-  const handleConnectionStateChange = useCallback((state: RTCPeerConnectionState) => {
-    console.log('[Communication] Connection state:', state);
-    if (state === 'connected') {
-      setCallState(prev => ({
-        ...prev,
-        status: 'connected'
-      }));
-    } else if (state === 'disconnected' || state === 'failed' || state === 'closed') {
-      setCallState({
-        status: 'idle',
-        duration: 0
-      });
-      setIncomingCallerId(null);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!currentUser?.id) return;
-
-    const eventHandlers: CallEventHandler = {
-      onIncomingCall: handleIncomingCall,
-      onCallAccepted: handleCallAccepted,
-      onCallRejected: handleCallRejected,
-      onCallEnded: handleCallEnded,
-      onCallBusy: handleCallBusy,
-      onRemoteStream: handleRemoteStream,
-      onConnectionStateChange: handleConnectionStateChange
-    };
-
-    const userName = currentUser.name || currentUser.fullName || currentUser.email || 'User';
-    
-    webRTCService.initialize(
-      currentUser.id,
-      userName,
-      currentUser.avatar,
-      eventHandlers
-    ).then(() => {
-      console.log('[Communication] WebRTC service initialized for user:', currentUser.id);
-      setIsWebRTCInitialized(true);
-    }).catch(error => {
-      console.error('[Communication] Failed to initialize WebRTC:', error);
-    });
-
-    return () => {
-      webRTCService.destroy();
-      setIsWebRTCInitialized(false);
-    };
-  }, [currentUser?.id, currentUser?.name, currentUser?.fullName, currentUser?.email, currentUser?.avatar,
-      handleIncomingCall, handleCallAccepted, handleCallRejected, handleCallEnded, 
-      handleCallBusy, handleRemoteStream, handleConnectionStateChange]);
 
   const toggleChatPanel = () => {
     setIsChatPanelOpen(prev => !prev);
@@ -191,68 +71,40 @@ export const CommunicationProvider: React.FC<{ children: React.ReactNode }> = ({
     setIsNotificationsPanelOpen(false);
   };
 
+  const callState: CallState = {
+    status: callContext.callState.status === 'connecting' ? 'connected' : callContext.callState.status,
+    recipient: callContext.callState.participant ? {
+      id: callContext.callState.participant.id,
+      name: callContext.callState.participant.name,
+      avatar: callContext.callState.participant.avatar
+    } : undefined,
+    duration: callContext.callState.duration
+  };
+
   const startCall = async (recipientId: string, recipientName: string, recipientAvatar?: string) => {
-    if (!isWebRTCInitialized) {
-      console.error('[Communication] WebRTC not initialized');
-      return;
-    }
-
-    setCallState({
-      status: 'outgoing',
-      recipient: {
-        id: recipientId,
-        name: recipientName,
-        avatar: recipientAvatar
-      },
-      duration: 0
-    });
-
-    const success = await webRTCService.initiateCall(recipientId);
-    if (!success) {
-      console.error('[Communication] Failed to initiate call');
-      setCallState({
-        status: 'idle',
-        duration: 0
-      });
-    }
+    await callContext.initiateCall({
+      id: recipientId,
+      name: recipientName,
+      avatar: recipientAvatar,
+      role: '',
+      status: 'active'
+    } as User);
   };
 
   const initiateCall = (user: User) => {
-    const userName = user.fullName || user.name || user.username || user.email || 'Unknown';
-    startCall(user.id, userName, user.avatar);
+    callContext.initiateCall(user);
   };
 
-  const acceptCall = async () => {
-    if (!incomingCallerId) {
-      console.error('[Communication] No incoming call to accept');
-      return;
-    }
-
-    await webRTCService.acceptCall(incomingCallerId);
-    setCallState(prev => ({
-      ...prev,
-      status: 'connected'
-    }));
+  const acceptCall = () => {
+    callContext.acceptCall();
   };
 
-  const endCall = async () => {
-    await webRTCService.endCall();
-    setCallState({
-      status: 'idle',
-      duration: 0
-    });
-    setIncomingCallerId(null);
+  const endCall = () => {
+    callContext.endCall();
   };
 
-  const rejectCall = async () => {
-    if (incomingCallerId) {
-      await webRTCService.rejectCall(incomingCallerId);
-    }
-    setCallState({
-      status: 'idle',
-      duration: 0
-    });
-    setIncomingCallerId(null);
+  const rejectCall = () => {
+    callContext.rejectCall();
   };
   
   const openChatForEntity = (entityId: string, entityType: 'siteVisit' | 'mmpFile' | 'transaction' | 'chat') => {
@@ -292,7 +144,7 @@ export const CommunicationProvider: React.FC<{ children: React.ReactNode }> = ({
         activeAssignment,
         handleAcceptAssignment,
         handleDeclineAssignment,
-        isWebRTCInitialized
+        isWebRTCInitialized: callContext.isCallActive || true
       }}
     >
       {children}

@@ -412,19 +412,70 @@ class WebRTCService {
     this.cleanup();
   }
 
-  private async setupLocalStream() {
+  private videoEnabled: boolean = false;
+
+  private async setupLocalStream(enableVideo: boolean = false) {
+    this.videoEnabled = enableVideo;
     try {
       this.localStream = await navigator.mediaDevices.getUserMedia({
         audio: true,
-        video: false,
+        video: enableVideo ? { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } } : false,
       });
     } catch (error) {
-      console.error('[WebRTC] Failed to get user media:', error);
-      this.localStream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: false,
-      });
+      console.error('[WebRTC] Failed to get user media with video:', error);
+      // Fallback to audio only if video fails
+      try {
+        this.localStream = await navigator.mediaDevices.getUserMedia({
+          audio: true,
+          video: false,
+        });
+        this.videoEnabled = false;
+      } catch (audioError) {
+        console.error('[WebRTC] Failed to get audio:', audioError);
+        throw audioError;
+      }
     }
+  }
+
+  async toggleVideo(): Promise<boolean> {
+    if (!this.localStream || !this.peerConnection) return false;
+
+    const videoTracks = this.localStream.getVideoTracks();
+    
+    if (videoTracks.length > 0) {
+      // Turn off video
+      videoTracks.forEach(track => {
+        track.stop();
+        this.localStream?.removeTrack(track);
+        const sender = this.peerConnection?.getSenders().find(s => s.track === track);
+        if (sender) {
+          this.peerConnection?.removeTrack(sender);
+        }
+      });
+      this.videoEnabled = false;
+      return false;
+    } else {
+      // Turn on video
+      try {
+        const videoStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }
+        });
+        const videoTrack = videoStream.getVideoTracks()[0];
+        if (videoTrack) {
+          this.localStream?.addTrack(videoTrack);
+          this.peerConnection?.addTrack(videoTrack, this.localStream!);
+          this.videoEnabled = true;
+          return true;
+        }
+      } catch (error) {
+        console.error('[WebRTC] Failed to enable video:', error);
+      }
+      return false;
+    }
+  }
+
+  isVideoEnabled(): boolean {
+    return this.videoEnabled;
   }
 
   private async createPeerConnection() {
