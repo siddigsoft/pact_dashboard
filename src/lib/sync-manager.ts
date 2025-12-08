@@ -342,6 +342,16 @@ class SyncManager {
             throw fetchError;
           }
 
+          // Deduplication check: Skip if server already has this visit in a terminal/advanced state
+          if (this.isTerminalOrAdvancedStatus(serverData?.status, 'started')) {
+            console.log(`[SyncManager] Skipping started visit ${visit.id} - server already has status: ${serverData?.status}`);
+            await markSiteVisitSynced(visit.id);
+            synced++;
+            this.progress.completed++;
+            this.notifyProgress();
+            continue;
+          }
+
           // Resolve conflict using configured strategy
           const shouldUpdate = this.resolveConflict(visit, serverData);
           if (!shouldUpdate) {
@@ -375,6 +385,16 @@ class SyncManager {
             .single();
 
           if (fetchError) throw fetchError;
+
+          // Deduplication check: Skip if server already has this visit in a terminal state
+          if (this.isTerminalOrAdvancedStatus(existingEntry?.status, 'completed')) {
+            console.log(`[SyncManager] Skipping completed visit ${visit.id} - server already has status: ${existingEntry?.status}`);
+            await markSiteVisitSynced(visit.id);
+            synced++;
+            this.progress.completed++;
+            this.notifyProgress();
+            continue;
+          }
 
           const updateData: Record<string, any> = {
             status: 'Completed',
@@ -443,6 +463,45 @@ class SyncManager {
       default:
         return true;
     }
+  }
+
+  /**
+   * Normalizes a status string and checks if it represents a terminal or advanced state.
+   * Handles various formats: 'In Progress', 'in_progress', 'in-progress', 'inprogress', etc.
+   * Covers all known Supabase status values across the application.
+   */
+  private isTerminalOrAdvancedStatus(status: string | null | undefined, attemptedAction: 'started' | 'completed'): boolean {
+    if (!status) return false;
+    
+    // Normalize: lowercase, remove all non-alphanumeric characters
+    const normalized = status.toLowerCase().replace(/[^a-z0-9]/g, '');
+    
+    // Terminal states - visit is definitively done and should never be updated
+    const terminalStates = [
+      'completed',
+      'cancelled', 'canceled',
+      'rejected',
+      'declined',
+      'closed',
+      'archived',
+    ];
+    
+    // Advanced states - visit has progressed past the initial state
+    const inProgressStates = ['inprogress'];
+    
+    // Check for terminal states (always skip regardless of attempted action)
+    if (terminalStates.includes(normalized)) {
+      return true;
+    }
+    
+    if (attemptedAction === 'started') {
+      // For 'started' visits, skip if server is already in progress
+      // (meaning we already synced the start or someone else started it)
+      return inProgressStates.includes(normalized);
+    }
+    
+    // For 'completed' visits, only terminal states should skip (handled above)
+    return false;
   }
 
   private async syncLocations(): Promise<{ synced: number; failed: number; errors: string[] }> {
