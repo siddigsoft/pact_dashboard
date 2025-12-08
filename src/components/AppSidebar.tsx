@@ -362,8 +362,8 @@
       <Sidebar collapsible="icon" className="border-r bg-white dark:bg-gray-900">
 
         <SidebarHeader className="border-b py-0">
-          <div className="flex h-5 items-center gap-0.5 px-0.5">
-            <img src={Logo} alt="PACT Logo" className="h-4 w-4 shrink-0 object-contain" />
+          <div className="flex h-15 items-center gap-0.5 px-0.5">
+            <img src={Logo} alt="PACT Logo" className="h-8 w-8 shrink-0 object-contain" />
             <SidebarTrigger className="ml-auto h-4 w-4" data-testid="button-sidebar-trigger" />
           </div>
         </SidebarHeader>
