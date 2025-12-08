@@ -22,6 +22,8 @@ import { SuperAdminProvider } from './superAdmin/SuperAdminContext';
 import { ActiveVisitProvider } from './ActiveVisitContext';
 import BrowserNotificationListener from '@/components/BrowserNotificationListener';
 import GlobalCallOverlay from '@/components/communication/GlobalCallOverlay';
+import { GlobalPresenceProvider } from '@/context/presence/GlobalPresenceContext';
+import { MobilePushNotificationOverlay } from '@/components/mobile/MobilePushNotificationOverlay';
 
 interface CompositeContextType {
   currentUser: ReturnType<typeof useUser>['currentUser'];
@@ -158,9 +160,12 @@ export const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children
                                         <ChatProvider>
                                           <CallProvider>
                                             <CommunicationProvider>
-                                              <BrowserNotificationListener />
-                                              <GlobalCallOverlay />
-                                              {children}
+                                              <GlobalPresenceProvider>
+                                                <BrowserNotificationListener />
+                                                <GlobalCallOverlay />
+                                                <MobilePushNotificationOverlay />
+                                                {children}
+                                              </GlobalPresenceProvider>
                                             </CommunicationProvider>
                                           </CallProvider>
                                         </ChatProvider>
