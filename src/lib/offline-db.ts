@@ -45,6 +45,65 @@ interface CachedSiteData {
   expiresAt: number;
 }
 
+export interface CachedRecord<T = any> {
+  id: string;
+  data: T;
+  _version: number;
+  _cachedAt: number;
+  _expiresAt: number;
+  _storeType: string;
+}
+
+export interface CachedMMP {
+  id: string;
+  data: any;
+  _version: number;
+  _cachedAt: number;
+  _expiresAt: number;
+}
+
+export interface CachedBudget {
+  id: string;
+  data: any;
+  _version: number;
+  _cachedAt: number;
+  _expiresAt: number;
+}
+
+export interface CachedWallet {
+  id: string;
+  data: any;
+  _version: number;
+  _cachedAt: number;
+  _expiresAt: number;
+}
+
+export interface CachedNotification {
+  id: string;
+  data: any;
+  _version: number;
+  _cachedAt: number;
+  _expiresAt: number;
+  read: boolean;
+}
+
+export interface CachedChatMessage {
+  id: string;
+  data: any;
+  _version: number;
+  _cachedAt: number;
+  _expiresAt: number;
+  conversationId: string;
+}
+
+export interface CachedProject {
+  id: string;
+  data: any;
+  _version: number;
+  _cachedAt: number;
+  _expiresAt: number;
+}
+
 interface OfflineDBSchema extends DBSchema {
   pendingSync: {
     key: string;
@@ -70,10 +129,45 @@ interface OfflineDBSchema extends DBSchema {
     key: string;
     value: { key: string; value: any; updatedAt: number };
   };
+  mmps: {
+    key: string;
+    value: CachedMMP;
+    indexes: { 'by-expiresAt': number; 'by-cachedAt': number };
+  };
+  budgets: {
+    key: string;
+    value: CachedBudget;
+    indexes: { 'by-expiresAt': number; 'by-cachedAt': number };
+  };
+  wallets: {
+    key: string;
+    value: CachedWallet;
+    indexes: { 'by-expiresAt': number; 'by-cachedAt': number };
+  };
+  notifications: {
+    key: string;
+    value: CachedNotification;
+    indexes: { 'by-expiresAt': number; 'by-cachedAt': number; 'by-read': boolean };
+  };
+  chatMessages: {
+    key: string;
+    value: CachedChatMessage;
+    indexes: { 'by-expiresAt': number; 'by-cachedAt': number; 'by-conversationId': string };
+  };
+  projects: {
+    key: string;
+    value: CachedProject;
+    indexes: { 'by-expiresAt': number; 'by-cachedAt': number };
+  };
+  genericCache: {
+    key: string;
+    value: CachedRecord;
+    indexes: { 'by-expiresAt': number; 'by-storeType': string; 'by-cachedAt': number };
+  };
 }
 
 const DB_NAME = 'pact-offline-db';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let dbInstance: IDBPDatabase<OfflineDBSchema> | null = null;
 
@@ -110,6 +204,51 @@ export async function getOfflineDB(): Promise<IDBPDatabase<OfflineDBSchema>> {
 
       if (!db.objectStoreNames.contains('appState')) {
         db.createObjectStore('appState', { keyPath: 'key' });
+      }
+
+      if (!db.objectStoreNames.contains('mmps')) {
+        const mmpStore = db.createObjectStore('mmps', { keyPath: 'id' });
+        mmpStore.createIndex('by-expiresAt', '_expiresAt');
+        mmpStore.createIndex('by-cachedAt', '_cachedAt');
+      }
+
+      if (!db.objectStoreNames.contains('budgets')) {
+        const budgetStore = db.createObjectStore('budgets', { keyPath: 'id' });
+        budgetStore.createIndex('by-expiresAt', '_expiresAt');
+        budgetStore.createIndex('by-cachedAt', '_cachedAt');
+      }
+
+      if (!db.objectStoreNames.contains('wallets')) {
+        const walletStore = db.createObjectStore('wallets', { keyPath: 'id' });
+        walletStore.createIndex('by-expiresAt', '_expiresAt');
+        walletStore.createIndex('by-cachedAt', '_cachedAt');
+      }
+
+      if (!db.objectStoreNames.contains('notifications')) {
+        const notifStore = db.createObjectStore('notifications', { keyPath: 'id' });
+        notifStore.createIndex('by-expiresAt', '_expiresAt');
+        notifStore.createIndex('by-cachedAt', '_cachedAt');
+        notifStore.createIndex('by-read', 'read');
+      }
+
+      if (!db.objectStoreNames.contains('chatMessages')) {
+        const chatStore = db.createObjectStore('chatMessages', { keyPath: 'id' });
+        chatStore.createIndex('by-expiresAt', '_expiresAt');
+        chatStore.createIndex('by-cachedAt', '_cachedAt');
+        chatStore.createIndex('by-conversationId', 'conversationId');
+      }
+
+      if (!db.objectStoreNames.contains('projects')) {
+        const projectStore = db.createObjectStore('projects', { keyPath: 'id' });
+        projectStore.createIndex('by-expiresAt', '_expiresAt');
+        projectStore.createIndex('by-cachedAt', '_cachedAt');
+      }
+
+      if (!db.objectStoreNames.contains('genericCache')) {
+        const genericStore = db.createObjectStore('genericCache', { keyPath: 'id' });
+        genericStore.createIndex('by-expiresAt', '_expiresAt');
+        genericStore.createIndex('by-storeType', '_storeType');
+        genericStore.createIndex('by-cachedAt', '_cachedAt');
       }
     },
   });
@@ -246,14 +385,26 @@ export async function getCachedSiteData<T = any>(id: string): Promise<T | null> 
 export async function cleanExpiredCache(): Promise<number> {
   const db = await getOfflineDB();
   const now = Date.now();
-  const all = await db.getAll('siteCache');
-  const expired = all.filter(c => c.expiresAt < now);
-  const tx = db.transaction('siteCache', 'readwrite');
-  for (const item of expired) {
-    await tx.store.delete(item.id);
+  let totalCleaned = 0;
+
+  const stores = ['siteCache', 'mmps', 'budgets', 'wallets', 'notifications', 'chatMessages', 'projects', 'genericCache'] as const;
+  
+  for (const storeName of stores) {
+    const all = await db.getAll(storeName);
+    const expiryField = storeName === 'siteCache' ? 'expiresAt' : '_expiresAt';
+    const expired = all.filter((c: any) => c[expiryField] < now);
+    
+    if (expired.length > 0) {
+      const tx = db.transaction(storeName, 'readwrite');
+      for (const item of expired) {
+        await tx.store.delete(item.id);
+      }
+      await tx.done;
+      totalCleaned += expired.length;
+    }
   }
-  await tx.done;
-  return expired.length;
+  
+  return totalCleaned;
 }
 
 export async function saveAppState(key: string, value: any): Promise<void> {
@@ -272,19 +423,37 @@ export async function getOfflineStats(): Promise<{
   unsyncedVisits: number;
   unsyncedLocations: number;
   cachedItems: number;
+  cachedMMPs: number;
+  cachedBudgets: number;
+  cachedWallets: number;
+  cachedNotifications: number;
+  cachedChatMessages: number;
+  cachedProjects: number;
 }> {
   const db = await getOfflineDB();
-  const [pending, visits, locations, cached] = await Promise.all([
+  const [pending, visits, locations, cached, mmps, budgets, wallets, notifications, chatMessages, projects] = await Promise.all([
     db.countFromIndex('pendingSync', 'by-status', 'pending'),
     db.getAll('siteVisits').then(v => v.filter(x => !x.synced).length),
     db.getAll('locations').then(l => l.filter(x => !x.synced).length),
     db.count('siteCache'),
+    db.count('mmps'),
+    db.count('budgets'),
+    db.count('wallets'),
+    db.count('notifications'),
+    db.count('chatMessages'),
+    db.count('projects'),
   ]);
   return {
     pendingActions: pending,
     unsyncedVisits: visits,
     unsyncedLocations: locations,
     cachedItems: cached,
+    cachedMMPs: mmps,
+    cachedBudgets: budgets,
+    cachedWallets: wallets,
+    cachedNotifications: notifications,
+    cachedChatMessages: chatMessages,
+    cachedProjects: projects,
   };
 }
 
@@ -296,5 +465,278 @@ export async function clearAllOfflineData(): Promise<void> {
     db.clear('locations'),
     db.clear('siteCache'),
     db.clear('appState'),
+    db.clear('mmps'),
+    db.clear('budgets'),
+    db.clear('wallets'),
+    db.clear('notifications'),
+    db.clear('chatMessages'),
+    db.clear('projects'),
+    db.clear('genericCache'),
   ]);
+}
+
+export type CacheStoreName = 'mmps' | 'budgets' | 'wallets' | 'notifications' | 'chatMessages' | 'projects';
+
+const DEFAULT_TTL_MINUTES: Record<CacheStoreName, number> = {
+  mmps: 120,
+  budgets: 60,
+  wallets: 30,
+  notifications: 1440,
+  chatMessages: 2880,
+  projects: 120,
+};
+
+class OfflineCacheService {
+  private currentVersion = 1;
+
+  async cache<T>(
+    storeName: CacheStoreName,
+    id: string,
+    data: T,
+    options?: { ttlMinutes?: number; version?: number; additionalFields?: Record<string, any> }
+  ): Promise<void> {
+    const db = await getOfflineDB();
+    const now = Date.now();
+    const ttl = options?.ttlMinutes ?? DEFAULT_TTL_MINUTES[storeName];
+    
+    const record = {
+      id,
+      data,
+      _version: options?.version ?? this.currentVersion,
+      _cachedAt: now,
+      _expiresAt: now + ttl * 60 * 1000,
+      ...options?.additionalFields,
+    };
+
+    await db.put(storeName, record as any);
+  }
+
+  async get<T>(storeName: CacheStoreName, id: string): Promise<T | null> {
+    const db = await getOfflineDB();
+    const cached = await db.get(storeName, id);
+    
+    if (!cached) return null;
+    
+    if (cached._expiresAt < Date.now()) {
+      await db.delete(storeName, id);
+      return null;
+    }
+    
+    return cached.data as T;
+  }
+
+  async getWithMeta<T>(storeName: CacheStoreName, id: string): Promise<{ data: T; version: number; cachedAt: number } | null> {
+    const db = await getOfflineDB();
+    const cached = await db.get(storeName, id);
+    
+    if (!cached) return null;
+    
+    if (cached._expiresAt < Date.now()) {
+      await db.delete(storeName, id);
+      return null;
+    }
+    
+    return {
+      data: cached.data as T,
+      version: cached._version,
+      cachedAt: cached._cachedAt,
+    };
+  }
+
+  async getAll<T>(storeName: CacheStoreName): Promise<T[]> {
+    const db = await getOfflineDB();
+    const all = await db.getAll(storeName);
+    const now = Date.now();
+    
+    const valid = all.filter((item: any) => item._expiresAt >= now);
+    return valid.map((item: any) => item.data as T);
+  }
+
+  async invalidate(storeName: CacheStoreName, id: string): Promise<void> {
+    const db = await getOfflineDB();
+    await db.delete(storeName, id);
+  }
+
+  async invalidateAll(storeName: CacheStoreName): Promise<void> {
+    const db = await getOfflineDB();
+    await db.clear(storeName);
+  }
+
+  async invalidateExpired(storeName: CacheStoreName): Promise<number> {
+    const db = await getOfflineDB();
+    const all = await db.getAll(storeName);
+    const now = Date.now();
+    
+    const expired = all.filter((item: any) => item._expiresAt < now);
+    
+    if (expired.length > 0) {
+      const tx = db.transaction(storeName, 'readwrite');
+      for (const item of expired) {
+        await tx.store.delete(item.id);
+      }
+      await tx.done;
+    }
+    
+    return expired.length;
+  }
+
+  async batchCache<T>(
+    storeName: CacheStoreName,
+    items: Array<{ id: string; data: T; additionalFields?: Record<string, any> }>,
+    options?: { ttlMinutes?: number; version?: number }
+  ): Promise<void> {
+    const db = await getOfflineDB();
+    const now = Date.now();
+    const ttl = options?.ttlMinutes ?? DEFAULT_TTL_MINUTES[storeName];
+    
+    const tx = db.transaction(storeName, 'readwrite');
+    
+    for (const item of items) {
+      const record = {
+        id: item.id,
+        data: item.data,
+        _version: options?.version ?? this.currentVersion,
+        _cachedAt: now,
+        _expiresAt: now + ttl * 60 * 1000,
+        ...item.additionalFields,
+      };
+      await tx.store.put(record as any);
+    }
+    
+    await tx.done;
+  }
+
+  async batchGet<T>(storeName: CacheStoreName, ids: string[]): Promise<Map<string, T>> {
+    const db = await getOfflineDB();
+    const result = new Map<string, T>();
+    const now = Date.now();
+    
+    for (const id of ids) {
+      const cached = await db.get(storeName, id);
+      if (cached && cached._expiresAt >= now) {
+        result.set(id, cached.data as T);
+      }
+    }
+    
+    return result;
+  }
+
+  async updateVersion(storeName: CacheStoreName, id: string, newVersion: number): Promise<void> {
+    const db = await getOfflineDB();
+    const cached = await db.get(storeName, id);
+    
+    if (cached) {
+      cached._version = newVersion;
+      await db.put(storeName, cached as any);
+    }
+  }
+
+  async getByIndex<T>(
+    storeName: CacheStoreName,
+    indexName: string,
+    value: any
+  ): Promise<T[]> {
+    const db = await getOfflineDB();
+    const now = Date.now();
+    
+    let results: any[];
+    
+    if (storeName === 'notifications' && indexName === 'by-read') {
+      results = await db.getAllFromIndex('notifications', 'by-read', value);
+    } else if (storeName === 'chatMessages' && indexName === 'by-conversationId') {
+      results = await db.getAllFromIndex('chatMessages', 'by-conversationId', value);
+    } else {
+      results = await db.getAll(storeName);
+    }
+    
+    return results
+      .filter((item: any) => item._expiresAt >= now)
+      .map((item: any) => item.data as T);
+  }
+
+  async getCacheStats(): Promise<Record<CacheStoreName, { count: number; expiredCount: number }>> {
+    const db = await getOfflineDB();
+    const now = Date.now();
+    const stores: CacheStoreName[] = ['mmps', 'budgets', 'wallets', 'notifications', 'chatMessages', 'projects'];
+    
+    const stats: Record<string, { count: number; expiredCount: number }> = {};
+    
+    for (const store of stores) {
+      const all = await db.getAll(store);
+      const expired = all.filter((item: any) => item._expiresAt < now);
+      stats[store] = {
+        count: all.length,
+        expiredCount: expired.length,
+      };
+    }
+    
+    return stats as Record<CacheStoreName, { count: number; expiredCount: number }>;
+  }
+}
+
+export const offlineCacheService = new OfflineCacheService();
+
+export async function cacheMMP(id: string, data: any, ttlMinutes?: number): Promise<void> {
+  return offlineCacheService.cache('mmps', id, data, { ttlMinutes });
+}
+
+export async function getCachedMMP<T = any>(id: string): Promise<T | null> {
+  return offlineCacheService.get<T>('mmps', id);
+}
+
+export async function getAllCachedMMPs<T = any>(): Promise<T[]> {
+  return offlineCacheService.getAll<T>('mmps');
+}
+
+export async function cacheBudget(id: string, data: any, ttlMinutes?: number): Promise<void> {
+  return offlineCacheService.cache('budgets', id, data, { ttlMinutes });
+}
+
+export async function getCachedBudget<T = any>(id: string): Promise<T | null> {
+  return offlineCacheService.get<T>('budgets', id);
+}
+
+export async function cacheWallet(id: string, data: any, ttlMinutes?: number): Promise<void> {
+  return offlineCacheService.cache('wallets', id, data, { ttlMinutes });
+}
+
+export async function getCachedWallet<T = any>(id: string): Promise<T | null> {
+  return offlineCacheService.get<T>('wallets', id);
+}
+
+export async function cacheNotification(id: string, data: any, read: boolean = false, ttlMinutes?: number): Promise<void> {
+  return offlineCacheService.cache('notifications', id, data, { 
+    ttlMinutes, 
+    additionalFields: { read } 
+  });
+}
+
+export async function getCachedNotifications<T = any>(unreadOnly: boolean = false): Promise<T[]> {
+  if (unreadOnly) {
+    return offlineCacheService.getByIndex<T>('notifications', 'by-read', false);
+  }
+  return offlineCacheService.getAll<T>('notifications');
+}
+
+export async function cacheChatMessage(id: string, conversationId: string, data: any, ttlMinutes?: number): Promise<void> {
+  return offlineCacheService.cache('chatMessages', id, data, { 
+    ttlMinutes, 
+    additionalFields: { conversationId } 
+  });
+}
+
+export async function getCachedChatMessages<T = any>(conversationId: string): Promise<T[]> {
+  return offlineCacheService.getByIndex<T>('chatMessages', 'by-conversationId', conversationId);
+}
+
+export async function cacheProject(id: string, data: any, ttlMinutes?: number): Promise<void> {
+  return offlineCacheService.cache('projects', id, data, { ttlMinutes });
+}
+
+export async function getCachedProject<T = any>(id: string): Promise<T | null> {
+  return offlineCacheService.get<T>('projects', id);
+}
+
+export async function getAllCachedProjects<T = any>(): Promise<T[]> {
+  return offlineCacheService.getAll<T>('projects');
 }
