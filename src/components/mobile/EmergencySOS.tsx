@@ -1,11 +1,12 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { AlertTriangle, Phone, X, MapPin, Loader2, Send, Shield } from 'lucide-react';
+import { AlertTriangle, Phone, X, MapPin, Loader2, Send, Shield, Users, User, ChevronDown, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '@/context/user/UserContext';
 import { triggerHaptic } from '@/lib/haptics';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface EmergencySOSProps {
   isVisible: boolean;
@@ -13,10 +14,13 @@ interface EmergencySOSProps {
 }
 
 interface EmergencyContact {
+  id: string;
   name: string;
   phone: string;
   role: string;
 }
+
+type RecipientMode = 'supervisors' | 'specific';
 
 const HOLD_DURATION = 3000; // 3 seconds to activate
 
@@ -29,6 +33,11 @@ export function EmergencySOS({ isVisible, onClose }: EmergencySOSProps) {
   const [sent, setSent] = useState(false);
   const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number; accuracy?: number } | null>(null);
   const [emergencyContacts, setEmergencyContacts] = useState<EmergencyContact[]>([]);
+  const [allContacts, setAllContacts] = useState<EmergencyContact[]>([]);
+  const [recipientMode, setRecipientMode] = useState<RecipientMode>('supervisors');
+  const [selectedPerson, setSelectedPerson] = useState<EmergencyContact | null>(null);
+  const [showPersonPicker, setShowPersonPicker] = useState(false);
+  const [isLoadingContacts, setIsLoadingContacts] = useState(false);
   const holdTimerRef = useRef<NodeJS.Timeout | null>(null);
   const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -49,6 +58,8 @@ export function EmergencySOS({ isVisible, onClose }: EmergencySOSProps) {
 
       // Load emergency contacts (supervisors)
       loadEmergencyContacts();
+      // Load all contacts for specific person selection
+      loadAllContacts();
     }
 
     return () => {
@@ -59,15 +70,17 @@ export function EmergencySOS({ isVisible, onClose }: EmergencySOSProps) {
 
   const loadEmergencyContacts = async () => {
     try {
+      // Load ALL supervisors, hub managers, and admins - no limit
       const { data: supervisors } = await supabase
         .from('profiles')
-        .select('full_name, phone, role')
+        .select('id, full_name, phone, role')
         .in('role', ['supervisor', 'hub_manager', 'admin'])
-        .limit(3);
+        .order('full_name');
 
       if (supervisors) {
         setEmergencyContacts(
           supervisors.map(s => ({
+            id: s.id,
             name: s.full_name || 'Supervisor',
             phone: s.phone || '',
             role: s.role,
@@ -76,6 +89,32 @@ export function EmergencySOS({ isVisible, onClose }: EmergencySOSProps) {
       }
     } catch (error) {
       console.error('[SOS] Failed to load contacts:', error);
+    }
+  };
+
+  const loadAllContacts = async () => {
+    setIsLoadingContacts(true);
+    try {
+      const { data: contacts } = await supabase
+        .from('profiles')
+        .select('id, full_name, phone, role')
+        .neq('id', currentUser?.id || '')
+        .order('full_name');
+
+      if (contacts) {
+        setAllContacts(
+          contacts.map(c => ({
+            id: c.id,
+            name: c.full_name || 'Unknown',
+            phone: c.phone || '',
+            role: c.role || '',
+          }))
+        );
+      }
+    } catch (error) {
+      console.error('[SOS] Failed to load all contacts:', error);
+    } finally {
+      setIsLoadingContacts(false);
     }
   };
 
@@ -117,18 +156,36 @@ export function EmergencySOS({ isVisible, onClose }: EmergencySOSProps) {
     triggerHaptic('heavy');
 
     try {
-      // Create emergency alert in database
-      // Note: Using 'warning' type as per database constraint (info, success, warning, error)
-      const { error } = await supabase.from('notifications').insert({
-        user_id: currentUser?.id,
-        type: 'warning',
+      const targetRecipients = recipientMode === 'supervisors' 
+        ? emergencyContacts 
+        : selectedPerson 
+          ? [selectedPerson] 
+          : [];
+
+      // Error handling: ensure we have recipients
+      if (targetRecipients.length === 0) {
+        console.error('[SOS] No recipients available to send alert');
+        triggerHaptic('error');
+        // Show alert to user - can't send without recipients
+        alert(recipientMode === 'supervisors' 
+          ? 'No supervisors available. Please try again or select a specific person.' 
+          : 'Please select a person to send the alert to.');
+        setIsSending(false);
+        return;
+      }
+
+      // Create emergency alert notifications for each recipient
+      const notifications = targetRecipients.map(recipient => ({
+        user_id: recipient.id,
+        type: 'warning' as const,
         title: 'EMERGENCY SOS ALERT',
         message: `Emergency alert from ${currentUser?.fullName || 'Field Worker'}. Location: ${currentLocation ? `${currentLocation.lat.toFixed(6)}, ${currentLocation.lng.toFixed(6)}` : 'Unknown'}`,
         related_entity_type: 'user',
         related_entity_id: currentUser?.id,
         is_read: false,
-      });
+      }));
 
+      const { error } = await supabase.from('notifications').insert(notifications);
       if (error) throw error;
 
       // Broadcast to realtime channel
@@ -141,6 +198,8 @@ export function EmergencySOS({ isVisible, onClose }: EmergencySOSProps) {
           user_name: currentUser?.fullName,
           location: currentLocation,
           timestamp: new Date().toISOString(),
+          recipient_mode: recipientMode,
+          recipient_ids: targetRecipients.map(r => r.id),
         },
       });
 
@@ -149,6 +208,7 @@ export function EmergencySOS({ isVisible, onClose }: EmergencySOSProps) {
     } catch (error) {
       console.error('[SOS] Failed to send alert:', error);
       triggerHaptic('error');
+      alert('Failed to send emergency alert. Please try again or call directly.');
     } finally {
       setIsSending(false);
     }
@@ -165,8 +225,33 @@ export function EmergencySOS({ isVisible, onClose }: EmergencySOSProps) {
     setHoldProgress(0);
     setIsActivated(false);
     setSent(false);
+    setRecipientMode('supervisors');
+    setSelectedPerson(null);
+    setShowPersonPicker(false);
     onClose();
   };
+
+  const handleSelectPerson = (person: EmergencyContact) => {
+    setSelectedPerson(person);
+    setShowPersonPicker(false);
+    triggerHaptic('light');
+  };
+
+  const getRecipientDescription = () => {
+    if (recipientMode === 'supervisors') {
+      const count = emergencyContacts.length;
+      if (count === 0) {
+        return 'No supervisors available to notify';
+      }
+      return `This will notify ${count} supervisor${count !== 1 ? 's' : ''} with your location`;
+    }
+    if (selectedPerson) {
+      return `This will notify ${selectedPerson.name} with your location`;
+    }
+    return 'Select a person to notify';
+  };
+
+  const canSend = (recipientMode === 'supervisors' && emergencyContacts.length > 0) || selectedPerson !== null;
 
   return (
     <AnimatePresence>
@@ -181,10 +266,10 @@ export function EmergencySOS({ isVisible, onClose }: EmergencySOSProps) {
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.9, opacity: 0 }}
-            className="w-full max-w-sm bg-white dark:bg-black rounded-3xl overflow-hidden"
+            className="w-full max-w-sm bg-white dark:bg-black rounded-3xl overflow-hidden max-h-[90vh] flex flex-col"
           >
             {/* Header */}
-            <div className="bg-destructive text-white p-4 flex items-center justify-between">
+            <div className="bg-destructive text-white p-4 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2">
                 <Shield className="h-5 w-5" />
                 <span className="font-bold text-lg">Emergency SOS</span>
@@ -201,9 +286,136 @@ export function EmergencySOS({ isVisible, onClose }: EmergencySOSProps) {
               </Button>
             </div>
 
-            <div className="p-6 space-y-6">
+            <div className="p-6 space-y-6 overflow-y-auto flex-1">
               {!isActivated ? (
                 <>
+                  {/* Recipient Selection */}
+                  <div className="space-y-3">
+                    <p className="text-xs font-medium text-black/50 dark:text-white/50 uppercase tracking-wide">
+                      Send alert to
+                    </p>
+                    <div className="flex gap-2">
+                      <Button
+                        variant={recipientMode === 'supervisors' ? 'default' : 'outline'}
+                        className={cn(
+                          "flex-1 h-11 rounded-full gap-2",
+                          recipientMode === 'supervisors' 
+                            ? "bg-black dark:bg-white text-white dark:text-black" 
+                            : "border-black/20 dark:border-white/20"
+                        )}
+                        onClick={() => {
+                          setRecipientMode('supervisors');
+                          setSelectedPerson(null);
+                          triggerHaptic('light');
+                        }}
+                        data-testid="button-recipient-supervisors"
+                      >
+                        <Users className="h-4 w-4" />
+                        All Supervisors
+                      </Button>
+                      <Button
+                        variant={recipientMode === 'specific' ? 'default' : 'outline'}
+                        className={cn(
+                          "flex-1 h-11 rounded-full gap-2",
+                          recipientMode === 'specific' 
+                            ? "bg-black dark:bg-white text-white dark:text-black" 
+                            : "border-black/20 dark:border-white/20"
+                        )}
+                        onClick={() => {
+                          setRecipientMode('specific');
+                          triggerHaptic('light');
+                        }}
+                        data-testid="button-recipient-specific"
+                      >
+                        <User className="h-4 w-4" />
+                        Specific Person
+                      </Button>
+                    </div>
+
+                    {/* Person Picker */}
+                    {recipientMode === 'specific' && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="space-y-2"
+                      >
+                        <Button
+                          variant="outline"
+                          className="w-full h-12 rounded-full border-black/20 dark:border-white/20 justify-between"
+                          onClick={() => setShowPersonPicker(!showPersonPicker)}
+                          data-testid="button-select-person"
+                        >
+                          <span className={cn(
+                            "flex items-center gap-2",
+                            !selectedPerson && "text-black/40 dark:text-white/40"
+                          )}>
+                            <User className="h-4 w-4" />
+                            {selectedPerson ? selectedPerson.name : 'Select a person'}
+                          </span>
+                          <ChevronDown className={cn(
+                            "h-4 w-4 transition-transform",
+                            showPersonPicker && "rotate-180"
+                          )} />
+                        </Button>
+
+                        <AnimatePresence>
+                          {showPersonPicker && (
+                            <motion.div
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: 'auto' }}
+                              exit={{ opacity: 0, height: 0 }}
+                              className="overflow-hidden"
+                            >
+                              <ScrollArea className="h-48 rounded-2xl border border-black/10 dark:border-white/10">
+                                {isLoadingContacts ? (
+                                  <div className="flex items-center justify-center h-full py-8">
+                                    <Loader2 className="h-5 w-5 animate-spin text-black/40 dark:text-white/40" />
+                                  </div>
+                                ) : allContacts.length === 0 ? (
+                                  <div className="flex items-center justify-center h-full py-8 text-sm text-black/40 dark:text-white/40">
+                                    No contacts available
+                                  </div>
+                                ) : (
+                                  <div className="p-2 space-y-1">
+                                    {allContacts.map((contact) => (
+                                      <button
+                                        key={contact.id}
+                                        onClick={() => handleSelectPerson(contact)}
+                                        className={cn(
+                                          "w-full flex items-center gap-3 p-3 rounded-xl text-left transition-colors",
+                                          selectedPerson?.id === contact.id
+                                            ? "bg-black/10 dark:bg-white/10"
+                                            : "hover:bg-black/5 dark:hover:bg-white/5"
+                                        )}
+                                        data-testid={`contact-${contact.id}`}
+                                      >
+                                        <div className="w-8 h-8 rounded-full bg-black/10 dark:bg-white/10 flex items-center justify-center shrink-0">
+                                          <User className="h-4 w-4 text-black/60 dark:text-white/60" />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                          <div className="font-medium text-sm text-black dark:text-white truncate">
+                                            {contact.name}
+                                          </div>
+                                          <div className="text-xs text-black/40 dark:text-white/40 capitalize truncate">
+                                            {contact.role.replace(/_/g, ' ')}
+                                          </div>
+                                        </div>
+                                        {selectedPerson?.id === contact.id && (
+                                          <Check className="h-4 w-4 text-black dark:text-white shrink-0" />
+                                        )}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                              </ScrollArea>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </motion.div>
+                    )}
+                  </div>
+
                   {/* Hold to Activate */}
                   <div className="text-center space-y-4">
                     <p className="text-sm text-black/60 dark:text-white/60">
@@ -216,13 +428,15 @@ export function EmergencySOS({ isVisible, onClose }: EmergencySOSProps) {
                           "relative w-32 h-32 rounded-full flex items-center justify-center",
                           "bg-destructive text-white font-bold text-lg",
                           "shadow-lg active:scale-95 transition-transform",
-                          isHolding && "ring-4 ring-destructive/30"
+                          isHolding && "ring-4 ring-destructive/30",
+                          !canSend && "opacity-50 cursor-not-allowed"
                         )}
-                        onTouchStart={handleHoldStart}
-                        onTouchEnd={handleHoldEnd}
-                        onMouseDown={handleHoldStart}
-                        onMouseUp={handleHoldEnd}
-                        onMouseLeave={handleHoldEnd}
+                        onTouchStart={canSend ? handleHoldStart : undefined}
+                        onTouchEnd={canSend ? handleHoldEnd : undefined}
+                        onMouseDown={canSend ? handleHoldStart : undefined}
+                        onMouseUp={canSend ? handleHoldEnd : undefined}
+                        onMouseLeave={canSend ? handleHoldEnd : undefined}
+                        disabled={!canSend}
                         data-testid="button-sos-hold"
                         aria-label="Hold for 3 seconds to send emergency alert"
                       >
@@ -281,7 +495,10 @@ export function EmergencySOS({ isVisible, onClose }: EmergencySOSProps) {
                   </div>
                   <h3 className="text-xl font-bold text-black dark:text-white">Alert Sent</h3>
                   <p className="text-sm text-black/60 dark:text-white/60">
-                    Your emergency alert has been sent to supervisors with your current location.
+                    {recipientMode === 'supervisors' 
+                      ? 'Your emergency alert has been sent to supervisors with your current location.'
+                      : `Your emergency alert has been sent to ${selectedPerson?.name} with your current location.`
+                    }
                   </p>
                   <Button
                     className="w-full h-12 rounded-full bg-black dark:bg-white text-white dark:text-black font-semibold"
@@ -301,14 +518,14 @@ export function EmergencySOS({ isVisible, onClose }: EmergencySOSProps) {
                     </div>
                     <h3 className="text-xl font-bold text-black dark:text-white">Send Emergency Alert?</h3>
                     <p className="text-sm text-black/60 dark:text-white/60 mt-2">
-                      This will notify all supervisors with your location
+                      {getRecipientDescription()}
                     </p>
                   </div>
 
                   <Button
                     className="w-full h-14 rounded-full bg-destructive hover:bg-destructive/90 text-white font-bold text-lg"
                     onClick={handleSendSOS}
-                    disabled={isSending}
+                    disabled={isSending || !canSend}
                     data-testid="button-sos-confirm"
                     aria-label="Confirm and send emergency alert"
                   >
@@ -322,13 +539,13 @@ export function EmergencySOS({ isVisible, onClose }: EmergencySOSProps) {
                     )}
                   </Button>
 
-                  {/* Emergency Contacts */}
-                  {emergencyContacts.length > 0 && (
+                  {/* Emergency Contacts - only show for supervisor mode, limit display to 3 */}
+                  {recipientMode === 'supervisors' && emergencyContacts.length > 0 && (
                     <div className="space-y-2">
                       <p className="text-xs text-black/40 dark:text-white/40 text-center">
                         Or call directly:
                       </p>
-                      {emergencyContacts.map((contact, index) => (
+                      {emergencyContacts.slice(0, 3).map((contact, index) => (
                         <Button
                           key={index}
                           variant="outline"
@@ -347,6 +564,35 @@ export function EmergencySOS({ isVisible, onClose }: EmergencySOSProps) {
                           </div>
                         </Button>
                       ))}
+                      {emergencyContacts.length > 3 && (
+                        <p className="text-xs text-black/30 dark:text-white/30 text-center">
+                          +{emergencyContacts.length - 3} more supervisors will be notified
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Call selected person directly */}
+                  {recipientMode === 'specific' && selectedPerson && selectedPerson.phone && (
+                    <div className="space-y-2">
+                      <p className="text-xs text-black/40 dark:text-white/40 text-center">
+                        Or call directly:
+                      </p>
+                      <Button
+                        variant="outline"
+                        className="w-full h-12 rounded-full border-black/20 dark:border-white/20 justify-start gap-3"
+                        onClick={() => handleCallEmergency(selectedPerson.phone)}
+                        data-testid="button-call-selected"
+                        aria-label={`Call ${selectedPerson.name}`}
+                      >
+                        <Phone className="h-4 w-4" />
+                        <div className="flex-1 text-left">
+                          <div className="font-medium text-sm">{selectedPerson.name}</div>
+                          <div className="text-xs text-black/40 dark:text-white/40 capitalize">
+                            {selectedPerson.role.replace(/_/g, ' ')}
+                          </div>
+                        </div>
+                      </Button>
                     </div>
                   )}
 
