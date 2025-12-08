@@ -60,6 +60,8 @@ class WebRTCService {
   
   private callPresenceChannel: RealtimeChannel | null = null;
   private userPresenceChannel: RealtimeChannel | null = null;
+  private isNegotiating: boolean = false;
+  private makingOffer: boolean = false;
 
   async initialize(userId: string, userName: string, userAvatar?: string, handlers?: CallEventHandler) {
     this.currentUserId = userId;
@@ -518,6 +520,28 @@ class WebRTCService {
       }
     };
 
+    this.peerConnection.onsignalingstatechange = () => {
+      this.isNegotiating = this.peerConnection?.signalingState !== 'stable';
+    };
+
+    this.peerConnection.onnegotiationneeded = async () => {
+      if (!this.peerConnection || !this.targetUserId) return;
+      
+      try {
+        this.makingOffer = true;
+        await this.peerConnection.setLocalDescription();
+        await this.sendSignal({
+          type: 'offer',
+          to: this.targetUserId,
+          payload: this.peerConnection.localDescription,
+        });
+      } catch (error) {
+        console.error('[WebRTC] Renegotiation failed:', error);
+      } finally {
+        this.makingOffer = false;
+      }
+    };
+
     for (const candidate of this.pendingIceCandidates) {
       await this.peerConnection.addIceCandidate(candidate);
     }
@@ -545,7 +569,20 @@ class WebRTCService {
 
     this.targetUserId = callerId;
 
-    await this.peerConnection!.setRemoteDescription(new RTCSessionDescription(offer));
+    const offerCollision = this.makingOffer || this.peerConnection!.signalingState !== 'stable';
+    const isPolite = !this.isInitiator;
+    
+    if (offerCollision) {
+      if (!isPolite) {
+        return;
+      }
+      await Promise.all([
+        this.peerConnection!.setLocalDescription({ type: 'rollback' }),
+        this.peerConnection!.setRemoteDescription(new RTCSessionDescription(offer)),
+      ]);
+    } else {
+      await this.peerConnection!.setRemoteDescription(new RTCSessionDescription(offer));
+    }
 
     const answer = await this.peerConnection!.createAnswer();
     await this.peerConnection!.setLocalDescription(answer);
@@ -633,6 +670,9 @@ class WebRTCService {
     this.pendingIceCandidates = [];
     this.currentCallId = null;
     this.currentCallToken = null;
+    this.videoEnabled = false;
+    this.isNegotiating = false;
+    this.makingOffer = false;
   }
 
   destroy() {
