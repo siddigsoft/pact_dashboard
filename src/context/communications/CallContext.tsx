@@ -5,6 +5,59 @@ import { useToast } from '@/hooks/use-toast';
 import webRTCService, { CallEventHandler } from '@/services/WebRTCService';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 
+// Helper function to request microphone permission before starting a call
+async function requestMicrophonePermission(): Promise<{ granted: boolean; error?: string }> {
+  try {
+    // First check if mediaDevices is available
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      return { granted: false, error: 'Audio is not supported in this browser' };
+    }
+
+    // Try to get microphone access
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    
+    // Stop all tracks immediately - we just needed to verify permission
+    stream.getTracks().forEach(track => track.stop());
+    
+    return { granted: true };
+  } catch (error: any) {
+    console.error('[Call] Microphone permission error:', error);
+    
+    // Provide specific error messages based on error type
+    if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+      return { 
+        granted: false, 
+        error: 'Microphone access was denied. Please enable microphone permission in your device settings.' 
+      };
+    } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
+      return { 
+        granted: false, 
+        error: 'No microphone found. Please connect a microphone and try again.' 
+      };
+    } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
+      return { 
+        granted: false, 
+        error: 'Microphone is in use by another application. Please close other apps and try again.' 
+      };
+    } else if (error.name === 'OverconstrainedError') {
+      return { 
+        granted: false, 
+        error: 'Could not access microphone. Please try again.' 
+      };
+    } else if (error.name === 'SecurityError') {
+      return { 
+        granted: false, 
+        error: 'Microphone access is blocked due to security settings.' 
+      };
+    }
+    
+    return { 
+      granted: false, 
+      error: 'Could not access microphone. Please check your permissions.' 
+    };
+  }
+}
+
 export type CallStatus = 'idle' | 'outgoing' | 'incoming' | 'connecting' | 'connected' | 'ended';
 
 export interface CallParticipant {
@@ -189,6 +242,22 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
 
+    // First check microphone permission before attempting the call
+    toast({
+      title: 'Preparing Call',
+      description: 'Checking microphone access...',
+    });
+
+    const micPermission = await requestMicrophonePermission();
+    if (!micPermission.granted) {
+      toast({
+        title: 'Microphone Required',
+        description: micPermission.error || 'Please enable microphone access to make calls.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setCallState({
       status: 'outgoing',
       participant: { id: user.id, name: user.name || user.fullName || 'User', avatar: user.avatar },
@@ -201,7 +270,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!success) {
       toast({
         title: 'Call Failed',
-        description: 'Could not start the call. Please check your microphone permissions.',
+        description: 'Could not connect the call. The other user may be offline or unavailable.',
         variant: 'destructive',
       });
       resetCallState();
