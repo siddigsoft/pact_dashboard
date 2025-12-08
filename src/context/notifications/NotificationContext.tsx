@@ -295,6 +295,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           link: notification.link,
           related_entity_id: notification.relatedEntityId,
           related_entity_type: notification.relatedEntityType,
+          target_roles: notification.targetRoles,
+          project_id: notification.projectId,
         });
       } catch (err) {
         console.warn('Failed to persist notification:', err);
