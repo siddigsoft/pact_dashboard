@@ -56,10 +56,8 @@ const Calls = () => {
   const { currentUser } = useAppContext();
   const navigate = useNavigate();
   const { users } = useUser();
-  const { callState, initiateCall, endCall, acceptCall, rejectCall } = useCommunication();
+  const { callState, initiateCall, endCall, acceptCall, rejectCall, toggleVideo, isVideoEnabled, toggleMute, isMuted } = useCommunication();
   const [searchQuery, setSearchQuery] = useState('');
-  const [isMuted, setIsMuted] = useState(false);
-  const [isVideoEnabled, setIsVideoEnabled] = useState(false);
   const [isSpeakerOn, setIsSpeakerOn] = useState(true);
   const [callDuration, setCallDuration] = useState(0);
   const [favorites, setFavorites] = useState<string[]>([]);
@@ -364,14 +362,14 @@ const Calls = () => {
                         <>
                           <button 
                             className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${isMuted ? 'bg-red-500' : 'bg-white/20'}`}
-                            onClick={() => setIsMuted(!isMuted)}
+                            onClick={toggleMute}
                             data-testid="button-toggle-mute"
                           >
                             {isMuted ? <MicOff className="h-4 w-4 text-white" /> : <Mic className="h-4 w-4 text-white dark:text-black" />}
                           </button>
                           <button 
                             className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${isVideoEnabled ? 'bg-white text-black' : 'bg-white/20'}`}
-                            onClick={() => setIsVideoEnabled(!isVideoEnabled)}
+                            onClick={toggleVideo}
                             data-testid="button-toggle-video"
                           >
                             {isVideoEnabled ? <Video className="h-4 w-4" /> : <VideoOff className="h-4 w-4 text-white dark:text-black" />}
