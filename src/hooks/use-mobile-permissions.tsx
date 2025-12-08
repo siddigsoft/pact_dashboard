@@ -107,7 +107,7 @@ export function useMobilePermissions() {
       }
       if (type === 'microphone') {
         try {
-          // Try navigator.permissions first (non-intrusive check)
+          // For native apps, check using navigator.permissions API which works on Android WebView
           if ('permissions' in navigator) {
             try {
               const result = await navigator.permissions.query({ name: 'microphone' as PermissionName });
@@ -117,9 +117,10 @@ export function useMobilePermissions() {
               return 'prompt';
             } catch {
               // Some browsers don't support microphone permission query
+              console.log('[Permissions] navigator.permissions.query not supported for microphone');
             }
           }
-          // Fallback: check if mediaDevices is available (indicates capability)
+          // Fallback: check if mediaDevices is available and enumerate devices
           if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
             const devices = await navigator.mediaDevices.enumerateDevices();
             const hasAudio = devices.some(d => d.kind === 'audioinput');
@@ -278,28 +279,16 @@ export function useMobilePermissions() {
         try {
           console.log('[Permissions] Requesting microphone access...');
           
-          if (isNative) {
-            try {
-              const cameraModule = await import('@capacitor/camera');
-              const Camera = cameraModule.Camera;
-              const result = await Camera.requestPermissions({ permissions: ['camera'] });
-              console.log('[Permissions] Native microphone/camera result:', JSON.stringify(result));
-              
-              setPermissions(prev => ({ ...prev, microphone: 'granted' }));
-              return { type, status: 'granted' };
-            } catch (nativeError) {
-              console.log('[Permissions] Native microphone request failed, trying web API:', nativeError);
-            }
-          }
-          
+          // Use getUserMedia to trigger the native permission dialog on Android/iOS
+          // This is the proper way to request RECORD_AUDIO permission
           if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            console.log('[Permissions] MediaDevices API not available, skipping microphone');
-            setPermissions(prev => ({ ...prev, microphone: 'granted' }));
-            return { type, status: 'granted' };
+            console.log('[Permissions] MediaDevices API not available');
+            setPermissions(prev => ({ ...prev, microphone: 'denied' }));
+            return { type, status: 'denied', error: 'Microphone not supported on this device' };
           }
           
           const timeoutPromise = new Promise<never>((_, reject) => {
-            setTimeout(() => reject(new Error('Microphone permission timeout')), 5000);
+            setTimeout(() => reject(new Error('Microphone permission timeout')), 15000);
           });
           
           const micPromise = navigator.mediaDevices.getUserMedia({ audio: true });
@@ -314,17 +303,26 @@ export function useMobilePermissions() {
             return { type, status: 'granted' };
           } catch (raceError: any) {
             if (raceError?.message === 'Microphone permission timeout') {
-              console.log('[Permissions] Microphone request timed out, auto-proceeding');
-              setPermissions(prev => ({ ...prev, microphone: 'granted' }));
-              return { type, status: 'granted' };
+              console.log('[Permissions] Microphone request timed out');
+              setPermissions(prev => ({ ...prev, microphone: 'prompt' }));
+              return { type, status: 'prompt', error: 'Permission request timed out. Please try again.' };
             }
             throw raceError;
           }
         } catch (error: any) {
           console.error('[Permissions] Microphone request error:', error?.name, error?.message);
-          console.log('[Permissions] Microphone error, auto-proceeding to next step');
-          setPermissions(prev => ({ ...prev, microphone: 'granted' }));
-          return { type, status: 'granted' };
+          
+          // Properly handle the error and update status
+          if (error?.name === 'NotAllowedError' || error?.name === 'PermissionDeniedError') {
+            setPermissions(prev => ({ ...prev, microphone: 'denied' }));
+            return { type, status: 'denied', error: 'Microphone access was denied. Please enable it in your device settings.' };
+          } else if (error?.name === 'NotFoundError') {
+            setPermissions(prev => ({ ...prev, microphone: 'denied' }));
+            return { type, status: 'denied', error: 'No microphone found on this device.' };
+          }
+          
+          setPermissions(prev => ({ ...prev, microphone: 'prompt' }));
+          return { type, status: 'prompt', error: 'Could not access microphone. Please try again.' };
         }
       }
 
