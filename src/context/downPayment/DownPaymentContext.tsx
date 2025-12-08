@@ -137,14 +137,21 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
       console.log('[DownPayment] Fetched requests:', data?.length || 0);
       setRequests((data || []).map(transformFromDB));
     } catch (error: any) {
-      console.error('Failed to fetch down-payment requests:', error);
-      // Only show error toast for unexpected errors, not permission issues
-      if (!error.message?.includes('permission') && !error.message?.includes('RLS') && error.code !== '42501') {
+      // Only log and show error for unexpected errors, not permission issues
+      const isPermissionError = error.code === '42501' || 
+        error.message?.includes('permission') || 
+        error.message?.includes('RLS') ||
+        error.message?.includes('policy');
+      
+      if (!isPermissionError) {
+        console.error('Failed to fetch down-payment requests:', error);
         toast({
           title: 'Error',
           description: 'Failed to load down-payment requests',
           variant: 'destructive',
         });
+      } else {
+        console.log('[DownPayment] Permission denied (expected for some roles)');
       }
     } finally {
       setLoading(false);

@@ -39,7 +39,6 @@ import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 import { cn } from '@/lib/utils';
 import { hapticPresets } from '@/lib/haptics';
-import { MobileHeader } from './MobileHeader';
 import { MobileBottomSheet } from './MobileBottomSheet';
 import { LogoutConfirmDialog, MobileConfirmDialog } from './MobileConfirmDialog';
 import { MobileDeviceInfo, DeviceTrustBadge } from './MobileDeviceInfo';
@@ -215,28 +214,8 @@ export function MobileSettingsScreen({
   };
 
   return (
-    <div className={cn("flex flex-col h-screen bg-white dark:bg-black", className)} data-testid="mobile-settings">
-      <MobileHeader
-        title="Settings"
-        showBack
-        elevated
-        rightActions={
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => {
-              hapticPresets.buttonPress();
-              setShowHelpInfo(true);
-            }}
-            data-testid="button-help"
-            aria-label="Open help center"
-          >
-            <HelpCircle className="w-5 h-5" />
-          </Button>
-        }
-      />
-
-      <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4 pb-32 space-y-6">
+    <div className={cn("flex flex-col min-h-0 flex-1 h-full bg-white dark:bg-black", className)} data-testid="mobile-settings">
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 py-4 pb-32 space-y-6">
         <Card className="p-4">
           <button
             onClick={() => {

@@ -23,6 +23,9 @@ import {
   ClipboardCheck,
   Timer,
   FileSignature,
+  MessageSquare,
+  Phone,
+  Bell,
 } from 'lucide-react';
 import { AppRole } from '@/types';
 import { MenuPreferences, DEFAULT_MENU_PREFERENCES } from '@/types/user-preferences';
@@ -76,6 +79,19 @@ export const getWorkflowMenuGroups = (
     overviewItems.push({ id: 'signatures', title: 'Signatures', url: '/signatures', icon: FileSignature, priority: 4, isPinned: isPinned('/signatures') });
   }
   if (overviewItems.length) groups.push({ id: 'overview', label: 'Overview', order: 1, items: overviewItems });
+
+  // Communication section - available to all users
+  const communicationItems: MenuGroup['items'] = [];
+  if (!isHidden('/chat')) {
+    communicationItems.push({ id: 'chat', title: 'Chat', url: '/chat', icon: MessageSquare, priority: 1, isPinned: isPinned('/chat') });
+  }
+  if (!isHidden('/calls')) {
+    communicationItems.push({ id: 'calls', title: 'Calls', url: '/calls', icon: Phone, priority: 2, isPinned: isPinned('/calls') });
+  }
+  if (!isHidden('/notifications')) {
+    communicationItems.push({ id: 'notifications', title: 'Notifications', url: '/notifications', icon: Bell, priority: 3, isPinned: isPinned('/notifications') });
+  }
+  if (communicationItems.length) groups.push({ id: 'communication', label: 'Communication', order: 1.5, items: communicationItems });
 
   const planningItems: MenuGroup['items'] = [];
   if (!isHidden('/projects') && (isAdmin || isICT || isProjectManager || perms.projects)) {
