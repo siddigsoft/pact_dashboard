@@ -40,6 +40,10 @@ interface CommunicationContextProps {
   handleAcceptAssignment: () => Promise<void>;
   handleDeclineAssignment: () => void;
   isWebRTCInitialized: boolean;
+  toggleVideo: () => Promise<void>;
+  isVideoEnabled: boolean;
+  toggleMute: () => void;
+  isMuted: boolean;
 }
 
 const CommunicationContext = createContext<CommunicationContextProps | undefined>(undefined);
@@ -144,7 +148,11 @@ export const CommunicationProvider: React.FC<{ children: React.ReactNode }> = ({
         activeAssignment,
         handleAcceptAssignment,
         handleDeclineAssignment,
-        isWebRTCInitialized: callContext.isCallActive || true
+        isWebRTCInitialized: callContext.isCallActive || true,
+        toggleVideo: callContext.toggleVideo,
+        isVideoEnabled: callContext.isVideoEnabled,
+        toggleMute: callContext.toggleMute,
+        isMuted: callContext.callState.isMuted
       }}
     >
       {children}
