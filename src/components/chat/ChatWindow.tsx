@@ -258,18 +258,15 @@ const ChatWindow: React.FC = () => {
 
   if (!activeChat) {
     return (
-      <div className="h-full flex flex-col items-center justify-center p-6 text-center bg-gradient-to-b from-background via-background to-muted/20" data-testid="no-chat-selected">
-        <div className="relative">
-          <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-primary/5 rounded-full blur-3xl" />
-          <div className="relative bg-card dark:bg-gray-800/80 backdrop-blur-sm p-10 rounded-3xl border border-border/50 shadow-xl max-w-sm">
-            <div className="h-20 w-20 rounded-2xl bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center mx-auto mb-6 shadow-lg shadow-primary/20">
-              <MessageSquare className="h-10 w-10 text-primary-foreground" />
-            </div>
-            <h2 className="text-xl font-bold mb-3 tracking-tight">Select a conversation</h2>
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              Choose a chat from the sidebar or start a new conversation with your team
-            </p>
+      <div className="h-full flex flex-col items-center justify-center p-6 text-center bg-white dark:bg-black" data-testid="no-chat-selected">
+        <div className="max-w-sm">
+          <div className="h-20 w-20 rounded-full bg-black dark:bg-white flex items-center justify-center mx-auto mb-6">
+            <MessageSquare className="h-10 w-10 text-white dark:text-black" />
           </div>
+          <h2 className="text-xl font-bold mb-3 tracking-tight text-black dark:text-white">Select a conversation</h2>
+          <p className="text-sm text-gray-500 leading-relaxed">
+            Choose a chat from the sidebar or start a new conversation with your team
+          </p>
         </div>
       </div>
     );
@@ -381,7 +378,7 @@ const ChatWindow: React.FC = () => {
                   <div className={`flex items-end gap-2.5 max-w-[80%] ${isOwnMessage ? 'flex-row-reverse' : ''}`}>
                     {!isOwnMessage && (
                       <Avatar className={`h-8 w-8 shrink-0 ${showAvatar ? 'visible' : 'invisible'}`}>
-                        <AvatarFallback className="bg-gradient-to-br from-gray-400 to-gray-500 text-white text-xs font-medium">
+                        <AvatarFallback className="bg-black text-white text-xs font-bold">
                           {activeChat.name.charAt(0).toUpperCase()}
                         </AvatarFallback>
                       </Avatar>
@@ -390,9 +387,9 @@ const ChatWindow: React.FC = () => {
                     <div
                       className={`relative group ${
                         isOwnMessage
-                          ? 'bg-gradient-to-br from-primary to-primary/90 text-primary-foreground rounded-2xl rounded-br-sm shadow-md shadow-primary/10'
-                          : 'bg-card dark:bg-gray-800/90 text-foreground rounded-2xl rounded-bl-sm border border-border/50 shadow-sm'
-                      } px-4 py-2.5 transition-all hover:shadow-lg`}
+                          ? 'bg-black text-white rounded-2xl rounded-br-sm'
+                          : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white rounded-2xl rounded-bl-sm'
+                      } px-4 py-2.5 transition-all`}
                     >
                       {message.attachments && (
                         <div className="mb-2 space-y-2">
@@ -464,11 +461,11 @@ const ChatWindow: React.FC = () => {
             })
           ) : (
             <div className="flex flex-col items-center justify-center py-16">
-              <div className="h-14 w-14 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-                <MessageSquare className="h-7 w-7 text-primary" />
+              <div className="h-14 w-14 rounded-full bg-black dark:bg-white flex items-center justify-center mb-4">
+                <MessageSquare className="h-7 w-7 text-white dark:text-black" />
               </div>
-              <p className="font-medium">Start your conversation</p>
-              <p className="text-sm text-muted-foreground mt-1 text-center">
+              <p className="font-semibold text-black dark:text-white">Start your conversation</p>
+              <p className="text-sm text-gray-500 mt-1 text-center">
                 {activeChat.type === 'private'
                   ? `Send a message to ${activeChat.name}`
                   : `Say hello to ${activeChat.name}`}
@@ -480,39 +477,39 @@ const ChatWindow: React.FC = () => {
       </ScrollArea>
       
       {selectedFiles.length > 0 && (
-        <div className="px-3 py-2 bg-muted/50 dark:bg-gray-800 border-t">
+        <div className="px-3 py-2 bg-gray-50 dark:bg-gray-900 border-t border-gray-100 dark:border-gray-800">
           <div className="flex flex-wrap gap-2">
             {selectedFiles.map((file, index) => (
               <div
                 key={index}
-                className="flex items-center gap-2 bg-card dark:bg-gray-700 border rounded-lg p-2 text-sm"
+                className="flex items-center gap-2 bg-white dark:bg-gray-800 rounded-xl p-2 text-sm"
               >
                 {file.type.startsWith('image/') ? (
                   <div className="relative">
                     <img
                       src={URL.createObjectURL(file)}
                       alt={file.name}
-                      className="w-12 h-12 object-cover rounded"
+                      className="w-12 h-12 object-cover rounded-lg"
                     />
                     {uploadingFiles[`${file.name}_${file.size}_${index}`] && (
-                      <div className="absolute inset-0 bg-black/50 rounded flex items-center justify-center">
+                      <div className="absolute inset-0 bg-black/50 rounded-lg flex items-center justify-center">
                         <Loader2 className="h-4 w-4 text-white animate-spin" />
                       </div>
                     )}
                   </div>
                 ) : (
-                  <div className="w-12 h-12 bg-muted rounded flex items-center justify-center">
-                    <File className="h-5 w-5 text-muted-foreground" />
+                  <div className="w-12 h-12 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center">
+                    <File className="h-5 w-5 text-gray-500" />
                   </div>
                 )}
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium truncate text-xs">{file.name}</p>
-                  <p className="text-xs text-muted-foreground">{formatFileSize(file.size)}</p>
+                  <p className="font-medium truncate text-xs text-black dark:text-white">{file.name}</p>
+                  <p className="text-xs text-gray-500">{formatFileSize(file.size)}</p>
                 </div>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-6 w-6"
+                  className="h-6 w-6 hover:bg-gray-100 dark:hover:bg-gray-700"
                   onClick={() => removeSelectedFile(index)}
                   disabled={Object.values(uploadingFiles).some(v => v)}
                   data-testid={`button-remove-file-${index}`}
@@ -525,7 +522,7 @@ const ChatWindow: React.FC = () => {
         </div>
       )}
 
-      <div className="p-3 bg-card/95 dark:bg-gray-900/95 backdrop-blur-md border-t shadow-sm">
+      <div className="p-3 bg-white dark:bg-black border-t border-gray-100 dark:border-gray-900">
         <div className="flex items-end gap-2">
           <input
             ref={fileInputRef}
@@ -539,19 +536,19 @@ const ChatWindow: React.FC = () => {
           <Button
             variant="ghost"
             size="icon"
-            className="h-10 w-10 shrink-0 rounded-full hover:bg-primary/10 transition-colors"
+            className="h-10 w-10 shrink-0 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
             onClick={() => fileInputRef.current?.click()}
             disabled={isSendingMessage || Object.values(uploadingFiles).some(v => v)}
             data-testid="button-attach"
           >
-            <Paperclip className="h-5 w-5 text-muted-foreground" />
+            <Paperclip className="h-5 w-5 text-gray-500" />
           </Button>
           
           <div className="flex-1 relative">
             <Textarea
               ref={textareaRef}
               placeholder="Type a message..."
-              className="resize-none min-h-[44px] max-h-[120px] py-3 pl-4 pr-12 text-sm bg-muted/60 dark:bg-gray-800/80 border border-border/30 rounded-2xl focus:ring-2 focus:ring-primary/20 focus:border-primary/30 transition-all"
+              className="resize-none min-h-[44px] max-h-[120px] py-3 pl-4 pr-12 text-sm bg-gray-100 dark:bg-gray-900 border-0 rounded-2xl focus:ring-2 focus:ring-black/10 dark:focus:ring-white/10 transition-all text-black dark:text-white placeholder:text-gray-500"
               value={messageText}
               onChange={handleTextareaChange}
               onKeyDown={handleKeyDown}
@@ -561,19 +558,19 @@ const ChatWindow: React.FC = () => {
             <Button
               variant="ghost"
               size="icon"
-              className="absolute right-2 bottom-1.5 h-8 w-8 rounded-full hover:bg-primary/10"
+              className="absolute right-2 bottom-1.5 h-8 w-8 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700"
               data-testid="button-emoji"
             >
-              <Smile className="h-5 w-5 text-muted-foreground" />
+              <Smile className="h-5 w-5 text-gray-500" />
             </Button>
           </div>
           
           <Button 
             size="icon" 
-            className={`h-10 w-10 shrink-0 rounded-full shadow-md transition-all ${
+            className={`h-10 w-10 shrink-0 rounded-full transition-all ${
               messageText.trim() || selectedFiles.length > 0
-                ? 'bg-gradient-to-br from-primary to-primary/90 hover:shadow-lg hover:scale-105'
-                : ''
+                ? 'bg-black dark:bg-white text-white dark:text-black hover:opacity-90'
+                : 'bg-gray-200 dark:bg-gray-800 text-gray-400'
             }`}
             onClick={handleSendMessage}
             disabled={(!messageText.trim() && selectedFiles.length === 0) || isSendingMessage || Object.values(uploadingFiles).some(v => v)}
