@@ -86,7 +86,9 @@ export const NotificationTriggerService = {
       priority = 'medium',
       link,
       relatedEntityId,
-      relatedEntityType
+      relatedEntityType,
+      targetRoles,
+      projectId
     } = options;
 
     const shouldSend = await shouldSendNotification(userId, category, priority);
@@ -106,13 +108,15 @@ export const NotificationTriggerService = {
         link,
         related_entity_id: relatedEntityId,
         related_entity_type: relatedEntityType,
+        target_roles: targetRoles,
+        project_id: projectId,
         is_read: false
       });
 
       if (error) {
-        // If category/priority columns don't exist, try without them
+        // If category/priority/target_roles/project_id columns don't exist, try without them
         if (error.message?.includes('column') || error.code === '42703') {
-          console.warn('Notifications table missing category/priority columns, inserting without them');
+          console.warn('Notifications table missing some columns, inserting without them');
           const { error: fallbackError } = await supabase.from('notifications').insert({
             user_id: userId,
             title,
