@@ -206,11 +206,15 @@ const Calls = () => {
   return (
     <div
       className="min-h-screen w-full max-w-full flex flex-col bg-white dark:bg-black overflow-hidden"
+      style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       data-testid="calls-page"
     >
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Compact Header */}
-        <div className="shrink-0 bg-black px-4 pt-4 pb-3">
+        {/* Compact Header with safe area for notch */}
+        <div 
+          className="shrink-0 bg-black px-4 pb-3"
+          style={{ paddingTop: 'calc(env(safe-area-inset-top) + 12px)' }}
+        >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <button 

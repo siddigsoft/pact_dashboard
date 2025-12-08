@@ -214,11 +214,18 @@ const Chat: React.FC = () => {
   // MOBILE VIEW - Compact Uber Style
   if (isMobile) {
     return (
-      <div className="h-full flex flex-col bg-white dark:bg-black" data-testid="chat-page">
+      <div 
+        className="h-full flex flex-col bg-white dark:bg-black" 
+        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+        data-testid="chat-page"
+      >
         {activeView === 'list' ? (
           <div className="flex flex-col h-full">
-            {/* Compact Header */}
-            <header className="shrink-0 bg-black px-3 pt-6 pb-3">
+            {/* Compact Header with safe area for notch */}
+            <header 
+              className="shrink-0 bg-black px-3 pb-3"
+              style={{ paddingTop: 'calc(env(safe-area-inset-top) + 12px)' }}
+            >
               <div className="flex items-center justify-between mb-2">
                 <button 
                   onClick={() => navigate('/dashboard')} 
@@ -457,8 +464,11 @@ const Chat: React.FC = () => {
           </div>
         ) : (
           <div className="flex flex-col h-full bg-white dark:bg-black">
-            {/* Chat Header */}
-            <header className="shrink-0 bg-black px-3 py-2.5 safe-area-top">
+            {/* Chat Header with safe area for notch */}
+            <header 
+              className="shrink-0 bg-black px-3 pb-2.5"
+              style={{ paddingTop: 'calc(env(safe-area-inset-top) + 10px)' }}
+            >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <button 

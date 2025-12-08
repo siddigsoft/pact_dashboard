@@ -177,9 +177,16 @@ const Notifications: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen w-full max-w-full flex flex-col bg-white dark:bg-black overflow-hidden" data-testid="notifications-page">
-      {/* Compact Header */}
-      <div className="shrink-0 bg-black px-4 pt-4 pb-3">
+    <div 
+      className="min-h-screen w-full max-w-full flex flex-col bg-white dark:bg-black overflow-hidden" 
+      style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+      data-testid="notifications-page"
+    >
+      {/* Compact Header with safe area for notch */}
+      <div 
+        className="shrink-0 bg-black px-4 pb-3"
+        style={{ paddingTop: 'calc(env(safe-area-inset-top) + 12px)' }}
+      >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button 
