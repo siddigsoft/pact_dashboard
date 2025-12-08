@@ -85,6 +85,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isMuted: false,
       startTime: null,
     });
+    setIsVideoEnabled(false);
     incomingCallerId.current = null;
     if (audioRef.current) {
       audioRef.current.srcObject = null;
