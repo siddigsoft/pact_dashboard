@@ -154,14 +154,21 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
         recentActivity: [],
       });
     } catch (error: any) {
-      console.error('Failed to fetch super-admins:', error);
-      // Only show error toast for unexpected errors, not permission issues
-      if (!error.message?.includes('permission') && !error.message?.includes('RLS')) {
+      // Only log and show error for unexpected errors, not permission issues
+      const isPermissionError = error.code === '42501' || 
+        error.message?.includes('permission') || 
+        error.message?.includes('RLS') ||
+        error.message?.includes('policy');
+      
+      if (!isPermissionError) {
+        console.error('Failed to fetch super-admins:', error);
         toast({
           title: 'Error',
           description: 'Failed to load super-admin data',
           variant: 'destructive',
         });
+      } else {
+        console.log('[SuperAdmin] Permission denied (expected for non-admin roles)');
       }
     } finally {
       setLoading(false);
