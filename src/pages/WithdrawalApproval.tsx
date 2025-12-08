@@ -479,7 +479,7 @@ export default function WithdrawalApproval() {
               <div className="p-2 rounded-lg bg-amber-500/10">
                 <Shield className="w-6 h-6 text-amber-600" />
               </div>
-              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Withdrawal Approval</h1>
+              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Admin Approval</h1>
             </div>
             {isSupervisor && hubName && (
               <Badge variant="outline" className="flex items-center gap-1.5 px-3 py-1">
