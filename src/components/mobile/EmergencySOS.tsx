@@ -118,18 +118,14 @@ export function EmergencySOS({ isVisible, onClose }: EmergencySOSProps) {
 
     try {
       // Create emergency alert in database
+      // Note: Using 'warning' type as per database constraint (info, success, warning, error)
       const { error } = await supabase.from('notifications').insert({
         user_id: currentUser?.id,
-        type: 'emergency_sos',
+        type: 'warning',
         title: 'EMERGENCY SOS ALERT',
         message: `Emergency alert from ${currentUser?.fullName || 'Field Worker'}. Location: ${currentLocation ? `${currentLocation.lat.toFixed(6)}, ${currentLocation.lng.toFixed(6)}` : 'Unknown'}`,
-        data: {
-          sender_id: currentUser?.id,
-          sender_name: currentUser?.fullName,
-          location: currentLocation,
-          timestamp: new Date().toISOString(),
-          type: 'sos',
-        },
+        related_entity_type: 'user',
+        related_entity_id: currentUser?.id,
         is_read: false,
       });
 
