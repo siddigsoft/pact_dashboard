@@ -9,7 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import ChatWindow from '@/components/chat/ChatWindow';
-import { getUserStatus } from '@/utils/userStatusUtils';
+import { useRealtimeTeamLocations } from '@/hooks/use-realtime-team-locations';
 import { formatDistanceToNow, parseISO } from 'date-fns';
 import { User } from '@/types/user';
 import { 
@@ -42,6 +42,8 @@ const Chat: React.FC = () => {
   const { chats, activeChat, setActiveChat, createChat, isLoading } = useChat();
   const { initiateCall } = useCommunication();
   const { users } = useUser();
+  
+  const { onlineUserIds } = useRealtimeTeamLocations({ enabled: true });
 
   useEffect(() => {
     if (!currentUser) {
@@ -151,8 +153,8 @@ const Chat: React.FC = () => {
   };
 
   const getUserStatusDisplay = (user: User) => {
-    const status = getUserStatus(user);
-    if (status.type === 'online') {
+    const isOnline = onlineUserIds.includes(user.id);
+    if (isOnline) {
       return { text: 'Online', color: 'text-green-500', dotColor: 'bg-green-500' };
     }
     const lastSeenTime = user.location?.lastUpdated || user.lastActive;
@@ -165,10 +167,10 @@ const Chat: React.FC = () => {
           dotColor: 'bg-gray-400'
         };
       } catch {
-        return { text: status.label, color: 'text-gray-500', dotColor: 'bg-gray-400' };
+        return { text: 'Offline', color: 'text-gray-500', dotColor: 'bg-gray-400' };
       }
     }
-    return { text: status.label, color: 'text-gray-500', dotColor: 'bg-gray-400' };
+    return { text: 'Offline', color: 'text-gray-500', dotColor: 'bg-gray-400' };
   };
 
   const getChatUserStatus = (chat: any) => {
@@ -180,11 +182,10 @@ const Chat: React.FC = () => {
     return getUserStatusDisplay(targetUser);
   };
 
-  // Get online users (excluding current user)
+  // Get online users using real-time presence (same as Calls page)
   const onlineUsers = users.filter(user => {
     if (user.id === currentUser?.id) return false;
-    const status = getUserStatus(user);
-    return status.type === 'online';
+    return onlineUserIds.includes(user.id);
   });
 
   const onlineCount = onlineUsers.length;
