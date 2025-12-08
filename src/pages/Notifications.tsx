@@ -177,7 +177,7 @@ const Notifications: React.FC = () => {
   };
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-white dark:bg-black" data-testid="notifications-page">
+    <div className="min-h-screen w-full max-w-full flex flex-col bg-white dark:bg-black overflow-hidden" data-testid="notifications-page">
       {/* Compact Header */}
       <div className="shrink-0 bg-black px-4 pt-4 pb-3">
         <div className="flex items-center justify-between">
@@ -284,7 +284,7 @@ const Notifications: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto p-3 space-y-2">
+      <div className="flex-1 overflow-auto overflow-x-hidden p-3 space-y-2">
         {/* Category Pills - Compact */}
         <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
           {NOTIFICATION_CATEGORIES.map((category) => (
@@ -325,9 +325,9 @@ const Notifications: React.FC = () => {
         </div>
 
         {/* Tabs - Compact */}
-        <div className="flex rounded-xl bg-gray-100 dark:bg-gray-900 p-0.5">
+        <div className="flex w-full max-w-full overflow-hidden rounded-xl bg-gray-100 dark:bg-gray-900 p-0.5">
           <button 
-            className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold transition-colors ${
+            className={`flex-1 min-w-0 py-1.5 px-2 rounded-lg text-xs font-semibold transition-colors ${
               activeTab === 'all' ? 'bg-black dark:bg-white text-white dark:text-black' : 'text-gray-600 dark:text-gray-400'
             }`}
             onClick={() => setActiveTab('all')}
@@ -336,7 +336,7 @@ const Notifications: React.FC = () => {
             All
           </button>
           <button 
-            className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1 ${
+            className={`flex-1 min-w-0 py-1.5 px-2 rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1 ${
               activeTab === 'unread' ? 'bg-black dark:bg-white text-white dark:text-black' : 'text-gray-600 dark:text-gray-400'
             }`}
             onClick={() => setActiveTab('unread')}
@@ -389,7 +389,7 @@ const Notifications: React.FC = () => {
             </p>
           </div>
         ) : (
-          <ScrollArea className="flex-1">
+          <ScrollArea className="flex-1 overflow-x-hidden">
             <div className="space-y-3 pb-4">
               {Object.entries(groupedNotifications).map(([dateGroup, items]) => {
                 if (items.length === 0) return null;
