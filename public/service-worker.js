@@ -1,8 +1,8 @@
-const CACHE_NAME = 'pact-v3';
+const CACHE_NAME = 'pact-v4';
 const OFFLINE_URL = '/offline.html';
-
-const STATIC_CACHE = 'pact-static-v1';
-const API_CACHE = 'pact-api-v1';
+const STATIC_CACHE = 'pact-static-v2';
+const API_CACHE = 'pact-api-v2';
+const DYNAMIC_CACHE = 'pact-dynamic-v1';
 
 const STATIC_ASSETS = [
   '/',
@@ -15,11 +15,34 @@ const STATIC_ASSETS = [
   '/notification.mp3'
 ];
 
-const API_CACHE_URLS = [
+const API_CACHE_PATTERNS = [
   '/rest/v1/mmp_site_entries',
   '/rest/v1/profiles',
   '/rest/v1/projects',
+  '/rest/v1/mmps',
+  '/rest/v1/budgets',
+  '/rest/v1/wallets',
+  '/rest/v1/hubs',
+  '/rest/v1/states',
+  '/rest/v1/localities',
+  '/rest/v1/master_sites',
+  '/rest/v1/roles',
+  '/rest/v1/notifications',
+  '/rest/v1/cost_submissions',
+  '/rest/v1/user_roles',
+  '/rest/v1/classifications',
 ];
+
+const SYNC_TAGS = {
+  PENDING_ACTIONS: 'sync-pending-actions',
+  SITE_VISITS: 'sync-site-visits',
+  LOCATIONS: 'sync-locations',
+  COST_SUBMISSIONS: 'sync-cost-submissions',
+  NOTIFICATIONS: 'sync-notifications',
+};
+
+const API_CACHE_MAX_AGE = 5 * 60 * 1000;
+const STALE_CACHE_MAX_AGE = 24 * 60 * 60 * 1000;
 
 const NOTIFICATION_SOUNDS = {
   default: '/notification.mp3',
@@ -35,6 +58,7 @@ const VIBRATION_PATTERNS = {
 };
 
 self.addEventListener('install', (event) => {
+  console.log('[SW] Installing service worker v4...');
   event.waitUntil(
     Promise.all([
       caches.open(CACHE_NAME).then((cache) => {
@@ -56,7 +80,8 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
-  const validCaches = [CACHE_NAME, STATIC_CACHE, API_CACHE];
+  console.log('[SW] Activating service worker v4...');
+  const validCaches = [CACHE_NAME, STATIC_CACHE, API_CACHE, DYNAMIC_CACHE];
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
@@ -211,12 +236,13 @@ self.addEventListener('notificationclose', (event) => {
   }
 });
 
-async function notifyClients(type, notificationId) {
+async function notifyClients(type, notificationId, additionalData = {}) {
   const allClients = await clients.matchAll({ includeUncontrolled: true });
   allClients.forEach((client) => {
     client.postMessage({
       type: type,
-      notificationId: notificationId
+      notificationId: notificationId,
+      ...additionalData
     });
   });
 }
@@ -256,9 +282,117 @@ self.addEventListener('message', (event) => {
       case 'GET_VERSION':
         event.ports[0].postMessage({ version: CACHE_NAME });
         break;
+      case 'TRIGGER_SYNC':
+        triggerBackgroundSync(event.data.tag || SYNC_TAGS.PENDING_ACTIONS);
+        break;
+      case 'CLEAR_API_CACHE':
+        clearApiCache(event.data.pattern);
+        break;
+      case 'INVALIDATE_CACHE':
+        invalidateCacheEntry(event.data.url);
+        break;
+      case 'GET_CACHE_STATS':
+        getCacheStats().then(stats => {
+          if (event.ports && event.ports[0]) {
+            event.ports[0].postMessage(stats);
+          }
+        });
+        break;
+      case 'PREFETCH_API':
+        prefetchApiEndpoints(event.data.urls);
+        break;
     }
   }
 });
+
+async function triggerBackgroundSync(tag) {
+  if ('sync' in self.registration) {
+    try {
+      await self.registration.sync.register(tag);
+      console.log(`[SW] Background sync registered: ${tag}`);
+    } catch (error) {
+      console.error('[SW] Background sync registration failed:', error);
+      notifyClients('SYNC_FALLBACK', null, { tag });
+    }
+  } else {
+    notifyClients('SYNC_FALLBACK', null, { tag });
+  }
+}
+
+async function clearApiCache(pattern) {
+  const cache = await caches.open(API_CACHE);
+  const keys = await cache.keys();
+  const deletions = keys
+    .filter(request => !pattern || request.url.includes(pattern))
+    .map(request => cache.delete(request));
+  await Promise.all(deletions);
+  console.log(`[SW] API cache cleared${pattern ? ` for pattern: ${pattern}` : ''}`);
+}
+
+async function invalidateCacheEntry(url) {
+  const cacheNames = [API_CACHE, DYNAMIC_CACHE];
+  for (const cacheName of cacheNames) {
+    const cache = await caches.open(cacheName);
+    await cache.delete(url);
+  }
+  console.log(`[SW] Cache invalidated for: ${url}`);
+}
+
+async function getCacheStats() {
+  const stats = {
+    staticCache: 0,
+    apiCache: 0,
+    dynamicCache: 0,
+    totalSize: 0
+  };
+
+  try {
+    const staticCache = await caches.open(STATIC_CACHE);
+    const staticKeys = await staticCache.keys();
+    stats.staticCache = staticKeys.length;
+
+    const apiCache = await caches.open(API_CACHE);
+    const apiKeys = await apiCache.keys();
+    stats.apiCache = apiKeys.length;
+
+    const dynamicCache = await caches.open(DYNAMIC_CACHE);
+    const dynamicKeys = await dynamicCache.keys();
+    stats.dynamicCache = dynamicKeys.length;
+  } catch (error) {
+    console.error('[SW] Error getting cache stats:', error);
+  }
+
+  return stats;
+}
+
+async function prefetchApiEndpoints(urls) {
+  if (!urls || !Array.isArray(urls)) return;
+  
+  const cache = await caches.open(API_CACHE);
+  const fetchPromises = urls.map(async (url) => {
+    try {
+      const response = await fetch(url);
+      if (response.ok) {
+        const cacheResponse = response.clone();
+        const headers = new Headers(cacheResponse.headers);
+        headers.set('sw-cache-timestamp', Date.now().toString());
+        
+        const body = await cacheResponse.blob();
+        const cachedResponse = new Response(body, {
+          status: cacheResponse.status,
+          statusText: cacheResponse.statusText,
+          headers
+        });
+        await cache.put(url, cachedResponse);
+        console.log(`[SW] Prefetched: ${url}`);
+      }
+    } catch (error) {
+      console.log(`[SW] Prefetch failed for: ${url}`, error);
+    }
+  });
+
+  await Promise.allSettled(fetchPromises);
+}
 
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
@@ -281,19 +415,124 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  const isApiRequest = API_CACHE_URLS.some(apiUrl => url.pathname.includes(apiUrl));
+  const isApiRequest = API_CACHE_PATTERNS.some(pattern => url.pathname.includes(pattern));
+  
   if (isApiRequest && event.request.method === 'GET') {
-    event.respondWith(staleWhileRevalidate(event.request, API_CACHE));
+    event.respondWith(networkFirstWithCache(event.request, API_CACHE));
+    return;
+  }
+
+  if (isApiRequest && (event.request.method === 'POST' || event.request.method === 'PATCH' || event.request.method === 'DELETE')) {
+    event.respondWith(handleMutationRequest(event.request));
     return;
   }
 
   const isStaticAsset = STATIC_ASSETS.some(asset => url.pathname === asset) ||
-    url.pathname.match(/\.(js|css|png|jpg|jpeg|svg|woff2?)$/);
+    url.pathname.match(/\.(js|css|png|jpg|jpeg|svg|woff2?|ico)$/);
   if (isStaticAsset) {
     event.respondWith(cacheFirst(event.request, STATIC_CACHE));
     return;
   }
+
+  if (url.origin === self.location.origin) {
+    event.respondWith(staleWhileRevalidate(event.request, DYNAMIC_CACHE));
+  }
 });
+
+async function networkFirstWithCache(request, cacheName) {
+  const cache = await caches.open(cacheName);
+
+  try {
+    const networkResponse = await fetch(request);
+    
+    if (networkResponse.ok) {
+      const responseToCache = networkResponse.clone();
+      const headers = new Headers(responseToCache.headers);
+      headers.set('sw-cache-timestamp', Date.now().toString());
+      
+      const body = await responseToCache.blob();
+      const cachedResponse = new Response(body, {
+        status: responseToCache.status,
+        statusText: responseToCache.statusText,
+        headers
+      });
+      
+      cache.put(request, cachedResponse);
+    }
+    
+    return networkResponse;
+  } catch (error) {
+    console.log('[SW] Network failed, checking cache:', request.url);
+    
+    const cachedResponse = await cache.match(request);
+    if (cachedResponse) {
+      const cacheTimestamp = cachedResponse.headers.get('sw-cache-timestamp');
+      const cacheAge = cacheTimestamp ? Date.now() - parseInt(cacheTimestamp) : 0;
+      
+      if (cacheAge < STALE_CACHE_MAX_AGE) {
+        console.log('[SW] Returning cached response, age:', Math.round(cacheAge / 1000), 's');
+        
+        notifyClients('SERVING_FROM_CACHE', null, {
+          url: request.url,
+          cacheAge: cacheAge
+        });
+        
+        return cachedResponse;
+      } else {
+        console.log('[SW] Cached response too old, removing');
+        await cache.delete(request);
+      }
+    }
+    
+    return new Response(JSON.stringify({ 
+      error: 'Offline', 
+      cached: false,
+      message: 'No network connection and no cached data available'
+    }), {
+      status: 503,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+}
+
+async function handleMutationRequest(request) {
+  try {
+    const response = await fetch(request);
+    
+    if (response.ok) {
+      const url = new URL(request.url);
+      await clearApiCache(url.pathname.split('?')[0]);
+      
+      notifyClients('MUTATION_SUCCESS', null, {
+        url: request.url,
+        method: request.method
+      });
+    }
+    
+    return response;
+  } catch (error) {
+    console.log('[SW] Mutation request failed, queuing for sync:', request.url);
+    
+    triggerBackgroundSync(SYNC_TAGS.PENDING_ACTIONS);
+    
+    notifyClients('MUTATION_FAILED', null, {
+      url: request.url,
+      method: request.method,
+      error: error.message,
+      syncRegistered: true
+    });
+    
+    return new Response(JSON.stringify({
+      error: 'Offline',
+      queued: true,
+      syncRegistered: true,
+      message: 'Request will be retried when online'
+    }), {
+      status: 503,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+}
 
 async function staleWhileRevalidate(request, cacheName) {
   const cache = await caches.open(cacheName);
@@ -346,12 +585,101 @@ async function cacheFirst(request, cacheName) {
 }
 
 self.addEventListener('sync', (event) => {
-  if (event.tag === 'sync-notifications') {
-    event.waitUntil(syncNotifications());
+  console.log('[SW] Sync event triggered:', event.tag);
+  
+  switch (event.tag) {
+    case SYNC_TAGS.PENDING_ACTIONS:
+      event.waitUntil(syncPendingActions());
+      break;
+    case SYNC_TAGS.SITE_VISITS:
+      event.waitUntil(syncSiteVisits());
+      break;
+    case SYNC_TAGS.LOCATIONS:
+      event.waitUntil(syncLocations());
+      break;
+    case SYNC_TAGS.COST_SUBMISSIONS:
+      event.waitUntil(syncCostSubmissions());
+      break;
+    case SYNC_TAGS.NOTIFICATIONS:
+      event.waitUntil(syncNotifications());
+      break;
+    default:
+      console.log('[SW] Unknown sync tag:', event.tag);
   }
 });
 
+async function syncPendingActions() {
+  console.log('[SW] Starting background sync for pending actions');
+  try {
+    const allClients = await clients.matchAll({ includeUncontrolled: true });
+    
+    if (allClients.length > 0) {
+      allClients.forEach((client) => {
+        client.postMessage({
+          type: 'TRIGGER_SYNC_MANAGER',
+          syncType: 'all'
+        });
+      });
+      console.log('[SW] Notified clients to trigger sync manager');
+    } else {
+      console.log('[SW] No clients available for sync');
+    }
+  } catch (error) {
+    console.error('[SW] Failed to sync pending actions:', error);
+    throw error;
+  }
+}
+
+async function syncSiteVisits() {
+  console.log('[SW] Starting background sync for site visits');
+  try {
+    const allClients = await clients.matchAll({ includeUncontrolled: true });
+    allClients.forEach((client) => {
+      client.postMessage({
+        type: 'TRIGGER_SYNC_MANAGER',
+        syncType: 'site_visits'
+      });
+    });
+  } catch (error) {
+    console.error('[SW] Failed to sync site visits:', error);
+    throw error;
+  }
+}
+
+async function syncLocations() {
+  console.log('[SW] Starting background sync for locations');
+  try {
+    const allClients = await clients.matchAll({ includeUncontrolled: true });
+    allClients.forEach((client) => {
+      client.postMessage({
+        type: 'TRIGGER_SYNC_MANAGER',
+        syncType: 'locations'
+      });
+    });
+  } catch (error) {
+    console.error('[SW] Failed to sync locations:', error);
+    throw error;
+  }
+}
+
+async function syncCostSubmissions() {
+  console.log('[SW] Starting background sync for cost submissions');
+  try {
+    const allClients = await clients.matchAll({ includeUncontrolled: true });
+    allClients.forEach((client) => {
+      client.postMessage({
+        type: 'TRIGGER_SYNC_MANAGER',
+        syncType: 'cost_submissions'
+      });
+    });
+  } catch (error) {
+    console.error('[SW] Failed to sync cost submissions:', error);
+    throw error;
+  }
+}
+
 async function syncNotifications() {
+  console.log('[SW] Starting background sync for notifications');
   try {
     const allClients = await clients.matchAll({ includeUncontrolled: true });
     allClients.forEach((client) => {
@@ -360,6 +688,56 @@ async function syncNotifications() {
       });
     });
   } catch (error) {
-    console.error('Failed to sync notifications:', error);
+    console.error('[SW] Failed to sync notifications:', error);
+    throw error;
   }
 }
+
+self.addEventListener('periodicsync', (event) => {
+  if (event.tag === 'periodic-sync-data') {
+    console.log('[SW] Periodic sync triggered');
+    event.waitUntil(performPeriodicSync());
+  }
+});
+
+async function performPeriodicSync() {
+  try {
+    const allClients = await clients.matchAll({ includeUncontrolled: true });
+    allClients.forEach((client) => {
+      client.postMessage({
+        type: 'PERIODIC_SYNC',
+        timestamp: Date.now()
+      });
+    });
+  } catch (error) {
+    console.error('[SW] Periodic sync failed:', error);
+  }
+}
+
+setInterval(async () => {
+  const now = Date.now();
+  const cacheNames = [API_CACHE, DYNAMIC_CACHE];
+  
+  for (const cacheName of cacheNames) {
+    try {
+      const cache = await caches.open(cacheName);
+      const keys = await cache.keys();
+      
+      for (const request of keys) {
+        const response = await cache.match(request);
+        if (response) {
+          const timestamp = response.headers.get('sw-cache-timestamp');
+          if (timestamp) {
+            const age = now - parseInt(timestamp);
+            if (age > STALE_CACHE_MAX_AGE) {
+              await cache.delete(request);
+              console.log('[SW] Cleaned stale cache entry:', request.url);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[SW] Cache cleanup error:', error);
+    }
+  }
+}, 60 * 60 * 1000);
