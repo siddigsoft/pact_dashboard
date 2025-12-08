@@ -25,6 +25,7 @@ import { getWorkflowMenuGroups } from '@/navigation/menu';
 import { syncManager } from '@/lib/sync-manager';
 import { getOfflineStats } from '@/lib/offline-db';
 import { hapticPresets } from '@/lib/haptics';
+import { PresenceIndicator } from '@/components/shared/PresenceIndicator';
 
 interface MobileAppHeaderProps {
   toggleSidebar?: () => void;
@@ -161,6 +162,7 @@ const MobileAppHeader = ({
         <h1 className="text-base font-semibold text-white truncate max-w-[150px]">
           {title}
         </h1>
+        <PresenceIndicator variant="compact" />
       </div>
       
       <div className="flex items-center gap-1">
