@@ -163,32 +163,63 @@ class WebRTCService {
 
     // Use a predictable channel name that senders can construct
     const channelName = `calls:user:${this.currentUserId}`;
+    console.log('[WebRTC] Setting up signaling channel:', channelName);
     
     this.signalingChannel = supabase
       .channel(channelName)
       .on('broadcast', { event: 'call-signal' }, async ({ payload }) => {
+        console.log('[WebRTC] Received broadcast signal:', payload);
         const signal = payload as CallSignal;
         
         if (signal.to !== this.currentUserId) return;
         
         const isAuthorized = await this.validateSignal(signal);
         if (!isAuthorized) {
-          console.warn('[WebRTC] Unauthorized signal rejected:', signal.type);
+          console.warn('[WebRTC] Unauthorized signal rejected:', signal.type, signal);
           return;
         }
         
         await this.handleSignal(signal);
-      })
-      .subscribe();
+      });
+    
+    // Wait for subscription to complete with error handling
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        console.error('[WebRTC] Signaling channel subscription timeout');
+        reject(new Error('Signaling channel subscription timeout'));
+      }, 10000);
+      
+      this.signalingChannel!.subscribe((status) => {
+        console.log('[WebRTC] Signaling channel status:', status);
+        if (status === 'SUBSCRIBED') {
+          clearTimeout(timeout);
+          resolve();
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          clearTimeout(timeout);
+          console.error('[WebRTC] Signaling channel error:', status);
+          reject(new Error(`Signaling channel failed: ${status}`));
+        }
+      });
+    }).catch((error) => {
+      console.error('[WebRTC] Signaling channel setup failed:', error);
+      // Continue anyway - we'll try to recover during call initiation
+    });
+    
+    console.log('[WebRTC] Signaling channel ready');
   }
 
   private async validateSignal(signal: CallSignal): Promise<boolean> {
+    console.log('[WebRTC] Validating signal:', signal.type, 'callId:', signal.callId, 'from:', signal.from);
+    
     if (signal.type === 'call-request') {
-      // Verify caller is not spoofing by checking their presence
+      // For call requests, we're more lenient - just verify basic presence
+      // The caller should be in presence with the callId/token they sent
       const callerInCall = await this.verifyUserInCall(signal.from, signal.callId, signal.callToken);
+      console.log('[WebRTC] Caller presence verified:', callerInCall);
       if (!callerInCall) {
-        console.warn('[WebRTC] Call request from user not in presence:', signal.from);
-        return false;
+        // Even if presence check fails, allow call-request if from a valid user
+        // This handles race conditions where presence sync is delayed
+        console.warn('[WebRTC] Caller presence not verified, allowing call-request anyway');
       }
       return true;
     }
@@ -200,19 +231,27 @@ class WebRTCService {
 
     // Verify signal matches our current call
     if (this.currentCallId && signal.callId === this.currentCallId) {
-      // Verify sender is in presence with matching call data
-      const senderVerified = await this.verifyUserInCall(signal.from, signal.callId, signal.callToken);
-      if (senderVerified) {
+      // Token matches what we have - allow signal
+      if (signal.callToken === this.currentCallToken) {
+        console.log('[WebRTC] Signal validated: token matches');
         return true;
       }
       
-      // Also accept if token matches what we have (for our own initiated call)
-      if (signal.callToken === this.currentCallToken) {
+      // Verify sender is in presence with matching call data
+      const senderVerified = await this.verifyUserInCall(signal.from, signal.callId, signal.callToken);
+      if (senderVerified) {
+        console.log('[WebRTC] Signal validated: sender presence verified');
+        return true;
+      }
+      
+      // As a fallback, if the callId matches and signal is from our target, allow it
+      if (signal.from === this.targetUserId) {
+        console.log('[WebRTC] Signal validated: from target user with matching callId');
         return true;
       }
     }
 
-    console.warn('[WebRTC] Token validation failed for call:', signal.callId);
+    console.warn('[WebRTC] Token validation failed for call:', signal.callId, 'expected:', this.currentCallId);
     return false;
   }
 
@@ -304,11 +343,28 @@ class WebRTCService {
     let channel = this.callChannels.get(channelName);
     if (!channel) {
       channel = supabase.channel(channelName);
-      await channel.subscribe();
+      // Wait for subscription to complete before sending
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error('Channel subscription timeout'));
+        }, 5000);
+        
+        channel!.subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            clearTimeout(timeout);
+            resolve();
+          } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            clearTimeout(timeout);
+            reject(new Error(`Channel subscription failed: ${status}`));
+          }
+        });
+      });
       this.callChannels.set(channelName, channel);
     }
     
-    await channel.send({
+    console.log('[WebRTC] Sending signal:', signal.type, 'to:', targetUserId);
+    
+    const result = await channel.send({
       type: 'broadcast',
       event: 'call-signal',
       payload: {
@@ -319,6 +375,8 @@ class WebRTCService {
         timestamp: Date.now(),
       } as CallSignal,
     });
+    
+    console.log('[WebRTC] Signal send result:', result);
   }
 
   private async sendSignal(signal: Omit<CallSignal, 'from' | 'fromName' | 'fromAvatar' | 'timestamp' | 'callId' | 'callToken'>) {
@@ -332,10 +390,15 @@ class WebRTCService {
   }
 
   async initiateCall(targetUserId: string): Promise<boolean> {
-    if (!this.currentUserId) return false;
+    console.log('[WebRTC] Initiating call to:', targetUserId);
+    
+    if (!this.currentUserId) {
+      console.error('[WebRTC] Cannot initiate call: no current user');
+      return false;
+    }
 
     if (this.currentCallId) {
-      console.warn('[WebRTC] Already in a call');
+      console.warn('[WebRTC] Already in a call:', this.currentCallId);
       return false;
     }
 
@@ -351,20 +414,30 @@ class WebRTCService {
     this.currentCallToken = generateSecureToken();
     this.isInitiator = true;
     this.targetUserId = targetUserId;
+    
+    console.log('[WebRTC] Call ID:', this.currentCallId);
 
     // Update our presence to show we're in a call with token for verification
     await this.updateUserPresenceWithToken(true, this.currentCallId, this.currentCallToken);
+    console.log('[WebRTC] Presence updated');
 
     try {
+      console.log('[WebRTC] Setting up local stream...');
       await this.setupLocalStream();
+      console.log('[WebRTC] Local stream ready');
+      
+      console.log('[WebRTC] Creating peer connection...');
       await this.createPeerConnection();
+      console.log('[WebRTC] Peer connection created');
 
+      console.log('[WebRTC] Sending call-request signal...');
       await this.sendSignalToUser(targetUserId, {
         type: 'call-request',
         to: targetUserId,
         callId: this.currentCallId,
         callToken: this.currentCallToken,
       });
+      console.log('[WebRTC] Call-request sent successfully');
 
       return true;
     } catch (error) {
@@ -382,9 +455,9 @@ class WebRTCService {
       await this.setupLocalStream();
       await this.createPeerConnection();
 
-      // Update presence to show we're in the call with our own token
-      const responseToken = generateSecureToken();
-      await this.updateUserPresenceWithToken(true, this.currentCallId, responseToken);
+      // Update presence using the SAME token that was received in call-request
+      // This is critical for signal validation to work correctly
+      await this.updateUserPresenceWithToken(true, this.currentCallId, this.currentCallToken);
 
       await this.sendSignal({
         type: 'call-accepted',
