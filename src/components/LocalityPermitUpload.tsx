@@ -207,24 +207,24 @@ export const LocalityPermitUpload: React.FC<LocalityPermitUploadProps> = ({
   };
 
   return (
-    <Card className="border-blue-200 bg-gradient-to-br from-blue-50/30 to-slate-50/50 shadow-sm">
+    <Card className="border-border shadow-sm">
       <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-blue-800">
-          <AlertTriangle className="h-5 w-5 text-orange-600" />
+        <CardTitle className="flex items-center gap-2 text-foreground">
+          <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
           Local Permit Required
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <Alert className="border-orange-200 bg-orange-50">
-          <AlertTriangle className="h-4 w-4 text-orange-600" />
-          <AlertDescription className="text-orange-800">
+        <Alert className="border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950">
+          <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+          <AlertDescription className="text-foreground">
             Upload the local permit for <strong>{locality}, {state}</strong> to verify all sites in this locality at once.
           </AlertDescription>
         </Alert>
 
         <div className="space-y-3">
-          <div className="text-sm text-gray-600">
-            <strong>Requirements:</strong>
+          <div className="text-sm text-muted-foreground">
+            <strong className="text-foreground">Requirements:</strong>
             <ul className="list-disc list-inside mt-1 space-y-1">
               <li>Valid local environmental permit for {locality}, {state}</li>
               <li>PDF or image format (JPG, PNG)</li>
@@ -234,14 +234,13 @@ export const LocalityPermitUpload: React.FC<LocalityPermitUploadProps> = ({
 
           {/* Preview Section */}
           {selectedFile && previewUrl && (
-            <div className="border border-gray-300 rounded-lg p-4 bg-white">
+            <div className="border border-border rounded-lg p-4 bg-card">
               <div className="flex items-center justify-between mb-3">
-                <h4 className="text-sm font-medium text-gray-700">Preview</h4>
+                <h4 className="text-sm font-medium text-foreground">Preview</h4>
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={togglePreview}
-                  className="text-blue-600 hover:text-blue-800 hover:bg-blue-100"
                 >
                   {showPreview ? (
                     <>
@@ -258,7 +257,7 @@ export const LocalityPermitUpload: React.FC<LocalityPermitUploadProps> = ({
               </div>
 
               {showPreview && (
-                <div className="border border-gray-200 rounded-lg overflow-hidden bg-gray-50">
+                <div className="border border-border rounded-lg overflow-hidden bg-muted">
                   {selectedFile.type === 'application/pdf' ? (
                     <iframe
                       src={previewUrl}
@@ -278,9 +277,9 @@ export const LocalityPermitUpload: React.FC<LocalityPermitUploadProps> = ({
           )}
 
           {!selectedFile ? (
-            <div className="border-2 border-dashed border-blue-300 rounded-lg p-6 text-center bg-gradient-to-br from-blue-50/50 to-white">
-              <Upload className="h-8 w-8 text-blue-500 mx-auto mb-2" />
-              <p className="text-sm text-blue-700 mb-3">
+            <div className="border-2 border-dashed border-border rounded-lg p-6 text-center bg-muted/30">
+              <Upload className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground mb-3">
                 Click to select your local permit file
               </p>
               <input
@@ -294,20 +293,19 @@ export const LocalityPermitUpload: React.FC<LocalityPermitUploadProps> = ({
               <Button
                 variant="outline"
                 onClick={() => fileInputRef.current?.click()}
-                className="border-blue-300 text-blue-700 hover:bg-blue-50 hover:border-blue-400"
               >
                 <FileText className="h-4 w-4 mr-2" />
                 Select File
               </Button>
             </div>
           ) : (
-            <div className="border border-emerald-300 bg-emerald-50/50 rounded-lg p-4">
+            <div className="border border-border bg-muted/50 rounded-lg p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                  <CheckCircle2 className="h-5 w-5 text-foreground" />
                   <div>
-                    <p className="font-medium text-emerald-800">{selectedFile.name}</p>
-                    <p className="text-sm text-emerald-600">
+                    <p className="font-medium text-foreground">{selectedFile.name}</p>
+                    <p className="text-sm text-muted-foreground">
                       {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
                     </p>
                   </div>
@@ -316,7 +314,6 @@ export const LocalityPermitUpload: React.FC<LocalityPermitUploadProps> = ({
                   variant="ghost"
                   size="sm"
                   onClick={clearFile}
-                  className="text-red-600 hover:text-red-800 hover:bg-red-50"
                 >
                   <X className="h-4 w-4" />
                 </Button>
@@ -327,7 +324,7 @@ export const LocalityPermitUpload: React.FC<LocalityPermitUploadProps> = ({
 
         {/* Permit Details Form */}
         <div className="space-y-4 mt-6">
-          <h4 className="text-sm font-medium text-gray-700">Permit Details</h4>
+          <h4 className="text-sm font-medium text-foreground">Permit Details</h4>
           
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -371,11 +368,11 @@ export const LocalityPermitUpload: React.FC<LocalityPermitUploadProps> = ({
           <Button
             onClick={handleUpload}
             disabled={!selectedFile || uploading || !issueDate || !expiryDate}
-            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
+            className="flex-1"
           >
             {uploading ? (
               <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
                 Uploading...
               </>
             ) : (

@@ -598,17 +598,14 @@ const MMP = () => {
             .is('accepted_by', null); // Only unclaimed sites
 
           // Add state/locality filters if we have the names
-          if (collectorStateName || collectorLocalityName) {
-            const conditions: string[] = [];
-            if (collectorStateName) {
-              conditions.push(`state.ilike.${collectorStateName}`);
-            }
-            if (collectorLocalityName) {
-              conditions.push(`locality.ilike.${collectorLocalityName}`);
-            }
-            if (conditions.length > 0) {
-              availableSitesQuery = availableSitesQuery.or(conditions.join(','));
-            }
+          // CRITICAL: If user has a locality set, filter by EXACT locality only (not by state OR locality)
+          // This ensures users only see sites in their assigned locality, not the entire state
+          if (collectorLocalityName) {
+            // User has locality set - filter by EXACT locality match only
+            availableSitesQuery = availableSitesQuery.ilike('locality', collectorLocalityName);
+          } else if (collectorStateName) {
+            // User only has state set (no locality) - filter by state
+            availableSitesQuery = availableSitesQuery.ilike('state', collectorStateName);
           }
 
           availableSitesQuery = availableSitesQuery
@@ -2007,17 +2004,14 @@ const MMP = () => {
           .is('accepted_by', null); // Only unclaimed sites
         
         // Add state/locality filters if we have the names
-        if (collectorStateName || collectorLocalityName) {
-          const conditions: string[] = [];
-          if (collectorStateName) {
-            conditions.push(`state.ilike.${collectorStateName}`);
-          }
-          if (collectorLocalityName) {
-            conditions.push(`locality.ilike.${collectorLocalityName}`);
-          }
-          if (conditions.length > 0) {
-            availableSitesQuery = availableSitesQuery.or(conditions.join(','));
-          }
+        // CRITICAL: If user has a locality set, filter by EXACT locality only (not by state OR locality)
+        // This ensures users only see sites in their assigned locality, not the entire state
+        if (collectorLocalityName) {
+          // User has locality set - filter by EXACT locality match only
+          availableSitesQuery = availableSitesQuery.ilike('locality', collectorLocalityName);
+        } else if (collectorStateName) {
+          // User only has state set (no locality) - filter by state
+          availableSitesQuery = availableSitesQuery.ilike('state', collectorStateName);
         } else {
           // If no state/locality is set, do NOT load all sites - this is a misconfiguration
           // Return empty result to prevent showing all sites to users without proper assignment
