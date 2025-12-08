@@ -88,12 +88,22 @@ class WebRTCService {
         // Presence sync handled
       })
       .on('presence', { event: 'leave' }, async ({ leftPresences }) => {
-        // If peer left during active call, end it
+        // If peer left during active call, verify they're really gone before ending
         if (this.currentCallId && this.targetUserId) {
           const peerLeft = leftPresences.some((p: any) => p.userId === this.targetUserId);
           if (peerLeft) {
-            this.eventHandlers?.onCallEnded();
-            this.cleanup();
+            console.log('[WebRTC] Peer potentially left, verifying...');
+            // Wait a moment and check if they're truly gone (might have just reconnected)
+            setTimeout(async () => {
+              const stillGone = !this.isUserPresent(this.targetUserId!);
+              if (stillGone && this.currentCallId) {
+                console.log('[WebRTC] Peer confirmed gone, ending call');
+                this.eventHandlers?.onCallEnded();
+                this.cleanup();
+              } else {
+                console.log('[WebRTC] Peer is still present, not ending call');
+              }
+            }, 2000);
           }
         }
       });
@@ -143,6 +153,21 @@ class WebRTCService {
       const presences = presenceState[key] as any[];
       for (const p of presences) {
         if (p.userId === userId && p.inCall) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  private isUserPresent(userId: string): boolean {
+    if (!this.userPresenceChannel) return false;
+    
+    const presenceState = this.userPresenceChannel.presenceState();
+    for (const key in presenceState) {
+      const presences = presenceState[key] as any[];
+      for (const p of presences) {
+        if (p.userId === userId) {
           return true;
         }
       }
@@ -364,8 +389,8 @@ class WebRTCService {
     
     console.log('[WebRTC] Sending signal:', signal.type, 'to:', targetUserId);
     
-    const result = await channel.send({
-      type: 'broadcast',
+    const signalPayload = {
+      type: 'broadcast' as const,
       event: 'call-signal',
       payload: {
         ...signal,
@@ -374,9 +399,26 @@ class WebRTCService {
         fromAvatar: this.currentUserAvatar,
         timestamp: Date.now(),
       } as CallSignal,
-    });
+    };
     
-    console.log('[WebRTC] Signal send result:', result);
+    // Try sending with retry - Supabase returns 'ok' string on success
+    let result = await channel.send(signalPayload);
+    console.log('[WebRTC] Signal send result:', result, 'type:', typeof result);
+    
+    // Supabase channel.send returns 'ok' string on success, or an error status
+    const isSuccess = result === 'ok';
+    
+    // If first send failed, retry once
+    if (!isSuccess) {
+      console.warn('[WebRTC] Signal send failed with:', result, '- retrying...');
+      await new Promise(resolve => setTimeout(resolve, 500));
+      result = await channel.send(signalPayload);
+      console.log('[WebRTC] Retry result:', result);
+      
+      if (result !== 'ok') {
+        console.error('[WebRTC] Signal send failed after retry:', signal.type, result);
+      }
+    }
   }
 
   private async sendSignal(signal: Omit<CallSignal, 'from' | 'fromName' | 'fromAvatar' | 'timestamp' | 'callId' | 'callToken'>) {
@@ -585,10 +627,24 @@ class WebRTCService {
 
     this.peerConnection.onconnectionstatechange = () => {
       const state = this.peerConnection?.connectionState;
+      console.log('[WebRTC] Connection state changed:', state);
       if (state) {
         this.eventHandlers?.onConnectionStateChange(state);
-        if (state === 'disconnected' || state === 'failed' || state === 'closed') {
+        // Only end call on 'failed' or 'closed' - 'disconnected' is often temporary
+        // Give 'disconnected' state 5 seconds to recover before ending
+        if (state === 'failed' || state === 'closed') {
+          console.log('[WebRTC] Connection failed/closed, ending call');
           this.eventHandlers?.onCallEnded();
+        } else if (state === 'disconnected') {
+          console.log('[WebRTC] Connection disconnected, waiting for recovery...');
+          // Wait a bit before ending - connection might recover
+          setTimeout(() => {
+            if (this.peerConnection?.connectionState === 'disconnected' || 
+                this.peerConnection?.connectionState === 'failed') {
+              console.log('[WebRTC] Connection did not recover, ending call');
+              this.eventHandlers?.onCallEnded();
+            }
+          }, 5000);
         }
       }
     };
