@@ -21,21 +21,21 @@ const GlobalCallOverlay: React.FC = () => {
   if (status === 'incoming') {
     return (
       <div 
-        className="fixed inset-0 z-[9999] bg-black/80 flex items-center justify-center"
+        className="fixed inset-0 z-[9999] bg-black/95 flex items-center justify-center"
         data-testid="overlay-incoming-call"
       >
-        <div className="bg-card rounded-lg p-8 max-w-sm w-full mx-4 text-center shadow-2xl">
+        <div className="bg-white dark:bg-gray-900 rounded-2xl p-8 max-w-sm w-full mx-4 text-center shadow-2xl border border-gray-200 dark:border-gray-700">
           <div className="mb-6">
-            <Avatar className="h-24 w-24 mx-auto mb-4 ring-4 ring-green-500/30">
+            <Avatar className="h-24 w-24 mx-auto mb-4 ring-4 ring-green-500">
               <AvatarImage src={participant?.avatar} alt={participant?.name} />
-              <AvatarFallback className="text-2xl bg-primary text-primary-foreground">
+              <AvatarFallback className="text-2xl bg-green-500 text-white font-bold">
                 {initials}
               </AvatarFallback>
             </Avatar>
-            <h2 className="text-xl font-semibold" data-testid="text-caller-name">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white" data-testid="text-caller-name">
               {participant?.name}
             </h2>
-            <p className="text-muted-foreground animate-pulse">Incoming call...</p>
+            <p className="text-gray-500 dark:text-gray-400 animate-pulse mt-1">Incoming call...</p>
           </div>
 
           <div className="flex justify-center gap-6">
