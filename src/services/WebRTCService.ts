@@ -99,10 +99,11 @@ class WebRTCService {
     await this.userPresenceChannel.subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
         await this.userPresenceChannel?.track({
-          odayUserId: this.currentUserId,
+          userId: this.currentUserId,
           online: true,
           inCall: false,
           callId: null,
+          callToken: null,
         });
       }
     });
@@ -158,7 +159,8 @@ class WebRTCService {
       await supabase.removeChannel(this.signalingChannel);
     }
 
-    const channelName = `calls:${this.currentUserId}:${generateSecureToken().substring(0, 8)}`;
+    // Use a predictable channel name that senders can construct
+    const channelName = `calls:user:${this.currentUserId}`;
     
     this.signalingChannel = supabase
       .channel(channelName)
@@ -294,7 +296,8 @@ class WebRTCService {
   ) {
     if (!this.currentUserId) return;
 
-    const channelName = `calls:${targetUserId}:signal:${signal.callId}`;
+    // Use the same predictable channel format as the receiver listens on
+    const channelName = `calls:user:${targetUserId}`;
     
     let channel = this.callChannels.get(channelName);
     if (!channel) {
