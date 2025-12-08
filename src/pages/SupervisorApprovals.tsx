@@ -293,6 +293,49 @@ export default function SupervisorApprovals() {
     );
   }
 
+  const WorkflowTimeline = ({ request }: { request: SupervisedRequest }) => {
+    const steps = [
+      { key: 'submitted', label: 'Submitted', done: true },
+      { key: 'supervisor', label: 'Supervisor', done: request.status !== 'pending' },
+      { key: 'finance', label: 'Finance', done: request.status === 'processing' || request.status === 'approved' },
+      { key: 'complete', label: 'Complete', done: request.status === 'approved' },
+    ];
+    
+    const rejectedStep = request.status === 'rejected' 
+      ? (request.adminProcessedBy ? 2 : 1)
+      : -1;
+    
+    return (
+      <div className="flex items-center gap-1 text-xs">
+        {steps.map((step, idx) => (
+          <div key={step.key} className="flex items-center">
+            <div className={`w-2 h-2 rounded-full ${
+              rejectedStep === idx 
+                ? 'bg-red-500' 
+                : step.done 
+                  ? 'bg-emerald-500' 
+                  : 'bg-muted-foreground/30'
+            }`} />
+            {idx < steps.length - 1 && (
+              <div className={`w-4 h-0.5 ${
+                step.done && steps[idx + 1]?.done 
+                  ? 'bg-emerald-500' 
+                  : 'bg-muted-foreground/30'
+              }`} />
+            )}
+          </div>
+        ))}
+        <span className="ml-1 text-muted-foreground">{
+          request.status === 'rejected' ? 'Rejected' :
+          request.status === 'approved' ? 'Completed' :
+          request.status === 'processing' ? 'Processing' :
+          request.status === 'supervisor_approved' ? 'With Finance' :
+          'Pending'
+        }</span>
+      </div>
+    );
+  };
+
   const RequestCard = ({ request }: { request: SupervisedRequest }) => {
     const urgency = getRequestUrgency(request.createdAt);
     const isSelected = selectedRequestIds.has(request.id);
@@ -340,6 +383,10 @@ export default function SupervisorApprovals() {
                     Hub
                   </Badge>
                 )}
+              </div>
+
+              <div className="mt-2">
+                <WorkflowTimeline request={request} />
               </div>
 
               {(request as any).description && (
