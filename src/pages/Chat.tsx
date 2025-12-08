@@ -180,6 +180,15 @@ const Chat: React.FC = () => {
     return getUserStatusDisplay(targetUser);
   };
 
+  // Get online users (excluding current user)
+  const onlineUsers = users.filter(user => {
+    if (user.id === currentUser?.id) return false;
+    const status = getUserStatus(user);
+    return status.type === 'online';
+  });
+
+  const onlineCount = onlineUsers.length;
+
   // MOBILE VIEW - Compact Uber Style
   if (isMobile) {
     return (
@@ -216,6 +225,42 @@ const Chat: React.FC = () => {
               <p className="text-white/60 text-xs">
                 {activeTab === 'conversations' ? `${filteredChats.length} conversations` : `${filteredUsers.length} contacts`}
               </p>
+              
+              {/* Online Now Section */}
+              {onlineCount > 0 && (
+                <div className="mt-3 flex items-center gap-2" data-testid="online-users-section">
+                  <div className="flex items-center gap-1">
+                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                    <span className="text-green-400 text-xs font-medium">{onlineCount} Online</span>
+                  </div>
+                  <div className="flex -space-x-2">
+                    {onlineUsers.slice(0, 5).map((user) => {
+                      const userName = user.fullName || user.name || user.username || 'U';
+                      return (
+                        <button
+                          key={user.id}
+                          onClick={() => handleStartChatWithUser(user.id)}
+                          className="relative"
+                          title={userName}
+                          data-testid={`online-avatar-${user.id}`}
+                        >
+                          <Avatar className="h-7 w-7 border-2 border-black">
+                            <AvatarImage src={user.avatar} alt={userName} />
+                            <AvatarFallback className="bg-green-500 text-white text-[10px] font-bold">
+                              {getInitials(userName)}
+                            </AvatarFallback>
+                          </Avatar>
+                        </button>
+                      );
+                    })}
+                    {onlineCount > 5 && (
+                      <div className="h-7 w-7 rounded-full bg-white/20 border-2 border-black flex items-center justify-center">
+                        <span className="text-white text-[10px] font-bold">+{onlineCount - 5}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </header>
             
             {/* Search */}
@@ -455,6 +500,42 @@ const Chat: React.FC = () => {
               <Plus className="h-4 w-4" />
             </button>
           </div>
+
+          {/* Online Now Section */}
+          {onlineCount > 0 && (
+            <div className="mb-3 flex items-center gap-3 p-2 rounded-lg bg-muted/50" data-testid="online-users-section-web">
+              <div className="flex items-center gap-1.5">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                <span className="text-green-600 dark:text-green-400 text-xs font-medium">{onlineCount} Online</span>
+              </div>
+              <div className="flex -space-x-2 flex-1">
+                {onlineUsers.slice(0, 6).map((user) => {
+                  const userName = user.fullName || user.name || user.username || 'U';
+                  return (
+                    <button
+                      key={user.id}
+                      onClick={() => handleStartChatWithUser(user.id)}
+                      className="relative hover:z-10 transition-transform hover:scale-110"
+                      title={userName}
+                      data-testid={`online-avatar-web-${user.id}`}
+                    >
+                      <Avatar className="h-7 w-7 border-2 border-card">
+                        <AvatarImage src={user.avatar} alt={userName} />
+                        <AvatarFallback className="bg-green-500 text-white text-[10px] font-bold">
+                          {getInitials(userName)}
+                        </AvatarFallback>
+                      </Avatar>
+                    </button>
+                  );
+                })}
+                {onlineCount > 6 && (
+                  <div className="h-7 w-7 rounded-full bg-muted border-2 border-card flex items-center justify-center">
+                    <span className="text-muted-foreground text-[10px] font-bold">+{onlineCount - 6}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
           
           {/* Search */}
           <div className="relative">
