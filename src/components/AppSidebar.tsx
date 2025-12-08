@@ -251,10 +251,10 @@
       adminItems.push({ id: 'wallets', title: "Wallets", url: "/admin/wallets", icon: CreditCard, priority: 7, isPinned: isPinned('/admin/wallets') });
     }
     if (!isHidden('/supervisor-approvals') && (isAdmin || isFinancialAdmin || isSupervisor || isFOM)) {
-      adminItems.push({ id: 'supervisor-approvals', title: "Supervisor Approvals", url: "/supervisor-approvals", icon: ClipboardCheck, priority: 7.5, isPinned: isPinned('/supervisor-approvals') });
+      adminItems.push({ id: 'supervisor-approvals', title: "Supervisor Approvals (Tier 1)", url: "/supervisor-approvals", icon: ClipboardCheck, priority: 7.5, isPinned: isPinned('/supervisor-approvals') });
     }
     if (!isHidden('/withdrawal-approval') && (isAdmin || isFinancialAdmin)) {
-      adminItems.push({ id: 'withdrawal-approval', title: "Withdrawal Approval", url: "/withdrawal-approval", icon: ClipboardCheck, priority: 8, isPinned: isPinned('/withdrawal-approval') });
+      adminItems.push({ id: 'withdrawal-approval', title: "Admin Approvals (Tier 2)", url: "/withdrawal-approval", icon: ClipboardCheck, priority: 8, isPinned: isPinned('/withdrawal-approval') });
     }
     if (!isHidden('/down-payment-approval') && (isAdmin || isFinancialAdmin || isSupervisor)) {
       adminItems.push({ id: 'down-payment-approval', title: "Down-Payment Approval", url: "/down-payment-approval", icon: DollarSign, priority: 8.5, isPinned: isPinned('/down-payment-approval') });
