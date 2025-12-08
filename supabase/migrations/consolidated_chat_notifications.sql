@@ -226,9 +226,11 @@ drop policy if exists "notifications_select_own" on public.notifications;
 create policy "notifications_select_own" on public.notifications 
   for select using (user_id = auth.uid());
 
-drop policy if exists "notifications_insert_authenticated" on public.notifications;
-create policy "notifications_insert_authenticated" on public.notifications 
-  for insert with check (auth.role() = 'authenticated');
+-- Users can only create notifications for themselves
+-- System/backend notifications should use service_role which bypasses RLS
+drop policy if exists "notifications_insert_own" on public.notifications;
+create policy "notifications_insert_own" on public.notifications 
+  for insert with check (user_id = auth.uid());
 
 drop policy if exists "notifications_update_own" on public.notifications;
 create policy "notifications_update_own" on public.notifications 
