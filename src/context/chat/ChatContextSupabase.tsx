@@ -391,10 +391,14 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
             return bTime - aTime; // Descending order (newest first)
           });
         });
+      } else {
+        throw new Error('Message was not saved - no response from database');
       }
     } catch (err: any) {
       console.error('Error sending message:', err);
-      setError(err.message || 'Failed to send message');
+      const errorMessage = err.message || 'Failed to send message';
+      setError(errorMessage);
+      throw err; // Re-throw so ChatWindow can show toast
     } finally {
       setIsSendingMessage(false);
     }
