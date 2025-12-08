@@ -3,6 +3,9 @@ import {
   getPendingSyncActions,
   updateSyncActionStatus,
   removeSyncAction,
+  requeueFailedAction,
+  getFailedSyncActions,
+  requeueAllFailedActions,
   getUnsyncedSiteVisits,
   markSiteVisitSynced,
   getUnsyncedLocations,
@@ -396,6 +399,17 @@ class SyncManager {
             continue;
           }
 
+          // Apply conflict resolution for completed visits
+          const shouldUpdate = this.resolveConflict(visit, existingEntry);
+          if (!shouldUpdate) {
+            console.log(`[SyncManager] Skipping completed visit ${visit.id} due to conflict resolution`);
+            await markSiteVisitSynced(visit.id);
+            synced++;
+            this.progress.completed++;
+            this.notifyProgress();
+            continue;
+          }
+
           const updateData: Record<string, any> = {
             status: 'Completed',
             visit_completed_at: visit.completedAt,
@@ -632,7 +646,16 @@ class SyncManager {
         this.progress.failed++;
         const errMsg = `Failed to sync ${action.type}: ${error instanceof Error ? error.message : 'Unknown error'}`;
         errors.push(errMsg);
+        
         await updateSyncActionStatus(action.id, 'failed', errMsg);
+        
+        if (action.retries < MAX_RETRIES - 1) {
+          await requeueFailedAction(action.id);
+          console.log(`[SyncManager] Requeued action ${action.id} for retry (attempt ${action.retries + 1})`);
+        } else {
+          console.warn(`[SyncManager] Action ${action.id} reached max retries, will be removed on next sync`);
+        }
+        
         console.error('[SyncManager]', errMsg);
       }
     }
@@ -696,6 +719,27 @@ class SyncManager {
   private async syncSiteVisitStart(action: PendingSyncAction): Promise<void> {
     const { siteEntryId, startedAt, location, userId } = action.payload;
 
+    const { data: serverData, error: fetchError } = await supabase
+      .from('mmp_site_entries')
+      .select('status, updated_at')
+      .eq('id', siteEntryId)
+      .single();
+
+    if (fetchError && fetchError.code !== 'PGRST116') {
+      throw fetchError;
+    }
+
+    if (this.isTerminalOrAdvancedStatus(serverData?.status, 'started')) {
+      console.log(`[SyncManager] Skipping start action - server already has status: ${serverData?.status}`);
+      return;
+    }
+
+    const shouldUpdate = this.resolveConflict({ startedAt }, serverData);
+    if (!shouldUpdate) {
+      console.log(`[SyncManager] Skipping start action due to conflict resolution`);
+      return;
+    }
+
     const { error } = await supabase
       .from('mmp_site_entries')
       .update({
@@ -718,11 +762,22 @@ class SyncManager {
 
     const { data: existing, error: fetchError } = await supabase
       .from('mmp_site_entries')
-      .select('additional_data, enumerator_fee, transport_fee')
+      .select('additional_data, enumerator_fee, transport_fee, status, updated_at')
       .eq('id', siteEntryId)
       .single();
 
     if (fetchError) throw fetchError;
+
+    if (this.isTerminalOrAdvancedStatus(existing?.status, 'completed')) {
+      console.log(`[SyncManager] Skipping complete action - server already has status: ${existing?.status}`);
+      return;
+    }
+
+    const shouldUpdate = this.resolveConflict({ completedAt }, existing);
+    if (!shouldUpdate) {
+      console.log(`[SyncManager] Skipping complete action due to conflict resolution`);
+      return;
+    }
 
     const { error } = await supabase
       .from('mmp_site_entries')

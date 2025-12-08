@@ -291,6 +291,36 @@ export async function removeSyncAction(id: string): Promise<void> {
   await db.delete('pendingSync', id);
 }
 
+export async function requeueFailedAction(id: string): Promise<void> {
+  const db = await getOfflineDB();
+  const action = await db.get('pendingSync', id);
+  if (action && action.status === 'failed') {
+    action.status = 'pending';
+    await db.put('pendingSync', action);
+  }
+}
+
+export async function getFailedSyncActions(): Promise<PendingSyncAction[]> {
+  const db = await getOfflineDB();
+  return db.getAllFromIndex('pendingSync', 'by-status', 'failed');
+}
+
+export async function requeueAllFailedActions(): Promise<number> {
+  const db = await getOfflineDB();
+  const failed = await db.getAllFromIndex('pendingSync', 'by-status', 'failed');
+  let requeued = 0;
+  
+  const tx = db.transaction('pendingSync', 'readwrite');
+  for (const action of failed) {
+    action.status = 'pending';
+    await tx.store.put(action);
+    requeued++;
+  }
+  await tx.done;
+  
+  return requeued;
+}
+
 export async function saveSiteVisitOffline(visit: Omit<OfflineSiteVisit, 'id' | 'synced'>): Promise<string> {
   const db = await getOfflineDB();
   const id = crypto.randomUUID();
