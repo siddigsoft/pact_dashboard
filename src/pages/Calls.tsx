@@ -200,7 +200,10 @@ const Calls = () => {
   );
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-white dark:bg-black" data-testid="calls-page">
+    <div
+      className="min-h-screen w-full max-w-full flex flex-col bg-white dark:bg-black overflow-hidden"
+      data-testid="calls-page"
+    >
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Compact Header */}
         <div className="shrink-0 bg-black px-4 pt-4 pb-3">
