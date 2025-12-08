@@ -1342,6 +1342,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!currentUser?.id) return;
 
+    const userRole = currentUser.role?.toLowerCase();
+    const isSupervisorRole = userRole === 'supervisor' || userRole === 'hubsupervisor' || userRole === 'fom';
+    const isAdmin = userRole === 'admin' || userRole === 'financialadmin';
+
     const walletChannel = supabase
       .channel('wallet_changes')
       .on(
@@ -1353,6 +1357,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           filter: `user_id=eq.${currentUser.id}`,
         },
         () => {
+          console.log('[Wallet Realtime] Wallet updated');
           refreshWallet();
         }
       )
@@ -1365,6 +1370,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           filter: `user_id=eq.${currentUser.id}`,
         },
         () => {
+          console.log('[Wallet Realtime] Transactions updated');
           refreshTransactions();
         }
       )
@@ -1377,15 +1383,43 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           filter: `user_id=eq.${currentUser.id}`,
         },
         () => {
+          console.log('[Wallet Realtime] Withdrawal requests updated');
           refreshWithdrawalRequests();
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('[Wallet Realtime] Channel status:', status);
+      });
+
+    // Supervisors/Admins: Subscribe to ALL withdrawal requests for real-time team updates
+    let supervisorChannel: ReturnType<typeof supabase.channel> | null = null;
+    if (isSupervisorRole || isAdmin) {
+      supervisorChannel = supabase
+        .channel('supervisor_withdrawal_changes')
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'withdrawal_requests',
+          },
+          () => {
+            console.log('[Wallet Realtime] Supervised withdrawal requests updated');
+            refreshSupervisedWithdrawalRequests();
+          }
+        )
+        .subscribe((status) => {
+          console.log('[Wallet Realtime] Supervisor channel status:', status);
+        });
+    }
 
     return () => {
       supabase.removeChannel(walletChannel);
+      if (supervisorChannel) {
+        supabase.removeChannel(supervisorChannel);
+      }
     };
-  }, [currentUser?.id]);
+  }, [currentUser?.id, currentUser?.role]);
 
   return (
     <WalletContext.Provider
