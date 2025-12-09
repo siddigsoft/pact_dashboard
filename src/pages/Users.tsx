@@ -943,7 +943,25 @@ const Users = () => {
                             </Button>
                           )}
                           {isAdminOrICT && (
-                            <div className="flex justify-end gap-2">
+                            <div className="flex flex-wrap justify-end gap-2 mt-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleOpenPasswordReset(user)}
+                                data-testid={`button-reset-password-all-${user.id}`}
+                              >
+                                <Mail className="h-4 w-4 mr-1" />
+                                Send Reset Email
+                              </Button>
+                              <Button
+                                variant="default"
+                                size="sm"
+                                onClick={() => handleOpenAdminPasswordChange(user)}
+                                data-testid={`button-change-password-all-${user.id}`}
+                              >
+                                <KeyRound className="h-4 w-4 mr-1" />
+                                Set Password
+                              </Button>
                               <Button
                                 variant="destructive"
                                 size="sm"
@@ -958,7 +976,6 @@ const Users = () => {
                               <Button
                                 variant="outline"
                                 size="sm"
-                                className="ml-2"
                                 onClick={() => handleDeactivate(user.id)}
                                 disabled={deletingUserId === user.id}
                               >

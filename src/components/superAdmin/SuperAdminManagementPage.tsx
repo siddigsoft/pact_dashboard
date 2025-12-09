@@ -21,7 +21,8 @@ import {
 } from '@/components/ui/select';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { useUser } from '@/context/user/UserContext';
-import { ShieldCheck, UserPlus, UserX, Shield, AlertTriangle, CheckCircle2, XCircle, Mail } from 'lucide-react';
+import { ShieldCheck, UserPlus, UserX, Shield, AlertTriangle, CheckCircle2, XCircle, Mail, KeyRound, Loader2 } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 
@@ -47,6 +48,10 @@ export function SuperAdminManagementPage() {
   const [processing, setProcessing] = useState(false);
   const [passwordResetDialog, setPasswordResetDialog] = useState<{ open: boolean; user: { id: string; name: string; email: string } | null }>({ open: false, user: null });
   const [isSendingReset, setIsSendingReset] = useState(false);
+  const [adminPasswordDialog, setAdminPasswordDialog] = useState<{ open: boolean; user: { id: string; name: string; email: string } | null }>({ open: false, user: null });
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   const handleCreate = async () => {
     if (!currentUser || !selectedUserId) return;
@@ -101,6 +106,67 @@ export function SuperAdminManagementPage() {
 
   const handleOpenPasswordReset = (user: { id: string; name: string; email: string }) => {
     setPasswordResetDialog({ open: true, user });
+  };
+
+  const handleOpenAdminPasswordChange = (user: { id: string; name: string; email: string }) => {
+    setAdminPasswordDialog({ open: true, user });
+    setNewPassword('');
+    setConfirmPassword('');
+  };
+
+  const handleAdminPasswordChange = async () => {
+    if (!adminPasswordDialog.user?.id) return;
+    
+    if (newPassword.length < 6) {
+      toast({
+        title: "Password too short",
+        description: "Password must be at least 6 characters long.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      toast({
+        title: "Passwords do not match",
+        description: "Please ensure both passwords are the same.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsChangingPassword(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('admin-change-password', {
+        body: {
+          userId: adminPasswordDialog.user.id,
+          newPassword: newPassword
+        }
+      });
+
+      if (error) throw error;
+
+      if (data?.success) {
+        toast({
+          title: "Password changed successfully",
+          description: `Password has been updated for ${adminPasswordDialog.user.name || adminPasswordDialog.user.email}`,
+        });
+        setAdminPasswordDialog({ open: false, user: null });
+        setNewPassword('');
+        setConfirmPassword('');
+      } else {
+        throw new Error(data?.error || 'Failed to change password');
+      }
+    } catch (error: any) {
+      console.error("Error changing password:", error);
+      toast({
+        title: "Failed to change password",
+        description: error.message || "There was an error changing the user's password.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsChangingPassword(false);
+    }
   };
 
   const handleSendPasswordReset = async () => {
@@ -283,15 +349,26 @@ export function SuperAdminManagementPage() {
                           </div>
                           <div className="flex gap-2 flex-wrap">
                             {user && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleOpenPasswordReset({ id: user.id, name: user.name, email: user.email })}
-                                data-testid={`button-reset-password-${superAdmin.id}`}
-                              >
-                                <Mail className="h-4 w-4 mr-1" />
-                                Reset Password
-                              </Button>
+                              <>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleOpenPasswordReset({ id: user.id, name: user.name, email: user.email })}
+                                  data-testid={`button-reset-password-${superAdmin.id}`}
+                                >
+                                  <Mail className="h-4 w-4 mr-1" />
+                                  Reset Password
+                                </Button>
+                                <Button
+                                  variant="default"
+                                  size="sm"
+                                  onClick={() => handleOpenAdminPasswordChange({ id: user.id, name: user.name, email: user.email })}
+                                  data-testid={`button-set-password-${superAdmin.id}`}
+                                >
+                                  <KeyRound className="h-4 w-4 mr-1" />
+                                  Set Password
+                                </Button>
+                              </>
                             )}
                             <Button
                               variant="destructive"
@@ -511,6 +588,99 @@ export function SuperAdminManagementPage() {
                 <>
                   <Mail className="h-4 w-4 mr-2" />
                   Send Reset Email
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog 
+        open={adminPasswordDialog.open} 
+        onOpenChange={(open) => {
+          if (!open) {
+            setAdminPasswordDialog({ open: false, user: null });
+            setNewPassword('');
+            setConfirmPassword('');
+          }
+        }}
+      >
+        <DialogContent data-testid="dialog-set-password">
+          <DialogHeader>
+            <DialogTitle>Set User Password</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 p-3 rounded-md">
+              <p className="text-sm text-blue-800 dark:text-blue-200">
+                Directly set a new password for this user. This works for both email/password and OAuth accounts.
+              </p>
+            </div>
+
+            {adminPasswordDialog.user && (
+              <div className="space-y-2">
+                <div>
+                  <Label className="text-xs text-muted-foreground">User</Label>
+                  <p className="font-medium">{adminPasswordDialog.user.name}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Email</Label>
+                  <p>{adminPasswordDialog.user.email}</p>
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-3">
+              <div className="space-y-2">
+                <Label>New Password</Label>
+                <Input
+                  type="password"
+                  placeholder="Enter new password (min 6 characters)"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  data-testid="input-new-password"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Confirm Password</Label>
+                <Input
+                  type="password"
+                  placeholder="Confirm new password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  data-testid="input-confirm-password"
+                />
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setAdminPasswordDialog({ open: false, user: null });
+                setNewPassword('');
+                setConfirmPassword('');
+              }} 
+              data-testid="button-cancel-set-password"
+              disabled={isChangingPassword}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleAdminPasswordChange}
+              disabled={isChangingPassword || !newPassword || !confirmPassword}
+              data-testid="button-confirm-set-password"
+            >
+              {isChangingPassword ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Changing...
+                </>
+              ) : (
+                <>
+                  <KeyRound className="h-4 w-4 mr-2" />
+                  Set Password
                 </>
               )}
             </Button>
