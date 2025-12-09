@@ -110,4 +110,11 @@ export interface SiteVisit {
   acknowledged_by?: string;  // User ID who acknowledged
   autorelease_at?: string;   // 1 day before visit - when auto-release triggers
   autorelease_triggered?: boolean;  // Flag indicating if auto-release was triggered
+
+  // Fee compatibility fields for RequestDownPaymentButton and other components
+  transport_fee?: number;
+  transportFee?: number;
+  enumerator_fee?: number;
+  accepted_by?: string;
+  acceptedBy?: string;
 }
