@@ -28,7 +28,7 @@ jobs:
           source: "."
           target: "${{ secrets.APP_DIR }}"
           overwrite: true
-          rm: true
+          rm: false
           strip_components: 0
           exclude: |
             .git
@@ -67,8 +67,7 @@ jobs:
           port: ${{ secrets.SSH_PORT }}
           script: |
             cd ${{ secrets.APP_DIR }}
-            docker compose down
-            docker compose build --pull
-            docker compose up -d
-            docker system prune -f
+            docker compose -p pact_dashboard down
+            docker compose -p pact_dashboard build --pull
+            docker compose -p pact_dashboard up -d
 
