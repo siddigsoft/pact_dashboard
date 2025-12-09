@@ -11,6 +11,8 @@ import { CLASSIFICATION_LABELS, CLASSIFICATION_COLORS } from '@/types/classifica
 import { useOffline } from '@/hooks/use-offline';
 import { useClassification } from '@/context/classification/ClassificationContext';
 import { getStateName, getLocalityName } from '@/data/sudanStates';
+import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
+import { useAuditLog } from '@/hooks/use-audit-log';
 
 interface AcceptSiteButtonProps {
   site: {
@@ -56,6 +58,8 @@ export function AcceptSiteButton({
   const { calculateFeeForClaim, loading: calculatingFee } = useClaimFeeCalculation();
   const { isOnline, claimSiteOffline } = useOffline();
   const { getUserClassification } = useClassification();
+  const { isSuperAdmin } = useSuperAdmin();
+  const { logSiteVisitEvent } = useAuditLog();
 
   const isFieldWorker = currentUser?.role === 'dataCollector' || 
                         currentUser?.role === 'datacollector' || 
@@ -72,8 +76,8 @@ export function AcceptSiteButton({
   
   // PERMISSION CHECK 2: Site must be in user's assigned locality
   const localityCheck = useMemo(() => {
-    if (!currentUser || !isFieldWorker) {
-      // Non-field workers (admin, FOM, etc) can claim any site
+    if (!currentUser || !isFieldWorker || isSuperAdmin) {
+      // Non-field workers (admin, FOM, etc) and SuperAdmins can claim any site
       return { canClaim: true, reason: null };
     }
     
@@ -121,12 +125,12 @@ export function AcceptSiteButton({
     }
     
     return { canClaim: true, reason: null };
-  }, [currentUser, isFieldWorker, site.state, site.locality]);
+  }, [currentUser, isFieldWorker, isSuperAdmin, site.state, site.locality]);
 
   // Combined permission check for field workers
   const canClaimSite = useMemo(() => {
-    // Non-field workers can claim (they are typically assigning, not claiming)
-    if (!isFieldWorker) return { allowed: true, reason: null };
+    // Non-field workers and SuperAdmins can claim (they are typically assigning, not claiming)
+    if (!isFieldWorker || isSuperAdmin) return { allowed: true, reason: null };
     
     // Field workers need classification
     if (!hasClassification) {
@@ -142,7 +146,7 @@ export function AcceptSiteButton({
     }
     
     return { allowed: true, reason: null };
-  }, [isFieldWorker, hasClassification, localityCheck]);
+  }, [isFieldWorker, isSuperAdmin, hasClassification, localityCheck]);
 
   const siteName = site.site_name || site.siteName || 'Site';
   const siteStatus = site.status?.toLowerCase();
@@ -211,6 +215,12 @@ export function AcceptSiteButton({
 
         if (error) {
           console.error('Claim RPC error:', error);
+          await logSiteVisitEvent('claim', site.id, siteName, `Site claim failed: ${error.message}`, {
+            severity: 'error',
+            success: false,
+            errorMessage: error.message,
+            metadata: { userId, siteId: site.id },
+          });
           toast({
             title: 'Claim Failed',
             description: error.message || 'Could not claim this site. Please try again.',
@@ -232,6 +242,12 @@ export function AcceptSiteButton({
             description = 'This site is no longer available for claiming.';
           }
 
+          await logSiteVisitEvent('claim', site.id, siteName, `Site claim rejected: ${description}`, {
+            severity: 'warning',
+            success: false,
+            errorMessage: result.error,
+            metadata: { userId, siteId: site.id, errorCode: result.error },
+          });
           toast({
             title: 'Could Not Claim Site',
             description,
@@ -268,9 +284,50 @@ export function AcceptSiteButton({
           : `Your fee: ${feeBreakdown.enumeratorFee.toLocaleString()} SDG + Transport: ${feeBreakdown.transportBudget.toLocaleString()} SDG = ${feeBreakdown.totalPayout.toLocaleString()} SDG`,
         variant: 'default'
       });
+
+      // Log audit event for site claim/accept
+      await logSiteVisitEvent(
+        isDispatchedSite ? 'claim' : 'accept',
+        site.id,
+        siteName,
+        isDispatchedSite 
+          ? `Site "${siteName}" claimed by ${currentUser?.name || 'User'}`
+          : `Site "${siteName}" accepted by ${currentUser?.name || 'User'}`,
+        {
+          severity: 'info',
+          workflowStep: 'in_progress',
+          metadata: {
+            state: site.state,
+            locality: site.locality,
+            enumeratorFee: feeBreakdown.enumeratorFee,
+            transportFee: feeBreakdown.transportBudget,
+            totalPayout: feeBreakdown.totalPayout,
+            classificationLevel: feeBreakdown.classificationLevel,
+            feeSource: feeBreakdown.feeSource,
+            isOffline: !isOnline,
+            isSuperAdmin,
+          },
+          previousState: { status: siteStatus },
+          newState: { status: isDispatchedSite ? 'claimed' : 'accepted', acceptedBy: userId },
+        }
+      );
+
       onAccepted?.();
     } catch (err) {
       console.error('Accept error:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      await logSiteVisitEvent(
+        isDispatchedSite ? 'claim' : 'accept',
+        site.id,
+        siteName,
+        `Site ${isDispatchedSite ? 'claim' : 'accept'} error: ${errorMessage}`,
+        {
+          severity: 'error',
+          success: false,
+          errorMessage,
+          metadata: { userId, siteId: site.id },
+        }
+      );
       toast({
         title: 'Accept Failed',
         description: 'An unexpected error occurred. Please try again.',

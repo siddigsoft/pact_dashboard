@@ -85,6 +85,7 @@ const PublicDocumentation = lazy(() => import('./pages/PublicDocumentation'));
 const SignaturesPage = lazy(() => import('./pages/Signatures'));
 const DocumentsPage = lazy(() => import('./pages/Documents'));
 const ApprovalDashboard = lazy(() => import('./pages/ApprovalDashboard'));
+const AuditLogs = lazy(() => import('./pages/AuditLogs'));
 
 // Components (keep these eagerly loaded as they're used immediately)
 import MainLayout from './components/MainLayout';
@@ -247,6 +248,7 @@ const AppRoutes = () => {
         <Route path="/tracker-preparation-plan" element={<TrackerPreparationPlan />} />
         <Route path="/signatures" element={<SignaturesPage />} />
         <Route path="/approval-dashboard" element={<ApprovalDashboard />} />
+        <Route path="/audit-logs" element={<AuditLogs />} />
       </Route>
 
       {/* Redirects */}
