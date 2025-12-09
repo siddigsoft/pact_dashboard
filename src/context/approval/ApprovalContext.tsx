@@ -54,12 +54,11 @@ export function ApprovalProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored) as ApprovalRequest[];
-        setRequests(parsed);
-      }
+      const parsed = stored ? JSON.parse(stored) as ApprovalRequest[] : [];
+      setRequests(parsed ?? []);
     } catch (error) {
       console.error('[Approval] Error loading requests:', error);
+      setRequests([]);
     } finally {
       setLoading(false);
     }
