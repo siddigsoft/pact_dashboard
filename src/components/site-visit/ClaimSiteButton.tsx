@@ -12,6 +12,7 @@ import { useClassification } from '@/context/classification/ClassificationContex
 import { getStateName, getLocalityName } from '@/data/sudanStates';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { useAuditLog } from '@/hooks/use-audit-log';
+import { calculateConfirmationDeadlines } from '@/utils/confirmationDeadlines';
 
 interface ClaimSiteButtonProps {
   siteId: string;
@@ -19,6 +20,7 @@ interface ClaimSiteButtonProps {
   userId: string;
   state?: string;
   locality?: string;
+  scheduledDate?: string;
   onClaimed?: () => void;
   disabled?: boolean;
   variant?: 'default' | 'outline' | 'ghost';
@@ -32,6 +34,7 @@ export function ClaimSiteButton({
   userId,
   state,
   locality,
+  scheduledDate,
   onClaimed,
   disabled = false,
   variant = 'default',
@@ -193,6 +196,50 @@ export function ClaimSiteButton({
         // Fee is now saved atomically by the RPC, no need for separate update
         const finalFee = result.enumerator_fee ?? feeBreakdown.enumeratorFee;
         const finalTotal = result.total_payout ?? feeBreakdown.totalPayout;
+
+        // Set confirmation deadlines for the claimed site visit
+        let visitDate = scheduledDate;
+        
+        // If no scheduled date provided, fetch it from the database
+        if (!visitDate) {
+          const { data: siteData } = await supabase
+            .from('site_visits')
+            .select('due_date, visit_data')
+            .eq('id', siteId)
+            .single();
+          
+          visitDate = siteData?.due_date || (siteData?.visit_data as any)?.scheduledDate;
+        }
+        
+        // Set confirmation tracking fields if we have a visit date
+        if (visitDate) {
+          const confirmationDeadlines = calculateConfirmationDeadlines(visitDate);
+          
+          // Fetch current visit_data to merge with confirmation fields
+          const { data: currentData } = await supabase
+            .from('site_visits')
+            .select('visit_data')
+            .eq('id', siteId)
+            .single();
+          
+          const existingVisitData = (currentData?.visit_data as Record<string, unknown>) || {};
+          
+          // Merge confirmation tracking fields into visit_data
+          const updatedVisitData = {
+            ...existingVisitData,
+            confirmation_deadline: confirmationDeadlines.confirmation_deadline,
+            confirmation_status: confirmationDeadlines.confirmation_status,
+            autorelease_at: confirmationDeadlines.autorelease_at,
+          };
+          
+          await supabase
+            .from('site_visits')
+            .update({
+              visit_data: updatedVisitData,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', siteId);
+        }
 
         logSiteVisitEvent('claim', siteId, siteName, `Site "${siteName}" claimed successfully`, {
           workflowStep: 'in_progress',
