@@ -684,6 +684,56 @@ export const NotificationTriggerService = {
       relatedEntityId: siteId,
       relatedEntityType: 'siteVisit'
     });
+  },
+
+  /**
+   * Send reminder at specific intervals (24h, 12h, 6h before deadline)
+   * Validates that hoursUntilDeadline is appropriate for the reminderType
+   */
+  async sendScheduledReminder(
+    userId: string,
+    siteName: string,
+    siteId: string,
+    hoursUntilDeadline: number,
+    reminderType: '24h' | '12h' | '6h'
+  ): Promise<boolean> {
+    const reminderThresholds: Record<string, { min: number; max: number }> = {
+      '24h': { min: 20, max: 28 },
+      '12h': { min: 10, max: 14 },
+      '6h': { min: 4, max: 8 }
+    };
+
+    const threshold = reminderThresholds[reminderType];
+    if (hoursUntilDeadline < threshold.min || hoursUntilDeadline > threshold.max) {
+      console.log(`[Notification] Skipping ${reminderType} reminder: ${hoursUntilDeadline}h outside range`);
+      return false;
+    }
+
+    const priorityMap: Record<string, NotificationPriority> = {
+      '24h': 'medium',
+      '12h': 'high',
+      '6h': 'urgent'
+    };
+
+    const messageMap: Record<string, string> = {
+      '24h': `Reminder: Please confirm your assignment to "${siteName}" within 24 hours.`,
+      '12h': `Important: Confirm your assignment to "${siteName}" within 12 hours or it may be released.`,
+      '6h': `Urgent: Only 6 hours left to confirm "${siteName}". Confirm now to keep your assignment.`
+    };
+
+    await this.send({
+      userId,
+      title: reminderType === '6h' ? 'Urgent: Confirm Now' : 'Confirm Your Site Visit',
+      message: messageMap[reminderType],
+      type: reminderType === '6h' ? 'warning' : 'info',
+      category: 'assignments',
+      priority: priorityMap[reminderType],
+      link: `/mmp`,
+      relatedEntityId: siteId,
+      relatedEntityType: 'siteVisit'
+    });
+
+    return true;
   }
 };
 
