@@ -44,6 +44,7 @@ import { useAuthorization } from "@/hooks/use-authorization";
 import { SiteVisitCostsUnified } from "@/components/site-visit/SiteVisitCostsUnified";
 import { SiteVisitAuditTrail } from "@/components/site-visit/SiteVisitAuditTrail";
 import { NearestEnumeratorsCard } from "@/components/site-visit/NearestEnumeratorsCard";
+import { ConfirmationAcknowledgment } from "@/components/site-visit/ConfirmationAcknowledgment";
 import { useWallet } from "@/context/wallet/WalletContext";
 import { getStateName, getLocalityName } from "@/data/sudanStates";
 import { isOverdue, getStatusLabel } from "@/utils/siteVisitUtils";
@@ -57,7 +58,7 @@ const SiteVisitDetail = () => {
   const [loading, setLoading] = useState(true);
   const [siteVisit, setSiteVisit] = useState<SiteVisit | null>(null);
   const { siteVisits, deleteSiteVisit } = useSiteVisitContext();
-  const { users } = useUser();
+  const { users, currentUser } = useUser();
   const [isDeleting, setIsDeleting] = useState(false);
   const [costDialogOpen, setCostDialogOpen] = useState(false);
   const [isReconciling, setIsReconciling] = useState(false);
@@ -338,6 +339,23 @@ const SiteVisitDetail = () => {
             )}
           </CardContent>
         </Card>
+
+        {/* Confirmation Acknowledgment - Show ONLY for the assigned user */}
+        {siteVisit.assignedTo && 
+         currentUser?.id === siteVisit.assignedTo && 
+         (siteVisit as any).visitData?.confirmation_deadline && (
+          <ConfirmationAcknowledgment
+            visitId={siteVisit.id}
+            visitData={(siteVisit as any).visitData || {}}
+            siteName={siteVisit.siteName}
+            dueDate={siteVisit.dueDate || ''}
+            isDispatchedSite={true}
+            onConfirmed={() => {
+              const updatedVisit = siteVisits.find(v => v.id === siteVisit.id);
+              if (updatedVisit) setSiteVisit(updatedVisit);
+            }}
+          />
+        )}
 
         {/* Quick Info Grid */}
         <div className="grid grid-cols-2 gap-3">

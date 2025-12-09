@@ -76,6 +76,7 @@ const CostSubmission = lazy(() => import('./pages/CostSubmission'));
 const DemoDataCollector = lazy(() => import('./pages/DemoDataCollector'));
 const FinancialOperations = lazy(() => import('./pages/FinancialOperations'));
 const SuperAdminManagement = lazy(() => import('./components/superAdmin/SuperAdminManagementPage').then(module => ({ default: module.SuperAdminManagementPage })));
+const SuperAdminDataManagement = lazy(() => import('./components/superAdmin/SuperAdminDataManagement').then(module => ({ default: module.SuperAdminDataManagement })));
 const HubOperations = lazy(() => import('./pages/HubOperations'));
 const TrackerPreparationPlan = lazy(() => import('./pages/TrackerPreparationPlan'));
 const NotificationsPage = lazy(() => import('./pages/Notifications'));
@@ -83,6 +84,8 @@ const Documentation = lazy(() => import('./pages/Documentation'));
 const PublicDocumentation = lazy(() => import('./pages/PublicDocumentation'));
 const SignaturesPage = lazy(() => import('./pages/Signatures'));
 const DocumentsPage = lazy(() => import('./pages/Documents'));
+const ApprovalDashboard = lazy(() => import('./pages/ApprovalDashboard'));
+const AuditLogs = lazy(() => import('./pages/AuditLogs'));
 
 // Components (keep these eagerly loaded as they're used immediately)
 import MainLayout from './components/MainLayout';
@@ -233,6 +236,7 @@ const AppRoutes = () => {
         <Route path="/calendar" element={<Calendar />} />
         <Route path="/role-management" element={<RoleManagement />} />
         <Route path="/super-admin-management" element={<SuperAdminManagement />} />
+        <Route path="/super-admin-data" element={<SuperAdminDataManagement />} />
   <Route path="/monitoring-plan" element={<MonitoringPlanPage />} />
   <Route path="/field-operation-manager" element={<FieldOperationManagerPage />} />
   <Route path="/search" element={<GlobalSearchPage />} />
@@ -243,6 +247,8 @@ const AppRoutes = () => {
   <Route path="/hub-operations" element={<HubOperations />} />
         <Route path="/tracker-preparation-plan" element={<TrackerPreparationPlan />} />
         <Route path="/signatures" element={<SignaturesPage />} />
+        <Route path="/approval-dashboard" element={<ApprovalDashboard />} />
+        <Route path="/audit-logs" element={<AuditLogs />} />
       </Route>
 
       {/* Redirects */}

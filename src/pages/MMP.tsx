@@ -2604,7 +2604,7 @@ const MMP = () => {
       }),
       approvedCosted: base.filter(mmp => {
         const stats = siteVisitStats[mmp.id];
-        // Approved & Costed: ALL site entries must have cost > 0 AND status = 'verified'
+        // Approved & Costed: ALL site entries must have AND status = 'verified'
         return Boolean(stats?.allApprovedAndCosted);
       }),
       dispatched: base.filter(mmp => {
@@ -2881,7 +2881,7 @@ const MMP = () => {
             map[mmpId] = { exists: false, hasCosted: false, hasAssigned: false, hasInProgress: false, hasAccepted: false, hasCompleted: false, hasRejected: false, hasDispatched: false, allApprovedAndCosted: false };
           }
           
-          // For "Approved & Costed", ALL entries must have cost > 0 AND status = 'verified'
+          // For "Approved & Costed", ALL entries must have AND status = 'verified'
           if (entries.length > 0) {
             const allApprovedAndCosted = entries.every(entry => {
               const status = String(entry.status || '').toLowerCase();

@@ -1,10 +1,12 @@
 import { useState, useMemo, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { 
   FileText, Search, Download, Eye, Calendar, MapPin, Building2, 
   FolderOpen, RefreshCw, FileSpreadsheet, Receipt, Shield, Hash,
-  ArrowUpDown, ChevronDown, ChevronUp, File, Image, Folder
+  ArrowUpDown, ChevronDown, ChevronUp, File, Image, Folder,
+  ExternalLink, History, Clock, Wallet
 } from 'lucide-react';
+import { formatDistanceToNow } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -437,16 +439,36 @@ const DocumentsPage = () => {
             <FolderOpen className="h-5 w-5 text-white dark:text-black" />
           </div>
           <div>
-            <h1 className="text-xl font-semibold leading-tight">Document Registry</h1>
+            <h1 className="text-xl font-semibold leading-tight" data-testid="text-documents-title">Document Registry</h1>
             <p className="text-sm text-muted-foreground">
               All uploaded files with indexing and categories
             </p>
           </div>
         </div>
-        <Button variant="outline" size="sm" onClick={fetchDocuments} data-testid="button-refresh-documents">
-          <RefreshCw className="h-4 w-4 mr-2" />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button variant="outline" size="sm" asChild data-testid="link-site-visits">
+            <Link to="/site-visits">
+              <MapPin className="h-4 w-4 mr-2" />
+              Site Visits
+            </Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild data-testid="link-audit-logs">
+            <Link to="/audit-logs">
+              <History className="h-4 w-4 mr-2" />
+              Audit Logs
+            </Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild data-testid="link-wallet-reports">
+            <Link to="/wallet-reports">
+              <Wallet className="h-4 w-4 mr-2" />
+              Wallet Reports
+            </Link>
+          </Button>
+          <Button variant="outline" size="sm" onClick={fetchDocuments} data-testid="button-refresh-documents">
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -653,10 +675,35 @@ const DocumentsPage = () => {
                                   {doc.locality}
                                 </span>
                               )}
-                              <span className="flex items-center gap-1">
-                                <Calendar className="h-3 w-3" />
-                                {format(new Date(doc.uploadedAt), 'MMM d, yyyy')}
+                              <span className="flex items-center gap-1" title={format(new Date(doc.uploadedAt), 'PPpp')}>
+                                <Clock className="h-3 w-3" />
+                                {formatDistanceToNow(new Date(doc.uploadedAt), { addSuffix: true })}
                               </span>
+                            </div>
+                            {/* Quick links to related pages */}
+                            <div className="flex items-center gap-2 mt-1">
+                              {doc.siteVisitId && (
+                                <Link 
+                                  to={`/site-visits/${doc.siteVisitId}`}
+                                  className="text-xs text-primary hover:underline flex items-center gap-1"
+                                  onClick={(e) => e.stopPropagation()}
+                                  data-testid={`link-site-visit-${doc.id}`}
+                                >
+                                  <ExternalLink className="h-3 w-3" />
+                                  View Site Visit
+                                </Link>
+                              )}
+                              {doc.mmpName && doc.id.startsWith('mmp-') && (
+                                <Link 
+                                  to={`/mmp/${doc.id.replace('mmp-', '')}/view`}
+                                  className="text-xs text-primary hover:underline flex items-center gap-1"
+                                  onClick={(e) => e.stopPropagation()}
+                                  data-testid={`link-mmp-${doc.id}`}
+                                >
+                                  <ExternalLink className="h-3 w-3" />
+                                  View MMP
+                                </Link>
+                              )}
                             </div>
                           </div>
                         </div>

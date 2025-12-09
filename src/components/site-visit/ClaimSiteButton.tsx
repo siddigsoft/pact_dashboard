@@ -10,6 +10,9 @@ import { useClaimFeeCalculation, type ClaimFeeBreakdown } from '@/hooks/use-clai
 import { CLASSIFICATION_LABELS, CLASSIFICATION_COLORS } from '@/types/classification';
 import { useClassification } from '@/context/classification/ClassificationContext';
 import { getStateName, getLocalityName } from '@/data/sudanStates';
+import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
+import { useAuditLog } from '@/hooks/use-audit-log';
+import { calculateConfirmationDeadlines } from '@/utils/confirmationDeadlines';
 
 interface ClaimSiteButtonProps {
   siteId: string;
@@ -17,6 +20,7 @@ interface ClaimSiteButtonProps {
   userId: string;
   state?: string;
   locality?: string;
+  scheduledDate?: string;
   onClaimed?: () => void;
   disabled?: boolean;
   variant?: 'default' | 'outline' | 'ghost';
@@ -30,6 +34,7 @@ export function ClaimSiteButton({
   userId,
   state,
   locality,
+  scheduledDate,
   onClaimed,
   disabled = false,
   variant = 'default',
@@ -44,6 +49,8 @@ export function ClaimSiteButton({
   const { currentUser } = useUser();
   const { calculateFeeForClaim, loading: calculatingFee } = useClaimFeeCalculation();
   const { getUserClassification } = useClassification();
+  const { isSuperAdmin } = useSuperAdmin();
+  const { logSiteVisitEvent } = useAuditLog();
 
   const isFieldWorker = currentUser?.role === 'dataCollector' || 
                         currentUser?.role === 'datacollector' || 
@@ -61,8 +68,8 @@ export function ClaimSiteButton({
   
   // PERMISSION CHECK 2: Site must be in user's assigned locality
   const localityCheck = useMemo(() => {
-    if (!currentUser || !isFieldWorker) {
-      // Non-field workers (admin, FOM, etc) can claim any site
+    if (!currentUser || !isFieldWorker || isSuperAdmin) {
+      // Non-field workers (admin, FOM, etc) and SuperAdmins can claim any site
       return { canClaim: true, reason: null };
     }
     
@@ -110,12 +117,12 @@ export function ClaimSiteButton({
     }
     
     return { canClaim: true, reason: null };
-  }, [currentUser, isFieldWorker, state, locality]);
+  }, [currentUser, isFieldWorker, isSuperAdmin, state, locality]);
 
   // Combined permission check for field workers
   const canClaimSite = useMemo(() => {
-    // Non-field workers can claim (they are typically assigning, not claiming)
-    if (!isFieldWorker) return { allowed: true, reason: null };
+    // Non-field workers and SuperAdmins can claim (they are typically assigning, not claiming)
+    if (!isFieldWorker || isSuperAdmin) return { allowed: true, reason: null };
     
     // Field workers need classification
     if (!hasClassification) {
@@ -131,7 +138,7 @@ export function ClaimSiteButton({
     }
     
     return { allowed: true, reason: null };
-  }, [isFieldWorker, hasClassification, localityCheck]);
+  }, [isFieldWorker, isSuperAdmin, hasClassification, localityCheck]);
 
   const handleInitiateClaim = async () => {
     if (claiming || claimed || disabled) return;
@@ -169,6 +176,12 @@ export function ClaimSiteButton({
 
       if (error) {
         console.error('Claim RPC error:', error);
+        logSiteVisitEvent('claim', siteId, siteName, `Site claim failed: ${error.message}`, {
+          severity: 'error',
+          success: false,
+          errorMessage: error.message,
+          metadata: { userId, siteId },
+        });
         toast({
           title: 'Claim Failed',
           description: error.message || 'Could not claim this site. Please try again.',
@@ -183,6 +196,55 @@ export function ClaimSiteButton({
         // Fee is now saved atomically by the RPC, no need for separate update
         const finalFee = result.enumerator_fee ?? feeBreakdown.enumeratorFee;
         const finalTotal = result.total_payout ?? feeBreakdown.totalPayout;
+
+        // Set confirmation deadlines for the claimed site visit
+        let visitDate = scheduledDate;
+        
+        // If no scheduled date provided, fetch it from the database
+        if (!visitDate) {
+          const { data: siteData } = await supabase
+            .from('site_visits')
+            .select('due_date, visit_data')
+            .eq('id', siteId)
+            .single();
+          
+          visitDate = siteData?.due_date || (siteData?.visit_data as any)?.scheduledDate;
+        }
+        
+        // Set confirmation tracking fields if we have a visit date
+        if (visitDate) {
+          const confirmationDeadlines = calculateConfirmationDeadlines(visitDate);
+          
+          // Fetch current visit_data to merge with confirmation fields
+          const { data: currentData } = await supabase
+            .from('site_visits')
+            .select('visit_data')
+            .eq('id', siteId)
+            .single();
+          
+          const existingVisitData = (currentData?.visit_data as Record<string, unknown>) || {};
+          
+          // Merge confirmation tracking fields into visit_data
+          const updatedVisitData = {
+            ...existingVisitData,
+            confirmation_deadline: confirmationDeadlines.confirmation_deadline,
+            confirmation_status: confirmationDeadlines.confirmation_status,
+            autorelease_at: confirmationDeadlines.autorelease_at,
+          };
+          
+          await supabase
+            .from('site_visits')
+            .update({
+              visit_data: updatedVisitData,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', siteId);
+        }
+
+        logSiteVisitEvent('claim', siteId, siteName, `Site "${siteName}" claimed successfully`, {
+          workflowStep: 'in_progress',
+          metadata: { fee: finalFee, totalPayout: finalTotal, userId },
+        });
 
         setClaimed(true);
         toast({
@@ -204,6 +266,12 @@ export function ClaimSiteButton({
           description = 'This site is no longer available for claiming.';
         }
 
+        logSiteVisitEvent('claim', siteId, siteName, `Site claim rejected: ${description}`, {
+          severity: 'warning',
+          success: false,
+          errorMessage: result.error,
+          metadata: { userId, siteId, errorCode: result.error },
+        });
         toast({
           title: 'Could Not Claim Site',
           description,
@@ -212,6 +280,13 @@ export function ClaimSiteButton({
       }
     } catch (err) {
       console.error('Claim error:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      logSiteVisitEvent('claim', siteId, siteName, `Site claim error: ${errorMessage}`, {
+        severity: 'error',
+        success: false,
+        errorMessage,
+        metadata: { userId, siteId },
+      });
       toast({
         title: 'Claim Failed',
         description: 'An unexpected error occurred. Please try again.',
