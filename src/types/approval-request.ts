@@ -6,6 +6,7 @@ export type ApprovalRequestType =
   | 'delete_wallet'
   | 'delete_transaction'
   | 'delete_report'
+  | 'delete_role'
   | 'assign_admin_role'
   | 'delete_cost_submission'
   | 'delete_activity'
@@ -56,6 +57,7 @@ export const APPROVAL_REQUEST_TYPE_LABELS: Record<ApprovalRequestType, string> =
   delete_wallet: 'Delete Wallet',
   delete_transaction: 'Delete Transaction',
   delete_report: 'Delete Report',
+  delete_role: 'Delete Role',
   assign_admin_role: 'Assign Admin Role',
   delete_cost_submission: 'Delete Cost Submission',
   delete_activity: 'Delete Activity',
