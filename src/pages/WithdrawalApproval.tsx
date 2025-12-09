@@ -479,7 +479,7 @@ export default function WithdrawalApproval() {
               <div className="p-2 rounded-lg bg-amber-500/10">
                 <Shield className="w-6 h-6 text-amber-600" />
               </div>
-              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Supervisor Approval</h1>
+              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Admin Approval</h1>
             </div>
             {isSupervisor && hubName && (
               <Badge variant="outline" className="flex items-center gap-1.5 px-3 py-1">
@@ -489,7 +489,7 @@ export default function WithdrawalApproval() {
             )}
           </div>
           <p className="text-muted-foreground mt-1">
-            Review and verify withdrawal requests from your team
+            Process supervisor-approved withdrawal requests for final payment
           </p>
         </div>
         <Button 
@@ -504,6 +504,14 @@ export default function WithdrawalApproval() {
           Refresh
         </Button>
       </div>
+
+      <Alert>
+        <Info className="h-4 w-4" />
+        <AlertDescription>
+          <strong>Admin Approval (Tier 2):</strong> These requests have been reviewed and approved by supervisors. 
+          As an admin, you process final payment and complete the withdrawal transaction.
+        </AlertDescription>
+      </Alert>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="bg-gradient-to-br from-amber-500/5 via-amber-500/10 to-orange-500/5 border-amber-500/20">

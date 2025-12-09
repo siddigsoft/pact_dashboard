@@ -3,6 +3,9 @@ import {
   getPendingSyncActions,
   updateSyncActionStatus,
   removeSyncAction,
+  requeueFailedAction,
+  getFailedSyncActions,
+  requeueAllFailedActions,
   getUnsyncedSiteVisits,
   markSiteVisitSynced,
   getUnsyncedLocations,
@@ -342,6 +345,16 @@ class SyncManager {
             throw fetchError;
           }
 
+          // Deduplication check: Skip if server already has this visit in a terminal/advanced state
+          if (this.isTerminalOrAdvancedStatus(serverData?.status, 'started')) {
+            console.log(`[SyncManager] Skipping started visit ${visit.id} - server already has status: ${serverData?.status}`);
+            await markSiteVisitSynced(visit.id);
+            synced++;
+            this.progress.completed++;
+            this.notifyProgress();
+            continue;
+          }
+
           // Resolve conflict using configured strategy
           const shouldUpdate = this.resolveConflict(visit, serverData);
           if (!shouldUpdate) {
@@ -375,6 +388,27 @@ class SyncManager {
             .single();
 
           if (fetchError) throw fetchError;
+
+          // Deduplication check: Skip if server already has this visit in a terminal state
+          if (this.isTerminalOrAdvancedStatus(existingEntry?.status, 'completed')) {
+            console.log(`[SyncManager] Skipping completed visit ${visit.id} - server already has status: ${existingEntry?.status}`);
+            await markSiteVisitSynced(visit.id);
+            synced++;
+            this.progress.completed++;
+            this.notifyProgress();
+            continue;
+          }
+
+          // Apply conflict resolution for completed visits
+          const shouldUpdate = this.resolveConflict(visit, existingEntry);
+          if (!shouldUpdate) {
+            console.log(`[SyncManager] Skipping completed visit ${visit.id} due to conflict resolution`);
+            await markSiteVisitSynced(visit.id);
+            synced++;
+            this.progress.completed++;
+            this.notifyProgress();
+            continue;
+          }
 
           const updateData: Record<string, any> = {
             status: 'Completed',
@@ -443,6 +477,45 @@ class SyncManager {
       default:
         return true;
     }
+  }
+
+  /**
+   * Normalizes a status string and checks if it represents a terminal or advanced state.
+   * Handles various formats: 'In Progress', 'in_progress', 'in-progress', 'inprogress', etc.
+   * Covers all known Supabase status values across the application.
+   */
+  private isTerminalOrAdvancedStatus(status: string | null | undefined, attemptedAction: 'started' | 'completed'): boolean {
+    if (!status) return false;
+    
+    // Normalize: lowercase, remove all non-alphanumeric characters
+    const normalized = status.toLowerCase().replace(/[^a-z0-9]/g, '');
+    
+    // Terminal states - visit is definitively done and should never be updated
+    const terminalStates = [
+      'completed',
+      'cancelled', 'canceled',
+      'rejected',
+      'declined',
+      'closed',
+      'archived',
+    ];
+    
+    // Advanced states - visit has progressed past the initial state
+    const inProgressStates = ['inprogress'];
+    
+    // Check for terminal states (always skip regardless of attempted action)
+    if (terminalStates.includes(normalized)) {
+      return true;
+    }
+    
+    if (attemptedAction === 'started') {
+      // For 'started' visits, skip if server is already in progress
+      // (meaning we already synced the start or someone else started it)
+      return inProgressStates.includes(normalized);
+    }
+    
+    // For 'completed' visits, only terminal states should skip (handled above)
+    return false;
   }
 
   private async syncLocations(): Promise<{ synced: number; failed: number; errors: string[] }> {
@@ -573,7 +646,16 @@ class SyncManager {
         this.progress.failed++;
         const errMsg = `Failed to sync ${action.type}: ${error instanceof Error ? error.message : 'Unknown error'}`;
         errors.push(errMsg);
+        
         await updateSyncActionStatus(action.id, 'failed', errMsg);
+        
+        if (action.retries < MAX_RETRIES - 1) {
+          await requeueFailedAction(action.id);
+          console.log(`[SyncManager] Requeued action ${action.id} for retry (attempt ${action.retries + 1})`);
+        } else {
+          console.warn(`[SyncManager] Action ${action.id} reached max retries, will be removed on next sync`);
+        }
+        
         console.error('[SyncManager]', errMsg);
       }
     }
@@ -637,6 +719,27 @@ class SyncManager {
   private async syncSiteVisitStart(action: PendingSyncAction): Promise<void> {
     const { siteEntryId, startedAt, location, userId } = action.payload;
 
+    const { data: serverData, error: fetchError } = await supabase
+      .from('mmp_site_entries')
+      .select('status, updated_at')
+      .eq('id', siteEntryId)
+      .single();
+
+    if (fetchError && fetchError.code !== 'PGRST116') {
+      throw fetchError;
+    }
+
+    if (this.isTerminalOrAdvancedStatus(serverData?.status, 'started')) {
+      console.log(`[SyncManager] Skipping start action - server already has status: ${serverData?.status}`);
+      return;
+    }
+
+    const shouldUpdate = this.resolveConflict({ startedAt }, serverData);
+    if (!shouldUpdate) {
+      console.log(`[SyncManager] Skipping start action due to conflict resolution`);
+      return;
+    }
+
     const { error } = await supabase
       .from('mmp_site_entries')
       .update({
@@ -659,11 +762,22 @@ class SyncManager {
 
     const { data: existing, error: fetchError } = await supabase
       .from('mmp_site_entries')
-      .select('additional_data, enumerator_fee, transport_fee')
+      .select('additional_data, enumerator_fee, transport_fee, status, updated_at')
       .eq('id', siteEntryId)
       .single();
 
     if (fetchError) throw fetchError;
+
+    if (this.isTerminalOrAdvancedStatus(existing?.status, 'completed')) {
+      console.log(`[SyncManager] Skipping complete action - server already has status: ${existing?.status}`);
+      return;
+    }
+
+    const shouldUpdate = this.resolveConflict({ completedAt }, existing);
+    if (!shouldUpdate) {
+      console.log(`[SyncManager] Skipping complete action due to conflict resolution`);
+      return;
+    }
 
     const { error } = await supabase
       .from('mmp_site_entries')
@@ -683,16 +797,41 @@ class SyncManager {
 
     if (error) throw error;
 
-    // Process wallet transaction for completed visit
+    // Process wallet transaction for completed visit - with duplicate prevention
     const fee = (existing?.enumerator_fee || 0) + (existing?.transport_fee || 0);
     if (fee > 0 && userId) {
+      // VALIDATION: Check if fee was already recorded for this site visit
+      // Check both site_visit_id (from online completion) and reference_id (from offline sync)
+      const { data: existingFees, error: feeCheckError } = await supabase
+        .from('wallet_transactions')
+        .select('id, amount')
+        .or(`site_visit_id.eq.${siteEntryId},reference_id.eq.${siteEntryId}`)
+        .in('type', ['earning', 'site_visit_fee']);
+
+      // CRITICAL: Abort if we cannot verify whether fee exists (fail-safe)
+      if (feeCheckError) {
+        console.error(`[SyncManager] Failed to check for existing fees: ${feeCheckError.message}`);
+        // Don't add fee if we can't verify - fail-safe approach
+        return;
+      }
+
+      // Skip if any fee already exists for this site visit
+      if (existingFees && existingFees.length > 0) {
+        const totalExisting = existingFees.reduce((sum, f) => sum + Number(f.amount || 0), 0);
+        console.log(`[SyncManager] Fee already recorded for site visit ${siteEntryId}: ${totalExisting} SDG (${existingFees.length} transaction(s)) - skipping`);
+        return;
+      }
+
       const { data: wallet } = await supabase
         .from('wallets')
-        .select('id, total_earned')
+        .select('id, total_earned, balances')
         .eq('user_id', userId)
         .single();
 
       if (wallet) {
+        const currentBalance = Number((wallet.balances as any)?.SDG ?? 0) || 0;
+        const newBalance = Number((currentBalance + fee).toFixed(2));
+
         await supabase.from('wallet_transactions').insert({
           wallet_id: wallet.id,
           user_id: userId,
@@ -700,14 +839,22 @@ class SyncManager {
           amount: fee,
           amount_cents: Math.round(fee * 100),
           description: `Site visit completion (offline sync)`,
+          site_visit_id: siteEntryId, // Use site_visit_id for consistency with online flow
           reference_id: siteEntryId,
           reference_type: 'site_visit',
+          balance_before: currentBalance,
+          balance_after: newBalance,
         });
 
         await supabase
           .from('wallets')
-          .update({ total_earned: (wallet.total_earned || 0) + fee })
+          .update({ 
+            total_earned: (wallet.total_earned || 0) + fee,
+            balances: { ...(wallet.balances as any), SDG: newBalance },
+          })
           .eq('id', wallet.id);
+        
+        console.log(`[SyncManager] Added fee ${fee} SDG for site visit ${siteEntryId} (offline sync)`);
       }
     }
   }

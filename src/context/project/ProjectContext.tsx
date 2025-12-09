@@ -1,8 +1,9 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { Project, ProjectActivity, SubActivity, ProjectTeamMember } from '@/types/project';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { validateProject } from '@/utils/projectValidation';
+import { useRealtimeTables } from '@/hooks/useRealtimeResource';
 
 interface ProjectContextProps {
   projects: Project[];
@@ -73,7 +74,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
   };
 
-  const fetchProjects = async () => {
+  const fetchProjects = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -161,11 +162,13 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
 
   useEffect(() => {
     fetchProjects();
-  }, []);
+  }, [fetchProjects]);
+
+  useRealtimeTables(['projects', 'project_activities', 'sub_activities'], fetchProjects);
 
   const addProject = async (project: Project): Promise<Project | null> => {
     try {

@@ -24,6 +24,7 @@ import BrowserNotificationListener from '@/components/BrowserNotificationListene
 import GlobalCallOverlay from '@/components/communication/GlobalCallOverlay';
 import { GlobalPresenceProvider } from '@/context/presence/GlobalPresenceContext';
 import { MobilePushNotificationOverlay } from '@/components/mobile/MobilePushNotificationOverlay';
+import { SyncStatusProvider } from './sync/SyncStatusContext';
 
 interface CompositeContextType {
   currentUser: ReturnType<typeof useUser>['currentUser'];
@@ -141,7 +142,8 @@ export const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children
   return (
     <NavigationProvider>
       <ViewModeProvider>
-        <NotificationProvider>
+        <SyncStatusProvider>
+          <NotificationProvider>
           <UserProvider>
             <ClassificationProvider>
               <WalletProvider>
@@ -184,7 +186,8 @@ export const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children
               </WalletProvider>
             </ClassificationProvider>
           </UserProvider>
-        </NotificationProvider>
+          </NotificationProvider>
+        </SyncStatusProvider>
       </ViewModeProvider>
     </NavigationProvider>
   );
