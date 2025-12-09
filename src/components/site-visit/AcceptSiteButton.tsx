@@ -13,6 +13,7 @@ import { useClassification } from '@/context/classification/ClassificationContex
 import { getStateName, getLocalityName } from '@/data/sudanStates';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { useAuditLog } from '@/hooks/use-audit-log';
+import { calculateConfirmationDeadlines } from '@/utils/confirmationDeadlines';
 
 interface AcceptSiteButtonProps {
   site: {
@@ -273,6 +274,64 @@ export function AcceptSiteButton({
         if (error) {
           console.error('Database update failed:', error);
           throw error;
+        }
+      }
+
+      // Set confirmation tracking fields for the claimed/accepted site visit
+      const visitDate = site.due_date || site.visitDate;
+      if (visitDate) {
+        const confirmationDeadlines = calculateConfirmationDeadlines(visitDate);
+        
+        // Determine which table to update based on whether it's dispatched (site_visits) or MMP entry
+        if (isDispatchedSite) {
+          // Fetch current visit_data to merge with confirmation fields
+          const { data: currentData } = await supabase
+            .from('site_visits')
+            .select('visit_data')
+            .eq('id', site.id)
+            .single();
+          
+          const existingVisitData = (currentData?.visit_data as Record<string, unknown>) || {};
+          
+          // Merge confirmation tracking fields into visit_data
+          const updatedVisitData = {
+            ...existingVisitData,
+            confirmation_deadline: confirmationDeadlines.confirmation_deadline,
+            confirmation_status: confirmationDeadlines.confirmation_status,
+            autorelease_at: confirmationDeadlines.autorelease_at,
+          };
+          
+          await supabase
+            .from('site_visits')
+            .update({
+              visit_data: updatedVisitData,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', site.id);
+        } else {
+          // For MMP site entries, update the extra_data JSON column
+          const { data: currentData } = await supabase
+            .from('mmp_site_entries')
+            .select('extra_data')
+            .eq('id', site.id)
+            .single();
+          
+          const existingExtraData = (currentData?.extra_data as Record<string, unknown>) || {};
+          
+          const updatedExtraData = {
+            ...existingExtraData,
+            confirmation_deadline: confirmationDeadlines.confirmation_deadline,
+            confirmation_status: confirmationDeadlines.confirmation_status,
+            autorelease_at: confirmationDeadlines.autorelease_at,
+          };
+          
+          await supabase
+            .from('mmp_site_entries')
+            .update({
+              extra_data: updatedExtraData,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', site.id);
         }
       }
 

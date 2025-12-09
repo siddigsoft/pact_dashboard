@@ -557,6 +557,133 @@ export const NotificationTriggerService = {
       priority: 'medium',
       projectId
     });
+  },
+
+  /**
+   * Site claim notification with role-based fan-out
+   * - When Data Collector claims: Notify Coordinator, Supervisor, Admins
+   * - When Coordinator claims: Notify Admins, Hub Supervisor
+   */
+  async siteClaimNotification(
+    claimerUserId: string,
+    claimerName: string,
+    claimerRole: string,
+    siteName: string,
+    siteId: string,
+    hubId?: string,
+    projectId?: string
+  ): Promise<number> {
+    try {
+      const isDataCollector = ['data_collector', 'enumerator', 'dc'].includes(claimerRole?.toLowerCase() || '');
+      const isCoordinator = ['coordinator', 'field_coordinator'].includes(claimerRole?.toLowerCase() || '');
+
+      let targetRoles: string[] = [];
+      let additionalUserIds: string[] = [];
+
+      if (isDataCollector) {
+        targetRoles = ['coordinator', 'supervisor', 'admin', 'super_admin'];
+      } else if (isCoordinator) {
+        targetRoles = ['admin', 'super_admin'];
+        
+        if (hubId) {
+          const { data: hubSupervisors } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('hub_id', hubId)
+            .eq('role', 'supervisor');
+          
+          if (hubSupervisors) {
+            additionalUserIds = hubSupervisors.map(s => s.id).filter(id => id !== claimerUserId);
+          }
+        }
+      } else {
+        targetRoles = ['admin', 'super_admin'];
+      }
+
+      const notificationOptions = {
+        title: 'Site Claimed',
+        message: `${claimerName} has claimed the site "${siteName}"`,
+        type: 'info' as const,
+        category: 'assignments' as NotificationCategory,
+        priority: 'medium' as NotificationPriority,
+        link: `/mmp`,
+        relatedEntityId: siteId,
+        relatedEntityType: 'siteVisit' as const
+      };
+
+      let successCount = 0;
+
+      if (targetRoles.length > 0) {
+        successCount += await this.sendToRoles(targetRoles, notificationOptions, projectId);
+      }
+
+      if (additionalUserIds.length > 0) {
+        successCount += await this.sendBulk(additionalUserIds, notificationOptions);
+      }
+
+      return successCount;
+    } catch (error) {
+      console.error('Failed to send site claim notifications:', error);
+      return 0;
+    }
+  },
+
+  /**
+   * Confirmation deadline reminder notification
+   * Sent to the assignee at specified intervals before the deadline
+   */
+  async confirmationReminder(
+    userId: string,
+    siteName: string,
+    siteId: string,
+    hoursUntilDeadline: number
+  ): Promise<void> {
+    const priority: NotificationPriority = hoursUntilDeadline <= 12 ? 'urgent' : hoursUntilDeadline <= 24 ? 'high' : 'medium';
+    const type = hoursUntilDeadline <= 12 ? 'warning' : 'info';
+    
+    let message: string;
+    if (hoursUntilDeadline <= 0) {
+      message = `Your confirmation deadline for "${siteName}" has passed. The site may be released.`;
+    } else if (hoursUntilDeadline <= 12) {
+      message = `Urgent: Confirm your assignment to "${siteName}" within ${Math.round(hoursUntilDeadline)} hours or it may be released.`;
+    } else if (hoursUntilDeadline <= 24) {
+      message = `Reminder: Please confirm your assignment to "${siteName}" within ${Math.round(hoursUntilDeadline)} hours.`;
+    } else {
+      message = `Don't forget to confirm your assignment to "${siteName}". Deadline is in ${Math.round(hoursUntilDeadline / 24)} days.`;
+    }
+
+    await this.send({
+      userId,
+      title: 'Confirm Your Site Visit',
+      message,
+      type,
+      category: 'assignments',
+      priority,
+      link: `/mmp`,
+      relatedEntityId: siteId,
+      relatedEntityType: 'siteVisit'
+    });
+  },
+
+  /**
+   * Auto-release notification sent to the former assignee
+   */
+  async siteAutoReleased(
+    userId: string,
+    siteName: string,
+    siteId: string
+  ): Promise<void> {
+    await this.send({
+      userId,
+      title: 'Site Released',
+      message: `Your claim on "${siteName}" has been automatically released due to no confirmation before the deadline.`,
+      type: 'warning',
+      category: 'assignments',
+      priority: 'high',
+      link: `/mmp`,
+      relatedEntityId: siteId,
+      relatedEntityType: 'siteVisit'
+    });
   }
 };
 
