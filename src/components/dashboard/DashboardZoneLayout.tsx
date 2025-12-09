@@ -14,6 +14,8 @@ import {
 } from 'lucide-react';
 import { useAppContext } from '@/context/AppContext';
 import { DashboardCommandBar } from './DashboardCommandBar';
+import { ConnectionStatus } from './ConnectionStatus';
+import { useLiveDashboard } from '@/hooks/useLiveDashboard';
 
 export type DashboardZone = 'operations' | 'team' | 'planning' | 'compliance' | 'performance' | 'fom' | 'data-collector' | 'financial' | 'ict' | 'project-manager';
 
@@ -127,22 +129,25 @@ export const DashboardZoneLayout: React.FC<DashboardZoneLayoutProps> = ({
   };
 
   const availableZones = zones.filter(z => hasRoleAccess(z.roles));
+  const { isConnected } = useLiveDashboard();
 
   return (
     <div className="flex flex-col h-full">
-      {/* Command Bar - Top most */}
-      <div className="sticky top-0 z-50 border-b border-border/50">
+      {/* Command Bar - Desktop only */}
+      <div className="sticky top-0 z-50 border-b border-border/50 hidden sm:block">
         <DashboardCommandBar />
       </div>
 
       {/* Horizontal Zone Navigation - Tech Style */}
-      <nav className="sticky top-[49px] z-40 bg-gradient-to-r from-card via-background to-card border-b border-border/50 backdrop-blur-sm shadow-sm">
-        <div className="flex items-center gap-1 px-3 py-2 overflow-x-auto scrollbar-hide">
-          <div className="flex-shrink-0 mr-2 hidden md:block">
-            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Zones:</span>
-          </div>
-          
-          {availableZones.map((zone) => {
+      <nav className="sticky top-0 sm:top-[49px] z-40 bg-gradient-to-r from-card via-background to-card border-b border-border/50 backdrop-blur-sm shadow-sm">
+        <div className="flex items-center justify-between gap-2 px-3 py-2">
+          {/* Zone buttons container - scrollable */}
+          <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide flex-1">
+            <div className="flex-shrink-0 mr-2 hidden md:block">
+              <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Zones:</span>
+            </div>
+            
+            {availableZones.map((zone) => {
             const Icon = zone.icon;
             const isActive = activeZone === zone.id;
 
@@ -196,6 +201,12 @@ export const DashboardZoneLayout: React.FC<DashboardZoneLayoutProps> = ({
               </button>
             );
           })}
+          </div>
+          
+          {/* Connection Status - Right side, mobile only */}
+          <div className="flex-shrink-0 sm:hidden">
+            <ConnectionStatus isConnected={isConnected} />
+          </div>
         </div>
       </nav>
 

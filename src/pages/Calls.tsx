@@ -206,13 +206,13 @@ const Calls = () => {
   return (
     <div
       className="min-h-screen w-full max-w-full flex flex-col bg-white dark:bg-black overflow-hidden"
-      style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+      style={{ paddingBottom: 'env(safe-area-inset-bottom)', paddingTop: 'env(safe-area-inset-top)' }}
       data-testid="calls-page"
     >
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Compact Header with safe area for notch */}
         <div 
-          className="shrink-0 bg-black px-4 pb-3"
+          className="fixed top-0 left-0 right-0 shrink-0 bg-black px-4 pb-3 z-50"
           style={{ paddingTop: 'calc(env(safe-area-inset-top) + 12px)' }}
         >
           <div className="flex items-center justify-between">
@@ -266,7 +266,7 @@ const Calls = () => {
           </div>
         </div>
 
-        <div className="flex-1 overflow-auto p-3 space-y-3">
+        <div className="flex-1 overflow-auto p-3 space-y-3" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 100px)' }}>
           {/* Online Users - Compact */}
           {onlineUsers.length > 0 && !isCallActive && (
             <div className="space-y-2">

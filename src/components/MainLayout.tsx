@@ -33,13 +33,70 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
   
   const getPageTitle = () => {
     const path = location.pathname;
-    if (path === '/dashboard') return 'Dashboard';
-    if (path === '/field-team') return 'Field Map';
-    if (path === '/site-visits') return 'Site Visits';
-    if (path === '/mmp') return 'MMP Files';
-    if (path === '/users') return 'Team Members';
-    if (path.startsWith('/projects')) return 'Projects';
-    if (path === '/archive') return 'Archives';
+    
+    // Exact matches
+    const exactMatches: { [key: string]: string } = {
+      '/dashboard': 'Dashboard',
+      '/field-team': 'Field Map',
+      '/site-visits': 'Site Visits',
+      '/mmp': 'MMP Files',
+      '/users': 'Team Members',
+      '/archive': 'Archives',
+      '/calls': 'Calls',
+      '/chat': 'Chat',
+      '/finance': 'Finance',
+      '/reports': 'Reports',
+      '/settings': 'Settings',
+      '/advanced-map': 'Advanced Map',
+      '/data-visibility': 'Data Visibility',
+      '/audit-compliance': 'Audit & Compliance',
+      '/calendar': 'Calendar',
+      '/role-management': 'Role Management',
+      '/monitoring-plan': 'Monitoring Plan',
+      '/field-operation-manager': 'Field Operations',
+      '/global-search': 'Search Results',
+      '/admin/wallets': 'Admin Wallets',
+      '/admin/approvals/withdrawal': 'Withdrawal Approvals',
+      '/admin/approvals/finance': 'Finance Approvals',
+      '/admin/approvals/down-payment': 'Down-payment Approvals',
+      '/supervisor/approvals': 'Supervisor Approvals',
+      '/reports/wallet': 'Wallet Reports',
+      '/budget': 'Budget',
+      '/classifications': 'Classifications',
+      '/classifications/fees': 'Fee Management',
+      '/cost-submission': 'Cost Submission',
+      '/demo/data-collector': 'Demo',
+      '/financial-operations': 'Financial Operations',
+      '/super-admin': 'Super Admin',
+      '/hub-operations': 'Hub Operations',
+      '/tracker-preparation-plan': 'Tracker Plan',
+      '/documentation': 'Documentation',
+      '/signatures': 'Signatures',
+      '/documents': 'Documents',
+      '/mmp/upload': 'Upload MMP',
+      '/mmp/verification': 'MMP Verification',
+      '/mmp/verification-page': 'MMP Verification',
+      '/review-assign-coordinators': 'Assign Coordinators',
+      '/coordinator-dashboard': 'Coordinator Dashboard',
+      '/coordinator/sites-for-verification': 'Sites For Verification',
+      '/coordinator/sites': 'Coordinator Sites',
+      '/projects/create': 'Create Project',
+      '/site-visits/create': 'Create Site Visit',
+      '/site-visits/create/mmp': 'Create MMP Site Visit',
+      '/site-visits/create/urgent': 'Create Urgent Site Visit',
+    };
+
+    if (exactMatches[path]) {
+      return exactMatches[path];
+    }
+
+    // Dynamic matches
+    if (path.startsWith('/projects/')) return 'Projects';
+    if (path.startsWith('/mmp/')) return 'MMP Details';
+    if (path.startsWith('/users/')) return 'User Details';
+    if (path.startsWith('/site-visits/')) return 'Site Visit Details';
+    if (path.startsWith('/admin/wallets/')) return 'Wallet Details';
+
     return 'PACT Command Center';
   };
 
@@ -60,6 +117,10 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
   };
 
   const isHomeRoute = location.pathname === '/dashboard';
+  const isNotificationsPage = location.pathname === '/notifications';
+  const isWalletPage = location.pathname === '/wallet';
+  const isChatPage = location.pathname === '/chat';
+  const isCallsPage = location.pathname === '/calls';
 
   return (
     <TooltipProvider>
@@ -70,19 +131,21 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
           {!isMobile && !isTablet && <AppSidebar />}
           <SidebarInset className={`${isMobile ? 'bg-gray-50 dark:bg-gray-900' : ''} relative z-0 flex flex-col min-w-0 overflow-x-hidden min-h-0`}>
             {isMobile ? (
-              <MobileAppHeader
-                toggleSidebar={toggleSidebar}
-                title={getPageTitle()}
-                showNotification={true}
-              />
+              !(isNotificationsPage || isWalletPage || isChatPage || isCallsPage) && (
+                <MobileAppHeader
+                  toggleSidebar={toggleSidebar}
+                  title={getPageTitle()}
+                  showNotification={true}
+                />
+              )
             ) : isTablet ? (
               <TabletNavigation />
             ) : (
               <Navbar />
             )}
-            {/* Global Refresh Bar - Available on all pages */}
-            <GlobalRefreshBar />
-            <div className={`flex-1 flex flex-col ${isMobile ? 'px-1 pb-12 pt-0.5' : 'p-1 md:p-1.5 lg:p-2'} ${isMobile ? 'bg-gray-50 dark:bg-gray-900 overflow-hidden' : 'bg-slate-50/70 dark:bg-gray-900/70 scroll-container overflow-y-auto'} relative z-0 min-w-0 min-h-0`}>
+            {/* Global Refresh Bar - Available on all pages except notifications, wallet, chat, and calls on mobile */}
+            {!(isMobile && (isNotificationsPage || isWalletPage || isChatPage || isCallsPage)) && <GlobalRefreshBar />}
+            <div className={`flex-1 flex flex-col ${isMobile ? ((isNotificationsPage || isWalletPage || isChatPage || isCallsPage) ? 'px-0 pb-12 pt-0' : 'px-1 pb-12 pt-10') : 'p-1 md:p-1.5 lg:p-2'} ${isMobile ? 'bg-gray-50 dark:bg-gray-900 overflow-y-auto overflow-x-hidden' : 'bg-slate-50/70 dark:bg-gray-900/70 scroll-container overflow-y-auto'} relative z-0 min-w-0 min-h-0`}>
               {children || <Outlet />}
             </div>
             {isMobile && <MobileBottomNav />}

@@ -161,7 +161,9 @@ export function OnlineOfflineToggle({
     const maxY = window.innerHeight - h - margin;
     newX = Math.max(margin, Math.min(maxX, newX));
     newY = Math.max(margin, Math.min(maxY, newY));
-    setPosition({ x: newX, y: newY });
+    requestAnimationFrame(() => {
+      setPosition({ x: newX, y: newY });
+    });
   };
 
   const onPointerUp = () => {
@@ -306,7 +308,12 @@ export function OnlineOfflineToggle({
           !position ? (mobileBottomOffset ? "right-4 bottom-24 md:bottom-6" : "right-4 bottom-6") : "",
           className
         )}
-        style={position ? { left: `${position.x}px`, top: `${position.y}px` } : undefined}
+        style={position ? { 
+          left: `${position.x}px`, 
+          top: `${position.y}px`,
+          willChange: draggingRef.current ? 'transform' : 'auto',
+          transition: draggingRef.current ? 'none' : 'left 0.2s ease-out, top 0.2s ease-out'
+        } : undefined}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}

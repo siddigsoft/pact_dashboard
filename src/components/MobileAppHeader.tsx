@@ -1,7 +1,16 @@
 
 import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Menu, Bell, Settings, LogOut, UserIcon, RefreshCw, WifiOff } from 'lucide-react';
+import { 
+  Menu, Bell, Settings, LogOut, UserIcon, RefreshCw, WifiOff,
+  Home, Map, FileText, Users, MessageSquare, Receipt,
+  DollarSign, Wallet, BarChart, Calendar, Settings as SettingsIcon,
+  Archive, FolderOpen, CheckCircle, Banknote, CreditCard,
+  TrendingUp, MapPin, Search, User, 
+  Shield, ClipboardList, ChevronRight, Building2,
+  FileCheck, UserCog, PenTool, HelpCircle, Phone, Eye,
+  Globe, Lock, Database, Activity
+} from 'lucide-react';
 import { useUser } from '@/context/user/UserContext';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -141,13 +150,127 @@ const MobileAppHeader = ({
   };
 
   const menuGroups = useMemo(
-    () => getWorkflowMenuGroups(roles || [], appUser?.role || currentUser?.role || 'dataCollector', perms, isSuperAdmin, menuPrefs),
-    [roles, appUser?.role, currentUser?.role, perms.dashboard, perms.projects, perms.mmp, perms.monitoringPlan, perms.siteVisits, perms.archive, perms.fieldTeam, perms.fieldOpManager, perms.dataVisibility, perms.reports, perms.users, perms.roleManagement, perms.settings, perms.financialOperations, isSuperAdmin, menuPrefs]
+    () => {
+      const workflowGroups = getWorkflowMenuGroups(roles || [], appUser?.role || currentUser?.role || 'dataCollector', perms, isSuperAdmin, menuPrefs);
+      
+      // Add additional menu items from the "More" section
+      const additionalMenuGroups = [
+        {
+          id: 'quick-access',
+          label: 'Quick Access',
+          items: [
+            { id: 'chat', icon: MessageSquare, title: 'Team Chat', url: '/chat' },
+            { id: 'notifications', icon: Bell, title: 'Notifications', url: '/notifications' },
+            { id: 'search', icon: Search, title: 'Global Search', url: '/search' },
+            { id: 'field-team', icon: Map, title: 'Field Team Map', url: '/field-team' },
+          ]
+        },
+        {
+          id: 'finance',
+          label: 'Finance & Wallet',
+          items: [
+            { id: 'wallet', icon: Wallet, title: 'My Wallet', url: '/wallet' },
+            ...(hasAnyRole(['SuperAdmin', 'Admin', 'DataCollector', 'Coordinator', 'Supervisor']) ? [
+              { id: 'cost-submission', icon: Receipt, title: 'Submit Costs', url: '/cost-submission' }
+            ] : []),
+            ...(hasAnyRole(['SuperAdmin', 'Admin', 'FinancialAdmin', 'Field Operation Manager (FOM)', 'ProjectManager', 'SeniorOperationsLead']) ? [
+              { id: 'finance', icon: DollarSign, title: 'Finance Overview', url: '/finance' }
+            ] : []),
+            ...(hasAnyRole(['SuperAdmin', 'Admin', 'FinancialAdmin', 'Field Operation Manager (FOM)']) ? [
+              { id: 'financial-ops', icon: TrendingUp, title: 'Financial Operations', url: '/financial-operations' }
+            ] : []),
+            ...(hasAnyRole(['SuperAdmin', 'Admin', 'FinancialAdmin', 'Field Operation Manager (FOM)', 'ProjectManager', 'SeniorOperationsLead']) ? [
+              { id: 'budget', icon: Banknote, title: 'Budget', url: '/budget' }
+            ] : []),
+            ...(hasAnyRole(['SuperAdmin', 'Admin', 'FinancialAdmin']) ? [
+              { id: 'admin-wallets', icon: CreditCard, title: 'Admin Wallets', url: '/admin/wallets' }
+            ] : []),
+          ]
+        },
+        ...(hasAnyRole(['SuperAdmin', 'Admin', 'FinancialAdmin', 'Field Operation Manager (FOM)', 'Supervisor', 'ProjectManager', 'SeniorOperationsLead']) ? [{
+          id: 'approvals',
+          label: 'Approvals',
+          items: [
+            { id: 'withdrawal-approval', icon: CheckCircle, title: 'Supervisor Approval', url: '/withdrawal-approval' },
+            ...(hasAnyRole(['SuperAdmin', 'Admin', 'FinancialAdmin']) ? [
+              { id: 'finance-approval', icon: CreditCard, title: 'Finance Approval', url: '/finance-approval' }
+            ] : []),
+            ...(hasAnyRole(['SuperAdmin', 'Admin', 'FinancialAdmin', 'Field Operation Manager (FOM)', 'SeniorOperationsLead']) ? [
+              { id: 'down-payment', icon: Banknote, title: 'Down Payment Approval', url: '/down-payment-approval' }
+            ] : []),
+          ]
+        }] : []),
+        ...(hasAnyRole(['SuperAdmin', 'Admin', 'ICT', 'Field Operation Manager (FOM)', 'ProjectManager', 'SeniorOperationsLead', 'Supervisor']) ? [{
+          id: 'team',
+          label: 'Team Management',
+          items: [
+            { id: 'users', icon: Users, title: 'Team Members', url: '/users' },
+            ...(hasAnyRole(['SuperAdmin', 'Admin', 'ICT']) ? [
+              { id: 'role-management', icon: UserCog, title: 'Role Management', url: '/role-management' }
+            ] : []),
+            ...(hasAnyRole(['SuperAdmin', 'Admin', 'Field Operation Manager (FOM)']) ? [
+              { id: 'hub-operations', icon: Building2, title: 'Hub Operations', url: '/hub-operations' }
+            ] : []),
+            ...(hasAnyRole(['SuperAdmin', 'Admin']) ? [
+              { id: 'data-visibility', icon: Eye, title: 'Data Visibility', url: '/data-visibility' }
+            ] : []),
+          ]
+        }] : []),
+        ...(hasAnyRole(['SuperAdmin', 'Admin', 'ICT', 'FinancialAdmin', 'Field Operation Manager (FOM)', 'ProjectManager', 'SeniorOperationsLead', 'Supervisor', 'Reviewer']) ? [{
+          id: 'reports',
+          label: 'Reports & Analytics',
+          items: [
+            { id: 'reports', icon: BarChart, title: 'Reports', url: '/reports' },
+            ...(hasAnyRole(['SuperAdmin', 'Admin', 'FinancialAdmin']) ? [
+              { id: 'wallet-reports', icon: ClipboardList, title: 'Wallet Reports', url: '/wallet-reports' }
+            ] : []),
+            ...(hasAnyRole(['SuperAdmin', 'Admin', 'Field Operation Manager (FOM)', 'Coordinator', 'ProjectManager']) ? [
+              { id: 'tracker-plan', icon: FileCheck, title: 'Tracker Plan', url: '/tracker-preparation-plan' }
+            ] : []),
+            ...(hasAnyRole(['SuperAdmin', 'Admin', 'ICT']) ? [
+              { id: 'login-analytics', icon: Activity, title: 'Login Analytics', url: '/login-analytics' }
+            ] : []),
+          ]
+        }] : []),
+        {
+          id: 'tools',
+          label: 'Tools',
+          items: [
+            { id: 'calendar', icon: Calendar, title: 'Calendar', url: '/calendar' },
+            { id: 'signatures', icon: PenTool, title: 'Signatures', url: '/signatures' },
+            { id: 'calls', icon: Phone, title: 'Calls', url: '/calls' },
+            { id: 'advanced-map', icon: Globe, title: 'Advanced Map', url: '/advanced-map' },
+          ]
+        },
+        ...(hasAnyRole(['SuperAdmin', 'Admin', 'ICT']) ? [{
+          id: 'admin',
+          label: 'Administration',
+          items: [
+            ...(hasAnyRole(['SuperAdmin', 'Admin']) ? [
+              { id: 'classifications', icon: Database, title: 'Classifications', url: '/classifications' },
+              { id: 'audit', icon: Shield, title: 'Audit & Compliance', url: '/audit-compliance' }
+            ] : []),
+          ]
+        }] : []),
+        {
+          id: 'settings-section',
+          label: 'Settings & Help',
+          items: [
+            { id: 'app-settings', icon: SettingsIcon, title: 'Settings', url: '/settings' },
+            { id: 'help-docs', icon: HelpCircle, title: 'Help & Docs', url: '/documentation' },
+          ]
+        },
+      ];
+
+      // Merge workflow groups with additional groups
+      return [...workflowGroups, ...additionalMenuGroups];
+    },
+    [roles, appUser?.role, currentUser?.role, perms.dashboard, perms.projects, perms.mmp, perms.monitoringPlan, perms.siteVisits, perms.archive, perms.fieldTeam, perms.fieldOpManager, perms.dataVisibility, perms.reports, perms.users, perms.roleManagement, perms.settings, perms.financialOperations, isSuperAdmin, menuPrefs, hasAnyRole]
   );
 
   return (
     <>
-    <header className="px-2 h-10 flex items-center justify-between bg-black dark:bg-black shadow-md relative z-50">
+    <header className="fixed top-0 left-0 right-0 px-2 h-10 flex items-center justify-between bg-black dark:bg-black shadow-md z-50">
       <div className="flex items-center gap-1">
         <Button 
           variant="ghost" 

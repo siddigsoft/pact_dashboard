@@ -362,7 +362,10 @@ export const DataCollectorZone: React.FC = () => {
   const activeFilterCount = Object.values(filters).filter(v => v !== '').length;
 
   return (
-    <div className="p-4 md:p-8 space-y-6">
+    <div className="space-y-6 px-4 md:px-8">
+      {/* Spacer for app bar */}
+      <div className="h-4"></div>
+      
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-3">
@@ -436,6 +439,7 @@ export const DataCollectorZone: React.FC = () => {
       </div>
 
       {/* Location Update Card */}
+      <div className="px-4 md:px-8">
       <Card className="border-blue-200 bg-blue-50 dark:bg-blue-950/20">
         <CardContent className="p-3 sm:p-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -500,8 +504,10 @@ export const DataCollectorZone: React.FC = () => {
           </div>
         </CardContent>
       </Card>
+      </div>
 
       {/* Streak & Performance Banner */}
+      <div className="px-4 md:px-8">
       {(streak > 0 || completionRate > 0) && (
         <Card className="bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-950/20 dark:to-amber-950/20 border-orange-200 dark:border-orange-800">
           <CardContent className="p-3 sm:p-4">
@@ -546,6 +552,7 @@ export const DataCollectorZone: React.FC = () => {
           </CardContent>
         </Card>
       )}
+      </div>
 
       {/* Main Content Tabs */}
       <Card className="border-border/50 bg-gradient-to-r from-muted/30 via-background to-muted/30">
@@ -990,3 +997,4 @@ export const DataCollectorZone: React.FC = () => {
   );
 };
 
+export default DataCollectorZone;
