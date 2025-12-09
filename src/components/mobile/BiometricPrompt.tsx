@@ -4,6 +4,7 @@ import { Fingerprint, ScanFace, Shield, X, Check, AlertCircle, Loader2 } from 'l
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { hapticPresets } from '@/lib/haptics';
+import { useBiometric } from '@/hooks/use-biometric';
 
 type BiometricType = 'fingerprint' | 'face' | 'iris' | 'unknown';
 type BiometricStatus = 'idle' | 'scanning' | 'success' | 'error' | 'locked';
@@ -43,8 +44,13 @@ export function BiometricPrompt({
   const [attempts, setAttempts] = useState(0);
   const [lockoutTime, setLockoutTime] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  
+  const biometric = useBiometric();
+  const detectedType = biometric.status.biometricType !== 'none' 
+    ? biometric.status.biometricType 
+    : biometricType;
 
-  const BiometricIcon = biometricType === 'face' ? ScanFace : Fingerprint;
+  const BiometricIcon = detectedType === 'face' ? ScanFace : Fingerprint;
 
   const startScan = useCallback(async () => {
     if (status === 'scanning' || status === 'locked') return;
@@ -54,13 +60,15 @@ export function BiometricPrompt({
     setErrorMessage(null);
 
     try {
-      const available = await checkBiometricAvailability();
-      
-      if (!available) {
-        throw new Error('Biometric authentication not available');
+      if (!biometric.status.isAvailable) {
+        throw new Error('Biometric authentication not available on this device');
       }
 
-      const result = await performBiometricAuth();
+      const result = await biometric.authenticate({
+        reason: 'Verify your identity to continue',
+        title: title,
+        subtitle: subtitle,
+      });
 
       if (result.success) {
         hapticPresets.success();
@@ -87,7 +95,7 @@ export function BiometricPrompt({
         onError?.(error instanceof Error ? error.message : 'Authentication failed');
       }
     }
-  }, [status, attempts, maxAttempts, lockoutDuration, onSuccess, onError]);
+  }, [status, attempts, maxAttempts, lockoutDuration, onSuccess, onError, biometric, title, subtitle]);
 
   useEffect(() => {
     if (lockoutTime > 0) {
@@ -287,29 +295,6 @@ export function BiometricPrompt({
   );
 }
 
-async function checkBiometricAvailability(): Promise<boolean> {
-  if ('PublicKeyCredential' in window) {
-    try {
-      const available = await (window as any).PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
-      return available;
-    } catch {
-      return false;
-    }
-  }
-  return false;
-}
-
-async function performBiometricAuth(): Promise<{ success: boolean; error?: string }> {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      const success = Math.random() > 0.3;
-      resolve({
-        success,
-        error: success ? undefined : 'Fingerprint not recognized',
-      });
-    }, 1500);
-  });
-}
 
 interface BiometricButtonProps {
   onSuccess: () => void;
@@ -369,27 +354,31 @@ export function BiometricSetup({
   onSkip,
   className,
 }: BiometricSetupProps) {
-  const [isAvailable, setIsAvailable] = useState<boolean | null>(null);
+  const biometric = useBiometric();
   const [isEnrolling, setIsEnrolling] = useState(false);
-
-  useEffect(() => {
-    checkBiometricAvailability().then(setIsAvailable);
-  }, []);
 
   const handleEnroll = useCallback(async () => {
     hapticPresets.buttonPress();
     setIsEnrolling(true);
 
     try {
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      hapticPresets.success();
-      onComplete();
+      const result = await biometric.authenticate({
+        reason: 'Set up biometric authentication',
+        title: 'Enable Biometrics',
+      });
+      
+      if (result.success) {
+        hapticPresets.success();
+        onComplete();
+      } else {
+        hapticPresets.error();
+      }
     } catch {
       hapticPresets.error();
     } finally {
       setIsEnrolling(false);
     }
-  }, [onComplete]);
+  }, [onComplete, biometric]);
 
   return (
     <div className={cn("flex flex-col items-center text-center p-6", className)} data-testid="biometric-setup">
@@ -405,10 +394,10 @@ export function BiometricSetup({
         Use your fingerprint or face to quickly and securely sign in to your account.
       </p>
 
-      {isAvailable === false && (
+      {!biometric.status.isAvailable && !biometric.isLoading && (
         <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-black/5 dark:bg-white/5 text-black/60 dark:text-white/60 text-sm mb-6 w-full">
           <AlertCircle className="h-4 w-4 flex-shrink-0" />
-          <span>Biometric authentication is not available on this device.</span>
+          <span>{biometric.status.errorMessage || 'Biometric authentication is not available on this device.'}</span>
         </div>
       )}
 
@@ -417,7 +406,7 @@ export function BiometricSetup({
           variant="default"
           size="lg"
           onClick={handleEnroll}
-          disabled={isAvailable === false || isEnrolling}
+          disabled={!biometric.status.isAvailable || isEnrolling || biometric.isLoading}
           className="w-full rounded-full bg-black dark:bg-white text-white dark:text-black"
           data-testid="button-enable-biometric"
         >
