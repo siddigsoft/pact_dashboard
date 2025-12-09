@@ -108,7 +108,14 @@ const Users = () => {
   const pendingUsers = useMemo(() => users.filter(user => !user.isApproved), [users]);
   const approvedUsers = useMemo(() => users.filter(user => user.isApproved), [users]);
 
-  const isAdminOrICT = (roles || []).includes('admin' as any) || (roles || []).includes('ict' as any) || (roles || []).includes('superAdmin' as any);
+  const primaryRole = currentUser?.role?.toLowerCase() || '';
+  const isAdminOrICT = 
+    (roles || []).includes('admin' as any) || 
+    (roles || []).includes('ict' as any) || 
+    (roles || []).includes('superAdmin' as any) ||
+    primaryRole === 'admin' ||
+    primaryRole === 'ict' ||
+    primaryRole === 'superadmin';
 
   const getUserRoleLabels = (uid: string): string[] => {
     // Combine system roles (text) and custom roles (via role_id -> roles table)
