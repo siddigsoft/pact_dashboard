@@ -21,6 +21,7 @@ import { DownPaymentProvider } from './downPayment/DownPaymentContext';
 import { SuperAdminProvider } from './superAdmin/SuperAdminContext';
 import { ActiveVisitProvider } from './ActiveVisitContext';
 import { ApprovalProvider } from './approval/ApprovalContext';
+import { AuditProvider } from './audit/AuditContext';
 import BrowserNotificationListener from '@/components/BrowserNotificationListener';
 import GlobalCallOverlay from '@/components/communication/GlobalCallOverlay';
 import { GlobalPresenceProvider } from '@/context/presence/GlobalPresenceContext';
@@ -159,8 +160,9 @@ export const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children
                                 <CostSubmissionProvider>
                                   <DownPaymentProvider>
                                     <SuperAdminProvider>
-                                      <ApprovalProvider>
-                                        <ActiveVisitProvider>
+                                      <AuditProvider>
+                                        <ApprovalProvider>
+                                          <ActiveVisitProvider>
                                           <ChatProvider>
                                           <CallProvider>
                                             <CommunicationProvider>
@@ -173,8 +175,9 @@ export const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children
                                             </CommunicationProvider>
                                           </CallProvider>
                                         </ChatProvider>
-                                        </ActiveVisitProvider>
-                                      </ApprovalProvider>
+                                          </ActiveVisitProvider>
+                                        </ApprovalProvider>
+                                      </AuditProvider>
                                     </SuperAdminProvider>
                                   </DownPaymentProvider>
                                 </CostSubmissionProvider>

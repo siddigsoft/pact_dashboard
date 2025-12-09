@@ -29,10 +29,12 @@ import LeafletMapContainer from '@/components/map/LeafletMapContainer';
 import { sudanStates, getStateName, getLocalityName } from '@/data/sudanStates';
 import { supabase } from '@/integrations/supabase/client';
 import { useUserProjects } from '@/hooks/useUserProjects';
+import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 
 const SiteVisits = () => {
   const { currentUser, hasRole } = useAppContext();
   const { canViewAllSiteVisits, checkPermission, hasAnyRole } = useAuthorization();
+  const { isSuperAdmin } = useSuperAdmin();
   const { siteVisits } = useSiteVisitContext();
   const { mmpFiles } = useMMP();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -273,6 +275,44 @@ const SiteVisits = () => {
   useEffect(() => {
     const canViewAll = canViewAllSiteVisits();
     
+    // SuperAdmin can see ALL site visits without any restrictions
+    if (isSuperAdmin) {
+      let filtered = [...siteVisits];
+      
+      // Apply status filter if set
+      if (statusFilter && statusFilter !== "all") {
+        filtered = filtered.filter(visit => 
+          visit.status?.toLowerCase() === statusFilter.toLowerCase()
+        );
+      }
+      
+      // Apply search filter
+      if (searchTerm.trim()) {
+        const search = searchTerm.toLowerCase();
+        filtered = filtered.filter(visit =>
+          (visit.siteName && visit.siteName.toLowerCase().includes(search)) ||
+          (visit.siteCode && visit.siteCode.toLowerCase().includes(search)) ||
+          (visit.locality && visit.locality.toLowerCase().includes(search)) ||
+          (visit.state && visit.state.toLowerCase().includes(search))
+        );
+      }
+      
+      // Sort filtered visits
+      filtered.sort((a, b) => {
+        if (sortBy === "dueDate") {
+          return new Date(a.dueDate || 0).getTime() - new Date(b.dueDate || 0).getTime();
+        } else if (sortBy === "priority") {
+          const priorityOrder = { high: 0, medium: 1, low: 2 };
+          return (priorityOrder[a.priority as keyof typeof priorityOrder] || 2) - 
+                 (priorityOrder[b.priority as keyof typeof priorityOrder] || 2);
+        }
+        return 0;
+      });
+      
+      setFilteredVisits(filtered);
+      return;
+    }
+    
     // For field workers (data collectors and coordinators), apply special filtering logic:
     // - "dispatched" status: show ONLY dispatched visits matching user's state AND locality
     //   This is where geographic filtering applies - users can only SEE and CLAIM sites in their locality
@@ -452,7 +492,7 @@ const SiteVisits = () => {
       }
       setSelectedVisit(selected || null);
     }
-  }, [currentUser, siteVisits, statusFilter, searchTerm, sortBy, view, hubParam, regionParam, monthParam, isFieldWorker, canViewAllSiteVisits, isSupervisor, supervisorHubName, canViewAllProjects, userProjectIds]);
+  }, [currentUser, siteVisits, statusFilter, searchTerm, sortBy, view, hubParam, regionParam, monthParam, isFieldWorker, canViewAllSiteVisits, isSupervisor, supervisorHubName, canViewAllProjects, userProjectIds, isSuperAdmin]);
 
   const handleRemoveFilter = (filterType: string) => {
     setActiveFilters(prev => ({
