@@ -797,16 +797,41 @@ class SyncManager {
 
     if (error) throw error;
 
-    // Process wallet transaction for completed visit
+    // Process wallet transaction for completed visit - with duplicate prevention
     const fee = (existing?.enumerator_fee || 0) + (existing?.transport_fee || 0);
     if (fee > 0 && userId) {
+      // VALIDATION: Check if fee was already recorded for this site visit
+      // Check both site_visit_id (from online completion) and reference_id (from offline sync)
+      const { data: existingFees, error: feeCheckError } = await supabase
+        .from('wallet_transactions')
+        .select('id, amount')
+        .or(`site_visit_id.eq.${siteEntryId},reference_id.eq.${siteEntryId}`)
+        .in('type', ['earning', 'site_visit_fee']);
+
+      // CRITICAL: Abort if we cannot verify whether fee exists (fail-safe)
+      if (feeCheckError) {
+        console.error(`[SyncManager] Failed to check for existing fees: ${feeCheckError.message}`);
+        // Don't add fee if we can't verify - fail-safe approach
+        return;
+      }
+
+      // Skip if any fee already exists for this site visit
+      if (existingFees && existingFees.length > 0) {
+        const totalExisting = existingFees.reduce((sum, f) => sum + Number(f.amount || 0), 0);
+        console.log(`[SyncManager] Fee already recorded for site visit ${siteEntryId}: ${totalExisting} SDG (${existingFees.length} transaction(s)) - skipping`);
+        return;
+      }
+
       const { data: wallet } = await supabase
         .from('wallets')
-        .select('id, total_earned')
+        .select('id, total_earned, balances')
         .eq('user_id', userId)
         .single();
 
       if (wallet) {
+        const currentBalance = Number((wallet.balances as any)?.SDG ?? 0) || 0;
+        const newBalance = Number((currentBalance + fee).toFixed(2));
+
         await supabase.from('wallet_transactions').insert({
           wallet_id: wallet.id,
           user_id: userId,
@@ -814,14 +839,22 @@ class SyncManager {
           amount: fee,
           amount_cents: Math.round(fee * 100),
           description: `Site visit completion (offline sync)`,
+          site_visit_id: siteEntryId, // Use site_visit_id for consistency with online flow
           reference_id: siteEntryId,
           reference_type: 'site_visit',
+          balance_before: currentBalance,
+          balance_after: newBalance,
         });
 
         await supabase
           .from('wallets')
-          .update({ total_earned: (wallet.total_earned || 0) + fee })
+          .update({ 
+            total_earned: (wallet.total_earned || 0) + fee,
+            balances: { ...(wallet.balances as any), SDG: newBalance },
+          })
           .eq('id', wallet.id);
+        
+        console.log(`[SyncManager] Added fee ${fee} SDG for site visit ${siteEntryId} (offline sync)`);
       }
     }
   }
