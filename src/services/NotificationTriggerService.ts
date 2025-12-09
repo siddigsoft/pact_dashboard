@@ -225,14 +225,18 @@ export const NotificationTriggerService = {
 
     const statusInfo = statusMessages[status];
     
+    // All withdrawal status changes should trigger email notifications
+    const priority: NotificationPriority = status === 'approved' || status === 'rejected' ? 'high' : 'medium';
+    
     await this.send({
       userId,
       title: statusInfo.title,
       message: statusInfo.message,
       type: statusInfo.type,
       category: 'financial',
-      priority: status === 'approved' ? 'high' : 'medium',
-      link: '/wallet'
+      priority,
+      link: '/wallet',
+      sendEmail: true // Always send email for withdrawal status changes
     });
   },
 
