@@ -7,9 +7,11 @@ import {
   AuditAction, 
   AuditSeverity,
   AuditLogEntry,
+  WorkflowStep,
   AUDIT_MODULE_LABELS, 
   AUDIT_ACTION_LABELS,
-  AUDIT_SEVERITY_LABELS 
+  AUDIT_SEVERITY_LABELS,
+  WORKFLOW_STEP_LABELS
 } from '@/types/audit-trail';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -33,7 +35,13 @@ import {
   ChevronDown,
   ChevronRight,
   FileText,
-  Shield
+  Shield,
+  GitBranch,
+  ArrowRight,
+  Circle,
+  PlayCircle,
+  PauseCircle,
+  StopCircle
 } from 'lucide-react';
 import { format, isToday, isYesterday, parseISO } from 'date-fns';
 
@@ -47,6 +55,7 @@ const AuditLogs = () => {
   const [actionFilter, setActionFilter] = useState<AuditAction | 'all'>('all');
   const [severityFilter, setSeverityFilter] = useState<AuditSeverity | 'all'>('all');
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
+  const [expandedEntityId, setExpandedEntityId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('timeline');
 
   if (!isSuperAdmin) {
@@ -115,6 +124,138 @@ const AuditLogs = () => {
     
     return groups;
   }, [filteredLogs]);
+
+  interface EntityWorkflow {
+    entityId: string;
+    entityType: string;
+    entityName?: string;
+    module: AuditModule;
+    logs: AuditLogEntry[];
+    currentStep: WorkflowStep | null;
+    lastActivity: string;
+    isCompleted: boolean;
+    hasFailed: boolean;
+    totalActions: number;
+  }
+
+  const groupedByEntity = useMemo(() => {
+    const entities: Record<string, EntityWorkflow> = {};
+    
+    for (const log of filteredLogs) {
+      const key = `${log.entityType}:${log.entityId}`;
+      
+      if (!entities[key]) {
+        entities[key] = {
+          entityId: log.entityId,
+          entityType: log.entityType,
+          entityName: log.entityName,
+          module: log.module,
+          logs: [],
+          currentStep: null,
+          lastActivity: log.timestamp,
+          isCompleted: false,
+          hasFailed: false,
+          totalActions: 0,
+        };
+      }
+      
+      entities[key].logs.push(log);
+      entities[key].totalActions++;
+      
+      if (log.entityName && !entities[key].entityName) {
+        entities[key].entityName = log.entityName;
+      }
+    }
+    
+    for (const entity of Object.values(entities)) {
+      const sortedLogs = [...entity.logs].sort(
+        (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      );
+      
+      entity.lastActivity = sortedLogs[0]?.timestamp || entity.lastActivity;
+      
+      for (const log of sortedLogs) {
+        if (log.workflowStep) {
+          entity.currentStep = log.workflowStep;
+          entity.isCompleted = log.workflowStep === 'completed';
+          entity.hasFailed = log.workflowStep === 'failed' || log.workflowStep === 'cancelled';
+          break;
+        }
+      }
+    }
+    
+    return Object.values(entities).sort(
+      (a, b) => new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime()
+    );
+  }, [filteredLogs]);
+
+  const getWorkflowStepIcon = (step: WorkflowStep | null, isCompleted: boolean, hasFailed: boolean) => {
+    if (hasFailed) {
+      return <StopCircle className="h-5 w-5 text-destructive" />;
+    }
+    if (isCompleted) {
+      return <CheckCircle className="h-5 w-5 text-green-500" />;
+    }
+    if (!step) {
+      return <Circle className="h-5 w-5 text-muted-foreground" />;
+    }
+    switch (step) {
+      case 'initiated':
+        return <PlayCircle className="h-5 w-5 text-blue-500" />;
+      case 'pending_approval':
+        return <PauseCircle className="h-5 w-5 text-yellow-500" />;
+      case 'approved':
+        return <CheckCircle className="h-5 w-5 text-green-500" />;
+      case 'rejected':
+        return <XCircle className="h-5 w-5 text-destructive" />;
+      case 'in_progress':
+        return <PlayCircle className="h-5 w-5 text-blue-500" />;
+      case 'completed':
+        return <CheckCircle className="h-5 w-5 text-green-500" />;
+      case 'cancelled':
+        return <StopCircle className="h-5 w-5 text-muted-foreground" />;
+      case 'failed':
+        return <XCircle className="h-5 w-5 text-destructive" />;
+      default:
+        return <Circle className="h-5 w-5 text-muted-foreground" />;
+    }
+  };
+
+  const getWorkflowStatusBadge = (step: WorkflowStep | null, isCompleted: boolean, hasFailed: boolean) => {
+    if (hasFailed) {
+      return <Badge variant="destructive">Failed</Badge>;
+    }
+    if (isCompleted) {
+      return <Badge className="bg-green-500 dark:bg-green-600 text-white">Completed</Badge>;
+    }
+    if (!step) {
+      return <Badge variant="outline">Unknown</Badge>;
+    }
+    switch (step) {
+      case 'initiated':
+        return <Badge className="bg-blue-500 dark:bg-blue-600 text-white">Initiated</Badge>;
+      case 'pending_approval':
+        return <Badge className="bg-yellow-500 dark:bg-yellow-600 text-white">Pending Approval</Badge>;
+      case 'approved':
+        return <Badge className="bg-green-500 dark:bg-green-600 text-white">Approved</Badge>;
+      case 'rejected':
+        return <Badge variant="destructive">Rejected</Badge>;
+      case 'in_progress':
+        return <Badge className="bg-blue-500 dark:bg-blue-600 text-white">In Progress</Badge>;
+      case 'completed':
+        return <Badge className="bg-green-500 dark:bg-green-600 text-white">Completed</Badge>;
+      case 'cancelled':
+        return <Badge variant="secondary">Cancelled</Badge>;
+      case 'failed':
+        return <Badge variant="destructive">Failed</Badge>;
+      default:
+        return <Badge variant="outline">{WORKFLOW_STEP_LABELS[step]}</Badge>;
+    }
+  };
+
+  const toggleEntityExpanded = (entityKey: string) => {
+    setExpandedEntityId(expandedEntityId === entityKey ? null : entityKey);
+  };
 
   const getSeverityColor = (severity: AuditSeverity) => {
     switch (severity) {
@@ -291,6 +432,10 @@ const AuditLogs = () => {
             <Clock className="h-4 w-4 mr-2" />
             Timeline
           </TabsTrigger>
+          <TabsTrigger value="workflows" data-testid="tab-workflows">
+            <GitBranch className="h-4 w-4 mr-2" />
+            Workflows
+          </TabsTrigger>
           <TabsTrigger value="table" data-testid="tab-table">
             <FileText className="h-4 w-4 mr-2" />
             Table View
@@ -440,6 +585,148 @@ const AuditLogs = () => {
                         </div>
                       </div>
                     ))}
+                  </div>
+                )}
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="workflows" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <GitBranch className="h-5 w-5" />
+                Entity Workflow Tracking
+              </CardTitle>
+              <CardDescription>
+                Track end-to-end workflow progress for each entity across all system activities
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              <ScrollArea className="h-[600px]">
+                {loading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : groupedByEntity.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                    <GitBranch className="h-12 w-12 mb-4" />
+                    <p>No workflow entities found</p>
+                  </div>
+                ) : (
+                  <div className="divide-y">
+                    {groupedByEntity.map((entity) => {
+                      const entityKey = `${entity.entityType}:${entity.entityId}`;
+                      const isExpanded = expandedEntityId === entityKey;
+                      
+                      return (
+                        <div key={entityKey}>
+                          <div 
+                            className="px-4 py-4 hover-elevate cursor-pointer"
+                            onClick={() => toggleEntityExpanded(entityKey)}
+                            data-testid={`workflow-entity-${entity.entityId}`}
+                          >
+                            <div className="flex items-start gap-4">
+                              <div className="mt-0.5">
+                                {getWorkflowStepIcon(entity.currentStep, entity.isCompleted, entity.hasFailed)}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-medium">
+                                    {entity.entityName || entity.entityId}
+                                  </span>
+                                  {getWorkflowStatusBadge(entity.currentStep, entity.isCompleted, entity.hasFailed)}
+                                  <Badge variant="outline" className="text-xs">
+                                    {AUDIT_MODULE_LABELS[entity.module]}
+                                  </Badge>
+                                </div>
+                                <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
+                                  <span className="flex items-center gap-1">
+                                    <FileText className="h-3 w-3" />
+                                    {entity.entityType}
+                                  </span>
+                                  <span className="flex items-center gap-1">
+                                    <Activity className="h-3 w-3" />
+                                    {entity.totalActions} actions
+                                  </span>
+                                  <span className="flex items-center gap-1">
+                                    <Clock className="h-3 w-3" />
+                                    {format(parseISO(entity.lastActivity), 'MMM d, HH:mm')}
+                                  </span>
+                                </div>
+                              </div>
+                              <div>
+                                {isExpanded ? (
+                                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                                ) : (
+                                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {isExpanded && (
+                            <div className="px-4 pb-4">
+                              <div className="ml-9 border-l-2 border-muted pl-4 space-y-4">
+                                <div className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2">
+                                  Activity Timeline
+                                </div>
+                                {[...entity.logs]
+                                  .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+                                  .map((log, index) => (
+                                    <div 
+                                      key={log.id} 
+                                      className="relative"
+                                      data-testid={`workflow-log-${log.id}`}
+                                    >
+                                      <div className="absolute -left-[21px] top-1 h-3 w-3 rounded-full bg-background border-2 border-muted-foreground" />
+                                      <div className="flex items-start gap-3">
+                                        <div className="flex-1">
+                                          <div className="flex items-center gap-2 flex-wrap">
+                                            <span className="text-sm font-medium">{AUDIT_ACTION_LABELS[log.action]}</span>
+                                            {log.workflowStep && (
+                                              <Badge variant="outline" className="text-xs">
+                                                {WORKFLOW_STEP_LABELS[log.workflowStep]}
+                                              </Badge>
+                                            )}
+                                            {!log.success && (
+                                              <XCircle className="h-3 w-3 text-destructive" />
+                                            )}
+                                          </div>
+                                          <p className="text-sm text-muted-foreground mt-0.5">
+                                            {log.description}
+                                          </p>
+                                          <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
+                                            <span className="flex items-center gap-1">
+                                              <User className="h-3 w-3" />
+                                              {log.actorName}
+                                            </span>
+                                            <span className="flex items-center gap-1">
+                                              <Clock className="h-3 w-3" />
+                                              {format(parseISO(log.timestamp), 'MMM d, yyyy HH:mm:ss')}
+                                            </span>
+                                          </div>
+                                          {log.errorMessage && (
+                                            <p className="text-xs text-destructive mt-1">
+                                              {log.errorMessage}
+                                            </p>
+                                          )}
+                                        </div>
+                                      </div>
+                                      {index < entity.logs.length - 1 && (
+                                        <div className="absolute -left-[15px] top-4 bottom-0 flex items-center">
+                                          <ArrowRight className="h-2 w-2 text-muted-foreground opacity-0" />
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </ScrollArea>
