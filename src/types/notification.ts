@@ -1,4 +1,6 @@
 
+export type NotificationCategory = 'assignments' | 'approvals' | 'financial' | 'team' | 'system' | 'signatures' | 'calls' | 'messages';
+
 export interface Notification {
   id: string;
   userId: string;
@@ -9,5 +11,9 @@ export interface Notification {
   createdAt: string;
   link?: string;
   relatedEntityId?: string;
-  relatedEntityType?: 'siteVisit' | 'mmpFile' | 'transaction' | 'chat';
+  relatedEntityType?: 'siteVisit' | 'mmpFile' | 'transaction' | 'chat' | 'call' | 'signature' | 'document';
+  category?: NotificationCategory;
+  priority?: 'low' | 'medium' | 'high' | 'urgent';
+  targetRoles?: string[];  // Roles that should see this notification
+  projectId?: string;      // Project this notification is related to
 }

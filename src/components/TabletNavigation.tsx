@@ -127,7 +127,7 @@ const TabletNavigation = () => {
 
           {/* Brand/Title */}
           <div className="flex items-center space-x-2">
-            <h1 className="text-lg font-semibold">PACT Platform</h1>
+            <h1 className="text-xl font-semibold">PACT Command Center</h1>
           </div>
 
           {/* Desktop Navigation */}

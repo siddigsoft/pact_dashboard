@@ -5,13 +5,6 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { GradientStatCard } from '@/components/ui/gradient-stat-card';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import {
   Table,
   TableBody,
   TableCell,
@@ -58,6 +51,7 @@ import SiteVisitsOverview from '../SiteVisitsOverview';
 import UpcomingSiteVisitsCard from '../UpcomingSiteVisitsCard';
 import { SiteVisitCostSummary } from '../SiteVisitCostSummary';
 import { DashboardCalendar } from '../DashboardCalendar';
+import { useUserProjects } from '@/hooks/useUserProjects';
 
 interface MMPFile {
   id: string;
@@ -85,8 +79,8 @@ export const FOMZone: React.FC = () => {
   const { currentUser } = useAppContext();
   const { siteVisits } = useSiteVisitContext();
   const navigate = useNavigate();
+  const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
   const [activeTab, setActiveTab] = useState('overview');
-  const [selectedCard, setSelectedCard] = useState<string | null>(null);
   const [filters, setFilters] = useState<Filters>({
     hub: '',
     state: '',
@@ -108,94 +102,151 @@ export const FOMZone: React.FC = () => {
   const [financialLoading, setFinancialLoading] = useState(false);
 
   // Load MMPs forwarded to this FOM
-  useEffect(() => {
-    let cancelled = false;
-    const loadForwarded = async () => {
-      if (!currentUser?.id) {
-        setForwardedMMPs([]);
-        return;
-      }
-      setForwardedLoading(true);
-      try {
-        const { data, error } = await supabase
+  const loadForwarded = async () => {
+    if (!currentUser?.id) {
+      setForwardedMMPs([]);
+      return;
+    }
+    setForwardedLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('mmp_files')
+        .select(`
+          id, name, mmp_id, status, workflow, uploaded_at, hub, month,
+          project:projects(name, project_code),
+          permits
+        `)
+        .contains('workflow', { forwardedToFomIds: [currentUser.id] })
+        .order('created_at', { ascending: false });
+      
+      if (error) {
+        // Log error but don't show to user - RLS may block this query for some users
+        if (error.code !== 'PGRST116' && error.code !== '42501') {
+          console.warn('Failed to load forwarded MMPs:', error.code, error.message);
+        }
+        // Fallback query without join
+        const { data: fbData, error: fbError } = await supabase
           .from('mmp_files')
-          .select(`
-            id, name, mmp_id, status, workflow, uploaded_at, hub, month,
-            project:projects(name, project_code),
-            permits
-          `)
+          .select('*')
           .contains('workflow', { forwardedToFomIds: [currentUser.id] })
           .order('created_at', { ascending: false });
-        
-        if (!cancelled) {
-          if (error) {
-            // Log error but don't show to user - RLS may block this query for some users
-            if (error.code !== 'PGRST116' && error.code !== '42501') {
-              console.warn('Failed to load forwarded MMPs:', error.code, error.message);
-            }
-            // Fallback query without join
-            const { data: fbData, error: fbError } = await supabase
-              .from('mmp_files')
-              .select('*')
-              .contains('workflow', { forwardedToFomIds: [currentUser.id] })
-              .order('created_at', { ascending: false });
-            if (fbError) {
-              // Silently fail - user may not have access to this data
-              setForwardedMMPs([]);
-            } else {
-              setForwardedMMPs((fbData || []) as MMPFile[]);
-            }
-          } else {
-            setForwardedMMPs((data || []) as MMPFile[]);
-          }
+        if (fbError) {
+          // Silently fail - user may not have access to this data
+          setForwardedMMPs([]);
+        } else {
+          setForwardedMMPs((fbData || []) as MMPFile[]);
         }
-      } catch (err) {
-        // Silently fail - don't log RLS errors to console
-        if (!cancelled) setForwardedMMPs([]);
-      } finally {
-        if (!cancelled) setForwardedLoading(false);
+      } else {
+        setForwardedMMPs((data || []) as MMPFile[]);
       }
-    };
+    } catch (err) {
+      // Silently fail - don't log RLS errors to console
+      setForwardedMMPs([]);
+    } finally {
+      setForwardedLoading(false);
+    }
+  };
+
+  useEffect(() => {
     loadForwarded();
-    const interval = setInterval(loadForwarded, 60000); // Refresh every minute
-    return () => { cancelled = true; clearInterval(interval); };
+    // Fallback polling every 60s in case realtime disconnects
+    const interval = setInterval(loadForwarded, 60000);
+    return () => clearInterval(interval);
   }, [currentUser?.id]);
 
-  // Load all MMPs for approval queue (pending approval)
-  useEffect(() => {
-    let cancelled = false;
-    const loadAllMMPs = async () => {
-      setAllMMPsLoading(true);
-      try {
-        const { data, error } = await supabase
-          .from('mmp_files')
-          .select(`
-            id, name, mmp_id, status, workflow, uploaded_at, hub, month, project_name,
-            project:projects(name, project_code)
-          `)
-          .in('status', ['pending', 'submitted'])
-          .order('created_at', { ascending: false })
-          .limit(50);
-        
-        if (!cancelled) {
-          if (error) {
-            console.error('Failed to load MMPs:', error);
-            setAllMMPs([]);
-          } else {
-            setAllMMPs((data || []) as MMPFile[]);
-          }
-        }
-      } catch (err) {
-        console.error('Error loading MMPs:', err);
-        if (!cancelled) setAllMMPs([]);
-      } finally {
-        if (!cancelled) setAllMMPsLoading(false);
+  // Load all MMPs for approval queue (pending approval) - filtered by user's project membership
+  const loadAllMMPs = async () => {
+    // Early return if no user or non-admin with no project assignments
+    if (!currentUser?.id) {
+      setAllMMPs([]);
+      return;
+    }
+    if (!isAdminOrSuperUser && userProjectIds.length === 0) {
+      setAllMMPs([]);
+      return;
+    }
+    
+    setAllMMPsLoading(true);
+    try {
+      let query = supabase
+        .from('mmp_files')
+        .select(`
+          id, name, mmp_id, status, workflow, uploaded_at, hub, month, project_name, project_id,
+          project:projects(name, project_code)
+        `)
+        .in('status', ['pending', 'submitted'])
+        .order('created_at', { ascending: false })
+        .limit(50);
+      
+      // Apply project filter for non-admin users
+      if (!isAdminOrSuperUser && userProjectIds.length > 0) {
+        query = query.in('project_id', userProjectIds);
       }
-    };
+      
+      const { data, error } = await query;
+      
+      if (error) {
+        console.error('Failed to load MMPs:', error);
+        setAllMMPs([]);
+      } else {
+        // Additional client-side filtering for non-admin users
+        let filtered = data || [];
+        if (!isAdminOrSuperUser && userProjectIds.length > 0) {
+          filtered = filtered.filter((mmp: any) => 
+            mmp.project_id && userProjectIds.includes(mmp.project_id)
+          );
+        }
+        setAllMMPs(filtered as MMPFile[]);
+      }
+    } catch (err) {
+      console.error('Error loading MMPs:', err);
+      setAllMMPs([]);
+    } finally {
+      setAllMMPsLoading(false);
+    }
+  };
+
+  useEffect(() => {
     loadAllMMPs();
-    const interval = setInterval(loadAllMMPs, 120000); // Refresh every 2 minutes
-    return () => { cancelled = true; clearInterval(interval); };
-  }, []);
+    // Fallback polling every 120s in case realtime disconnects
+    const interval = setInterval(loadAllMMPs, 120000);
+    return () => clearInterval(interval);
+  }, [isAdminOrSuperUser, userProjectIds]);
+
+  // Real-time subscription for automatic updates without page refresh
+  useEffect(() => {
+    if (!currentUser?.id) return;
+
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    
+    const debouncedReload = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        loadForwarded();
+        loadAllMMPs();
+        debounceTimer = null;
+      }, 1000); // 1s debounce to avoid double-fetch storms
+    };
+
+    const channel = supabase
+      .channel('fom_dashboard_realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'mmp_files' },
+        debouncedReload
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'mmp_site_entries' },
+        debouncedReload
+      )
+      .subscribe();
+
+    return () => {
+      try { supabase.removeChannel(channel); } catch {}
+      if (debounceTimer) clearTimeout(debounceTimer);
+    };
+  }, [currentUser?.id, isAdminOrSuperUser, userProjectIds]);
 
   // Load financial overview
   useEffect(() => {
@@ -350,7 +401,7 @@ export const FOMZone: React.FC = () => {
           subtitle="MMPs needing permits"
           icon={FileCheck}
           color="orange"
-          onClick={() => setSelectedCard('awaiting-permits')}
+          onClick={() => navigate('/mmp')}
         />
 
         <GradientStatCard
@@ -359,7 +410,7 @@ export const FOMZone: React.FC = () => {
           subtitle={`${permitAttachmentRate}% completion`}
           icon={CheckCircle2}
           color="green"
-          onClick={() => setSelectedCard('permits-attached')}
+          onClick={() => navigate('/mmp')}
         />
 
         <GradientStatCard
@@ -368,7 +419,7 @@ export const FOMZone: React.FC = () => {
           subtitle="MMPs in queue"
           icon={Clock}
           color="blue"
-          onClick={() => setSelectedCard('pending-approval')}
+          onClick={() => navigate('/mmp')}
         />
 
         <GradientStatCard
@@ -377,7 +428,7 @@ export const FOMZone: React.FC = () => {
           subtitle="This period"
           icon={Target}
           color="green"
-          onClick={() => setSelectedCard('approved')}
+          onClick={() => navigate('/mmp')}
         />
 
         <GradientStatCard
@@ -386,7 +437,7 @@ export const FOMZone: React.FC = () => {
           subtitle={`${completionRate}% completed`}
           icon={MapPin}
           color="cyan"
-          onClick={() => setSelectedCard('site-visits')}
+          onClick={() => navigate('/site-visits')}
         />
 
         <GradientStatCard
@@ -395,7 +446,7 @@ export const FOMZone: React.FC = () => {
           subtitle="Permit attachment rate"
           icon={TrendingUp}
           color="purple"
-          onClick={() => setSelectedCard('performance')}
+          onClick={() => navigate('/dashboard')}
         />
       </div>
 

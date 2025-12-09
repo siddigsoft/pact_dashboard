@@ -40,7 +40,7 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
     if (path === '/users') return 'Team Members';
     if (path.startsWith('/projects')) return 'Projects';
     if (path === '/archive') return 'Archives';
-    return 'PACT Platform';
+    return 'PACT Command Center';
   };
 
   useEffect(() => {
@@ -82,7 +82,7 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
             )}
             {/* Global Refresh Bar - Available on all pages */}
             <GlobalRefreshBar />
-            <div className={`flex-1 ${isMobile ? 'px-3 pb-16 pt-2' : 'p-4 md:p-6 lg:p-8'} ${isMobile ? 'bg-gray-50 dark:bg-gray-900 scroll-container' : 'bg-slate-50/70 dark:bg-gray-900/70'} overflow-y-auto relative z-0 min-w-0 min-h-0`}>
+            <div className={`flex-1 flex flex-col ${isMobile ? 'px-1 pb-12 pt-0.5' : 'p-1 md:p-1.5 lg:p-2'} ${isMobile ? 'bg-gray-50 dark:bg-gray-900 overflow-hidden' : 'bg-slate-50/70 dark:bg-gray-900/70 scroll-container overflow-y-auto'} relative z-0 min-w-0 min-h-0`}>
               {children || <Outlet />}
             </div>
             {isMobile && <MobileBottomNav />}

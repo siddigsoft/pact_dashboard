@@ -11,6 +11,31 @@ import {
   CreateDeletionLog,
 } from '@/types/super-admin';
 
+export interface ResetSiteVisitParams {
+  siteVisitId: string;
+  reason: string;
+  deletedBy: string;
+  deletedByName: string;
+  deletedByRole: string;
+}
+
+export interface DeleteWalletTransactionParams {
+  transactionId: string;
+  reason: string;
+  deletedBy: string;
+  deletedByName: string;
+  deletedByRole: string;
+}
+
+export interface ResetWalletParams {
+  userId: string;
+  walletId: string;
+  reason: string;
+  deletedBy: string;
+  deletedByName: string;
+  deletedByRole: string;
+}
+
 interface SuperAdminContextType {
   superAdmins: SuperAdmin[];
   deletionLogs: DeletionAuditLog[];
@@ -24,6 +49,9 @@ interface SuperAdminContextType {
   deactivateSuperAdmin: (data: DeactivateSuperAdmin) => Promise<boolean>;
   logDeletion: (data: CreateDeletionLog) => Promise<boolean>;
   checkSuperAdminStatus: (userId: string) => Promise<boolean>;
+  resetSiteVisit: (params: ResetSiteVisitParams) => Promise<boolean>;
+  deleteWalletTransaction: (params: DeleteWalletTransactionParams) => Promise<boolean>;
+  resetWallet: (params: ResetWalletParams) => Promise<boolean>;
 }
 
 const SuperAdminContext = createContext<SuperAdminContextType | undefined>(undefined);
@@ -95,15 +123,34 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
         .eq('is_active', true)
         .maybeSingle();
 
-      if (error) throw error;
+      if (error) {
+        // Suppress RLS permission errors - just log and return false
+        if (error.code === '42501' || error.message?.includes('permission') || error.message?.includes('RLS')) {
+          console.log('[SuperAdmin] No permission to check status (expected for some roles)');
+          return false;
+        }
+        throw error;
+      }
       return !!data;
-    } catch (error) {
-      console.error('Failed to check super-admin status:', error);
+    } catch (error: any) {
+      // Suppress permission-related errors silently
+      if (!error.message?.includes('permission') && !error.message?.includes('RLS') && error.code !== '42501') {
+        console.error('Failed to check super-admin status:', error);
+      }
       return false;
     }
   }, []);
 
   const refreshSuperAdmins = useCallback(async () => {
+    // Only admins should fetch super-admin data
+    const userRole = currentUser?.role?.toLowerCase();
+    if (!currentUser || (userRole !== 'admin' && userRole !== 'superadmin')) {
+      setSuperAdmins([]);
+      setStats(null);
+      setLoading(false);
+      return;
+    }
+    
     try {
       setLoading(true);
       const { data, error } = await supabase
@@ -111,7 +158,17 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        // Suppress RLS permission errors - just log them
+        if (error.code === '42501' || error.message?.includes('permission') || error.message?.includes('RLS')) {
+          console.log('[SuperAdmin] No permission to fetch super-admins (expected for non-admins)');
+          setSuperAdmins([]);
+          setStats(null);
+          setLoading(false);
+          return;
+        }
+        throw error;
+      }
 
       const admins = (data || []).map(transformSuperAdminFromDB);
       setSuperAdmins(admins);
@@ -125,16 +182,26 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
         recentActivity: [],
       });
     } catch (error: any) {
-      console.error('Failed to fetch super-admins:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to load super-admin data',
-        variant: 'destructive',
-      });
+      // Only log and show error for unexpected errors, not permission issues
+      const isPermissionError = error.code === '42501' || 
+        error.message?.includes('permission') || 
+        error.message?.includes('RLS') ||
+        error.message?.includes('policy');
+      
+      if (!isPermissionError) {
+        console.error('Failed to fetch super-admins:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to load super-admin data',
+          variant: 'destructive',
+        });
+      } else {
+        console.log('[SuperAdmin] Permission denied (expected for non-admin roles)');
+      }
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [currentUser, toast]);
 
   const refreshDeletionLogs = useCallback(async () => {
     try {
@@ -144,10 +211,21 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
         .order('deleted_at', { ascending: false })
         .limit(100);
 
-      if (error) throw error;
+      if (error) {
+        // Suppress RLS permission errors - just log them
+        if (error.code === '42501' || error.message?.includes('permission') || error.message?.includes('RLS')) {
+          console.log('[SuperAdmin] No permission to fetch deletion logs (expected for some roles)');
+          setDeletionLogs([]);
+          return;
+        }
+        throw error;
+      }
       setDeletionLogs((data || []).map(transformDeletionLogFromDB));
     } catch (error: any) {
-      console.error('Failed to fetch deletion logs:', error);
+      // Suppress permission-related errors silently
+      if (!error.message?.includes('permission') && !error.message?.includes('RLS') && error.code !== '42501') {
+        console.error('Failed to fetch deletion logs:', error);
+      }
     }
   }, []);
 
@@ -258,6 +336,400 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
     }
   };
 
+  const sendNotificationToUser = async (
+    userId: string,
+    title: string,
+    message: string,
+    type: string = 'info',
+    relatedEntityId?: string,
+    relatedEntityType?: string
+  ) => {
+    try {
+      await supabase.from('notifications').insert({
+        user_id: userId,
+        title,
+        message,
+        type,
+        is_read: false,
+        related_entity_id: relatedEntityId,
+        related_entity_type: relatedEntityType,
+        category: 'system',
+        priority: 'high',
+      });
+    } catch (error) {
+      console.error('Failed to send notification:', error);
+    }
+  };
+
+  const resetSiteVisit = async (params: ResetSiteVisitParams): Promise<boolean> => {
+    try {
+      const { siteVisitId, reason, deletedBy, deletedByName, deletedByRole } = params;
+      const errors: string[] = [];
+
+      // 1. Get the site visit details first
+      const { data: siteVisit, error: fetchError } = await supabase
+        .from('mmp_site_entries')
+        .select('*, accepted_by, supervisor_id, site_name, site_code, status')
+        .eq('id', siteVisitId)
+        .single();
+
+      if (fetchError || !siteVisit) {
+        toast({
+          title: 'Error',
+          description: 'Site visit not found',
+          variant: 'destructive',
+        });
+        return false;
+      }
+
+      const dataCollectorId = siteVisit.accepted_by;
+      const supervisorId = siteVisit.supervisor_id;
+
+      // 2. Find related wallet transactions
+      const { data: transactions, error: txnFetchError } = await supabase
+        .from('wallet_transactions')
+        .select('*')
+        .or(`site_visit_id.eq.${siteVisitId},reference_id.eq.${siteVisitId}`);
+
+      if (txnFetchError) {
+        throw new Error(`Failed to fetch related transactions: ${txnFetchError.message}`);
+      }
+
+      // 3. Reset the site visit status FIRST (most important operation)
+      const { error: updateError } = await supabase
+        .from('mmp_site_entries')
+        .update({
+          status: 'assigned',
+          visit_completed_at: null,
+          completion_notes: null,
+          gps_coordinates: null,
+          signature_data: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', siteVisitId);
+
+      if (updateError) {
+        throw new Error(`Failed to reset site visit status: ${updateError.message}`);
+      }
+
+      // 4. Log the site visit reset
+      await logDeletion({
+        tableName: 'mmp_site_entries',
+        recordId: siteVisitId,
+        recordData: { ...siteVisit, action: 'status_reset' },
+        deletedBy,
+        deletedByRole,
+        deletedByName,
+        deletionReason: reason,
+        isRestorable: true,
+      });
+
+      // 5. Process related wallet transactions (less critical - log errors but continue)
+      if (transactions && transactions.length > 0) {
+        for (const txn of transactions) {
+          try {
+            // Log the deletion first
+            await logDeletion({
+              tableName: 'wallet_transactions',
+              recordId: txn.id,
+              recordData: txn,
+              deletedBy,
+              deletedByRole,
+              deletedByName,
+              deletionReason: `Site visit reset: ${reason}`,
+              isRestorable: true,
+            });
+
+            // Get wallet and update balance
+            const { data: wallet, error: walletError } = await supabase
+              .from('wallets')
+              .select('*')
+              .eq('id', txn.wallet_id)
+              .single();
+
+            if (walletError) {
+              errors.push(`Failed to fetch wallet for transaction ${txn.id}`);
+              continue;
+            }
+
+            if (wallet) {
+              const currentBalance = wallet.balances?.[txn.currency] || 0;
+              const newBalance = currentBalance - txn.amount;
+              const updatedBalances = { ...wallet.balances, [txn.currency]: Math.max(0, newBalance) };
+
+              const { error: balanceError } = await supabase
+                .from('wallets')
+                .update({
+                  balances: updatedBalances,
+                  total_earned: Math.max(0, (parseFloat(wallet.total_earned) || 0) - txn.amount),
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('id', wallet.id);
+
+              if (balanceError) {
+                errors.push(`Failed to update wallet balance: ${balanceError.message}`);
+                continue;
+              }
+            }
+
+            // Delete the transaction
+            const { error: deleteError } = await supabase
+              .from('wallet_transactions')
+              .delete()
+              .eq('id', txn.id);
+
+            if (deleteError) {
+              errors.push(`Failed to delete transaction ${txn.id}: ${deleteError.message}`);
+            }
+          } catch (txnError: any) {
+            errors.push(`Transaction processing error: ${txnError.message}`);
+          }
+        }
+      }
+
+      // 6. Send notifications (non-critical - don't fail if these fail)
+      const notificationTitle = 'Site Visit Status Reset';
+      const notificationMessage = `Site visit "${siteVisit.site_name}" (${siteVisit.site_code}) has been reset to incomplete by ${deletedByName}. Reason: ${reason}`;
+
+      if (dataCollectorId) {
+        await sendNotificationToUser(
+          dataCollectorId,
+          notificationTitle,
+          notificationMessage,
+          'warning',
+          siteVisitId,
+          'site_visit'
+        );
+      }
+
+      if (supervisorId && supervisorId !== dataCollectorId) {
+        await sendNotificationToUser(
+          supervisorId,
+          notificationTitle,
+          notificationMessage,
+          'warning',
+          siteVisitId,
+          'site_visit'
+        );
+      }
+
+      // Show result with any partial errors
+      if (errors.length > 0) {
+        console.warn('Site visit reset completed with some errors:', errors);
+        toast({
+          title: 'Site Visit Reset (Partial)',
+          description: `Site visit reset completed. ${errors.length} transaction(s) had issues - check audit log.`,
+          variant: 'default',
+        });
+      } else {
+        toast({
+          title: 'Site Visit Reset',
+          description: 'Site visit has been reset to incomplete and related transactions removed',
+        });
+      }
+
+      return true;
+    } catch (error: any) {
+      console.error('Failed to reset site visit:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to reset site visit',
+        variant: 'destructive',
+      });
+      return false;
+    }
+  };
+
+  const deleteWalletTransaction = async (params: DeleteWalletTransactionParams): Promise<boolean> => {
+    try {
+      const { transactionId, reason, deletedBy, deletedByName, deletedByRole } = params;
+
+      // 1. Get the transaction
+      const { data: txn, error: fetchError } = await supabase
+        .from('wallet_transactions')
+        .select('*')
+        .eq('id', transactionId)
+        .single();
+
+      if (fetchError || !txn) {
+        toast({
+          title: 'Error',
+          description: 'Transaction not found',
+          variant: 'destructive',
+        });
+        return false;
+      }
+
+      // 2. Delete the transaction FIRST (most important)
+      const { error: deleteError } = await supabase
+        .from('wallet_transactions')
+        .delete()
+        .eq('id', transactionId);
+
+      if (deleteError) {
+        throw new Error(`Failed to delete transaction: ${deleteError.message}`);
+      }
+
+      // 3. Log the deletion
+      await logDeletion({
+        tableName: 'wallet_transactions',
+        recordId: transactionId,
+        recordData: txn,
+        deletedBy,
+        deletedByRole,
+        deletedByName,
+        deletionReason: reason,
+        isRestorable: true,
+      });
+
+      // 4. Update wallet balance (less critical - log error but don't fail)
+      const { data: wallet, error: walletFetchError } = await supabase
+        .from('wallets')
+        .select('*')
+        .eq('id', txn.wallet_id)
+        .single();
+
+      let balanceUpdateFailed = false;
+      if (!walletFetchError && wallet) {
+        const currentBalance = wallet.balances?.[txn.currency] || 0;
+        const newBalance = currentBalance - txn.amount;
+        const updatedBalances = { ...wallet.balances, [txn.currency]: Math.max(0, newBalance) };
+
+        const { error: balanceError } = await supabase
+          .from('wallets')
+          .update({
+            balances: updatedBalances,
+            total_earned: txn.amount > 0 
+              ? Math.max(0, (parseFloat(wallet.total_earned) || 0) - txn.amount)
+              : wallet.total_earned,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', wallet.id);
+
+        if (balanceError) {
+          console.error('Failed to update wallet balance:', balanceError);
+          balanceUpdateFailed = true;
+        }
+      }
+
+      // 5. Send notification to the user (non-critical)
+      if (txn.user_id) {
+        await sendNotificationToUser(
+          txn.user_id,
+          'Wallet Transaction Removed',
+          `A transaction of ${txn.amount} ${txn.currency} has been removed from your wallet by ${deletedByName}. Reason: ${reason}`,
+          'warning',
+          transactionId,
+          'wallet_transaction'
+        );
+      }
+
+      toast({
+        title: 'Transaction Deleted',
+        description: balanceUpdateFailed 
+          ? 'Transaction removed. Wallet balance may need manual adjustment.'
+          : 'Wallet transaction has been removed and balance adjusted',
+        variant: balanceUpdateFailed ? 'default' : 'default',
+      });
+
+      return true;
+    } catch (error: any) {
+      console.error('Failed to delete wallet transaction:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to delete transaction',
+        variant: 'destructive',
+      });
+      return false;
+    }
+  };
+
+  const resetWallet = async (params: ResetWalletParams): Promise<boolean> => {
+    try {
+      const { userId, walletId, reason, deletedBy, deletedByName, deletedByRole } = params;
+
+      // 1. Get all transactions for this wallet
+      const { data: transactions, error: fetchError } = await supabase
+        .from('wallet_transactions')
+        .select('*')
+        .eq('wallet_id', walletId);
+
+      if (fetchError) {
+        throw new Error(`Failed to fetch transactions: ${fetchError.message}`);
+      }
+
+      // 2. Reset wallet balances FIRST (most important)
+      const { error: walletError } = await supabase
+        .from('wallets')
+        .update({
+          balances: {},
+          total_earned: 0,
+          total_withdrawn: 0,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', walletId);
+
+      if (walletError) {
+        throw new Error(`Failed to reset wallet balances: ${walletError.message}`);
+      }
+
+      // 3. Delete all transactions
+      if (transactions && transactions.length > 0) {
+        const { error: deleteError } = await supabase
+          .from('wallet_transactions')
+          .delete()
+          .eq('wallet_id', walletId);
+
+        if (deleteError) {
+          throw new Error(`Failed to delete transactions: ${deleteError.message}`);
+        }
+
+        // 4. Log all transactions as deleted (non-critical)
+        for (const txn of transactions) {
+          try {
+            await logDeletion({
+              tableName: 'wallet_transactions',
+              recordId: txn.id,
+              recordData: txn,
+              deletedBy,
+              deletedByRole,
+              deletedByName,
+              deletionReason: `Wallet reset: ${reason}`,
+              isRestorable: true,
+            });
+          } catch (logError) {
+            console.error('Failed to log transaction deletion:', logError);
+          }
+        }
+      }
+
+      // 5. Send notification to the user (non-critical)
+      await sendNotificationToUser(
+        userId,
+        'Wallet Reset',
+        `Your wallet has been reset by ${deletedByName}. All transactions have been cleared. Reason: ${reason}`,
+        'warning',
+        walletId,
+        'wallet'
+      );
+
+      toast({
+        title: 'Wallet Reset',
+        description: `Wallet has been reset. ${transactions?.length || 0} transactions removed.`,
+      });
+
+      return true;
+    } catch (error: any) {
+      console.error('Failed to reset wallet:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to reset wallet',
+        variant: 'destructive',
+      });
+      return false;
+    }
+  };
+
   const value: SuperAdminContextType = {
     superAdmins,
     deletionLogs,
@@ -271,6 +743,9 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
     deactivateSuperAdmin,
     logDeletion,
     checkSuperAdminStatus,
+    resetSiteVisit,
+    deleteWalletTransaction,
+    resetWallet,
   };
 
   return <SuperAdminContext.Provider value={value}>{children}</SuperAdminContext.Provider>;

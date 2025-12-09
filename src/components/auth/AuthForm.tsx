@@ -402,65 +402,69 @@ const AuthForm = ({ mode }: AuthFormProps) => {
 
   if (mode === 'login') {
     return (
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="space-y-2">
+      <form onSubmit={handleSubmit} className="space-y-3">
+        <div className="space-y-1.5">
           <div id="login-email">
-            <label className="text-sm font-medium">Email <span className="text-red-500">*</span></label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+            <label className="text-xs font-medium text-muted-foreground">Email <span className="text-red-500">*</span></label>
+            <div className="relative flex items-center">
+              <div className="absolute left-0 inset-y-0 flex items-center pl-3 pointer-events-none">
+                <Mail className="h-4 w-4 text-muted-foreground" />
+              </div>
               <Input
                 type="email"
-                placeholder="Email"
+                placeholder="Enter your email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="pl-10 bg-white/50 focus:bg-white transition-colors focus:border-red-500"
+                style={{ paddingLeft: '2.5rem' }}
+                className="h-9 text-sm bg-white/50 dark:bg-gray-800/50 focus:bg-white dark:focus:bg-gray-800 transition-colors"
                 data-testid="input-email"
               />
             </div>
           </div>
         </div>
 
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           <div id="login-password">
-            <label className="text-sm font-medium">Password <span className="text-red-500">*</span></label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+            <label className="text-xs font-medium text-muted-foreground">Password <span className="text-red-500">*</span></label>
+            <div className="relative flex items-center">
+              <div className="absolute left-0 inset-y-0 flex items-center pl-3 pointer-events-none">
+                <Lock className="h-4 w-4 text-muted-foreground" />
+              </div>
               <Input
                 type={showPassword ? "text" : "password"}
-                placeholder="Password"
+                placeholder="Enter your password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="pl-10 pr-10 bg-white/50 focus:bg-white transition-colors focus:border-red-500"
+                style={{ paddingLeft: '2.5rem', paddingRight: '2.5rem' }}
+                className="h-9 text-sm bg-white/50 dark:bg-gray-800/50 focus:bg-white dark:focus:bg-gray-800 transition-colors"
                 data-testid="input-password"
               />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-3 text-gray-400 hover:text-gray-600"
-                data-testid="button-toggle-password"
-              >
-                {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-              </button>
+              <div className="absolute right-0 inset-y-0 flex items-center pr-3">
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                  data-testid="button-toggle-password"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
           </div>
         </div>
 
         <Button
           type="submit"
-          className="w-full bg-[#9b87f5] hover:bg-[#8b77e5] transition-colors 
-                   transform hover:scale-105 active:scale-95 
-                   duration-300 ease-in-out relative
-                   animate-fade-in hover:animate-pulse-slow
-                   disabled:opacity-70 disabled:cursor-not-allowed
-                   disabled:hover:scale-100 disabled:hover:bg-[#9b87f5]"
+          className="w-full h-9 text-sm bg-primary hover:bg-primary/90 transition-colors"
           disabled={isLoading}
           data-testid="button-login"
         >
           {isLoading ? (
             <div className="flex items-center justify-center gap-2">
-              <svg className="h-5 w-5 animate-spin" fill="none" viewBox="0 0 24 24">
+              <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
               </svg>
@@ -471,19 +475,19 @@ const AuthForm = ({ mode }: AuthFormProps) => {
           )}
         </Button>
 
-        <div className="relative my-6">
+        <div className="relative my-4">
           <div className="absolute inset-0 flex items-center">
             <span className="w-full border-t" />
           </div>
-          <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-white px-2 text-gray-500">Or continue with</span>
+          <div className="relative flex justify-center text-[10px] uppercase tracking-wider">
+            <span className="bg-background px-2 text-muted-foreground">Or continue with</span>
           </div>
         </div>
 
         <Button
           type="button"
           variant="outline"
-          className="w-full"
+          className="w-full h-9 text-sm"
           onClick={handleGoogleSignIn}
           disabled={isLoading}
         >

@@ -1,7 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { MapPin, Loader2 } from 'lucide-react';
-import { dynamic } from '@/lib/utils';
 import 'leaflet/dist/leaflet.css';
 
 interface ReactLeafletMapProps {
@@ -12,6 +11,10 @@ interface ReactLeafletMapProps {
     longitude: number;
     type: 'user' | 'site';
     status?: string;
+    phone?: string;
+    lastActive?: string;
+    workload?: number;
+    avatar?: string;
   }>;
   height?: string;
   onLocationClick?: (id: string) => void;
@@ -20,35 +23,24 @@ interface ReactLeafletMapProps {
   defaultZoom?: number;
 }
 
-// Dynamically import the map component with no SSR to avoid server-side rendering issues
-const LeafletMapComponent = () => {
-  const [loading, setLoading] = useState(true);
-  
-  const MapContainer = dynamic(
-    () => import('./LeafletMapContainer').then((mod) => mod.default),
-    { 
-      ssr: false, 
-      loading: () => (
-        <div className="h-full w-full flex items-center justify-center bg-slate-100/50 backdrop-blur-sm">
-          <div className="text-center p-4">
-            <Loader2 className="h-12 w-12 mx-auto mb-2 text-primary animate-spin" />
-            <p className="text-muted-foreground">Loading map data...</p>
-          </div>
-        </div>
-      )
-    }
-  );
-  
-  return <MapContainer />;
-};
+const MapPlaceholder = () => (
+  <div className="h-full w-full flex items-center justify-center bg-slate-100/50 dark:bg-slate-900/50 backdrop-blur-sm">
+    <div className="text-center p-4">
+      <Loader2 className="h-12 w-12 mx-auto mb-2 text-black dark:text-white animate-spin" />
+      <p className="text-muted-foreground">Loading map...</p>
+    </div>
+  </div>
+);
+
+const LazyLeafletMapContainer = lazy(() => import('./LeafletMapContainer'));
 
 const ReactLeafletMap: React.FC<ReactLeafletMapProps> = ({ 
   locations = [], 
   height = '500px', 
   onLocationClick,
   mapType = 'standard',
-  defaultCenter = [20, 0], // Global default
-  defaultZoom = 3  // Global zoom
+  defaultCenter = [15.5, 32.5],
+  defaultZoom = 6
 }) => {
   const [isClient, setIsClient] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,20 +49,11 @@ const ReactLeafletMap: React.FC<ReactLeafletMapProps> = ({
     setIsClient(true);
   }, []);
 
-  const MapPlaceholder = () => (
-    <div className="h-full w-full flex items-center justify-center bg-slate-100/50 backdrop-blur-sm">
-      <div className="text-center p-4">
-        <Loader2 className="h-12 w-12 mx-auto mb-2 text-primary animate-spin" />
-        <p className="text-muted-foreground">Loading map data...</p>
-      </div>
-    </div>
-  );
-
   const MapError = () => (
-    <div className="h-full w-full flex items-center justify-center bg-slate-100/50 backdrop-blur-sm">
+    <div className="h-full w-full flex items-center justify-center bg-slate-100/50 dark:bg-slate-900/50 backdrop-blur-sm">
       <div className="text-center p-4">
         <MapPin className="h-12 w-12 mx-auto mb-2 text-destructive/70" />
-        <p className="text-muted-foreground">{error || "Failed to load map component"}</p>
+        <p className="text-muted-foreground">{error || "Failed to load map"}</p>
       </div>
     </div>
   );
@@ -78,16 +61,22 @@ const ReactLeafletMap: React.FC<ReactLeafletMapProps> = ({
   return (
     <Card className="w-full">
       <CardContent className="p-0">
-        <div style={{ height, width: '100%' }} className="rounded-lg">
+        <div style={{ height, width: '100%' }} className="rounded-lg overflow-hidden">
           {!isClient ? (
             <MapPlaceholder />
           ) : error ? (
             <MapError />
           ) : (
-            <div className="h-full w-full">
-              {/* Use the regular MapComponent from MapComponent.tsx instead */}
-              <MapPlaceholder />
-            </div>
+            <Suspense fallback={<MapPlaceholder />}>
+              <LazyLeafletMapContainer
+                locations={locations}
+                height={height}
+                onLocationClick={onLocationClick}
+                mapType={mapType}
+                defaultCenter={defaultCenter}
+                defaultZoom={defaultZoom}
+              />
+            </Suspense>
           )}
         </div>
       </CardContent>

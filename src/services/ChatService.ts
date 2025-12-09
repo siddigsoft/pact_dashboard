@@ -278,13 +278,16 @@ export class ChatService {
       
       if (error) {
         console.error('Error sending message:', error);
-        return null;
+        throw new Error(`Failed to send message: ${error.message || error.code || 'Database error'}`);
       }
       
       return data;
     } catch (error) {
       console.error('Error sending message:', error);
-      return null;
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error('Failed to send message: Unknown error');
     }
   }
 

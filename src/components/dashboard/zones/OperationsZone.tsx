@@ -1,31 +1,10 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { GradientStatCard } from '@/components/ui/gradient-stat-card';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { 
   ClipboardList, 
   Calendar, 
@@ -40,10 +19,7 @@ import {
   Zap,
   Target,
   BarChart3,
-  ExternalLink,
-  Filter,
-  X,
-  ChevronDown
+  ExternalLink
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { Button } from '@/components/ui/button';
@@ -73,18 +49,9 @@ export const OperationsZone: React.FC = () => {
   const { siteVisits: allSiteVisits } = useSiteVisitContext();
   const { users, currentUser } = useUser();
   const { hasAnyRole } = useAuthorization();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('overview');
-  const [selectedCard, setSelectedCard] = useState<MetricCardType>(null);
   const [supervisorHubName, setSupervisorHubName] = useState<string | null>(null);
-  const [filters, setFilters] = useState<Filters>({
-    hub: '',
-    state: '',
-    locality: '',
-    coordinator: '',
-    enumerator: '',
-    status: ''
-  });
-  const [showFilters, setShowFilters] = useState(false);
 
   // Check if user is a supervisor (not admin/ict)
   const isSupervisor = useMemo(() => {
@@ -215,133 +182,31 @@ export const OperationsZone: React.FC = () => {
   }).length;
   const completionRate = totalVisits > 0 ? Math.round((completedVisits / totalVisits) * 100) : 0;
 
-  // Get filtered visits based on selected card
-  const getFilteredVisits = (cardType: MetricCardType) => {
+  // Handle card clicks - navigate to site visits page with appropriate filters
+  const handleCardClick = (cardType: MetricCardType) => {
     switch (cardType) {
       case 'total':
-        return siteVisits;
+        navigate('/site-visits');
+        break;
       case 'completed':
-        return siteVisits.filter(v => v.status === 'completed');
+        navigate('/site-visits?status=completed');
+        break;
       case 'assigned':
-        return siteVisits.filter(v => v.status === 'assigned' || v.status === 'inProgress');
+        navigate('/site-visits?status=assigned');
+        break;
       case 'pending':
-        return siteVisits.filter(v => v.status === 'pending' || v.status === 'permitVerified');
+        navigate('/site-visits?status=scheduled');
+        break;
       case 'overdue':
-        return siteVisits.filter(v => {
-          const dueDate = new Date(v.dueDate);
-          const today = new Date();
-          return dueDate < today && v.status !== 'completed';
-        });
+        navigate('/site-visits?status=overdue');
+        break;
       case 'performance':
-        return siteVisits.filter(v => v.status === 'completed');
+        navigate('/site-visits?status=completed');
+        break;
       default:
-        return [];
+        navigate('/site-visits');
     }
   };
-
-  const getCardTitle = (cardType: MetricCardType) => {
-    switch (cardType) {
-      case 'total': return 'All Operations';
-      case 'completed': return 'Completed Visits';
-      case 'assigned': return 'Active Operations';
-      case 'pending': return 'Pending Queue';
-      case 'overdue': return 'Overdue Alerts';
-      case 'performance': return 'Performance Metrics';
-      default: return '';
-    }
-  };
-
-  const baseFilteredVisits = getFilteredVisits(selectedCard);
-
-  // Extract unique values for filter dropdowns with counts
-  const hubsWithCounts = useMemo(() => {
-    const hubs = [...new Set(baseFilteredVisits.map(v => v.hub).filter(Boolean))];
-    return hubs.map(hub => ({
-      value: hub,
-      count: baseFilteredVisits.filter(v => v.hub === hub).length
-    })).sort((a, b) => a.value.localeCompare(b.value));
-  }, [baseFilteredVisits]);
-
-  const statesWithCounts = useMemo(() => {
-    const states = [...new Set(baseFilteredVisits.map(v => v.state).filter(Boolean))];
-    return states.map(state => ({
-      value: state,
-      count: baseFilteredVisits.filter(v => v.state === state).length
-    })).sort((a, b) => a.value.localeCompare(b.value));
-  }, [baseFilteredVisits]);
-
-  const localitiesWithCounts = useMemo(() => {
-    const localities = [...new Set(baseFilteredVisits.map(v => v.locality).filter(Boolean))];
-    return localities.map(locality => ({
-      value: locality,
-      count: baseFilteredVisits.filter(v => v.locality === locality).length
-    })).sort((a, b) => a.value.localeCompare(b.value));
-  }, [baseFilteredVisits]);
-
-  const coordinatorsWithCounts = useMemo(() => {
-    const coordinators = [...new Set(baseFilteredVisits.map(v => v.team?.coordinator).filter(Boolean))];
-    return coordinators.map(coordinator => ({
-      value: coordinator,
-      count: baseFilteredVisits.filter(v => v.team?.coordinator === coordinator).length
-    })).sort((a, b) => a.value.localeCompare(b.value));
-  }, [baseFilteredVisits]);
-
-  const enumeratorsWithCounts = useMemo(() => {
-    const enumerators = [...new Set(baseFilteredVisits.map(v => v.assignedTo).filter(Boolean))];
-    return enumerators.map(enumerator => ({
-      value: enumerator,
-      count: baseFilteredVisits.filter(v => v.assignedTo === enumerator).length
-    })).sort((a, b) => a.value.localeCompare(b.value));
-  }, [baseFilteredVisits]);
-
-  const statusesWithCounts = useMemo(() => {
-    const statuses = [...new Set(baseFilteredVisits.map(v => v.status).filter(Boolean))];
-    return statuses.map(status => ({
-      value: status,
-      count: baseFilteredVisits.filter(v => v.status === status).length
-    })).sort((a, b) => a.value.localeCompare(b.value));
-  }, [baseFilteredVisits]);
-
-  // Apply filters to data
-  const filteredVisits = useMemo(() => {
-    return baseFilteredVisits.filter(visit => {
-      if (filters.hub && visit.hub !== filters.hub) return false;
-      if (filters.state && visit.state !== filters.state) return false;
-      if (filters.locality && visit.locality !== filters.locality) return false;
-      if (filters.coordinator && visit.team?.coordinator !== filters.coordinator) return false;
-      if (filters.enumerator && visit.assignedTo !== filters.enumerator) return false;
-      if (filters.status && visit.status !== filters.status) return false;
-      return true;
-    });
-  }, [baseFilteredVisits, filters]);
-
-  // Reset filters when card changes
-  const handleCardClick = (cardType: MetricCardType) => {
-    setSelectedCard(cardType);
-    setFilters({
-      hub: '',
-      state: '',
-      locality: '',
-      coordinator: '',
-      enumerator: '',
-      status: ''
-    });
-  };
-
-  // Clear all filters
-  const clearAllFilters = () => {
-    setFilters({
-      hub: '',
-      state: '',
-      locality: '',
-      coordinator: '',
-      enumerator: '',
-      status: ''
-    });
-  };
-
-  // Count active filters
-  const activeFilterCount = Object.values(filters).filter(v => v !== '').length;
 
   return (
     <div className="p-3 sm:p-4 md:p-6 lg:p-8 space-y-4 sm:space-y-6">
@@ -503,370 +368,6 @@ export const OperationsZone: React.FC = () => {
           </Tabs>
         </CardContent>
       </Card>
-
-      {/* Detail Modal */}
-      <Dialog open={selectedCard !== null} onOpenChange={(open) => !open && setSelectedCard(null)}>
-        <DialogContent className="max-w-4xl max-h-[85vh] sm:max-h-[80vh] overflow-hidden flex flex-col mx-4 sm:mx-auto">
-          <DialogHeader className="pb-3">
-            <DialogTitle className="flex items-center gap-2 text-lg sm:text-xl">
-              {selectedCard === 'total' && <Activity className="h-5 w-5 text-primary" />}
-              {selectedCard === 'completed' && <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />}
-              {selectedCard === 'assigned' && <Users className="h-5 w-5 text-blue-600 dark:text-blue-400" />}
-              {selectedCard === 'pending' && <Clock className="h-5 w-5 text-orange-600 dark:text-orange-400" />}
-              {selectedCard === 'overdue' && <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />}
-              {selectedCard === 'performance' && <BarChart3 className="h-5 w-5 text-purple-600 dark:text-purple-400" />}
-              <span className="truncate">{getCardTitle(selectedCard)}</span>
-              <Badge variant="outline" className="ml-auto flex-shrink-0">
-                {filteredVisits.length} {filteredVisits.length === 1 ? 'visit' : 'visits'}
-              </Badge>
-            </DialogTitle>
-            <DialogDescription className="text-sm">
-              Detailed breakdown of {getCardTitle(selectedCard).toLowerCase()}
-            </DialogDescription>
-          </DialogHeader>
-
-          {/* Filter Bar */}
-          <div className="space-y-3 border-b pb-4">
-            <div className="flex items-center gap-2">
-              <Filter className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-medium">Filters</span>
-              {activeFilterCount > 0 && (
-                <Badge variant="secondary" className="h-5 text-[10px]">
-                  {activeFilterCount} active
-                </Badge>
-              )}
-              {activeFilterCount > 0 && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={clearAllFilters}
-                  className="ml-auto h-8 px-3 text-xs active:scale-95 transition-all"
-                  data-testid="button-clear-filters"
-                >
-                  <X className="h-3 w-3 mr-1" />
-                  Clear all
-                </Button>
-              )}
-            </div>
-
-            {/* Mobile Filter Toggle */}
-            <div className="block sm:hidden">
-              <Button
-                variant="outline"
-                onClick={() => setShowFilters(!showFilters)}
-                className="w-full h-10 active:scale-95 transition-all"
-              >
-                {showFilters ? 'Hide Filters' : 'Show Filters'}
-                <ChevronDown className={`h-4 w-4 ml-2 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
-              </Button>
-            </div>
-
-            <div className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 ${showFilters ? 'block' : 'hidden sm:grid'}`}>
-              {/* Hub Filter */}
-              <Select
-                value={filters.hub}
-                onValueChange={(value) => setFilters(prev => ({ ...prev, hub: value === 'all' ? '' : value }))}
-              >
-                <SelectTrigger className="h-9 text-xs" data-testid="select-filter-hub">
-                  <SelectValue placeholder="Hub" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Hubs ({baseFilteredVisits.length})</SelectItem>
-                  {hubsWithCounts.map((item) => (
-                    <SelectItem key={item.value} value={item.value}>
-                      {item.value} ({item.count})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              {/* State Filter */}
-              <Select
-                value={filters.state}
-                onValueChange={(value) => setFilters(prev => ({ ...prev, state: value === 'all' ? '' : value }))}
-              >
-                <SelectTrigger className="h-9 text-xs" data-testid="select-filter-state">
-                  <SelectValue placeholder="State" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All States ({baseFilteredVisits.length})</SelectItem>
-                  {statesWithCounts.map((item) => (
-                    <SelectItem key={item.value} value={item.value}>
-                      {item.value} ({item.count})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              {/* Locality Filter */}
-              <Select
-                value={filters.locality}
-                onValueChange={(value) => setFilters(prev => ({ ...prev, locality: value === 'all' ? '' : value }))}
-              >
-                <SelectTrigger className="h-9 text-xs" data-testid="select-filter-locality">
-                  <SelectValue placeholder="Locality" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Localities ({baseFilteredVisits.length})</SelectItem>
-                  {localitiesWithCounts.map((item) => (
-                    <SelectItem key={item.value} value={item.value}>
-                      {item.value} ({item.count})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              {/* Coordinator Filter */}
-              <Select
-                value={filters.coordinator}
-                onValueChange={(value) => setFilters(prev => ({ ...prev, coordinator: value === 'all' ? '' : value }))}
-              >
-                <SelectTrigger className="h-9 text-xs" data-testid="select-filter-coordinator">
-                  <SelectValue placeholder="Coordinator" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Coordinators ({baseFilteredVisits.length})</SelectItem>
-                  {coordinatorsWithCounts.map((item) => (
-                    <SelectItem key={item.value} value={item.value}>
-                      {item.value} ({item.count})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              {/* Enumerator Filter */}
-              <Select
-                value={filters.enumerator}
-                onValueChange={(value) => setFilters(prev => ({ ...prev, enumerator: value === 'all' ? '' : value }))}
-              >
-                <SelectTrigger className="h-9 text-xs" data-testid="select-filter-enumerator">
-                  <SelectValue placeholder="Enumerator" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Enumerators ({baseFilteredVisits.length})</SelectItem>
-                  {enumeratorsWithCounts.map((item) => (
-                    <SelectItem key={item.value} value={item.value}>
-                      {item.value} ({item.count})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              {/* Status Filter */}
-              <Select
-                value={filters.status}
-                onValueChange={(value) => setFilters(prev => ({ ...prev, status: value === 'all' ? '' : value }))}
-              >
-                <SelectTrigger className="h-9 text-xs" data-testid="select-filter-status">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Statuses ({baseFilteredVisits.length})</SelectItem>
-                  {statusesWithCounts.map((item) => (
-                    <SelectItem key={item.value} value={item.value}>
-                      {item.value} ({item.count})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          
-          <div className="flex-1 overflow-auto border rounded-md">
-            {filteredVisits.length > 0 ? (
-              <>
-                {/* Mobile Card View */}
-                <div className="block md:hidden space-y-3 p-3">
-                  {filteredVisits.map((visit) => (
-                    <Card key={visit.id} className="p-4">
-                      <div className="space-y-3">
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="text-sm font-medium text-primary truncate">
-                                {visit.mmpDetails?.mmpId || visit.projectName || 'N/A'}
-                              </span>
-                              <Badge 
-                                variant={
-                                  visit.status === 'completed' ? 'default' : 
-                                  visit.status === 'assigned' || visit.status === 'inProgress' ? 'secondary' : 
-                                  'outline'
-                                }
-                                className="text-[10px] flex-shrink-0"
-                              >
-                                {visit.status}
-                              </Badge>
-                            </div>
-                            <p className="text-sm font-medium truncate">{visit.siteName}</p>
-                            {visit.siteCode && (
-                              <p className="text-xs text-muted-foreground">{visit.siteCode}</p>
-                            )}
-                          </div>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-8 w-8 p-0 flex-shrink-0"
-                            onClick={() => window.location.href = `/site-visits/${visit.id}`}
-                          >
-                            <ExternalLink className="h-4 w-4" />
-                          </Button>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3 text-xs">
-                          <div>
-                            <p className="text-muted-foreground">Location</p>
-                            <p className="font-medium truncate">{visit.locality}, {visit.state}</p>
-                          </div>
-                          <div>
-                            <p className="text-muted-foreground">Assigned To</p>
-                            <p className="font-medium truncate">
-                              {visit.assignedTo 
-                                ? users.find(u => u.id === visit.assignedTo)?.name || 'Unknown' 
-                                : 'Unassigned'}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-muted-foreground">Due Date</p>
-                            <p className="font-medium">
-                              {visit.dueDate 
-                                ? format(new Date(visit.dueDate), 'MMM dd, yyyy')
-                                : 'Not scheduled'}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-muted-foreground">Completed</p>
-                            <p className="font-medium">
-                              {visit.completedAt 
-                                ? format(new Date(visit.completedAt), 'MMM dd, yyyy')
-                                : 'In progress'}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    </Card>
-                  ))}
-                </div>
-
-                {/* Desktop Table View */}
-                <div className="hidden md:block">
-                  <Table>
-                    <TableHeader className="sticky top-0 bg-background z-10">
-                      <TableRow>
-                        <TableHead>MMP Name</TableHead>
-                        <TableHead className="w-[200px]">Site Name</TableHead>
-                        <TableHead>Location</TableHead>
-                        <TableHead> Visit Date (coordinator)</TableHead>
-                        <TableHead>Actual Visit Date</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Assigned To</TableHead>
-                        <TableHead className="text-right">Action</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredVisits.map((visit) => (
-                        <TableRow key={visit.id} className="hover:bg-muted/50">
-                          <TableCell>
-                            <div className="flex flex-col">
-                              <span className="text-xs font-medium text-primary">
-                                {visit.mmpDetails?.mmpId || visit.projectName || 'N/A'}
-                              </span>
-                              {visit.mmpDetails?.projectName && visit.mmpDetails.mmpId && (
-                                <span className="text-[10px] text-muted-foreground truncate max-w-[120px]">
-                                  {visit.mmpDetails.projectName}
-                                </span>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell className="font-medium">
-                            <div className="flex flex-col">
-                              <span className="text-sm">{visit.siteName}</span>
-                              {visit.siteCode && (
-                                <span className="text-xs text-muted-foreground">{visit.siteCode}</span>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-1">
-                              <MapPin className="h-3 w-3 text-muted-foreground" />
-                              <span className="text-xs">{visit.locality}, {visit.state}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex flex-col">
-                              <span className={`text-xs ${!visit.dueDate ? 'text-muted-foreground' : ''}`}>
-                                {visit.dueDate 
-                                  ? format(new Date(visit.dueDate), 'MMM dd, yyyy')
-                                  : 'Not scheduled yet'
-                                }
-                              </span>
-                              {!visit.dueDate && (
-                                <span className="text-[10px] text-muted-foreground">Pending scheduling</span>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex flex-col">
-                              <span className={`text-xs ${!visit.completedAt ? 'text-muted-foreground' : ''}`}>
-                                {visit.completedAt 
-                                  ? format(new Date(visit.completedAt), 'MMM dd, yyyy')
-                                  : 'Not completed yet'
-                                }
-                              </span>
-                              {!visit.completedAt && (
-                                <span className="text-[10px] text-muted-foreground">Visit in progress</span>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <Badge 
-                              variant={
-                                visit.status === 'completed' ? 'default' : 
-                                visit.status === 'assigned' || visit.status === 'inProgress' ? 'secondary' : 
-                                'outline'
-                              }
-                              className="text-[10px]"
-                            >
-                              {visit.status}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <span className="text-xs text-muted-foreground">
-                              {visit.assignedTo 
-                                ? users.find(u => u.id === visit.assignedTo)?.name || 'Unknown' 
-                                : 'Unassigned'}
-                            </span>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-7 px-2"
-                              onClick={() => window.location.href = `/site-visits/${visit.id}`}
-                              data-testid={`button-view-visit-${visit.id}`}
-                            >
-                              <ExternalLink className="h-3 w-3" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </>
-            ) : (
-              <div className="flex flex-col items-center justify-center py-12 text-center">
-                <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
-                  <Activity className="h-8 w-8 text-muted-foreground" />
-                </div>
-                <p className="text-sm font-medium text-muted-foreground">No visits found</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  There are no site visits in this category
-                </p>
-              </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };

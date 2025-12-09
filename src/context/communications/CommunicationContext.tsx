@@ -1,6 +1,7 @@
 
 import React, { createContext, useContext, useState } from 'react';
 import { User, SiteVisit } from '@/types';
+import { useCall } from './CallContext';
 
 export type CallType = 'incoming' | 'outgoing' | 'connected';
 export type CallStatus = 'idle' | 'incoming' | 'outgoing' | 'connected' | 'ended';
@@ -16,6 +17,9 @@ interface CallState {
   recipient?: CallRecipient;
   duration: number;
   caller?: User;
+  callId?: string;
+  remoteStream?: MediaStream;
+  localStream?: MediaStream;
 }
 
 interface CommunicationContextProps {
@@ -35,6 +39,11 @@ interface CommunicationContextProps {
   activeAssignment: SiteVisit | null;
   handleAcceptAssignment: () => Promise<void>;
   handleDeclineAssignment: () => void;
+  isWebRTCInitialized: boolean;
+  toggleVideo: () => Promise<void>;
+  isVideoEnabled: boolean;
+  toggleMute: () => void;
+  isMuted: boolean;
 }
 
 const CommunicationContext = createContext<CommunicationContextProps | undefined>(undefined);
@@ -42,26 +51,10 @@ const CommunicationContext = createContext<CommunicationContextProps | undefined
 export const CommunicationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   children 
 }) => {
+  const callContext = useCall();
   const [isChatPanelOpen, setIsChatPanelOpen] = useState(false);
   const [isNotificationsPanelOpen, setIsNotificationsPanelOpen] = useState(false);
-  const [callState, setCallState] = useState<CallState>({
-    status: 'idle',
-    duration: 0
-  });
   const [activeAssignment, setActiveAssignment] = useState<SiteVisit | null>(null);
-  
-  // We'll use chat and notification functions safely with optional chaining
-  let chatContext;
-  let notificationContext;
-  
-  try {
-    // These will be defined when used in the correct hierarchy
-    // Don't import or use here to avoid circular dependencies
-    console.log('Chat or notification context will be accessed when needed');
-  } catch (error) {
-    // Will be defined when used in the correct hierarchy
-    console.log('Chat or notification context not available yet');
-  }
 
   const toggleChatPanel = () => {
     setIsChatPanelOpen(prev => !prev);
@@ -82,56 +75,52 @@ export const CommunicationProvider: React.FC<{ children: React.ReactNode }> = ({
     setIsNotificationsPanelOpen(false);
   };
 
-  const startCall = (recipientId: string, recipientName: string, recipientAvatar?: string) => {
-    setCallState({
-      status: 'outgoing' as CallStatus,
-      recipient: {
-        id: recipientId,
-        name: recipientName,
-        avatar: recipientAvatar
-      },
-      duration: 0
-    });
+  const callState: CallState = {
+    status: callContext.callState.status === 'connecting' ? 'connected' : callContext.callState.status,
+    recipient: callContext.callState.participant ? {
+      id: callContext.callState.participant.id,
+      name: callContext.callState.participant.name,
+      avatar: callContext.callState.participant.avatar
+    } : undefined,
+    duration: callContext.callState.duration
+  };
+
+  const startCall = async (recipientId: string, recipientName: string, recipientAvatar?: string) => {
+    await callContext.initiateCall({
+      id: recipientId,
+      name: recipientName,
+      avatar: recipientAvatar,
+      role: '',
+      status: 'active'
+    } as User);
   };
 
   const initiateCall = (user: User) => {
-    startCall(user.id, user.name, user.avatar);
+    callContext.initiateCall(user);
   };
 
   const acceptCall = () => {
-    setCallState(prev => ({
-      ...prev,
-      status: 'connected' as CallStatus
-    }));
+    callContext.acceptCall();
   };
 
   const endCall = () => {
-    setCallState({
-      status: 'idle',
-      duration: 0
-    });
+    callContext.endCall();
   };
 
   const rejectCall = () => {
-    setCallState({
-      status: 'idle',
-      duration: 0
-    });
+    callContext.rejectCall();
   };
   
   const openChatForEntity = (entityId: string, entityType: 'siteVisit' | 'mmpFile' | 'transaction' | 'chat') => {
     console.log(`Opening chat for ${entityType} with ID ${entityId}`);
-    // Implementation will be added when proper chat context is available
   };
   
   const createChatForSiteVisit = (siteVisitId: string) => {
     console.log(`Creating chat for site visit with ID ${siteVisitId}`);
-    // Implementation will be added when proper chat context is available
   };
 
   const handleAcceptAssignment = async (): Promise<void> => {
     console.log('Accepting assignment:', activeAssignment?.id);
-    // Implementation will be added
     return Promise.resolve();
   };
 
@@ -158,7 +147,12 @@ export const CommunicationProvider: React.FC<{ children: React.ReactNode }> = ({
         createChatForSiteVisit,
         activeAssignment,
         handleAcceptAssignment,
-        handleDeclineAssignment
+        handleDeclineAssignment,
+        isWebRTCInitialized: callContext.isCallActive || true,
+        toggleVideo: callContext.toggleVideo,
+        isVideoEnabled: callContext.isVideoEnabled,
+        toggleMute: callContext.toggleMute,
+        isMuted: callContext.callState.isMuted
       }}
     >
       {children}

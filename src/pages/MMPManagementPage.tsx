@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useAppContext } from '@/context/AppContext';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { useApproval } from '@/context/approval/ApprovalContext';
+import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Trash2 } from 'lucide-react';
 import { AlertDialog, AlertDialogTrigger, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog';
@@ -16,6 +18,8 @@ const FieldOperationManagerPage = () => {
   const { currentUser, roles } = useAppContext();
   const { mmpFiles, deleteMMPFile } = useMMP();
   const { checkPermission, hasAnyRole } = useAuthorization();
+  const { canBypassApproval, createApprovalRequest, hasPendingRequest } = useApproval();
+  const { toast } = useToast();
   const [deleteId, setDeleteId] = useState<string|null>(null);
   const [deleting, setDeleting] = useState(false);
   const navigate = useNavigate();
@@ -139,7 +143,44 @@ const FieldOperationManagerPage = () => {
                               disabled={deleting}
                               onClick={async () => {
                                 setDeleting(true);
-                                await deleteMMPFile(mmp.id);
+                                const mmpName = (mmp as any).projectName || mmp.mmpId;
+                                
+                                // SuperAdmin can bypass approval and delete directly
+                                if (canBypassApproval()) {
+                                  await deleteMMPFile(mmp.id);
+                                  toast({
+                                    title: "MMP Deleted",
+                                    description: `${mmpName} has been deleted.`,
+                                  });
+                                } else if (hasPendingRequest('mmp', mmp.id)) {
+                                  toast({
+                                    title: "Request Pending",
+                                    description: "An approval request is already pending for this MMP.",
+                                    variant: "destructive"
+                                  });
+                                } else {
+                                  // Non-SuperAdmin: create approval request
+                                  const result = await createApprovalRequest({
+                                    type: 'delete_mmp',
+                                    resourceType: 'mmp',
+                                    resourceId: mmp.id,
+                                    resourceName: mmpName,
+                                    reason: `Delete MMP: ${mmpName}`
+                                  });
+                                  if (result.success) {
+                                    toast({
+                                      title: "Request Submitted",
+                                      description: "Your deletion request has been sent to SuperAdmin for approval.",
+                                    });
+                                  } else {
+                                    toast({
+                                      title: "Request Failed",
+                                      description: result.error || "Failed to submit approval request.",
+                                      variant: "destructive"
+                                    });
+                                  }
+                                }
+                                
                                 setDeleting(false);
                                 setDeleteId(null);
                               }}

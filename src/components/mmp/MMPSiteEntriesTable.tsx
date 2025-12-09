@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Search, Eye, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Eye, ChevronLeft, ChevronRight, Play } from 'lucide-react';
 import SiteDetailDialog from './SiteDetailDialog';
 import { AcceptSiteButton } from '@/components/site-visit/AcceptSiteButton';
 import { RequestDownPaymentButton } from '@/components/site-visit/RequestDownPaymentButton';
@@ -401,15 +401,15 @@ const MMPSiteEntriesTable = ({
                         )}
                         {showVisitActions ? (
                           <>
-                            {(site.status?.toLowerCase() === 'accepted' || site.status?.toLowerCase() === 'assigned') && onStartVisit && (
+                            {['accepted', 'assigned', 'verified', 'approved', 'dispatched'].includes(site.status?.toLowerCase()) && onStartVisit && (
                               <Button 
-                                variant="default" 
                                 size="sm" 
                                 onClick={() => onStartVisit(site)} 
-                                className="bg-blue-600 hover:bg-blue-700"
+                                className="w-full sm:w-auto min-h-[52px] sm:min-h-[36px] rounded-full bg-black dark:bg-white text-white dark:text-black font-bold text-base sm:text-sm active:scale-95 hover:bg-black/90 dark:hover:bg-white/90"
                                 data-testid={`button-start-visit-${site.id}`}
+                                aria-label={`Start visit for ${site.site_name || site.siteName || 'site'}`}
                               >
-                                <Eye className="h-4 w-4 mr-1" /> Start Visit
+                                <Play className="h-5 w-5 sm:h-4 sm:w-4 mr-2" /> Start Visit
                               </Button>
                             )}
                             {(site.status?.toLowerCase() === 'ongoing' || site.status?.toLowerCase() === 'in progress' || site.status?.toLowerCase() === 'in_progress') && onCompleteVisit && (

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Table,
   TableBody,
@@ -9,11 +9,14 @@ import {
 } from '@/components/ui/table';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Circle, MapPin, Clock } from 'lucide-react';
+import { Circle, MapPin, Clock, MessageSquare } from 'lucide-react';
 import { User } from '@/types/user';
 import { formatDistanceToNow, format } from 'date-fns';
 import { getUserStatus } from '@/utils/userStatusUtils';
 import { TeamMemberActions } from '@/components/team/TeamMemberActions';
+import { useNavigate } from 'react-router-dom';
+import { useChat } from '@/context/chat/ChatContextSupabase';
+import { useToast } from '@/hooks/use-toast';
 
 interface TeamMemberTableProps {
   users: User[];
@@ -31,6 +34,43 @@ export const TeamMemberTable: React.FC<TeamMemberTableProps> = ({
   workloads,
   onRowClick 
 }) => {
+  const navigate = useNavigate();
+  const { createChat } = useChat();
+  const { toast } = useToast();
+  const [creatingChatFor, setCreatingChatFor] = useState<string | null>(null);
+
+  const handleDirectMessage = async (e: React.MouseEvent, user: User) => {
+    e.stopPropagation();
+    setCreatingChatFor(user.id);
+    
+    try {
+      const chat = await createChat([user.id], undefined, 'private');
+      if (chat) {
+        navigate('/chat');
+        toast({
+          title: 'Chat Opened',
+          description: `Opening conversation with ${user.name}`,
+          variant: 'success',
+        });
+      } else {
+        toast({
+          title: 'Error',
+          description: 'Failed to open chat. Please try again.',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Error creating chat:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to open chat. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setCreatingChatFor(null);
+    }
+  };
+
   const getInitials = (name: string) => {
     return name
       ?.split(' ')
@@ -53,21 +93,19 @@ export const TeamMemberTable: React.FC<TeamMemberTableProps> = ({
   };
 
   return (
-    <div className="rounded-lg border border-border bg-card">
+    <div className="rounded-md border border-border bg-card overflow-hidden">
       <Table>
         <TableHeader>
-          <TableRow className="bg-muted/30">
-            <TableHead className="w-12">Status</TableHead>
-            <TableHead>Team Member</TableHead>
-            <TableHead>Role</TableHead>
-            <TableHead>Last Login</TableHead>
-            <TableHead>Location</TableHead>
-            <TableHead className="text-center">Active</TableHead>
-            <TableHead className="text-center">Completed</TableHead>
-            <TableHead className="text-center">Pending</TableHead>
-            <TableHead className="text-center">Overdue</TableHead>
-            <TableHead className="text-right">Workload</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
+          <TableRow className="bg-muted/40 border-b">
+            <TableHead className="w-8 px-2 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"></TableHead>
+            <TableHead className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Member</TableHead>
+            <TableHead className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Role</TableHead>
+            <TableHead className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground hidden md:table-cell">Last Seen</TableHead>
+            <TableHead className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground hidden lg:table-cell">Location</TableHead>
+            <TableHead className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground text-center">Tasks</TableHead>
+            <TableHead className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground text-center hidden sm:table-cell">Done</TableHead>
+            <TableHead className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground text-right">Load</TableHead>
+            <TableHead className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground text-right w-16"></TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -77,96 +115,87 @@ export const TeamMemberTable: React.FC<TeamMemberTableProps> = ({
             const workloadPercentage = Math.min(Math.round((totalTasks / 20) * 100), 100);
             const userStatus = getUserStatus(user);
             const primaryRole = user.roles?.[0] || user.role;
+            const isCreatingChat = creatingChatFor === user.id;
 
             return (
               <TableRow
                 key={user.id}
-                className="cursor-pointer hover-elevate"
+                className="cursor-pointer hover:bg-muted/30 transition-colors"
                 onClick={() => onRowClick(user)}
                 data-testid={`row-team-member-${user.id}`}
               >
-                <TableCell>
+                <TableCell className="px-2 py-1.5">
                   <Circle 
-                    className={`h-3 w-3 ${userStatus.color.replace('bg-', 'text-')}`}
+                    className={`h-2.5 w-2.5 ${userStatus.color.replace('bg-', 'text-')}`}
                     fill="currentColor"
                     data-testid={`status-indicator-${user.id}`}
                   />
                 </TableCell>
                 
-                <TableCell>
+                <TableCell className="px-2 py-1.5">
                   <div className="flex items-center gap-2">
-                    <Avatar className="h-8 w-8 border border-border">
+                    <Avatar className="h-7 w-7 border border-border flex-shrink-0">
                       <AvatarImage src={user.avatar} alt={user.name} />
-                      <AvatarFallback className="text-xs font-semibold bg-primary/10">
+                      <AvatarFallback className="text-[10px] font-semibold bg-primary/10">
                         {getInitials(user.name || '')}
                       </AvatarFallback>
                     </Avatar>
-                    <div className="flex flex-col">
-                      <span className="font-medium text-sm">{user.name}</span>
-                      <Badge variant={userStatus.badgeVariant} className="w-fit text-[9px] h-4 px-1">
+                    <div className="flex flex-col min-w-0">
+                      <button
+                        onClick={(e) => handleDirectMessage(e, user)}
+                        disabled={isCreatingChat}
+                        className="font-medium text-xs text-left hover:text-primary hover:underline transition-colors flex items-center gap-1 group"
+                        data-testid={`button-dm-${user.id}`}
+                      >
+                        <span className="truncate">{user.name}</span>
+                        <MessageSquare className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                      </button>
+                      <Badge variant={userStatus.badgeVariant} className="w-fit text-[9px] h-3.5 px-1 mt-0.5">
                         {userStatus.label}
                       </Badge>
                     </div>
                   </div>
                 </TableCell>
                 
-                <TableCell>
-                  <Badge variant="secondary" className="text-xs">
+                <TableCell className="px-2 py-1.5">
+                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
                     {primaryRole}
                   </Badge>
                 </TableCell>
                 
-                <TableCell>
-                  <div className="flex flex-col gap-0.5">
-                    <div className="flex items-center gap-1 text-sm">
-                      <Clock className="h-3 w-3 text-muted-foreground" />
-                      <span>{getLastLogin(user)}</span>
+                <TableCell className="px-2 py-1.5 hidden md:table-cell">
+                  <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                    <Clock className="h-2.5 w-2.5" />
+                    <span>{getLastLogin(user)}</span>
+                  </div>
+                </TableCell>
+                
+                <TableCell className="px-2 py-1.5 hidden lg:table-cell">
+                  {user.location?.isSharing && user.location?.address ? (
+                    <div className="flex items-center gap-1 text-[11px]">
+                      <MapPin className="h-2.5 w-2.5 text-blue-500 flex-shrink-0" />
+                      <span className="truncate max-w-[140px]">{user.location.address}</span>
                     </div>
-                    {getLastLoginDate(user) && (
-                      <span className="text-xs text-muted-foreground">
-                        {getLastLoginDate(user)}
-                      </span>
+                  ) : (
+                    <span className="text-[11px] text-muted-foreground">-</span>
+                  )}
+                </TableCell>
+                
+                <TableCell className="px-2 py-1.5 text-center">
+                  <div className="flex items-center justify-center gap-0.5">
+                    <span className="text-[11px] font-medium text-blue-600 dark:text-blue-400 tabular-nums">{workload.active}</span>
+                    {workload.overdue > 0 && (
+                      <span className="text-[10px] text-red-500 tabular-nums">+{workload.overdue}</span>
                     )}
                   </div>
                 </TableCell>
                 
-                <TableCell>
-                  {user.location?.isSharing && user.location?.address ? (
-                    <div className="flex items-center gap-1 text-xs">
-                      <MapPin className="h-3 w-3 text-blue-500" />
-                      <span className="truncate max-w-[200px]">{user.location.address}</span>
-                    </div>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">No location</span>
-                  )}
+                <TableCell className="px-2 py-1.5 text-center hidden sm:table-cell">
+                  <span className="text-[11px] font-medium text-green-600 dark:text-green-400 tabular-nums">{workload.completed}</span>
                 </TableCell>
                 
-                <TableCell className="text-center">
-                  <Badge className="bg-gradient-to-br from-blue-500/10 to-blue-600/5 border-blue-500/20 text-blue-600 dark:text-blue-400 text-xs tabular-nums">
-                    {workload.active}
-                  </Badge>
-                </TableCell>
-                
-                <TableCell className="text-center">
-                  <Badge className="bg-gradient-to-br from-green-500/10 to-green-600/5 border-green-500/20 text-green-600 dark:text-green-400 text-xs tabular-nums">
-                    {workload.completed}
-                  </Badge>
-                </TableCell>
-                
-                <TableCell className="text-center">
-                  <Badge className="bg-gradient-to-br from-orange-500/10 to-orange-600/5 border-orange-500/20 text-orange-600 dark:text-orange-400 text-xs tabular-nums">
-                    {workload.pending}
-                  </Badge>
-                </TableCell>
-                
-                <TableCell className="text-center">
-                  <Badge className="bg-gradient-to-br from-red-500/10 to-red-600/5 border-red-500/20 text-red-600 dark:text-red-400 text-xs tabular-nums">
-                    {workload.overdue}
-                  </Badge>
-                </TableCell>
-                
-                <TableCell className="text-right">
-                  <span className={`font-bold tabular-nums text-sm ${
+                <TableCell className="px-2 py-1.5 text-right">
+                  <span className={`font-semibold tabular-nums text-[11px] ${
                     workloadPercentage >= 80 ? 'text-red-600 dark:text-red-400' :
                     workloadPercentage >= 50 ? 'text-orange-600 dark:text-orange-400' :
                     'text-green-600 dark:text-green-400'
@@ -175,7 +204,7 @@ export const TeamMemberTable: React.FC<TeamMemberTableProps> = ({
                   </span>
                 </TableCell>
                 
-                <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                <TableCell className="px-2 py-1.5 text-right" onClick={(e) => e.stopPropagation()}>
                   <TeamMemberActions user={user} variant="dropdown" />
                 </TableCell>
               </TableRow>

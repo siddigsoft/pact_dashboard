@@ -16,7 +16,7 @@ const NavBrand = () => {
       {/* Brand Text */}
       {/* <div className="flex flex-col leading-tight">
         <span className="font-display font-bold text-lg text-neutral-800 dark:text-neutral-100">
-          PACT Platform
+          PACT Command Center
         </span>
         <span className="text-xs text-neutral-500 dark:text-neutral-400 font-medium">
           Advanced MMP Management

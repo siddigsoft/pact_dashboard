@@ -299,7 +299,7 @@ const LoginEnhanced = () => {
       if (success) {
         toast({
           title: `Welcome${currentUser?.name ? `, ${currentUser.name}` : ""}!`,
-          description: "You are now logged into the PACT Platform",
+          description: "You are now logged into the PACT Command Center",
           variant: "success",
         });
         
