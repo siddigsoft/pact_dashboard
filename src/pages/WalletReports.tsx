@@ -1,8 +1,10 @@
 import { useState, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { useWallet } from '@/context/wallet/WalletContext';
 import { useUser } from '@/context/user/UserContext';
 import { 
@@ -14,9 +16,14 @@ import {
   ArrowUpCircle,
   ArrowDownCircle,
   Activity,
-  PieChart
+  PieChart,
+  ExternalLink,
+  Clock,
+  FileText,
+  History,
+  MapPin
 } from 'lucide-react';
-import { format, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
+import { format, startOfMonth, endOfMonth, isWithinInterval, formatDistanceToNow } from 'date-fns';
 
 export default function WalletReports() {
   const { withdrawalRequests } = useWallet();
@@ -116,17 +123,39 @@ export default function WalletReports() {
 
   return (
     <div className="space-y-6 p-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Wallet Reports & Analytics</h1>
+          <h1 className="text-3xl font-bold tracking-tight" data-testid="text-wallet-reports-title">Wallet Reports & Analytics</h1>
           <p className="text-muted-foreground mt-1">Financial insights and withdrawal trends</p>
         </div>
-        <Tabs value={timeframe} onValueChange={(v: any) => setTimeframe(v)}>
-          <TabsList>
-            <TabsTrigger value="month">This Month</TabsTrigger>
-            <TabsTrigger value="all">All Time</TabsTrigger>
-          </TabsList>
-        </Tabs>
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" asChild data-testid="link-site-visits">
+              <Link to="/site-visits">
+                <MapPin className="h-4 w-4 mr-2" />
+                Site Visits
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild data-testid="link-audit-logs">
+              <Link to="/audit-logs">
+                <History className="h-4 w-4 mr-2" />
+                Audit Logs
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild data-testid="link-documents">
+              <Link to="/documents">
+                <FileText className="h-4 w-4 mr-2" />
+                Documents
+              </Link>
+            </Button>
+          </div>
+          <Tabs value={timeframe} onValueChange={(v: any) => setTimeframe(v)}>
+            <TabsList>
+              <TabsTrigger value="month" data-testid="tab-this-month">This Month</TabsTrigger>
+              <TabsTrigger value="all" data-testid="tab-all-time">All Time</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -203,12 +232,23 @@ export default function WalletReports() {
                     </TableRow>
                   ) : (
                     enumeratorStats.map((stat) => (
-                      <TableRow key={stat.userId} className="hover-elevate">
+                      <TableRow key={stat.userId} className="hover-elevate" data-testid={`row-collector-${stat.userId}`}>
                         <TableCell>
-                          <div>
-                            <p className="font-medium">{stat.name}</p>
-                            <p className="text-xs text-muted-foreground">{stat.email}</p>
-                          </div>
+                          <Link 
+                            to={`/users/${stat.userId}`} 
+                            className="group"
+                            data-testid={`link-user-${stat.userId}`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <div>
+                                <p className="font-medium group-hover:text-primary transition-colors flex items-center gap-1">
+                                  {stat.name}
+                                  <ExternalLink className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                </p>
+                                <p className="text-xs text-muted-foreground">{stat.email}</p>
+                              </div>
+                            </div>
+                          </Link>
                         </TableCell>
                         <TableCell className="text-right tabular-nums">{stat.requestCount}</TableCell>
                         <TableCell className="text-right">
