@@ -21,11 +21,13 @@ import {
 } from '@/components/ui/select';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { useUser } from '@/context/user/UserContext';
-import { ShieldCheck, UserPlus, UserX, Shield, AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
+import { ShieldCheck, UserPlus, UserX, Shield, AlertTriangle, CheckCircle2, XCircle, Mail } from 'lucide-react';
 import { format } from 'date-fns';
+import { useToast } from '@/hooks/use-toast';
 
 export function SuperAdminManagementPage() {
-  const { currentUser, users } = useUser();
+  const { toast } = useToast();
+  const { currentUser, users, sendPasswordRecoveryEmail } = useUser();
   const {
     superAdmins,
     stats,
@@ -43,6 +45,8 @@ export function SuperAdminManagementPage() {
   const [appointmentReason, setAppointmentReason] = useState('');
   const [deactivationReason, setDeactivationReason] = useState('');
   const [processing, setProcessing] = useState(false);
+  const [passwordResetDialog, setPasswordResetDialog] = useState<{ open: boolean; user: { id: string; name: string; email: string } | null }>({ open: false, user: null });
+  const [isSendingReset, setIsSendingReset] = useState(false);
 
   const handleCreate = async () => {
     if (!currentUser || !selectedUserId) return;
@@ -93,6 +97,34 @@ export function SuperAdminManagementPage() {
   const openDeactivateDialog = (superAdminId: string) => {
     setSelectedSuperAdminId(superAdminId);
     setShowDeactivateDialog(true);
+  };
+
+  const handleOpenPasswordReset = (user: { id: string; name: string; email: string }) => {
+    setPasswordResetDialog({ open: true, user });
+  };
+
+  const handleSendPasswordReset = async () => {
+    if (!passwordResetDialog.user?.email) return;
+    setIsSendingReset(true);
+    try {
+      const success = await sendPasswordRecoveryEmail(passwordResetDialog.user.email);
+      if (success) {
+        toast({
+          title: "Password reset email sent",
+          description: `A password reset link has been sent to ${passwordResetDialog.user.email}`,
+        });
+        setPasswordResetDialog({ open: false, user: null });
+      }
+    } catch (error) {
+      console.error("Error sending password reset:", error);
+      toast({
+        title: "Error",
+        description: "Failed to send password reset email",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSendingReset(false);
+    }
   };
 
   const eligibleUsers = users.filter((user) => {
@@ -249,15 +281,28 @@ export function SuperAdminManagementPage() {
                               </div>
                             </div>
                           </div>
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => openDeactivateDialog(superAdmin.id)}
-                            data-testid={`button-deactivate-${superAdmin.id}`}
-                          >
-                            <UserX className="h-4 w-4 mr-1" />
-                            Deactivate
-                          </Button>
+                          <div className="flex gap-2 flex-wrap">
+                            {user && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleOpenPasswordReset({ id: user.id, name: user.name, email: user.email })}
+                                data-testid={`button-reset-password-${superAdmin.id}`}
+                              >
+                                <Mail className="h-4 w-4 mr-1" />
+                                Reset Password
+                              </Button>
+                            )}
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={() => openDeactivateDialog(superAdmin.id)}
+                              data-testid={`button-deactivate-${superAdmin.id}`}
+                            >
+                              <UserX className="h-4 w-4 mr-1" />
+                              Deactivate
+                            </Button>
+                          </div>
                         </div>
                       </CardContent>
                     </Card>
@@ -412,6 +457,62 @@ export function SuperAdminManagementPage() {
               data-testid="button-confirm-deactivate"
             >
               {processing ? 'Deactivating...' : 'Deactivate'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog 
+        open={passwordResetDialog.open} 
+        onOpenChange={(open) => {
+          if (!open) setPasswordResetDialog({ open: false, user: null });
+        }}
+      >
+        <DialogContent data-testid="dialog-password-reset">
+          <DialogHeader>
+            <DialogTitle>Reset Password</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 p-3 rounded-md">
+              <p className="text-sm text-blue-800 dark:text-blue-200">
+                This will send a password reset email to the user. They will receive a link to create a new password.
+              </p>
+            </div>
+
+            {passwordResetDialog.user && (
+              <div className="space-y-2">
+                <div>
+                  <Label className="text-xs text-muted-foreground">User</Label>
+                  <p className="font-medium">{passwordResetDialog.user.name}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Email</Label>
+                  <p>{passwordResetDialog.user.email}</p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setPasswordResetDialog({ open: false, user: null })} 
+              data-testid="button-cancel-reset"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSendPasswordReset}
+              disabled={isSendingReset || !passwordResetDialog.user?.email}
+              data-testid="button-confirm-send-reset"
+            >
+              {isSendingReset ? 'Sending...' : (
+                <>
+                  <Mail className="h-4 w-4 mr-2" />
+                  Send Reset Email
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
