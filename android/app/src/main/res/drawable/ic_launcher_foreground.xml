@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    
+    <!-- PACT Logo Foreground - White on transparent for adaptive icon -->
+    <!-- Safe zone is 66dp centered (21dp padding on each side) -->
+    
+    <!-- Outer circle ring -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,21
+            A33,33 0 1,1 53.99,21
+            A33,33 0 1,1 54,21
+            M54,26
+            A28,28 0 1,0 54.01,26
+            A28,28 0 1,0 54,26" />
+    
+    <!-- PACT Text - Stylized -->
+    <!-- P -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M32,44 L32,64 L36,64 L36,56 L40,56 
+            C44,56 46,54 46,50 C46,46 44,44 40,44 L32,44
+            M36,48 L39,48 C41,48 42,49 42,50 C42,51 41,52 39,52 L36,52 L36,48" />
+    
+    <!-- A -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M47,64 L51,64 L52,60 L58,60 L59,64 L63,64 L57,44 L53,44 L47,64
+            M53,56 L55,49 L57,56 L53,56" />
+    
+    <!-- C -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M72,44 C66,44 63,48 63,54 C63,60 66,64 72,64 
+            C75,64 77,63 79,61 L76,58 C75,59 74,60 72,60 
+            C69,60 67,58 67,54 C67,50 69,48 72,48 
+            C74,48 75,49 76,50 L79,47 C77,45 75,44 72,44" />
+    
+    <!-- T -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M80,44 L80,48 L85,48 L85,64 L89,64 L89,48 L94,48 L94,44 L80,44" />
+    
+    <!-- Small dot accent -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,70 A2,2 0 1,1 53.99,70 A2,2 0 1,1 54,70" />
+</vector>

@@ -1,4 +1,4 @@
-import React, { createContext, useContext } from 'react';
+import React, { createContext, useContext, useMemo, useCallback } from 'react';
 import { UserProvider, useUser } from './user/UserContext';
 import { MMPProvider, useMMP } from './mmp/MMPContext';
 import { NotificationProvider, useNotifications } from './notifications/NotificationContext';
@@ -7,6 +7,7 @@ import { AppRole, ResourceType, ActionType } from '@/types/roles';
 import { ProjectProvider } from './project/ProjectContext';
 import { ChatProvider } from './chat/ChatContextSupabase';
 import { CommunicationProvider } from './communications/CommunicationContext';
+import { CallProvider } from './communications/CallContext';
 import { NavigationProvider } from './NavigationContext';
 import { ViewModeProvider } from './ViewModeContext';
 import { ArchiveProvider } from './archive/ArchiveContext';
@@ -18,7 +19,14 @@ import { ClassificationProvider } from './classification/ClassificationContext';
 import { CostSubmissionProvider } from './costApproval/CostSubmissionContext';
 import { DownPaymentProvider } from './downPayment/DownPaymentContext';
 import { SuperAdminProvider } from './superAdmin/SuperAdminContext';
+import { ActiveVisitProvider } from './ActiveVisitContext';
+import { ApprovalProvider } from './approval/ApprovalContext';
+import { AuditProvider } from './audit/AuditContext';
 import BrowserNotificationListener from '@/components/BrowserNotificationListener';
+import GlobalCallOverlay from '@/components/communication/GlobalCallOverlay';
+import { GlobalPresenceProvider } from '@/context/presence/GlobalPresenceContext';
+import { MobilePushNotificationOverlay } from '@/components/mobile/MobilePushNotificationOverlay';
+import { SyncStatusProvider } from './sync/SyncStatusContext';
 
 interface CompositeContextType {
   currentUser: ReturnType<typeof useUser>['currentUser'];
@@ -81,14 +89,13 @@ const CompositeContextProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const notificationContext = useNotifications();
   const roleManagement = useRoleManagement();
   
-  // Legacy hasPermission(action: string) removed: use useAuthorization() or hasGranularPermission() instead.
-
-  const hasGranularPermission = (resource: ResourceType, action: ActionType): boolean => {
+  // Memoized utility functions to prevent recreation on each render
+  const hasGranularPermission = useCallback((resource: ResourceType, action: ActionType): boolean => {
     if (!userContext.currentUser) return false;
     return roleManagement.hasPermission(userContext.currentUser.id, resource, action);
-  };
+  }, [userContext.currentUser, roleManagement]);
   
-  const calculateDistanceFee = (latitude: number, longitude: number): number => {
+  const calculateDistanceFee = useCallback((latitude: number, longitude: number): number => {
     const baseLatitude = 15.5007;
     const baseLongitude = 32.5599;
     
@@ -97,9 +104,10 @@ const CompositeContextProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const distance = Math.sqrt(latDiff * latDiff + lngDiff * lngDiff);
     
     return Math.round(distance * 50);
-  };
+  }, []);
   
-  const contextValue: CompositeContextType = {
+  // Memoized context value to prevent unnecessary re-renders
+  const contextValue = useMemo<CompositeContextType>(() => ({
     ...userContext,
     ...mmpContext,
     ...siteVisitContext,
@@ -116,7 +124,14 @@ const CompositeContextProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     verificationEmail: userContext.verificationEmail,
     resendVerificationEmail: userContext.resendVerificationEmail,
     clearEmailVerificationNotice: userContext.clearEmailVerificationNotice,
-  };
+  }), [
+    userContext,
+    mmpContext,
+    siteVisitContext,
+    notificationContext,
+    hasGranularPermission,
+    calculateDistanceFee,
+  ]);
   
   return (
     <AppContext.Provider value={contextValue}>
@@ -129,7 +144,8 @@ export const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children
   return (
     <NavigationProvider>
       <ViewModeProvider>
-        <NotificationProvider>
+        <SyncStatusProvider>
+          <NotificationProvider>
           <UserProvider>
             <ClassificationProvider>
               <WalletProvider>
@@ -144,12 +160,24 @@ export const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children
                                 <CostSubmissionProvider>
                                   <DownPaymentProvider>
                                     <SuperAdminProvider>
-                                      <ChatProvider>
-                                        <CommunicationProvider>
-                                          <BrowserNotificationListener />
-                                          {children}
-                                        </CommunicationProvider>
-                                      </ChatProvider>
+                                      <AuditProvider>
+                                        <ApprovalProvider>
+                                          <ActiveVisitProvider>
+                                          <ChatProvider>
+                                          <CallProvider>
+                                            <CommunicationProvider>
+                                              <GlobalPresenceProvider>
+                                                <BrowserNotificationListener />
+                                                <GlobalCallOverlay />
+                                                <MobilePushNotificationOverlay />
+                                                {children}
+                                              </GlobalPresenceProvider>
+                                            </CommunicationProvider>
+                                          </CallProvider>
+                                        </ChatProvider>
+                                          </ActiveVisitProvider>
+                                        </ApprovalProvider>
+                                      </AuditProvider>
                                     </SuperAdminProvider>
                                   </DownPaymentProvider>
                                 </CostSubmissionProvider>
@@ -164,7 +192,8 @@ export const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children
               </WalletProvider>
             </ClassificationProvider>
           </UserProvider>
-        </NotificationProvider>
+          </NotificationProvider>
+        </SyncStatusProvider>
       </ViewModeProvider>
     </NavigationProvider>
   );

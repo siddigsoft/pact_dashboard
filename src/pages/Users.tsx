@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Link } from 'react-router-dom';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { useApproval } from '@/context/approval/ApprovalContext';
 import {
   User as UserIcon,
   Search,
@@ -35,7 +36,9 @@ import {
   Sparkles,
   Award,
   Users as UsersIcon,
-  CheckCircle
+  CheckCircle,
+  KeyRound,
+  Mail
 } from 'lucide-react';
 import { AppRole } from '@/types/roles';
 import {
@@ -70,9 +73,10 @@ const ALL_POSSIBLE_ROLES = [
 ] as const;
 
 const Users = () => {
-  const { currentUser, users, approveUser, rejectUser, refreshUsers, hasRole, addRole, removeRole } = useUser();
+  const { currentUser, users, approveUser, rejectUser, refreshUsers, hasRole, addRole, removeRole, sendPasswordRecoveryEmail } = useUser();
   const { roles: allRoles, getUserRolesByUserId, assignRoleToUser, removeRoleFromUser } = useRoleManagement();
   const { canManageRoles } = useAuthorization();
+  const { canBypassApproval, createApprovalRequest, hasPendingRequest } = useApproval();
   const { toast } = useToast();
   const { roles } = useAppContext();
   const [filteredUsers, setFilteredUsers] = useState<User[]>(users);
@@ -93,10 +97,25 @@ const Users = () => {
   const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; userId?: string; action?: 'delete' | 'deactivate' }>({ open: false });
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
 
+  const [passwordResetDialog, setPasswordResetDialog] = useState<{ open: boolean; user?: User }>({ open: false });
+  const [isSendingReset, setIsSendingReset] = useState(false);
+
+  const [adminPasswordDialog, setAdminPasswordDialog] = useState<{ open: boolean; user?: User }>({ open: false });
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+
   const pendingUsers = useMemo(() => users.filter(user => !user.isApproved), [users]);
   const approvedUsers = useMemo(() => users.filter(user => user.isApproved), [users]);
 
-  const isAdminOrICT = (roles || []).includes('admin' as any) || (roles || []).includes('ict' as any);
+  const primaryRole = currentUser?.role?.toLowerCase() || '';
+  const isAdminOrICT = 
+    (roles || []).includes('admin' as any) || 
+    (roles || []).includes('ict' as any) || 
+    (roles || []).includes('superAdmin' as any) ||
+    primaryRole === 'admin' ||
+    primaryRole === 'ict' ||
+    primaryRole === 'superadmin';
 
   const getUserRoleLabels = (uid: string): string[] => {
     // Combine system roles (text) and custom roles (via role_id -> roles table)
@@ -428,21 +447,141 @@ const Users = () => {
 
   const confirmAction = async () => {
     if (confirmDialog.action === 'delete' && confirmDialog.userId) {
-      setDeletingUserId(confirmDialog.userId);
       const userToDelete = users.find(u => u.id === confirmDialog.userId);
-      await deleteUser(confirmDialog.userId);
-      await refreshUsers();
-      setDeletingUserId(null);
-      toast({
-        title: "User deleted",
-        description: `${userToDelete?.name || 'User'} has been successfully deleted from the system.`,
-        variant: "success"
-      });
+      
+      // SuperAdmin can bypass approval and delete directly
+      if (canBypassApproval()) {
+        setDeletingUserId(confirmDialog.userId);
+        await deleteUser(confirmDialog.userId);
+        await refreshUsers();
+        setDeletingUserId(null);
+        toast({
+          title: "User deleted",
+          description: `${userToDelete?.name || 'User'} has been successfully deleted from the system.`,
+        });
+      } else if (hasPendingRequest('user', confirmDialog.userId)) {
+        toast({
+          title: "Request Pending",
+          description: "An approval request is already pending for this user.",
+          variant: "destructive"
+        });
+      } else {
+        // Non-SuperAdmin: create approval request
+        const result = await createApprovalRequest({
+          type: 'delete_user',
+          resourceType: 'user',
+          resourceId: confirmDialog.userId,
+          resourceName: userToDelete?.name || 'Unknown User',
+          reason: `Delete user: ${userToDelete?.name || 'Unknown User'} (${userToDelete?.email || 'No email'})`
+        });
+        if (result.success) {
+          toast({
+            title: "Request Submitted",
+            description: "Your deletion request has been sent to SuperAdmin for approval.",
+          });
+        } else {
+          toast({
+            title: "Request Failed",
+            description: result.error || "Failed to submit approval request.",
+            variant: "destructive"
+          });
+        }
+      }
     } else if (confirmDialog.action === 'deactivate' && confirmDialog.userId) {
       await deactivateUser(confirmDialog.userId);
       await refreshUsers();
     }
     setConfirmDialog({ open: false });
+  };
+
+  const handleOpenPasswordReset = (user: User) => {
+    setPasswordResetDialog({ open: true, user });
+  };
+
+  const handleSendPasswordReset = async () => {
+    if (!passwordResetDialog.user?.email) return;
+    
+    setIsSendingReset(true);
+    try {
+      const success = await sendPasswordRecoveryEmail(passwordResetDialog.user.email);
+      if (success) {
+        toast({
+          title: "Password reset email sent",
+          description: `A password reset link has been sent to ${passwordResetDialog.user.email}`,
+        });
+        setPasswordResetDialog({ open: false });
+      }
+    } catch (error) {
+      console.error("Error sending password reset:", error);
+      toast({
+        title: "Failed to send reset email",
+        description: "There was an error sending the password reset email.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSendingReset(false);
+    }
+  };
+
+  const handleOpenAdminPasswordChange = (user: User) => {
+    setAdminPasswordDialog({ open: true, user });
+    setNewPassword('');
+    setConfirmPassword('');
+  };
+
+  const handleAdminPasswordChange = async () => {
+    if (!adminPasswordDialog.user?.id) return;
+    
+    if (newPassword.length < 6) {
+      toast({
+        title: "Password too short",
+        description: "Password must be at least 6 characters long.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      toast({
+        title: "Passwords do not match",
+        description: "Please ensure both passwords are the same.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsChangingPassword(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('admin-change-password', {
+        body: {
+          userId: adminPasswordDialog.user.id,
+          newPassword: newPassword
+        }
+      });
+
+      if (error) throw error;
+
+      if (data?.success) {
+        toast({
+          title: "Password changed successfully",
+          description: `Password has been updated for ${adminPasswordDialog.user.name || adminPasswordDialog.user.email}`,
+        });
+        setAdminPasswordDialog({ open: false });
+        setNewPassword('');
+        setConfirmPassword('');
+      } else {
+        throw new Error(data?.error || 'Failed to change password');
+      }
+    } catch (error: any) {
+      console.error("Error changing password:", error);
+      toast({
+        title: "Failed to change password",
+        description: error.message || "There was an error changing the user's password.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsChangingPassword(false);
+    }
   };
 
   const stats = {
@@ -804,7 +943,25 @@ const Users = () => {
                             </Button>
                           )}
                           {isAdminOrICT && (
-                            <div className="flex justify-end gap-2">
+                            <div className="flex flex-wrap justify-end gap-2 mt-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleOpenPasswordReset(user)}
+                                data-testid={`button-reset-password-all-${user.id}`}
+                              >
+                                <Mail className="h-4 w-4 mr-1" />
+                                Send Reset Email
+                              </Button>
+                              <Button
+                                variant="default"
+                                size="sm"
+                                onClick={() => handleOpenAdminPasswordChange(user)}
+                                data-testid={`button-change-password-all-${user.id}`}
+                              >
+                                <KeyRound className="h-4 w-4 mr-1" />
+                                Set Password
+                              </Button>
                               <Button
                                 variant="destructive"
                                 size="sm"
@@ -819,7 +976,6 @@ const Users = () => {
                               <Button
                                 variant="outline"
                                 size="sm"
-                                className="ml-2"
                                 onClick={() => handleDeactivate(user.id)}
                                 disabled={deletingUserId === user.id}
                               >
@@ -928,6 +1084,30 @@ const Users = () => {
                               Edit Roles
                             </Button>
                           )}
+                          {isAdminOrICT && (
+                            <>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="ml-2"
+                                onClick={() => handleOpenPasswordReset(user)}
+                                data-testid={`button-reset-password-${user.id}`}
+                              >
+                                <Mail className="h-4 w-4 mr-1" />
+                                Send Reset Email
+                              </Button>
+                              <Button
+                                variant="default"
+                                size="sm"
+                                className="ml-2"
+                                onClick={() => handleOpenAdminPasswordChange(user)}
+                                data-testid={`button-change-password-${user.id}`}
+                              >
+                                <KeyRound className="h-4 w-4 mr-1" />
+                                Set Password
+                              </Button>
+                            </>
+                          )}
                         </TableCell>
                       </TableRow>
                     );
@@ -1013,6 +1193,152 @@ const Users = () => {
             </Button>
             <Button variant={confirmDialog.action === 'delete' ? 'destructive' : 'default'} onClick={confirmAction}>
               {confirmDialog.action === 'delete' ? 'Delete' : 'Deactivate'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={passwordResetDialog.open} onOpenChange={open => setPasswordResetDialog(open ? s => ({ ...s, open }) : { open: false })}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reset User Password</DialogTitle>
+            <DialogDescription>
+              Send a password reset link to this user&apos;s email address.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="flex items-center gap-3">
+              <Avatar>
+                <AvatarImage src={passwordResetDialog.user?.avatar} />
+                <AvatarFallback className="bg-primary/10 text-primary">
+                  {passwordResetDialog.user?.name ? getInitials(passwordResetDialog.user.name) : <UserIcon className="h-4 w-4" />}
+                </AvatarFallback>
+              </Avatar>
+              <div>
+                <p className="font-medium">{passwordResetDialog.user?.name}</p>
+                <p className="text-sm text-muted-foreground flex items-center gap-1">
+                  <Mail className="h-3 w-3" />
+                  {passwordResetDialog.user?.email}
+                </p>
+              </div>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Clicking &quot;Send Reset Email&quot; will send a password reset link to the user&apos;s email address. They will be able to set a new password using that link.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setPasswordResetDialog({ open: false })}
+              disabled={isSendingReset}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleSendPasswordReset}
+              disabled={isSendingReset || !passwordResetDialog.user?.email}
+              data-testid="button-confirm-send-reset"
+            >
+              {isSendingReset ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <Mail className="h-4 w-4 mr-2" />
+                  Send Reset Email
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={adminPasswordDialog.open} onOpenChange={open => {
+        if (!open) {
+          setAdminPasswordDialog({ open: false });
+          setNewPassword('');
+          setConfirmPassword('');
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Set User Password</DialogTitle>
+            <DialogDescription>
+              Directly set a new password for this user. This will work for both email/password and OAuth accounts.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="flex items-center gap-3">
+              <Avatar>
+                <AvatarImage src={adminPasswordDialog.user?.avatar} />
+                <AvatarFallback className="bg-primary/10 text-primary">
+                  {adminPasswordDialog.user?.name ? getInitials(adminPasswordDialog.user.name) : <UserIcon className="h-4 w-4" />}
+                </AvatarFallback>
+              </Avatar>
+              <div>
+                <p className="font-medium">{adminPasswordDialog.user?.name}</p>
+                <p className="text-sm text-muted-foreground flex items-center gap-1">
+                  <Mail className="h-3 w-3" />
+                  {adminPasswordDialog.user?.email}
+                </p>
+              </div>
+            </div>
+            <div className="space-y-3">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">New Password</label>
+                <Input
+                  type="password"
+                  placeholder="Enter new password (min 6 characters)"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  data-testid="input-new-password"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Confirm Password</label>
+                <Input
+                  type="password"
+                  placeholder="Confirm new password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  data-testid="input-confirm-password"
+                />
+              </div>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              After setting the password, the user can log in using their email and this new password.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setAdminPasswordDialog({ open: false });
+                setNewPassword('');
+                setConfirmPassword('');
+              }}
+              disabled={isChangingPassword}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleAdminPasswordChange}
+              disabled={isChangingPassword || !newPassword || !confirmPassword}
+              data-testid="button-confirm-change-password"
+            >
+              {isChangingPassword ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Changing...
+                </>
+              ) : (
+                <>
+                  <KeyRound className="h-4 w-4 mr-2" />
+                  Set Password
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -6,6 +6,7 @@ export type AppRole =
   | 'Field Operation Manager (FOM)'
   | 'FinancialAdmin'
   | 'ProjectManager'
+  | 'SeniorOperationsLead'
   | 'Supervisor'
   | 'Coordinator'
   | 'DataCollector'
@@ -122,99 +123,80 @@ export const ACTIONS: ActionType[] = [
   'override'
 ];
 
+// Helper to generate all permissions for a resource
+const allActionsFor = (resource: ResourceType): { resource: ResourceType; action: ActionType }[] =>
+  ACTIONS.map(action => ({ resource, action }));
+
+// SuperAdmin gets ALL permissions on ALL resources - highest privilege level
+const SUPER_ADMIN_PERMISSIONS: { resource: ResourceType; action: ActionType }[] = 
+  RESOURCES.flatMap(resource => allActionsFor(resource));
+
 // Default role permissions mapping
 export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType; action: ActionType }[]> = {
-  SuperAdmin: [
+  // SuperAdmin: Complete system control - ALL actions on ALL resources
+  SuperAdmin: SUPER_ADMIN_PERMISSIONS,
+  Admin: [
+    // Users - full management except system override
     { resource: 'users', action: 'create' },
     { resource: 'users', action: 'read' },
     { resource: 'users', action: 'update' },
     { resource: 'users', action: 'delete' },
     { resource: 'users', action: 'assign' },
+    // Roles - full management
     { resource: 'roles', action: 'create' },
     { resource: 'roles', action: 'read' },
     { resource: 'roles', action: 'update' },
     { resource: 'roles', action: 'delete' },
     { resource: 'roles', action: 'assign' },
+    // Permissions - full management
     { resource: 'permissions', action: 'create' },
     { resource: 'permissions', action: 'read' },
     { resource: 'permissions', action: 'update' },
     { resource: 'permissions', action: 'delete' },
+    // Projects - full management
     { resource: 'projects', action: 'create' },
     { resource: 'projects', action: 'read' },
     { resource: 'projects', action: 'update' },
     { resource: 'projects', action: 'delete' },
     { resource: 'projects', action: 'archive' },
+    { resource: 'projects', action: 'assign' },
+    { resource: 'projects', action: 'approve' },
+    // MMP - full management
     { resource: 'mmp', action: 'create' },
     { resource: 'mmp', action: 'read' },
     { resource: 'mmp', action: 'update' },
     { resource: 'mmp', action: 'delete' },
     { resource: 'mmp', action: 'approve' },
     { resource: 'mmp', action: 'archive' },
+    { resource: 'mmp', action: 'assign' },
+    // Site visits - full management
     { resource: 'site_visits', action: 'create' },
     { resource: 'site_visits', action: 'read' },
     { resource: 'site_visits', action: 'update' },
     { resource: 'site_visits', action: 'delete' },
     { resource: 'site_visits', action: 'assign' },
+    { resource: 'site_visits', action: 'approve' },
+    // Finances - full management
     { resource: 'finances', action: 'create' },
     { resource: 'finances', action: 'read' },
     { resource: 'finances', action: 'update' },
     { resource: 'finances', action: 'delete' },
     { resource: 'finances', action: 'approve' },
+    // Reports - full management
     { resource: 'reports', action: 'read' },
     { resource: 'reports', action: 'create' },
     { resource: 'reports', action: 'delete' },
+    // Settings - can read and update
     { resource: 'settings', action: 'read' },
     { resource: 'settings', action: 'update' },
-    { resource: 'super_admins', action: 'create' },
-    { resource: 'super_admins', action: 'read' },
-    { resource: 'super_admins', action: 'update' },
-    { resource: 'super_admins', action: 'delete' },
-    { resource: 'audit_logs', action: 'read' },
-    { resource: 'audit_logs', action: 'delete' },
-    { resource: 'audit_logs', action: 'restore' },
+    // Wallets - can manage
     { resource: 'wallets', action: 'create' },
     { resource: 'wallets', action: 'read' },
     { resource: 'wallets', action: 'update' },
-    { resource: 'wallets', action: 'delete' },
     { resource: 'wallets', action: 'approve' },
-    { resource: 'system', action: 'read' },
-    { resource: 'system', action: 'update' },
-    { resource: 'system', action: 'override' },
-  ],
-  Admin: [
-    { resource: 'users', action: 'create' },
-    { resource: 'users', action: 'read' },
-    { resource: 'users', action: 'update' },
-    { resource: 'users', action: 'delete' },
-    { resource: 'roles', action: 'create' },
-    { resource: 'roles', action: 'read' },
-    { resource: 'roles', action: 'update' },
-    { resource: 'roles', action: 'delete' },
-    { resource: 'permissions', action: 'create' },
-    { resource: 'permissions', action: 'read' },
-    { resource: 'permissions', action: 'update' },
-    { resource: 'permissions', action: 'delete' },
-    { resource: 'projects', action: 'create' },
-    { resource: 'projects', action: 'read' },
-    { resource: 'projects', action: 'update' },
-    { resource: 'projects', action: 'delete' },
-    { resource: 'mmp', action: 'create' },
-    { resource: 'mmp', action: 'read' },
-    { resource: 'mmp', action: 'update' },
-    { resource: 'mmp', action: 'delete' },
-    { resource: 'mmp', action: 'approve' },
-    { resource: 'mmp', action: 'archive' },
-    { resource: 'site_visits', action: 'create' },
-    { resource: 'site_visits', action: 'read' },
-    { resource: 'site_visits', action: 'update' },
-    { resource: 'site_visits', action: 'delete' },
-    { resource: 'finances', action: 'read' },
-    { resource: 'finances', action: 'update' },
-    { resource: 'finances', action: 'approve' },
-    { resource: 'reports', action: 'read' },
-    { resource: 'reports', action: 'create' },
-    { resource: 'settings', action: 'read' },
-    { resource: 'settings', action: 'update' }
+    // Audit logs - can read
+    { resource: 'audit_logs', action: 'read' },
+    // NOTE: Admin cannot: manage super_admins, delete audit_logs, restore records, override system, delete wallets
   ],
   ICT: [
     { resource: 'users', action: 'create' },
@@ -290,6 +272,29 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<AppRole, { resource: ResourceType;
     { resource: 'reports', action: 'create' },
     { resource: 'wallets', action: 'read' },
     { resource: 'wallets', action: 'approve' },
+    { resource: 'audit_logs', action: 'read' },
+    { resource: 'settings', action: 'read' },
+  ],
+  SeniorOperationsLead: [
+    { resource: 'projects', action: 'read' },
+    { resource: 'projects', action: 'update' },
+    { resource: 'projects', action: 'approve' },
+    { resource: 'mmp', action: 'read' },
+    { resource: 'mmp', action: 'update' },
+    { resource: 'mmp', action: 'approve' },
+    { resource: 'site_visits', action: 'read' },
+    { resource: 'site_visits', action: 'update' },
+    { resource: 'site_visits', action: 'approve' },
+    { resource: 'finances', action: 'read' },
+    { resource: 'finances', action: 'update' },
+    { resource: 'finances', action: 'approve' },
+    { resource: 'finances', action: 'override' },
+    { resource: 'users', action: 'read' },
+    { resource: 'reports', action: 'read' },
+    { resource: 'reports', action: 'create' },
+    { resource: 'wallets', action: 'read' },
+    { resource: 'wallets', action: 'approve' },
+    { resource: 'wallets', action: 'override' },
     { resource: 'audit_logs', action: 'read' },
     { resource: 'settings', action: 'read' },
   ],

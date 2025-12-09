@@ -483,7 +483,7 @@ const MMPDetailView = () => {
               <div className="space-y-4">
                 {siteEntries.map((site) => (
                   <Card key={site.id} className="overflow-hidden hover:shadow-md transition-shadow">
-                    <CardContent className="pt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <CardContent className="p-10 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                       <div>
                         <p className="text-sm font-medium text-muted-foreground">Site Code</p>
                         <p>{site.siteCode}</p>
@@ -714,17 +714,19 @@ const MMPDetailView = () => {
       
 
       {/* Move file management to the top of the page */}
-      {(canArchive || canDelete || canApprove) && (
+      {(canArchive || canDelete || canApprove || canForward) && (
         <div className="mb-6">
           <MMPFileManagement
             mmpFile={mmpFile}
             canArchive={canArchive}
             canDelete={canDelete}
             canApprove={canApprove}
+            canForward={canForward}
             onArchive={handleArchive}
             onDelete={handleDelete}
             onResetApproval={handleReset}
             onApprove={handleApprove}
+            onForward={() => setForwardOpen(true)}
           />
         </div>
       )}

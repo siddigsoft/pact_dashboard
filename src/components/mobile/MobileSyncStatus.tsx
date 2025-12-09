@@ -48,18 +48,18 @@ export function MobileSyncStatus({
     return (
       <div className={cn("flex items-center gap-2", className)}>
         {isOnline ? (
-          <Badge variant="outline" className="gap-1 text-green-600 border-green-600/30 bg-green-50 dark:bg-green-950/30">
+          <Badge variant="outline" className="gap-1 text-foreground border-foreground/20 bg-foreground/5">
             <Cloud className="h-3 w-3" />
             Online
           </Badge>
         ) : (
-          <Badge variant="outline" className="gap-1 text-amber-600 border-amber-600/30 bg-amber-50 dark:bg-amber-950/30">
+          <Badge variant="outline" className="gap-1 text-black dark:text-white border-black/20 dark:border-white/20 bg-black/5 dark:bg-white/5">
             <CloudOff className="h-3 w-3" />
             Offline
           </Badge>
         )}
         {pendingCount > 0 && (
-          <Badge variant="secondary" className="gap-1">
+          <Badge variant="secondary" className="gap-1 bg-black/10 dark:bg-white/10 text-foreground">
             <RefreshCw className={cn("h-3 w-3", isSyncing && "animate-spin")} />
             {pendingCount} pending
           </Badge>
@@ -75,12 +75,12 @@ export function MobileSyncStatus({
           <span className="flex items-center gap-2">
             {isOnline ? (
               <>
-                <Signal className="h-4 w-4 text-green-500" />
+                <Signal className="h-4 w-4 text-black dark:text-white" />
                 Connected
               </>
             ) : (
               <>
-                <WifiOff className="h-4 w-4 text-amber-500" />
+                <WifiOff className="h-4 w-4 text-black dark:text-white" />
                 Offline Mode
               </>
             )}
@@ -172,14 +172,14 @@ export function MobileSyncStatus({
             <div className="flex items-center gap-2 text-xs">
               {lastSyncResult.success ? (
                 <>
-                  <CheckCircle className="h-3.5 w-3.5 text-green-500" />
+                  <CheckCircle className="h-3.5 w-3.5 text-black dark:text-white" />
                   <span className="text-muted-foreground">
                     Last sync: {lastSyncResult.synced} items synced
                   </span>
                 </>
               ) : (
                 <>
-                  <AlertCircle className="h-3.5 w-3.5 text-amber-500" />
+                  <AlertCircle className="h-3.5 w-3.5 text-destructive" />
                   <span className="text-muted-foreground">
                     Sync had {lastSyncResult.failed} errors
                   </span>
@@ -204,9 +204,9 @@ export function MobileOfflineBanner() {
       className={cn(
         "sm:hidden px-3 py-1.5 text-xs font-medium flex items-center justify-center gap-2",
         !isOnline 
-          ? "bg-amber-500/90 text-amber-950" 
+          ? "bg-black dark:bg-white text-white dark:text-black" 
           : isSyncing 
-            ? "bg-primary/90 text-primary-foreground"
+            ? "bg-black dark:bg-white text-white dark:text-black"
             : "bg-muted text-muted-foreground"
       )}
       data-testid="mobile-status-banner"

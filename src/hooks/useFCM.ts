@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useAppContext } from '@/context/AppContext';
 import { useServiceWorker } from '@/hooks/use-service-worker';
 import { FCMService } from '@/services/FCMService';
-import { firebaseConfig, firebaseVapidPublicKey } from '@/config/firebase';
+import { firebaseConfig, firebaseVapidPublicKey, isFirebaseConfigured } from '@/config/firebase';
 import { NotificationService } from '@/services/NotificationService';
 
 export function useFCM() {
@@ -13,6 +13,12 @@ export function useFCM() {
   useEffect(() => {
     if (!authReady || !currentUser) return;
     if (initializedRef.current) return;
+    
+    // Skip FCM initialization if Firebase is not configured
+    if (!isFirebaseConfigured) {
+      console.warn('[FCM] Firebase not configured, skipping push notification setup');
+      return;
+    }
 
     // On web, wait for service worker registration before initializing FCM
     const needsSW = typeof window !== 'undefined' && 'serviceWorker' in navigator;

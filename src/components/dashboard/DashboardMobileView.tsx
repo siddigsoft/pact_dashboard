@@ -1,4 +1,4 @@
-import React, { Suspense, useState } from 'react';
+import { Suspense, useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardHeader, CardContent, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -12,9 +12,10 @@ import { Activity, Calendar, Users, Layout, Target } from 'lucide-react';
 import { MMPStageIndicator } from '@/components/MMPStageIndicator';
 import ForwardedMMPsCard from './ForwardedMMPsCard';
 import { useAppContext } from '@/context/AppContext';
+import React from 'react';
 
 const DashboardCalendar = React.lazy(() => 
-  import(/* webpackChunkName: "dashboard-calendar" */ '@/components/dashboard/DashboardCalendar')
+  import('@/components/dashboard/DashboardCalendar')
     .then(module => ({ default: module.DashboardCalendar }))
 );
 
@@ -113,9 +114,9 @@ export const DashboardMobileView = () => {
               
               <Suspense fallback={<LoadingCard />}>
                 <Card className="relative transform transition-all duration-200 hover:shadow-md">
-                  <CardHeader className="flex flex-row items-center justify-between">
+                  <CardHeader className="flex flex-row items-center justify-between gap-2">
                     <CardTitle className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4 text-blue-500" />
+                      <Calendar className="h-4 w-4 text-primary" />
                       Calendar
                     </CardTitle>
                   </CardHeader>
@@ -127,9 +128,9 @@ export const DashboardMobileView = () => {
               
               <Suspense fallback={<LoadingCard />}>
                 <Card className="transform transition-all duration-200 hover:shadow-md">
-                  <CardHeader className="bg-gradient-to-r from-emerald-50 to-transparent">
+                  <CardHeader className="bg-muted/30 dark:bg-muted/10">
                     <CardTitle className="flex items-center gap-2">
-                      <Layout className="h-4 w-4 text-emerald-500" />
+                      <Layout className="h-4 w-4 text-primary" />
                       Site Visits
                     </CardTitle>
                   </CardHeader>
@@ -150,9 +151,12 @@ export const DashboardMobileView = () => {
               className="space-y-4"
             >
               <Suspense fallback={<LoadingCard />}>
-                <Card className="border-t-4 border-t-emerald-500">
-                  <CardHeader className="bg-gradient-to-r from-emerald-50 to-transparent">
-                    <CardTitle>Team Activity</CardTitle>
+                <Card>
+                  <CardHeader className="bg-muted/30 dark:bg-muted/10">
+                    <CardTitle className="flex items-center gap-2">
+                      <Activity className="h-4 w-4 text-primary" />
+                      Team Activity
+                    </CardTitle>
                   </CardHeader>
                   <CardContent>
                     <ActivityFeed />
@@ -160,9 +164,12 @@ export const DashboardMobileView = () => {
                 </Card>
               </Suspense>
               <Suspense fallback={<LoadingCard />}>
-                <Card className="border-t-4 border-t-violet-500">
-                  <CardHeader className="bg-gradient-to-r from-violet-50 to-transparent">
-                    <CardTitle>MMP Status</CardTitle>
+                <Card>
+                  <CardHeader className="bg-muted/30 dark:bg-muted/10">
+                    <CardTitle className="flex items-center gap-2">
+                      <Target className="h-4 w-4 text-primary" />
+                      MMP Status
+                    </CardTitle>
                   </CardHeader>
                   <CardContent>
                     <MMPStageIndicator {...mmpStageProps} />
@@ -181,9 +188,12 @@ export const DashboardMobileView = () => {
               className="space-y-4"
             >
               <Suspense fallback={<LoadingCard />}>
-                <Card className="overflow-hidden transform transition-all duration-200 hover:shadow-md border-t-4 border-t-blue-500">
-                  <CardHeader className="bg-gradient-to-r from-blue-50 to-transparent">
-                    <CardTitle>Team Map</CardTitle>
+                <Card className="overflow-hidden transform transition-all duration-200 hover:shadow-md">
+                  <CardHeader className="bg-muted/30 dark:bg-muted/10">
+                    <CardTitle className="flex items-center gap-2">
+                      <Users className="h-4 w-4 text-primary" />
+                      Team Map
+                    </CardTitle>
                   </CardHeader>
                   <CardContent className="p-0">
                     <LiveTeamMapWidget />
@@ -194,21 +204,10 @@ export const DashboardMobileView = () => {
               <Suspense fallback={<LoadingCard />}>
                 <DashboardLocationSharingCard />
               </Suspense>
-              
-              {/* <Suspense fallback={<LoadingCard />}>
-                <Card className="border-t-4 border-t-violet-500">
-                  <CardHeader className="bg-gradient-to-r from-violet-50 to-transparent">
-                    <CardTitle>Team Communication</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <ChatIndicatorWidget />
-                  </CardContent>
-                </Card>
-              </Suspense> */}
             </motion.div>
           </TabsContent>
           
-          {/* <TabsContent value="progress" className="space-y-4 min-h-[200px] mt-0">
+          <TabsContent value="progress" className="space-y-4 min-h-[200px] mt-0">
             <motion.div
               key="progress-content"
               variants={tabContentVariants}
@@ -220,7 +219,7 @@ export const DashboardMobileView = () => {
                 <AchievementTracker />
               </Suspense>
             </motion.div>
-          </TabsContent> */}
+          </TabsContent>
         </div>
       </Tabs>
     </div>

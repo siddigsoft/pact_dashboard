@@ -46,6 +46,7 @@ import { toast } from "@/components/ui/use-toast";
 import { useAuthorization } from '@/hooks/use-authorization';
 import { useProjectContext } from '@/context/project/ProjectContext';
 import MMPFileManagement from '@/components/mmp/MMPFileManagement';
+import ForwardToFOMDialog from '@/components/mmp/ForwardToFOMDialog';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { validateCSV, CSVValidationError } from "@/utils/csvValidator";
@@ -110,6 +111,7 @@ const MMPUpload = () => {
   const [isEditingEntries, setIsEditingEntries] = useState(false);
   const [editingRows, setEditingRows] = useState<Set<number>>(new Set());
   const [rowBackups, setRowBackups] = useState<Record<number, Record<string, string>>>({});
+  const [forwardOpen, setForwardOpen] = useState(false);
   const IMPORTANT_COLS = [
     'Hub Office','State','Locality','Site Name','Site Code','CP Name','Activity at Site','Activity Details','Monitoring By','Survey Tool',
     'Use Market Diversion Monitoring','Use Warehouse Monitoring','Visit Date','Comments'
@@ -648,6 +650,7 @@ const MMPUpload = () => {
   const canApproveAction = checkPermission('mmp', 'approve') || isAdmin;
   const canArchiveAction = checkPermission('mmp', 'archive') || isAdmin;
   const canDeleteAction = checkPermission('mmp', 'delete') || isAdmin;
+  const canForwardAction = hasAnyRole(['admin', 'ict']);
 
   const handleApproveAction = async () => {
     if (uploadedMmpId && currentUser?.id) {
@@ -820,12 +823,24 @@ const MMPUpload = () => {
                   canArchive={canArchiveAction}
                   canDelete={canDeleteAction}
                   canApprove={canApproveAction}
+                  canForward={canForwardAction}
                   onArchive={handleArchiveAction}
                   onDelete={handleDeleteAction}
                   onResetApproval={handleResetApprovalAction}
                   onApprove={handleApproveAction}
+                  onForward={() => setForwardOpen(true)}
                 />
               </div>
+            )}
+
+            {uploadedMmp && (
+              <ForwardToFOMDialog
+                open={forwardOpen}
+                onOpenChange={setForwardOpen}
+                mmpId={uploadedMmp.id}
+                mmpName={uploadedMmp.name}
+                onForwarded={() => {}}
+              />
             )}
           </CardContent>
         </Card>

@@ -163,6 +163,58 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
     );
   };
 
+  const WorkflowTimeline = ({ request }: { request: DownPaymentRequest }) => {
+    const status = request.status;
+    const supervisorPassed = status !== 'pending_supervisor';
+    const adminPassed = status === 'approved' || status === 'partially_paid' || status === 'fully_paid';
+    const isComplete = status === 'fully_paid';
+    const isRejected = status === 'rejected';
+    
+    const steps = [
+      { key: 'submitted', label: 'Submitted', done: true },
+      { key: 'supervisor', label: 'Supervisor', done: supervisorPassed && !isRejected },
+      { key: 'admin', label: 'Admin', done: adminPassed },
+      { key: 'complete', label: 'Complete', done: isComplete },
+    ];
+    
+    const rejectedStep = isRejected 
+      ? ((request as any).adminRejectedById ? 2 : 1)
+      : -1;
+    
+    return (
+      <div className="flex items-center gap-1 text-xs">
+        {steps.map((step, idx) => (
+          <div key={step.key} className="flex items-center">
+            <div className={`w-2 h-2 rounded-full ${
+              rejectedStep === idx 
+                ? 'bg-red-500' 
+                : isRejected && idx > rejectedStep
+                  ? 'bg-muted-foreground/30'
+                  : step.done 
+                    ? 'bg-emerald-500' 
+                    : 'bg-muted-foreground/30'
+            }`} />
+            {idx < steps.length - 1 && (
+              <div className={`w-4 h-0.5 ${
+                step.done && steps[idx + 1]?.done 
+                  ? 'bg-emerald-500' 
+                  : 'bg-muted-foreground/30'
+              }`} />
+            )}
+          </div>
+        ))}
+        <span className="ml-1 text-muted-foreground">{
+          status === 'rejected' ? 'Rejected' :
+          status === 'fully_paid' ? 'Completed' :
+          status === 'partially_paid' ? 'Partial Payment' :
+          status === 'approved' ? 'Approved' :
+          status === 'pending_admin' ? 'With Admin' :
+          'Pending Supervisor'
+        }</span>
+      </div>
+    );
+  };
+
   const hasHubId = !!currentUser?.hubId;
 
   return (
@@ -210,6 +262,10 @@ export function DownPaymentApprovalPanel({ userRole }: DownPaymentApprovalPanelP
                           </p>
                         </div>
                         {getStatusBadge(request.status)}
+                      </div>
+
+                      <div className="mt-2">
+                        <WorkflowTimeline request={request} />
                       </div>
 
                       <div className="grid grid-cols-2 gap-3 text-sm">

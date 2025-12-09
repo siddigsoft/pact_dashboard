@@ -91,10 +91,10 @@ const MobileFAB = forwardRef<HTMLButtonElement, MobileFABProps>(
         ref={ref}
         size="icon"
         className={cn(
-          'fixed z-40 h-14 w-14 rounded-full shadow-lg',
+          'fixed z-40 h-12 w-12 rounded-full shadow-lg',
           'touch-manipulation select-none',
           'transition-all duration-200 active:scale-[0.95]',
-          'bg-primary hover:bg-primary/90',
+          'bg-black hover:bg-black/90 dark:bg-white dark:hover:bg-white/90 text-white dark:text-black',
           positionClasses[position],
           'pb-safe',
           className
