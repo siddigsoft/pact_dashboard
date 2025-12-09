@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -161,6 +161,17 @@ export function MobileMoreMenu({ isOpen, onClose }: MobileMoreMenuProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const { currentUser, roles, hasRole, logout } = useUser();
+
+  // Lock body scroll when menu is open
+  useEffect(() => {
+    if (isOpen) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
+    }
+  }, [isOpen]);
 
   const handleNavigate = (path: string) => {
     hapticPresets.buttonPress();
