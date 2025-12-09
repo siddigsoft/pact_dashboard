@@ -11,6 +11,31 @@ import {
   CreateDeletionLog,
 } from '@/types/super-admin';
 
+export interface ResetSiteVisitParams {
+  siteVisitId: string;
+  reason: string;
+  deletedBy: string;
+  deletedByName: string;
+  deletedByRole: string;
+}
+
+export interface DeleteWalletTransactionParams {
+  transactionId: string;
+  reason: string;
+  deletedBy: string;
+  deletedByName: string;
+  deletedByRole: string;
+}
+
+export interface ResetWalletParams {
+  userId: string;
+  walletId: string;
+  reason: string;
+  deletedBy: string;
+  deletedByName: string;
+  deletedByRole: string;
+}
+
 interface SuperAdminContextType {
   superAdmins: SuperAdmin[];
   deletionLogs: DeletionAuditLog[];
@@ -24,6 +49,9 @@ interface SuperAdminContextType {
   deactivateSuperAdmin: (data: DeactivateSuperAdmin) => Promise<boolean>;
   logDeletion: (data: CreateDeletionLog) => Promise<boolean>;
   checkSuperAdminStatus: (userId: string) => Promise<boolean>;
+  resetSiteVisit: (params: ResetSiteVisitParams) => Promise<boolean>;
+  deleteWalletTransaction: (params: DeleteWalletTransactionParams) => Promise<boolean>;
+  resetWallet: (params: ResetWalletParams) => Promise<boolean>;
 }
 
 const SuperAdminContext = createContext<SuperAdminContextType | undefined>(undefined);
@@ -308,6 +336,342 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
     }
   };
 
+  const sendNotificationToUser = async (
+    userId: string,
+    title: string,
+    message: string,
+    type: string = 'info',
+    relatedEntityId?: string,
+    relatedEntityType?: string
+  ) => {
+    try {
+      await supabase.from('notifications').insert({
+        user_id: userId,
+        title,
+        message,
+        type,
+        is_read: false,
+        related_entity_id: relatedEntityId,
+        related_entity_type: relatedEntityType,
+        category: 'system',
+        priority: 'high',
+      });
+    } catch (error) {
+      console.error('Failed to send notification:', error);
+    }
+  };
+
+  const resetSiteVisit = async (params: ResetSiteVisitParams): Promise<boolean> => {
+    try {
+      const { siteVisitId, reason, deletedBy, deletedByName, deletedByRole } = params;
+
+      // 1. Get the site visit details first
+      const { data: siteVisit, error: fetchError } = await supabase
+        .from('mmp_site_entries')
+        .select('*, accepted_by, supervisor_id, site_name, site_code, status')
+        .eq('id', siteVisitId)
+        .single();
+
+      if (fetchError || !siteVisit) {
+        toast({
+          title: 'Error',
+          description: 'Site visit not found',
+          variant: 'destructive',
+        });
+        return false;
+      }
+
+      const dataCollectorId = siteVisit.accepted_by;
+      const supervisorId = siteVisit.supervisor_id;
+
+      // 2. Find and delete related wallet transaction
+      const { data: transactions, error: txnFetchError } = await supabase
+        .from('wallet_transactions')
+        .select('*')
+        .or(`site_visit_id.eq.${siteVisitId},reference_id.eq.${siteVisitId}`);
+
+      if (!txnFetchError && transactions && transactions.length > 0) {
+        for (const txn of transactions) {
+          // Log the deletion
+          await logDeletion({
+            tableName: 'wallet_transactions',
+            recordId: txn.id,
+            recordData: txn,
+            deletedBy,
+            deletedByRole,
+            deletedByName,
+            deletionReason: `Site visit reset: ${reason}`,
+            isRestorable: true,
+          });
+
+          // Get wallet and update balance
+          const { data: wallet } = await supabase
+            .from('wallets')
+            .select('*')
+            .eq('id', txn.wallet_id)
+            .single();
+
+          if (wallet) {
+            const currentBalance = wallet.balances?.[txn.currency] || 0;
+            const newBalance = currentBalance - txn.amount;
+            const updatedBalances = { ...wallet.balances, [txn.currency]: Math.max(0, newBalance) };
+
+            await supabase
+              .from('wallets')
+              .update({
+                balances: updatedBalances,
+                total_earned: Math.max(0, (parseFloat(wallet.total_earned) || 0) - txn.amount),
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', wallet.id);
+          }
+
+          // Delete the transaction
+          await supabase
+            .from('wallet_transactions')
+            .delete()
+            .eq('id', txn.id);
+        }
+      }
+
+      // 3. Reset the site visit status
+      await logDeletion({
+        tableName: 'mmp_site_entries',
+        recordId: siteVisitId,
+        recordData: { ...siteVisit, action: 'status_reset' },
+        deletedBy,
+        deletedByRole,
+        deletedByName,
+        deletionReason: reason,
+        isRestorable: true,
+      });
+
+      const { error: updateError } = await supabase
+        .from('mmp_site_entries')
+        .update({
+          status: 'assigned',
+          visit_completed_at: null,
+          completion_notes: null,
+          gps_coordinates: null,
+          signature_data: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', siteVisitId);
+
+      if (updateError) throw updateError;
+
+      // 4. Send notifications to data collector and supervisor
+      const notificationTitle = 'Site Visit Status Reset';
+      const notificationMessage = `Site visit "${siteVisit.site_name}" (${siteVisit.site_code}) has been reset to incomplete by ${deletedByName}. Reason: ${reason}`;
+
+      if (dataCollectorId) {
+        await sendNotificationToUser(
+          dataCollectorId,
+          notificationTitle,
+          notificationMessage,
+          'warning',
+          siteVisitId,
+          'site_visit'
+        );
+      }
+
+      if (supervisorId && supervisorId !== dataCollectorId) {
+        await sendNotificationToUser(
+          supervisorId,
+          notificationTitle,
+          notificationMessage,
+          'warning',
+          siteVisitId,
+          'site_visit'
+        );
+      }
+
+      toast({
+        title: 'Site Visit Reset',
+        description: 'Site visit has been reset to incomplete and related transactions removed',
+      });
+
+      return true;
+    } catch (error: any) {
+      console.error('Failed to reset site visit:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to reset site visit',
+        variant: 'destructive',
+      });
+      return false;
+    }
+  };
+
+  const deleteWalletTransaction = async (params: DeleteWalletTransactionParams): Promise<boolean> => {
+    try {
+      const { transactionId, reason, deletedBy, deletedByName, deletedByRole } = params;
+
+      // 1. Get the transaction
+      const { data: txn, error: fetchError } = await supabase
+        .from('wallet_transactions')
+        .select('*')
+        .eq('id', transactionId)
+        .single();
+
+      if (fetchError || !txn) {
+        toast({
+          title: 'Error',
+          description: 'Transaction not found',
+          variant: 'destructive',
+        });
+        return false;
+      }
+
+      // 2. Log the deletion
+      await logDeletion({
+        tableName: 'wallet_transactions',
+        recordId: transactionId,
+        recordData: txn,
+        deletedBy,
+        deletedByRole,
+        deletedByName,
+        deletionReason: reason,
+        isRestorable: true,
+      });
+
+      // 3. Update wallet balance
+      const { data: wallet } = await supabase
+        .from('wallets')
+        .select('*')
+        .eq('id', txn.wallet_id)
+        .single();
+
+      if (wallet) {
+        const currentBalance = wallet.balances?.[txn.currency] || 0;
+        const newBalance = currentBalance - txn.amount;
+        const updatedBalances = { ...wallet.balances, [txn.currency]: Math.max(0, newBalance) };
+
+        await supabase
+          .from('wallets')
+          .update({
+            balances: updatedBalances,
+            total_earned: txn.amount > 0 
+              ? Math.max(0, (parseFloat(wallet.total_earned) || 0) - txn.amount)
+              : wallet.total_earned,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', wallet.id);
+      }
+
+      // 4. Delete the transaction
+      const { error: deleteError } = await supabase
+        .from('wallet_transactions')
+        .delete()
+        .eq('id', transactionId);
+
+      if (deleteError) throw deleteError;
+
+      // 5. Send notification to the user
+      if (txn.user_id) {
+        await sendNotificationToUser(
+          txn.user_id,
+          'Wallet Transaction Removed',
+          `A transaction of ${txn.amount} ${txn.currency} has been removed from your wallet by ${deletedByName}. Reason: ${reason}`,
+          'warning',
+          transactionId,
+          'wallet_transaction'
+        );
+      }
+
+      toast({
+        title: 'Transaction Deleted',
+        description: 'Wallet transaction has been removed and balance adjusted',
+      });
+
+      return true;
+    } catch (error: any) {
+      console.error('Failed to delete wallet transaction:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to delete transaction',
+        variant: 'destructive',
+      });
+      return false;
+    }
+  };
+
+  const resetWallet = async (params: ResetWalletParams): Promise<boolean> => {
+    try {
+      const { userId, walletId, reason, deletedBy, deletedByName, deletedByRole } = params;
+
+      // 1. Get all transactions for this wallet
+      const { data: transactions, error: fetchError } = await supabase
+        .from('wallet_transactions')
+        .select('*')
+        .eq('wallet_id', walletId);
+
+      if (fetchError) throw fetchError;
+
+      // 2. Log all transactions as deleted
+      if (transactions && transactions.length > 0) {
+        for (const txn of transactions) {
+          await logDeletion({
+            tableName: 'wallet_transactions',
+            recordId: txn.id,
+            recordData: txn,
+            deletedBy,
+            deletedByRole,
+            deletedByName,
+            deletionReason: `Wallet reset: ${reason}`,
+            isRestorable: true,
+          });
+        }
+
+        // 3. Delete all transactions
+        const { error: deleteError } = await supabase
+          .from('wallet_transactions')
+          .delete()
+          .eq('wallet_id', walletId);
+
+        if (deleteError) throw deleteError;
+      }
+
+      // 4. Reset wallet balances
+      const { error: walletError } = await supabase
+        .from('wallets')
+        .update({
+          balances: {},
+          total_earned: 0,
+          total_withdrawn: 0,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', walletId);
+
+      if (walletError) throw walletError;
+
+      // 5. Send notification to the user
+      await sendNotificationToUser(
+        userId,
+        'Wallet Reset',
+        `Your wallet has been reset by ${deletedByName}. All transactions have been cleared. Reason: ${reason}`,
+        'warning',
+        walletId,
+        'wallet'
+      );
+
+      toast({
+        title: 'Wallet Reset',
+        description: `Wallet has been reset. ${transactions?.length || 0} transactions removed.`,
+      });
+
+      return true;
+    } catch (error: any) {
+      console.error('Failed to reset wallet:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to reset wallet',
+        variant: 'destructive',
+      });
+      return false;
+    }
+  };
+
   const value: SuperAdminContextType = {
     superAdmins,
     deletionLogs,
@@ -321,6 +685,9 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
     deactivateSuperAdmin,
     logDeletion,
     checkSuperAdminStatus,
+    resetSiteVisit,
+    deleteWalletTransaction,
+    resetWallet,
   };
 
   return <SuperAdminContext.Provider value={value}>{children}</SuperAdminContext.Provider>;

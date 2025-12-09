@@ -76,6 +76,7 @@ const CostSubmission = lazy(() => import('./pages/CostSubmission'));
 const DemoDataCollector = lazy(() => import('./pages/DemoDataCollector'));
 const FinancialOperations = lazy(() => import('./pages/FinancialOperations'));
 const SuperAdminManagement = lazy(() => import('./components/superAdmin/SuperAdminManagementPage').then(module => ({ default: module.SuperAdminManagementPage })));
+const SuperAdminDataManagement = lazy(() => import('./components/superAdmin/SuperAdminDataManagement').then(module => ({ default: module.SuperAdminDataManagement })));
 const HubOperations = lazy(() => import('./pages/HubOperations'));
 const TrackerPreparationPlan = lazy(() => import('./pages/TrackerPreparationPlan'));
 const NotificationsPage = lazy(() => import('./pages/Notifications'));
@@ -233,6 +234,7 @@ const AppRoutes = () => {
         <Route path="/calendar" element={<Calendar />} />
         <Route path="/role-management" element={<RoleManagement />} />
         <Route path="/super-admin-management" element={<SuperAdminManagement />} />
+        <Route path="/super-admin-data" element={<SuperAdminDataManagement />} />
   <Route path="/monitoring-plan" element={<MonitoringPlanPage />} />
   <Route path="/field-operation-manager" element={<FieldOperationManagerPage />} />
   <Route path="/search" element={<GlobalSearchPage />} />
