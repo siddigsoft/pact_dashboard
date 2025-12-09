@@ -16,6 +16,7 @@ const Auth = lazy(() => import('./pages/Auth'));
 const Register = lazy(() => import('./pages/Register'));
 const RegistrationSuccess = lazy(() => import('./pages/RegistrationSuccess'));
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
+const ResetPassword = lazy(() => import('./pages/ResetPassword'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const MMP = lazy(() => import('./pages/MMP'));
 const MMPUpload = lazy(() => import('./pages/MMPUpload'));
@@ -153,7 +154,7 @@ const AuthGuard = ({ children }) => {
 
   if (
     !currentUser &&
-    !['/', '/auth', '/login', '/register', '/registration-success', '/forgot-password', '/documentation'].includes(location.pathname) &&
+    !['/', '/auth', '/login', '/register', '/registration-success', '/forgot-password', '/reset-password', '/documentation'].includes(location.pathname) &&
     !location.pathname.startsWith('/demo/')
   ) {
     return <Navigate to="/auth" replace />;
@@ -173,6 +174,7 @@ const AppRoutes = () => {
       <Route path="/register" element={<Register />} />
       <Route path="/registration-success" element={<RegistrationSuccess />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/demo/data-collector" element={<DemoDataCollector />} />
 
       {/* Protected routes */}
