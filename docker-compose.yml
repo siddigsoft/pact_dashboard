@@ -1,5 +1,7 @@
 version: "3.8"
 
+name: pact_dashboard
+
 services:
   web:
     build: .
@@ -8,4 +10,10 @@ services:
       - .env
     ports:
       - "3000:3000"
+    networks:
+      - pact_dashboard_network
+
+networks:
+  pact_dashboard_network:
+    driver: bridge
 
