@@ -35,7 +35,9 @@ import {
   Sparkles,
   Award,
   Users as UsersIcon,
-  CheckCircle
+  CheckCircle,
+  KeyRound,
+  Mail
 } from 'lucide-react';
 import { AppRole } from '@/types/roles';
 import {
@@ -70,7 +72,7 @@ const ALL_POSSIBLE_ROLES = [
 ] as const;
 
 const Users = () => {
-  const { currentUser, users, approveUser, rejectUser, refreshUsers, hasRole, addRole, removeRole } = useUser();
+  const { currentUser, users, approveUser, rejectUser, refreshUsers, hasRole, addRole, removeRole, sendPasswordRecoveryEmail } = useUser();
   const { roles: allRoles, getUserRolesByUserId, assignRoleToUser, removeRoleFromUser } = useRoleManagement();
   const { canManageRoles } = useAuthorization();
   const { toast } = useToast();
@@ -92,6 +94,9 @@ const Users = () => {
 
   const [confirmDialog, setConfirmDialog] = useState<{ open: boolean; userId?: string; action?: 'delete' | 'deactivate' }>({ open: false });
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
+
+  const [passwordResetDialog, setPasswordResetDialog] = useState<{ open: boolean; user?: User }>({ open: false });
+  const [isSendingReset, setIsSendingReset] = useState(false);
 
   const pendingUsers = useMemo(() => users.filter(user => !user.isApproved), [users]);
   const approvedUsers = useMemo(() => users.filter(user => user.isApproved), [users]);
@@ -443,6 +448,35 @@ const Users = () => {
       await refreshUsers();
     }
     setConfirmDialog({ open: false });
+  };
+
+  const handleOpenPasswordReset = (user: User) => {
+    setPasswordResetDialog({ open: true, user });
+  };
+
+  const handleSendPasswordReset = async () => {
+    if (!passwordResetDialog.user?.email) return;
+    
+    setIsSendingReset(true);
+    try {
+      const success = await sendPasswordRecoveryEmail(passwordResetDialog.user.email);
+      if (success) {
+        toast({
+          title: "Password reset email sent",
+          description: `A password reset link has been sent to ${passwordResetDialog.user.email}`,
+        });
+        setPasswordResetDialog({ open: false });
+      }
+    } catch (error) {
+      console.error("Error sending password reset:", error);
+      toast({
+        title: "Failed to send reset email",
+        description: "There was an error sending the password reset email.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSendingReset(false);
+    }
   };
 
   const stats = {
@@ -928,6 +962,18 @@ const Users = () => {
                               Edit Roles
                             </Button>
                           )}
+                          {isAdminOrICT && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="ml-2"
+                              onClick={() => handleOpenPasswordReset(user)}
+                              data-testid={`button-reset-password-${user.id}`}
+                            >
+                              <KeyRound className="h-4 w-4 mr-1" />
+                              Reset Password
+                            </Button>
+                          )}
                         </TableCell>
                       </TableRow>
                     );
@@ -1013,6 +1059,63 @@ const Users = () => {
             </Button>
             <Button variant={confirmDialog.action === 'delete' ? 'destructive' : 'default'} onClick={confirmAction}>
               {confirmDialog.action === 'delete' ? 'Delete' : 'Deactivate'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={passwordResetDialog.open} onOpenChange={open => setPasswordResetDialog(open ? s => ({ ...s, open }) : { open: false })}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reset User Password</DialogTitle>
+            <DialogDescription>
+              Send a password reset link to this user&apos;s email address.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="flex items-center gap-3">
+              <Avatar>
+                <AvatarImage src={passwordResetDialog.user?.avatar} />
+                <AvatarFallback className="bg-primary/10 text-primary">
+                  {passwordResetDialog.user?.name ? getInitials(passwordResetDialog.user.name) : <UserIcon className="h-4 w-4" />}
+                </AvatarFallback>
+              </Avatar>
+              <div>
+                <p className="font-medium">{passwordResetDialog.user?.name}</p>
+                <p className="text-sm text-muted-foreground flex items-center gap-1">
+                  <Mail className="h-3 w-3" />
+                  {passwordResetDialog.user?.email}
+                </p>
+              </div>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Clicking &quot;Send Reset Email&quot; will send a password reset link to the user&apos;s email address. They will be able to set a new password using that link.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setPasswordResetDialog({ open: false })}
+              disabled={isSendingReset}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleSendPasswordReset}
+              disabled={isSendingReset || !passwordResetDialog.user?.email}
+              data-testid="button-confirm-send-reset"
+            >
+              {isSendingReset ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <Mail className="h-4 w-4 mr-2" />
+                  Send Reset Email
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
