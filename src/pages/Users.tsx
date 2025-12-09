@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Link } from 'react-router-dom';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { useApproval } from '@/context/approval/ApprovalContext';
 import {
   User as UserIcon,
   Search,
@@ -75,6 +76,7 @@ const Users = () => {
   const { currentUser, users, approveUser, rejectUser, refreshUsers, hasRole, addRole, removeRole, sendPasswordRecoveryEmail } = useUser();
   const { roles: allRoles, getUserRolesByUserId, assignRoleToUser, removeRoleFromUser } = useRoleManagement();
   const { canManageRoles } = useAuthorization();
+  const { canBypassApproval, createApprovalRequest, hasPendingRequest } = useApproval();
   const { toast } = useToast();
   const { roles } = useAppContext();
   const [filteredUsers, setFilteredUsers] = useState<User[]>(users);
@@ -433,16 +435,46 @@ const Users = () => {
 
   const confirmAction = async () => {
     if (confirmDialog.action === 'delete' && confirmDialog.userId) {
-      setDeletingUserId(confirmDialog.userId);
       const userToDelete = users.find(u => u.id === confirmDialog.userId);
-      await deleteUser(confirmDialog.userId);
-      await refreshUsers();
-      setDeletingUserId(null);
-      toast({
-        title: "User deleted",
-        description: `${userToDelete?.name || 'User'} has been successfully deleted from the system.`,
-        variant: "success"
-      });
+      
+      // SuperAdmin can bypass approval and delete directly
+      if (canBypassApproval()) {
+        setDeletingUserId(confirmDialog.userId);
+        await deleteUser(confirmDialog.userId);
+        await refreshUsers();
+        setDeletingUserId(null);
+        toast({
+          title: "User deleted",
+          description: `${userToDelete?.name || 'User'} has been successfully deleted from the system.`,
+        });
+      } else if (hasPendingRequest('user', confirmDialog.userId)) {
+        toast({
+          title: "Request Pending",
+          description: "An approval request is already pending for this user.",
+          variant: "destructive"
+        });
+      } else {
+        // Non-SuperAdmin: create approval request
+        const result = await createApprovalRequest({
+          type: 'delete_user',
+          resourceType: 'user',
+          resourceId: confirmDialog.userId,
+          resourceName: userToDelete?.name || 'Unknown User',
+          reason: `Delete user: ${userToDelete?.name || 'Unknown User'} (${userToDelete?.email || 'No email'})`
+        });
+        if (result.success) {
+          toast({
+            title: "Request Submitted",
+            description: "Your deletion request has been sent to SuperAdmin for approval.",
+          });
+        } else {
+          toast({
+            title: "Request Failed",
+            description: result.error || "Failed to submit approval request.",
+            variant: "destructive"
+          });
+        }
+      }
     } else if (confirmDialog.action === 'deactivate' && confirmDialog.userId) {
       await deactivateUser(confirmDialog.userId);
       await refreshUsers();
