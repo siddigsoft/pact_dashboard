@@ -8,7 +8,8 @@ import { useAppContext } from "@/context/AppContext";
 import { useAuthorization } from "@/hooks/use-authorization";
 import { SiteVisit } from "@/types";
 import { Link } from "react-router-dom";
-import { Plus, ChevronLeft, Search, MapPin, Clock, AlertTriangle, Building2 } from "lucide-react";
+import { Plus, ChevronLeft, Search, MapPin, Clock, AlertTriangle, Building2, FileText, Wallet, History, ExternalLink, User } from "lucide-react";
+import { formatDistanceToNow } from 'date-fns';
 import { useSiteVisitContext } from "@/context/siteVisit/SiteVisitContext";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { format, isValid } from "date-fns";
@@ -841,11 +842,13 @@ const SiteVisits = () => {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => navigate("/dashboard")}
+            asChild
             data-testid="button-back-dashboard-fom"
           >
-            <ChevronLeft className="h-4 w-4 mr-2" />
-            Dashboard
+            <Link to="/dashboard">
+              <ChevronLeft className="h-4 w-4 mr-2" />
+              Dashboard
+            </Link>
           </Button>
         </div>
 
@@ -912,11 +915,37 @@ const SiteVisits = () => {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => navigate("/dashboard")}
+            asChild
             data-testid="button-back-dashboard"
           >
-            <ChevronLeft className="h-4 w-4 mr-2" />
-            Dashboard
+            <Link to="/dashboard">
+              <ChevronLeft className="h-4 w-4 mr-2" />
+              Dashboard
+            </Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild data-testid="link-documents">
+            <Link to="/documents">
+              <FileText className="h-4 w-4 mr-2" />
+              Documents
+            </Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild data-testid="link-wallet-reports">
+            <Link to="/wallet-reports">
+              <Wallet className="h-4 w-4 mr-2" />
+              Wallet Reports
+            </Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild data-testid="link-audit-logs">
+            <Link to="/audit-logs">
+              <History className="h-4 w-4 mr-2" />
+              Audit Logs
+            </Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild data-testid="link-map">
+            <Link to="/map">
+              <MapPin className="h-4 w-4 mr-2" />
+              Map
+            </Link>
           </Button>
           {!isFieldWorker && (checkPermission('site_visits', 'create') || hasAnyRole(['admin'])) && (
             <Button 
