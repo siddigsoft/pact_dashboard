@@ -727,10 +727,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const addSiteVisitFeeToWallet = async (userId: string, siteVisitId: string, complexityMultiplier: number = 1.0) => {
     try {
       // VALIDATION 1: Check if fee was already added for this site visit (prevent duplicate fees)
+      // Check both site_visit_id (from online completion) and reference_id (from offline sync)
       const { data: existingFees, error: feeCheckError } = await supabase
         .from('wallet_transactions')
         .select('id, amount')
-        .eq('site_visit_id', siteVisitId)
+        .or(`site_visit_id.eq.${siteVisitId},reference_id.eq.${siteVisitId}`)
         .in('type', ['earning', 'site_visit_fee']);
 
       // CRITICAL: Abort if we cannot verify whether fee exists (fail-safe)
