@@ -35,7 +35,10 @@
     FileSignature,
     Phone,
     MessageSquare,
-    Bell
+    Bell,
+    FileText,
+    Map,
+    ScrollText
   } from "lucide-react";
   import { useSiteVisitReminders } from "@/hooks/use-site-visit-reminders";
   import Logo from "../assets/logo.png";
@@ -103,7 +106,10 @@
     FileSignature,
     Phone,
     MessageSquare,
-    Bell
+    Bell,
+    FileText,
+    Map,
+    ScrollText
   };
 
 
@@ -217,6 +223,15 @@
     if (!isHidden('/tracker-preparation-plan') && (isSuperAdmin || isAdmin || isICT)) {
       dataItems.push({ id: 'tracker-plan', title: "Tracker Preparation", url: "/tracker-preparation-plan", icon: BarChart3, priority: 4, isPinned: isPinned('/tracker-preparation-plan') });
     }
+    if (!isHidden('/documents') && (isSuperAdmin || isAdmin || isICT || isFinancialAdmin)) {
+      dataItems.push({ id: 'documents', title: "Documents", url: "/documents", icon: FileText, priority: 5, isPinned: isPinned('/documents') });
+    }
+    if (!isHidden('/map') && (isSuperAdmin || isAdmin || isFOM)) {
+      dataItems.push({ id: 'advanced-map', title: "Advanced Map", url: "/map", icon: Map, priority: 6, isPinned: isPinned('/map') });
+    }
+    if (!isHidden('/wallet-reports') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
+      dataItems.push({ id: 'wallet-reports', title: "Wallet Reports", url: "/wallet-reports", icon: BarChart3, priority: 7, isPinned: isPinned('/wallet-reports') });
+    }
     if (dataItems.length) groups.push({ id: 'reports', label: "Data & Reports", order: 5, items: dataItems });
 
     const helpItems: MenuGroup['items'] = [];
@@ -267,6 +282,9 @@
     }
     if (!isHidden('/settings') && (isSuperAdmin || ((isAdmin || perms.settings) && !isDataCollector))) {
       adminItems.push({ id: 'settings', title: "Settings", url: "/settings", icon: Settings, priority: 10, isPinned: isPinned('/settings') });
+    }
+    if (!isHidden('/audit-logs') && isSuperAdmin) {
+      adminItems.push({ id: 'audit-logs', title: "Audit Logs", url: "/audit-logs", icon: ScrollText, priority: 11, isPinned: isPinned('/audit-logs') });
     }
     if (adminItems.length) groups.push({ id: 'admin', label: "Administration", order: 6, items: adminItems });
 
