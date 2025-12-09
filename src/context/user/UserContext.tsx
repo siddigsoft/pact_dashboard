@@ -5,6 +5,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useRoles } from '@/hooks/use-roles';
 import { AppRole } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
+import { EmailNotificationService } from '@/services/email-notification.service';
 
 interface UserContextType {
   currentUser: User | null;
@@ -851,6 +852,26 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         title: "User approved",
         description: "The user can now log in to the system.",
       });
+
+      // Send welcome email to the newly approved user
+      try {
+        const { data: userProfile } = await supabase
+          .from('profiles')
+          .select('email, full_name, role')
+          .eq('id', userId)
+          .single();
+
+        if (userProfile?.email) {
+          EmailNotificationService.sendWelcomeEmail(
+            userProfile.email,
+            userProfile.full_name || 'User',
+            userProfile.role || 'Data Collector'
+          );
+        }
+      } catch (emailError) {
+        console.error('Failed to send welcome email:', emailError);
+      }
+
       return true;
     } catch (error) {
       console.error("User approval error:", error);
