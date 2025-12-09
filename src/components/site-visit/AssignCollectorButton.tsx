@@ -8,6 +8,7 @@ import SmartCollectorSelector from './SmartCollectorSelector';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { useNotifications } from '@/context/notifications/NotificationContext';
+import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 
 interface AssignCollectorButtonProps {
   siteVisit: SiteVisit;
@@ -65,7 +66,10 @@ const AssignCollectorButton: React.FC<AssignCollectorButtonProps> = ({ siteVisit
     const success = await assignSiteVisit(siteVisit.id, userId);
 
     if (success) {
-      // Notify the assignee about the assignment
+      // Notify the assignee about the assignment (sends email for high priority)
+      NotificationTriggerService.siteAssigned(userId, siteVisit.siteName, siteVisit.id);
+      
+      // Also add to local notification context for immediate UI update
       addNotification({
         userId,
         title: "Assigned to Site Visit",
