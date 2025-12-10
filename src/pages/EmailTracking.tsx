@@ -236,38 +236,34 @@ export default function EmailTracking() {
 
     setSendingTest(true);
     try {
-      const result = await EmailNotificationService.sendNotification(
-        testEmail,
-        'Test User',
-        {
-          title: 'SMTP Test Email',
-          message: 'This is a test email to verify your SMTP configuration is working correctly. If you received this email, your IONOS SMTP settings are configured properly.',
-          type: 'success',
-          actionUrl: window.location.origin,
-          actionLabel: 'Go to PACT Platform',
-        }
-      );
+      // Use Supabase Auth password reset - this goes through IONOS SMTP configured in Dashboard
+      const { error } = await supabase.auth.resetPasswordForEmail(testEmail, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+
+      const success = !error;
+      const errorMessage = error?.message;
 
       // Store log locally for immediate display
-      storeLocalEmailLog(testEmail, 'SMTP Test Email', result.success, result.error);
+      storeLocalEmailLog(testEmail, 'Password Reset Test (SMTP)', success, errorMessage);
 
-      if (result.success) {
+      if (success) {
         toast({
-          title: 'Test email sent',
-          description: `Email sent successfully to ${testEmail}`,
+          title: 'Password reset email sent',
+          description: `Test email sent to ${testEmail} via IONOS SMTP. Check inbox (and spam folder).`,
         });
         setTestEmail('');
       } else {
         toast({
           title: 'Failed to send test email',
-          description: result.error || 'Unknown error occurred',
+          description: errorMessage || 'Unknown error occurred',
           variant: 'destructive',
         });
       }
       // Refresh logs after storing
       setTimeout(fetchEmailLogs, 500);
     } catch (error: any) {
-      storeLocalEmailLog(testEmail, 'SMTP Test Email', false, error.message);
+      storeLocalEmailLog(testEmail, 'Password Reset Test (SMTP)', false, error.message);
       toast({
         title: 'Error',
         description: error.message || 'Failed to send test email',
@@ -458,7 +454,7 @@ export default function EmailTracking() {
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <Send className="h-4 w-4" />
-            Test SMTP Configuration
+            Test IONOS SMTP Configuration
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -489,7 +485,7 @@ export default function EmailTracking() {
             </Button>
           </div>
           <p className="text-xs text-muted-foreground mt-2">
-            Send a test email to verify your IONOS SMTP configuration is working correctly.
+            Tests your IONOS SMTP by sending a password reset email. This uses the same SMTP configured in Supabase Dashboard for all auth emails.
           </p>
         </CardContent>
       </Card>
