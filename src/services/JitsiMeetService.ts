@@ -45,22 +45,59 @@ class JitsiMeetService {
     this.loadPromise = new Promise((resolve, reject) => {
       if (typeof window.JitsiMeetExternalAPI !== 'undefined') {
         this.scriptLoaded = true;
+        console.log('[Jitsi] External API already available');
         resolve();
+        return;
+      }
+
+      // Check if script is already loading
+      const existingScript = document.querySelector(`script[src*="${this.domain}/external_api.js"]`);
+      if (existingScript) {
+        console.log('[Jitsi] Script already in DOM, waiting for load...');
+        const checkInterval = setInterval(() => {
+          if (typeof window.JitsiMeetExternalAPI !== 'undefined') {
+            clearInterval(checkInterval);
+            this.scriptLoaded = true;
+            resolve();
+          }
+        }, 100);
+        setTimeout(() => {
+          clearInterval(checkInterval);
+          if (!this.scriptLoaded) {
+            reject(new Error('Timeout waiting for Jitsi API'));
+          }
+        }, 15000);
         return;
       }
 
       const script = document.createElement('script');
       script.src = `https://${this.domain}/external_api.js`;
       script.async = true;
+      script.crossOrigin = 'anonymous';
+
+      const timeout = setTimeout(() => {
+        console.error('[Jitsi] Script load timeout');
+        reject(new Error('Timeout loading Jitsi Meet API'));
+      }, 15000);
 
       script.onload = () => {
-        this.scriptLoaded = true;
-        console.log('[Jitsi] External API loaded');
-        resolve();
+        clearTimeout(timeout);
+        // Wait a bit for the API to be fully initialized
+        setTimeout(() => {
+          if (typeof window.JitsiMeetExternalAPI !== 'undefined') {
+            this.scriptLoaded = true;
+            console.log('[Jitsi] External API loaded successfully');
+            resolve();
+          } else {
+            reject(new Error('JitsiMeetExternalAPI not available after script load'));
+          }
+        }, 200);
       };
 
-      script.onerror = () => {
-        console.error('[Jitsi] Failed to load external API');
+      script.onerror = (e) => {
+        clearTimeout(timeout);
+        console.error('[Jitsi] Failed to load external API:', e);
+        this.loadPromise = null; // Reset so it can be retried
         reject(new Error('Failed to load Jitsi Meet API'));
       };
 
