@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState, useRef } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAppContext } from '@/context/AppContext';
 import { useViewMode } from '@/context/ViewModeContext';
 import { useChat } from '@/context/chat/ChatContextSupabase';
@@ -33,6 +33,7 @@ import {
 const Chat: React.FC = () => {
   const { currentUser } = useAppContext();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { viewMode } = useViewMode();
   const { toast } = useToast();
   const isMobile = viewMode === 'mobile';
@@ -44,6 +45,7 @@ const Chat: React.FC = () => {
   const { chats, activeChat, setActiveChat, createChat, isLoading } = useChat();
   const { initiateCall } = useCommunication();
   const { users } = useUser();
+  const lastProcessedParamRef = useRef<string | null>(null);
   
   const { onlineUserIds } = useRealtimeTeamLocations({ enabled: true });
 
@@ -52,6 +54,51 @@ const Chat: React.FC = () => {
       navigate('/login');
     }
   }, [currentUser, navigate]);
+
+  useEffect(() => {
+    const userId = searchParams.get('userId');
+    const chatId = searchParams.get('chatId');
+    const paramKey = userId || chatId;
+    
+    if (!paramKey || lastProcessedParamRef.current === paramKey) return;
+    
+    if (chatId && chats.length > 0) {
+      const existingChat = chats.find(c => c.id === chatId);
+      if (existingChat) {
+        lastProcessedParamRef.current = paramKey;
+        setActiveChat(existingChat);
+        setActiveTab('conversations');
+        if (isMobile) setActiveView('chat');
+        setSearchParams({}, { replace: true });
+      }
+    } else if (userId && users.length > 0 && currentUser) {
+      const targetUser = users.find(u => u.id === userId);
+      if (targetUser) {
+        lastProcessedParamRef.current = paramKey;
+        const existingChat = chats.find(c => 
+          c.type === 'private' && 
+          c.participants?.includes(userId) && 
+          c.participants?.includes(currentUser.id)
+        );
+        
+        if (existingChat) {
+          setActiveChat(existingChat);
+          setActiveTab('conversations');
+          if (isMobile) setActiveView('chat');
+        } else {
+          const userName = targetUser.fullName || targetUser.name || targetUser.username || 'User';
+          createChat([userId], userName, 'private').then(chat => {
+            if (chat) {
+              setActiveChat(chat);
+              setActiveTab('conversations');
+              if (isMobile) setActiveView('chat');
+            }
+          });
+        }
+        setSearchParams({}, { replace: true });
+      }
+    }
+  }, [searchParams, chats, users, currentUser, isMobile, setActiveChat, createChat, setSearchParams]);
 
   const handleSelectChat = (chatId: string) => {
     const chat = chats.find(c => c.id === chatId);
