@@ -50,7 +50,7 @@ export function AuditingReports() {
     to: new Date(),
   });
   const { toast } = useToast();
-  const { logs: auditLogs, syncPendingLogs } = useAudit();
+  const { logs: auditLogs, syncToDatabase } = useAudit();
 
   const filteredAuditLogs = auditLogs.filter(log => {
     if (!dateRange?.from || !dateRange?.to) return true;
@@ -139,14 +139,17 @@ export function AuditingReports() {
 
   const handleExportCSV = () => {
     if (!data) return;
+    const overrideCount = data.recentOverrides?.length || 0;
+    const overrideRate = data.totalActions > 0 ? (overrideCount / data.totalActions * 100).toFixed(1) : 0;
+    const complianceIssuesCount = data.complianceIssues?.length || 0;
+    const dataQualityScore = data.dataQualityMetrics?.reduce((acc, m) => acc + (m.completenessPercentage || 0), 0) / (data.dataQualityMetrics?.length || 1);
+    
     const csvData = [
       { Metric: 'Total Actions', Value: data.totalActions },
-      { Metric: 'Override Count', Value: data.overrideCount },
-      { Metric: 'Override Rate', Value: data.overrideRate },
-      { Metric: 'Approval Rate', Value: data.approvalRate },
-      { Metric: 'Avg Processing Time (hrs)', Value: data.averageProcessingTime },
-      { Metric: 'Compliance Score', Value: data.complianceScore },
-      { Metric: 'Data Quality Score', Value: data.dataQualityScore },
+      { Metric: 'Override Count', Value: overrideCount },
+      { Metric: 'Override Rate (%)', Value: overrideRate },
+      { Metric: 'Compliance Issues', Value: complianceIssuesCount },
+      { Metric: 'Data Quality Score', Value: dataQualityScore.toFixed(1) },
       ...data.actionsByType.map(a => ({
         Metric: `Action: ${a.type}`,
         Value: a.count,
@@ -287,7 +290,7 @@ export function AuditingReports() {
                   </CardTitle>
                   <CardDescription>Complete chronological audit trail of system activities</CardDescription>
                 </div>
-                <Button variant="outline" size="sm" onClick={syncPendingLogs}>
+                <Button variant="outline" size="sm" onClick={() => syncToDatabase()}>
                   <RefreshCw className="w-4 h-4 mr-2" />
                   Sync Logs
                 </Button>
@@ -315,11 +318,11 @@ export function AuditingReports() {
                         <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
                           <Clock className="w-3 h-3" />
                           {format(new Date(log.timestamp), 'MMM dd, yyyy HH:mm:ss')}
-                          {log.userId && (
+                          {log.actorId && (
                             <>
                               <span className="mx-1">|</span>
                               <Users className="w-3 h-3" />
-                              <span>User: {log.userId.slice(0, 8)}...</span>
+                              <span>User: {log.actorName || log.actorId.slice(0, 8) + '...'}</span>
                             </>
                           )}
                         </div>
@@ -332,9 +335,9 @@ export function AuditingReports() {
                           </div>
                         )}
                       </div>
-                      {log.synced !== undefined && (
-                        <Badge variant={log.synced ? 'default' : 'secondary'} className="flex-shrink-0">
-                          {log.synced ? 'Synced' : 'Pending'}
+                      {log.success !== undefined && (
+                        <Badge variant={log.success ? 'default' : 'secondary'} className="flex-shrink-0">
+                          {log.success ? 'Success' : 'Failed'}
                         </Badge>
                       )}
                     </div>
