@@ -602,9 +602,9 @@ const Chat: React.FC = () => {
 
   // WEB VIEW - Uber Style Black/White Theme
   return (
-    <div className="h-full w-full flex bg-white dark:bg-black rounded-lg overflow-hidden border border-gray-200 dark:border-gray-800" data-testid="chat-page">
+    <div className="h-full w-full flex bg-white dark:bg-black overflow-hidden" data-testid="chat-page">
       {/* Left Panel - Conversation List */}
-      <div className="w-[340px] h-full flex flex-col shrink-0 border-r border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950">
+      <div className="w-[340px] min-w-[340px] max-w-[340px] h-full flex flex-col flex-shrink-0 border-r border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950">
         {/* Header with Search */}
         <div className="p-4 border-b border-gray-200 dark:border-gray-800">
           <div className="flex items-center justify-between mb-3">
@@ -839,7 +839,7 @@ const Chat: React.FC = () => {
       </div>
 
       {/* Right Panel - Chat Window */}
-      <div className="flex-1 h-full flex flex-col bg-white dark:bg-black">
+      <div className="flex-1 min-w-0 h-full flex flex-col bg-white dark:bg-black overflow-hidden">
         {activeChat ? (
           <ChatWindow />
         ) : (
