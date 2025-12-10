@@ -39,6 +39,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [chats, setChats] = useState<Chat[]>([]);
   const [messages, setMessages] = useState<Record<string, ChatMessage[]>>({});
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  const [activeChatDirect, setActiveChatDirect] = useState<Chat | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isSendingMessage, setIsSendingMessage] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -54,6 +55,17 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
     };
   }, [channels]);
+
+  // Sync activeChatDirect with chats when chats are updated (e.g., with new messages)
+  useEffect(() => {
+    if (activeChatDirect) {
+      const updatedChat = chats.find(c => c.id === activeChatDirect.id);
+      if (updatedChat && (updatedChat.lastMessage !== activeChatDirect.lastMessage || 
+          updatedChat.name !== activeChatDirect.name)) {
+        setActiveChatDirect(updatedChat);
+      }
+    }
+  }, [chats, activeChatDirect]);
 
   // Load chats when user is available
   useEffect(() => {
@@ -240,11 +252,21 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const activeChat = activeChatId ? chats.find(c => c.id === activeChatId) || null : null;
+  // Compute activeChat: prefer direct storage, fallback to lookup
+  const activeChat = activeChatDirect || (activeChatId ? chats.find(c => c.id === activeChatId) || null : null);
 
   const setActiveChat = (chat: Chat | null) => {
+    // Store the chat directly to avoid race conditions
+    setActiveChatDirect(chat);
     setActiveChatId(chat?.id || null);
     if (chat?.id) {
+      // Ensure the chat is in the chats array
+      setChats(prev => {
+        if (chat && !prev.some(c => c.id === chat.id)) {
+          return [...prev, chat];
+        }
+        return prev;
+      });
       // Load messages when chat is activated
       loadChatMessages(chat.id);
       // Subscribe to realtime updates for this chat
