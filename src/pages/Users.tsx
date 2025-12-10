@@ -134,8 +134,10 @@ const Users = () => {
 
   const getUserRoleLabels = (uid: string): string[] => {
     // Combine system roles (text) and custom roles (via role_id -> roles table)
-    const urs = getUserRolesByUserId(uid);
+    const urs = getUserRolesByUserId(uid) ?? [];
+    if (!Array.isArray(urs) || urs.length === 0) return [];
     const labels = urs.map(ur => {
+      if (!ur) return 'custom';
       if (ur.role) return ur.role as string;
       if (ur.role_id) {
         const r = allRoles.find(rr => rr.id === ur.role_id);
@@ -148,15 +150,17 @@ const Users = () => {
 
   // Determine the single, effective role label to display for a user
   const getPrimaryRoleLabel = (user: User): string => {
-    const urs = getUserRolesByUserId(user.id);
-    const sys = urs.find(ur => !!ur.role);
+    if (!user?.id) return user?.role || 'unknown';
+    const urs = getUserRolesByUserId(user.id) ?? [];
+    if (!Array.isArray(urs) || urs.length === 0) return user.role || 'unknown';
+    const sys = urs.find(ur => ur && !!ur.role);
     if (sys?.role) return sys.role as string;
-    const custom = urs.find(ur => !!ur.role_id);
+    const custom = urs.find(ur => ur && !!ur.role_id);
     if (custom?.role_id) {
       const r = allRoles.find(rr => rr.id === custom.role_id);
       return r?.display_name || r?.name || 'custom';
     }
-    return user.role;
+    return user.role || 'unknown';
   };
 
   const handleRefreshUsers = async () => {
@@ -275,8 +279,9 @@ const Users = () => {
     }
   };
 
-  const getInitials = (name: string) => {
-    return name.split(' ').map((n) => n[0]).join('').toUpperCase();
+  const getInitials = (name: string | null | undefined) => {
+    if (!name) return '??';
+    return name.split(' ').map((n) => n[0] || '').join('').toUpperCase() || '??';
   };
 
   const handleOpenRoleEdit = (user: User) => {
