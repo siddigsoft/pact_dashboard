@@ -4,9 +4,10 @@ import {
   FileText, Search, Download, Eye, Calendar, MapPin, Building2, 
   FolderOpen, RefreshCw, FileSpreadsheet, Receipt, Shield, Hash,
   ArrowUpDown, ChevronDown, ChevronUp, File, Image, Folder,
-  ExternalLink, History, Clock, Wallet
+  ExternalLink, History, Clock, Wallet, Filter, X, PenLine,
+  Briefcase, Home
 } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow, format, parseISO } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -16,7 +17,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { format } from 'date-fns';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 interface Document {
   id: string;
@@ -25,19 +26,35 @@ interface Document {
   fileUrl: string;
   fileSize?: string;
   fileType?: string;
-  category: 'mmp_file' | 'federal_permit' | 'state_permit' | 'local_permit' | 'cost_receipt' | 'report' | 'attachment' | 'other';
+  category: 'mmp_file' | 'federal_permit' | 'state_permit' | 'local_permit' | 'cost_receipt' | 'transaction_receipt' | 'site_visit_photo' | 'report' | 'attachment' | 'other';
   uploadedAt: string;
   uploadedBy?: string;
   state?: string;
   locality?: string;
+  projectId?: string;
   projectName?: string;
+  hubId?: string;
+  hubName?: string;
   mmpName?: string;
   siteVisitId?: string;
   issueDate?: string;
   expiryDate?: string;
+  monthBucket?: string;
   status?: 'pending' | 'verified' | 'rejected' | 'approved';
   verified?: boolean;
-  sourceType: 'mmp' | 'permit' | 'cost' | 'chat' | 'other';
+  signatureId?: string;
+  signedAt?: string;
+  sourceType: 'mmp' | 'permit' | 'cost' | 'transaction' | 'site_visit' | 'chat' | 'other';
+}
+
+interface Project {
+  id: string;
+  name: string;
+}
+
+interface Hub {
+  id: string;
+  name: string;
 }
 
 const categoryLabels: Record<string, string> = {
@@ -46,6 +63,8 @@ const categoryLabels: Record<string, string> = {
   state_permit: 'State Permit',
   local_permit: 'Local Permit',
   cost_receipt: 'Cost Receipt',
+  transaction_receipt: 'Transaction Receipt',
+  site_visit_photo: 'Site Visit Photo',
   report: 'Report',
   attachment: 'Attachment',
   other: 'Other'
@@ -57,6 +76,8 @@ const categoryIcons: Record<string, typeof FileText> = {
   state_permit: Shield,
   local_permit: Shield,
   cost_receipt: Receipt,
+  transaction_receipt: Wallet,
+  site_visit_photo: Image,
   report: FileText,
   attachment: File,
   other: File
@@ -68,6 +89,8 @@ const categoryColors: Record<string, string> = {
   state_permit: 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400',
   local_permit: 'bg-violet-500/10 text-violet-600 dark:text-violet-400',
   cost_receipt: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+  transaction_receipt: 'bg-teal-500/10 text-teal-600 dark:text-teal-400',
+  site_visit_photo: 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400',
   report: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
   attachment: 'bg-gray-500/10 text-gray-600 dark:text-gray-400',
   other: 'bg-gray-500/10 text-gray-600 dark:text-gray-400'
@@ -88,23 +111,64 @@ const DocumentsPage = () => {
   const [sortField, setSortField] = useState<SortField>('uploadedAt');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [activeTab, setActiveTab] = useState('all');
+  
+  // New advanced filters
+  const [projectFilter, setProjectFilter] = useState<string>('all');
+  const [monthFilter, setMonthFilter] = useState<string>('all');
+  const [hubFilter, setHubFilter] = useState<string>('all');
+  const [stateFilter, setStateFilter] = useState<string>('all');
+  const [hasSignatureFilter, setHasSignatureFilter] = useState<string>('all');
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  
+  // Filter options data
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [hubs, setHubs] = useState<Hub[]>([]);
+  const [availableMonths, setAvailableMonths] = useState<string[]>([]);
+  const [availableStates, setAvailableStates] = useState<string[]>([]);
+
+  // Fetch filter options (projects, hubs, etc.)
+  const fetchFilterOptions = async () => {
+    try {
+      // Fetch projects
+      const { data: projectsData } = await supabase
+        .from('projects')
+        .select('id, name')
+        .order('name');
+      
+      setProjects(projectsData || []);
+      
+      // Fetch hubs
+      const { data: hubsData } = await supabase
+        .from('hubs')
+        .select('id, name')
+        .order('name');
+      
+      setHubs(hubsData || []);
+    } catch (error) {
+      console.error('Error fetching filter options:', error);
+    }
+  };
 
   const fetchDocuments = async () => {
     setLoading(true);
     try {
       const docs: Document[] = [];
       let indexCounter = 1;
+      const monthsSet = new Set<string>();
+      const statesSet = new Set<string>();
 
       // 1. Fetch MMP Files (the CSV uploads themselves)
       const { data: mmpFiles, error: mmpError } = await supabase
         .from('mmp_files')
-        .select('id, filename, file_url, created_at, updated_at, permits, project_id, status, projects(name)')
+        .select('id, filename, file_url, created_at, updated_at, permits, project_id, status, uploaded_by, projects(name)')
         .order('created_at', { ascending: false });
 
       if (mmpError) throw mmpError;
 
       mmpFiles?.forEach((mmp: any) => {
         const projectName = mmp.projects?.name || 'Unknown Project';
+        const monthBucket = mmp.created_at ? format(parseISO(mmp.created_at), 'yyyy-MM') : undefined;
+        if (monthBucket) monthsSet.add(monthBucket);
         
         // Add the MMP file itself
         docs.push({
@@ -114,7 +178,10 @@ const DocumentsPage = () => {
           fileUrl: mmp.file_url || '',
           category: 'mmp_file',
           uploadedAt: mmp.created_at || new Date().toISOString(),
+          uploadedBy: mmp.uploaded_by,
+          projectId: mmp.project_id,
           projectName,
+          monthBucket,
           status: mmp.status === 'approved' ? 'approved' : mmp.status === 'rejected' ? 'rejected' : 'pending',
           verified: mmp.status === 'approved',
           sourceType: 'mmp'
@@ -126,6 +193,9 @@ const DocumentsPage = () => {
         // Federal permits
         if (permits.documents) {
           permits.documents.forEach((doc: any, idx: number) => {
+            const docMonth = doc.uploadedAt ? format(parseISO(doc.uploadedAt), 'yyyy-MM') : monthBucket;
+            if (docMonth) monthsSet.add(docMonth);
+            
             docs.push({
               id: `${mmp.id}-fed-${idx}`,
               indexNo: indexCounter++,
@@ -133,8 +203,10 @@ const DocumentsPage = () => {
               fileUrl: doc.fileUrl || '',
               category: 'federal_permit',
               uploadedAt: doc.uploadedAt || mmp.created_at || new Date().toISOString(),
+              projectId: mmp.project_id,
               projectName,
               mmpName: mmp.filename,
+              monthBucket: docMonth,
               verified: doc.validated || false,
               status: doc.validated ? 'verified' : 'pending',
               sourceType: 'permit'
@@ -145,7 +217,12 @@ const DocumentsPage = () => {
         // State permits
         if (permits.statePermits) {
           permits.statePermits.forEach((sp: any) => {
+            if (sp.stateName) statesSet.add(sp.stateName);
+            
             sp.documents?.forEach((doc: any, idx: number) => {
+              const docMonth = doc.uploadedAt ? format(parseISO(doc.uploadedAt), 'yyyy-MM') : monthBucket;
+              if (docMonth) monthsSet.add(docMonth);
+              
               docs.push({
                 id: `${mmp.id}-state-${sp.stateName}-${idx}`,
                 indexNo: indexCounter++,
@@ -154,8 +231,10 @@ const DocumentsPage = () => {
                 category: 'state_permit',
                 uploadedAt: doc.uploadedAt || mmp.created_at || new Date().toISOString(),
                 state: sp.stateName,
+                projectId: mmp.project_id,
                 projectName,
                 mmpName: mmp.filename,
+                monthBucket: docMonth,
                 issueDate: doc.issueDate,
                 expiryDate: doc.expiryDate,
                 verified: doc.validated || sp.verified || false,
@@ -169,7 +248,12 @@ const DocumentsPage = () => {
         // Local permits
         if (permits.localPermits) {
           permits.localPermits.forEach((lp: any) => {
+            if (lp.state) statesSet.add(lp.state);
+            
             lp.documents?.forEach((doc: any, idx: number) => {
+              const docMonth = doc.uploadedAt ? format(parseISO(doc.uploadedAt), 'yyyy-MM') : monthBucket;
+              if (docMonth) monthsSet.add(docMonth);
+              
               docs.push({
                 id: `${mmp.id}-local-${lp.localityName}-${idx}`,
                 indexNo: indexCounter++,
@@ -177,9 +261,12 @@ const DocumentsPage = () => {
                 fileUrl: doc.fileUrl || '',
                 category: 'local_permit',
                 uploadedAt: doc.uploadedAt || mmp.created_at || new Date().toISOString(),
+                state: lp.state,
                 locality: lp.localityName,
+                projectId: mmp.project_id,
                 projectName,
                 mmpName: mmp.filename,
+                monthBucket: docMonth,
                 issueDate: doc.issueDate,
                 expiryDate: doc.expiryDate,
                 verified: doc.validated || lp.verified || false,
@@ -193,6 +280,10 @@ const DocumentsPage = () => {
         // Locality permits array format
         if (Array.isArray(permits.localityPermits)) {
           permits.localityPermits.forEach((lp: any, idx: number) => {
+            if (lp.state) statesSet.add(lp.state);
+            const docMonth = lp.uploadedAt ? format(parseISO(lp.uploadedAt), 'yyyy-MM') : monthBucket;
+            if (docMonth) monthsSet.add(docMonth);
+            
             docs.push({
               id: `${mmp.id}-locality-${idx}`,
               indexNo: indexCounter++,
@@ -202,8 +293,10 @@ const DocumentsPage = () => {
               uploadedAt: lp.uploadedAt || mmp.created_at || new Date().toISOString(),
               state: lp.state,
               locality: lp.locality,
+              projectId: mmp.project_id,
               projectName,
               mmpName: mmp.filename,
+              monthBucket: docMonth,
               issueDate: lp.issueDate,
               expiryDate: lp.expiryDate,
               verified: lp.verified || false,
@@ -217,21 +310,28 @@ const DocumentsPage = () => {
       // 2. Fetch Cost Submission Receipts
       const { data: costSubmissions, error: costError } = await supabase
         .from('cost_submissions')
-        .select('id, receipt_url, receipt_filename, amount, created_at, status, site_visit_id, documents')
+        .select('id, receipt_url, receipt_filename, amount, created_at, status, site_visit_id, documents, project_id, projects(name)')
         .order('created_at', { ascending: false });
 
       if (!costError && costSubmissions) {
         costSubmissions.forEach((cost: any) => {
+          const costMonth = cost.created_at ? format(parseISO(cost.created_at), 'yyyy-MM') : undefined;
+          if (costMonth) monthsSet.add(costMonth);
+          const projectName = cost.projects?.name;
+          
           // Add main receipt if exists
           if (cost.receipt_url) {
             docs.push({
               id: `cost-${cost.id}`,
               indexNo: indexCounter++,
-              fileName: cost.receipt_filename || `Receipt - ${cost.amount ? `$${cost.amount}` : 'Cost Submission'}`,
+              fileName: cost.receipt_filename || `Receipt - ${cost.amount ? `SDG ${cost.amount}` : 'Cost Submission'}`,
               fileUrl: cost.receipt_url,
               category: 'cost_receipt',
               uploadedAt: cost.created_at || new Date().toISOString(),
+              projectId: cost.project_id,
+              projectName,
               siteVisitId: cost.site_visit_id,
+              monthBucket: costMonth,
               status: cost.status === 'approved' ? 'approved' : cost.status === 'rejected' ? 'rejected' : 'pending',
               verified: cost.status === 'approved',
               sourceType: 'cost'
@@ -241,6 +341,9 @@ const DocumentsPage = () => {
           if (cost.documents && Array.isArray(cost.documents)) {
             cost.documents.forEach((doc: any, idx: number) => {
               if (doc.fileUrl || doc.url) {
+                const docMonth = doc.uploadedAt ? format(parseISO(doc.uploadedAt), 'yyyy-MM') : costMonth;
+                if (docMonth) monthsSet.add(docMonth);
+                
                 docs.push({
                   id: `cost-doc-${cost.id}-${idx}`,
                   indexNo: indexCounter++,
@@ -248,7 +351,10 @@ const DocumentsPage = () => {
                   fileUrl: doc.fileUrl || doc.url || '',
                   category: 'cost_receipt',
                   uploadedAt: doc.uploadedAt || cost.created_at || new Date().toISOString(),
+                  projectId: cost.project_id,
+                  projectName,
                   siteVisitId: cost.site_visit_id,
+                  monthBucket: docMonth,
                   status: cost.status === 'approved' ? 'approved' : cost.status === 'rejected' ? 'rejected' : 'pending',
                   verified: cost.status === 'approved',
                   sourceType: 'cost'
@@ -269,17 +375,21 @@ const DocumentsPage = () => {
         if (!photoError && reportPhotos) {
           reportPhotos.forEach((photo: any) => {
             if (photo.photo_url) {
+              const photoMonth = photo.created_at ? format(parseISO(photo.created_at), 'yyyy-MM') : undefined;
+              if (photoMonth) monthsSet.add(photoMonth);
+              
               docs.push({
                 id: `photo-${photo.id}`,
                 indexNo: indexCounter++,
                 fileName: photo.caption || `Site Visit Photo`,
                 fileUrl: photo.photo_url,
-                category: 'attachment',
+                category: 'site_visit_photo',
                 uploadedAt: photo.created_at || new Date().toISOString(),
                 siteVisitId: photo.site_visit_id,
+                monthBucket: photoMonth,
                 status: 'verified',
                 verified: true,
-                sourceType: 'other'
+                sourceType: 'site_visit'
               });
             }
           });
@@ -293,6 +403,10 @@ const DocumentsPage = () => {
       docs.forEach((doc, idx) => {
         doc.indexNo = idx + 1;
       });
+
+      // Set available months and states for filters
+      setAvailableMonths(Array.from(monthsSet).sort((a, b) => b.localeCompare(a)));
+      setAvailableStates(Array.from(statesSet).sort());
 
       setDocuments(docs);
     } catch (error) {
@@ -308,8 +422,33 @@ const DocumentsPage = () => {
   };
 
   useEffect(() => {
-    fetchDocuments();
+    // Fetch filter options first, then documents
+    const loadData = async () => {
+      await fetchFilterOptions();
+      await fetchDocuments();
+    };
+    loadData();
   }, []);
+
+  // Reset all filters
+  const resetFilters = () => {
+    setSearchTerm('');
+    setCategoryFilter('all');
+    setStatusFilter('all');
+    setSourceFilter('all');
+    setProjectFilter('all');
+    setMonthFilter('all');
+    setHubFilter('all');
+    setStateFilter('all');
+    setHasSignatureFilter('all');
+  };
+
+  // Count active advanced filters
+  const activeAdvancedFiltersCount = [
+    projectFilter !== 'all',
+    monthFilter !== 'all',
+    stateFilter !== 'all'
+  ].filter(Boolean).length;
 
   const filteredDocuments = useMemo(() => {
     let filtered = documents.filter(doc => {
@@ -325,13 +464,19 @@ const DocumentsPage = () => {
       const matchesStatus = statusFilter === 'all' || doc.status === statusFilter;
       const matchesSource = sourceFilter === 'all' || doc.sourceType === sourceFilter;
       
+      // New advanced filters
+      const matchesProject = projectFilter === 'all' || doc.projectId === projectFilter;
+      const matchesMonth = monthFilter === 'all' || doc.monthBucket === monthFilter;
+      const matchesState = stateFilter === 'all' || doc.state === stateFilter;
+      
       // Tab filtering
       const matchesTab = activeTab === 'all' || 
         (activeTab === 'mmp' && doc.category === 'mmp_file') ||
         (activeTab === 'permits' && doc.category.includes('permit')) ||
-        (activeTab === 'receipts' && doc.category === 'cost_receipt');
+        (activeTab === 'receipts' && (doc.category === 'cost_receipt' || doc.category === 'transaction_receipt'));
       
-      return matchesSearch && matchesCategory && matchesStatus && matchesSource && matchesTab;
+      return matchesSearch && matchesCategory && matchesStatus && matchesSource && 
+        matchesProject && matchesMonth && matchesState && matchesTab;
     });
 
     // Sort
@@ -355,7 +500,7 @@ const DocumentsPage = () => {
     });
 
     return filtered;
-  }, [documents, searchTerm, categoryFilter, statusFilter, sourceFilter, activeTab, sortField, sortDirection]);
+  }, [documents, searchTerm, categoryFilter, statusFilter, sourceFilter, projectFilter, monthFilter, stateFilter, activeTab, sortField, sortDirection]);
 
   const stats = useMemo(() => ({
     total: documents.length,
@@ -576,7 +721,7 @@ const DocumentsPage = () => {
                     data-testid="input-search-documents"
                   />
                 </div>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2 items-center">
                   <Select value={categoryFilter} onValueChange={setCategoryFilter}>
                     <SelectTrigger className="w-[150px]" data-testid="select-category-filter">
                       <SelectValue placeholder="Category" />
@@ -588,6 +733,8 @@ const DocumentsPage = () => {
                       <SelectItem value="state_permit">State Permit</SelectItem>
                       <SelectItem value="local_permit">Local Permit</SelectItem>
                       <SelectItem value="cost_receipt">Cost Receipt</SelectItem>
+                      <SelectItem value="transaction_receipt">Transaction Receipt</SelectItem>
+                      <SelectItem value="site_visit_photo">Site Visit Photo</SelectItem>
                       <SelectItem value="report">Report</SelectItem>
                       <SelectItem value="other">Other</SelectItem>
                     </SelectContent>
@@ -604,6 +751,95 @@ const DocumentsPage = () => {
                       <SelectItem value="rejected">Rejected</SelectItem>
                     </SelectContent>
                   </Select>
+
+                  {/* Advanced Filters Popover */}
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" size="sm" data-testid="button-advanced-filters">
+                        <Filter className="h-4 w-4 mr-2" />
+                        Filters
+                        {activeAdvancedFiltersCount > 0 && (
+                          <Badge variant="secondary" className="ml-2">
+                            {activeAdvancedFiltersCount}
+                          </Badge>
+                        )}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-80" align="end">
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-medium">Advanced Filters</h4>
+                          {activeAdvancedFiltersCount > 0 && (
+                            <Button variant="ghost" size="sm" onClick={resetFilters} data-testid="button-reset-filters">
+                              <X className="h-3 w-3 mr-1" />
+                              Reset
+                            </Button>
+                          )}
+                        </div>
+                        
+                        {/* Project Filter */}
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium flex items-center gap-1">
+                            <Briefcase className="h-3 w-3" />
+                            Project
+                          </label>
+                          <Select value={projectFilter} onValueChange={setProjectFilter}>
+                            <SelectTrigger data-testid="select-project-filter">
+                              <SelectValue placeholder="All Projects" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">All Projects</SelectItem>
+                              {projects.map(p => (
+                                <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        
+                        {/* Month Filter */}
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium flex items-center gap-1">
+                            <Calendar className="h-3 w-3" />
+                            Month
+                          </label>
+                          <Select value={monthFilter} onValueChange={setMonthFilter}>
+                            <SelectTrigger data-testid="select-month-filter">
+                              <SelectValue placeholder="All Months" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">All Months</SelectItem>
+                              {availableMonths.map(m => (
+                                <SelectItem key={m} value={m}>
+                                  {format(parseISO(`${m}-01`), 'MMMM yyyy')}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        
+                        {/* State Filter */}
+                        {availableStates.length > 0 && (
+                          <div className="space-y-2">
+                            <label className="text-sm font-medium flex items-center gap-1">
+                              <MapPin className="h-3 w-3" />
+                              State
+                            </label>
+                            <Select value={stateFilter} onValueChange={setStateFilter}>
+                              <SelectTrigger data-testid="select-state-filter">
+                                <SelectValue placeholder="All States" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="all">All States</SelectItem>
+                                {availableStates.map(s => (
+                                  <SelectItem key={s} value={s}>{s}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
                 </div>
               </div>
 
