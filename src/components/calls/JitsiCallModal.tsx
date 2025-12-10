@@ -65,15 +65,30 @@ export function JitsiCallModal({
   const [callDuration, setCallDuration] = useState(0);
   const durationTimerRef = useRef<NodeJS.Timeout | null>(null);
 
+  const retryCountRef = useRef(0);
+  const maxRetries = 5;
+
   const startMeeting = useCallback(async () => {
     const container = document.getElementById('jitsi-container');
     if (!container) {
-      console.error('[Jitsi] Container element not found, retrying...');
-      // Retry after a short delay
-      setTimeout(() => startMeeting(), 200);
-      return;
+      retryCountRef.current += 1;
+      if (retryCountRef.current < maxRetries) {
+        console.warn(`[Jitsi] Container not found, retry ${retryCountRef.current}/${maxRetries}...`);
+        setTimeout(() => startMeeting(), 300);
+        return;
+      } else {
+        console.error('[Jitsi] Container element not found after max retries');
+        toast({
+          title: 'Call Failed',
+          description: 'Could not initialize video call container.',
+          variant: 'destructive'
+        });
+        onClose();
+        return;
+      }
     }
 
+    retryCountRef.current = 0;
     setIsLoading(true);
 
     try {
@@ -147,10 +162,11 @@ export function JitsiCallModal({
 
   useEffect(() => {
     if (isOpen) {
-      // Add a small delay to ensure the container is rendered before initializing Jitsi
+      // Add a delay to ensure the container is rendered before initializing Jitsi
+      // Longer delay for better reliability across different devices
       const timeout = setTimeout(() => {
         startMeeting();
-      }, 100);
+      }, 300);
       
       return () => {
         clearTimeout(timeout);
