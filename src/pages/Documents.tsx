@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { 
   FileText, Search, Download, Eye, Calendar, MapPin, Building2, 
@@ -668,11 +668,29 @@ const DocumentsPage = () => {
     }
   }, [useLazyLoad, pageSize]);
   
-  // Sentinel element ref state for IntersectionObserver - using callback ref pattern
+  // Sentinel tracking for IntersectionObserver
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const [sentinelNode, setSentinelNode] = useState<HTMLDivElement | null>(null);
+  
+  // Callback ref to track when sentinel element enters/exits DOM
   const sentinelRef = useCallback((node: HTMLDivElement | null) => {
-    if (!node || !useLazyLoad) return;
+    setSentinelNode(node);
+  }, []);
+  
+  // IntersectionObserver setup with proper cleanup
+  useEffect(() => {
+    // Disconnect existing observer
+    if (observerRef.current) {
+      observerRef.current.disconnect();
+      observerRef.current = null;
+    }
     
-    const observer = new IntersectionObserver(
+    // Only observe when lazy load is enabled, there's more to load, and sentinel exists
+    if (!useLazyLoad || !hasMoreToLoad || !sentinelNode) {
+      return;
+    }
+    
+    observerRef.current = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting) {
           loadMore();
@@ -681,11 +699,15 @@ const DocumentsPage = () => {
       { threshold: 0.1, rootMargin: '150px' }
     );
     
-    observer.observe(node);
+    observerRef.current.observe(sentinelNode);
     
-    // Store cleanup function
-    return () => observer.disconnect();
-  }, [useLazyLoad, loadMore]);
+    return () => {
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+        observerRef.current = null;
+      }
+    };
+  }, [useLazyLoad, hasMoreToLoad, loadMore, sentinelNode]);
 
   const stats = useMemo(() => ({
     total: documents.length,
