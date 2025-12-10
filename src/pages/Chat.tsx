@@ -28,7 +28,7 @@ import {
   Sparkles,
   Clock,
   RotateCcw,
-  VideoIcon
+  Clapperboard
 } from 'lucide-react';
 import { JitsiCallModal } from '@/components/calls/JitsiCallModal';
 
@@ -586,7 +586,7 @@ const Chat: React.FC = () => {
                     data-testid="button-jitsi-call"
                     title="Jitsi Video Call (Backup)"
                   >
-                    <VideoIcon className="h-4 w-4 text-white" />
+                    <Clapperboard className="h-4 w-4 text-white" />
                   </button>
                 </div>
               </div>
@@ -872,13 +872,13 @@ const Chat: React.FC = () => {
           targetUser={getTargetUser() ? {
             id: getTargetUser()!.id,
             name: getTargetUser()!.fullName || getTargetUser()!.name || 'User',
-            avatar: getTargetUser()!.avatarUrl,
+            avatar: getTargetUser()!.avatar,
             email: getTargetUser()!.email
           } : undefined}
           currentUser={{
             id: currentUser.id,
             name: currentUser.fullName || currentUser.name || 'You',
-            avatar: currentUser.avatarUrl,
+            avatar: currentUser.avatar,
             email: currentUser.email
           }}
           isAudioOnly={jitsiIsAudioOnly}
