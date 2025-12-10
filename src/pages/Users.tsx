@@ -115,6 +115,23 @@ const Users = () => {
     return user.role || 'unknown';
   };
 
+  // Check if user is a Google OAuth user (no password set)
+  const isGoogleAuthUser = (user: User): boolean => {
+    // Check provider metadata if available
+    if ((user as any).provider === 'google') return true;
+    if ((user as any).auth_provider === 'google') return true;
+    if ((user as any).identities?.some((i: any) => i.provider === 'google')) return true;
+    // Check app metadata
+    if ((user as any).app_metadata?.provider === 'google') return true;
+    if ((user as any).user_metadata?.provider === 'google') return true;
+    return false;
+  };
+
+  // Get auth method label for display
+  const getAuthMethod = (user: User): 'email' | 'google' => {
+    return isGoogleAuthUser(user) ? 'google' : 'email';
+  };
+
   // Statistics
   const stats = useMemo(() => {
     const pending = users.filter(u => !u.isApproved);
@@ -425,14 +442,23 @@ const Users = () => {
                   {isAdminOrICT && (
                     <>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={() => handleOpenPasswordReset(user)}>
-                        <Mail className="h-4 w-4 mr-2" />
-                        Send Reset Email
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleOpenAdminPasswordChange(user)}>
-                        <KeyRound className="h-4 w-4 mr-2" />
-                        Set Password
-                      </DropdownMenuItem>
+                      {isGoogleAuthUser(user) ? (
+                        <DropdownMenuItem disabled className="text-muted-foreground">
+                          <Mail className="h-4 w-4 mr-2" />
+                          Google Auth (No Password)
+                        </DropdownMenuItem>
+                      ) : (
+                        <>
+                          <DropdownMenuItem onClick={() => handleOpenPasswordReset(user)}>
+                            <Mail className="h-4 w-4 mr-2" />
+                            Send Reset Email
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleOpenAdminPasswordChange(user)}>
+                            <KeyRound className="h-4 w-4 mr-2" />
+                            Set New Password
+                          </DropdownMenuItem>
+                        </>
+                      )}
                       <DropdownMenuSeparator />
                       <DropdownMenuItem onClick={() => handleDeactivate(user.id)} disabled={deletingUserId === user.id}>
                         <UserX className="h-4 w-4 mr-2" />
