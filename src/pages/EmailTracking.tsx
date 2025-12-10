@@ -8,6 +8,15 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
+import {
   Table,
   TableBody,
   TableCell,
@@ -30,6 +39,11 @@ import {
   AlertTriangle,
   MailCheck,
   MailX,
+  Eye,
+  User,
+  Calendar,
+  FileText,
+  Copy,
 } from 'lucide-react';
 import { format, parseISO, isValid } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
@@ -97,6 +111,7 @@ export default function EmailTracking() {
   });
   const [testEmail, setTestEmail] = useState('');
   const [sendingTest, setSendingTest] = useState(false);
+  const [selectedLog, setSelectedLog] = useState<EmailLog | null>(null);
 
   const fetchEmailLogs = async () => {
     setLoading(true);
@@ -551,12 +566,17 @@ export default function EmailTracking() {
                     <TableHead>Subject / Purpose</TableHead>
                     <TableHead>Sent By</TableHead>
                     <TableHead>Timestamp</TableHead>
-                    <TableHead>Error</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredLogs.map((log) => (
-                    <TableRow key={log.id} data-testid={`row-email-${log.id}`}>
+                    <TableRow 
+                      key={log.id} 
+                      data-testid={`row-email-${log.id}`}
+                      className="cursor-pointer hover-elevate"
+                      onClick={() => setSelectedLog(log)}
+                    >
                       <TableCell>{getStatusBadge(log.success)}</TableCell>
                       <TableCell>{getTypeBadge(log)}</TableCell>
                       <TableCell className="font-medium max-w-[200px] truncate">
@@ -572,12 +592,18 @@ export default function EmailTracking() {
                         {safeParseDateForDisplay(log.timestamp)}
                       </TableCell>
                       <TableCell>
-                        {log.error_message && (
-                          <Badge variant="outline" className="bg-red-500/10 text-red-600 border-red-500/30 text-xs">
-                            <AlertTriangle className="w-3 h-3 mr-1" />
-                            {log.error_message.substring(0, 30)}...
-                          </Badge>
-                        )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedLog(log);
+                          }}
+                          data-testid={`button-view-details-${log.id}`}
+                        >
+                          <Eye className="h-4 w-4 mr-1" />
+                          Details
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -587,6 +613,204 @@ export default function EmailTracking() {
           )}
         </CardContent>
       </Card>
+
+      {/* Log Detail Dialog */}
+      <Dialog open={!!selectedLog} onOpenChange={() => setSelectedLog(null)}>
+        <DialogContent className="max-w-2xl" data-testid="dialog-log-details">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {selectedLog?.entity_type === 'email' ? (
+                <Mail className="h-5 w-5" />
+              ) : (
+                <KeyRound className="h-5 w-5" />
+              )}
+              {selectedLog?.entity_type === 'email' ? 'Email' : 'OTP'} Log Details
+            </DialogTitle>
+            <DialogDescription>
+              Complete details for this notification log entry
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedLog && (
+            <ScrollArea className="max-h-[60vh]">
+              <div className="space-y-4 pr-4">
+                {/* Status Section */}
+                <div className="flex items-center justify-between gap-2 p-3 rounded-lg bg-muted/50">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium">Status:</span>
+                    {getStatusBadge(selectedLog.success)}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium">Type:</span>
+                    {getTypeBadge(selectedLog)}
+                  </div>
+                </div>
+
+                {/* Basic Information */}
+                <div className="space-y-3">
+                  <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                    Basic Information
+                  </h4>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">Log ID</label>
+                      <div className="flex items-center gap-2">
+                        <code className="text-sm bg-muted px-2 py-1 rounded flex-1 truncate">
+                          {selectedLog.id}
+                        </code>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() => {
+                            navigator.clipboard.writeText(selectedLog.id);
+                            toast({ title: 'Copied', description: 'Log ID copied to clipboard' });
+                          }}
+                          data-testid="button-copy-id"
+                        >
+                          <Copy className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">Timestamp</label>
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm">{safeParseDateForDisplay(selectedLog.timestamp)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Recipient Details */}
+                <div className="space-y-3">
+                  <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                    Recipient Details
+                  </h4>
+                  
+                  <div className="grid grid-cols-1 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">
+                        {selectedLog.entity_type === 'email' ? 'Email Address' : 'Destination'}
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <Mail className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm font-medium">{getRecipient(selectedLog)}</span>
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">
+                        {selectedLog.entity_type === 'email' ? 'Subject' : 'Purpose'}
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm">{getSubject(selectedLog)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Actor Information */}
+                <div className="space-y-3">
+                  <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                    Actor Information
+                  </h4>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">Sent By</label>
+                      <div className="flex items-center gap-2">
+                        <User className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm">{selectedLog.actor_name || 'System'}</span>
+                      </div>
+                    </div>
+                    
+                    {selectedLog.actor_email && (
+                      <div className="space-y-1">
+                        <label className="text-xs text-muted-foreground">Actor Email</label>
+                        <span className="text-sm">{selectedLog.actor_email}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Description */}
+                <div className="space-y-3">
+                  <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                    Description
+                  </h4>
+                  <p className="text-sm bg-muted/50 p-3 rounded-lg">
+                    {selectedLog.description || 'No description available'}
+                  </p>
+                </div>
+
+                {/* Metadata Section */}
+                {selectedLog.metadata && Object.keys(selectedLog.metadata).length > 0 && (
+                  <>
+                    <Separator />
+                    <div className="space-y-3">
+                      <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                        Metadata
+                      </h4>
+                      <div className="bg-muted/50 p-3 rounded-lg">
+                        <pre className="text-xs overflow-x-auto whitespace-pre-wrap">
+                          {JSON.stringify(selectedLog.metadata, null, 2)}
+                        </pre>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* Tags */}
+                {selectedLog.tags && selectedLog.tags.length > 0 && (
+                  <>
+                    <Separator />
+                    <div className="space-y-3">
+                      <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                        Tags
+                      </h4>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedLog.tags.map((tag, idx) => (
+                          <Badge key={idx} variant="secondary">
+                            {tag}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* Error Message */}
+                {selectedLog.error_message && (
+                  <>
+                    <Separator />
+                    <div className="space-y-3">
+                      <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+                        <AlertTriangle className="h-4 w-4 text-red-500" />
+                        Error Details
+                      </h4>
+                      <div className="bg-red-500/10 border border-red-500/30 p-3 rounded-lg">
+                        <p className="text-sm text-red-600 dark:text-red-400">
+                          {selectedLog.error_message}
+                        </p>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </ScrollArea>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
