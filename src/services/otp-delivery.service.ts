@@ -8,6 +8,7 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
+import { logOtpSend } from '@/utils/audit-logger';
 
 export interface OTPDeliveryResult {
   success: boolean;
@@ -59,6 +60,8 @@ export const OTPDeliveryService = {
     console.log('NOTE: SMS delivery requires Twilio integration');
     console.log('='.repeat(60));
     
+    await logOtpSend('phone', phoneNumber, purpose, true, 'mock');
+    
     return {
       success: true,
       provider: 'mock',
@@ -93,6 +96,7 @@ export const OTPDeliveryService = {
 
       if (error) {
         console.error('[OTP DELIVERY] Email send failed:', error);
+        await logOtpSend('email', email, purpose, false, 'smtp', error.message);
         return {
           success: false,
           provider: 'smtp',
@@ -102,6 +106,7 @@ export const OTPDeliveryService = {
 
       if (data && !data.success) {
         console.error('[OTP DELIVERY] Email send failed:', data.error);
+        await logOtpSend('email', email, purpose, false, 'smtp', data.error);
         return {
           success: false,
           provider: 'smtp',
@@ -110,6 +115,7 @@ export const OTPDeliveryService = {
       }
 
       console.log(`[OTP DELIVERY] Email sent successfully to ${email}`);
+      await logOtpSend('email', email, purpose, true, 'smtp');
       return {
         success: true,
         provider: 'smtp',
@@ -119,7 +125,6 @@ export const OTPDeliveryService = {
     } catch (error: any) {
       console.error('[OTP DELIVERY] Email send error:', error);
       
-      // Fallback to mock mode if edge function fails
       console.log('='.repeat(60));
       console.log('[OTP DELIVERY - FALLBACK MOCK MODE]');
       console.log(`Email: ${email}`);
@@ -128,6 +133,8 @@ export const OTPDeliveryService = {
       console.log(`OTP Code: ${otp}`);
       console.log('NOTE: Edge function unavailable, using mock mode');
       console.log('='.repeat(60));
+      
+      await logOtpSend('email', email, purpose, true, 'mock', `Fallback: ${error.message}`);
       
       return {
         success: true,
@@ -163,6 +170,7 @@ export const OTPDeliveryService = {
 
       if (error) {
         console.error('[PASSWORD RESET] Email send failed:', error);
+        await logOtpSend('email', email, 'password-reset', false, 'smtp', error.message);
         return {
           success: false,
           provider: 'smtp',
@@ -172,6 +180,7 @@ export const OTPDeliveryService = {
 
       if (data && !data.success) {
         console.error('[PASSWORD RESET] Email send failed:', data.error);
+        await logOtpSend('email', email, 'password-reset', false, 'smtp', data.error);
         return {
           success: false,
           provider: 'smtp',
@@ -180,6 +189,7 @@ export const OTPDeliveryService = {
       }
 
       console.log(`[PASSWORD RESET] Email sent successfully to ${email}`);
+      await logOtpSend('email', email, 'password-reset', true, 'smtp');
       return {
         success: true,
         provider: 'smtp',
@@ -188,6 +198,7 @@ export const OTPDeliveryService = {
       };
     } catch (error: any) {
       console.error('[PASSWORD RESET] Email send error:', error);
+      await logOtpSend('email', email, 'password-reset', false, 'smtp', error.message);
       return {
         success: false,
         provider: 'smtp',

@@ -5,6 +5,7 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
+import { logEmailSend } from '@/utils/audit-logger';
 
 export interface EmailNotificationResult {
   success: boolean;
@@ -105,9 +106,9 @@ export const EmailNotificationService = {
    * Send a custom email
    */
   async sendEmail(options: EmailOptions): Promise<EmailNotificationResult> {
+    const { to, subject, recipientName, html, text } = options;
+    
     try {
-      const { to, subject, recipientName, html, text } = options;
-      
       console.log(`[EMAIL] Sending to ${to}: ${subject}`);
 
       const { data, error } = await supabase.functions.invoke('send-email', {
@@ -123,6 +124,7 @@ export const EmailNotificationService = {
 
       if (error) {
         console.error('[EMAIL] Send failed:', error);
+        await logEmailSend(to, subject, 'notification', false, undefined, error.message);
         return {
           success: false,
           error: error.message || 'Failed to send email',
@@ -131,6 +133,7 @@ export const EmailNotificationService = {
 
       if (data && !data.success) {
         console.error('[EMAIL] Send failed:', data.error);
+        await logEmailSend(to, subject, 'notification', false, undefined, data.error);
         return {
           success: false,
           error: data.error || 'Failed to send email',
@@ -138,13 +141,16 @@ export const EmailNotificationService = {
       }
 
       console.log(`[EMAIL] Sent successfully to ${to}`);
+      const messageId = data?.messageId || `email-${Date.now()}`;
+      await logEmailSend(to, subject, 'notification', true, messageId);
       return {
         success: true,
-        messageId: data?.messageId || `email-${Date.now()}`,
+        messageId,
         deliveredAt: data?.deliveredAt || new Date().toISOString(),
       };
     } catch (error: any) {
       console.error('[EMAIL] Error:', error);
+      await logEmailSend(to, subject, 'notification', false, undefined, error.message);
       return {
         success: false,
         error: error.message || 'Failed to send email',
