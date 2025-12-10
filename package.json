@@ -33,6 +33,7 @@
     "@capacitor/network": "^7.0.2",
     "@capacitor/push-notifications": "^7.0.3",
     "@capacitor/status-bar": "^7.0.3",
+    "@google/genai": "^1.32.0",
     "@heroicons/react": "^2.2.0",
     "@hookform/resolvers": "^3.10.0",
     "@octokit/rest": "^22.0.1",

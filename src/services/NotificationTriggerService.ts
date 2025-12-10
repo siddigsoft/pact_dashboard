@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { EmailNotificationService } from './email-notification.service';
 
 export type NotificationCategory = 'assignments' | 'approvals' | 'financial' | 'team' | 'system' | 'signatures' | 'calls' | 'messages';
 export type NotificationPriority = 'low' | 'medium' | 'high' | 'urgent';
@@ -15,6 +16,9 @@ interface TriggerNotificationOptions {
   relatedEntityType?: 'siteVisit' | 'mmpFile' | 'transaction' | 'chat' | 'call' | 'signature' | 'document';
   targetRoles?: string[];
   projectId?: string;
+  sendEmail?: boolean;
+  emailActionUrl?: string;
+  emailActionLabel?: string;
 }
 
 interface QuietHoursSettings {
@@ -88,7 +92,10 @@ export const NotificationTriggerService = {
       relatedEntityId,
       relatedEntityType,
       targetRoles,
-      projectId
+      projectId,
+      sendEmail = false,
+      emailActionUrl,
+      emailActionLabel
     } = options;
 
     const shouldSend = await shouldSendNotification(userId, category, priority);
@@ -114,7 +121,6 @@ export const NotificationTriggerService = {
       });
 
       if (error) {
-        // If category/priority/target_roles/project_id columns don't exist, try without them
         if (error.message?.includes('column') || error.code === '42703') {
           console.warn('Notifications table missing some columns, inserting without them');
           const { error: fallbackError } = await supabase.from('notifications').insert({
@@ -132,11 +138,27 @@ export const NotificationTriggerService = {
             console.error('Failed to create notification (fallback):', fallbackError);
             return false;
           }
-          return true;
+        } else {
+          console.error('Failed to create notification:', error);
+          return false;
         }
-        
-        console.error('Failed to create notification:', error);
-        return false;
+      }
+
+      // Send email for high priority or explicit email requests
+      const shouldSendEmail = sendEmail || priority === 'urgent' || priority === 'high';
+      if (shouldSendEmail) {
+        try {
+          const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+          await EmailNotificationService.sendToUser(userId, {
+            title,
+            message,
+            type,
+            actionUrl: emailActionUrl || (link ? `${baseUrl}${link}` : undefined),
+            actionLabel: emailActionLabel || 'View Details'
+          });
+        } catch (emailError) {
+          console.error('Failed to send email notification:', emailError);
+        }
       }
 
       return true;
@@ -203,14 +225,18 @@ export const NotificationTriggerService = {
 
     const statusInfo = statusMessages[status];
     
+    // All withdrawal status changes should trigger email notifications
+    const priority: NotificationPriority = status === 'approved' || status === 'rejected' ? 'high' : 'medium';
+    
     await this.send({
       userId,
       title: statusInfo.title,
       message: statusInfo.message,
       type: statusInfo.type,
       category: 'financial',
-      priority: status === 'approved' ? 'high' : 'medium',
-      link: '/wallet'
+      priority,
+      link: '/wallet',
+      sendEmail: true // Always send email for withdrawal status changes
     });
   },
 

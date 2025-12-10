@@ -25,6 +25,7 @@ import {
   TrendingUp,
   Wallet,
   Shield,
+  PenTool,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -58,6 +59,9 @@ import { FinancialReports } from "@/components/reports/FinancialReports";
 import { AnalyticsReports } from "@/components/reports/AnalyticsReports";
 import { ProjectCostReports } from "@/components/reports/ProjectCostReports";
 import { AuditingReports } from "@/components/reports/AuditingReports";
+import { DocumentsReport } from "@/components/reports/DocumentsReport";
+import { ReceiptsReport } from "@/components/reports/ReceiptsReport";
+import { SignaturesReport } from "@/components/reports/SignaturesReport";
 
 const Reports: React.FC = () => {
   const [activeTab, setActiveTab] = useState("executive");
@@ -674,7 +678,7 @@ const Reports: React.FC = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-1 p-1 h-auto">
+        <TabsList className="grid w-full grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-1 p-1 h-auto">
           <TabsTrigger value="executive" className="py-2 text-xs data-[state=active]:bg-blue-50">
             <span className="flex items-center gap-1">
               <LayoutDashboard className="h-3 w-3" />
@@ -697,6 +701,24 @@ const Reports: React.FC = () => {
             <span className="flex items-center gap-1">
               <BarChart4 className="h-3 w-3" />
               <span className="hidden sm:inline">Costs</span>
+            </span>
+          </TabsTrigger>
+          <TabsTrigger value="documents" className="py-2 text-xs data-[state=active]:bg-blue-50">
+            <span className="flex items-center gap-1">
+              <FileSpreadsheet className="h-3 w-3" />
+              <span className="hidden sm:inline">Documents</span>
+            </span>
+          </TabsTrigger>
+          <TabsTrigger value="receipts" className="py-2 text-xs data-[state=active]:bg-blue-50">
+            <span className="flex items-center gap-1">
+              <FileDown className="h-3 w-3" />
+              <span className="hidden sm:inline">Receipts</span>
+            </span>
+          </TabsTrigger>
+          <TabsTrigger value="signatures" className="py-2 text-xs data-[state=active]:bg-blue-50">
+            <span className="flex items-center gap-1">
+              <PenTool className="h-3 w-3" />
+              <span className="hidden sm:inline">Signatures</span>
             </span>
           </TabsTrigger>
           <TabsTrigger value="auditing" className="py-2 text-xs data-[state=active]:bg-blue-50">
@@ -728,6 +750,18 @@ const Reports: React.FC = () => {
 
         <TabsContent value="project_costs" className="mt-4">
           <ProjectCostReports />
+        </TabsContent>
+
+        <TabsContent value="documents" className="mt-4">
+          <DocumentsReport />
+        </TabsContent>
+
+        <TabsContent value="receipts" className="mt-4">
+          <ReceiptsReport />
+        </TabsContent>
+
+        <TabsContent value="signatures" className="mt-4">
+          <SignaturesReport />
         </TabsContent>
 
         <TabsContent value="auditing" className="mt-4">

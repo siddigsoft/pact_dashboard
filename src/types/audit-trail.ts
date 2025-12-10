@@ -16,6 +16,7 @@ export type AuditModule =
   | 'report'
   | 'settings'
   | 'auth'
+  | 'notification'
   | 'system';
 
 export type AuditAction =
@@ -51,7 +52,8 @@ export type AuditAction =
   | 'role_assign'
   | 'role_revoke'
   | 'bypass'
-  | 'view';
+  | 'view'
+  | 'send';
 
 export type AuditSeverity = 'info' | 'warning' | 'error' | 'critical';
 
@@ -159,6 +161,7 @@ export const AUDIT_MODULE_LABELS: Record<AuditModule, string> = {
   report: 'Reports',
   settings: 'Settings',
   auth: 'Authentication',
+  notification: 'Notifications',
   system: 'System',
 };
 
@@ -196,6 +199,7 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   role_revoke: 'Role Revoked',
   bypass: 'Bypassed',
   view: 'Viewed',
+  send: 'Sent',
 };
 
 export const AUDIT_SEVERITY_LABELS: Record<AuditSeverity, string> = {

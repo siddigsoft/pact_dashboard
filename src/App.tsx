@@ -16,6 +16,7 @@ const Auth = lazy(() => import('./pages/Auth'));
 const Register = lazy(() => import('./pages/Register'));
 const RegistrationSuccess = lazy(() => import('./pages/RegistrationSuccess'));
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
+const ResetPassword = lazy(() => import('./pages/ResetPassword'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const MMP = lazy(() => import('./pages/MMP'));
 const MMPUpload = lazy(() => import('./pages/MMPUpload'));
@@ -86,6 +87,7 @@ const SignaturesPage = lazy(() => import('./pages/Signatures'));
 const DocumentsPage = lazy(() => import('./pages/Documents'));
 const ApprovalDashboard = lazy(() => import('./pages/ApprovalDashboard'));
 const AuditLogs = lazy(() => import('./pages/AuditLogs'));
+const EmailTracking = lazy(() => import('./pages/EmailTracking'));
 
 // Components (keep these eagerly loaded as they're used immediately)
 import MainLayout from './components/MainLayout';
@@ -153,7 +155,7 @@ const AuthGuard = ({ children }) => {
 
   if (
     !currentUser &&
-    !['/', '/auth', '/login', '/register', '/registration-success', '/forgot-password', '/documentation'].includes(location.pathname) &&
+    !['/', '/auth', '/login', '/register', '/registration-success', '/forgot-password', '/reset-password', '/documentation'].includes(location.pathname) &&
     !location.pathname.startsWith('/demo/')
   ) {
     return <Navigate to="/auth" replace />;
@@ -173,6 +175,7 @@ const AppRoutes = () => {
       <Route path="/register" element={<Register />} />
       <Route path="/registration-success" element={<RegistrationSuccess />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/demo/data-collector" element={<DemoDataCollector />} />
 
       {/* Protected routes */}
@@ -249,6 +252,7 @@ const AppRoutes = () => {
         <Route path="/signatures" element={<SignaturesPage />} />
         <Route path="/approval-dashboard" element={<ApprovalDashboard />} />
         <Route path="/audit-logs" element={<AuditLogs />} />
+        <Route path="/email-tracking" element={<EmailTracking />} />
       </Route>
 
       {/* Redirects */}
