@@ -38,6 +38,7 @@ import { useCommunication } from '@/context/communications/CommunicationContext'
 import { useCallSounds } from '@/hooks/useCallSounds';
 import { useRealtimeTeamLocations } from '@/hooks/use-realtime-team-locations';
 import { JitsiCallModal } from '@/components/calls/JitsiCallModal';
+import { CallMethodDialog, CallMethod, CallType } from '@/components/calls/CallMethodDialog';
 
 const MESSAGE_TEMPLATES = [
   { id: 1, label: "I'll call back", text: "Sorry I missed your call. I'll call you back shortly." },
@@ -72,6 +73,8 @@ const Calls = () => {
   const [showJitsiCall, setShowJitsiCall] = useState(false);
   const [jitsiIsAudioOnly, setJitsiIsAudioOnly] = useState(false);
   const [jitsiCallUser, setJitsiCallUser] = useState<{ id: string; name: string } | null>(null);
+  const [showCallMethodDialog, setShowCallMethodDialog] = useState(false);
+  const [pendingCallUser, setPendingCallUser] = useState<{ id: string; name: string } | null>(null);
   
   const { stopSounds } = useCallSounds(callState.status);
   
@@ -140,6 +143,16 @@ const Calls = () => {
   const isIncoming = callState.status === 'incoming';
   const isOutgoing = callState.status === 'outgoing';
   
+  // Opens the call method selection dialog
+  const handleInitiateCall = (userId: string) => {
+    const user = users.find(u => u.id === userId);
+    if (user) {
+      setPendingCallUser({ id: user.id, name: user.name });
+      setShowCallMethodDialog(true);
+    }
+  };
+
+  // Direct WebRTC call (legacy, still available)
   const handleStartCall = (userId: string) => {
     const user = users.find(u => u.id === userId);
     if (user) {
@@ -162,6 +175,25 @@ const Calls = () => {
       setJitsiIsAudioOnly(audioOnly);
       setShowJitsiCall(true);
     }
+  };
+
+  // Handler when user selects call method from dialog
+  const handleCallMethodSelect = (method: CallMethod, callType: CallType) => {
+    if (!pendingCallUser) return;
+
+    if (method === 'webrtc') {
+      const user = users.find(u => u.id === pendingCallUser.id);
+      if (user) {
+        initiateCall(user);
+        // For video calls, the video will be enabled after connection
+      }
+    } else if (method === 'jitsi') {
+      setJitsiCallUser({ id: pendingCallUser.id, name: pendingCallUser.name });
+      setJitsiIsAudioOnly(callType === 'audio');
+      setShowJitsiCall(true);
+    }
+
+    setPendingCallUser(null);
   };
 
   const handleMissedCallAction = (userId: string, userName: string, avatar?: string) => {
@@ -302,7 +334,7 @@ const Calls = () => {
                   return (
                     <button
                       key={user.id}
-                      onClick={() => handleStartCall(user.id)}
+                      onClick={() => handleInitiateCall(user.id)}
                       className="flex flex-col items-center gap-1 min-w-[56px] group"
                       data-testid={`online-user-${user.id}`}
                     >
@@ -527,28 +559,13 @@ const Calls = () => {
                               <MessageSquare className="h-4 w-4 text-gray-600 dark:text-gray-400" />
                             </button>
                             <button
-                              onClick={() => handleStartCall(user.id)}
-                              className="w-8 h-8 rounded-full flex items-center justify-center bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-                              data-testid={`voice-call-${user.id}`}
-                              title="Voice call"
+                              onClick={() => handleInitiateCall(user.id)}
+                              className="h-8 px-3 rounded-full bg-black dark:bg-white text-white dark:text-black text-xs font-semibold flex items-center gap-1.5 hover:opacity-90 transition-opacity"
+                              data-testid={`call-${user.id}`}
+                              title="Start a call"
                             >
-                              <Phone className="h-4 w-4 text-gray-700 dark:text-gray-300" />
-                            </button>
-                            <button
-                              onClick={() => handleVideoCall(user.id)}
-                              className="w-8 h-8 rounded-full flex items-center justify-center bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-                              data-testid={`video-call-${user.id}`}
-                              title="Video call"
-                            >
-                              <Video className="h-4 w-4 text-gray-700 dark:text-gray-300" />
-                            </button>
-                            <button
-                              onClick={() => handleJitsiCall(user.id, false)}
-                              className="w-8 h-8 rounded-full flex items-center justify-center bg-blue-500 hover:bg-blue-600 transition-colors"
-                              data-testid={`jitsi-call-${user.id}`}
-                              title="Jitsi video call (reliable)"
-                            >
-                              <Clapperboard className="h-4 w-4 text-white" />
+                              <Phone className="h-3.5 w-3.5" />
+                              Call
                             </button>
                           </div>
                         </div>
@@ -782,7 +799,7 @@ const Calls = () => {
             onClick={() => {
               const firstOnlineUser = onlineUsers[0];
               if (firstOnlineUser) {
-                handleStartCall(firstOnlineUser.id);
+                handleInitiateCall(firstOnlineUser.id);
               }
             }}
             data-testid="fab-new-call"
@@ -791,6 +808,17 @@ const Calls = () => {
             <Phone className="h-5 w-5" />
           </button>
         )}
+
+        {/* Call Method Selection Dialog */}
+        <CallMethodDialog
+          isOpen={showCallMethodDialog}
+          onClose={() => {
+            setShowCallMethodDialog(false);
+            setPendingCallUser(null);
+          }}
+          onSelect={handleCallMethodSelect}
+          recipientName={pendingCallUser?.name || ''}
+        />
 
         {/* Jitsi Call Modal */}
         {currentUser && (
