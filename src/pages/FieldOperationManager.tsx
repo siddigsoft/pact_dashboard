@@ -829,7 +829,7 @@ const FieldOperationManagerPage = () => {
     );
   };
 
-  React.useEffect(() => {
+  const fetchMmpFiles = React.useCallback(() => {
     setLoading(true);
     supabase
       .from('mmp_files')
@@ -897,60 +897,76 @@ const FieldOperationManagerPage = () => {
         setMmpFiles(mapped);
         setLoading(false);
       });
-  }, [
-    // add dependencies if you want to refetch on filter changes
-  ]);
+  }, []);
+
+  React.useEffect(() => {
+    fetchMmpFiles();
+
+    // Set up real-time subscription for mmp_files
+    const mmpFilesChannel = supabase
+      .channel('mmp-files-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'mmp_files'
+        },
+        (payload) => {
+          console.log('MMP files change detected:', payload);
+          fetchMmpFiles();
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ MMP files real-time subscription active');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('❌ MMP files real-time subscription error - Check if replication is enabled in Supabase');
+        } else if (status === 'TIMED_OUT') {
+          console.warn('⏱️ MMP files real-time subscription timed out');
+        } else {
+          console.log('MMP files subscription status:', status);
+        }
+      });
+
+    // Cleanup subscription on unmount
+    return () => {
+      supabase.removeChannel(mmpFilesChannel);
+    };
+  }, [fetchMmpFiles]);
 
   // Load MMPs explicitly forwarded to the current FOM
-  React.useEffect(() => {
-    const loadForwarded = async () => {
-      if (!currentUser?.id) {
-        setForwardedMmpFiles([]);
-        return;
-      }
-      setForwardedLoading(true);
-      try {
-        const { data, error } = await supabase
+  const loadForwarded = React.useCallback(async () => {
+    if (!currentUser?.id) {
+      setForwardedMmpFiles([]);
+      return;
+    }
+    setForwardedLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('mmp_files')
+        .select(`
+          *,
+          project:projects(
+            id,
+            name,
+            project_code
+          )
+        `)
+        .contains('workflow', { forwardedToFomIds: [currentUser.id] })
+        .order('created_at', { ascending: false });
+      if (error) {
+        // Fallback query without join - don't log RLS errors
+        const { data: fbData, error: fbErr } = await supabase
           .from('mmp_files')
-          .select(`
-            *,
-            project:projects(
-              id,
-              name,
-              project_code
-            )
-          `)
+          .select('*')
           .contains('workflow', { forwardedToFomIds: [currentUser.id] })
           .order('created_at', { ascending: false });
-        if (error) {
-          // Fallback query without join - don't log RLS errors
-          const { data: fbData, error: fbErr } = await supabase
-            .from('mmp_files')
-            .select('*')
-            .contains('workflow', { forwardedToFomIds: [currentUser.id] })
-            .order('created_at', { ascending: false });
-          if (fbErr) {
-            // Silently fail - user may not have access to this data
-            setForwardedMmpFiles([]);
-          } else {
-            const mappedFb = (fbData || []).map((mmp: any) => ({
-              ...mmp,
-              sites: Array.isArray(mmp.site_entries) ? mmp.site_entries : [],
-              uploadedAt: mmp.uploaded_at,
-              uploadedBy: mmp.uploaded_by || 'Unknown',
-              hub: mmp.hub,
-              month: mmp.month,
-              projectId: mmp.project_id,
-              projectName: mmp.project_name || undefined,
-              mmpId: mmp.mmp_id || mmp.id,
-              status: mmp.status,
-              siteCount: typeof mmp.entries === 'number' ? mmp.entries : (Array.isArray(mmp.site_entries) ? mmp.site_entries.length : 0),
-              logs: mmp.workflow?.logs || [],
-            }));
-            setForwardedMmpFiles(mappedFb);
-          }
+        if (fbErr) {
+          // Silently fail - user may not have access to this data
+          setForwardedMmpFiles([]);
         } else {
-          const mapped = (data || []).map((mmp: any) => ({
+          const mappedFb = (fbData || []).map((mmp: any) => ({
             ...mmp,
             sites: Array.isArray(mmp.site_entries) ? mmp.site_entries : [],
             uploadedAt: mmp.uploaded_at,
@@ -958,20 +974,72 @@ const FieldOperationManagerPage = () => {
             hub: mmp.hub,
             month: mmp.month,
             projectId: mmp.project_id,
-            projectName: mmp.project?.name || mmp.project_name,
+            projectName: mmp.project_name || undefined,
             mmpId: mmp.mmp_id || mmp.id,
             status: mmp.status,
             siteCount: typeof mmp.entries === 'number' ? mmp.entries : (Array.isArray(mmp.site_entries) ? mmp.site_entries.length : 0),
             logs: mmp.workflow?.logs || [],
           }));
-          setForwardedMmpFiles(mapped);
+          setForwardedMmpFiles(mappedFb);
         }
-      } finally {
-        setForwardedLoading(false);
+      } else {
+        const mapped = (data || []).map((mmp: any) => ({
+          ...mmp,
+          sites: Array.isArray(mmp.site_entries) ? mmp.site_entries : [],
+          uploadedAt: mmp.uploaded_at,
+          uploadedBy: mmp.uploaded_by || 'Unknown',
+          hub: mmp.hub,
+          month: mmp.month,
+          projectId: mmp.project_id,
+          projectName: mmp.project?.name || mmp.project_name,
+          mmpId: mmp.mmp_id || mmp.id,
+          status: mmp.status,
+          siteCount: typeof mmp.entries === 'number' ? mmp.entries : (Array.isArray(mmp.site_entries) ? mmp.site_entries.length : 0),
+          logs: mmp.workflow?.logs || [],
+        }));
+        setForwardedMmpFiles(mapped);
       }
-    };
-    loadForwarded();
+    } finally {
+      setForwardedLoading(false);
+    }
   }, [currentUser?.id]);
+
+  React.useEffect(() => {
+    loadForwarded();
+
+    // Set up real-time subscription for forwarded MMP files
+    // Note: This will trigger on any mmp_files change, and loadForwarded will filter appropriately
+    const forwardedChannel = supabase
+      .channel('forwarded-mmp-files-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'mmp_files'
+        },
+        (payload) => {
+          console.log('Forwarded MMP files change detected:', payload);
+          loadForwarded();
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ Forwarded MMP files real-time subscription active');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('❌ Forwarded MMP files real-time subscription error - Check if replication is enabled in Supabase');
+        } else if (status === 'TIMED_OUT') {
+          console.warn('⏱️ Forwarded MMP files real-time subscription timed out');
+        } else {
+          console.log('Forwarded MMP files subscription status:', status);
+        }
+      });
+
+    // Cleanup subscription on unmount
+    return () => {
+      supabase.removeChannel(forwardedChannel);
+    };
+  }, [loadForwarded]);
 
   return (
     <div className="min-h-screen py-10 px-2 md:px-8 bg-slate-50 dark:bg-gray-900 space-y-10">

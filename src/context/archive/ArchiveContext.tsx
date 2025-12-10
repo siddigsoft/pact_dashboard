@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { 
   ArchiveMonth, 
   ArchiveFilter, 
@@ -43,9 +43,8 @@ export const ArchiveProvider: React.FC<ArchiveProviderProps> = ({ children, curr
     monthlyTrends: [],
   });
 
-  // Initial data loading
-  useEffect(() => {
-    const load = async () => {
+  // Load function extracted for reuse
+  const load = React.useCallback(async () => {
       try {
         setLoading(true);
 
@@ -282,9 +281,68 @@ export const ArchiveProvider: React.FC<ArchiveProviderProps> = ({ children, curr
       } finally {
         setLoading(false);
       }
-    };
-    load();
   }, []);
+
+  // Initial data loading with real-time subscriptions
+  useEffect(() => {
+    load();
+
+    // Set up real-time subscriptions for archive data
+    const archiveChannel = supabase
+      .channel('archive-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'mmp_files'
+        },
+        (payload) => {
+          console.log('Archive: MMP files change detected:', payload);
+          load();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'mmp_site_entries'
+        },
+        (payload) => {
+          console.log('Archive: Site entries change detected:', payload);
+          load();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'report_photos'
+        },
+        (payload) => {
+          console.log('Archive: Report photos change detected:', payload);
+          load();
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ Archive real-time subscription active');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('❌ Archive real-time subscription error - Check if replication is enabled in Supabase');
+        } else if (status === 'TIMED_OUT') {
+          console.warn('⏱️ Archive real-time subscription timed out');
+        } else {
+          console.log('Archive subscription status:', status);
+        }
+      });
+
+    // Cleanup subscription on unmount
+    return () => {
+      supabase.removeChannel(archiveChannel);
+    };
+  }, [load]);
 
   // Select a specific month's archive
   const selectMonth = (year: number, month: number) => {
