@@ -169,146 +169,146 @@ const DocumentsPage = () => {
         }
 
         mmpFiles?.forEach((mmp: any) => {
-        const projectName = mmp.projects?.name || 'Unknown Project';
-        const monthBucket = mmp.created_at ? format(parseISO(mmp.created_at), 'yyyy-MM') : undefined;
-        if (monthBucket) monthsSet.add(monthBucket);
-        
-        // Add the MMP file itself
-        docs.push({
-          id: `mmp-${mmp.id}`,
-          indexNo: indexCounter++,
-          fileName: mmp.filename || 'Untitled MMP',
-          fileUrl: mmp.file_url || '',
-          category: 'mmp_file',
-          uploadedAt: mmp.created_at || new Date().toISOString(),
-          uploadedBy: mmp.uploaded_by,
-          projectId: mmp.project_id,
-          projectName,
-          monthBucket,
-          status: mmp.status === 'approved' ? 'approved' : mmp.status === 'rejected' ? 'rejected' : 'pending',
-          verified: mmp.status === 'approved',
-          sourceType: 'mmp'
-        });
-
-        // Extract permit documents
-        const permits = mmp.permits || {};
-        
-        // Federal permits
-        if (permits.documents) {
-          permits.documents.forEach((doc: any, idx: number) => {
-            const docMonth = doc.uploadedAt ? format(parseISO(doc.uploadedAt), 'yyyy-MM') : monthBucket;
-            if (docMonth) monthsSet.add(docMonth);
-            
-            docs.push({
-              id: `${mmp.id}-fed-${idx}`,
-              indexNo: indexCounter++,
-              fileName: doc.fileName || 'Federal Permit',
-              fileUrl: doc.fileUrl || '',
-              category: 'federal_permit',
-              uploadedAt: doc.uploadedAt || mmp.created_at || new Date().toISOString(),
-              projectId: mmp.project_id,
-              projectName,
-              mmpName: mmp.filename,
-              monthBucket: docMonth,
-              verified: doc.validated || false,
-              status: doc.validated ? 'verified' : 'pending',
-              sourceType: 'permit'
-            });
+          const projectName = mmp.projects?.name || 'Unknown Project';
+          const monthBucket = mmp.created_at ? format(parseISO(mmp.created_at), 'yyyy-MM') : undefined;
+          if (monthBucket) monthsSet.add(monthBucket);
+          
+          // Add the MMP file itself
+          docs.push({
+            id: `mmp-${mmp.id}`,
+            indexNo: indexCounter++,
+            fileName: mmp.filename || 'Untitled MMP',
+            fileUrl: mmp.file_url || '',
+            category: 'mmp_file',
+            uploadedAt: mmp.created_at || new Date().toISOString(),
+            uploadedBy: mmp.uploaded_by,
+            projectId: mmp.project_id,
+            projectName,
+            monthBucket,
+            status: mmp.status === 'approved' ? 'approved' : mmp.status === 'rejected' ? 'rejected' : 'pending',
+            verified: mmp.status === 'approved',
+            sourceType: 'mmp'
           });
-        }
 
-        // State permits
-        if (permits.statePermits) {
-          permits.statePermits.forEach((sp: any) => {
-            if (sp.stateName) statesSet.add(sp.stateName);
-            
-            sp.documents?.forEach((doc: any, idx: number) => {
+          // Extract permit documents
+          const permits = mmp.permits || {};
+          
+          // Federal permits
+          if (permits.documents) {
+            permits.documents.forEach((doc: any, idx: number) => {
               const docMonth = doc.uploadedAt ? format(parseISO(doc.uploadedAt), 'yyyy-MM') : monthBucket;
               if (docMonth) monthsSet.add(docMonth);
               
               docs.push({
-                id: `${mmp.id}-state-${sp.stateName}-${idx}`,
+                id: `${mmp.id}-fed-${idx}`,
                 indexNo: indexCounter++,
-                fileName: doc.fileName || `State Permit - ${sp.stateName}`,
+                fileName: doc.fileName || 'Federal Permit',
                 fileUrl: doc.fileUrl || '',
-                category: 'state_permit',
+                category: 'federal_permit',
                 uploadedAt: doc.uploadedAt || mmp.created_at || new Date().toISOString(),
-                state: sp.stateName,
                 projectId: mmp.project_id,
                 projectName,
                 mmpName: mmp.filename,
                 monthBucket: docMonth,
-                issueDate: doc.issueDate,
-                expiryDate: doc.expiryDate,
-                verified: doc.validated || sp.verified || false,
-                status: doc.status || (sp.verified ? 'verified' : 'pending'),
+                verified: doc.validated || false,
+                status: doc.validated ? 'verified' : 'pending',
                 sourceType: 'permit'
               });
             });
-          });
-        }
+          }
 
-        // Local permits
-        if (permits.localPermits) {
-          permits.localPermits.forEach((lp: any) => {
-            if (lp.state) statesSet.add(lp.state);
-            
-            lp.documents?.forEach((doc: any, idx: number) => {
-              const docMonth = doc.uploadedAt ? format(parseISO(doc.uploadedAt), 'yyyy-MM') : monthBucket;
+          // State permits
+          if (permits.statePermits) {
+            permits.statePermits.forEach((sp: any) => {
+              if (sp.stateName) statesSet.add(sp.stateName);
+              
+              sp.documents?.forEach((doc: any, idx: number) => {
+                const docMonth = doc.uploadedAt ? format(parseISO(doc.uploadedAt), 'yyyy-MM') : monthBucket;
+                if (docMonth) monthsSet.add(docMonth);
+                
+                docs.push({
+                  id: `${mmp.id}-state-${sp.stateName}-${idx}`,
+                  indexNo: indexCounter++,
+                  fileName: doc.fileName || `State Permit - ${sp.stateName}`,
+                  fileUrl: doc.fileUrl || '',
+                  category: 'state_permit',
+                  uploadedAt: doc.uploadedAt || mmp.created_at || new Date().toISOString(),
+                  state: sp.stateName,
+                  projectId: mmp.project_id,
+                  projectName,
+                  mmpName: mmp.filename,
+                  monthBucket: docMonth,
+                  issueDate: doc.issueDate,
+                  expiryDate: doc.expiryDate,
+                  verified: doc.validated || sp.verified || false,
+                  status: doc.status || (sp.verified ? 'verified' : 'pending'),
+                  sourceType: 'permit'
+                });
+              });
+            });
+          }
+
+          // Local permits
+          if (permits.localPermits) {
+            permits.localPermits.forEach((lp: any) => {
+              if (lp.state) statesSet.add(lp.state);
+              
+              lp.documents?.forEach((doc: any, idx: number) => {
+                const docMonth = doc.uploadedAt ? format(parseISO(doc.uploadedAt), 'yyyy-MM') : monthBucket;
+                if (docMonth) monthsSet.add(docMonth);
+                
+                docs.push({
+                  id: `${mmp.id}-local-${lp.localityName}-${idx}`,
+                  indexNo: indexCounter++,
+                  fileName: doc.fileName || `Local Permit - ${lp.localityName}`,
+                  fileUrl: doc.fileUrl || '',
+                  category: 'local_permit',
+                  uploadedAt: doc.uploadedAt || mmp.created_at || new Date().toISOString(),
+                  state: lp.state,
+                  locality: lp.localityName,
+                  projectId: mmp.project_id,
+                  projectName,
+                  mmpName: mmp.filename,
+                  monthBucket: docMonth,
+                  issueDate: doc.issueDate,
+                  expiryDate: doc.expiryDate,
+                  verified: doc.validated || lp.verified || false,
+                  status: doc.status || (lp.verified ? 'verified' : 'pending'),
+                  sourceType: 'permit'
+                });
+              });
+            });
+          }
+
+          // Locality permits array format
+          if (Array.isArray(permits.localityPermits)) {
+            permits.localityPermits.forEach((lp: any, idx: number) => {
+              if (lp.state) statesSet.add(lp.state);
+              const docMonth = lp.uploadedAt ? format(parseISO(lp.uploadedAt), 'yyyy-MM') : monthBucket;
               if (docMonth) monthsSet.add(docMonth);
               
               docs.push({
-                id: `${mmp.id}-local-${lp.localityName}-${idx}`,
+                id: `${mmp.id}-locality-${idx}`,
                 indexNo: indexCounter++,
-                fileName: doc.fileName || `Local Permit - ${lp.localityName}`,
-                fileUrl: doc.fileUrl || '',
+                fileName: lp.fileName || `Locality Permit`,
+                fileUrl: lp.fileUrl || '',
                 category: 'local_permit',
-                uploadedAt: doc.uploadedAt || mmp.created_at || new Date().toISOString(),
+                uploadedAt: lp.uploadedAt || mmp.created_at || new Date().toISOString(),
                 state: lp.state,
-                locality: lp.localityName,
+                locality: lp.locality,
                 projectId: mmp.project_id,
                 projectName,
                 mmpName: mmp.filename,
                 monthBucket: docMonth,
-                issueDate: doc.issueDate,
-                expiryDate: doc.expiryDate,
-                verified: doc.validated || lp.verified || false,
-                status: doc.status || (lp.verified ? 'verified' : 'pending'),
+                issueDate: lp.issueDate,
+                expiryDate: lp.expiryDate,
+                verified: lp.verified || false,
+                status: lp.verified ? 'verified' : 'pending',
                 sourceType: 'permit'
               });
             });
-          });
-        }
-
-        // Locality permits array format
-        if (Array.isArray(permits.localityPermits)) {
-          permits.localityPermits.forEach((lp: any, idx: number) => {
-            if (lp.state) statesSet.add(lp.state);
-            const docMonth = lp.uploadedAt ? format(parseISO(lp.uploadedAt), 'yyyy-MM') : monthBucket;
-            if (docMonth) monthsSet.add(docMonth);
-            
-            docs.push({
-              id: `${mmp.id}-locality-${idx}`,
-              indexNo: indexCounter++,
-              fileName: lp.fileName || `Locality Permit`,
-              fileUrl: lp.fileUrl || '',
-              category: 'local_permit',
-              uploadedAt: lp.uploadedAt || mmp.created_at || new Date().toISOString(),
-              state: lp.state,
-              locality: lp.locality,
-              projectId: mmp.project_id,
-              projectName,
-              mmpName: mmp.filename,
-              monthBucket: docMonth,
-              issueDate: lp.issueDate,
-              expiryDate: lp.expiryDate,
-              verified: lp.verified || false,
-              status: lp.verified ? 'verified' : 'pending',
-              sourceType: 'permit'
-            });
-          });
-        }
-      });
+          }
+        });
       } catch (mmpErr) {
         console.warn('Error processing MMP files:', mmpErr);
       }

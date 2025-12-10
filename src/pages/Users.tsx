@@ -717,25 +717,37 @@ const Users = () => {
                         }
                         return selectedRole;
                       })()}
-                      <Button variant="ghost" size="icon" className="h-4 w-4 ml-1" onClick={() => setSelectedRole(null)} data-testid="button-clear-role-filter">
+                      <button 
+                        className="ml-1 hover:text-foreground" 
+                        onClick={() => setSelectedRole(null)} 
+                        data-testid="button-clear-role-filter"
+                      >
                         <X className="h-3 w-3" />
-                      </Button>
+                      </button>
                     </Badge>
                   )}
                   {selectedState && (
                     <Badge variant="outline" className="flex items-center gap-1 text-xs">
                       State
-                      <Button variant="ghost" size="icon" className="h-4 w-4 ml-1" onClick={() => setSelectedState(null)} data-testid="button-clear-state-filter">
+                      <button 
+                        className="ml-1 hover:text-foreground" 
+                        onClick={() => setSelectedState(null)} 
+                        data-testid="button-clear-state-filter"
+                      >
                         <X className="h-3 w-3" />
-                      </Button>
+                      </button>
                     </Badge>
                   )}
                   {selectedHub && (
                     <Badge variant="outline" className="flex items-center gap-1 text-xs">
                       Hub
-                      <Button variant="ghost" size="icon" className="h-4 w-4 ml-1" onClick={() => setSelectedHub(null)} data-testid="button-clear-hub-filter">
+                      <button 
+                        className="ml-1 hover:text-foreground" 
+                        onClick={() => setSelectedHub(null)} 
+                        data-testid="button-clear-hub-filter"
+                      >
                         <X className="h-3 w-3" />
-                      </Button>
+                      </button>
                     </Badge>
                   )}
                   <Button variant="ghost" size="sm" className="text-xs h-7" onClick={() => {
