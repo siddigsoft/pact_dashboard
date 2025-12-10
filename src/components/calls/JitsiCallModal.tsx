@@ -19,6 +19,7 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { jitsiMeetService, type JitsiMeetApi } from '@/services/JitsiMeetService';
+import { webRTCService } from '@/services/WebRTCService';
 import { useToast } from '@/hooks/use-toast';
 
 interface JitsiCallModalProps {
@@ -101,6 +102,14 @@ export function JitsiCallModal({
       } else if (targetUser) {
         roomName = jitsiMeetService.generateRoomName(currentUser.id, targetUser.id);
         subject = `Call with ${targetUser.name}`;
+        
+        // Send Jitsi invite to the target user so they can join the same room
+        try {
+          await webRTCService.sendJitsiInvite(targetUser.id, roomName, isAudioOnly);
+          console.log('[Jitsi] Invite sent to:', targetUser.id, 'room:', roomName);
+        } catch (err) {
+          console.error('[Jitsi] Failed to send invite:', err);
+        }
       } else {
         roomName = jitsiMeetService.generateGroupRoomName(currentUser.id);
         subject = 'PACT Meeting';

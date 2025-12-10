@@ -35,10 +35,12 @@ import {
 import { useUser } from '@/context/user/UserContext';
 import { useAppContext } from '@/context/AppContext';
 import { useCommunication } from '@/context/communications/CommunicationContext';
+import { useCall } from '@/context/communications/CallContext';
 import { useCallSounds } from '@/hooks/useCallSounds';
 import { useRealtimeTeamLocations } from '@/hooks/use-realtime-team-locations';
 import { JitsiCallModal } from '@/components/calls/JitsiCallModal';
 import { CallMethodDialog, CallMethod, CallType } from '@/components/calls/CallMethodDialog';
+import { IncomingJitsiCall } from '@/components/calls/IncomingJitsiCall';
 
 const MESSAGE_TEMPLATES = [
   { id: 1, label: "I'll call back", text: "Sorry I missed your call. I'll call you back shortly." },
@@ -60,6 +62,7 @@ const Calls = () => {
   const navigate = useNavigate();
   const { users } = useUser();
   const { callState, initiateCall, endCall, acceptCall, rejectCall, toggleVideo, isVideoEnabled, toggleMute, isMuted } = useCommunication();
+  const { incomingJitsiCall, acceptJitsiCall, rejectJitsiCall } = useCall();
   const [searchQuery, setSearchQuery] = useState('');
   const [isSpeakerOn, setIsSpeakerOn] = useState(true);
   const [callDuration, setCallDuration] = useState(0);
@@ -76,6 +79,7 @@ const Calls = () => {
   const [showCallMethodDialog, setShowCallMethodDialog] = useState(false);
   const [pendingCallUser, setPendingCallUser] = useState<{ id: string; name: string } | null>(null);
   const [pendingVideoCall, setPendingVideoCall] = useState(false);
+  const [acceptedJitsiCall, setAcceptedJitsiCall] = useState<{ roomName: string; callerName: string; isAudioOnly: boolean } | null>(null);
   
   const { stopSounds } = useCallSounds(callState.status);
   
@@ -837,10 +841,11 @@ const Calls = () => {
         {/* Jitsi Call Modal */}
         {currentUser && (
           <JitsiCallModal
-            isOpen={showJitsiCall}
+            isOpen={showJitsiCall || !!acceptedJitsiCall}
             onClose={() => {
               setShowJitsiCall(false);
               setJitsiCallUser(null);
+              setAcceptedJitsiCall(null);
             }}
             targetUser={jitsiCallUser ? { id: jitsiCallUser.id, name: jitsiCallUser.name } : undefined}
             currentUser={{
@@ -848,7 +853,26 @@ const Calls = () => {
               name: currentUser.fullName || currentUser.name || 'User',
               email: currentUser.email,
             }}
-            isAudioOnly={jitsiIsAudioOnly}
+            isAudioOnly={jitsiIsAudioOnly || acceptedJitsiCall?.isAudioOnly || false}
+            groupCall={acceptedJitsiCall ? { roomName: acceptedJitsiCall.roomName, subject: `Call with ${acceptedJitsiCall.callerName}` } : undefined}
+          />
+        )}
+
+        {/* Incoming Jitsi Call Notification */}
+        {incomingJitsiCall && (
+          <IncomingJitsiCall
+            call={incomingJitsiCall}
+            onAccept={() => {
+              acceptJitsiCall();
+              setAcceptedJitsiCall({
+                roomName: incomingJitsiCall.roomName,
+                callerName: incomingJitsiCall.callerName,
+                isAudioOnly: incomingJitsiCall.isAudioOnly
+              });
+            }}
+            onReject={() => {
+              rejectJitsiCall();
+            }}
           />
         )}
       </div>
