@@ -320,3 +320,77 @@ export interface ReportGenerationResult {
   downloadUrl?: string;
   error?: string;
 }
+
+export interface DocumentsSummary {
+  totalDocuments: number;
+  documentsByType: { type: string; count: number }[];
+  documentsByProject: { projectId: string; projectName: string; count: number }[];
+  documentsByMonth: { month: string; count: number }[];
+  documentsByStatus: { status: string; count: number }[];
+  recentDocuments: DocumentEntry[];
+  signedDocuments: number;
+  unsignedDocuments: number;
+  signatureComplianceRate: number;
+  documentsWithReceipts: number;
+}
+
+export interface DocumentEntry {
+  id: string;
+  type: string;
+  fileName: string;
+  projectId?: string;
+  projectName?: string;
+  createdAt: string;
+  signatureId?: string;
+  signatureStatus?: 'signed' | 'unsigned' | 'pending';
+  uploadedBy?: string;
+  fileSize?: number;
+}
+
+export interface SignaturesSummary {
+  totalSignatures: number;
+  signaturesByType: { type: string; count: number }[];
+  signaturesByMethod: { method: string; count: number }[];
+  signaturesByMonth: { month: string; count: number }[];
+  recentSignatures: SignatureEntry[];
+  verifiedSignatures: number;
+  pendingVerifications: number;
+  averageVerificationTime: number;
+}
+
+export interface SignatureEntry {
+  id: string;
+  type: 'transaction' | 'document';
+  signerId: string;
+  signerName: string;
+  createdAt: string;
+  verifiedAt?: string;
+  method: string;
+  entityId: string;
+  entityType: string;
+  isValid: boolean;
+}
+
+export interface ReceiptsSummary {
+  totalReceipts: number;
+  receiptsByProject: { projectId: string; projectName: string; count: number; amount: number }[];
+  receiptsByMonth: { month: string; count: number; amount: number }[];
+  receiptsByStatus: { status: string; count: number; amount: number }[];
+  totalAmount: number;
+  approvedAmount: number;
+  pendingAmount: number;
+  rejectedAmount: number;
+  recentReceipts: ReceiptEntry[];
+}
+
+export interface ReceiptEntry {
+  id: string;
+  costSubmissionId: string;
+  projectName: string;
+  amount: number;
+  status: string;
+  uploadedAt: string;
+  approvedAt?: string;
+  approvedBy?: string;
+  hasSignature: boolean;
+}

@@ -192,6 +192,34 @@ export function useAuditLog() {
     });
   }, [logEvent]);
 
+  const logNotificationEvent = useCallback(async (
+    action: AuditAction,
+    entityId: string,
+    description: string,
+    options?: {
+      entityType?: string;
+      entityName?: string;
+      severity?: AuditSeverity;
+      metadata?: Record<string, unknown>;
+      success?: boolean;
+      errorMessage?: string;
+    }
+  ) => {
+    return logEvent({
+      module: 'notification',
+      action,
+      entityType: options?.entityType || 'email',
+      entityId,
+      entityName: options?.entityName,
+      description,
+      severity: options?.severity || 'info',
+      metadata: options?.metadata,
+      success: options?.success !== false,
+      errorMessage: options?.errorMessage,
+      tags: ['notification', action, options?.entityType || 'email'],
+    });
+  }, [logEvent]);
+
   return {
     logEvent,
     logSiteVisitEvent,
@@ -200,6 +228,7 @@ export function useAuditLog() {
     logUserEvent,
     logApprovalEvent,
     logSystemEvent,
+    logNotificationEvent,
     isAvailable: !!auditContext,
   };
 }

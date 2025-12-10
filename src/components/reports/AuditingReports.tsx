@@ -22,6 +22,11 @@ import {
   Users,
   Activity,
   Clock,
+  History,
+  PenTool,
+  Mail,
+  CheckCircle,
+  XCircle,
 } from 'lucide-react';
 import { ReportingService } from '@/services/reporting.service';
 import { 
@@ -33,7 +38,8 @@ import type { AuditSummary } from '@/types/reports';
 import { useToast } from '@/components/ui/use-toast';
 import { DatePickerWithRange } from '@/components/ui/date-range-picker';
 import { DateRange } from 'react-day-picker';
-import { subDays, format } from 'date-fns';
+import { subDays, format, isWithinInterval } from 'date-fns';
+import { useAudit } from '@/context/audit/AuditContext';
 
 export function AuditingReports() {
   const [data, setData] = useState<AuditSummary | null>(null);
@@ -44,6 +50,32 @@ export function AuditingReports() {
     to: new Date(),
   });
   const { toast } = useToast();
+  const { logs: auditLogs, syncToDatabase } = useAudit();
+
+  const filteredAuditLogs = auditLogs.filter(log => {
+    if (!dateRange?.from || !dateRange?.to) return true;
+    const logDate = new Date(log.timestamp);
+    return isWithinInterval(logDate, { start: dateRange.from, end: dateRange.to });
+  }).slice(0, 50);
+
+  const getActionIcon = (action: string) => {
+    if (action.includes('sign') || action.includes('signature')) return <PenTool className="w-4 h-4" />;
+    if (action.includes('email') || action.includes('otp')) return <Mail className="w-4 h-4" />;
+    if (action.includes('approve') || action.includes('verify')) return <CheckCircle className="w-4 h-4 text-green-600" />;
+    if (action.includes('reject') || action.includes('fail')) return <XCircle className="w-4 h-4 text-red-600" />;
+    return <Activity className="w-4 h-4" />;
+  };
+
+  const getModuleBadge = (module: string) => {
+    const colors: Record<string, string> = {
+      wallet: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100',
+      transaction: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100',
+      approval: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-100',
+      document: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-100',
+      site_visit: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-100',
+    };
+    return colors[module] || 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-100';
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -107,14 +139,17 @@ export function AuditingReports() {
 
   const handleExportCSV = () => {
     if (!data) return;
+    const overrideCount = data.recentOverrides?.length || 0;
+    const overrideRate = data.totalActions > 0 ? (overrideCount / data.totalActions * 100).toFixed(1) : 0;
+    const complianceIssuesCount = data.complianceIssues?.length || 0;
+    const dataQualityScore = data.dataQualityMetrics?.reduce((acc, m) => acc + (m.completenessPercentage || 0), 0) / (data.dataQualityMetrics?.length || 1);
+    
     const csvData = [
       { Metric: 'Total Actions', Value: data.totalActions },
-      { Metric: 'Override Count', Value: data.overrideCount },
-      { Metric: 'Override Rate', Value: data.overrideRate },
-      { Metric: 'Approval Rate', Value: data.approvalRate },
-      { Metric: 'Avg Processing Time (hrs)', Value: data.averageProcessingTime },
-      { Metric: 'Compliance Score', Value: data.complianceScore },
-      { Metric: 'Data Quality Score', Value: data.dataQualityScore },
+      { Metric: 'Override Count', Value: overrideCount },
+      { Metric: 'Override Rate (%)', Value: overrideRate },
+      { Metric: 'Compliance Issues', Value: complianceIssuesCount },
+      { Metric: 'Data Quality Score', Value: dataQualityScore.toFixed(1) },
       ...data.actionsByType.map(a => ({
         Metric: `Action: ${a.type}`,
         Value: a.count,
@@ -236,12 +271,90 @@ export function AuditingReports() {
         </Card>
       </div>
 
-      <Tabs defaultValue="activity" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="activity">Activity Log</TabsTrigger>
-          <TabsTrigger value="overrides">Budget Overrides</TabsTrigger>
-          <TabsTrigger value="users">User Activity</TabsTrigger>
+      <Tabs defaultValue="timeline" className="w-full">
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="timeline" data-testid="tab-timeline">Timeline</TabsTrigger>
+          <TabsTrigger value="activity" data-testid="tab-activity">Activity Log</TabsTrigger>
+          <TabsTrigger value="overrides" data-testid="tab-overrides">Overrides</TabsTrigger>
+          <TabsTrigger value="users" data-testid="tab-users">Users</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="timeline" className="mt-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <History className="w-5 h-5" />
+                    Audit Timeline
+                  </CardTitle>
+                  <CardDescription>Complete chronological audit trail of system activities</CardDescription>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => syncToDatabase()}>
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Sync Logs
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {filteredAuditLogs.length > 0 ? (
+                <div className="space-y-4">
+                  {filteredAuditLogs.map((log, index) => (
+                    <div 
+                      key={log.id || index} 
+                      className="flex items-start gap-4 p-3 rounded-lg border bg-card/50"
+                      data-testid={`audit-log-${log.id || index}`}
+                    >
+                      <div className="mt-1 flex-shrink-0">
+                        {getActionIcon(log.action)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                          <Badge variant="default" className={getModuleBadge(log.module)}>
+                            {log.module}
+                          </Badge>
+                          <span className="font-medium text-sm">{log.action.replace(/_/g, ' ')}</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+                          <Clock className="w-3 h-3" />
+                          {format(new Date(log.timestamp), 'MMM dd, yyyy HH:mm:ss')}
+                          {log.actorId && (
+                            <>
+                              <span className="mx-1">|</span>
+                              <Users className="w-3 h-3" />
+                              <span>User: {log.actorName || log.actorId.slice(0, 8) + '...'}</span>
+                            </>
+                          )}
+                        </div>
+                        {log.metadata && Object.keys(log.metadata).length > 0 && (
+                          <div className="text-xs text-muted-foreground bg-muted/50 p-2 rounded mt-2">
+                            <pre className="whitespace-pre-wrap break-all">
+                              {JSON.stringify(log.metadata, null, 2).slice(0, 200)}
+                              {JSON.stringify(log.metadata).length > 200 ? '...' : ''}
+                            </pre>
+                          </div>
+                        )}
+                      </div>
+                      {log.success !== undefined && (
+                        <Badge variant={log.success ? 'default' : 'secondary'} className="flex-shrink-0">
+                          {log.success ? 'Success' : 'Failed'}
+                        </Badge>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <History className="w-12 h-12 text-muted-foreground mb-2" />
+                  <p className="text-muted-foreground">No audit logs in this period</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Audit logs track signatures, approvals, and verification activities
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         <TabsContent value="activity" className="mt-4">
           <Card>

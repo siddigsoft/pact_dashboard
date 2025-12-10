@@ -9,6 +9,7 @@ interface UserClassificationBadgeProps {
   size?: 'sm' | 'md' | 'lg';
   className?: string;
   showUnassigned?: boolean;
+  compact?: boolean;
 }
 
 export default function UserClassificationBadge({ 
@@ -17,6 +18,7 @@ export default function UserClassificationBadge({
   size = 'sm',
   className,
   showUnassigned = false,
+  compact = false,
 }: UserClassificationBadgeProps) {
   const { getUserClassification } = useClassification();
 
@@ -43,8 +45,8 @@ export default function UserClassificationBadge({
     <ClassificationBadge
       level={classification.classificationLevel}
       roleScope={classification.roleScope}
-      showTooltip={showTooltip}
-      size={size}
+      showTooltip={compact ? false : showTooltip}
+      size={compact ? 'sm' : size}
       className={className}
     />
   );

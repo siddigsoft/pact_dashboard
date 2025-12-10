@@ -13,6 +13,7 @@ import { getStateName, getLocalityName } from '@/data/sudanStates';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { useAuditLog } from '@/hooks/use-audit-log';
 import { calculateConfirmationDeadlines } from '@/utils/confirmationDeadlines';
+import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 
 interface ClaimSiteButtonProps {
   siteId: string;
@@ -245,6 +246,22 @@ export function ClaimSiteButton({
           workflowStep: 'in_progress',
           metadata: { fee: finalFee, totalPayout: finalTotal, userId },
         });
+
+        // Send notification (and email for high priority) to the claimer
+        NotificationTriggerService.siteAssigned(userId, siteName, siteId);
+        
+        // Send notifications to supervisors/admins about the claim
+        if (currentUser) {
+          NotificationTriggerService.siteClaimNotification(
+            userId,
+            currentUser.fullName || currentUser.name || 'A team member',
+            currentUser.role || 'data_collector',
+            siteName,
+            siteId,
+            currentUser.hubId,
+            undefined
+          );
+        }
 
         setClaimed(true);
         toast({

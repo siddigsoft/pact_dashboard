@@ -10,6 +10,7 @@ import {
   APPROVAL_REQUEST_TYPE_LABELS 
 } from '@/types/approval-request';
 import { v4 as uuidv4 } from 'uuid';
+import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 
 interface ApprovalContextType {
   pendingRequests: ApprovalRequest[];
@@ -86,23 +87,15 @@ export function ApprovalProvider({ children }: { children: ReactNode }) {
       
       if (superAdmins && superAdmins.length > 0) {
         for (const sa of superAdmins) {
-          await supabase.from('notifications').insert({
-            id: uuidv4(),
-            user_id: sa.user_id,
-            title: 'Approval Request',
-            message: `${request.requestedByName || 'A user'} requested to ${APPROVAL_REQUEST_TYPE_LABELS[request.type]}: ${request.resourceName || request.resourceId}`,
-            category: 'system',
-            is_read: false,
-            created_at: new Date().toISOString(),
-            metadata: {
-              type: 'approval_request',
-              requestId: request.id,
-              requestType: request.type,
-              resourceId: request.resourceId,
-            }
-          });
+          // Send notification with email for high priority approval requests
+          await NotificationTriggerService.approvalRequired(
+            sa.user_id,
+            APPROVAL_REQUEST_TYPE_LABELS[request.type],
+            request.resourceName || request.resourceId,
+            '/approval-dashboard'
+          );
         }
-        console.log('[Approval] Notified', superAdmins.length, 'super admins');
+        console.log('[Approval] Notified', superAdmins.length, 'super admins with email');
       }
     } catch (error) {
       console.error('[Approval] Error notifying super admins:', error);
@@ -193,20 +186,18 @@ export function ApprovalProvider({ children }: { children: ReactNode }) {
     );
     saveRequests(updatedRequests);
 
+    // Send notification with email to requester about approval decision
     try {
-      await supabase.from('notifications').insert({
-        id: uuidv4(),
-        user_id: request.requestedBy,
+      await NotificationTriggerService.send({
+        userId: request.requestedBy,
         title: action === 'approve' ? 'Request Approved' : 'Request Rejected',
         message: `Your request to ${APPROVAL_REQUEST_TYPE_LABELS[request.type]} has been ${action}ed by ${currentUser.name}${notes ? `: ${notes}` : ''}`,
-        category: 'system',
-        is_read: false,
-        created_at: new Date().toISOString(),
-        metadata: {
-          type: 'approval_response',
-          requestId: request.id,
-          action,
-        }
+        type: action === 'approve' ? 'success' : 'error',
+        category: 'approvals',
+        priority: 'high',
+        link: '/approval-dashboard',
+        sendEmail: true,
+        emailActionLabel: 'View Details'
       });
     } catch (error) {
       console.error('[Approval] Error notifying requester:', error);
