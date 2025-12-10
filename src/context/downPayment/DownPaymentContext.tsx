@@ -141,6 +141,38 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
 
   useEffect(() => {
     refreshRequests();
+
+    // Set up real-time subscription for down payment requests
+    const downPaymentChannel = supabase
+      .channel('down-payment-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'down_payment_requests'
+        },
+        (payload) => {
+          console.log('Down payment requests change detected:', payload);
+          refreshRequests();
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ Down payment requests real-time subscription active');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('❌ Down payment requests real-time subscription error - Check if replication is enabled in Supabase');
+        } else if (status === 'TIMED_OUT') {
+          console.warn('⏱️ Down payment requests real-time subscription timed out');
+        } else {
+          console.log('Down payment requests subscription status:', status);
+        }
+      });
+
+    // Cleanup subscription on unmount
+    return () => {
+      supabase.removeChannel(downPaymentChannel);
+    };
   }, [refreshRequests]);
 
   const createRequest = async (request: CreateDownPaymentRequest): Promise<boolean> => {

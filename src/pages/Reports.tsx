@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -93,59 +93,128 @@ const Reports: React.FC = () => {
     navigate("/dashboard");
   };
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        setLoading(true);
-        setError(null);
+  const load = React.useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
 
-        let svQuery = supabase.from("mmp_site_entries").select("*");
-        let mmpQuery = supabase.from("mmp_files").select("*");
-        let projQuery = supabase.from("projects").select("*");
-        let profQuery = supabase.from("profiles").select("id, full_name, role, email");
+      let svQuery = supabase.from("mmp_site_entries").select("*");
+      let mmpQuery = supabase.from("mmp_files").select("*");
+      let projQuery = supabase.from("projects").select("*");
+      let profQuery = supabase.from("profiles").select("id, full_name, role, email");
 
-        if (dateRange?.from) {
-          const from = startOfDay(dateRange.from).toISOString();
-          svQuery = svQuery.gte("visit_date", from);
-          mmpQuery = mmpQuery.gte("created_at", from);
-          projQuery = projQuery.gte("created_at", from);
-        }
-        if (dateRange?.to) {
-          const to = endOfDay(dateRange.to).toISOString();
-          svQuery = svQuery.lte("visit_date", to);
-          mmpQuery = mmpQuery.lte("created_at", to);
-          projQuery = projQuery.lte("created_at", to);
-        }
-
-        // Sensible ordering for display/export
-        svQuery = svQuery.order("visit_date", { ascending: false });
-        mmpQuery = mmpQuery.order("created_at", { ascending: false });
-        projQuery = projQuery.order("created_at", { ascending: false });
-
-        const [svRes, mmpRes, projRes, profRes] = await Promise.all([
-          svQuery,
-          mmpQuery,
-          projQuery,
-          profQuery,
-        ]);
-
-        if (svRes.error) throw svRes.error;
-        if (mmpRes.error) throw mmpRes.error;
-        if (projRes.error) throw projRes.error;
-        if (profRes.error) throw profRes.error;
-
-        setSiteVisits(svRes.data || []);
-        setMmpFiles(mmpRes.data || []);
-        setProjects(projRes.data || []);
-        setProfiles(profRes.data || []);
-      } catch (e: any) {
-        setError(e?.message || "Failed to load reports data");
-      } finally {
-        setLoading(false);
+      if (dateRange?.from) {
+        const from = startOfDay(dateRange.from).toISOString();
+        svQuery = svQuery.gte("visit_date", from);
+        mmpQuery = mmpQuery.gte("created_at", from);
+        projQuery = projQuery.gte("created_at", from);
       }
-    };
-    load();
+      if (dateRange?.to) {
+        const to = endOfDay(dateRange.to).toISOString();
+        svQuery = svQuery.lte("visit_date", to);
+        mmpQuery = mmpQuery.lte("created_at", to);
+        projQuery = projQuery.lte("created_at", to);
+      }
+
+      // Sensible ordering for display/export
+      svQuery = svQuery.order("visit_date", { ascending: false });
+      mmpQuery = mmpQuery.order("created_at", { ascending: false });
+      projQuery = projQuery.order("created_at", { ascending: false });
+
+      const [svRes, mmpRes, projRes, profRes] = await Promise.all([
+        svQuery,
+        mmpQuery,
+        projQuery,
+        profQuery,
+      ]);
+
+      if (svRes.error) throw svRes.error;
+      if (mmpRes.error) throw mmpRes.error;
+      if (projRes.error) throw projRes.error;
+      if (profRes.error) throw profRes.error;
+
+      setSiteVisits(svRes.data || []);
+      setMmpFiles(mmpRes.data || []);
+      setProjects(projRes.data || []);
+      setProfiles(profRes.data || []);
+    } catch (e: any) {
+      setError(e?.message || "Failed to load reports data");
+    } finally {
+      setLoading(false);
+    }
   }, [dateRange]);
+
+  useEffect(() => {
+    load();
+
+    // Set up real-time subscriptions for reports data
+    const reportsChannel = supabase
+      .channel('reports-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'mmp_site_entries'
+        },
+        (payload) => {
+          console.log('Reports: Site entries change detected:', payload);
+          load();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'mmp_files'
+        },
+        (payload) => {
+          console.log('Reports: MMP files change detected:', payload);
+          load();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'projects'
+        },
+        (payload) => {
+          console.log('Reports: Projects change detected:', payload);
+          load();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'profiles'
+        },
+        (payload) => {
+          console.log('Reports: Profiles change detected:', payload);
+          load();
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ Reports real-time subscription active');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('❌ Reports real-time subscription error - Check if replication is enabled in Supabase');
+        } else if (status === 'TIMED_OUT') {
+          console.warn('⏱️ Reports real-time subscription timed out');
+        } else {
+          console.log('Reports subscription status:', status);
+        }
+      });
+
+    // Cleanup subscription on unmount
+    return () => {
+      supabase.removeChannel(reportsChannel);
+    };
+  }, [load]);
 
   const fetchLatestForReports = async () => {
     try {

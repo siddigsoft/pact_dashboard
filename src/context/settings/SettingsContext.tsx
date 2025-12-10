@@ -1,5 +1,5 @@
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '../user/UserContext';
@@ -134,13 +134,12 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
   const [menuPreferences, setMenuPreferences] = useState<MenuPreferences>(DEFAULT_MENU_PREFERENCES);
   const [dashboardPreferences, setDashboardPreferences] = useState<DashboardPreferences>(DEFAULT_DASHBOARD_PREFERENCES);
 
-  // Fetch settings from the database when the component mounts
-  useEffect(() => {
+  // Fetch settings function
+  const fetchSettings = React.useCallback(async () => {
     if (!currentUser?.id) return;
-
-    const fetchSettings = async () => {
-      setLoading(true);
-      setError(null);
+    
+    setLoading(true);
+    setError(null);
       try {
         // user_settings - use limit(1) to handle duplicates gracefully
         const { data: userDataArray, error: userError } = await supabase
@@ -225,10 +224,72 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
       } finally {
         setLoading(false);
       }
-    };
+  }, [currentUser?.id]);
+
+  // Fetch settings from the database when the component mounts
+  useEffect(() => {
+    if (!currentUser?.id) return;
 
     fetchSettings();
-  }, [currentUser?.id]);
+
+    // Set up real-time subscriptions for settings
+    const settingsChannel = supabase
+      .channel('settings-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'user_settings',
+          filter: `user_id=eq.${currentUser.id}`
+        },
+        (payload) => {
+          console.log('User settings change detected:', payload);
+          fetchSettings();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'data_visibility_settings',
+          filter: `user_id=eq.${currentUser.id}`
+        },
+        (payload) => {
+          console.log('Data visibility settings change detected:', payload);
+          fetchSettings();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'dashboard_settings',
+          filter: `user_id=eq.${currentUser.id}`
+        },
+        (payload) => {
+          console.log('Dashboard settings change detected:', payload);
+          fetchSettings();
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ Settings real-time subscription active');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('❌ Settings real-time subscription error - Check if replication is enabled in Supabase');
+        } else if (status === 'TIMED_OUT') {
+          console.warn('⏱️ Settings real-time subscription timed out');
+        } else {
+          console.log('Settings subscription status:', status);
+        }
+      });
+
+    return () => {
+      supabase.removeChannel(settingsChannel);
+    };
+  }, [currentUser?.id, fetchSettings]);
   
   const updateUserSettings = async (settings: Partial<UserSettings['settings']>) => {
     if (!currentUser?.id) return;

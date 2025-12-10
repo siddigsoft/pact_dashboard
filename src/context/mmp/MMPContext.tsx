@@ -409,7 +409,17 @@ export const useMMPProvider = () => {
           refreshMMPFiles();
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ MMP context real-time subscription active');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('❌ MMP context real-time subscription error - Check if replication is enabled in Supabase');
+        } else if (status === 'TIMED_OUT') {
+          console.warn('⏱️ MMP context real-time subscription timed out');
+        } else {
+          console.log('MMP context subscription status:', status);
+        }
+      });
 
     return () => {
       supabase.removeChannel(channel);

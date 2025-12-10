@@ -53,7 +53,17 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         { event: '*', schema: 'public', table: 'site_visits' },
         () => refreshSiteVisits()
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ Site visits real-time subscription active');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('❌ Site visits real-time subscription error - Check if replication is enabled in Supabase');
+        } else if (status === 'TIMED_OUT') {
+          console.warn('⏱️ Site visits real-time subscription timed out');
+        } else {
+          console.log('Site visits subscription status:', status);
+        }
+      });
 
     return () => {
       supabase.removeChannel(channel);

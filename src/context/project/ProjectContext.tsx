@@ -166,6 +166,62 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   useEffect(() => {
     fetchProjects();
+
+    // Set up real-time subscriptions for projects
+    const projectsChannel = supabase
+      .channel('projects-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'projects'
+        },
+        (payload) => {
+          console.log('Projects change detected:', payload);
+          fetchProjects();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'project_activities'
+        },
+        (payload) => {
+          console.log('Project activities change detected:', payload);
+          fetchProjects();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'sub_activities'
+        },
+        (payload) => {
+          console.log('Sub activities change detected:', payload);
+          fetchProjects();
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ Projects real-time subscription active');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('❌ Projects real-time subscription error - Check if replication is enabled in Supabase');
+        } else if (status === 'TIMED_OUT') {
+          console.warn('⏱️ Projects real-time subscription timed out');
+        } else {
+          console.log('Projects subscription status:', status);
+        }
+      });
+
+    // Cleanup subscription on unmount
+    return () => {
+      supabase.removeChannel(projectsChannel);
+    };
   }, []);
 
   const addProject = async (project: Project): Promise<Project | null> => {
