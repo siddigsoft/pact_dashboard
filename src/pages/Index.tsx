@@ -241,7 +241,8 @@ const Index = () => {
               <img 
                 src={PactLogo} 
                 alt="PACT" 
-                className="h-20 w-20 relative z-10 drop-shadow-lg"
+                className="h-28 w-28 md:h-32 md:w-32 relative z-10 drop-shadow-lg object-contain"
+                style={{ imageRendering: 'crisp-edges' }}
               />
             </div>
 
@@ -295,12 +296,13 @@ const Index = () => {
         <section className="container mx-auto px-4 pt-16 pb-12 md:pt-24 md:pb-16">
           <div className="max-w-4xl mx-auto text-center space-y-6">
             {/* Logo & Status Badge */}
-            <div className="flex flex-col items-center gap-3">
+            <div className="flex flex-col items-center gap-4">
               <img
                 src={PactLogo}
                 alt="PACT Logo"
                 data-testid="img-logo"
-                className="h-14 w-14 md:h-16 md:w-16"
+                className="h-24 w-24 md:h-32 md:w-32 lg:h-40 lg:w-40 object-contain drop-shadow-lg"
+                style={{ imageRendering: 'crisp-edges' }}
               />
               <Badge 
                 variant="secondary" 
