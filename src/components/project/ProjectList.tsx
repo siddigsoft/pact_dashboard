@@ -4,21 +4,22 @@ import { useNavigate } from 'react-router-dom';
 import { format, isValid, parseISO } from 'date-fns';
 import { 
   Calendar, 
-  Clock, 
   BarChart, 
   Tag,
   FileText, 
   ArrowRight,
   Search,
-  Filter,
   CheckCircle,
   AlertCircle,
   Clock3,
-  Layers
+  MapPin,
+  UserCircle,
+  DollarSign,
+  Eye
 } from 'lucide-react';
 
 import { Project } from '@/types/project';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -90,6 +91,37 @@ const ProjectList: React.FC<ProjectListProps> = ({
     }
   };
 
+  // Safe budget parsing helper
+  const getBudgetSummary = (budget: any) => {
+    if (!budget) return null;
+
+    const parseNumber = (value: any): number | null => {
+      if (value === null || value === undefined) return null;
+      if (typeof value === 'number' && !Number.isNaN(value)) return value;
+      if (typeof value === 'string') {
+        const n = Number(value);
+        return Number.isNaN(n) ? null : n;
+      }
+      return null;
+    };
+
+    const totalCents = parseNumber(
+      budget.totalBudgetCents !== undefined
+        ? budget.totalBudgetCents
+        : budget.total_budget_cents,
+    );
+
+    const total = (() => {
+      if (totalCents !== null) return totalCents / 100;
+      const rawTotal = parseNumber(budget.total);
+      return rawTotal;
+    })();
+
+    const currency = budget.currency || 'SDG';
+
+    return total !== null ? { total, currency } : null;
+  };
+
   const getTypeBadge = (type: string) => {
     switch (type) {
       case 'infrastructure':
@@ -110,30 +142,36 @@ const ProjectList: React.FC<ProjectListProps> = ({
   if (loading) {
     return (
       <div className="w-full">
-        <div className="flex justify-between items-center mb-6">
-          <div className="w-full md:w-64 h-10 bg-muted animate-pulse rounded-md"></div>
-          <div className="hidden md:flex gap-2">
-            <div className="w-32 h-10 bg-muted animate-pulse rounded-md"></div>
-            <div className="w-32 h-10 bg-muted animate-pulse rounded-md"></div>
+        <div className="flex flex-col md:flex-row gap-4 mb-4 items-start md:items-center justify-between">
+          <div className="w-full md:w-96 h-9 bg-muted animate-pulse rounded-md"></div>
+          <div className="flex gap-3">
+            <div className="w-40 h-9 bg-muted animate-pulse rounded-md"></div>
+            <div className="w-40 h-9 bg-muted animate-pulse rounded-md"></div>
           </div>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {[1, 2, 3, 4, 5, 6].map((item) => (
             <Card key={item} className="overflow-hidden">
-              <CardHeader className="pb-2">
-                <div className="w-3/4 h-6 bg-muted animate-pulse rounded-md"></div>
-                <div className="w-1/2 h-4 bg-muted animate-pulse rounded-md mt-2"></div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  <div className="w-full h-4 bg-muted animate-pulse rounded-md"></div>
-                  <div className="w-full h-4 bg-muted animate-pulse rounded-md"></div>
-                  <div className="w-3/4 h-4 bg-muted animate-pulse rounded-md"></div>
+              <CardHeader className="p-3 pb-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 space-y-2">
+                    <div className="w-3/4 h-5 bg-muted animate-pulse rounded-md"></div>
+                    <div className="flex gap-1.5">
+                      <div className="w-16 h-5 bg-muted animate-pulse rounded-md"></div>
+                      <div className="w-20 h-5 bg-muted animate-pulse rounded-md"></div>
+                    </div>
+                  </div>
+                  <div className="w-16 h-5 bg-muted animate-pulse rounded-md"></div>
                 </div>
+              </CardHeader>
+              <CardContent className="p-3 pt-1 space-y-2">
+                <div className="w-full h-4 bg-muted animate-pulse rounded-md"></div>
+                <div className="w-2/3 h-4 bg-muted animate-pulse rounded-md"></div>
+                <div className="w-3/4 h-4 bg-muted animate-pulse rounded-md"></div>
               </CardContent>
-              <CardFooter>
-                <div className="w-full h-10 bg-muted animate-pulse rounded-md"></div>
+              <CardFooter className="p-3 pt-0">
+                <div className="w-full h-8 bg-muted animate-pulse rounded-md"></div>
               </CardFooter>
             </Card>
           ))}
@@ -144,7 +182,7 @@ const ProjectList: React.FC<ProjectListProps> = ({
 
   return (
     <div className="w-full">
-      <div className="flex flex-col md:flex-row gap-4 mb-6 items-start md:items-center justify-between">
+      <div className="flex flex-col md:flex-row gap-3 mb-4 items-start md:items-center justify-between">
         <div className="relative w-full md:w-96">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
@@ -188,70 +226,101 @@ const ProjectList: React.FC<ProjectListProps> = ({
       </div>
       
       {filteredProjects.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredProjects.map((project) => (
-            <Card key={project.id} className="overflow-hidden hover:shadow-md transition-shadow duration-200 flex flex-col">
-              <CardHeader className="pb-2 bg-muted/30 relative">
-                <CardTitle className="text-lg font-medium">{project.name}</CardTitle>
-                <CardDescription className="flex items-center gap-1 text-xs">
-                  <Tag className="h-3 w-3" /> {project.projectCode}
-                </CardDescription>
-                <div className="absolute top-4 right-4">
-                  {getStatusBadge(project.status)}
+            <Card 
+              key={project.id} 
+              className="overflow-hidden hover-elevate flex flex-col"
+              data-testid={`card-project-${project.id}`}
+            >
+              {/* Zone 1: Header - Status badge + project code */}
+              <CardHeader className="p-3 pb-2 space-y-0">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="font-semibold text-base leading-tight truncate" title={project.name}>
+                      {project.name}
+                    </h3>
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <Badge variant="outline" className="text-xs px-1.5 py-0 h-5 font-mono">
+                        <Tag className="h-2.5 w-2.5 mr-1" />
+                        {project.projectCode}
+                      </Badge>
+                      {getTypeBadge(project.projectType)}
+                    </div>
+                  </div>
+                  <div className="flex-shrink-0">
+                    {getStatusBadge(project.status)}
+                  </div>
                 </div>
               </CardHeader>
-              <CardContent className="py-4 flex-grow">
-                <div className="space-y-4">
-                  <div className="flex flex-col space-y-2">
-                    <div className="flex flex-wrap items-center space-x-2 text-sm">
-                      <Calendar className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-muted-foreground">
-                        {formatDate(project.startDate)} - {formatDate(project.endDate)}
+
+              {/* Zone 2: Body - Key meta rows with icons */}
+              <CardContent className="p-3 pt-1 flex-grow space-y-2">
+                {/* Dates */}
+                <div className="flex items-center gap-2 text-sm">
+                  <Calendar className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                  <span className="text-muted-foreground truncate">
+                    {formatDate(project.startDate)} - {formatDate(project.endDate)}
+                  </span>
+                </div>
+
+                {/* Project Manager */}
+                {project.team?.projectManager && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <UserCircle className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                    <span className="truncate">
+                      <span className="text-muted-foreground">PM:</span>{' '}
+                      <span className="font-medium">{project.team.projectManager}</span>
+                    </span>
+                  </div>
+                )}
+
+                {/* Location */}
+                {project.location?.region && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <MapPin className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                    <span className="text-muted-foreground truncate">
+                      {project.location.region}
+                      {project.location.state && `, ${project.location.state}`}
+                    </span>
+                  </div>
+                )}
+
+                {/* Budget */}
+                {(() => {
+                  const budgetSummary = getBudgetSummary(project.budget);
+                  return budgetSummary ? (
+                    <div className="flex items-center gap-2 text-sm">
+                      <DollarSign className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                      <span className="text-muted-foreground truncate">
+                        {budgetSummary.currency} {budgetSummary.total.toLocaleString('en-US', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}
                       </span>
                     </div>
-                    
-                    <div className="flex items-center space-x-2 text-sm">
-                      <Layers className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-muted-foreground">Type: {getTypeBadge(project.projectType)}</span>
-                    </div>
-                    
-                    {project.location?.region && (
-                      <div className="flex items-center space-x-2 text-sm">
-                        <svg className="h-4 w-4 text-muted-foreground" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
-                          <circle cx="12" cy="10" r="3" />
-                        </svg>
-                        <span className="text-muted-foreground">
-                          {project.location.region}
-                          {project.location.state && `, ${project.location.state}`}
-                        </span>
-                      </div>
-                    )}
-                    
-                    {project.budget && (
-                      <div className="flex items-center space-x-2 text-sm">
-                        <BarChart className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-muted-foreground">
-                          Budget: {project.budget.total.toLocaleString()} {project.budget.currency}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                  
-                  {project.description && (
-                    <p className="text-sm text-muted-foreground line-clamp-2">
-                      {project.description}
-                    </p>
-                  )}
-                </div>
+                  ) : null;
+                })()}
+
+                {/* Description preview */}
+                {project.description && (
+                  <p className="text-xs text-muted-foreground line-clamp-2 pt-1">
+                    {project.description}
+                  </p>
+                )}
               </CardContent>
-              <CardFooter className="pt-2 pb-4 border-t border-border/50 bg-muted/10">
+
+              {/* Zone 3: Footer - Quick actions */}
+              <CardFooter className="p-3 pt-0 mt-auto">
                 <Button 
-                  className="w-full flex items-center justify-center"
+                  className="w-full"
                   variant="default"
+                  size="sm"
                   onClick={() => onViewProject(project.id)}
+                  data-testid={`button-view-project-${project.id}`}
                 >
-                  View Details <ArrowRight className="ml-2 h-4 w-4" />
+                  <Eye className="h-3.5 w-3.5 mr-1.5" />
+                  View Details
                 </Button>
               </CardFooter>
             </Card>

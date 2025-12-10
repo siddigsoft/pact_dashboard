@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- PACT Brand Colors - Uber Style Black/White Monochrome -->
+    <color name="colorPrimary">#000000</color>
+    <color name="colorPrimaryDark">#000000</color>
+    <color name="colorPrimaryLight">#333333</color>
+    
+    <!-- Secondary Colors -->
+    <color name="colorSecondary">#1a1a1a</color>
+    <color name="colorSecondaryDark">#000000</color>
+    <color name="colorSecondaryLight">#404040</color>
+    
+    <!-- Accent Colors -->
+    <color name="colorAccent">#FFFFFF</color>
+    <color name="colorAccentDark">#e0e0e0</color>
+    <color name="colorAccentLight">#FFFFFF</color>
+    
+    <!-- Neutral Colors -->
+    <color name="colorBackground">#FFFFFF</color>
+    <color name="colorSurface">#f8f9fa</color>
+    <color name="colorForeground">#000000</color>
+    <color name="colorMuted">#666666</color>
+    <color name="colorBorder">#e5e7eb</color>
+    
+    <!-- Status Colors -->
+    <color name="colorSuccess">#10b981</color>
+    <color name="colorWarning">#f59e0b</color>
+    <color name="colorError">#ff4d4d</color>
+    <color name="colorInfo">#3b82f6</color>
+    
+    <!-- Launcher Colors - Black/White Uber Style -->
+    <color name="ic_launcher_background">#000000</color>
+    <color name="ic_launcher_foreground">#FFFFFF</color>
+    
+    <!-- Splash Screen - Stark Black -->
+    <color name="splashBackground">#000000</color>
+    
+    <!-- Status Bar & Navigation -->
+    <color name="statusBarColor">#000000</color>
+    <color name="navigationBarColor">#000000</color>
+</resources>

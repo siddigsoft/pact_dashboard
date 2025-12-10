@@ -1,0 +1,55 @@
+PS C:\Users\PC\pact_dashboard> git pull 
+Updating 4f9244e..f3237c5
+Fast-forward
+ android/app/src/main/AndroidManifest.xml           |   4 +
+ ...25-12-06_at_01.08.42_ca067d70_1764972606042.jpg | Bin 0 -> 32440 bytes
+ ...25-12-06_at_01.08.42_ce2a33a0_1764972588879.jpg | Bin 0 -> 32440 bytes
+ ...25-12-06_at_01.08.56_6db9d25c_1764972598277.jpg | Bin 0 -> 30189 bytes
+ ...25-12-06_at_01.08.56_8787f07d_1764972581192.jpg | Bin 0 -> 30189 bytes
+ ...25-12-06_at_01.08.56_eae54d69_1764972632497.jpg | Bin 0 -> 30189 bytes
+ ...25-12-06_at_01.09.27_ad500b24_1764972574941.jpg | Bin 0 -> 27665 bytes
+ ...25-12-06_at_01.09.27_b5b5a411_1764972648001.jpg | Bin 0 -> 27665 bytes
+ package-lock.json                                  |  10 +
+ package.json                                       |   1 +
+ src/App.tsx                                        |   7 +-
+ src/components/mobile/LocationBlocker.tsx          | 141 +++++++++++
+ src/components/mobile/MobilePermissionGuard.tsx    |  63 +++++
+ .../mobile/MobilePermissionOnboarding.tsx          | 236 ++++++++++++++++++
+ src/hooks/use-mobile-permissions.tsx               | 264 +++++++++++++++++++--
+ src/pages/MMP.tsx                                  |  33 +--
+ 16 files changed, 718 insertions(+), 41 deletions(-)
+ create mode 100644 attached_assets/WhatsApp_Image_2025-12-06_at_01.08.42_ca067d70_1764972606042.jpg
+ create mode 100644 attached_assets/WhatsApp_Image_2025-12-06_at_01.08.42_ce2a33a0_1764972588879.jpg
+ create mode 100644 attached_assets/WhatsApp_Image_2025-12-06_at_01.08.56_6db9d25c_1764972598277.jpg
+ create mode 100644 attached_assets/WhatsApp_Image_2025-12-06_at_01.08.56_8787f07d_1764972581192.jpg
+ create mode 100644 attached_assets/WhatsApp_Image_2025-12-06_at_01.08.56_eae54d69_1764972632497.jpg
+ create mode 100644 attached_assets/WhatsApp_Image_2025-12-06_at_01.09.27_ad500b24_1764972574941.jpg
+ create mode 100644 attached_assets/WhatsApp_Image_2025-12-06_at_01.09.27_b5b5a411_1764972648001.jpg
+ create mode 100644 src/components/mobile/LocationBlocker.tsx
+ create mode 100644 src/components/mobile/MobilePermissionGuard.tsx
+ create mode 100644 src/components/mobile/MobilePermissionOnboarding.tsx
+PS C:\Users\PC\pact_dashboard>  git pull 
+Already up to date.
+PS C:\Users\PC\pact_dashboard>  npm run build      
+
+> vite_react_shadcn_ts@0.0.0 build
+> vite build
+
+vite v5.4.20 building for production...
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+✓ 3969 modules transformed.
+x Build failed in 26.79s
+error during build:
+[vite]: Rollup failed to resolve import "capacitor-native-settings" from "C:/Users/PC/pact_dashboard/src/hooks/use-mobile-permissions.tsx".
+This is most likely unintended because it can break your application at runtime.
+If you do want to externalize this module explicitly add it to
+`build.rollupOptions.external`
+    at viteWarn (file:///C:/Users/PC/pact_dashboard/node_modules/vite/dist/node/chunks/dep-D_zLpgQd.js:65854:17)
+    at onwarn (file:///C:/Users/PC/pact_dashboard/node_modules/@vitejs/plugin-react-swc/index.js:90:7)
+    at onRollupWarning (file:///C:/Users/PC/pact_dashboard/node_modules/vite/dist/node/chunks/dep-D_zLpgQd.js:65884:5)
+    at onwarn (file:///C:/Users/PC/pact_dashboard/node_modules/vite/dist/node/chunks/dep-D_zLpgQd.js:65549:7)
+    at file:///C:/Users/PC/pact_dashboard/node_modules/rollup/dist/es/shared/node-entry.js:20950:13
+    at Object.logger [as onLog] (file:///C:/Users/PC/pact_dashboard/node_modules/rollup/dist/es/shared/node-entry.js:22822:9)
+    at ModuleLoader.handleInvalidResolvedId (file:///C:/Users/PC/pact_dashboard/node_modules/rollup/dist/es/shared/node-entry.js:21566:26)
+    at ModuleLoader.resolveDynamicImport (file:///C:/Users/PC/pact_dashboard/node_modules/rollup/dist/es/shared/node-entry.js:21624:58)
+    at async file:///C:/Users/PC/pact_dashboard/node_modules/rollup/dist/es/shared/node-entry.js:21508:32

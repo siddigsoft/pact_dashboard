@@ -422,18 +422,18 @@ const CostSubmissionHistory = ({ submissions }: CostSubmissionHistoryProps) => {
       {canApprove && (
         <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border-blue-200 dark:border-blue-800">
           <CardContent className="pt-4">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
               <div className="text-center">
-                <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                <p className="text-xl sm:text-2xl font-bold text-blue-600 dark:text-blue-400">
                   {financeSummary.pendingCount}
                 </p>
                 <p className="text-xs text-muted-foreground">Awaiting Review</p>
               </div>
               <div className="text-center">
-                <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">
+                <div className="text-xl sm:text-2xl font-bold text-amber-600 dark:text-amber-400">
                   {Object.entries(financeSummary.pendingByCurrency).length > 0 ? (
                     Object.entries(financeSummary.pendingByCurrency).map(([currency, cents]) => (
-                      <div key={currency} className="text-lg">{formatCurrency(cents, currency)}</div>
+                      <div key={currency} className="text-sm sm:text-lg">{formatCurrency(cents, currency)}</div>
                     ))
                   ) : (
                     <span>0</span>
@@ -442,10 +442,10 @@ const CostSubmissionHistory = ({ submissions }: CostSubmissionHistoryProps) => {
                 <p className="text-xs text-muted-foreground">Pending Payout</p>
               </div>
               <div className="text-center">
-                <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+                <div className="text-xl sm:text-2xl font-bold text-green-600 dark:text-green-400">
                   {Object.entries(financeSummary.approvedByCurrency).length > 0 ? (
                     Object.entries(financeSummary.approvedByCurrency).map(([currency, cents]) => (
-                      <div key={currency} className="text-lg">{formatCurrency(cents, currency)}</div>
+                      <div key={currency} className="text-sm sm:text-lg">{formatCurrency(cents, currency)}</div>
                     ))
                   ) : (
                     <span>0</span>
@@ -454,7 +454,7 @@ const CostSubmissionHistory = ({ submissions }: CostSubmissionHistoryProps) => {
                 <p className="text-xs text-muted-foreground">Ready to Pay</p>
               </div>
               <div className="text-center">
-                <p className="text-2xl font-bold text-red-600 dark:text-red-400">
+                <p className="text-xl sm:text-2xl font-bold text-red-600 dark:text-red-400">
                   {financeSummary.overdueCount}
                 </p>
                 <p className="text-xs text-muted-foreground">Overdue (&gt;72h)</p>
@@ -626,7 +626,7 @@ const CostSubmissionHistory = ({ submissions }: CostSubmissionHistoryProps) => {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                   <div>
                     <p className="text-xs text-muted-foreground">Transportation</p>
                     <p className="text-sm font-semibold">
@@ -690,7 +690,7 @@ const CostSubmissionHistory = ({ submissions }: CostSubmissionHistoryProps) => {
                   </div>
                 )}
 
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-col sm:flex-row gap-2">
                   {canApprove && isPending && (
                     <>
                       <Button
@@ -700,7 +700,7 @@ const CostSubmissionHistory = ({ submissions }: CostSubmissionHistoryProps) => {
                           setShowApproveDialog(true);
                         }}
                         disabled={isReviewing}
-                        className="bg-emerald-600 text-white"
+                        className="bg-emerald-600 text-white min-h-[44px] flex-1 sm:flex-none"
                         data-testid={`button-approve-${submission.id}`}
                       >
                         <ThumbsUp className="h-4 w-4 mr-2" />
@@ -714,6 +714,7 @@ const CostSubmissionHistory = ({ submissions }: CostSubmissionHistoryProps) => {
                           setShowRejectDialog(true);
                         }}
                         disabled={isReviewing}
+                        className="min-h-[44px] flex-1 sm:flex-none"
                         data-testid={`button-reject-${submission.id}`}
                       >
                         <ThumbsDown className="h-4 w-4 mr-2" />
@@ -728,6 +729,7 @@ const CostSubmissionHistory = ({ submissions }: CostSubmissionHistoryProps) => {
                         variant="outline"
                         size="sm"
                         onClick={() => setSelectedSubmission(submission)}
+                        className="min-h-[44px] flex-1 sm:flex-none"
                         data-testid={`button-view-details-${submission.id}`}
                       >
                         <Eye className="h-4 w-4 mr-2" />

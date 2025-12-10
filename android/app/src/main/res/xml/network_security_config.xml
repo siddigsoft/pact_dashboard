@@ -1,25 +1,43 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <!-- Allow cleartext for localhost (required for Capacitor's internal server) -->
+    <!-- Allow cleartext ONLY for localhost (required for Capacitor's internal server during development) -->
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="true">localhost</domain>
         <domain includeSubdomains="true">10.0.2.2</domain>
+        <domain includeSubdomains="true">127.0.0.1</domain>
     </domain-config>
     
-    <!-- HTTPS only for external APIs -->
+    <!-- HTTPS only for Supabase and Firebase -->
     <domain-config cleartextTrafficPermitted="false">
         <domain includeSubdomains="true">supabase.co</domain>
         <domain includeSubdomains="true">supabase.in</domain>
-        <domain includeSubdomains="true">vercel.app</domain>
-        <domain includeSubdomains="true">googleapis.com</domain>
-        <domain includeSubdomains="true">gstatic.com</domain>
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>
     </domain-config>
     
-    <!-- Default: HTTPS for everything else -->
-    <base-config cleartextTrafficPermitted="true">
+    <!-- HTTPS only for Google services -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">googleapis.com</domain>
+        <domain includeSubdomains="true">gstatic.com</domain>
+        <domain includeSubdomains="true">firebase.google.com</domain>
+        <domain includeSubdomains="true">firebaseio.com</domain>
+        <domain includeSubdomains="true">fcm.googleapis.com</domain>
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </domain-config>
+    
+    <!-- HTTPS only for Vercel -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">vercel.app</domain>
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </domain-config>
+    
+    <!-- Default: HTTPS for everything else (secure by default) -->
+    <base-config cleartextTrafficPermitted="false">
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>

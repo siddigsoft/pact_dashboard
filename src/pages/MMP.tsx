@@ -8,6 +8,7 @@ import { useMMP } from '@/context/mmp/MMPContext';
 import { MMPList } from '@/components/mmp/MMPList';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { useUserProjects } from '@/hooks/useUserProjects';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import type { SiteVisitRow } from '@/components/mmp/MMPCategorySitesTable';
@@ -62,7 +63,8 @@ const SitesDisplayTable: React.FC<{
         const { data: mmpEntries, error: mmpError } = await supabase
           .from('mmp_site_entries')
           .select('*')
-          .in('mmp_file_id', mmpIds);
+          .in('mmp_file_id', mmpIds)
+          .not('status', 'ilike', 'completed'); // Exclude completed sites
 
         if (mmpError) throw mmpError;
 
@@ -371,6 +373,7 @@ const MMP = () => {
   const { checkPermission, hasAnyRole, currentUser } = useAuthorization();
   const { toast } = useToast();
   const { reconcileSiteVisitFee } = useWallet();
+  const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
   const [activeTab, setActiveTab] = useState('new');
   // Subcategory state for Forwarded MMPs (Admin/ICT only)
   const [forwardedSubTab, setForwardedSubTab] = useState<'pending' | 'verified'>('pending');
@@ -379,7 +382,7 @@ const MMP = () => {
   // Subcategory state for Enumerator dashboard
   const [enumeratorSubTab, setEnumeratorSubTab] = useState<'availableSites' | 'smartAssigned' | 'mySites'>('availableSites');
   // Sub-subcategory state for My Sites (Data Collector)
-  const [mySitesSubTab, setMySitesSubTab] = useState<'pending' | 'ongoing' | 'completed'>('pending');
+  const [mySitesSubTab, setMySitesSubTab] = useState<'pending' | 'ongoing' | 'completed' | 'all'>('pending');
   // Subcategory state for New MMPs (FOM only)
   const [newFomSubTab, setNewFomSubTab] = useState<'pending' | 'verified'>('pending');
   const [siteVisitStats, setSiteVisitStats] = useState<Record<string, {
@@ -516,20 +519,16 @@ const MMP = () => {
   // Handle accepting/claiming a site (works for both Smart Assigned and Available Sites)
   const handleAcceptSite = async (site: any) => {
     try {
-      console.log('🔄 Starting site acceptance/claim for site:', site.id, site.site_name);
-      
       const isDispatchedSite = site.status?.toLowerCase() === 'dispatched';
       
       if (isDispatchedSite && currentUser?.id) {
         // Use atomic claim RPC for dispatched sites (first-claim system)
-        console.log('📍 Using atomic claim RPC for dispatched site...');
         const { data: result, error: rpcError } = await supabase.rpc('claim_site_visit', {
           p_site_id: site.id,
           p_user_id: currentUser.id
         });
         
         if (rpcError) {
-          console.error('❌ Claim RPC failed:', rpcError);
           toast({
             title: 'Claim Failed',
             description: rpcError.message || 'Could not claim this site. It may have been claimed by another enumerator.',
@@ -541,7 +540,6 @@ const MMP = () => {
         const claimResult = result as { success: boolean; error?: string; message: string };
         
         if (!claimResult.success) {
-          console.error('❌ Claim rejected:', claimResult);
           let description = claimResult.message;
           
           if (claimResult.error === 'ALREADY_CLAIMED') {
@@ -557,8 +555,6 @@ const MMP = () => {
           });
           return;
         }
-        
-        console.log('✅ Site claimed successfully via RPC');
       } else {
         // Standard accept for Smart Assigned sites
         const now = new Date().toISOString();
@@ -573,11 +569,8 @@ const MMP = () => {
           .eq('id', site.id);
 
         if (error) {
-          console.error('❌ Database update failed:', error);
           throw error;
         }
-        
-        console.log('✅ Database update successful');
       }
 
       toast({
@@ -590,8 +583,6 @@ const MMP = () => {
       if (canClaimSites && currentUser?.id) {
         setLoadingEnumerator(true);
         try {
-          console.log('🔄 Reloading enumerator data after site acceptance...');
-
           // Convert collector's stateId/localityId to names for matching with site entries
           const collectorStateName = currentUser.stateId ? sudanStates.find(s => s.id === currentUser.stateId)?.name : undefined;
           const collectorLocalityName = currentUser.stateId && currentUser.localityId
@@ -607,17 +598,14 @@ const MMP = () => {
             .is('accepted_by', null); // Only unclaimed sites
 
           // Add state/locality filters if we have the names
-          if (collectorStateName || collectorLocalityName) {
-            const conditions: string[] = [];
-            if (collectorStateName) {
-              conditions.push(`state.ilike.${collectorStateName}`);
-            }
-            if (collectorLocalityName) {
-              conditions.push(`locality.ilike.${collectorLocalityName}`);
-            }
-            if (conditions.length > 0) {
-              availableSitesQuery = availableSitesQuery.or(conditions.join(','));
-            }
+          // CRITICAL: If user has a locality set, filter by EXACT locality only (not by state OR locality)
+          // This ensures users only see sites in their assigned locality, not the entire state
+          if (collectorLocalityName) {
+            // User has locality set - filter by EXACT locality match only
+            availableSitesQuery = availableSitesQuery.ilike('locality', collectorLocalityName);
+          } else if (collectorStateName) {
+            // User only has state set (no locality) - filter by state
+            availableSitesQuery = availableSitesQuery.ilike('state', collectorStateName);
           }
 
           availableSitesQuery = availableSitesQuery
@@ -647,27 +635,6 @@ const MMP = () => {
             smartAssignedQuery,
             mySitesQuery
           ]);
-
-          console.log('🔍 Query results after acceptance:');
-          console.log('  Available sites:', availableResult.data?.length || 0, 'found');
-          console.log('  Smart assigned:', smartAssignedResult.data?.length || 0, 'found');
-          console.log('  My sites:', mySitesResult.data?.length || 0, 'found');
-
-          // Check if the accepted site is still in available sites (it shouldn't be)
-          const acceptedSiteInAvailable = availableResult.data?.find(s => s.id === site.id);
-          if (acceptedSiteInAvailable) {
-            console.error('❌ BUG: Accepted site still appears in Available Sites!', acceptedSiteInAvailable);
-          } else {
-            console.log('✅ Good: Accepted site no longer appears in Available Sites');
-          }
-
-          // Check if the accepted site appears in My Sites (it should)
-          const acceptedSiteInMySites = mySitesResult.data?.find(s => s.id === site.id);
-          if (acceptedSiteInMySites) {
-            console.log('✅ Good: Accepted site appears in My Sites');
-          } else {
-            console.error('❌ BUG: Accepted site does not appear in My Sites!');
-          }
 
           // Format entries for display
           const formatEntries = (entries: any[]) => entries.map(entry => {
@@ -710,11 +677,6 @@ const MMP = () => {
           const smartAssignedEntries = rawSmartAssigned.filter(entry => !entry.cost_acknowledged);
           const mySitesEntries = formatEntries(mySitesResult.data || []);
 
-          console.log('📊 Final state after formatting:');
-          console.log('  Available entries:', availableEntries.length);
-          console.log('  Smart assigned entries:', smartAssignedEntries.length);
-          console.log('  My sites entries:', mySitesEntries.length);
-
           // Store all entries for reference
           setEnumeratorSiteEntries(availableEntries);
 
@@ -745,14 +707,11 @@ const MMP = () => {
               if (!byId.has(key)) byId.set(key, e);
             });
             setEnumeratorMySites(Array.from(byId.values()));
-            console.log('✅ Enumerator data reloaded successfully after site acceptance');
           } catch (e) {
-            console.error('❌ Error building My Sites union:', e);
             setEnumeratorMySites(mySitesEntries);
           }
 
         } catch (reloadError) {
-          console.error('❌ Failed to reload enumerator data:', reloadError);
           // Fallback to page reload if data reload fails
           window.location.reload();
         } finally {
@@ -1723,22 +1682,6 @@ const MMP = () => {
     enabled: canClaimSites
   });
 
-  // Debug: Log role checks
-  useEffect(() => {
-    if (currentUser) {
-      console.log('🔍 MMP Page - Current User:', currentUser);
-      console.log('🔍 User Role:', currentUser.role);
-      console.log('🔍 User Roles Array:', currentUser.roles);
-      console.log('🔍 isAdmin:', isAdmin);
-      console.log('🔍 isICT:', isICT);
-      console.log('🔍 isFOM:', isFOM);
-      console.log('🔍 isCoordinator:', isCoordinator);
-      console.log('🔍 isDataCollector:', isDataCollector);
-      console.log('🔍 canClaimSites:', canClaimSites);
-      console.log('🔍 canCreate:', canCreate);
-    }
-  }, [currentUser, isAdmin, isICT, isFOM, isCoordinator, isDataCollector, canClaimSites, canCreate]);
-
   // Set initial active tab based on role
   // Coordinators should see the enumerator tab (they can claim sites like data collectors)
   useEffect(() => {
@@ -1753,9 +1696,25 @@ const MMP = () => {
   const categorizedMMPs = useMemo(() => {
     let filteredMMPs = mmpFiles;
 
+    // PROJECT TEAM MEMBERSHIP FILTER
+    // Only show MMPs from projects the user belongs to (unless admin/superuser)
+    if (!isAdminOrSuperUser && userProjectIds.length > 0) {
+      filteredMMPs = mmpFiles.filter(mmp => {
+        // If MMP has no projectId, exclude it from non-admin users
+        if (!mmp.projectId) return false;
+        return userProjectIds.includes(mmp.projectId);
+      });
+    } else if (!isAdminOrSuperUser && userProjectIds.length === 0) {
+      // User is not admin and has no project assignments - show no MMPs
+      // But allow Data Collectors to see Available Sites (handled separately)
+      if (!canClaimSites) {
+        filteredMMPs = [];
+      }
+    }
+
     // For FOM users, only show MMPs forwarded to them or their verified MMPs
     if (isFOM && currentUser) {
-      filteredMMPs = mmpFiles.filter(mmp => {
+      filteredMMPs = filteredMMPs.filter(mmp => {
         const workflow = mmp.workflow as any;
         const forwardedToFomIds = workflow?.forwardedToFomIds || [];
         const isForwardedToThisFOM = forwardedToFomIds.includes(currentUser.id);
@@ -1767,7 +1726,7 @@ const MMP = () => {
 
     // For Coordinator users, show verified MMPs that contain sites they can verify
     if (isCoordinator && currentUser) {
-      filteredMMPs = mmpFiles.filter(mmp => 
+      filteredMMPs = filteredMMPs.filter(mmp => 
         mmp.type === 'verified-template' || 
         mmp.status === 'approved' ||
         ((mmp.workflow as any)?.currentStage && ['permitsVerified', 'cpVerification', 'completed'].includes((mmp.workflow as any)?.currentStage))
@@ -1831,7 +1790,7 @@ const MMP = () => {
       forwarded: forwardedMMPs,
       verified: verifiedMMPs
     };
-  }, [mmpFiles, isFOM, currentUser]);
+  }, [mmpFiles, isFOM, isCoordinator, currentUser, isAdminOrSuperUser, userProjectIds, canClaimSites]);
 
   // Forwarded subcategories for Admin/ICT view (Removed Rejected)
   const forwardedSubcategories = useMemo(() => {
@@ -2028,13 +1987,6 @@ const MMP = () => {
 
       setLoadingEnumerator(true);
       try {
-        console.log('🔍 Loading enumerator entries for user:', {
-          userId: currentUser.id,
-          stateId: currentUser.stateId,
-          localityId: currentUser.localityId,
-          role: currentUser.role
-        });
-
         // Load available sites in the enumerator's state or locality for "Available Sites" tab
         // These are sites with status "Dispatched" (bulk dispatched by state/locality)
         // Convert collector's stateId/localityId to names for matching with site entries
@@ -2042,27 +1994,6 @@ const MMP = () => {
         const collectorLocalityName = currentUser.stateId && currentUser.localityId
           ? sudanStates.find(s => s.id === currentUser.stateId)?.localities.find(l => l.id === currentUser.localityId)?.name
           : undefined;
-        
-        console.log('🔍 Collector location:', {
-          stateId: currentUser.stateId,
-          localityId: currentUser.localityId,
-          stateName: collectorStateName,
-          localityName: collectorLocalityName
-        });
-
-        // Debug: Check if there are any dispatched sites at all
-        const debugAllDispatchedQuery = supabase
-          .from('mmp_site_entries')
-          .select('id, site_name, state, locality, status, accepted_by')
-          .ilike('status', 'Dispatched')
-          .limit(10);
-        
-        const debugResult = await debugAllDispatchedQuery;
-        console.log('🔍 Debug - All dispatched sites (sample):', {
-          count: debugResult.data?.length || 0,
-          sample: debugResult.data,
-          error: debugResult.error
-        });
         
         // Build query for "Available Sites" - status = "Dispatched" (bulk dispatched)
         // These are unclaimed sites (accepted_by IS NULL) in the collector's area
@@ -2073,20 +2004,18 @@ const MMP = () => {
           .is('accepted_by', null); // Only unclaimed sites
         
         // Add state/locality filters if we have the names
-        if (collectorStateName || collectorLocalityName) {
-          const conditions: string[] = [];
-          if (collectorStateName) {
-            conditions.push(`state.ilike.${collectorStateName}`);
-          }
-          if (collectorLocalityName) {
-            conditions.push(`locality.ilike.${collectorLocalityName}`);
-          }
-          if (conditions.length > 0) {
-            availableSitesQuery = availableSitesQuery.or(conditions.join(','));
-          }
+        // CRITICAL: If user has a locality set, filter by EXACT locality only (not by state OR locality)
+        // This ensures users only see sites in their assigned locality, not the entire state
+        if (collectorLocalityName) {
+          // User has locality set - filter by EXACT locality match only
+          availableSitesQuery = availableSitesQuery.ilike('locality', collectorLocalityName);
+        } else if (collectorStateName) {
+          // User only has state set (no locality) - filter by state
+          availableSitesQuery = availableSitesQuery.ilike('state', collectorStateName);
         } else {
-          // If no state/locality is set, log a warning but still try to load all dispatched sites
-          console.warn('⚠️ Data collector has no stateId or localityId set. Loading all dispatched sites.');
+          // If no state/locality is set, do NOT load all sites - this is a misconfiguration
+          // Return empty result to prevent showing all sites to users without proper assignment
+          availableSitesQuery = availableSitesQuery.eq('id', 'NEVER_MATCH_NO_GEO_ASSIGNMENT');
         }
         
         availableSitesQuery = availableSitesQuery
@@ -2124,25 +2053,13 @@ const MMP = () => {
           mySitesQuery
         ]);
 
-        console.log('🔍 Query results:', {
-          availableCount: availableResult.data?.length || 0,
-          availableError: availableResult.error,
-          smartAssignedCount: smartAssignedResult.data?.length || 0,
-          smartAssignedError: smartAssignedResult.error,
-          mySitesCount: mySitesResult.data?.length || 0,
-          mySitesError: mySitesResult.error
-        });
-
         if (availableResult.error) {
-          console.error('❌ Available sites query error:', availableResult.error);
           throw availableResult.error;
         }
         if (smartAssignedResult.error) {
-          console.error('❌ Smart assigned query error:', smartAssignedResult.error);
           throw smartAssignedResult.error;
         }
         if (mySitesResult.error) {
-          console.error('❌ My sites query error:', mySitesResult.error);
           throw mySitesResult.error;
         }
 
@@ -2687,7 +2604,7 @@ const MMP = () => {
       }),
       approvedCosted: base.filter(mmp => {
         const stats = siteVisitStats[mmp.id];
-        // Approved & Costed: ALL site entries must have cost > 0 AND status = 'verified'
+        // Approved & Costed: ALL site entries must have AND status = 'verified'
         return Boolean(stats?.allApprovedAndCosted);
       }),
       dispatched: base.filter(mmp => {
@@ -2832,12 +2749,17 @@ const MMP = () => {
 
   const verifiedGroupedRows = useMemo(() => {
     // For "newSites" subcategory, filter to only show verified sites
+    // For other sub-tabs, exclude completed sites since tables are editable
     const filterFn = verifiedSubTab === 'newSites' 
       ? (row: SiteVisitRow) => {
           const status = row.status?.toLowerCase() || '';
           return status === 'verified';
         }
-      : undefined;
+      : (row: SiteVisitRow) => {
+          // Exclude completed sites from editable tables
+          const status = row.status?.toLowerCase() || '';
+          return status !== 'completed';
+        };
     
     return verifiedVisibleMMPs.map(m => ({
       mmp: m,
@@ -2850,7 +2772,11 @@ const MMP = () => {
     if (!isFOM) return [] as SiteVisitRow[];
     const mmps = forwardedSubcategories[forwardedSubTab] || [];
     if (mmps.length === 0) return [];
-    return buildSiteRowsFromMMPs(mmps);
+    return buildSiteRowsFromMMPs(mmps, (row) => {
+      // Exclude completed sites from editable tables
+      const status = row.status?.toLowerCase() || '';
+      return status !== 'completed';
+    });
   }, [isFOM, forwardedSubTab, forwardedSubcategories, siteVisitRows]);
 
   // Aggregated site entries (raw MMP.siteEntries) for Forwarded section
@@ -2955,7 +2881,7 @@ const MMP = () => {
             map[mmpId] = { exists: false, hasCosted: false, hasAssigned: false, hasInProgress: false, hasAccepted: false, hasCompleted: false, hasRejected: false, hasDispatched: false, allApprovedAndCosted: false };
           }
           
-          // For "Approved & Costed", ALL entries must have cost > 0 AND status = 'verified'
+          // For "Approved & Costed", ALL entries must have AND status = 'verified'
           if (entries.length > 0) {
             const allApprovedAndCosted = entries.every(entry => {
               const status = String(entry.status || '').toLowerCase();
@@ -3032,7 +2958,7 @@ const MMP = () => {
       </div>
 
       {/* Body */}
-      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-lg p-2 sm:p-4 md:p-6">
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-lg p-2 sm:p-4 md:p-6 overflow-y-auto max-h-[calc(100vh-200px)]">
         {loading ? (
           <div className="text-center text-muted-foreground py-8">Loading MMP files...</div>
         ) : (
@@ -3069,10 +2995,9 @@ const MMP = () => {
             {!canClaimSites && (
               <TabsContent value="new">
                 {isFOM && (
-                  <div className="mb-4">
+                  <div className="mb-4 overflow-x-auto pb-2">
                     <div className="text-sm font-medium text-muted-foreground mb-2">Subcategory:</div>
-                    <div className="overflow-x-auto pb-2">
-                      <div className="flex gap-2 min-w-max">
+                    <div className="flex gap-2 min-w-max">
                         <Button variant={newFomSubTab === 'pending' ? 'default' : 'outline'} size="sm" onClick={() => setNewFomSubTab('pending')} className={`${newFomSubTab === 'pending' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} flex-shrink-0 whitespace-nowrap`}>
                           MMPs Pending Verification
                           <Badge variant="secondary" className="ml-2">{newFomSubcategories.pending.length}</Badge>
@@ -3082,7 +3007,6 @@ const MMP = () => {
                           <Badge variant="secondary" className="ml-2">{newFomSubcategories.verified.length}</Badge>
                         </Button>
                       </div>
-                    </div>
                   </div>
                 )}
                 <MMPList mmpFiles={isFOM ? newFomSubcategories[newFomSubTab] : categorizedMMPs.new} />
@@ -3092,10 +3016,9 @@ const MMP = () => {
             {!canClaimSites && (
               <TabsContent value="forwarded">
                 {(isAdmin || isICT || isFOM) && (
-                  <div className="mb-4">
+                  <div className="mb-4 overflow-x-auto pb-2">
                     <div className="text-sm font-medium text-muted-foreground mb-2">Subcategory:</div>
-                    <div className="overflow-x-auto pb-2">
-                      <div className="flex gap-2 min-w-max">
+                    <div className="flex gap-2 min-w-max">
                         <Button variant={forwardedSubTab === 'pending' ? 'default' : 'outline'} size="sm" onClick={() => setForwardedSubTab('pending')} className={`${forwardedSubTab === 'pending' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} flex-shrink-0 whitespace-nowrap`}>
                           {isFOM ? 'Sites Pending Verification' : 'MMPs Pending Verification'}
                           <Badge variant="secondary" className="ml-2">{forwardedSubcategories.pending.length}</Badge>
@@ -3105,7 +3028,6 @@ const MMP = () => {
                           <Badge variant="secondary" className="ml-2">{forwardedSubcategories.verified.length}</Badge>
                         </Button>
                       </div>
-                    </div>
                   </div>
                 )}
                 <MMPList mmpFiles={(isAdmin || isICT || isFOM) ? forwardedSubcategories[forwardedSubTab] : categorizedMMPs.forwarded} />
@@ -3121,9 +3043,8 @@ const MMP = () => {
 
             <TabsContent value="verified">
               {(isAdmin || isICT || isFOM || isCoordinator) && (
-                <div className="mb-4">
+                <div className="mb-4 flex gap-2 overflow-x-auto pb-2">
                   <div className="text-sm font-medium text-muted-foreground mb-2">Subcategory:</div>
-                  <div className="flex gap-2 overflow-x-auto pb-2">
                     <Button variant={verifiedSubTab === 'newSites' ? 'default' : 'outline'} size="sm" onClick={() => setVerifiedSubTab('newSites')} className={`${verifiedSubTab === 'newSites' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} text-xs whitespace-nowrap flex-shrink-0`}>
                       New Sites
                       <Badge variant="secondary" className="ml-1 text-xs">
@@ -3162,7 +3083,6 @@ const MMP = () => {
                       Rejected
                       <Badge variant="secondary" className="ml-1 text-xs">{rejectedCount}</Badge>
                     </Button>
-                  </div>
                 </div>
               )}
               {verifiedSubTab !== 'approvedCosted' && verifiedSubTab !== 'dispatched' && verifiedSubTab !== 'smartAssigned' && verifiedSubTab !== 'accepted' && verifiedSubTab !== 'ongoing' && verifiedSubTab !== 'completed' && verifiedSubTab !== 'rejected' && <MMPList mmpFiles={verifiedVisibleMMPs} />}
@@ -3279,7 +3199,7 @@ const MMP = () => {
                       </CardContent>
                     </Card>
                   ) : (
-                    <div>
+                    <>
                       <div className="flex items-center justify-between mb-4">
                         <h3 className="text-lg font-semibold">Approved & Costed Site Entries</h3>
                         <Badge variant="secondary">{approvedCostedSiteEntries.length} entries</Badge>
@@ -3439,7 +3359,7 @@ const MMP = () => {
                           }
                         }}
                       />
-                    </div>
+                    </>
                   )}
                 </div>
               )}
@@ -3644,46 +3564,47 @@ const MMP = () => {
             {canClaimSites && (
               <TabsContent value="enumerator">
                 <div className="mb-4">
-                  <div className="text-sm font-medium text-muted-foreground mb-3">View:</div>
-                  <div className="overflow-x-auto pb-2">
-                    <div className="flex gap-2 min-w-max">
+                  <div className="text-sm font-medium text-muted-foreground mb-2">View:</div>
+                  <div className="flex flex-wrap gap-2">
                     <Button 
                       variant={enumeratorSubTab === 'availableSites' ? 'default' : 'outline'} 
+                      size="sm"
                       onClick={() => setEnumeratorSubTab('availableSites')} 
-                      className={`h-12 text-sm font-medium ${enumeratorSubTab === 'availableSites' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : 'hover:bg-gray-50'}`}
+                      className={`flex items-center gap-1.5 flex-shrink-0 ${enumeratorSubTab === 'availableSites' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : 'hover:bg-gray-50'}`}
+                      data-testid="tab-available-sites"
+                      aria-label="View available sites"
                     >
-                      <div className="flex flex-col items-center gap-1">
-                        <span>Available Sites</span>
-                        <Badge variant="secondary" className="text-xs">{Object.values(enumeratorGroupedByStates).flat().length}</Badge>
-                      </div>
+                      <span className="whitespace-nowrap">Claimable</span>
+                      <Badge variant="secondary" className="text-xs">{Object.values(enumeratorGroupedByStates).flat().length}</Badge>
                     </Button>
                     <Button 
                       variant={enumeratorSubTab === 'smartAssigned' ? 'default' : 'outline'} 
+                      size="sm"
                       onClick={() => setEnumeratorSubTab('smartAssigned')} 
-                      className={`h-12 text-sm font-medium ${enumeratorSubTab === 'smartAssigned' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : 'hover:bg-gray-50'}`}
+                      className={`flex items-center gap-1.5 flex-shrink-0 ${enumeratorSubTab === 'smartAssigned' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : 'hover:bg-gray-50'}`}
+                      data-testid="tab-smart-assigned"
+                      aria-label="View smart assigned sites"
                     >
-                      <div className="flex flex-col items-center gap-1">
-                        <span>Smart Assigned</span>
-                        <Badge variant="secondary" className="text-xs">{enumeratorSmartAssigned.length}</Badge>
-                      </div>
+                      <span className="whitespace-nowrap">Assigned</span>
+                      <Badge variant="secondary" className="text-xs">{enumeratorSmartAssigned.length}</Badge>
                     </Button>
                     <Button 
                       variant={enumeratorSubTab === 'mySites' ? 'default' : 'outline'} 
+                      size="sm"
                       onClick={() => setEnumeratorSubTab('mySites')} 
-                      className={`h-12 text-sm font-medium ${enumeratorSubTab === 'mySites' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : 'hover:bg-gray-50'}`}
+                      className={`flex items-center gap-1.5 flex-shrink-0 ${enumeratorSubTab === 'mySites' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : 'hover:bg-gray-50'}`}
+                      data-testid="tab-my-sites"
+                      aria-label="View my sites"
                     >
-                      <div className="flex flex-col items-center gap-1">
-                        <span>My Sites</span>
-                        <Badge variant="secondary" className="text-xs">{enumeratorMySites.length}</Badge>
-                      </div>
+                      <span className="whitespace-nowrap">My Sites</span>
+                      <Badge variant="secondary" className="text-xs">{enumeratorMySites.length}</Badge>
                     </Button>
                   </div>
-                  </div>
+
                   {enumeratorSubTab === 'mySites' && (
-                    <div className="mt-4">
+                    <div className="mt-3">
                       <div className="text-sm font-medium text-muted-foreground mb-2">Subcategories:</div>
-                      <div className="overflow-x-auto pb-2">
-                        <div className="flex gap-2 min-w-max">
+                      <div className="flex flex-wrap gap-2">
                           <Button 
                             variant={mySitesSubTab === 'pending' ? 'default' : 'outline'} 
                             size="sm" 
@@ -3692,11 +3613,19 @@ const MMP = () => {
                           >
                             Pending Visits
                             <Badge variant="secondary" className="ml-2">
-                              {enumeratorMySites.filter(site => 
-                                site.status?.toLowerCase() === 'accepted' || 
-                                site.status?.toLowerCase() === 'assigned' ||
-                                (site.accepted_by && site.status?.toLowerCase() !== 'completed')
-                              ).length}
+                              {enumeratorMySites.filter(site => {
+                                const status = (site.status || '').toLowerCase().replace(/[-_\s]/g, '');
+                                return status === 'accepted' || 
+                                       status === 'assigned' || 
+                                       status === 'dispatched' ||
+                                       status === 'smartassigned' ||
+                                       status === 'pending' ||
+                                       status === 'acknowledged' ||
+                                       status === 'costandacknowledged' ||
+                                       status.includes('pending') ||
+                                       status.includes('accepted') ||
+                                       status.includes('assigned');
+                              }).length}
                             </Badge>
                           </Button>
                           <Button 
@@ -3707,10 +3636,13 @@ const MMP = () => {
                           >
                             Ongoing
                             <Badge variant="secondary" className="ml-2">
-                              {enumeratorMySites.filter(site => 
-                                site.status?.toLowerCase() === 'in progress' || 
-                                site.status?.toLowerCase() === 'in_progress'
-                              ).length}
+                              {enumeratorMySites.filter(site => {
+                                const status = (site.status || '').toLowerCase().replace(/[-_\s]/g, '');
+                                return status === 'inprogress' || 
+                                       status.includes('ongoing') ||
+                                       status.includes('progress') ||
+                                       status.includes('started');
+                              }).length}
                             </Badge>
                           </Button>
                           <Button 
@@ -3721,10 +3653,23 @@ const MMP = () => {
                           >
                             Completed
                             <Badge variant="secondary" className="ml-2">
-                              {enumeratorMySites.filter(site => site.status?.toLowerCase() === 'completed').length}
+                              {enumeratorMySites.filter(site => {
+                                const status = (site.status || '').toLowerCase();
+                                return status.includes('completed') || status.includes('finished') || status.includes('done');
+                              }).length}
                             </Badge>
                           </Button>
-                        </div>
+                          <Button 
+                            variant={mySitesSubTab === 'all' ? 'default' : 'outline'} 
+                            size="sm" 
+                            onClick={() => setMySitesSubTab('all')} 
+                            className={`${mySitesSubTab === 'all' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} flex-shrink-0 whitespace-nowrap`}
+                          >
+                            All Sites
+                            <Badge variant="secondary" className="ml-2">
+                              {enumeratorMySites.length}
+                            </Badge>
+                          </Button>
                       </div>
                     </div>
                   )}
@@ -3885,7 +3830,10 @@ const MMP = () => {
                       <div>
                         <h3 className="text-lg font-semibold">
                           {enumeratorSubTab === 'mySites' 
-                            ? (mySitesSubTab === 'pending' ? 'Pending Visits' : mySitesSubTab === 'ongoing' ? 'Ongoing Visits' : 'Completed Sites')
+                            ? (mySitesSubTab === 'pending' ? 'Pending Visits' 
+                               : mySitesSubTab === 'ongoing' ? 'Ongoing Visits' 
+                               : mySitesSubTab === 'all' ? 'All My Sites'
+                               : 'Completed Sites')
                             : 'Smart Assigned Sites'
                           }
                         </h3>
@@ -3895,6 +3843,8 @@ const MMP = () => {
                                 ? 'Sites that have been accepted or smart assigned' 
                                 : mySitesSubTab === 'ongoing'
                                 ? 'Sites currently being visited or saved as drafts for offline access'
+                                : mySitesSubTab === 'all'
+                                ? 'All sites assigned to you regardless of status'
                                 : 'Sites that have been completed with submitted reports')
                             : 'Sites assigned to your area that must be visited'
                           }
@@ -3903,17 +3853,33 @@ const MMP = () => {
                       <Badge variant="secondary">
                         {enumeratorSubTab === 'mySites'
                           ? (mySitesSubTab === 'pending' 
-                              ? enumeratorMySites.filter(site => 
-                                  site.status?.toLowerCase() === 'accepted' || 
-                                  site.status?.toLowerCase() === 'assigned' ||
-                                  (site.accepted_by && site.status?.toLowerCase() !== 'completed')
-                                ).length
+                              ? enumeratorMySites.filter(site => {
+                                  const status = (site.status || '').toLowerCase().replace(/[-_\s]/g, '');
+                                  return status === 'accepted' || 
+                                         status === 'assigned' || 
+                                         status === 'dispatched' ||
+                                         status === 'smartassigned' ||
+                                         status === 'pending' ||
+                                         status === 'acknowledged' ||
+                                         status === 'costandacknowledged' ||
+                                         status.includes('pending') ||
+                                         status.includes('accepted') ||
+                                         status.includes('assigned');
+                                }).length
                               : mySitesSubTab === 'ongoing'
-                              ? enumeratorMySites.filter(site => 
-                                  site.status?.toLowerCase() === 'in progress' || 
-                                  site.status?.toLowerCase() === 'in_progress'
-                                ).length
-                              : enumeratorMySites.filter(site => site.status?.toLowerCase() === 'completed').length)
+                              ? enumeratorMySites.filter(site => {
+                                  const status = (site.status || '').toLowerCase().replace(/[-_\s]/g, '');
+                                  return status === 'inprogress' || 
+                                         status.includes('ongoing') ||
+                                         status.includes('progress') ||
+                                         status.includes('started');
+                                }).length
+                              : mySitesSubTab === 'all'
+                              ? enumeratorMySites.length
+                              : enumeratorMySites.filter(site => {
+                                  const status = (site.status || '').toLowerCase();
+                                  return status.includes('completed') || status.includes('finished') || status.includes('done');
+                                }).length)
                           : enumeratorSmartAssigned.length
                         } sites
                       </Badge>
@@ -3926,20 +3892,41 @@ const MMP = () => {
                       </div>
                     )}
                     {(() => {
-                      const sitesToShow = enumeratorSubTab === 'mySites'
-                        ? (mySitesSubTab === 'pending' 
-                            ? enumeratorMySites.filter(site => 
-                                site.status?.toLowerCase() === 'accepted' || 
-                                site.status?.toLowerCase() === 'assigned' ||
-                                (site.accepted_by && site.status?.toLowerCase() !== 'completed')
-                              )
-                            : mySitesSubTab === 'ongoing'
-                            ? enumeratorMySites.filter(site => 
-                                site.status?.toLowerCase() === 'in progress' || 
-                                site.status?.toLowerCase() === 'in_progress'
-                              )
-                            : enumeratorMySites.filter(site => site.status?.toLowerCase() === 'completed'))
-                        : enumeratorSmartAssigned;
+                      let sitesToShow: any[] = [];
+                      if (enumeratorSubTab === 'mySites') {
+                        if (mySitesSubTab === 'all') {
+                          sitesToShow = enumeratorMySites;
+                        } else if (mySitesSubTab === 'pending') {
+                          sitesToShow = enumeratorMySites.filter(site => {
+                            const status = (site.status || '').toLowerCase().replace(/[-_\s]/g, '');
+                            return status === 'accepted' || 
+                                   status === 'assigned' || 
+                                   status === 'dispatched' ||
+                                   status === 'smartassigned' ||
+                                   status === 'pending' ||
+                                   status === 'acknowledged' ||
+                                   status === 'costandacknowledged' ||
+                                   status.includes('pending') ||
+                                   status.includes('accepted') ||
+                                   status.includes('assigned');
+                          });
+                        } else if (mySitesSubTab === 'ongoing') {
+                          sitesToShow = enumeratorMySites.filter(site => {
+                            const status = (site.status || '').toLowerCase().replace(/[-_\s]/g, '');
+                            return status === 'inprogress' || 
+                                   status.includes('ongoing') ||
+                                   status.includes('progress') ||
+                                   status.includes('started');
+                          });
+                        } else {
+                          sitesToShow = enumeratorMySites.filter(site => {
+                            const status = (site.status || '').toLowerCase();
+                            return status.includes('completed') || status.includes('finished') || status.includes('done');
+                          });
+                        }
+                      } else {
+                        sitesToShow = enumeratorSmartAssigned;
+                      }
                       
                       return sitesToShow.length === 0 ? (
                         <Card>
@@ -3950,6 +3937,8 @@ const MMP = () => {
                                     ? 'No pending visits found.' 
                                     : mySitesSubTab === 'ongoing'
                                     ? 'No ongoing visits found.'
+                                    : mySitesSubTab === 'all'
+                                    ? 'No sites assigned to you yet. Check "Available Sites" to claim new sites.'
                                     : 'No completed sites found.')
                                 : 'No sites assigned to you yet.'
                               }
@@ -3959,7 +3948,7 @@ const MMP = () => {
                       ) : (
                         <MMPSiteEntriesTable 
                           siteEntries={sitesToShow} 
-                          editable={true}
+                          editable={enumeratorSubTab === 'mySites' && mySitesSubTab !== 'completed'}
                           onAcceptSite={enumeratorSubTab === 'smartAssigned' ? handleAcceptSite : undefined}
                           onAcknowledgeCost={enumeratorSubTab === 'smartAssigned' ? handleCostAcknowledgment : undefined}
                           onStartVisit={handleStartVisit}

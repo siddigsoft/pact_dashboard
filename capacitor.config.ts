@@ -1,8 +1,8 @@
 import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.pact.workflow',
-  appName: 'PACT Workflow',
+  appId: 'com.pact.commandcenter',
+  appName: 'PACT Command Center',
   webDir: 'dist',
  
   server: process.env.CAPACITOR_REMOTE_URL
@@ -58,11 +58,12 @@ const config: CapacitorConfig = {
   },
   plugins: {
     SplashScreen: {
-      launchShowDuration: 2000,
-      backgroundColor: '#1e40af',
+      launchShowDuration: 2500,
+      launchAutoHide: true,
+      backgroundColor: '#000000',
       androidScaleType: 'CENTER_CROP',
       showSpinner: true,
-      spinnerColor: '#ffffff',
+      spinnerColor: '#FFFFFF',
       androidSpinnerStyle: 'large',
       iosSpinnerStyle: 'small',
       splashFullScreen: true,
@@ -72,8 +73,8 @@ const config: CapacitorConfig = {
       presentationOptions: ['badge', 'sound', 'alert']
     },
     LocalNotifications: {
-      smallIcon: 'ic_stat_icon_config_sample',
-      iconColor: '#1e40af',
+      smallIcon: 'ic_notification',
+      iconColor: '#000000',
       sound: 'beep.wav'
     },
     Keyboard: {
@@ -83,8 +84,8 @@ const config: CapacitorConfig = {
     },
     StatusBar: {
       style: 'light',
-      backgroundColor: '#00000000',
-      overlaysWebView: true
+      backgroundColor: '#000000',
+      overlaysWebView: false
     },
     Geolocation: {
       enableHighAccuracy: true,

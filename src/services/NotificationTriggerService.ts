@@ -1,6 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 
-export type NotificationCategory = 'assignments' | 'approvals' | 'financial' | 'team' | 'system';
+export type NotificationCategory = 'assignments' | 'approvals' | 'financial' | 'team' | 'system' | 'signatures' | 'calls' | 'messages';
 export type NotificationPriority = 'low' | 'medium' | 'high' | 'urgent';
 
 interface TriggerNotificationOptions {
@@ -12,7 +12,9 @@ interface TriggerNotificationOptions {
   priority?: NotificationPriority;
   link?: string;
   relatedEntityId?: string;
-  relatedEntityType?: 'siteVisit' | 'mmpFile' | 'transaction' | 'chat';
+  relatedEntityType?: 'siteVisit' | 'mmpFile' | 'transaction' | 'chat' | 'call' | 'signature' | 'document';
+  targetRoles?: string[];
+  projectId?: string;
 }
 
 interface QuietHoursSettings {
@@ -84,7 +86,9 @@ export const NotificationTriggerService = {
       priority = 'medium',
       link,
       relatedEntityId,
-      relatedEntityType
+      relatedEntityType,
+      targetRoles,
+      projectId
     } = options;
 
     const shouldSend = await shouldSendNotification(userId, category, priority);
@@ -99,13 +103,38 @@ export const NotificationTriggerService = {
         title,
         message,
         type,
+        category,
+        priority,
         link,
         related_entity_id: relatedEntityId,
         related_entity_type: relatedEntityType,
+        target_roles: targetRoles,
+        project_id: projectId,
         is_read: false
       });
 
       if (error) {
+        // If category/priority/target_roles/project_id columns don't exist, try without them
+        if (error.message?.includes('column') || error.code === '42703') {
+          console.warn('Notifications table missing some columns, inserting without them');
+          const { error: fallbackError } = await supabase.from('notifications').insert({
+            user_id: userId,
+            title,
+            message,
+            type,
+            link,
+            related_entity_id: relatedEntityId,
+            related_entity_type: relatedEntityType,
+            is_read: false
+          });
+          
+          if (fallbackError) {
+            console.error('Failed to create notification (fallback):', fallbackError);
+            return false;
+          }
+          return true;
+        }
+        
         console.error('Failed to create notification:', error);
         return false;
       }
@@ -262,6 +291,449 @@ export const NotificationTriggerService = {
     );
 
     return successCount;
+  },
+
+  // Signature-related notifications
+  async transactionSigned(userId: string, transactionId: string, amount: number, currency: string): Promise<void> {
+    await this.send({
+      userId,
+      title: 'Transaction Signed',
+      message: `Your transaction of ${currency} ${amount.toLocaleString()} has been digitally signed and recorded`,
+      type: 'success',
+      category: 'signatures',
+      priority: 'medium',
+      link: '/wallet',
+      relatedEntityId: transactionId,
+      relatedEntityType: 'transaction'
+    });
+  },
+
+  async signatureVerified(userId: string, signatureType: 'transaction' | 'document', itemName: string): Promise<void> {
+    await this.send({
+      userId,
+      title: 'Signature Verified',
+      message: `Your ${signatureType} signature for "${itemName}" has been verified successfully`,
+      type: 'success',
+      category: 'signatures',
+      priority: 'low',
+      link: '/signatures'
+    });
+  },
+
+  async documentSignedByParty(userId: string, documentTitle: string, signerName: string, documentId: string): Promise<void> {
+    await this.send({
+      userId,
+      title: 'Document Signed',
+      message: `${signerName} has signed "${documentTitle}"`,
+      type: 'info',
+      category: 'signatures',
+      priority: 'medium',
+      link: '/signatures',
+      relatedEntityId: documentId,
+      relatedEntityType: 'document'
+    });
+  },
+
+  async signatureRequired(userId: string, documentTitle: string, documentId: string): Promise<void> {
+    await this.send({
+      userId,
+      title: 'Signature Required',
+      message: `Your signature is required for "${documentTitle}"`,
+      type: 'warning',
+      category: 'signatures',
+      priority: 'high',
+      link: '/signatures',
+      relatedEntityId: documentId,
+      relatedEntityType: 'document'
+    });
+  },
+
+  async signatureRevoked(userId: string, signatureType: 'transaction' | 'document', reason: string): Promise<void> {
+    await this.send({
+      userId,
+      title: 'Signature Revoked',
+      message: `A ${signatureType} signature has been revoked. Reason: ${reason}`,
+      type: 'warning',
+      category: 'signatures',
+      priority: 'high',
+      link: '/signatures'
+    });
+  },
+
+  async verificationCodeSent(userId: string, method: 'phone' | 'email', destination: string): Promise<void> {
+    const methodLabel = method === 'phone' ? 'SMS' : 'email';
+    const maskedDestination = method === 'phone' 
+      ? `***${destination.slice(-4)}`
+      : `${destination.slice(0, 3)}***@${destination.split('@')[1]}`;
+    
+    await this.send({
+      userId,
+      title: 'Verification Code Sent',
+      message: `A verification code has been sent via ${methodLabel} to ${maskedDestination}`,
+      type: 'info',
+      category: 'signatures',
+      priority: 'high'
+    });
+  },
+
+  // Call notifications
+  async missedCall(userId: string, callerName: string, callerId: string): Promise<void> {
+    await this.send({
+      userId,
+      title: 'Missed Call',
+      message: `You missed a call from ${callerName}`,
+      type: 'warning',
+      category: 'calls',
+      priority: 'high',
+      link: '/calls',
+      relatedEntityId: callerId,
+      relatedEntityType: 'call'
+    });
+  },
+
+  async incomingCall(userId: string, callerName: string, callerId: string): Promise<void> {
+    await this.send({
+      userId,
+      title: 'Incoming Call',
+      message: `${callerName} is calling you`,
+      type: 'info',
+      category: 'calls',
+      priority: 'urgent',
+      link: '/calls',
+      relatedEntityId: callerId,
+      relatedEntityType: 'call'
+    });
+  },
+
+  async callEnded(userId: string, participantName: string, duration: number): Promise<void> {
+    const mins = Math.floor(duration / 60);
+    const secs = duration % 60;
+    const durationStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+    
+    await this.send({
+      userId,
+      title: 'Call Ended',
+      message: `Call with ${participantName} ended (${durationStr})`,
+      type: 'info',
+      category: 'calls',
+      priority: 'low',
+      link: '/calls'
+    });
+  },
+
+  // Message notifications
+  async newMessage(userId: string, senderName: string, messagePreview: string, chatId?: string): Promise<void> {
+    await this.send({
+      userId,
+      title: 'New Message',
+      message: `${senderName}: ${messagePreview.slice(0, 50)}${messagePreview.length > 50 ? '...' : ''}`,
+      type: 'info',
+      category: 'messages',
+      priority: 'medium',
+      link: chatId ? `/chat?userId=${chatId}` : '/chat',
+      relatedEntityId: chatId,
+      relatedEntityType: 'chat'
+    });
+  },
+
+  async unreadMessages(userId: string, count: number): Promise<void> {
+    await this.send({
+      userId,
+      title: 'Unread Messages',
+      message: `You have ${count} unread message${count > 1 ? 's' : ''}`,
+      type: 'info',
+      category: 'messages',
+      priority: 'medium',
+      link: '/chat'
+    });
+  },
+
+  // Role-based notifications (sent to all users with specific roles)
+  async sendToRoles(
+    roles: string[], 
+    options: Omit<TriggerNotificationOptions, 'userId' | 'targetRoles'>,
+    projectId?: string
+  ): Promise<number> {
+    try {
+      // Fetch users with the specified roles
+      let query = supabase.from('profiles').select('id, role');
+      
+      if (roles.length > 0) {
+        query = query.in('role', roles);
+      }
+      
+      const { data: users, error } = await query;
+      
+      if (error) {
+        console.error('Failed to fetch users by roles:', error);
+        return 0;
+      }
+      
+      if (!users || users.length === 0) return 0;
+      
+      // If projectId is specified, filter by project membership
+      let targetUserIds = users.map(u => u.id);
+      
+      if (projectId) {
+        const { data: teamMembers } = await supabase
+          .from('team_members')
+          .select('user_id')
+          .eq('project_id', projectId);
+        
+        if (teamMembers) {
+          const projectUserIds = teamMembers.map(m => m.user_id);
+          targetUserIds = targetUserIds.filter(id => projectUserIds.includes(id));
+        }
+      }
+      
+      // Send notifications to all matching users
+      return await this.sendBulk(targetUserIds, {
+        ...options,
+        targetRoles: roles,
+        projectId
+      });
+    } catch (error) {
+      console.error('Failed to send role-based notifications:', error);
+      return 0;
+    }
+  },
+
+  // Project-specific notifications
+  async sendToProjectTeam(
+    projectId: string,
+    options: Omit<TriggerNotificationOptions, 'userId' | 'projectId'>
+  ): Promise<number> {
+    try {
+      const { data: teamMembers, error } = await supabase
+        .from('team_members')
+        .select('user_id')
+        .eq('project_id', projectId);
+      
+      if (error) {
+        console.error('Failed to fetch project team members:', error);
+        return 0;
+      }
+      
+      if (!teamMembers || teamMembers.length === 0) return 0;
+      
+      const userIds = teamMembers.map(m => m.user_id).filter((id): id is string => id !== null);
+      
+      return await this.sendBulk(userIds, {
+        ...options,
+        projectId
+      });
+    } catch (error) {
+      console.error('Failed to send project team notifications:', error);
+      return 0;
+    }
+  },
+
+  // System update notifications (sent to specific roles only)
+  async systemUpdate(
+    title: string, 
+    message: string, 
+    targetRoles?: string[],
+    projectId?: string
+  ): Promise<number> {
+    if (targetRoles && targetRoles.length > 0) {
+      return await this.sendToRoles(targetRoles, {
+        title,
+        message,
+        type: 'info',
+        category: 'system',
+        priority: 'medium'
+      }, projectId);
+    }
+    
+    // If no roles specified, send to all users
+    const { data: users } = await supabase.from('profiles').select('id').limit(100);
+    if (!users) return 0;
+    
+    return await this.sendBulk(users.map(u => u.id), {
+      title,
+      message,
+      type: 'info',
+      category: 'system',
+      priority: 'medium',
+      projectId
+    });
+  },
+
+  /**
+   * Site claim notification with role-based fan-out
+   * - When Data Collector claims: Notify Coordinator, Supervisor, Admins
+   * - When Coordinator claims: Notify Admins, Hub Supervisor
+   */
+  async siteClaimNotification(
+    claimerUserId: string,
+    claimerName: string,
+    claimerRole: string,
+    siteName: string,
+    siteId: string,
+    hubId?: string,
+    projectId?: string
+  ): Promise<number> {
+    try {
+      const isDataCollector = ['data_collector', 'enumerator', 'dc'].includes(claimerRole?.toLowerCase() || '');
+      const isCoordinator = ['coordinator', 'field_coordinator'].includes(claimerRole?.toLowerCase() || '');
+
+      let targetRoles: string[] = [];
+      let additionalUserIds: string[] = [];
+
+      if (isDataCollector) {
+        targetRoles = ['coordinator', 'supervisor', 'admin', 'super_admin'];
+      } else if (isCoordinator) {
+        targetRoles = ['admin', 'super_admin'];
+        
+        if (hubId) {
+          const { data: hubSupervisors } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('hub_id', hubId)
+            .eq('role', 'supervisor');
+          
+          if (hubSupervisors) {
+            additionalUserIds = hubSupervisors.map(s => s.id).filter(id => id !== claimerUserId);
+          }
+        }
+      } else {
+        targetRoles = ['admin', 'super_admin'];
+      }
+
+      const notificationOptions = {
+        title: 'Site Claimed',
+        message: `${claimerName} has claimed the site "${siteName}"`,
+        type: 'info' as const,
+        category: 'assignments' as NotificationCategory,
+        priority: 'medium' as NotificationPriority,
+        link: `/mmp`,
+        relatedEntityId: siteId,
+        relatedEntityType: 'siteVisit' as const
+      };
+
+      let successCount = 0;
+
+      if (targetRoles.length > 0) {
+        successCount += await this.sendToRoles(targetRoles, notificationOptions, projectId);
+      }
+
+      if (additionalUserIds.length > 0) {
+        successCount += await this.sendBulk(additionalUserIds, notificationOptions);
+      }
+
+      return successCount;
+    } catch (error) {
+      console.error('Failed to send site claim notifications:', error);
+      return 0;
+    }
+  },
+
+  /**
+   * Confirmation deadline reminder notification
+   * Sent to the assignee at specified intervals before the deadline
+   */
+  async confirmationReminder(
+    userId: string,
+    siteName: string,
+    siteId: string,
+    hoursUntilDeadline: number
+  ): Promise<void> {
+    const priority: NotificationPriority = hoursUntilDeadline <= 12 ? 'urgent' : hoursUntilDeadline <= 24 ? 'high' : 'medium';
+    const type = hoursUntilDeadline <= 12 ? 'warning' : 'info';
+    
+    let message: string;
+    if (hoursUntilDeadline <= 0) {
+      message = `Your confirmation deadline for "${siteName}" has passed. The site may be released.`;
+    } else if (hoursUntilDeadline <= 12) {
+      message = `Urgent: Confirm your assignment to "${siteName}" within ${Math.round(hoursUntilDeadline)} hours or it may be released.`;
+    } else if (hoursUntilDeadline <= 24) {
+      message = `Reminder: Please confirm your assignment to "${siteName}" within ${Math.round(hoursUntilDeadline)} hours.`;
+    } else {
+      message = `Don't forget to confirm your assignment to "${siteName}". Deadline is in ${Math.round(hoursUntilDeadline / 24)} days.`;
+    }
+
+    await this.send({
+      userId,
+      title: 'Confirm Your Site Visit',
+      message,
+      type,
+      category: 'assignments',
+      priority,
+      link: `/mmp`,
+      relatedEntityId: siteId,
+      relatedEntityType: 'siteVisit'
+    });
+  },
+
+  /**
+   * Auto-release notification sent to the former assignee
+   */
+  async siteAutoReleased(
+    userId: string,
+    siteName: string,
+    siteId: string
+  ): Promise<void> {
+    await this.send({
+      userId,
+      title: 'Site Released',
+      message: `Your claim on "${siteName}" has been automatically released due to no confirmation before the deadline.`,
+      type: 'warning',
+      category: 'assignments',
+      priority: 'high',
+      link: `/mmp`,
+      relatedEntityId: siteId,
+      relatedEntityType: 'siteVisit'
+    });
+  },
+
+  /**
+   * Send reminder at specific intervals (24h, 12h, 6h before deadline)
+   * Validates that hoursUntilDeadline is appropriate for the reminderType
+   */
+  async sendScheduledReminder(
+    userId: string,
+    siteName: string,
+    siteId: string,
+    hoursUntilDeadline: number,
+    reminderType: '24h' | '12h' | '6h'
+  ): Promise<boolean> {
+    const reminderThresholds: Record<string, { min: number; max: number }> = {
+      '24h': { min: 20, max: 28 },
+      '12h': { min: 10, max: 14 },
+      '6h': { min: 4, max: 8 }
+    };
+
+    const threshold = reminderThresholds[reminderType];
+    if (hoursUntilDeadline < threshold.min || hoursUntilDeadline > threshold.max) {
+      console.log(`[Notification] Skipping ${reminderType} reminder: ${hoursUntilDeadline}h outside range`);
+      return false;
+    }
+
+    const priorityMap: Record<string, NotificationPriority> = {
+      '24h': 'medium',
+      '12h': 'high',
+      '6h': 'urgent'
+    };
+
+    const messageMap: Record<string, string> = {
+      '24h': `Reminder: Please confirm your assignment to "${siteName}" within 24 hours.`,
+      '12h': `Important: Confirm your assignment to "${siteName}" within 12 hours or it may be released.`,
+      '6h': `Urgent: Only 6 hours left to confirm "${siteName}". Confirm now to keep your assignment.`
+    };
+
+    await this.send({
+      userId,
+      title: reminderType === '6h' ? 'Urgent: Confirm Now' : 'Confirm Your Site Visit',
+      message: messageMap[reminderType],
+      type: reminderType === '6h' ? 'warning' : 'info',
+      category: 'assignments',
+      priority: priorityMap[reminderType],
+      link: `/mmp`,
+      relatedEntityId: siteId,
+      relatedEntityType: 'siteVisit'
+    });
+
+    return true;
   }
 };
 

@@ -1,7 +1,7 @@
 
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Menu, Bell, Settings, LogOut, UserIcon } from 'lucide-react';
+import { Menu, Bell, Settings, LogOut, UserIcon, RefreshCw, WifiOff } from 'lucide-react';
 import { useUser } from '@/context/user/UserContext';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -22,6 +22,10 @@ import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { useSettings } from '@/context/settings/SettingsContext';
 import { MenuPreferences, DEFAULT_MENU_PREFERENCES } from '@/types/user-preferences';
 import { getWorkflowMenuGroups } from '@/navigation/menu';
+import { syncManager } from '@/lib/sync-manager';
+import { getOfflineStats } from '@/lib/offline-db';
+import { hapticPresets } from '@/lib/haptics';
+import { PresenceIndicator } from '@/components/shared/PresenceIndicator';
 
 interface MobileAppHeaderProps {
   toggleSidebar?: () => void;
@@ -42,6 +46,60 @@ const MobileAppHeader = ({
   const { isSuperAdmin } = useSuperAdmin();
   const { userSettings } = useSettings();
   const [open, setOpen] = useState(false);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
+
+  // Track online status and pending sync items
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    const updateStats = async () => {
+      try {
+        const stats = await getOfflineStats();
+        setPendingCount(stats.pendingActions + stats.unsyncedVisits + stats.unsyncedLocations);
+      } catch (error) {
+        console.error('[Header] Failed to get stats:', error);
+      }
+    };
+
+    updateStats();
+    const interval = setInterval(updateStats, 5000);
+
+    // Subscribe to sync progress
+    const unsubProgress = syncManager.onProgress((progress) => {
+      setIsSyncing(progress.isRunning);
+    });
+    const unsubComplete = syncManager.onComplete(() => {
+      setIsSyncing(false);
+      updateStats();
+    });
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      clearInterval(interval);
+      unsubProgress();
+      unsubComplete();
+    };
+  }, []);
+
+  const handleSync = useCallback(async () => {
+    if (!isOnline || isSyncing) return;
+    hapticPresets.buttonPress();
+    setIsSyncing(true);
+    try {
+      await syncManager.forceSync();
+    } catch (error) {
+      console.error('[Header] Sync failed:', error);
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [isOnline, isSyncing]);
 
   const handleLogout = useCallback(async () => {
     await logout();
@@ -89,32 +147,62 @@ const MobileAppHeader = ({
 
   return (
     <>
-    <header className="px-4 h-16 flex items-center justify-between bg-gradient-to-r from-blue-600 to-purple-600 shadow-md relative z-50">
-      <div className="flex items-center gap-2">
+    <header className="px-2 h-10 flex items-center justify-between bg-black dark:bg-black shadow-md relative z-50">
+      <div className="flex items-center gap-1">
         <Button 
           variant="ghost" 
           size="icon" 
           onClick={() => setOpen(true)}
-          className="h-9 w-9 text-white hover:bg-white/10"
+          className="h-7 w-7 text-white hover:bg-white/10"
+          data-testid="button-open-menu"
+          aria-label="Open navigation menu"
         >
-          <Menu className="h-5 w-5" />
+          <Menu className="h-4 w-4" />
         </Button>
-        <h1 className="text-lg font-semibold text-white truncate max-w-[180px]">
+        <h1 className="text-base font-semibold text-white truncate max-w-[150px]">
           {title}
         </h1>
+        <PresenceIndicator variant="compact" />
       </div>
       
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-1">
+        {/* Always-visible Sync Button */}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={handleSync}
+          disabled={!isOnline || isSyncing}
+          className="relative h-7 w-7 text-white hover:bg-white/10"
+          data-testid="button-sync-header"
+          aria-label={isOnline ? (isSyncing ? 'Syncing data' : `Sync now${pendingCount > 0 ? ` (${pendingCount} pending)` : ''}`) : 'Offline - sync unavailable'}
+        >
+          {!isOnline ? (
+            <WifiOff className="h-4 w-4 text-destructive" />
+          ) : isSyncing ? (
+            <RefreshCw className="h-4 w-4 animate-spin" />
+          ) : (
+            <RefreshCw className="h-4 w-4" />
+          )}
+          {/* Pending count badge */}
+          {isOnline && pendingCount > 0 && !isSyncing && (
+            <Badge className="absolute -top-1 -right-1 h-3.5 min-w-3.5 px-0.5 p-0 flex items-center justify-center bg-white text-black text-[9px]">
+              {pendingCount > 9 ? '9+' : pendingCount}
+            </Badge>
+          )}
+        </Button>
+        
         {showNotification && (
           <Button 
             variant="ghost" 
             size="icon" 
-            className="relative h-9 w-9 text-white hover:bg-white/10" 
+            className="relative h-7 w-7 text-white hover:bg-white/10"
+            data-testid="button-notifications"
+            aria-label="View notifications"
             onClick={() => navigate('/notifications')}
           >
-            <Bell className="h-5 w-5" />
+            <Bell className="h-4 w-4" />
             {hasNotifications && (
-              <Badge className="absolute -top-1 -right-1 h-4 w-4 p-0 flex items-center justify-center bg-red-500">
+              <Badge className="absolute -top-1 -right-1 h-3.5 w-3.5 p-0 flex items-center justify-center bg-white text-black">
                 <span className="sr-only">New notifications</span>
               </Badge>
             )}
@@ -124,27 +212,29 @@ const MobileAppHeader = ({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button 
-              className="rounded-full h-9 w-9 p-1 border border-white/30 hover:bg-white/10 cursor-pointer transition-colors"
+              className="rounded-full h-7 w-7 p-0.5 border border-white/30 hover:bg-white/10 cursor-pointer transition-colors"
+              data-testid="button-user-menu"
+              aria-label="Open user menu"
             >
               <Avatar className="h-full w-full">
                 <AvatarImage src={currentUser?.avatar} alt={currentUser?.name || ''} />
-                <AvatarFallback className="bg-gradient-to-br from-blue-500 to-blue-700 text-white">{currentUser?.name ? getInitials(currentUser.name) : "FO"}</AvatarFallback>
+                <AvatarFallback className="bg-white text-black font-semibold text-[10px]">{currentUser?.name ? getInitials(currentUser.name) : "FO"}</AvatarFallback>
               </Avatar>
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56 z-[9999]">
             <DropdownMenuLabel className="text-base font-semibold">My Account</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => currentUser?.id && navigate(`/users/${currentUser.id}`)}>
+            <DropdownMenuItem onClick={() => currentUser?.id && navigate(`/users/${currentUser.id}`)} data-testid="menu-profile" aria-label="View profile">
               <UserIcon className="w-4 h-4 mr-2" />
               <span>Profile</span>
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => navigate('/settings')}>
+            <DropdownMenuItem onClick={() => navigate('/settings')} data-testid="menu-settings" aria-label="Open settings">
               <Settings className="w-4 h-4 mr-2" />
               <span>Settings</span>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleLogout}>
+            <DropdownMenuItem onClick={handleLogout} data-testid="menu-logout" aria-label="Log out">
               <LogOut className="w-4 h-4 mr-2" />
               <span>Log out</span>
             </DropdownMenuItem>
@@ -154,26 +244,43 @@ const MobileAppHeader = ({
     </header>
 
     <Sheet open={open} onOpenChange={setOpen}>
-      <SheetContent side="left" className="w-[85vw] p-0">
-        <SheetHeader className="px-4 py-3 border-b">
-          <SheetTitle>Menu</SheetTitle>
-        </SheetHeader>
-        <ScrollArea className="h-[calc(100vh-56px-64px)] pb-safe">
-          <div className="px-2 py-3 space-y-4">
+      <SheetContent side="left" className="w-[75vw] p-0 bg-white dark:bg-black border-r border-gray-200 dark:border-gray-800">
+        <SheetHeader className="flex items-center justify-between px-2 py-2 border-b border-gray-200 dark:border-gray-800 bg-black">
+  <SheetTitle className="text-sm font-semibold text-white">Menu</SheetTitle>
+  <button
+    type="button"
+    aria-label="Close menu"
+    data-testid="button-close-menu"
+    className="p-2 rounded-full hover:bg-white/10 focus:outline-none"
+    onClick={() => setOpen(false)}
+  >
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      className="h-5 w-5 text-white"
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+    >
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+    </svg>
+  </button>
+</SheetHeader>
+        <ScrollArea className="h-[calc(100vh-40px-48px)] pb-safe">
+          <div className="px-1 py-1 space-y-2">
             {menuGroups.map((group) => (
               <div key={group.id}>
-                <div className="px-2 text-[11px] uppercase tracking-wide font-semibold text-blue-600 dark:text-blue-300 mb-2">
+                <div className="px-1 text-[10px] uppercase tracking-wide font-semibold text-gray-500 dark:text-gray-400 mb-1">
                   {group.label}
                 </div>
-                <div className="flex flex-col gap-1">
+                <div className="flex flex-col gap-0.5">
                   {group.items.map((item) => (
                     <Link
                       key={item.id}
                       to={item.url}
                       onClick={() => setOpen(false)}
-                      className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm hover:bg-blue-50 dark:hover:bg-blue-900/30 ${location.pathname === item.url ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300' : ''}`}
+                      className={`flex items-center gap-2 px-2 py-1.5 rounded-full text-xs transition-colors ${location.pathname === item.url ? 'bg-black text-white dark:bg-white dark:text-black font-medium' : 'hover:bg-gray-100 dark:hover:bg-gray-900 text-gray-700 dark:text-gray-300'}`}
                     >
-                      <item.icon className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                      <item.icon className="h-3.5 w-3.5" />
                       <span className="truncate">{item.title}</span>
                     </Link>
                   ))}

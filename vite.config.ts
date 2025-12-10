@@ -39,6 +39,12 @@ export default defineConfig(({ mode }) => ({
   build: {
     chunkSizeWarningLimit: 1000,
     rollupOptions: {
+      external: [
+        '@capacitor-firebase/crashlytics',
+        '@capacitor/haptics',
+        'capacitor-native-biometric',
+        'capacitor-native-settings',
+      ],
       output: {
         manualChunks(id) {
           // Core React libraries - keep in vendor chunk to ensure proper loading order
