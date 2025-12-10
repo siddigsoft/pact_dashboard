@@ -87,6 +87,7 @@ const SignaturesPage = lazy(() => import('./pages/Signatures'));
 const DocumentsPage = lazy(() => import('./pages/Documents'));
 const ApprovalDashboard = lazy(() => import('./pages/ApprovalDashboard'));
 const AuditLogs = lazy(() => import('./pages/AuditLogs'));
+const EmailTracking = lazy(() => import('./pages/EmailTracking'));
 
 // Components (keep these eagerly loaded as they're used immediately)
 import MainLayout from './components/MainLayout';
@@ -251,6 +252,7 @@ const AppRoutes = () => {
         <Route path="/signatures" element={<SignaturesPage />} />
         <Route path="/approval-dashboard" element={<ApprovalDashboard />} />
         <Route path="/audit-logs" element={<AuditLogs />} />
+        <Route path="/email-tracking" element={<EmailTracking />} />
       </Route>
 
       {/* Redirects */}
