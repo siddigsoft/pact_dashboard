@@ -27,8 +27,10 @@ import {
   CheckCheck,
   Sparkles,
   Clock,
-  RotateCcw
+  RotateCcw,
+  VideoIcon
 } from 'lucide-react';
+import { JitsiCallModal } from '@/components/calls/JitsiCallModal';
 
 const Chat: React.FC = () => {
   const { currentUser } = useAppContext();
@@ -41,6 +43,8 @@ const Chat: React.FC = () => {
   const [activeView, setActiveView] = useState<'list' | 'chat'>('list');
   const [activeTab, setActiveTab] = useState<'contacts' | 'conversations'>('conversations');
   const [contactPage, setContactPage] = useState(1);
+  const [showJitsiCall, setShowJitsiCall] = useState(false);
+  const [jitsiIsAudioOnly, setJitsiIsAudioOnly] = useState(false);
   const CONTACTS_PAGE_SIZE = 10;
   const { chats, activeChat, setActiveChat, createChat, isLoading } = useChat();
   const { initiateCall } = useCommunication();
@@ -168,6 +172,20 @@ const Chat: React.FC = () => {
     }
     initiateCall(targetUser);
     navigate('/calls');
+  };
+
+  const handleJitsiCall = (audioOnly: boolean = false) => {
+    const targetUser = getTargetUser();
+    if (!targetUser) {
+      toast({
+        title: 'Cannot call',
+        description: activeChat?.type === 'group' ? 'Group calls coming soon' : 'Select a chat first',
+        variant: 'destructive',
+      });
+      return;
+    }
+    setJitsiIsAudioOnly(audioOnly);
+    setShowJitsiCall(true);
   };
 
   const filteredChats = chats.filter(chat => 
@@ -558,8 +576,17 @@ const Chat: React.FC = () => {
                     onClick={handleVideoCall}
                     className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center"
                     data-testid="button-video-call"
+                    title="WebRTC Video Call"
                   >
                     <Video className="h-4 w-4 text-white" />
+                  </button>
+                  <button 
+                    onClick={() => handleJitsiCall(false)}
+                    className="w-8 h-8 rounded-full bg-blue-500/80 flex items-center justify-center"
+                    data-testid="button-jitsi-call"
+                    title="Jitsi Video Call (Backup)"
+                  >
+                    <VideoIcon className="h-4 w-4 text-white" />
                   </button>
                 </div>
               </div>
@@ -837,6 +864,26 @@ const Chat: React.FC = () => {
           </div>
         )}
       </div>
+
+      {currentUser && (
+        <JitsiCallModal
+          isOpen={showJitsiCall}
+          onClose={() => setShowJitsiCall(false)}
+          targetUser={getTargetUser() ? {
+            id: getTargetUser()!.id,
+            name: getTargetUser()!.fullName || getTargetUser()!.name || 'User',
+            avatar: getTargetUser()!.avatarUrl,
+            email: getTargetUser()!.email
+          } : undefined}
+          currentUser={{
+            id: currentUser.id,
+            name: currentUser.fullName || currentUser.name || 'You',
+            avatar: currentUser.avatarUrl,
+            email: currentUser.email
+          }}
+          isAudioOnly={jitsiIsAudioOnly}
+        />
+      )}
     </div>
   );
 };
