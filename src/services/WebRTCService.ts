@@ -312,9 +312,16 @@ class WebRTCService {
         break;
 
       case 'call-accepted':
+        console.log('[WebRTC] Call accepted! isInitiator:', this.isInitiator);
         this.eventHandlers?.onCallAccepted();
         if (this.isInitiator) {
-          await this.createOffer();
+          console.log('[WebRTC] Creating and sending offer...');
+          try {
+            await this.createOffer();
+            console.log('[WebRTC] Offer created and sent');
+          } catch (error) {
+            console.error('[WebRTC] Failed to create offer:', error);
+          }
         }
         break;
 
@@ -334,11 +341,23 @@ class WebRTCService {
         break;
 
       case 'offer':
-        await this.handleOffer(signal.payload, signal.from);
+        console.log('[WebRTC] Received offer from:', signal.from);
+        try {
+          await this.handleOffer(signal.payload, signal.from);
+          console.log('[WebRTC] Offer processed, answer sent');
+        } catch (error) {
+          console.error('[WebRTC] Failed to handle offer:', error);
+        }
         break;
 
       case 'answer':
-        await this.handleAnswer(signal.payload);
+        console.log('[WebRTC] Received answer from:', signal.from);
+        try {
+          await this.handleAnswer(signal.payload);
+          console.log('[WebRTC] Answer processed, connection should establish');
+        } catch (error) {
+          console.error('[WebRTC] Failed to handle answer:', error);
+        }
         break;
 
       case 'ice-candidate':
@@ -493,18 +512,30 @@ class WebRTCService {
     this.isInitiator = false;
     this.targetUserId = callerId;
 
+    console.log('[WebRTC] Accepting call from:', callerId, 'callId:', this.currentCallId);
+
     try {
-      await this.setupLocalStream();
-      await this.createPeerConnection();
-
-      // Update presence using the SAME token that was received in call-request
-      // This is critical for signal validation to work correctly
-      await this.updateUserPresenceWithToken(true, this.currentCallId, this.currentCallToken);
-
+      // Send call-accepted FIRST so caller stops ringing immediately
+      console.log('[WebRTC] Sending call-accepted signal...');
       await this.sendSignal({
         type: 'call-accepted',
         to: callerId,
       });
+      console.log('[WebRTC] call-accepted signal sent');
+
+      // Then set up the media and connection
+      console.log('[WebRTC] Setting up local stream...');
+      await this.setupLocalStream();
+      console.log('[WebRTC] Local stream ready');
+      
+      console.log('[WebRTC] Creating peer connection...');
+      await this.createPeerConnection();
+      console.log('[WebRTC] Peer connection created');
+
+      // Update presence using the SAME token that was received in call-request
+      // This is critical for signal validation to work correctly
+      await this.updateUserPresenceWithToken(true, this.currentCallId, this.currentCallToken);
+      console.log('[WebRTC] Presence updated, waiting for offer...');
     } catch (error) {
       console.error('[WebRTC] Failed to accept call:', error);
       this.cleanup();
