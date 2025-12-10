@@ -38,7 +38,8 @@
     Bell,
     FileText,
     Map,
-    ScrollText
+    ScrollText,
+    Mail
   } from "lucide-react";
   import { useSiteVisitReminders } from "@/hooks/use-site-visit-reminders";
   import Logo from "../assets/logo.png";
@@ -109,7 +110,8 @@
     Bell,
     FileText,
     Map,
-    ScrollText
+    ScrollText,
+    Mail
   };
 
 
@@ -285,6 +287,9 @@
     }
     if (!isHidden('/audit-logs') && isSuperAdmin) {
       adminItems.push({ id: 'audit-logs', title: "Audit Logs", url: "/audit-logs", icon: ScrollText, priority: 11, isPinned: isPinned('/audit-logs') });
+    }
+    if (!isHidden('/email-tracking') && isSuperAdmin) {
+      adminItems.push({ id: 'email-tracking', title: "Email Tracking", url: "/email-tracking", icon: Mail, priority: 12, isPinned: isPinned('/email-tracking') });
     }
     if (adminItems.length) groups.push({ id: 'admin', label: "Administration", order: 6, items: adminItems });
 
