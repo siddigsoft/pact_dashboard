@@ -102,3 +102,8 @@ externalPort = 4200
 
 [objectStorage]
 defaultBucketID = "replit-objstore-005adaa9-1cce-4c34-9d82-43b2125a4ea5"
+
+[userenv]
+
+[userenv.shared]
+VITE_FIREBASE_PROJECT_ID = "tpm-workflow"
