@@ -12,6 +12,7 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
+import notificationSoundService from '@/services/NotificationSoundService';
 
 interface TypingUser {
   id: string;
@@ -407,6 +408,11 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
               [chatId]: [...existing, chatMessage]
             };
           });
+          
+          // Play notification sound if message is from someone else
+          if (newMessage.sender_id !== currentUser?.id) {
+            notificationSoundService.play('message');
+          }
           
           // Update chat's last message and re-sort chats
           setChats(prevChats => {
