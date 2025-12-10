@@ -5,6 +5,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useRoles } from '@/hooks/use-roles';
 import { AppRole } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
+import { EmailNotificationService } from '@/services/email-notification.service';
 
 interface UserContextType {
   currentUser: User | null;
@@ -255,10 +256,50 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     refreshUsers();
-    
-    const pollingInterval = setInterval(refreshUsers, 300000);
-    
-    return () => clearInterval(pollingInterval);
+
+    // Set up real-time subscriptions for users and roles
+    const usersChannel = supabase
+      .channel('users-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'profiles'
+        },
+        (payload) => {
+          console.log('Profiles change detected:', payload);
+          refreshUsers();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'user_roles'
+        },
+        (payload) => {
+          console.log('User roles change detected:', payload);
+          refreshUsers();
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ Users real-time subscription active');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('❌ Users real-time subscription error - Check if replication is enabled in Supabase');
+        } else if (status === 'TIMED_OUT') {
+          console.warn('⏱️ Users real-time subscription timed out');
+        } else {
+          console.log('Users subscription status:', status);
+        }
+      });
+
+    // Cleanup subscription on unmount
+    return () => {
+      supabase.removeChannel(usersChannel);
+    };
   }, []);
 
   useEffect(() => {
@@ -851,6 +892,26 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         title: "User approved",
         description: "The user can now log in to the system.",
       });
+
+      // Send welcome email to the newly approved user
+      try {
+        const { data: userProfile } = await supabase
+          .from('profiles')
+          .select('email, full_name, role')
+          .eq('id', userId)
+          .single();
+
+        if (userProfile?.email) {
+          EmailNotificationService.sendWelcomeEmail(
+            userProfile.email,
+            userProfile.full_name || 'User',
+            userProfile.role || 'Data Collector'
+          );
+        }
+      } catch (emailError) {
+        console.error('Failed to send welcome email:', emailError);
+      }
+
       return true;
     } catch (error) {
       console.error("User approval error:", error);

@@ -614,7 +614,17 @@ export function BudgetProvider({ children }: { children: ReactNode }) {
         refreshBudgetAlerts();
       });
 
-    channel.subscribe();
+    channel.subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        console.log('✅ Budget real-time subscription active');
+      } else if (status === 'CHANNEL_ERROR') {
+        console.error('❌ Budget real-time subscription error - Check if replication is enabled in Supabase');
+      } else if (status === 'TIMED_OUT') {
+        console.warn('⏱️ Budget real-time subscription timed out');
+      } else {
+        console.log('Budget subscription status:', status);
+      }
+    });
 
     return () => {
       supabase.removeChannel(channel);

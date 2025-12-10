@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/context/user/UserContext';
 import { useClassification } from '@/context/classification/ClassificationContext';
+import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 import type {
   Wallet,
   WalletTransaction,
@@ -366,6 +367,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         description: 'The request has been forwarded to Finance for processing',
       });
 
+      // Send email notification to the requester
+      NotificationTriggerService.withdrawalStatusChanged(
+        request.userId,
+        'pending_final',
+        request.amount
+      );
+
       // Refresh both personal and supervised withdrawal requests
       await Promise.all([refreshWithdrawalRequests(), refreshSupervisedWithdrawalRequests()]);
     } catch (error: any) {
@@ -484,6 +492,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         description: 'The payment has been completed and funds released',
       });
 
+      // Send email notification to the requester
+      NotificationTriggerService.withdrawalStatusChanged(
+        request.userId,
+        'approved',
+        request.amount
+      );
+
       // Refresh all relevant data including supervised requests
       await Promise.all([refreshWallet(), refreshTransactions(), refreshWithdrawalRequests(), refreshSupervisedWithdrawalRequests()]);
     } catch (error: any) {
@@ -554,6 +569,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         description: 'The withdrawal request has been rejected',
       });
 
+      // Send email notification to the requester
+      NotificationTriggerService.withdrawalStatusChanged(
+        request.userId,
+        'rejected',
+        request.amount
+      );
+
       // Refresh all relevant data including supervised requests
       await Promise.all([refreshWithdrawalRequests(), refreshSupervisedWithdrawalRequests()]);
     } catch (error: any) {
@@ -570,6 +592,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (!currentUser?.id) return;
 
     try {
+      // Find the request to get userId and amount for notification
+      let request = withdrawalRequests.find(r => r.id === requestId);
+      if (!request) {
+        request = supervisedWithdrawalRequests.find(r => r.id === requestId);
+      }
+
       const { error } = await supabase
         .from('withdrawal_requests')
         .update({
@@ -587,6 +615,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         title: 'Withdrawal Rejected',
         description: 'The withdrawal request has been rejected',
       });
+
+      // Send email notification to the requester
+      if (request) {
+        NotificationTriggerService.withdrawalStatusChanged(
+          request.userId,
+          'rejected',
+          request.amount
+        );
+      }
 
       // Refresh both personal and supervised withdrawal requests
       await Promise.all([refreshWithdrawalRequests(), refreshSupervisedWithdrawalRequests()]);

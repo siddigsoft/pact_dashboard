@@ -10,6 +10,7 @@ import {
   AuditSeverity
 } from '@/types/audit-trail';
 import { v4 as uuidv4 } from 'uuid';
+import { supabase } from '@/integrations/supabase/client';
 
 interface AuditContextType {
   logs: AuditLogEntry[];
@@ -24,11 +25,13 @@ interface AuditContextType {
   clearOldLogs: (daysToKeep?: number) => void;
   exportLogs: (filter?: AuditLogFilter) => string;
   refreshLogs: () => Promise<void>;
+  syncToDatabase: () => Promise<void>;
 }
 
 const AuditContext = createContext<AuditContextType | undefined>(undefined);
 
 const STORAGE_KEY = 'pact_audit_logs';
+const PENDING_SYNC_KEY = 'pact_audit_pending_sync';
 const MAX_LOGS = 10000;
 const DEFAULT_DAYS_TO_KEEP = 90;
 
@@ -37,26 +40,162 @@ export function AuditProvider({ children }: { children: ReactNode }) {
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Load logs from Supabase with localStorage fallback
   const loadLogs = useCallback(async () => {
     setLoading(true);
     try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      const parsed = stored ? JSON.parse(stored) as AuditLogEntry[] : [];
-      setLogs(parsed.sort((a, b) => 
-        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-      ));
+      // Try to load from Supabase first
+      const { data: dbLogs, error } = await supabase
+        .from('audit_logs')
+        .select('*')
+        .order('timestamp', { ascending: false })
+        .limit(MAX_LOGS);
+
+      if (!error && dbLogs && dbLogs.length > 0) {
+        // Transform database records to AuditLogEntry format
+        const transformedLogs: AuditLogEntry[] = dbLogs.map((log: any) => ({
+          id: log.id,
+          module: log.module as AuditModule,
+          action: log.action as AuditAction,
+          entityType: log.entity_type,
+          entityId: log.entity_id,
+          entityName: log.entity_name,
+          actorId: log.actor_id,
+          actorName: log.actor_name,
+          actorRole: log.actor_role,
+          actorEmail: log.actor_email,
+          timestamp: log.timestamp,
+          severity: log.severity as AuditSeverity,
+          workflowStep: log.workflow_step,
+          previousState: log.previous_state,
+          newState: log.new_state,
+          changes: log.changes,
+          metadata: log.metadata,
+          description: log.description,
+          details: log.details,
+          tags: log.tags,
+          relatedEntityIds: log.related_entity_ids,
+          success: log.success,
+          errorMessage: log.error_message,
+          sessionId: log.session_id,
+        }));
+        setLogs(transformedLogs);
+        // Cache in localStorage for offline access
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(transformedLogs.slice(0, 1000)));
+      } else {
+        // Fallback to localStorage if Supabase fails or no data
+        const stored = localStorage.getItem(STORAGE_KEY);
+        const parsed = stored ? JSON.parse(stored) as AuditLogEntry[] : [];
+        setLogs(parsed.sort((a, b) => 
+          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+        ));
+      }
     } catch (error) {
-      console.error('[Audit] Error loading logs:', error);
-      setLogs([]);
+      console.error('[Audit] Error loading logs from Supabase:', error);
+      // Fallback to localStorage
+      try {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        const parsed = stored ? JSON.parse(stored) as AuditLogEntry[] : [];
+        setLogs(parsed.sort((a, b) => 
+          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+        ));
+      } catch (localError) {
+        console.error('[Audit] Error loading logs from localStorage:', localError);
+        setLogs([]);
+      }
     } finally {
       setLoading(false);
     }
   }, []);
 
+  // Save log to Supabase with localStorage fallback
+  const saveLogToDatabase = useCallback(async (log: AuditLogEntry): Promise<boolean> => {
+    try {
+      const { error } = await supabase
+        .from('audit_logs')
+        .insert({
+          id: log.id,
+          module: log.module,
+          action: log.action,
+          entity_type: log.entityType,
+          entity_id: log.entityId,
+          entity_name: log.entityName,
+          actor_id: log.actorId,
+          actor_name: log.actorName,
+          actor_role: log.actorRole,
+          actor_email: log.actorEmail,
+          timestamp: log.timestamp,
+          severity: log.severity,
+          workflow_step: log.workflowStep,
+          previous_state: log.previousState,
+          new_state: log.newState,
+          changes: log.changes,
+          metadata: log.metadata,
+          description: log.description,
+          details: log.details,
+          tags: log.tags,
+          related_entity_ids: log.relatedEntityIds,
+          success: log.success,
+          error_message: log.errorMessage,
+          session_id: log.sessionId,
+        });
+
+      if (error) {
+        console.error('[Audit] Error saving to Supabase:', error);
+        return false;
+      }
+      return true;
+    } catch (error) {
+      console.error('[Audit] Error saving to Supabase:', error);
+      return false;
+    }
+  }, []);
+
+  // Save pending logs to localStorage for later sync
+  const addToPendingSync = useCallback((log: AuditLogEntry) => {
+    try {
+      const pending = localStorage.getItem(PENDING_SYNC_KEY);
+      const pendingLogs = pending ? JSON.parse(pending) : [];
+      pendingLogs.push(log);
+      localStorage.setItem(PENDING_SYNC_KEY, JSON.stringify(pendingLogs.slice(-500)));
+    } catch (error) {
+      console.error('[Audit] Error adding to pending sync:', error);
+    }
+  }, []);
+
+  // Sync pending logs to database
+  const syncToDatabase = useCallback(async () => {
+    try {
+      const pending = localStorage.getItem(PENDING_SYNC_KEY);
+      if (!pending) return;
+
+      const pendingLogs: AuditLogEntry[] = JSON.parse(pending);
+      if (pendingLogs.length === 0) return;
+
+      console.log(`[Audit] Syncing ${pendingLogs.length} pending logs to database`);
+
+      const successfullyInserted: string[] = [];
+      for (const log of pendingLogs) {
+        const success = await saveLogToDatabase(log);
+        if (success) {
+          successfullyInserted.push(log.id);
+        }
+      }
+
+      // Remove successfully synced logs from pending
+      const remaining = pendingLogs.filter(log => !successfullyInserted.includes(log.id));
+      localStorage.setItem(PENDING_SYNC_KEY, JSON.stringify(remaining));
+
+      console.log(`[Audit] Synced ${successfullyInserted.length} logs, ${remaining.length} remaining`);
+    } catch (error) {
+      console.error('[Audit] Error syncing to database:', error);
+    }
+  }, [saveLogToDatabase]);
+
   const saveLogs = useCallback((newLogs: AuditLogEntry[]) => {
     try {
       const trimmedLogs = newLogs.slice(0, MAX_LOGS);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmedLogs));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmedLogs.slice(0, 1000)));
       setLogs(trimmedLogs);
     } catch (error) {
       console.error('[Audit] Error saving logs:', error);
@@ -65,7 +204,17 @@ export function AuditProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     loadLogs();
-  }, [loadLogs]);
+    // Sync pending logs on mount
+    syncToDatabase();
+  }, [loadLogs, syncToDatabase]);
+
+  // Periodic sync of pending logs (every 5 minutes)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      syncToDatabase();
+    }, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [syncToDatabase]);
 
   const logAuditEvent = useCallback(async (input: CreateAuditLogInput): Promise<string> => {
     const logId = uuidv4();
@@ -97,13 +246,21 @@ export function AuditProvider({ children }: { children: ReactNode }) {
       sessionId: sessionStorage.getItem('sessionId') || undefined,
     };
 
+    // Update local state immediately
     const updatedLogs = [newLog, ...logs];
     saveLogs(updatedLogs);
+
+    // Try to save to Supabase
+    const success = await saveLogToDatabase(newLog);
+    if (!success) {
+      // Add to pending sync queue if Supabase save fails
+      addToPendingSync(newLog);
+    }
 
     console.log(`[Audit] ${input.module}:${input.action} - ${input.description}`);
 
     return logId;
-  }, [currentUser, logs, saveLogs]);
+  }, [currentUser, logs, saveLogs, saveLogToDatabase, addToPendingSync]);
 
   const getAuditLogs = useCallback((filter?: AuditLogFilter): AuditLogEntry[] => {
     if (!filter) return logs;
@@ -268,6 +425,7 @@ export function AuditProvider({ children }: { children: ReactNode }) {
     clearOldLogs,
     exportLogs,
     refreshLogs,
+    syncToDatabase,
   };
 
   return (

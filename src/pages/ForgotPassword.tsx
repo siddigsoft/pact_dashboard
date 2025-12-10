@@ -1,10 +1,8 @@
-
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Link } from "react-router-dom";
 import { Mail, ArrowLeft, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAppContext } from "@/context/AppContext";
@@ -12,6 +10,7 @@ import { Form, FormControl, FormField, FormItem, FormMessage } from "@/component
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { supabase } from "@/integrations/supabase/client";
 
 const formSchema = z.object({
   email: z.string().email("Please enter a valid email address")
@@ -31,7 +30,6 @@ const ForgotPassword = () => {
     }
   });
 
-  // If user is already logged in, redirect to dashboard
   if (currentUser) {
     navigate("/dashboard");
     return null;
@@ -41,16 +39,32 @@ const ForgotPassword = () => {
     setIsLoading(true);
     
     try {
-      // Here would be the actual password reset request to your backend
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      
+      const { data, error } = await supabase.functions.invoke('verify-reset-otp', {
+        body: { 
+          email: values.email.toLowerCase(),
+          action: 'generate'
+        },
+      });
+
+      if (error) {
+        console.error('Password reset error:', error);
+        toast({
+          title: "Error",
+          description: "There was a problem sending reset instructions. Please try again.",
+          variant: "destructive",
+        });
+        setIsLoading(false);
+        return;
+      }
+
       setEmailSent(true);
       toast({
-        title: "Reset email sent",
-        description: "If an account exists with this email, you'll receive password reset instructions.",
+        title: "Reset code sent",
+        description: "If an account exists with this email, you'll receive a verification code.",
         variant: "default",
       });
     } catch (error) {
+      console.error('Password reset error:', error);
       toast({
         title: "Error",
         description: "There was a problem sending reset instructions. Please try again.",
@@ -59,6 +73,11 @@ const ForgotPassword = () => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleContinueToReset = () => {
+    const email = form.getValues("email");
+    navigate(`/reset-password?email=${encodeURIComponent(email)}`);
   };
 
   return (
@@ -73,7 +92,7 @@ const ForgotPassword = () => {
             </div>
             <CardTitle className="text-2xl font-bold tracking-tight text-gray-800">Reset Password</CardTitle>
             <CardDescription className="text-gray-600">
-              Enter your email to receive reset instructions
+              Enter your email to receive a verification code
             </CardDescription>
           </CardHeader>
 
@@ -96,6 +115,7 @@ const ForgotPassword = () => {
                               disabled={isLoading}
                               className="pl-10 bg-white/50 focus:bg-white transition-colors"
                               aria-label="Email address"
+                              data-testid="input-email"
                             />
                           </FormControl>
                         </div>
@@ -109,14 +129,15 @@ const ForgotPassword = () => {
                     type="submit" 
                     className="w-full bg-[#9b87f5] hover:bg-[#8b77e5] transition-colors"
                     disabled={isLoading}
+                    data-testid="button-send-code"
                   >
                     {isLoading ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Sending Email...
+                        Sending Code...
                       </>
                     ) : (
-                      "Send Reset Instructions"
+                      "Send Verification Code"
                     )}
                   </Button>
                   <Button 
@@ -124,6 +145,7 @@ const ForgotPassword = () => {
                     className="w-full flex items-center justify-center"
                     onClick={() => navigate("/login")}
                     type="button"
+                    data-testid="button-back-login"
                   >
                     <ArrowLeft className="mr-2 h-4 w-4" />
                     Back to Login
@@ -135,19 +157,27 @@ const ForgotPassword = () => {
             <div className="animate-fade-in">
               <CardContent className="space-y-4 pt-6">
                 <div className="text-center p-4 bg-green-50/50 rounded-lg border border-green-100">
-                  <p className="text-green-800 mb-2 font-medium">We've sent reset instructions to:</p>
+                  <p className="text-green-800 mb-2 font-medium">Verification code sent to:</p>
                   <p className="font-semibold text-lg text-green-700">{form.getValues("email")}</p>
                 </div>
                 <p className="text-sm text-gray-600 text-center">
-                  Please check your email and follow the instructions to reset your password.
-                  The link will expire in 30 minutes.
+                  Please check your email for the 6-digit verification code.
+                  The code will expire in 15 minutes.
                 </p>
               </CardContent>
               <CardFooter className="flex flex-col space-y-4">
                 <Button 
+                  className="w-full bg-[#9b87f5] hover:bg-[#8b77e5] transition-colors"
+                  onClick={handleContinueToReset}
+                  data-testid="button-continue-reset"
+                >
+                  Continue to Reset Password
+                </Button>
+                <Button 
                   variant="ghost" 
                   className="w-full flex items-center justify-center"
                   onClick={() => navigate("/login")}
+                  data-testid="button-back-login-sent"
                 >
                   <ArrowLeft className="mr-2 h-4 w-4" />
                   Back to Login

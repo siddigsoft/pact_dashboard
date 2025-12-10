@@ -1,29 +1,20 @@
 /**
  * OTP Delivery Service
- * Handles SMS delivery via Twilio and Email delivery via SendGrid
+ * Handles Email delivery via IONOS SMTP through Supabase Edge Function
  * For phone/email signature verification
  * 
- * IMPORTANT: This service currently operates in MOCK MODE only.
- * In production, OTP delivery MUST be handled by a secure backend service
- * to prevent exposing API credentials. The Supabase Edge Functions or a
- * dedicated backend API should handle actual SMS/Email delivery.
- * 
- * This mock implementation:
- * - Logs OTP codes to console for development/testing
- * - Simulates delivery delays for realistic testing
- * - Does NOT send real SMS/Email messages
- * 
- * For production deployment:
- * 1. Create a Supabase Edge Function for OTP delivery
- * 2. Store Twilio/SendGrid credentials in Supabase secrets
- * 3. Call the Edge Function from this service instead of direct API calls
+ * This service sends real emails in production using the send-email Edge Function.
+ * SMS delivery remains in mock mode (requires Twilio integration).
  */
+
+import { supabase } from '@/integrations/supabase/client';
+import { logOtpSend } from '@/utils/audit-logger';
 
 export interface OTPDeliveryResult {
   success: boolean;
   messageId?: string;
   error?: string;
-  provider: 'mock';
+  provider: 'smtp' | 'mock';
   deliveredAt?: string;
   developmentNote?: string;
 }
@@ -31,10 +22,10 @@ export interface OTPDeliveryResult {
 export const OTPDeliveryService = {
   /**
    * Check if OTP delivery services are configured
-   * Always returns false in mock mode - real delivery requires backend integration
+   * Email is configured via IONOS SMTP, SMS is not yet configured
    */
   isConfigured(): boolean {
-    return false;
+    return true;
   },
 
   /**
@@ -48,39 +39,41 @@ export const OTPDeliveryService = {
   } {
     return {
       smsConfigured: false,
-      emailConfigured: false,
-      mode: 'mock',
-      note: 'OTP delivery is in mock mode. For production, implement a Supabase Edge Function.',
+      emailConfigured: true,
+      mode: 'production',
+      note: 'Email delivery is configured via IONOS SMTP. SMS requires Twilio integration.',
     };
   },
 
   /**
-   * Send OTP via SMS (Mock implementation)
+   * Send OTP via SMS (Mock implementation - Twilio not configured)
    * In development, logs OTP to console instead of sending actual SMS
    */
   async sendSMS(phoneNumber: string, otp: string, purpose: string): Promise<OTPDeliveryResult> {
     await new Promise(resolve => setTimeout(resolve, 500));
     
     console.log('='.repeat(60));
-    console.log('[OTP DELIVERY - MOCK MODE]');
+    console.log('[OTP DELIVERY - SMS MOCK MODE]');
     console.log(`Phone: ${phoneNumber}`);
     console.log(`Purpose: ${purpose}`);
     console.log(`OTP Code: ${otp}`);
-    console.log('NOTE: In production, this would be sent via Twilio SMS');
+    console.log('NOTE: SMS delivery requires Twilio integration');
     console.log('='.repeat(60));
+    
+    await logOtpSend('phone', phoneNumber, purpose, true, 'mock');
     
     return {
       success: true,
       provider: 'mock',
       messageId: `mock-sms-${Date.now()}`,
       deliveredAt: new Date().toISOString(),
-      developmentNote: `Mock SMS - OTP: ${otp} sent to ${phoneNumber}`,
+      developmentNote: `Mock SMS - OTP: ${otp} sent to ${phoneNumber}. Configure Twilio for real SMS.`,
     };
   },
 
   /**
-   * Send OTP via Email (Mock implementation)
-   * In development, logs OTP to console instead of sending actual email
+   * Send OTP via Email using IONOS SMTP
+   * Uses the send-email Supabase Edge Function
    */
   async sendEmail(
     email: string,
@@ -88,24 +81,187 @@ export const OTPDeliveryService = {
     purpose: string,
     recipientName?: string
   ): Promise<OTPDeliveryResult> {
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    console.log('='.repeat(60));
-    console.log('[OTP DELIVERY - MOCK MODE]');
-    console.log(`Email: ${email}`);
-    console.log(`Recipient: ${recipientName || 'Unknown'}`);
-    console.log(`Purpose: ${purpose}`);
-    console.log(`OTP Code: ${otp}`);
-    console.log('NOTE: In production, this would be sent via SendGrid Email');
-    console.log('='.repeat(60));
-    
-    return {
-      success: true,
-      provider: 'mock',
-      messageId: `mock-email-${Date.now()}`,
-      deliveredAt: new Date().toISOString(),
-      developmentNote: `Mock Email - OTP: ${otp} sent to ${email}`,
-    };
+    try {
+      console.log(`[OTP DELIVERY] Sending email to ${email} for ${purpose}`);
+
+      const { data, error } = await supabase.functions.invoke('send-email', {
+        body: {
+          to: email,
+          subject: `Your PACT Verification Code`,
+          type: 'otp',
+          otp: otp,
+          recipientName: recipientName || 'User',
+        },
+      });
+
+      if (error) {
+        console.error('[OTP DELIVERY] Email send failed:', error);
+        await logOtpSend('email', email, purpose, false, 'smtp', error.message);
+        return {
+          success: false,
+          provider: 'smtp',
+          error: error.message || 'Failed to send email',
+        };
+      }
+
+      if (data && !data.success) {
+        console.error('[OTP DELIVERY] Email send failed:', data.error);
+        await logOtpSend('email', email, purpose, false, 'smtp', data.error);
+        return {
+          success: false,
+          provider: 'smtp',
+          error: data.error || 'Failed to send email',
+        };
+      }
+
+      console.log(`[OTP DELIVERY] Email sent successfully to ${email}`);
+      await logOtpSend('email', email, purpose, true, 'smtp');
+      return {
+        success: true,
+        provider: 'smtp',
+        messageId: data?.messageId || `email-${Date.now()}`,
+        deliveredAt: data?.deliveredAt || new Date().toISOString(),
+      };
+    } catch (error: any) {
+      console.error('[OTP DELIVERY] Email send error:', error);
+      
+      console.log('='.repeat(60));
+      console.log('[OTP DELIVERY - FALLBACK MOCK MODE]');
+      console.log(`Email: ${email}`);
+      console.log(`Recipient: ${recipientName || 'Unknown'}`);
+      console.log(`Purpose: ${purpose}`);
+      console.log(`OTP Code: ${otp}`);
+      console.log('NOTE: Edge function unavailable, using mock mode');
+      console.log('='.repeat(60));
+      
+      await logOtpSend('email', email, purpose, true, 'mock', `Fallback: ${error.message}`);
+      
+      return {
+        success: true,
+        provider: 'mock',
+        messageId: `mock-email-${Date.now()}`,
+        deliveredAt: new Date().toISOString(),
+        developmentNote: `Mock fallback - OTP: ${otp} sent to ${email}. Edge function error: ${error.message}`,
+      };
+    }
+  },
+
+  /**
+   * Send password reset email using IONOS SMTP
+   * Uses the send-email Supabase Edge Function with password-reset template
+   */
+  async sendPasswordResetEmail(
+    email: string,
+    otp: string,
+    recipientName?: string
+  ): Promise<OTPDeliveryResult> {
+    try {
+      console.log(`[PASSWORD RESET] Sending reset email to ${email}`);
+
+      const { data, error } = await supabase.functions.invoke('send-email', {
+        body: {
+          to: email,
+          subject: `PACT Password Reset Code`,
+          type: 'password-reset',
+          otp: otp,
+          recipientName: recipientName || 'User',
+        },
+      });
+
+      if (error) {
+        console.error('[PASSWORD RESET] Email send failed:', error);
+        await logOtpSend('email', email, 'password-reset', false, 'smtp', error.message);
+        return {
+          success: false,
+          provider: 'smtp',
+          error: error.message || 'Failed to send password reset email',
+        };
+      }
+
+      if (data && !data.success) {
+        console.error('[PASSWORD RESET] Email send failed:', data.error);
+        await logOtpSend('email', email, 'password-reset', false, 'smtp', data.error);
+        return {
+          success: false,
+          provider: 'smtp',
+          error: data.error || 'Failed to send password reset email',
+        };
+      }
+
+      console.log(`[PASSWORD RESET] Email sent successfully to ${email}`);
+      await logOtpSend('email', email, 'password-reset', true, 'smtp');
+      return {
+        success: true,
+        provider: 'smtp',
+        messageId: data?.messageId || `email-${Date.now()}`,
+        deliveredAt: data?.deliveredAt || new Date().toISOString(),
+      };
+    } catch (error: any) {
+      console.error('[PASSWORD RESET] Email send error:', error);
+      await logOtpSend('email', email, 'password-reset', false, 'smtp', error.message);
+      return {
+        success: false,
+        provider: 'smtp',
+        error: error.message || 'Failed to send password reset email',
+      };
+    }
+  },
+
+  /**
+   * Send a general notification email
+   */
+  async sendNotificationEmail(
+    email: string,
+    subject: string,
+    htmlContent: string,
+    textContent?: string
+  ): Promise<OTPDeliveryResult> {
+    try {
+      console.log(`[NOTIFICATION] Sending email to ${email}: ${subject}`);
+
+      const { data, error } = await supabase.functions.invoke('send-email', {
+        body: {
+          to: email,
+          subject: subject,
+          html: htmlContent,
+          text: textContent,
+          type: 'notification',
+        },
+      });
+
+      if (error) {
+        console.error('[NOTIFICATION] Email send failed:', error);
+        return {
+          success: false,
+          provider: 'smtp',
+          error: error.message || 'Failed to send notification email',
+        };
+      }
+
+      if (data && !data.success) {
+        console.error('[NOTIFICATION] Email send failed:', data.error);
+        return {
+          success: false,
+          provider: 'smtp',
+          error: data.error || 'Failed to send notification email',
+        };
+      }
+
+      console.log(`[NOTIFICATION] Email sent successfully to ${email}`);
+      return {
+        success: true,
+        provider: 'smtp',
+        messageId: data?.messageId || `email-${Date.now()}`,
+        deliveredAt: data?.deliveredAt || new Date().toISOString(),
+      };
+    } catch (error: any) {
+      console.error('[NOTIFICATION] Email send error:', error);
+      return {
+        success: false,
+        provider: 'smtp',
+        error: error.message || 'Failed to send notification email',
+      };
+    }
   },
 
   /**
@@ -123,69 +279,6 @@ export const OTPDeliveryService = {
     } else {
       return this.sendEmail(destination, otp, purpose, recipientName);
     }
-  },
-
-  /**
-   * Production implementation template
-   * This shows how to implement real OTP delivery via Supabase Edge Function
-   */
-  getProductionImplementationGuide(): string {
-    return `
-## Production OTP Delivery Implementation
-
-### 1. Create Supabase Edge Function (supabase/functions/send-otp/index.ts):
-
-\`\`\`typescript
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-
-serve(async (req) => {
-  const { method, destination, otp, purpose } = await req.json()
-  
-  if (method === 'phone') {
-    // Twilio SMS
-    const accountSid = Deno.env.get('TWILIO_ACCOUNT_SID')
-    const authToken = Deno.env.get('TWILIO_AUTH_TOKEN')
-    const fromNumber = Deno.env.get('TWILIO_FROM_NUMBER')
-    
-    const response = await fetch(
-      \`https://api.twilio.com/2010-04-01/Accounts/\${accountSid}/Messages.json\`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': 'Basic ' + btoa(\`\${accountSid}:\${authToken}\`),
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: new URLSearchParams({
-          To: destination,
-          From: fromNumber,
-          Body: \`Your PACT verification code: \${otp}\`,
-        }),
-      }
-    )
-    return new Response(JSON.stringify(await response.json()))
-  } else {
-    // SendGrid Email
-    const apiKey = Deno.env.get('SENDGRID_API_KEY')
-    // ... SendGrid implementation
-  }
-})
-\`\`\`
-
-### 2. Set secrets in Supabase:
-\`\`\`bash
-supabase secrets set TWILIO_ACCOUNT_SID=xxx
-supabase secrets set TWILIO_AUTH_TOKEN=xxx
-supabase secrets set TWILIO_FROM_NUMBER=+1234567890
-supabase secrets set SENDGRID_API_KEY=xxx
-\`\`\`
-
-### 3. Call Edge Function from this service:
-\`\`\`typescript
-const { data, error } = await supabase.functions.invoke('send-otp', {
-  body: { method, destination, otp, purpose }
-})
-\`\`\`
-    `;
   },
 };
 

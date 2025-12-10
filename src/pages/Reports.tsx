@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,6 +25,7 @@ import {
   TrendingUp,
   Wallet,
   Shield,
+  PenTool,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -58,6 +59,9 @@ import { FinancialReports } from "@/components/reports/FinancialReports";
 import { AnalyticsReports } from "@/components/reports/AnalyticsReports";
 import { ProjectCostReports } from "@/components/reports/ProjectCostReports";
 import { AuditingReports } from "@/components/reports/AuditingReports";
+import { DocumentsReport } from "@/components/reports/DocumentsReport";
+import { ReceiptsReport } from "@/components/reports/ReceiptsReport";
+import { SignaturesReport } from "@/components/reports/SignaturesReport";
 
 const Reports: React.FC = () => {
   const [activeTab, setActiveTab] = useState("executive");
@@ -103,59 +107,128 @@ const Reports: React.FC = () => {
     navigate("/dashboard");
   };
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        setLoading(true);
-        setError(null);
+  const load = React.useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
 
-        let svQuery = supabase.from("mmp_site_entries").select("*");
-        let mmpQuery = supabase.from("mmp_files").select("*");
-        let projQuery = supabase.from("projects").select("*");
-        let profQuery = supabase.from("profiles").select("id, full_name, role, email");
+      let svQuery = supabase.from("mmp_site_entries").select("*");
+      let mmpQuery = supabase.from("mmp_files").select("*");
+      let projQuery = supabase.from("projects").select("*");
+      let profQuery = supabase.from("profiles").select("id, full_name, role, email");
 
-        if (dateRange?.from) {
-          const from = startOfDay(dateRange.from).toISOString();
-          svQuery = svQuery.gte("visit_date", from);
-          mmpQuery = mmpQuery.gte("created_at", from);
-          projQuery = projQuery.gte("created_at", from);
-        }
-        if (dateRange?.to) {
-          const to = endOfDay(dateRange.to).toISOString();
-          svQuery = svQuery.lte("visit_date", to);
-          mmpQuery = mmpQuery.lte("created_at", to);
-          projQuery = projQuery.lte("created_at", to);
-        }
-
-        // Sensible ordering for display/export
-        svQuery = svQuery.order("visit_date", { ascending: false });
-        mmpQuery = mmpQuery.order("created_at", { ascending: false });
-        projQuery = projQuery.order("created_at", { ascending: false });
-
-        const [svRes, mmpRes, projRes, profRes] = await Promise.all([
-          svQuery,
-          mmpQuery,
-          projQuery,
-          profQuery,
-        ]);
-
-        if (svRes.error) throw svRes.error;
-        if (mmpRes.error) throw mmpRes.error;
-        if (projRes.error) throw projRes.error;
-        if (profRes.error) throw profRes.error;
-
-        setSiteVisits(svRes.data || []);
-        setMmpFiles(mmpRes.data || []);
-        setProjects(projRes.data || []);
-        setProfiles(profRes.data || []);
-      } catch (e: any) {
-        setError(e?.message || "Failed to load reports data");
-      } finally {
-        setLoading(false);
+      if (dateRange?.from) {
+        const from = startOfDay(dateRange.from).toISOString();
+        svQuery = svQuery.gte("visit_date", from);
+        mmpQuery = mmpQuery.gte("created_at", from);
+        projQuery = projQuery.gte("created_at", from);
       }
-    };
-    load();
+      if (dateRange?.to) {
+        const to = endOfDay(dateRange.to).toISOString();
+        svQuery = svQuery.lte("visit_date", to);
+        mmpQuery = mmpQuery.lte("created_at", to);
+        projQuery = projQuery.lte("created_at", to);
+      }
+
+      // Sensible ordering for display/export
+      svQuery = svQuery.order("visit_date", { ascending: false });
+      mmpQuery = mmpQuery.order("created_at", { ascending: false });
+      projQuery = projQuery.order("created_at", { ascending: false });
+
+      const [svRes, mmpRes, projRes, profRes] = await Promise.all([
+        svQuery,
+        mmpQuery,
+        projQuery,
+        profQuery,
+      ]);
+
+      if (svRes.error) throw svRes.error;
+      if (mmpRes.error) throw mmpRes.error;
+      if (projRes.error) throw projRes.error;
+      if (profRes.error) throw profRes.error;
+
+      setSiteVisits(svRes.data || []);
+      setMmpFiles(mmpRes.data || []);
+      setProjects(projRes.data || []);
+      setProfiles(profRes.data || []);
+    } catch (e: any) {
+      setError(e?.message || "Failed to load reports data");
+    } finally {
+      setLoading(false);
+    }
   }, [dateRange]);
+
+  useEffect(() => {
+    load();
+
+    // Set up real-time subscriptions for reports data
+    const reportsChannel = supabase
+      .channel('reports-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'mmp_site_entries'
+        },
+        (payload) => {
+          console.log('Reports: Site entries change detected:', payload);
+          load();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'mmp_files'
+        },
+        (payload) => {
+          console.log('Reports: MMP files change detected:', payload);
+          load();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'projects'
+        },
+        (payload) => {
+          console.log('Reports: Projects change detected:', payload);
+          load();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'profiles'
+        },
+        (payload) => {
+          console.log('Reports: Profiles change detected:', payload);
+          load();
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ Reports real-time subscription active');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('❌ Reports real-time subscription error - Check if replication is enabled in Supabase');
+        } else if (status === 'TIMED_OUT') {
+          console.warn('⏱️ Reports real-time subscription timed out');
+        } else {
+          console.log('Reports subscription status:', status);
+        }
+      });
+
+    // Cleanup subscription on unmount
+    return () => {
+      supabase.removeChannel(reportsChannel);
+    };
+  }, [load]);
 
   const fetchLatestForReports = async () => {
     try {
@@ -605,7 +678,7 @@ const Reports: React.FC = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-1 p-1 h-auto">
+        <TabsList className="grid w-full grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-1 p-1 h-auto">
           <TabsTrigger value="executive" className="py-2 text-xs data-[state=active]:bg-blue-50">
             <span className="flex items-center gap-1">
               <LayoutDashboard className="h-3 w-3" />
@@ -628,6 +701,24 @@ const Reports: React.FC = () => {
             <span className="flex items-center gap-1">
               <BarChart4 className="h-3 w-3" />
               <span className="hidden sm:inline">Costs</span>
+            </span>
+          </TabsTrigger>
+          <TabsTrigger value="documents" className="py-2 text-xs data-[state=active]:bg-blue-50">
+            <span className="flex items-center gap-1">
+              <FileSpreadsheet className="h-3 w-3" />
+              <span className="hidden sm:inline">Documents</span>
+            </span>
+          </TabsTrigger>
+          <TabsTrigger value="receipts" className="py-2 text-xs data-[state=active]:bg-blue-50">
+            <span className="flex items-center gap-1">
+              <FileDown className="h-3 w-3" />
+              <span className="hidden sm:inline">Receipts</span>
+            </span>
+          </TabsTrigger>
+          <TabsTrigger value="signatures" className="py-2 text-xs data-[state=active]:bg-blue-50">
+            <span className="flex items-center gap-1">
+              <PenTool className="h-3 w-3" />
+              <span className="hidden sm:inline">Signatures</span>
             </span>
           </TabsTrigger>
           <TabsTrigger value="auditing" className="py-2 text-xs data-[state=active]:bg-blue-50">
@@ -659,6 +750,18 @@ const Reports: React.FC = () => {
 
         <TabsContent value="project_costs" className="mt-4">
           <ProjectCostReports />
+        </TabsContent>
+
+        <TabsContent value="documents" className="mt-4">
+          <DocumentsReport />
+        </TabsContent>
+
+        <TabsContent value="receipts" className="mt-4">
+          <ReceiptsReport />
+        </TabsContent>
+
+        <TabsContent value="signatures" className="mt-4">
+          <SignaturesReport />
         </TabsContent>
 
         <TabsContent value="auditing" className="mt-4">
