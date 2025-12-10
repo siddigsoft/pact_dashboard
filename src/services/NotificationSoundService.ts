@@ -22,9 +22,12 @@ class NotificationSoundService {
     enabled: true,
     volume: 0.5
   };
+  private isUnlocked: boolean = false;
+  private unlockAttempted: boolean = false;
 
   constructor() {
     this.loadSettings();
+    this.setupMobileUnlock();
   }
 
   private loadSettings(): void {
@@ -36,6 +39,56 @@ class NotificationSoundService {
     } catch (e) {
       console.warn('[Sound] Failed to load settings:', e);
     }
+  }
+
+  private setupMobileUnlock(): void {
+    if (typeof window === 'undefined') return;
+
+    const unlockAudio = () => {
+      if (this.isUnlocked) return;
+      
+      try {
+        const ctx = this.getAudioContext();
+        
+        if (ctx.state === 'suspended') {
+          ctx.resume().then(() => {
+            this.isUnlocked = true;
+            console.log('[Sound] AudioContext unlocked for mobile');
+          }).catch(e => {
+            console.warn('[Sound] Failed to unlock AudioContext:', e);
+          });
+        } else {
+          this.isUnlocked = true;
+        }
+
+        // Play a silent buffer to fully unlock on iOS
+        const buffer = ctx.createBuffer(1, 1, 22050);
+        const source = ctx.createBufferSource();
+        source.buffer = buffer;
+        source.connect(ctx.destination);
+        source.start(0);
+      } catch (e) {
+        console.warn('[Sound] Mobile unlock failed:', e);
+      }
+    };
+
+    // Listen for first user interaction to unlock audio
+    const events = ['touchstart', 'touchend', 'mousedown', 'keydown', 'click'];
+    
+    const handleInteraction = () => {
+      if (!this.unlockAttempted) {
+        this.unlockAttempted = true;
+        unlockAudio();
+        // Remove listeners after first successful unlock attempt
+        events.forEach(event => {
+          document.removeEventListener(event, handleInteraction, true);
+        });
+      }
+    };
+
+    events.forEach(event => {
+      document.addEventListener(event, handleInteraction, true);
+    });
   }
 
   updateSettings(settings: Partial<SoundSettings>): void {
