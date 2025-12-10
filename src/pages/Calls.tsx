@@ -75,6 +75,7 @@ const Calls = () => {
   const [jitsiCallUser, setJitsiCallUser] = useState<{ id: string; name: string } | null>(null);
   const [showCallMethodDialog, setShowCallMethodDialog] = useState(false);
   const [pendingCallUser, setPendingCallUser] = useState<{ id: string; name: string } | null>(null);
+  const [pendingVideoCall, setPendingVideoCall] = useState(false);
   
   const { stopSounds } = useCallSounds(callState.status);
   
@@ -184,8 +185,9 @@ const Calls = () => {
     if (method === 'webrtc') {
       const user = users.find(u => u.id === pendingCallUser.id);
       if (user) {
+        // Store if this should be a video call
+        setPendingVideoCall(callType === 'video');
         initiateCall(user);
-        // For video calls, the video will be enabled after connection
       }
     } else if (method === 'jitsi') {
       setJitsiCallUser({ id: pendingCallUser.id, name: pendingCallUser.name });
@@ -195,6 +197,18 @@ const Calls = () => {
 
     setPendingCallUser(null);
   };
+
+  // Auto-enable video when a video call connects
+  useEffect(() => {
+    if (pendingVideoCall && callState.status === 'connected' && !isVideoEnabled) {
+      // Enable video after connection is established
+      toggleVideo().then(() => {
+        setPendingVideoCall(false);
+      }).catch(() => {
+        setPendingVideoCall(false);
+      });
+    }
+  }, [pendingVideoCall, callState.status, isVideoEnabled, toggleVideo]);
 
   const handleMissedCallAction = (userId: string, userName: string, avatar?: string) => {
     setMissedCallUser({ id: userId, name: userName, avatar });
