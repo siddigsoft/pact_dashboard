@@ -302,35 +302,14 @@ const Index = () => {
                 data-testid="img-logo"
                 className="h-14 w-14 md:h-16 md:w-16"
               />
-              <div className="flex items-center gap-3 flex-wrap justify-center">
-                <Badge 
-                  variant="secondary" 
-                  className="gap-1.5 text-xs"
-                  data-testid="badge-status"
-                >
-                  <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
-                  System Operational
-                </Badge>
-                <Badge 
-                  variant="outline" 
-                  className="gap-1.5 text-xs font-mono"
-                  data-testid="badge-time"
-                >
-                  <Clock className="w-3 h-3" />
-                  {currentTime.toLocaleTimeString('en-US', { 
-                    hour: '2-digit', 
-                    minute: '2-digit',
-                    second: '2-digit',
-                    hour12: true 
-                  })}
-                  <span className="text-muted-foreground">|</span>
-                  {currentTime.toLocaleDateString('en-US', { 
-                    weekday: 'short',
-                    month: 'short', 
-                    day: 'numeric'
-                  })}
-                </Badge>
-              </div>
+              <Badge 
+                variant="secondary" 
+                className="gap-1.5 text-xs"
+                data-testid="badge-status"
+              >
+                <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
+                System Operational
+              </Badge>
             </div>
 
             {/* Hero Headline */}
@@ -379,6 +358,90 @@ const Index = () => {
                   </>
                 )}
               </Button>
+            </div>
+
+            {/* Analog & Digital Clock */}
+            <div className="flex flex-col items-center gap-4 pt-4" data-testid="clock-container">
+              <div className="flex items-center gap-6">
+                {/* Analog Clock */}
+                <div className="relative w-24 h-24 md:w-28 md:h-28">
+                  <div className="absolute inset-0 rounded-full border-2 border-border bg-background shadow-inner">
+                    {/* Clock face marks */}
+                    {[...Array(12)].map((_, i) => (
+                      <div
+                        key={i}
+                        className="absolute w-0.5 h-2 bg-muted-foreground/50"
+                        style={{
+                          left: '50%',
+                          top: '4px',
+                          transform: `translateX(-50%) rotate(${i * 30}deg)`,
+                          transformOrigin: '50% 44px',
+                        }}
+                      />
+                    ))}
+                    {/* Hour hand */}
+                    <div
+                      className="absolute w-1 h-6 bg-foreground rounded-full origin-bottom"
+                      style={{
+                        left: '50%',
+                        bottom: '50%',
+                        transform: `translateX(-50%) rotate(${(currentTime.getHours() % 12) * 30 + currentTime.getMinutes() * 0.5}deg)`,
+                      }}
+                    />
+                    {/* Minute hand */}
+                    <div
+                      className="absolute w-0.5 h-8 bg-foreground rounded-full origin-bottom"
+                      style={{
+                        left: '50%',
+                        bottom: '50%',
+                        transform: `translateX(-50%) rotate(${currentTime.getMinutes() * 6}deg)`,
+                      }}
+                    />
+                    {/* Second hand */}
+                    <div
+                      className="absolute w-0.5 h-9 bg-red-500 rounded-full origin-bottom"
+                      style={{
+                        left: '50%',
+                        bottom: '50%',
+                        transform: `translateX(-50%) rotate(${currentTime.getSeconds() * 6}deg)`,
+                      }}
+                    />
+                    {/* Center dot */}
+                    <div className="absolute w-2 h-2 bg-foreground rounded-full top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
+                  </div>
+                </div>
+
+                {/* Digital Clock */}
+                <div className="flex flex-col items-center">
+                  <div className="font-mono text-3xl md:text-4xl font-bold tracking-wider">
+                    {currentTime.toLocaleTimeString('en-US', { 
+                      hour: '2-digit', 
+                      minute: '2-digit',
+                      second: '2-digit',
+                      hour12: false 
+                    })}
+                  </div>
+                  <div className="text-sm text-muted-foreground mt-1">
+                    {currentTime.toLocaleTimeString('en-US', { 
+                      hour: '2-digit', 
+                      minute: '2-digit',
+                      hour12: true 
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Date */}
+              <div className="text-center">
+                <p className="text-lg font-medium">
+                  {currentTime.toLocaleDateString('en-US', { 
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long', 
+                    day: 'numeric'
+                  })}
+                </p>
+              </div>
             </div>
           </div>
         </section>
