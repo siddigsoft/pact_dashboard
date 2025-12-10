@@ -158,14 +158,17 @@ const DocumentsPage = () => {
       const statesSet = new Set<string>();
 
       // 1. Fetch MMP Files (the CSV uploads themselves)
-      const { data: mmpFiles, error: mmpError } = await supabase
-        .from('mmp_files')
-        .select('id, filename, file_url, created_at, updated_at, permits, project_id, status, uploaded_by, projects(name)')
-        .order('created_at', { ascending: false });
+      try {
+        const { data: mmpFiles, error: mmpError } = await supabase
+          .from('mmp_files')
+          .select('id, filename, file_url, created_at, updated_at, permits, project_id, status, uploaded_by, projects(name)')
+          .order('created_at', { ascending: false });
 
-      if (mmpError) throw mmpError;
+        if (mmpError) {
+          console.warn('MMP files fetch error:', mmpError);
+        }
 
-      mmpFiles?.forEach((mmp: any) => {
+        mmpFiles?.forEach((mmp: any) => {
         const projectName = mmp.projects?.name || 'Unknown Project';
         const monthBucket = mmp.created_at ? format(parseISO(mmp.created_at), 'yyyy-MM') : undefined;
         if (monthBucket) monthsSet.add(monthBucket);
@@ -306,6 +309,9 @@ const DocumentsPage = () => {
           });
         }
       });
+      } catch (mmpErr) {
+        console.warn('Error processing MMP files:', mmpErr);
+      }
 
       // 2. Fetch Cost Submission Receipts
       const { data: costSubmissions, error: costError } = await supabase
