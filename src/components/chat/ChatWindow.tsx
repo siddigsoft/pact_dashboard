@@ -14,7 +14,6 @@ import { User } from '@/types/user';
 import { 
   Send, 
   ArrowLeft, 
-  MoreVertical, 
   Paperclip, 
   Users, 
   X, 
@@ -363,14 +362,6 @@ const ChatWindow: React.FC = () => {
             data-testid="button-refresh"
           >
             <RotateCcw className="h-4 w-4" />
-          </Button>
-          <Button 
-            variant="ghost"
-            size="icon"
-            className="rounded-full bg-white/10 hover:bg-white/20 text-white"
-            data-testid="button-more"
-          >
-            <MoreVertical className="h-4 w-4" />
           </Button>
         </div>
       </div>
