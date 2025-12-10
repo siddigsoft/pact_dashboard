@@ -66,7 +66,13 @@ export function JitsiCallModal({
   const durationTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const startMeeting = useCallback(async () => {
-    if (!containerRef.current) return;
+    const container = document.getElementById('jitsi-container');
+    if (!container) {
+      console.error('[Jitsi] Container element not found, retrying...');
+      // Retry after a short delay
+      setTimeout(() => startMeeting(), 200);
+      return;
+    }
 
     setIsLoading(true);
 
@@ -141,9 +147,19 @@ export function JitsiCallModal({
 
   useEffect(() => {
     if (isOpen) {
-      startMeeting();
+      // Add a small delay to ensure the container is rendered before initializing Jitsi
+      const timeout = setTimeout(() => {
+        startMeeting();
+      }, 100);
+      
+      return () => {
+        clearTimeout(timeout);
+      };
     }
+  }, [isOpen, startMeeting]);
 
+  // Cleanup effect
+  useEffect(() => {
     return () => {
       if (durationTimerRef.current) {
         clearInterval(durationTimerRef.current);
@@ -154,7 +170,7 @@ export function JitsiCallModal({
       setCallDuration(0);
       setParticipantCount(1);
     };
-  }, [isOpen, startMeeting]);
+  }, []);
 
   const handleEndCall = () => {
     jitsiMeetService.hangup();
