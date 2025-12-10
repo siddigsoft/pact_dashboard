@@ -2,7 +2,7 @@ import { supabase } from '@/integrations/supabase/client';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
 export type CallSignal = {
-  type: 'offer' | 'answer' | 'ice-candidate' | 'call-request' | 'call-accepted' | 'call-rejected' | 'call-ended' | 'call-busy';
+  type: 'offer' | 'answer' | 'ice-candidate' | 'call-request' | 'call-accepted' | 'call-rejected' | 'call-ended' | 'call-busy' | 'jitsi-invite' | 'jitsi-accepted' | 'jitsi-rejected';
   from: string;
   to: string;
   fromName: string;
@@ -11,6 +11,8 @@ export type CallSignal = {
   callToken: string;
   payload?: any;
   timestamp: number;
+  jitsiRoom?: string;
+  isAudioOnly?: boolean;
 };
 
 export type CallEventHandler = {
@@ -21,6 +23,9 @@ export type CallEventHandler = {
   onCallBusy: () => void;
   onRemoteStream: (stream: MediaStream) => void;
   onConnectionStateChange: (state: RTCPeerConnectionState) => void;
+  onIncomingJitsiCall?: (callerId: string, callerName: string, roomName: string, isAudioOnly: boolean, callId: string, callerAvatar?: string) => void;
+  onJitsiCallAccepted?: (callId: string) => void;
+  onJitsiCallRejected?: (callId: string) => void;
 };
 
 const ICE_SERVERS: RTCConfiguration = {
@@ -382,6 +387,30 @@ class WebRTCService {
       case 'ice-candidate':
         await this.handleIceCandidate(signal.payload);
         break;
+
+      case 'jitsi-invite':
+        console.log('[WebRTC] Received Jitsi invite from:', signal.from, 'room:', signal.jitsiRoom);
+        if (signal.jitsiRoom) {
+          this.eventHandlers?.onIncomingJitsiCall?.(
+            signal.from,
+            signal.fromName,
+            signal.jitsiRoom,
+            signal.isAudioOnly || false,
+            signal.callId,
+            signal.fromAvatar
+          );
+        }
+        break;
+
+      case 'jitsi-accepted':
+        console.log('[WebRTC] Jitsi call accepted by:', signal.from);
+        this.eventHandlers?.onJitsiCallAccepted?.(signal.callId);
+        break;
+
+      case 'jitsi-rejected':
+        console.log('[WebRTC] Jitsi call rejected by:', signal.from);
+        this.eventHandlers?.onJitsiCallRejected?.(signal.callId);
+        break;
     }
   }
 
@@ -577,6 +606,55 @@ class WebRTCService {
       });
     }
     this.cleanup();
+  }
+
+  // Jitsi call signaling methods
+  async sendJitsiInvite(targetUserId: string, roomName: string, isAudioOnly: boolean = false): Promise<string> {
+    if (!this.currentUserId) {
+      throw new Error('Not initialized');
+    }
+
+    const callId = generateCallId();
+    const callToken = generateSecureToken();
+
+    console.log('[WebRTC] Sending Jitsi invite to:', targetUserId, 'room:', roomName);
+
+    await this.sendSignalToUser(targetUserId, {
+      type: 'jitsi-invite',
+      to: targetUserId,
+      callId,
+      callToken,
+      jitsiRoom: roomName,
+      isAudioOnly,
+    });
+
+    return callId;
+  }
+
+  async acceptJitsiCall(callerId: string, callId: string): Promise<void> {
+    if (!this.currentUserId) return;
+
+    console.log('[WebRTC] Accepting Jitsi call from:', callerId);
+
+    await this.sendSignalToUser(callerId, {
+      type: 'jitsi-accepted',
+      to: callerId,
+      callId,
+      callToken: '',
+    });
+  }
+
+  async rejectJitsiCall(callerId: string, callId: string): Promise<void> {
+    if (!this.currentUserId) return;
+
+    console.log('[WebRTC] Rejecting Jitsi call from:', callerId);
+
+    await this.sendSignalToUser(callerId, {
+      type: 'jitsi-rejected',
+      to: callerId,
+      callId,
+      callToken: '',
+    });
   }
 
   private videoEnabled: boolean = false;
