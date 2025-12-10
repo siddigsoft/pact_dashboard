@@ -28,17 +28,20 @@ import {
   UserCog,
   Clock,
   Shield,
-  Edit,
   RefreshCw,
-  AlertCircle,
-  Bell,
   Loader2,
-  Sparkles,
-  Award,
   Users as UsersIcon,
   CheckCircle,
   KeyRound,
-  Mail
+  Mail,
+  MoreHorizontal,
+  Trash2,
+  UserX,
+  Eye,
+  ChevronDown,
+  Filter,
+  Sparkles,
+  Award
 } from 'lucide-react';
 import { AppRole } from '@/types/roles';
 import {
@@ -50,6 +53,18 @@ import {
   DialogFooter,
   DialogClose
 } from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -591,121 +606,152 @@ const Users = () => {
     totalRoles: Array.from(new Set(users.map(u => getPrimaryRoleLabel(u)))).length
   };
 
+  const [showFilters, setShowFilters] = useState(false);
+
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      {/* Header */}
-      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            <UsersIcon className="h-8 w-8 text-blue-600" />
-            Users Management
-          </h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-1">
-            View and manage user accounts and permissions
-          </p>
+    <div className="container mx-auto p-4 space-y-4">
+      {/* Compact Header */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2">
+          <UsersIcon className="h-5 w-5 text-primary" />
+          <h1 className="text-xl font-semibold">Users</h1>
+          <Badge variant="secondary" className="text-xs">{stats.totalUsers}</Badge>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex items-center gap-2">
           <Button 
-            variant="outline" 
-            size="sm"
+            variant="ghost" 
+            size="icon"
             onClick={handleRefreshUsers}
             disabled={isRefreshing}
             data-testid="button-refresh-users"
           >
-            <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-            {isRefreshing ? 'Refreshing...' : 'Refresh'}
+            <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
           </Button>
-          
           <Button size="sm" asChild data-testid="button-add-user">
             <Link to="/register">
-              <UserPlus className="mr-2 h-4 w-4" />
-              Add User
+              <UserPlus className="mr-1 h-4 w-4" />
+              Add
             </Link>
           </Button>
         </div>
       </div>
 
-      {/* Enhanced Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card 
-          className="hover-elevate active-elevate-2 cursor-pointer overflow-hidden relative bg-gradient-to-br from-blue-500 to-blue-700 text-white border-0"
+      {/* Compact Stats Bar */}
+      <div className="flex flex-wrap items-center gap-2 py-2 px-3 bg-muted/50 rounded-md">
+        <Button 
+          variant={activeTab === 'all-users' ? 'default' : 'ghost'}
+          size="sm"
           onClick={() => setActiveTab('all-users')}
-          data-testid="card-total-users"
+          className="h-8"
+          data-testid="button-tab-all-users"
         >
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-white/90">
-              Total Users
-            </CardTitle>
-            <UsersIcon className="h-5 w-5 text-white/80" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-white">{stats.totalUsers}</div>
-            <p className="text-xs text-white/80 mt-1">
-              Click to view all users
-            </p>
-          </CardContent>
-          <Sparkles className="absolute -right-4 -bottom-4 h-24 w-24 text-white/10" />
-        </Card>
-
-        <Card 
-          className="hover-elevate active-elevate-2 cursor-pointer overflow-hidden relative bg-gradient-to-br from-green-500 to-emerald-700 text-white border-0"
+          <UsersIcon className="h-4 w-4 mr-1" />
+          All
+          <Badge variant="secondary" className="text-xs ml-1">{stats.totalUsers}</Badge>
+        </Button>
+        <Button 
+          variant={activeTab === 'approved-users' ? 'default' : 'ghost'}
+          size="sm"
           onClick={() => setActiveTab('approved-users')}
-          data-testid="card-approved-users"
+          className="h-8"
+          data-testid="button-tab-approved-users"
         >
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-white/90">
-              Approved Users
-            </CardTitle>
-            <CheckCircle className="h-5 w-5 text-white/80" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-white">{stats.approvedUsers}</div>
-            <p className="text-xs text-white/80 mt-1">
-              Active in the system
-            </p>
-          </CardContent>
-          <Sparkles className="absolute -right-4 -bottom-4 h-24 w-24 text-white/10" />
-        </Card>
-
-        <Card 
-          className="hover-elevate active-elevate-2 cursor-pointer overflow-hidden relative bg-gradient-to-br from-purple-500 to-purple-700 text-white border-0"
+          <CheckCircle className="h-4 w-4 mr-1" />
+          Approved
+          <Badge variant="secondary" className="text-xs ml-1 bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">{stats.approvedUsers}</Badge>
+        </Button>
+        <Button 
+          variant={activeTab === 'pending-approvals' ? 'default' : 'ghost'}
+          size="sm"
           onClick={() => setActiveTab('pending-approvals')}
-          data-testid="card-pending-approvals"
+          className="h-8"
+          data-testid="button-tab-pending-approvals"
         >
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-white/90">
-              Pending Approvals
-            </CardTitle>
-            <Clock className="h-5 w-5 text-white/80" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-white">{stats.pendingApprovals}</div>
-            <p className="text-xs text-white/80 mt-1">
-              {stats.pendingApprovals > 0 ? 'Click to review' : 'No pending approvals'}
-            </p>
-          </CardContent>
-          <Sparkles className="absolute -right-4 -bottom-4 h-24 w-24 text-white/10" />
-        </Card>
-
-        <Card 
-          className="hover-elevate active-elevate-2 cursor-pointer overflow-hidden relative bg-gradient-to-br from-orange-500 to-red-600 text-white border-0"
-          data-testid="card-unique-roles"
-        >
-          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-white/90">
-              Unique Roles
-            </CardTitle>
-            <Award className="h-5 w-5 text-white/80" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-white">{stats.totalRoles}</div>
-            <p className="text-xs text-white/80 mt-1">
-              Active role types
-            </p>
-          </CardContent>
-          <Sparkles className="absolute -right-4 -bottom-4 h-24 w-24 text-white/10" />
-        </Card>
+          <Clock className="h-4 w-4 mr-1" />
+          Pending
+          {stats.pendingApprovals > 0 && (
+            <Badge variant="destructive" className="text-xs ml-1">{stats.pendingApprovals}</Badge>
+          )}
+        </Button>
+        <div className="ml-auto flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowFilters(!showFilters)}
+            className="text-xs h-8"
+            data-testid="button-toggle-filters"
+          >
+            <Filter className="h-3.5 w-3.5 mr-1" />
+            Filters
+            <ChevronDown className={`h-3 w-3 ml-1 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
+          </Button>
+        </div>
       </div>
+
+      {/* Collapsible Filters */}
+      <Collapsible open={showFilters}>
+        <CollapsibleContent>
+          <Card className="p-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="search"
+                  placeholder="Search by name, email, role..."
+                  className="pl-8 h-9"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  data-testid="input-search-users"
+                />
+              </div>
+              {(selectedRole || selectedState || selectedHub) && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  {selectedRole && (
+                    <Badge variant="outline" className="flex items-center gap-1 text-xs">
+                      {(() => {
+                        if (selectedRole.startsWith('sys:')) return selectedRole.slice(4);
+                        if (selectedRole.startsWith('custom:')) {
+                          const rid = selectedRole.slice(7);
+                          const r = allRoles.find(rr => rr.id === rid);
+                          return r?.display_name || r?.name || 'custom';
+                        }
+                        return selectedRole;
+                      })()}
+                      <Button variant="ghost" size="icon" className="h-4 w-4 ml-1" onClick={() => setSelectedRole(null)} data-testid="button-clear-role-filter">
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </Badge>
+                  )}
+                  {selectedState && (
+                    <Badge variant="outline" className="flex items-center gap-1 text-xs">
+                      State
+                      <Button variant="ghost" size="icon" className="h-4 w-4 ml-1" onClick={() => setSelectedState(null)} data-testid="button-clear-state-filter">
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </Badge>
+                  )}
+                  {selectedHub && (
+                    <Badge variant="outline" className="flex items-center gap-1 text-xs">
+                      Hub
+                      <Button variant="ghost" size="icon" className="h-4 w-4 ml-1" onClick={() => setSelectedHub(null)} data-testid="button-clear-hub-filter">
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </Badge>
+                  )}
+                  <Button variant="ghost" size="sm" className="text-xs h-7" onClick={() => {
+                    setSelectedRole(null);
+                    setSelectedState(null);
+                    setSelectedHub(null);
+                    setSearchQuery('');
+                  }} data-testid="button-clear-all-filters">
+                    Clear all
+                  </Button>
+                </div>
+              )}
+            </div>
+          </Card>
+        </CollapsibleContent>
+      </Collapsible>
 
       {users.length === 0 && (
         <Card className="p-6 bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-700/30 mb-6">
@@ -727,106 +773,41 @@ const Users = () => {
         </Card>
       )}
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
-        <TabsList>
-          <TabsTrigger value="all-users">All Users</TabsTrigger>
-          <TabsTrigger value="pending-approvals" className="flex items-center gap-1">
-            Pending Approvals
-            {pendingUsers.length > 0 && (
-              <Badge variant="secondary" className="ml-1 bg-amber-100 text-amber-800">
-                {pendingUsers.length}
-              </Badge>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="approved-users">Approved Users</TabsTrigger>
-        </TabsList>
-
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-2">
         <TabsContent value="all-users" className="mt-0">
           {showAdminSection && <AdminUsersTable />}
 
-          <div className="my-6">
-            <UserRoleDashboard
-              users={users}
-              onRoleClick={handleRoleClick}
-              onStateChange={setSelectedState}
-              selectedState={selectedState}
-              onHubChange={setSelectedHub}
-              selectedHub={selectedHub}
-            />
-          </div>
-
-          <div className="mb-6 flex flex-col md:flex-row gap-4">
-            <div className="w-full md:w-64">
-              <div className="relative">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  type="search"
-                  placeholder="Search users..."
-                  className="pl-8"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+          <Collapsible>
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" size="sm" className="mb-2 text-xs" data-testid="button-toggle-role-dashboard">
+                <Shield className="h-3.5 w-3.5 mr-1" />
+                Role Dashboard
+                <ChevronDown className="h-3 w-3 ml-1" />
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="mb-4">
+                <UserRoleDashboard
+                  users={users}
+                  onRoleClick={handleRoleClick}
+                  onStateChange={setSelectedState}
+                  selectedState={selectedState}
+                  onHubChange={setSelectedHub}
+                  selectedHub={selectedHub}
                 />
               </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              {selectedRole && (
-                <Badge variant="outline" className="flex items-center gap-1">
-                  Role: {(() => {
-                    if (selectedRole.startsWith('sys:')) return selectedRole.slice(4);
-                    if (selectedRole.startsWith('custom:')) {
-                      const rid = selectedRole.slice(7);
-                      const r = allRoles.find(rr => rr.id === rid);
-                      return r?.display_name || r?.name || 'custom';
-                    }
-                    return selectedRole;
-                  })()}
-                  <button
-                    onClick={() => setSelectedRole(null)}
-                    className="ml-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 p-0.5"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              )}
-
-              {selectedState && (
-                <Badge variant="outline" className="flex items-center gap-1">
-                  State filter active
-                  <button
-                    onClick={() => setSelectedState(null)}
-                    className="ml-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 p-0.5"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              )}
-
-              {selectedHub && (
-                <Badge variant="outline" className="flex items-center gap-1">
-                  Hub filter active
-                  <button
-                    onClick={() => setSelectedHub(null)}
-                    className="ml-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 p-0.5"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              )}
-            </div>
-          </div>
+            </CollapsibleContent>
+          </Collapsible>
 
           <div className="relative overflow-hidden border rounded-lg">
-            <Table>
+            <Table className="text-sm">
               <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Classification</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Last Active</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                <TableRow className="h-10">
+                  <TableHead className="py-2">User</TableHead>
+                  <TableHead className="py-2">Role</TableHead>
+                  <TableHead className="py-2 hidden md:table-cell">Status</TableHead>
+                  <TableHead className="py-2 hidden lg:table-cell">Active</TableHead>
+                  <TableHead className="py-2 text-right w-24">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -840,14 +821,14 @@ const Users = () => {
                       ? Math.round((now.getTime() - lastActiveDate.getTime()) / (1000 * 60))
                       : null;
                     const activeStatus = minutesSinceActive === null
-                      ? 'Unknown'
+                      ? '-'
                       : minutesSinceActive < 5
-                        ? 'Just now'
+                        ? 'Now'
                         : minutesSinceActive < 60
-                          ? `${minutesSinceActive}m ago`
+                          ? `${minutesSinceActive}m`
                           : minutesSinceActive < 24 * 60
-                            ? `${Math.round(minutesSinceActive / 60)}h ago`
-                            : `${Math.round(minutesSinceActive / (60 * 24))}d ago`;
+                            ? `${Math.round(minutesSinceActive / 60)}h`
+                            : `${Math.round(minutesSinceActive / (60 * 24))}d`;
 
                     const primaryRole = getPrimaryRoleLabel(user);
 
@@ -856,133 +837,125 @@ const Users = () => {
                     const canManageRolesUI = canManageRoles();
 
                     return (
-                      <TableRow key={user.id}>
-                        <TableCell>
-                          <div className="flex items-center gap-3">
-                            <Avatar>
+                      <TableRow key={user.id} className="h-12">
+                        <TableCell className="py-1.5">
+                          <div className="flex items-center gap-2">
+                            <Avatar className="h-7 w-7">
                               <AvatarImage src={user.avatar} />
-                              <AvatarFallback className="bg-primary/10 text-primary">
-                                {user.name ? getInitials(user.name) : <UserIcon className="h-4 w-4" />}
+                              <AvatarFallback className="bg-primary/10 text-primary text-xs">
+                                {user.name ? getInitials(user.name) : <UserIcon className="h-3 w-3" />}
                               </AvatarFallback>
                             </Avatar>
-                            <div>
-                              <p className="font-medium">{user.name}</p>
-                              <p className="text-xs text-muted-foreground">{user.phone || '-'}</p>
+                            <div className="min-w-0">
+                              <p className="font-medium text-sm truncate">{user.name}</p>
+                              <p className="text-xs text-muted-foreground truncate">{user.email}</p>
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell>{user.email}</TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap gap-1">
+                        <TableCell className="py-1.5">
+                          <div className="flex items-center gap-1">
                             <RoleBadge role={user.role} size="sm" />
+                            <UserClassificationBadge userId={user.id} compact />
                           </div>
                         </TableCell>
-                        <TableCell>
-                          <UserClassificationBadge userId={user.id} />
-                        </TableCell>
-                        <TableCell>
+                        <TableCell className="py-1.5 hidden md:table-cell">
                           {user.isApproved ? (
-                            <div className="flex items-center">
-                              <Badge variant="success" className="bg-green-100 text-green-800 hover:bg-green-200">
-                                <Check size={12} className="mr-1" /> Approved
-                              </Badge>
-                            </div>
+                            <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800">
+                              <Check size={10} className="mr-0.5" /> OK
+                            </Badge>
                           ) : (
-                            <div className="flex items-center">
-                              <Badge variant="destructive" className="bg-amber-100 text-amber-800 hover:bg-amber-200">
-                                <Clock size={12} className="mr-1" /> Pending
-                              </Badge>
-                            </div>
+                            <Badge variant="outline" className="text-xs bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-800">
+                              <Clock size={10} className="mr-0.5" /> Pending
+                            </Badge>
                           )}
                         </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <span className={`h-2 w-2 rounded-full 
-                              ${user.availability === 'online' ? 'bg-green-500' : 'bg-gray-300'}`}>
-                            </span>
-                            <span className="text-sm text-muted-foreground">
-                              {activeStatus}
-                            </span>
+                        <TableCell className="py-1.5 hidden lg:table-cell">
+                          <div className="flex items-center gap-1.5">
+                            <span className={`h-1.5 w-1.5 rounded-full ${user.availability === 'online' ? 'bg-green-500' : 'bg-gray-300'}`} />
+                            <span className="text-xs text-muted-foreground">{activeStatus}</span>
                           </div>
                         </TableCell>
                         <TableCell className="text-right">
-                          {!user.isApproved && isAdmin && (
-                            <div className="flex justify-end gap-2 mb-2">
-                              <Button 
-                                variant="default" 
-                                size="sm"
-                                onClick={() => handleApproveUser(user.id)}
-                                disabled={isLoadingApproval === user.id}
-                              >
-                                <Check className="h-4 w-4 mr-1" />
-                                {isLoadingApproval === user.id ? "Processing..." : "Approve"}
-                              </Button>
-                              <Button 
-                                variant="destructive" 
-                                size="sm"
-                                onClick={() => handleRejectUser(user.id)}
-                                disabled={isLoadingApproval === user.id}
-                              >
-                                <X className="h-4 w-4 mr-1" />
-                                {isLoadingApproval === user.id ? "Processing..." : "Reject"}
-                              </Button>
-                            </div>
-                          )}
-                          <Button variant="ghost" size="sm" asChild>
-                            <Link to={`/users/${user.id}`}>
-                              <UserCog className="h-4 w-4 mr-2" />
-                              Manage
-                            </Link>
-                          </Button>
-                          {canManageRolesUI && (
-                            <Button variant="outline" size="sm" className="ml-2" asChild>
-                              <Link to="/role-management" className="flex items-center">
-                                <Shield className="h-4 w-4 mr-1" />
-                                Manage Roles
+                          <div className="flex items-center justify-end gap-1">
+                            {!user.isApproved && isAdmin && (
+                              <>
+                                <Button 
+                                  variant="default" 
+                                  size="sm"
+                                  className="h-7 text-xs"
+                                  onClick={() => handleApproveUser(user.id)}
+                                  disabled={isLoadingApproval === user.id}
+                                >
+                                  {isLoadingApproval === user.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                                </Button>
+                                <Button 
+                                  variant="destructive" 
+                                  size="sm"
+                                  className="h-7 text-xs"
+                                  onClick={() => handleRejectUser(user.id)}
+                                  disabled={isLoadingApproval === user.id}
+                                >
+                                  <X className="h-3 w-3" />
+                                </Button>
+                              </>
+                            )}
+                            <Button variant="ghost" size="icon" className="h-7 w-7" asChild data-testid={`button-view-user-${user.id}`}>
+                              <Link to={`/users/${user.id}`}>
+                                <Eye className="h-3.5 w-3.5" />
                               </Link>
                             </Button>
-                          )}
-                          {isAdminOrICT && (
-                            <div className="flex flex-wrap justify-end gap-2 mt-2">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleOpenPasswordReset(user)}
-                                data-testid={`button-reset-password-all-${user.id}`}
-                              >
-                                <Mail className="h-4 w-4 mr-1" />
-                                Send Reset Email
-                              </Button>
-                              <Button
-                                variant="default"
-                                size="sm"
-                                onClick={() => handleOpenAdminPasswordChange(user)}
-                                data-testid={`button-change-password-all-${user.id}`}
-                              >
-                                <KeyRound className="h-4 w-4 mr-1" />
-                                Set Password
-                              </Button>
-                              <Button
-                                variant="destructive"
-                                size="sm"
-                                onClick={() => handleDelete(user.id)}
-                                disabled={deletingUserId === user.id}
-                              >
-                                {deletingUserId === user.id ? (
-                                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                                ) : null}
-                                Delete
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleDeactivate(user.id)}
-                                disabled={deletingUserId === user.id}
-                              >
-                                Deactivate
-                              </Button>
-                            </div>
-                          )}
+                            {(isAdminOrICT || canManageRolesUI) && (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7" data-testid={`button-actions-menu-${user.id}`}>
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-48">
+                                  <DropdownMenuItem asChild>
+                                    <Link to={`/users/${user.id}`} className="flex items-center">
+                                      <UserCog className="h-4 w-4 mr-2" />
+                                      View Details
+                                    </Link>
+                                  </DropdownMenuItem>
+                                  {canManageRolesUI && (
+                                    <DropdownMenuItem asChild>
+                                      <Link to="/role-management" className="flex items-center">
+                                        <Shield className="h-4 w-4 mr-2" />
+                                        Manage Roles
+                                      </Link>
+                                    </DropdownMenuItem>
+                                  )}
+                                  {isAdminOrICT && (
+                                    <>
+                                      <DropdownMenuSeparator />
+                                      <DropdownMenuItem onClick={() => handleOpenPasswordReset(user)}>
+                                        <Mail className="h-4 w-4 mr-2" />
+                                        Send Reset Email
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem onClick={() => handleOpenAdminPasswordChange(user)}>
+                                        <KeyRound className="h-4 w-4 mr-2" />
+                                        Set Password
+                                      </DropdownMenuItem>
+                                      <DropdownMenuSeparator />
+                                      <DropdownMenuItem onClick={() => handleDeactivate(user.id)} disabled={deletingUserId === user.id}>
+                                        <UserX className="h-4 w-4 mr-2" />
+                                        Deactivate
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem 
+                                        onClick={() => handleDelete(user.id)} 
+                                        disabled={deletingUserId === user.id}
+                                        className="text-destructive focus:text-destructive"
+                                      >
+                                        <Trash2 className="h-4 w-4 mr-2" />
+                                        Delete
+                                      </DropdownMenuItem>
+                                    </>
+                                  )}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     );
@@ -1010,15 +983,12 @@ const Users = () => {
 
         <TabsContent value="approved-users" className="mt-0">
           <div className="relative overflow-hidden border rounded-lg">
-            <Table>
+            <Table className="text-sm">
               <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Classification</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                <TableRow className="h-10">
+                  <TableHead className="py-2">User</TableHead>
+                  <TableHead className="py-2">Role</TableHead>
+                  <TableHead className="py-2 text-right w-24">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1031,90 +1001,82 @@ const Users = () => {
                       (currentUser.roles && Array.isArray(currentUser.roles) && (currentUser.roles.includes('admin' as any) || currentUser.roles.includes('Admin'))));
 
                     return (
-                      <TableRow key={user.id}>
-                        <TableCell>
-                          <div className="flex items-center gap-3">
-                            <Avatar>
+                      <TableRow key={user.id} className="h-12">
+                        <TableCell className="py-1.5">
+                          <div className="flex items-center gap-2">
+                            <Avatar className="h-7 w-7">
                               <AvatarImage src={user.avatar} />
-                              <AvatarFallback className="bg-primary/10 text-primary">
-                                {user.name ? getInitials(user.name) : <UserIcon className="h-4 w-4" />}
+                              <AvatarFallback className="bg-primary/10 text-primary text-xs">
+                                {user.name ? getInitials(user.name) : <UserIcon className="h-3 w-3" />}
                               </AvatarFallback>
                             </Avatar>
-                            <div>
-                              <p className="font-medium">{user.name}</p>
-                              <p className="text-xs text-muted-foreground">{user.phone || '-'}</p>
+                            <div className="min-w-0">
+                              <p className="font-medium text-sm truncate">{user.name}</p>
+                              <p className="text-xs text-muted-foreground truncate">{user.email}</p>
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell>{user.email}</TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap gap-1">
+                        <TableCell className="py-1.5">
+                          <div className="flex items-center gap-1">
                             {roleLabels.length > 0 ? (
-                              roleLabels.map((label, index) => (
-                                <RoleBadge key={index} role={label} size="sm" />
-                              ))
+                              <RoleBadge role={roleLabels[0]} size="sm" />
                             ) : (
                               <RoleBadge role={user.role} size="sm" />
                             )}
+                            <UserClassificationBadge userId={user.id} compact />
                           </div>
                         </TableCell>
-                        <TableCell>
-                          <UserClassificationBadge userId={user.id} />
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="success" className="bg-green-100 text-green-800 hover:bg-green-200">
-                            <Check size={12} className="mr-1" /> Active
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button variant="ghost" size="sm" asChild>
-                            <Link to={`/users/${user.id}`}>
-                              <UserCog className="h-4 w-4 mr-2" />
-                              Manage
-                            </Link>
-                          </Button>
-                          {isAdmin && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="ml-2"
-                              onClick={() => handleOpenRoleEdit(user)}
-                            >
-                              <Shield className="h-4 w-4 mr-1" />
-                              Edit Roles
+                        <TableCell className="py-1.5 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button variant="ghost" size="icon" className="h-7 w-7" asChild data-testid={`button-view-approved-user-${user.id}`}>
+                              <Link to={`/users/${user.id}`}>
+                                <Eye className="h-3.5 w-3.5" />
+                              </Link>
                             </Button>
-                          )}
-                          {isAdminOrICT && (
-                            <>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="ml-2"
-                                onClick={() => handleOpenPasswordReset(user)}
-                                data-testid={`button-reset-password-${user.id}`}
-                              >
-                                <Mail className="h-4 w-4 mr-1" />
-                                Send Reset Email
-                              </Button>
-                              <Button
-                                variant="default"
-                                size="sm"
-                                className="ml-2"
-                                onClick={() => handleOpenAdminPasswordChange(user)}
-                                data-testid={`button-change-password-${user.id}`}
-                              >
-                                <KeyRound className="h-4 w-4 mr-1" />
-                                Set Password
-                              </Button>
-                            </>
-                          )}
+                            {(isAdmin || isAdminOrICT) && (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7" data-testid={`button-approved-actions-menu-${user.id}`}>
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-48">
+                                  <DropdownMenuItem asChild>
+                                    <Link to={`/users/${user.id}`} className="flex items-center">
+                                      <UserCog className="h-4 w-4 mr-2" />
+                                      View Details
+                                    </Link>
+                                  </DropdownMenuItem>
+                                  {isAdmin && (
+                                    <DropdownMenuItem onClick={() => handleOpenRoleEdit(user)}>
+                                      <Shield className="h-4 w-4 mr-2" />
+                                      Edit Roles
+                                    </DropdownMenuItem>
+                                  )}
+                                  {isAdminOrICT && (
+                                    <>
+                                      <DropdownMenuSeparator />
+                                      <DropdownMenuItem onClick={() => handleOpenPasswordReset(user)}>
+                                        <Mail className="h-4 w-4 mr-2" />
+                                        Send Reset Email
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem onClick={() => handleOpenAdminPasswordChange(user)}>
+                                        <KeyRound className="h-4 w-4 mr-2" />
+                                        Set Password
+                                      </DropdownMenuItem>
+                                    </>
+                                  )}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     );
                   })
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
+                    <TableCell colSpan={3} className="text-center py-6 text-muted-foreground">
                       No approved users found
                     </TableCell>
                   </TableRow>
