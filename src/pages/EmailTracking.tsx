@@ -101,6 +101,7 @@ export default function EmailTracking() {
   const fetchEmailLogs = async () => {
     setLoading(true);
     try {
+      // Try to fetch from database first
       const { data, error } = await supabase
         .from('audit_logs')
         .select('*')
@@ -109,17 +110,17 @@ export default function EmailTracking() {
         .order('timestamp', { ascending: false })
         .limit(500);
 
+      let logs: EmailLog[] = [];
+
       if (error) {
-        console.error('Error fetching email logs:', error);
-        toast({
-          title: 'Error loading logs',
-          description: error.message,
-          variant: 'destructive',
-        });
-        return;
+        console.warn('Database not available, using localStorage:', error.message);
+        // Fallback to localStorage
+        const localLogs = getLocalEmailLogs();
+        logs = localLogs;
+      } else {
+        logs = (data || []) as EmailLog[];
       }
 
-      const logs = (data || []) as EmailLog[];
       setEmailLogs(logs);
 
       // Calculate stats
@@ -134,8 +135,41 @@ export default function EmailTracking() {
       setStats(newStats);
     } catch (error: any) {
       console.error('Error:', error);
+      // Try localStorage as last resort
+      const localLogs = getLocalEmailLogs();
+      setEmailLogs(localLogs);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Get email logs from localStorage (fallback)
+  const getLocalEmailLogs = (): EmailLog[] => {
+    try {
+      const stored = localStorage.getItem('pact_audit_logs');
+      if (!stored) return [];
+      const allLogs = JSON.parse(stored);
+      // Filter for email/otp logs
+      return allLogs.filter((log: any) => 
+        log.module === 'notification' && 
+        (log.entityType === 'email' || log.entityType === 'otp' || 
+         log.entity_type === 'email' || log.entity_type === 'otp')
+      ).map((log: any) => ({
+        id: log.id,
+        entity_type: log.entityType || log.entity_type || 'email',
+        entity_name: log.entityName || log.entity_name || '',
+        description: log.description || '',
+        timestamp: log.timestamp || new Date().toISOString(),
+        success: log.success !== false,
+        error_message: log.errorMessage || log.error_message,
+        metadata: log.metadata || {},
+        actor_name: log.actorName || log.actor_name || 'System',
+        actor_email: log.actorEmail || log.actor_email,
+        tags: log.tags || [],
+      }));
+    } catch (e) {
+      console.warn('Failed to read local logs:', e);
+      return [];
     }
   };
 
@@ -161,6 +195,35 @@ export default function EmailTracking() {
     return matchesSearch && matchesStatus && matchesType;
   });
 
+  // Store email log locally for immediate display
+  const storeLocalEmailLog = (recipient: string, subject: string, success: boolean, error?: string) => {
+    try {
+      const stored = localStorage.getItem('pact_audit_logs');
+      const logs = stored ? JSON.parse(stored) : [];
+      const newLog = {
+        id: `email-${Date.now()}`,
+        module: 'notification',
+        entityType: 'email',
+        entity_type: 'email',
+        entityName: subject,
+        entity_name: subject,
+        description: success ? `Email sent to ${recipient}: ${subject}` : `Failed to send email to ${recipient}`,
+        timestamp: new Date().toISOString(),
+        success,
+        errorMessage: error,
+        error_message: error,
+        metadata: { recipient, subject, emailType: 'test' },
+        actorName: 'System',
+        actor_name: 'System',
+        tags: ['notification', 'email', 'test'],
+      };
+      logs.unshift(newLog);
+      localStorage.setItem('pact_audit_logs', JSON.stringify(logs.slice(0, 1000)));
+    } catch (e) {
+      console.warn('Failed to store local email log:', e);
+    }
+  };
+
   const sendTestEmail = async () => {
     if (!testEmail || !testEmail.includes('@')) {
       toast({
@@ -185,14 +248,15 @@ export default function EmailTracking() {
         }
       );
 
+      // Store log locally for immediate display
+      storeLocalEmailLog(testEmail, 'SMTP Test Email', result.success, result.error);
+
       if (result.success) {
         toast({
           title: 'Test email sent',
           description: `Email sent successfully to ${testEmail}`,
         });
         setTestEmail('');
-        // Refresh logs after a short delay
-        setTimeout(fetchEmailLogs, 2000);
       } else {
         toast({
           title: 'Failed to send test email',
@@ -200,12 +264,16 @@ export default function EmailTracking() {
           variant: 'destructive',
         });
       }
+      // Refresh logs after storing
+      setTimeout(fetchEmailLogs, 500);
     } catch (error: any) {
+      storeLocalEmailLog(testEmail, 'SMTP Test Email', false, error.message);
       toast({
         title: 'Error',
         description: error.message || 'Failed to send test email',
         variant: 'destructive',
       });
+      setTimeout(fetchEmailLogs, 500);
     } finally {
       setSendingTest(false);
     }
