@@ -1,12 +1,11 @@
-import React, { useState } from 'react';
-import { format, isValid, parseISO } from 'date-fns';
+import { useState } from 'react';
+import { format, isValid, parseISO, differenceInDays } from 'date-fns';
 import {
   Calendar,
   Tag,
-  Clock,
   Users,
   BarChart,
-  Map,
+  MapPin,
   Edit,
   Trash2,
   Layers,
@@ -15,9 +14,18 @@ import {
   Clock3,
   FileText,
   Plus,
-  Loader2
+  Loader2,
+  ArrowLeft,
+  UserCircle,
+  DollarSign,
+  Target,
+  TrendingUp,
+  Wallet
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useBudget } from '@/context/budget/BudgetContext';
+import { ProjectBudgetCard } from '@/components/budget/BudgetCard';
+import { EditProjectBudgetDialog } from '@/components/budget/EditProjectBudgetDialog';
 
 import { Project } from '@/types/project';
 import { Button } from '@/components/ui/button';
@@ -46,6 +54,62 @@ interface ProjectDetailProps {
   deleting?: boolean;
 }
 
+const getBudgetSummary = (budget: any) => {
+  if (!budget) return null;
+
+  const parseNumber = (value: any): number | null => {
+    if (value === null || value === undefined) return null;
+    if (typeof value === 'number' && !Number.isNaN(value)) return value;
+    if (typeof value === 'string') {
+      const n = Number(value);
+      return Number.isNaN(n) ? null : n;
+    }
+    return null;
+  };
+
+  const totalCents = parseNumber(
+    budget.totalBudgetCents !== undefined
+      ? budget.totalBudgetCents
+      : budget.total_budget_cents,
+  );
+
+  const total = (() => {
+    if (totalCents !== null) return totalCents / 100;
+    const rawTotal = parseNumber(budget.total);
+    return rawTotal;
+  })();
+
+  const allocatedCents = parseNumber(
+    budget.allocatedBudgetCents !== undefined
+      ? budget.allocatedBudgetCents
+      : budget.allocated_budget_cents,
+  );
+
+  const allocated = (() => {
+    if (allocatedCents !== null) return allocatedCents / 100;
+    const rawAllocated = parseNumber(budget.allocated);
+    return rawAllocated;
+  })();
+
+  const remainingCents = parseNumber(
+    budget.remainingBudgetCents !== undefined
+      ? budget.remainingBudgetCents
+      : budget.remaining_budget_cents,
+  );
+
+  const remaining = (() => {
+    if (remainingCents !== null) return remainingCents / 100;
+    const rawRemaining = parseNumber(budget.remaining);
+    if (rawRemaining !== null) return rawRemaining;
+    if (total !== null && allocated !== null) return total - allocated;
+    return null;
+  })();
+
+  const currency = budget.currency || 'SDG';
+
+  return { total, allocated, remaining, currency };
+};
+
 const ProjectDetail: React.FC<ProjectDetailProps> = ({
   project,
   onEdit,
@@ -54,6 +118,9 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
 }) => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('overview');
+  const [editBudgetOpen, setEditBudgetOpen] = useState(false);
+  const { getProjectBudget, loading: budgetLoading, refreshProjectBudgets } = useBudget();
+  const projectBudget = getProjectBudget(project.id);
 
   // Helper function to safely format dates
   const formatDate = (dateString: string) => {
@@ -115,174 +182,286 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
     }
   };
 
+  const getDaysRemaining = () => {
+    try {
+      const endDate = parseISO(project.endDate);
+      if (!isValid(endDate)) return null;
+      const days = differenceInDays(endDate, new Date());
+      return days;
+    } catch {
+      return null;
+    }
+  };
+
+  const daysRemaining = getDaysRemaining();
+
+  const budgetSummary = project.budget ? getBudgetSummary(project.budget) : null;
+
   return (
-    <div className="space-y-8">
-      {/* Project header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold">{project.name}</h1>
-            {getStatusBadge(project.status)}
-          </div>
-          <div className="flex items-center text-sm text-muted-foreground mt-1">
-            <Tag className="h-4 w-4 mr-1" /> {project.projectCode}
-          </div>
-        </div>
-        
-        <div className="flex flex-wrap gap-2">
-          {onEdit && (
-            <Button variant="outline" size="sm" onClick={onEdit}>
-              <Edit className="h-4 w-4 mr-2" /> Edit Project
-            </Button>
-          )}
-          {onDelete && (
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                  disabled={!!deleting}
-                >
-                  <Trash2 className="h-4 w-4 mr-2" /> Delete
+    <div className="space-y-4 p-3 md:p-4">
+      {/* Back Navigation */}
+      <Button 
+        variant="ghost" 
+        size="sm" 
+        onClick={() => navigate('/projects')}
+        className="gap-1.5 -ml-2"
+        data-testid="button-back-projects"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Back to Projects
+      </Button>
+
+      {/* Hero Summary Card */}
+      <Card className="bg-gradient-to-r from-blue-500/10 to-cyan-500/10 border-blue-200 dark:border-blue-800">
+        <CardContent className="p-4">
+          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+            {/* Left: Project info */}
+            <div className="space-y-2 flex-1 min-w-0">
+              <div className="flex items-start gap-2 flex-wrap">
+                <h1 className="text-xl font-semibold">{project.name}</h1>
+                {getStatusBadge(project.status)}
+                {budgetSummary && budgetSummary.total != null && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-green-500/10 text-green-700 dark:text-green-300 px-2 py-0.5 text-xs font-medium">
+                    <DollarSign className="h-3 w-3" />
+                    {`${budgetSummary.currency} ${budgetSummary.total.toLocaleString('en-US', {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}`}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center flex-wrap gap-3 text-sm text-muted-foreground">
+                <span className="flex items-center gap-1">
+                  <Tag className="h-3.5 w-3.5" />
+                  <span className="font-mono">{project.projectCode}</span>
+                </span>
+                {project.team?.projectManager && (
+                  <span className="flex items-center gap-1">
+                    <UserCircle className="h-3.5 w-3.5" />
+                    {project.team.projectManager}
+                  </span>
+                )}
+                {project.location?.region && (
+                  <span className="flex items-center gap-1">
+                    <MapPin className="h-3.5 w-3.5" />
+                    {project.location.region}
+                    {project.location.state && `, ${project.location.state}`}
+                  </span>
+                )}
+              </div>
+
+              {/* Quick stats row */}
+              <div className="flex flex-wrap gap-4 pt-2">
+                <div className="flex items-center gap-2 text-sm">
+                  <div className="w-8 h-8 rounded-md bg-blue-500/20 flex items-center justify-center">
+                    <Target className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Activities</p>
+                    <p className="font-semibold">{getCompletedActivities().completed}/{getCompletedActivities().total}</p>
+                  </div>
+                </div>
+                
+                {daysRemaining !== null && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <div className={`w-8 h-8 rounded-md flex items-center justify-center ${daysRemaining > 30 ? 'bg-green-500/20' : daysRemaining > 7 ? 'bg-orange-500/20' : 'bg-red-500/20'}`}>
+                      <TrendingUp className={`h-4 w-4 ${daysRemaining > 30 ? 'text-green-600 dark:text-green-400' : daysRemaining > 7 ? 'text-orange-600 dark:text-orange-400' : 'text-red-600 dark:text-red-400'}`} />
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Days Left</p>
+                      <p className="font-semibold">{daysRemaining > 0 ? daysRemaining : 'Overdue'}</p>
+                    </div>
+                  </div>
+                )}
+
+                {budgetSummary && budgetSummary.total != null && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <div className="w-8 h-8 rounded-md bg-green-500/20 flex items-center justify-center">
+                      <DollarSign className="h-4 w-4 text-green-600 dark:text-green-400" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Budget</p>
+                      <p className="font-semibold">
+                        {`${budgetSummary.currency} ${budgetSummary.total.toLocaleString('en-US', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })}`}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Right: Actions */}
+            <div className="flex flex-wrap gap-2">
+              {onEdit && (
+                <Button variant="outline" size="sm" onClick={onEdit}>
+                  <Edit className="h-4 w-4 mr-1.5" /> Edit
                 </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Are you sure you want to delete this project?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    This action cannot be undone. This will permanently delete the project "{project.name}" and all associated data including activities, team members, and progress tracking.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction
-                    onClick={onDelete}
-                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                    disabled={!!deleting}
-                  >
-                    {deleting ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Deleting...
-                      </>
-                    ) : (
-                      "Delete Project"
-                    )}
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          )}
-        </div>
-      </div>
+              )}
+              {onDelete && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-destructive"
+                      disabled={!!deleting}
+                    >
+                      <Trash2 className="h-4 w-4 mr-1.5" /> Delete
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Are you sure you want to delete this project?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This action cannot be undone. This will permanently delete the project "{project.name}" and all associated data including activities, team members, and progress tracking.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={onDelete}
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        disabled={!!deleting}
+                      >
+                        {deleting ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Deleting...
+                          </>
+                        ) : (
+                          "Delete Project"
+                        )}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
       
       {/* Project content */}
       <Tabs defaultValue="overview" value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid grid-cols-3 md:w-[400px]">
+        <TabsList className="grid grid-cols-4 w-full md:w-[480px]">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="activities">Activities</TabsTrigger>
           <TabsTrigger value="team">Team</TabsTrigger>
+          <TabsTrigger value="budget">Budget</TabsTrigger>
         </TabsList>
         
-        <TabsContent value="overview" className="space-y-6 mt-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Project details */}
-            <Card className="md:col-span-2">
-              <CardHeader>
-                <CardTitle className="text-lg">Project Details</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <p className="text-sm text-muted-foreground">Project Type</p>
-                    <div className="flex items-center">
-                      <Layers className="h-4 w-4 mr-2 text-primary" />
-                      <span className="capitalize">{project.projectType}</span>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-1">
-                    <p className="text-sm text-muted-foreground">Status</p>
-                    <div className="flex items-center">
-                      <span>{getStatusBadge(project.status)}</span>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-1">
-                    <p className="text-sm text-muted-foreground">Start Date</p>
-                    <div className="flex items-center">
-                      <Calendar className="h-4 w-4 mr-2 text-primary" />
-                      <span>{formatDate(project.startDate)}</span>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-1">
-                    <p className="text-sm text-muted-foreground">End Date</p>
-                    <div className="flex items-center">
-                      <Calendar className="h-4 w-4 mr-2 text-primary" />
-                      <span>{formatDate(project.endDate)}</span>
-                    </div>
-                  </div>
-                  
-                  {project.budget && (
-                    <div className="space-y-1">
-                      <p className="text-sm text-muted-foreground">Budget</p>
-                      <div className="flex items-center">
-                        <BarChart className="h-4 w-4 mr-2 text-primary" />
-                        <span>{project.budget.total.toLocaleString()} {project.budget.currency}</span>
+        <TabsContent value="overview" className="space-y-4 mt-4">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {/* Left column: Details + Timeline */}
+            <div className="lg:col-span-2 space-y-4">
+              {/* Project details */}
+              <Card>
+                <CardHeader className="p-3 pb-2">
+                  <CardTitle className="text-base font-semibold">Project Details</CardTitle>
+                </CardHeader>
+                <CardContent className="p-3 pt-0 space-y-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    <div className="space-y-0.5">
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide">Project ID</p>
+                      <div className="flex items-center gap-1.5">
+                        <Tag className="h-3.5 w-3.5 text-muted-foreground" />
+                        <span className="text-sm font-mono">{project.projectCode}</span>
                       </div>
                     </div>
-                  )}
-                  
-                  {project.location && (project.location.region || project.location.state) && (
-                    <div className="space-y-1">
-                      <p className="text-sm text-muted-foreground">Location</p>
-                      <div className="flex items-center">
-                        <Map className="h-4 w-4 mr-2 text-primary" />
-                        <span>
-                          {project.location.region}
-                          {project.location.state && `, ${project.location.state}`}
-                          {project.location.locality && `, ${project.location.locality}`}
-                        </span>
+
+                    <div className="space-y-0.5">
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide">Project Manager</p>
+                      <div className="flex items-center gap-1.5">
+                        <UserCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                        <span className="text-sm">{project.team?.projectManager || 'Not assigned'}</span>
                       </div>
                     </div>
-                  )}
-                </div>
-                
-                {project.description && (
-                  <div className="space-y-1 pt-2 border-t border-border">
-                    <p className="text-sm text-muted-foreground">Description</p>
-                    <p>{project.description}</p>
+
+                    <div className="space-y-0.5">
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide">Type</p>
+                      <div className="flex items-center gap-1.5">
+                        <Layers className="h-3.5 w-3.5 text-muted-foreground" />
+                        <span className="text-sm capitalize">{project.projectType}</span>
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-0.5">
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide">Start</p>
+                      <div className="flex items-center gap-1.5">
+                        <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                        <span className="text-sm">{formatDate(project.startDate)}</span>
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-0.5">
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide">End</p>
+                      <div className="flex items-center gap-1.5">
+                        <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                        <span className="text-sm">{formatDate(project.endDate)}</span>
+                      </div>
+                    </div>
+                    
+                    {budgetSummary && budgetSummary.total != null && (
+                      <div className="space-y-0.5">
+                        <p className="text-xs text-muted-foreground uppercase tracking-wide">Budget</p>
+                        <div className="flex items-center gap-1.5">
+                          <BarChart className="h-3.5 w-3.5 text-muted-foreground" />
+                          <span className="text-sm">{`${budgetSummary.currency} ${budgetSummary.total.toLocaleString('en-US', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}`}</span>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {project.location && (project.location.region || project.location.state) && (
+                      <div className="space-y-0.5 col-span-2">
+                        <p className="text-xs text-muted-foreground uppercase tracking-wide">Location</p>
+                        <div className="flex items-center gap-1.5">
+                          <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
+                          <span className="text-sm">
+                            {project.location.region}
+                            {project.location.state && `, ${project.location.state}`}
+                            {project.location.locality && `, ${project.location.locality}`}
+                          </span>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                )}
-              </CardContent>
-            </Card>
-            
-            {/* Activity Timeline */}
-            <div className="md:col-span-2">
+                  
+                  {project.description && (
+                    <div className="space-y-1 pt-2 border-t border-border/50">
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide">Description</p>
+                      <p className="text-sm">{project.description}</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+              
+              {/* Activity Timeline */}
               <ActivityTimeline activities={project.activities} />
             </div>
 
-            {/* Project progress */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Progress</CardTitle>
+            {/* Right column: Progress */}
+            <Card className="h-fit">
+              <CardHeader className="p-3 pb-2">
+                <CardTitle className="text-base font-semibold">Progress</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-2">
+              <CardContent className="p-3 pt-0 space-y-4">
+                <div className="space-y-1.5">
                   <div className="flex justify-between text-sm">
-                    <span>Activities</span>
-                    <span className="text-primary">{getCompletedActivities().completed}/{getCompletedActivities().total}</span>
+                    <span className="text-muted-foreground">Activities</span>
+                    <span className="font-medium">{getCompletedActivities().completed}/{getCompletedActivities().total}</span>
                   </div>
                   <Progress value={getCompletedActivities().percentage} className="h-2" />
                 </div>
                 
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <div className="flex justify-between text-sm">
-                    <span>Timeline</span>
-                    <span className="text-primary">
-                      {calculateTimelinePercentage()}%
-                    </span>
+                    <span className="text-muted-foreground">Timeline</span>
+                    <span className="font-medium">{calculateTimelinePercentage()}%</span>
                   </div>
                   <Progress 
                     value={calculateTimelinePercentage()} 
@@ -290,16 +469,28 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
                   />
                 </div>
                 
-                {project.budget && (
-                  <div className="space-y-2">
+                {budgetSummary && budgetSummary.total != null && budgetSummary.allocated != null && budgetSummary.total > 0 && (
+                  <div className="space-y-1.5">
                     <div className="flex justify-between text-sm">
-                      <span>Budget</span>
-                      <span className="text-primary">
-                        {Math.round((project.budget.allocated / project.budget.total) * 100) || 0}%
+                      <span className="text-muted-foreground">Budget Used</span>
+                      <span className="font-medium">
+                        {(() => {
+                          const total = budgetSummary.total || 0;
+                          const allocated = budgetSummary.allocated || 0;
+                          return total > 0
+                            ? Math.round((allocated / total) * 100)
+                            : 0;
+                        })()}%
                       </span>
                     </div>
                     <Progress 
-                      value={Math.round((project.budget.allocated / project.budget.total) * 100) || 0} 
+                      value={(() => {
+                        const total = budgetSummary.total || 0;
+                        const allocated = budgetSummary.allocated || 0;
+                        return total > 0
+                          ? Math.round((allocated / total) * 100)
+                          : 0;
+                      })()} 
                       className="h-2" 
                     />
                   </div>
@@ -309,11 +500,11 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
           </div>
         </TabsContent>
         
-        <TabsContent value="activities" className="space-y-6 mt-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-medium">Activities</h2>
+        <TabsContent value="activities" className="space-y-4 mt-4">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-base font-semibold">Activities</h2>
             <Button size="sm" onClick={() => navigate(`/projects/${project.id}/activities/create`)}>
-              <Plus className="h-4 w-4 mr-2" /> Add Activity
+              <Plus className="h-4 w-4 mr-1.5" /> Add Activity
             </Button>
           </div>
           
@@ -387,11 +578,11 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
           )}
         </TabsContent>
         
-        <TabsContent value="team" className="space-y-6 mt-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-medium">Team Members</h2>
+        <TabsContent value="team" className="space-y-4 mt-4">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-base font-semibold">Team Members</h2>
             <Button size="sm" onClick={() => navigate(`/projects/${project.id}/team`)}>
-              <Plus className="h-4 w-4 mr-2" /> Add Members
+              <Plus className="h-4 w-4 mr-1.5" /> Add Members
             </Button>
           </div>
           
@@ -412,6 +603,54 @@ const ProjectDetail: React.FC<ProjectDetailProps> = ({
               </p>
               <Button className="mt-4" onClick={() => navigate(`/projects/${project.id}/team`)}>
                 <Plus className="h-4 w-4 mr-2" /> Add Team Members
+              </Button>
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="budget" className="space-y-4 mt-4">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-base font-semibold">Project Budget</h2>
+            {projectBudget && (
+              <Button size="sm" variant="outline" onClick={() => setEditBudgetOpen(true)} data-testid="button-edit-budget">
+                <Edit className="h-4 w-4 mr-1.5" /> Edit Budget
+              </Button>
+            )}
+            {!projectBudget && (
+              <Button size="sm" onClick={() => navigate('/budget')}>
+                <Plus className="h-4 w-4 mr-1.5" /> Create Budget
+              </Button>
+            )}
+          </div>
+          
+          {budgetLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : projectBudget ? (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <ProjectBudgetCard budget={projectBudget} projectName={project.name} />
+              </div>
+              <EditProjectBudgetDialog
+                budget={projectBudget}
+                projectName={project.name}
+                open={editBudgetOpen}
+                onOpenChange={setEditBudgetOpen}
+                onSuccess={() => refreshProjectBudgets()}
+              />
+            </>
+          ) : (
+            <div className="text-center py-12 border border-dashed rounded-lg border-border">
+              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-muted mb-4">
+                <Wallet className="h-6 w-6 text-muted-foreground" />
+              </div>
+              <h3 className="text-lg font-medium">No budget assigned</h3>
+              <p className="text-muted-foreground mt-1 max-w-md mx-auto">
+                Create a budget for this project to track spending and allocations
+              </p>
+              <Button className="mt-4" onClick={() => navigate('/budget')}>
+                <Plus className="h-4 w-4 mr-2" /> Create Project Budget
               </Button>
             </div>
           )}

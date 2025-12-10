@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
@@ -9,12 +9,14 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { SiteVisit } from "@/types";
 import { useCostSubmissionContext } from "@/context/costApproval/CostSubmissionContext";
 import { SupportingDocument } from "@/types/cost-submission";
 import CostDocumentUpload from "./CostDocumentUpload";
-import { Loader2, DollarSign, Bus, Hotel, Utensils, MoreHorizontal, FileText } from "lucide-react";
+import { useBudgetRestriction } from "@/hooks/useBudgetRestriction";
+import { Loader2, DollarSign, Bus, Hotel, Utensils, MoreHorizontal, FileText, AlertTriangle, Info } from "lucide-react";
 
 const formSchema = z.object({
   mmpSiteEntryId: z.string().min(1, "Please select a site visit"),
@@ -40,9 +42,12 @@ const CostSubmissionForm = ({ siteVisits }: CostSubmissionFormProps) => {
   const { toast } = useToast();
   const { useCreateSubmission } = useCostSubmissionContext();
   const { mutate: createSubmission, isPending } = useCreateSubmission();
+  const { checkRestriction, isChecking, lastResult, canOverride, escalateToSeniorOps } = useBudgetRestriction();
   
   const [selectedSiteVisit, setSelectedSiteVisit] = useState<SiteVisit | null>(null);
   const [supportingDocuments, setSupportingDocuments] = useState<SupportingDocument[]>([]);
+  const [budgetWarning, setBudgetWarning] = useState<string | null>(null);
+  const [budgetBlocked, setBudgetBlocked] = useState(false);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -68,6 +73,54 @@ const CostSubmissionForm = ({ siteVisits }: CostSubmissionFormProps) => {
     form.setValue("mmpSiteEntryId", siteVisitId);
   };
 
+  const checkBudgetBeforeSubmit = async (totalCents: number): Promise<boolean> => {
+    if (!selectedSiteVisit?.mmpDetails?.mmpId) return true;
+    
+    const result = await checkRestriction(selectedSiteVisit.mmpDetails.mmpId, totalCents);
+    
+    const projectName = selectedSiteVisit.mmpDetails.projectName || 
+                        selectedSiteVisit.projectName || 
+                        'Unknown Project';
+    
+    if (!result.allowed && !canOverride) {
+      setBudgetBlocked(true);
+      setBudgetWarning(
+        `Budget exceeded: Your submission of ${(totalCents / 100).toLocaleString()} SDG exceeds the remaining budget of ${result.budgetDetails.remaining.toLocaleString()} SDG. ` +
+        `This request requires Senior Operations Lead approval.`
+      );
+      
+      if (selectedSiteVisit.mmpDetails.projectId) {
+        const requestId = `cost_${selectedSiteVisit.id}_${Date.now()}`;
+        await escalateToSeniorOps({
+          requestId,
+          requestType: 'cost_submission',
+          amount: totalCents / 100,
+          shortfall: result.budgetDetails.shortfall,
+          projectId: selectedSiteVisit.mmpDetails.projectId,
+          projectName,
+          mmpId: selectedSiteVisit.mmpDetails.mmpId,
+          reason: `Cost submission for site "${selectedSiteVisit.siteName}" exceeds budget by ${result.budgetDetails.shortfall.toLocaleString()} SDG`,
+        });
+      }
+      return false;
+    } else if (!result.allowed && canOverride) {
+      setBudgetBlocked(false);
+      setBudgetWarning(
+        `Budget override available: Your submission exceeds the remaining budget by ${result.budgetDetails.shortfall.toLocaleString()} SDG. ` +
+        `As a ${canOverride ? 'privileged user' : ''}, you may override and submit with justification.`
+      );
+    } else if (result.alerts.length > 0) {
+      setBudgetBlocked(false);
+      const alert = result.alerts[0];
+      setBudgetWarning(alert.message || `Budget at ${result.budgetDetails.utilizationPercentage.toFixed(1)}% utilization`);
+    } else {
+      setBudgetBlocked(false);
+      setBudgetWarning(null);
+    }
+    
+    return true;
+  };
+
   const onSubmit = async (values: FormValues) => {
     if (!selectedSiteVisit) {
       toast({
@@ -79,7 +132,6 @@ const CostSubmissionForm = ({ siteVisits }: CostSubmissionFormProps) => {
     }
 
     try {
-      // Validate project ID is available
       if (!selectedSiteVisit.mmpDetails.projectId) {
         toast({
           title: "Error",
@@ -89,9 +141,24 @@ const CostSubmissionForm = ({ siteVisits }: CostSubmissionFormProps) => {
         return;
       }
 
-      // Ensure all cost values are properly converted to numbers
+      const totalCents = 
+        Number(values.transportationCostCents) +
+        Number(values.accommodationCostCents) +
+        Number(values.mealAllowanceCents) +
+        Number(values.otherCostsCents);
+
+      const budgetOk = await checkBudgetBeforeSubmit(totalCents);
+      if (!budgetOk) {
+        toast({
+          title: "Budget Restriction",
+          description: "This expense exceeds the available budget and has been escalated for Senior Operations Lead approval.",
+          variant: "warning"
+        });
+        return;
+      }
+
       await createSubmission({
-        mmpSiteEntryId: values.mmpSiteEntryId,
+        siteVisitId: values.mmpSiteEntryId,
         mmpFileId: selectedSiteVisit.mmpDetails.mmpId,
         projectId: selectedSiteVisit.mmpDetails.projectId,
         transportationCostCents: Number(values.transportationCostCents),
@@ -112,10 +179,11 @@ const CostSubmissionForm = ({ siteVisits }: CostSubmissionFormProps) => {
         description: "Cost submission created successfully"
       });
 
-      // Reset form
       form.reset();
       setSelectedSiteVisit(null);
       setSupportingDocuments([]);
+      setBudgetWarning(null);
+      setBudgetBlocked(false);
     } catch (error: any) {
       toast({
         title: "Error",
@@ -147,6 +215,33 @@ const CostSubmissionForm = ({ siteVisits }: CostSubmissionFormProps) => {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
+            {budgetWarning && (
+              <Alert variant={budgetBlocked ? "destructive" : "default"} data-testid="alert-budget-warning">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription className="flex items-start gap-2">
+                  <div>
+                    <span className="font-medium">{budgetBlocked ? "Budget Exceeded" : "Budget Alert"}</span>
+                    <p className="text-sm mt-1">{budgetWarning}</p>
+                    {budgetBlocked && !canOverride && (
+                      <p className="text-sm mt-2 text-muted-foreground">
+                        A notification has been sent to Senior Operations Lead for approval.
+                      </p>
+                    )}
+                  </div>
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {lastResult && !budgetBlocked && lastResult.budgetDetails.allocated > 0 && (
+              <Alert variant="default" data-testid="alert-budget-info">
+                <Info className="h-4 w-4" />
+                <AlertDescription>
+                  <span className="font-medium">Budget Status: </span>
+                  {lastResult.budgetDetails.remaining.toLocaleString()} SDG remaining 
+                  ({(100 - lastResult.budgetDetails.utilizationPercentage).toFixed(1)}% available)
+                </AlertDescription>
+              </Alert>
+            )}
             {/* Site Visit Selection */}
             <FormField
               control={form.control}
@@ -452,17 +547,17 @@ const CostSubmissionForm = ({ siteVisits }: CostSubmissionFormProps) => {
 
             {/* Total Summary */}
             <Card className="bg-muted">
-              <CardContent className="pt-6">
-                <div className="flex items-center justify-between">
+              <CardContent className="pt-4 sm:pt-6">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
                   <div className="flex items-center gap-2">
-                    <DollarSign className="h-5 w-5" />
-                    <span className="text-lg font-semibold">Total Cost:</span>
+                    <DollarSign className="h-5 w-5 flex-shrink-0" />
+                    <span className="text-base sm:text-lg font-semibold">Total Cost:</span>
                   </div>
-                  <div className="text-right">
-                    <p className="text-2xl font-bold text-primary" data-testid="text-total-cost">
+                  <div className="text-left sm:text-right">
+                    <p className="text-xl sm:text-2xl font-bold text-primary" data-testid="text-total-cost">
                       {formatCurrency(totalCostCents, form.watch("currency"))}
                     </p>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs sm:text-sm text-muted-foreground">
                       {totalCostCents} cents
                     </p>
                   </div>
@@ -470,7 +565,7 @@ const CostSubmissionForm = ({ siteVisits }: CostSubmissionFormProps) => {
               </CardContent>
             </Card>
           </CardContent>
-          <CardFooter className="flex justify-between gap-4">
+          <CardFooter className="flex flex-col sm:flex-row gap-3 sm:justify-between">
             <Button
               type="button"
               variant="outline"
@@ -480,6 +575,7 @@ const CostSubmissionForm = ({ siteVisits }: CostSubmissionFormProps) => {
                 setSupportingDocuments([]);
               }}
               disabled={isPending}
+              className="min-h-[44px] w-full sm:w-auto order-2 sm:order-1"
               data-testid="button-reset"
             >
               Reset Form
@@ -487,6 +583,7 @@ const CostSubmissionForm = ({ siteVisits }: CostSubmissionFormProps) => {
             <Button
               type="submit"
               disabled={isPending || !selectedSiteVisit}
+              className="min-h-[44px] w-full sm:w-auto order-1 sm:order-2"
               data-testid="button-submit-costs"
             >
               {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Users, MapPin, MessageSquare, UserCircle, LayoutGrid, Table as TableIcon, Building2 } from 'lucide-react';
 import { TeamCommunication } from '../TeamCommunication';
@@ -11,22 +11,24 @@ import { Badge } from '@/components/ui/badge';
 import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
 import { TeamMemberCard } from '../TeamMemberCard';
 import { TeamMemberTable } from '../TeamMemberTable';
-import { TeamMemberDetailModal } from '../TeamMemberDetailModal';
 import { User } from '@/types/user';
 import { useAppContext } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
+import { useCall } from '@/context/communications/CallContext';
+import { useCommunication } from '@/context/communications/CommunicationContext';
 
 export const TeamZone: React.FC = () => {
   const [activeTab, setActiveTab] = useState('overview');
   const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
   const [selectedMember, setSelectedMember] = useState<User | null>(null);
-  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [hubName, setHubName] = useState<string | null>(null);
   
   const navigate = useNavigate();
   const { users } = useUser();
   const { siteVisits } = useSiteVisitContext();
   const { currentUser, roles } = useAppContext();
+  const { initiateCall } = useCall();
+  const { openChatForEntity } = useCommunication();
 
   // Check if current user is a supervisor (not admin/ict)
   const isSupervisor = useMemo(() => {
@@ -135,28 +137,30 @@ export const TeamZone: React.FC = () => {
   }, [selectedMember, siteVisits]);
 
   const handleMemberClick = (user: User) => {
-    setSelectedMember(user);
-    setIsDetailModalOpen(true);
+    navigate(`/users/${user.id}`);
   };
 
-  const handleModalClose = () => {
-    setIsDetailModalOpen(false);
-    setSelectedMember(null);
-  };
+  const handleCallUser = useCallback((user: User) => {
+    initiateCall(user);
+  }, [initiateCall]);
+
+  const handleMessageUser = useCallback((user: User) => {
+    openChatForEntity(user.id, 'chat');
+  }, [openChatForEntity]);
 
   return (
-    <div className="min-h-screen bg-background p-3 sm:p-4 md:p-6 lg:p-8 space-y-4 sm:space-y-6">
+    <div className="min-h-screen bg-background p-3 md:p-4 space-y-4">
       {/* Modern Tech Header */}
-      <div className="relative overflow-hidden rounded-lg border border-border/50 bg-gradient-to-r from-green-500/5 via-blue-500/5 to-background p-4 shadow-sm">
-        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-lg bg-green-500/10 border border-green-500/20 flex-shrink-0">
-              <Users className="h-5 w-5 sm:h-6 sm:w-6 text-green-600 dark:text-green-400" />
+      <div className="relative overflow-hidden rounded-md border border-border/50 bg-muted/30 p-3">
+        <div className="relative z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <div className="flex items-center justify-center w-9 h-9 rounded-md bg-green-500/10 border border-green-500/20 flex-shrink-0">
+              <Users className="h-4 w-4 text-green-600 dark:text-green-400" />
             </div>
             <div className="min-w-0 flex-1">
-              <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold truncate">Team Coordination</h2>
-              <p className="text-xs sm:text-sm text-muted-foreground uppercase tracking-wide">
-                {isSupervisor && hubName ? `${hubName} Hub - ` : ''}Field team locations and communication
+              <h2 className="text-lg font-semibold truncate">Team Coordination</h2>
+              <p className="text-[11px] text-muted-foreground">
+                {isSupervisor && hubName ? `${hubName} Hub - ` : ''}Field team locations
               </p>
             </div>
           </div>
@@ -268,6 +272,8 @@ export const TeamZone: React.FC = () => {
           <TeamLocationMap 
             users={assignableTeamMembers} 
             siteVisits={siteVisits || []}
+            onCallUser={handleCallUser}
+            onMessageUser={handleMessageUser}
           />
         </TabsContent>
 
@@ -275,14 +281,6 @@ export const TeamZone: React.FC = () => {
           <TeamCommunication />
         </TabsContent>
       </Tabs>
-
-      {/* Team Member Detail Modal */}
-      <TeamMemberDetailModal
-        open={isDetailModalOpen}
-        onOpenChange={handleModalClose}
-        user={selectedMember}
-        userTasks={selectedMemberTasks}
-      />
     </div>
   );
 };

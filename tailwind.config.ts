@@ -18,8 +18,10 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
-        display: ['Plus Jakarta Sans', 'system-ui', 'sans-serif'],
+        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'system-ui', 'sans-serif'],
+        display: ['Poppins', 'system-ui', 'sans-serif'],
+        serif: ['Playfair Display', 'Georgia', 'serif'],
+        mono: ['JetBrains Mono', 'Fira Code', 'Courier New', 'monospace'],
       },
       colors: {
         border: "hsl(var(--border))",
@@ -92,11 +94,72 @@ export default {
           DEFAULT: 'hsl(var(--accent))',
           foreground: 'hsl(var(--accent-foreground))',
         },
+        card: {
+          DEFAULT: 'hsl(var(--card))',
+          foreground: 'hsl(var(--card-foreground))',
+        },
+        popover: {
+          DEFAULT: 'hsl(var(--popover))',
+          foreground: 'hsl(var(--popover-foreground))',
+        },
       },
       borderRadius: {
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',
         sm: 'calc(var(--radius) - 4px)',
+      },
+      spacing: {
+        xs: '0.25rem',     // 4px
+        sm: '0.5rem',      // 8px
+        md: '1rem',        // 16px
+        lg: '1.5rem',      // 24px
+        xl: '2rem',        // 32px
+        '2xl': '2.5rem',   // 40px
+        '3xl': '3rem',     // 48px
+        '4xl': '3.5rem',   // 56px
+        '5xl': '4rem',     // 64px
+      },
+      gap: {
+        xs: '0.25rem',
+        sm: '0.5rem',
+        md: '1rem',
+        lg: '1.5rem',
+        xl: '2rem',
+      },
+      padding: {
+        xs: '0.25rem',
+        sm: '0.5rem',
+        md: '1rem',
+        lg: '1.5rem',
+        xl: '2rem',
+        '2xl': '2.5rem',
+        '3xl': '3rem',
+      },
+      margin: {
+        xs: '0.25rem',
+        sm: '0.5rem',
+        md: '1rem',
+        lg: '1.5rem',
+        xl: '2rem',
+        '2xl': '2.5rem',
+        '3xl': '3rem',
+      },
+      fontSize: {
+        xs: ['clamp(0.75rem, 2vw, 0.875rem)', '1rem'],
+        sm: ['clamp(0.875rem, 2.5vw, 1rem)', '1.25rem'],
+        base: ['clamp(1rem, 2.5vw, 1.1rem)', '1.5rem'],
+        lg: ['clamp(1.125rem, 3vw, 1.25rem)', '1.75rem'],
+        xl: ['clamp(1.25rem, 3.5vw, 1.5rem)', '1.75rem'],
+        '2xl': ['clamp(1.5rem, 4vw, 1.875rem)', '2rem'],
+        '3xl': ['clamp(1.875rem, 4.5vw, 2.25rem)', '2.25rem'],
+        '4xl': ['clamp(2.25rem, 5vw, 2.5rem)', '2.5rem'],
+        '5xl': ['clamp(3rem, 6vw, 3.75rem)', '1'],
+      },
+      lineHeight: {
+        tight: '1.2',
+        normal: '1.5',
+        relaxed: '1.75',
+        loose: '2',
       },
       keyframes: {
         'accordion-down': {
@@ -144,6 +207,40 @@ export default {
         'dark-sm': '0 1px 3px 0 rgba(255, 255, 255, 0.1)',
         'dark-md': '0 4px 6px -1px rgba(255, 255, 255, 0.1), 0 2px 4px -1px rgba(255, 255, 255, 0.06)',
         'dark-lg': '0 10px 15px -3px rgba(255, 255, 255, 0.1), 0 4px 6px -2px rgba(255, 255, 255, 0.05)',
+      },
+      screens: {
+        'xs': '320px',
+        'sm': '640px',
+        'md': '768px',
+        'lg': '1024px',
+        'xl': '1280px',
+        '2xl': '1536px',
+        'touch': { 'raw': '(pointer: coarse)' },
+        'pointer': { 'raw': '(pointer: fine)' },
+        'landscape': { 'raw': '(orientation: landscape)' },
+        'portrait': { 'raw': '(orientation: portrait)' },
+      },
+      maxWidth: {
+        'xs': '20rem',
+        'sm': '24rem',
+        'md': '28rem',
+        'lg': '32rem',
+        'xl': '36rem',
+        '2xl': '42rem',
+        '3xl': '48rem',
+        '4xl': '56rem',
+        '5xl': '64rem',
+        '6xl': '72rem',
+        '7xl': '80rem',
+        'full': '100%',
+        'min': 'min-content',
+        'max': 'max-content',
+        'fit': 'fit-content',
+      },
+      minHeight: {
+        'touch': '44px',
+        'screen': '100vh',
+        'screen-dynamic': '100dvh',
       },
     },
   },

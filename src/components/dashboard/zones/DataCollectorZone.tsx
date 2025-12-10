@@ -386,7 +386,7 @@ export const DataCollectorZone: React.FC = () => {
           subtitle="Total visits"
           icon={Target}
           color="blue"
-          onClick={() => setActiveTab('my-visits')}
+          onClick={() => navigate('/site-visits?status=assigned')}
         />
 
         <GradientStatCard
@@ -395,7 +395,7 @@ export const DataCollectorZone: React.FC = () => {
           subtitle="Due today"
           icon={Calendar}
           color="orange"
-          onClick={() => setActiveTab('my-visits')}
+          onClick={() => navigate('/site-visits?status=assigned')}
         />
 
         <GradientStatCard
@@ -404,7 +404,7 @@ export const DataCollectorZone: React.FC = () => {
           subtitle="Active now"
           icon={Play}
           color="cyan"
-          onClick={() => setActiveTab('my-visits')}
+          onClick={() => navigate('/site-visits?status=inProgress')}
         />
 
         <GradientStatCard
@@ -413,7 +413,7 @@ export const DataCollectorZone: React.FC = () => {
           subtitle={`${completionRate}% rate`}
           icon={CheckCircle2}
           color="green"
-          onClick={() => setActiveTab('performance')}
+          onClick={() => navigate('/site-visits?status=completed')}
         />
 
         <GradientStatCard
@@ -422,7 +422,7 @@ export const DataCollectorZone: React.FC = () => {
           subtitle={overdueCount > 0 ? "Needs attention" : "All on time"}
           icon={AlertCircle}
           color={overdueCount > 0 ? "orange" : "green"}
-          onClick={() => setActiveTab('my-visits')}
+          onClick={() => navigate('/site-visits?status=overdue')}
         />
 
         <GradientStatCard
@@ -431,7 +431,7 @@ export const DataCollectorZone: React.FC = () => {
           subtitle={`${thisMonthEarnings.toLocaleString()} this month`}
           icon={Wallet}
           color="purple"
-          onClick={() => setActiveTab('wallet')}
+          onClick={() => navigate('/wallet')}
         />
       </div>
 

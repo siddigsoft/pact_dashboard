@@ -1,3 +1,7 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@400;500;600;700&family=Playfair+Display:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700;800&display=swap');
+@import './styles/mobile-only-theme.css';
+@import './styles/whatsapp-notifications.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -8,6 +12,19 @@
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);
   --safe-area-left: env(safe-area-inset-left, 0px);
   --safe-area-right: env(safe-area-inset-right, 0px);
+  
+  /* Standardized spacing tokens */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  
+  /* Compact page padding */
+  --page-padding: 1rem;
+  --section-gap: 1rem;
+  --card-padding: 1rem;
 }
 
 @layer base {
@@ -83,6 +100,85 @@
   }
 }
 
+/* Typography Layer - Premium Font System */
+@layer base {
+  h1 {
+    @apply text-2xl font-semibold leading-tight;
+    font-family: 'Poppins', system-ui, sans-serif;
+    letter-spacing: -0.025em;
+  }
+
+  h2 {
+    @apply text-xl font-semibold leading-snug;
+    font-family: 'Poppins', system-ui, sans-serif;
+    letter-spacing: -0.02em;
+  }
+
+  h3 {
+    @apply text-lg font-medium leading-snug;
+    font-family: 'Poppins', system-ui, sans-serif;
+    letter-spacing: -0.01em;
+  }
+
+  h4 {
+    @apply text-base font-medium;
+    font-family: 'Poppins', system-ui, sans-serif;
+  }
+
+  h5 {
+    @apply text-sm font-medium;
+    font-family: 'Poppins', system-ui, sans-serif;
+  }
+
+  h6 {
+    @apply text-xs font-medium;
+    font-family: 'Poppins', system-ui, sans-serif;
+  }
+
+  p {
+    @apply leading-relaxed text-sm;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  small {
+    @apply text-xs font-normal;
+  }
+
+  strong, b {
+    @apply font-semibold;
+  }
+
+  em, i {
+    font-style: italic;
+  }
+
+  code {
+    @apply bg-muted px-1.5 py-0.5 rounded text-xs;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  pre {
+    @apply bg-muted p-3 rounded-md overflow-x-auto text-xs;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* Monospace utility for IDs, codes, technical data */
+  .font-mono {
+    font-family: 'JetBrains Mono', monospace !important;
+    font-feature-settings: 'liga' 0;
+  }
+
+  /* Display font utility for impactful headings */
+  .font-display {
+    font-family: 'Poppins', system-ui, sans-serif !important;
+  }
+
+  /* Elegant serif for premium/luxury sections */
+  .font-serif {
+    font-family: 'Playfair Display', Georgia, serif !important;
+  }
+}
+
 @layer base {
   * {
     @apply border-border;
@@ -90,6 +186,7 @@
 
   html, body {
     @apply bg-background text-foreground;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'system-ui', sans-serif;
     /* Apply safe area padding for mobile devices */
     padding-top: var(--safe-area-top);
     padding-bottom: var(--safe-area-bottom);
@@ -389,6 +486,425 @@
   .tech-metric-card {
     @apply relative overflow-hidden rounded-lg border border-cyan-500/20 bg-gradient-to-br from-cyan-950/5 to-transparent p-3;
   }
+
+  /* ==================== UBER-STYLE DESIGN SYSTEM ==================== */
+  
+  /* Uber Typography */
+  .uber-font {
+    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif !important;
+  }
+
+  .uber-heading {
+    font-family: 'Manrope', system-ui, sans-serif;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+  }
+
+  .uber-text {
+    font-family: 'Manrope', system-ui, sans-serif;
+    font-weight: 500;
+  }
+
+  /* Uber Button Styles */
+  .uber-btn {
+    @apply px-6 py-3 rounded-full font-semibold transition-all duration-200;
+    font-family: 'Manrope', system-ui, sans-serif;
+  }
+
+  .uber-btn-primary {
+    @apply bg-foreground text-background;
+  }
+
+  .uber-btn-primary:hover {
+    @apply opacity-90;
+  }
+
+  .uber-btn-secondary {
+    @apply bg-muted text-foreground;
+  }
+
+  .uber-btn-secondary:hover {
+    @apply bg-muted/80;
+  }
+
+  .uber-btn-outline {
+    @apply border-2 border-foreground bg-transparent text-foreground;
+  }
+
+  .uber-btn-outline:hover {
+    @apply bg-foreground text-background;
+  }
+
+  .uber-btn-ghost {
+    @apply bg-transparent text-foreground;
+  }
+
+  .uber-btn-ghost:hover {
+    @apply bg-muted/50;
+  }
+
+  /* Uber Card Styles */
+  .uber-card {
+    @apply rounded-2xl bg-card border-0 shadow-sm transition-all duration-300;
+  }
+
+  .uber-card:hover {
+    @apply shadow-md;
+  }
+
+  .uber-card-elevated {
+    @apply rounded-2xl bg-card shadow-lg border border-border/20;
+  }
+
+  /* Uber Status Indicators */
+  .uber-status-online {
+    @apply w-3 h-3 rounded-full bg-green-500 ring-2 ring-background;
+  }
+
+  .uber-status-away {
+    @apply w-3 h-3 rounded-full bg-amber-500 ring-2 ring-background;
+  }
+
+  .uber-status-offline {
+    @apply w-3 h-3 rounded-full bg-gray-400 ring-2 ring-background;
+  }
+
+  .uber-status-busy {
+    @apply w-3 h-3 rounded-full bg-red-500 ring-2 ring-background;
+  }
+
+  /* Uber Pill/Badge Styles */
+  .uber-pill {
+    @apply inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold;
+    font-family: 'Manrope', system-ui, sans-serif;
+  }
+
+  .uber-pill-dark {
+    @apply bg-foreground text-background;
+  }
+
+  .uber-pill-light {
+    @apply bg-muted text-foreground;
+  }
+
+  .uber-pill-success {
+    @apply bg-green-500/20 text-green-700 dark:bg-green-500/25 dark:text-green-300 font-semibold;
+  }
+
+  .uber-pill-warning {
+    @apply bg-amber-500/20 text-amber-700 dark:bg-amber-500/25 dark:text-amber-300 font-semibold;
+  }
+
+  .uber-pill-danger {
+    @apply bg-red-500/20 text-red-700 dark:bg-red-500/25 dark:text-red-300 font-semibold;
+  }
+
+  .uber-pill-info {
+    @apply bg-blue-500/20 text-blue-700 dark:bg-blue-500/25 dark:text-blue-300 font-semibold;
+  }
+
+  .uber-pill-purple {
+    @apply bg-purple-500/20 text-purple-700 dark:bg-purple-500/25 dark:text-purple-300 font-semibold;
+  }
+
+  /* Uber List Item */
+  .uber-list-item {
+    @apply flex items-center gap-4 p-4 rounded-xl transition-colors;
+  }
+
+  .uber-list-item:hover {
+    @apply bg-muted/50;
+  }
+
+  .uber-list-item-active {
+    @apply bg-muted;
+  }
+
+  /* Uber Search - Enhanced */
+  .uber-search {
+    @apply w-full px-5 py-3.5 rounded-full bg-muted/80 border-0 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-foreground/20 shadow-sm;
+    font-family: 'Manrope', system-ui, sans-serif;
+    backdrop-filter: blur(8px);
+  }
+
+  /* Uber Avatar Ring */
+  .uber-avatar-ring {
+    @apply ring-2 ring-offset-2 ring-offset-background;
+  }
+
+  .uber-avatar-online {
+    @apply ring-green-500;
+  }
+
+  .uber-avatar-away {
+    @apply ring-amber-500;
+  }
+
+  /* Uber Divider */
+  .uber-divider {
+    @apply h-px bg-border/50 my-2;
+  }
+
+  /* Uber Page Header - Enhanced with sticky and backdrop */
+  .uber-page-header {
+    @apply flex items-center justify-between py-4 px-1 sticky top-0 z-40;
+    background: linear-gradient(to bottom, hsl(var(--background)) 0%, hsl(var(--background) / 0.95) 100%);
+    backdrop-filter: blur(12px);
+  }
+
+  /* Uber Tab Style */
+  .uber-tabs {
+    @apply flex gap-2 p-1 rounded-full bg-muted;
+  }
+
+  .uber-tab {
+    @apply px-4 py-2 rounded-full text-sm font-medium transition-all;
+    font-family: 'Manrope', system-ui, sans-serif;
+  }
+
+  .uber-tab-active {
+    @apply bg-background shadow-sm;
+  }
+
+  /* Uber Notification Dot */
+  .uber-notification-dot {
+    @apply absolute -top-1 -right-1 min-w-[1.25rem] h-5 px-1 rounded-full bg-red-600 text-white text-[10px] font-bold flex items-center justify-center shadow-sm;
+  }
+
+  .uber-notification-dot-success {
+    @apply absolute -top-1 -right-1 min-w-[1.25rem] h-5 px-1 rounded-full bg-green-600 text-white text-[10px] font-bold flex items-center justify-center shadow-sm;
+  }
+
+  .uber-notification-dot-warning {
+    @apply absolute -top-1 -right-1 min-w-[1.25rem] h-5 px-1 rounded-full bg-amber-500 text-white text-[10px] font-bold flex items-center justify-center shadow-sm;
+  }
+
+  /* Uber Icon Button - Enhanced styling */
+  .uber-icon-btn {
+    @apply p-3 rounded-full bg-muted/80 transition-all duration-200 shadow-sm;
+    backdrop-filter: blur(8px);
+  }
+
+  .uber-icon-btn:hover {
+    @apply bg-muted scale-105 shadow-md;
+  }
+
+  .uber-icon-btn:active {
+    @apply scale-95 bg-muted;
+  }
+
+  /* Uber Live Indicator */
+  .uber-live-indicator {
+    @apply inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-green-500/10 text-green-600 text-[10px] font-semibold uppercase tracking-wide;
+  }
+
+  .uber-live-indicator::before {
+    content: '';
+    @apply w-2 h-2 rounded-full bg-green-500 animate-pulse;
+  }
+
+  /* Uber Floating Action Button */
+  .uber-fab {
+    @apply fixed bottom-6 right-6 w-14 h-14 rounded-full bg-foreground text-background shadow-xl flex items-center justify-center transition-transform z-50;
+  }
+
+  .uber-fab:hover {
+    @apply scale-110;
+  }
+
+  .uber-fab:active {
+    @apply scale-95;
+  }
+
+  /* Pulse animation for live status */
+  @keyframes uber-pulse {
+    0%, 100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.7;
+      transform: scale(1.1);
+    }
+  }
+
+  .uber-animate-pulse {
+    animation: uber-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  /* Uber Slide Animations */
+  @keyframes uber-slide-in-left {
+    from {
+      opacity: 0;
+      transform: translateX(-20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes uber-slide-in-right {
+    from {
+      opacity: 0;
+      transform: translateX(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes uber-slide-in-up {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes uber-slide-in-down {
+    from {
+      opacity: 0;
+      transform: translateY(-20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes uber-fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes uber-scale-in {
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  .uber-slide-in-left {
+    animation: uber-slide-in-left 0.3s ease-out forwards;
+  }
+
+  .uber-slide-in-right {
+    animation: uber-slide-in-right 0.3s ease-out forwards;
+  }
+
+  .uber-slide-in-up {
+    animation: uber-slide-in-up 0.3s ease-out forwards;
+  }
+
+  .uber-slide-in-down {
+    animation: uber-slide-in-down 0.3s ease-out forwards;
+  }
+
+  .uber-fade-in {
+    animation: uber-fade-in 0.3s ease-out forwards;
+  }
+
+  .uber-scale-in {
+    animation: uber-scale-in 0.3s ease-out forwards;
+  }
+
+  /* Staggered animation delays */
+  .uber-stagger-1 { animation-delay: 0.05s; }
+  .uber-stagger-2 { animation-delay: 0.1s; }
+  .uber-stagger-3 { animation-delay: 0.15s; }
+  .uber-stagger-4 { animation-delay: 0.2s; }
+  .uber-stagger-5 { animation-delay: 0.25s; }
+  .uber-stagger-6 { animation-delay: 0.3s; }
+
+  /* Uber Page Container with smooth transitions */
+  .uber-page {
+    @apply min-h-screen bg-background;
+    font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  }
+
+  .uber-page-content {
+    @apply container mx-auto p-4 space-y-5 max-w-4xl;
+  }
+
+  /* Enhanced Uber Contact Card */
+  .uber-contact-card {
+    @apply flex items-center gap-4 p-4 rounded-2xl transition-all duration-200 cursor-pointer;
+  }
+
+  .uber-contact-card:hover {
+    @apply bg-muted/50 scale-[1.01];
+  }
+
+  .uber-contact-card:active {
+    @apply scale-[0.99];
+  }
+
+  /* Uber Action Row */
+  .uber-action-row {
+    @apply flex items-center gap-2;
+  }
+
+  /* Uber Section Header */
+  .uber-section-header {
+    @apply flex items-center justify-between py-2;
+  }
+
+  .uber-section-title {
+    @apply text-xs font-semibold text-muted-foreground uppercase tracking-wider;
+  }
+
+  /* Uber Notification Card */
+  .uber-notification-card {
+    @apply flex items-start gap-4 p-4 rounded-2xl transition-all duration-200 border-l-4 border-l-transparent;
+  }
+
+  .uber-notification-card:hover {
+    @apply bg-muted/30;
+  }
+
+  .uber-notification-card.unread {
+    @apply bg-primary/5 border-l-primary;
+  }
+
+  /* Uber Message Bubble */
+  .uber-message-bubble {
+    @apply max-w-[80%] p-4 rounded-2xl;
+  }
+
+  .uber-message-bubble.sent {
+    @apply bg-foreground text-background ml-auto rounded-br-md;
+  }
+
+  .uber-message-bubble.received {
+    @apply bg-muted mr-auto rounded-bl-md;
+  }
+
+  /* Uber Input with icon */
+  .uber-input-with-icon {
+    @apply relative;
+  }
+
+  .uber-input-with-icon input {
+    @apply pl-12 pr-4 py-3 w-full rounded-2xl bg-muted border-0 text-foreground placeholder:text-muted-foreground focus:ring-2 focus:ring-foreground/20 transition-all;
+  }
+
+  .uber-input-with-icon .icon {
+    @apply absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground;
+  }
 }
 
 @layer components {
@@ -488,6 +1004,249 @@
   
   .cyber-dialog-form h4 {
     @apply text-cyan-100;
+  }
+
+  /* ==================== RESPONSIVE UTILITIES ==================== */
+
+  /* Responsive containers */
+  .container-responsive {
+    width: 100%;
+    margin: 0 auto;
+    padding: 0 clamp(0.5rem, 3vw, 2rem);
+  }
+
+  /* Responsive grid layouts */
+  .grid-responsive-2 {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr));
+    gap: clamp(0.75rem, 2vw, 1.5rem);
+  }
+
+  .grid-responsive-3 {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+    gap: clamp(0.75rem, 2vw, 1.5rem);
+  }
+
+  .grid-responsive-4 {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+    gap: clamp(0.75rem, 2vw, 1.5rem);
+  }
+
+  /* Stack on small screens, flex on larger */
+  .flex-responsive {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(0.75rem, 2vw, 1rem);
+  }
+
+  @media (min-width: 768px) {
+    .flex-responsive {
+      flex-direction: row;
+    }
+  }
+
+  /* Responsive heading sizing with clamp */
+  .heading-responsive-1 {
+    font-size: clamp(1.5rem, 5vw, 2.5rem);
+    font-weight: 700;
+    line-height: 1.2;
+  }
+
+  .heading-responsive-2 {
+    font-size: clamp(1.25rem, 4vw, 2rem);
+    font-weight: 600;
+    line-height: 1.3;
+  }
+
+  .heading-responsive-3 {
+    font-size: clamp(1rem, 3.5vw, 1.5rem);
+    font-weight: 600;
+    line-height: 1.4;
+  }
+
+  /* Responsive text sizing */
+  .text-responsive {
+    font-size: clamp(0.95rem, 2.5vw, 1.1rem);
+    line-height: 1.6;
+  }
+
+  .text-responsive-sm {
+    font-size: clamp(0.9rem, 2.5vw, 1rem);
+    line-height: 1.5;
+  }
+
+  /* Responsive padding */
+  .p-responsive {
+    padding: clamp(1rem, 4vw, 1.5rem);
+  }
+
+  .px-responsive {
+    padding-left: clamp(0.5rem, 3vw, 2rem);
+    padding-right: clamp(0.5rem, 3vw, 2rem);
+  }
+
+  .py-responsive {
+    padding-top: clamp(1rem, 4vw, 1.5rem);
+    padding-bottom: clamp(1rem, 4vw, 1.5rem);
+  }
+
+  /* Responsive gap/spacing */
+  .gap-responsive {
+    gap: clamp(0.75rem, 2vw, 1.5rem);
+  }
+
+  /* Responsive max-width for sections */
+  .section-responsive {
+    width: 100%;
+    max-width: min(100%, 1200px);
+    margin: 0 auto;
+    padding: clamp(1rem, 4vw, 2rem) clamp(0.5rem, 3vw, 2rem);
+  }
+
+  /* Responsive card styling */
+  .card-responsive {
+    padding: clamp(1rem, 3vw, 1.5rem);
+    border-radius: clamp(0.5rem, 2vw, 0.75rem);
+    background: hsl(var(--background));
+    border: 1px solid hsl(var(--border));
+  }
+
+  /* Touch-friendly buttons */
+  .btn-touch {
+    min-height: 44px;
+    min-width: 44px;
+    padding: clamp(0.5rem, 2vw, 0.75rem) clamp(0.75rem, 3vw, 1rem);
+    font-size: clamp(0.95rem, 2.5vw, 1rem);
+  }
+
+  /* Responsive images */
+  .img-responsive {
+    max-width: 100%;
+    height: auto;
+    display: block;
+  }
+
+  /* Responsive aspect ratio containers */
+  .aspect-video-responsive {
+    aspect-ratio: 16 / 9;
+  }
+
+  .aspect-square-responsive {
+    aspect-ratio: 1;
+  }
+
+  /* Tablet optimizations (min-width: 600px) */
+  @media (min-width: 600px) {
+    .container-responsive {
+      padding: 0 clamp(1rem, 4vw, 2rem);
+    }
+
+    .grid-responsive-2 {
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    }
+
+    .heading-responsive-1 {
+      font-size: 2rem;
+    }
+  }
+
+  /* Large tablet/landscape optimizations (min-width: 900px) */
+  @media (min-width: 900px) {
+    .heading-responsive-1 {
+      font-size: 2.5rem;
+    }
+
+    .section-responsive {
+      padding: 2rem clamp(1rem, 4vw, 3rem);
+    }
+  }
+
+  /* Landscape orientation adjustments */
+  @media (orientation: landscape) and (max-height: 600px) {
+    .heading-responsive-1 {
+      font-size: clamp(1.25rem, 4vw, 1.75rem);
+    }
+
+    .section-responsive {
+      padding: clamp(0.5rem, 2vw, 1rem) clamp(0.5rem, 3vw, 2rem);
+    }
+  }
+
+  /* Accessibility: High Contrast Mode */
+  .high-contrast {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 0%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 0%;
+    --border: 0 0% 0%;
+    --input: 0 0% 0%;
+  }
+
+  .high-contrast.dark {
+    --background: 0 0% 0%;
+    --foreground: 0 0% 100%;
+    --card: 0 0% 0%;
+    --card-foreground: 0 0% 100%;
+    --border: 0 0% 100%;
+    --input: 0 0% 100%;
+  }
+
+  .high-contrast * {
+    border-color: currentColor !important;
+  }
+
+  .high-contrast button,
+  .high-contrast a {
+    text-decoration: underline;
+  }
+
+  /* Accessibility: Reduced Motion */
+  .reduce-motion *,
+  .reduce-motion *::before,
+  .reduce-motion *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* RTL Support */
+  [dir="rtl"] {
+    direction: rtl;
+    text-align: right;
+  }
+
+  [dir="rtl"] .flex-row {
+    flex-direction: row-reverse;
+  }
+
+  [dir="rtl"] .ml-auto {
+    margin-left: 0;
+    margin-right: auto;
+  }
+
+  [dir="rtl"] .mr-auto {
+    margin-right: 0;
+    margin-left: auto;
+  }
+
+  [dir="rtl"] .text-left {
+    text-align: right;
+  }
+
+  [dir="rtl"] .text-right {
+    text-align: left;
+  }
+
+  /* Font size scaling for accessibility */
+  :root {
+    --base-font-size: 16px;
+  }
+
+  html {
+    font-size: var(--base-font-size);
   }
 
 }

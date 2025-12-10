@@ -1,0 +1,1310 @@
+Yesterday
+Create for me a prompt for budget and expenses mudule and should be link to other module we have as well restric the apporvel of any expenses that exceed the budget
+Got it 👍 — you want a system prompt specification for a Budget & Expenses module that integrates with your other modules (like accounting, enumerator management, field operations, etc.) and enforces strict approval rules when expenses exceed the allocated budget. Here’s a structured draft you can adapt directly into your workflow:
+
+📝 Prompt for Budget & Expenses Module
+Module Purpose
+The Budget & Expenses module manages financial allocations, tracks expenditures, and enforces approval workflows. It ensures that all expenses remain within predefined budget limits and integrates seamlessly with other operational modules.
+
+Core Features
+Budget Allocation
+
+Define budgets per project, team, or activity.
+
+Link allocations to accounting and field operations modules.
+
+Expense Tracking
+
+Record expenses with categories, dates, and responsible staff.
+
+Auto-sync with enumerator compensation and procurement modules.
+
+Approval Workflow
+
+Expenses ≤ budget → auto-approve or route to manager.
+
+Expenses > budget → automatically flagged and restricted until higher-level approval.
+
+Integration
+
+Linked to:
+
+Accounting system (for reconciliation and reporting).
+
+Field operations app (for enumerator-related expenses).
+
+Legal/contracts module (to validate expense legitimacy).
+
+Device/office logistics module (for operational costs).
+
+Notifications
+
+Alerts sent to managers when expenses approach 80% of budget.
+
+Hard stop when budget is exceeded — requires override by senior operations lead.
+
+Approval Restriction Logic
+pseudo
+IF Expense.Amount <= Budget.Remaining
+    THEN ApproveExpense()
+ELSE
+    FlagExpense("Over Budget")
+    RequireApproval(Role = "Senior Operations Lead")
+    LockTransactionUntilApproved()
+END IF
+Prompt Example
+"You are the Budget & Expenses module. Your role is to track all financial allocations and expenditures across projects. You must enforce strict approval rules: any expense that exceeds the allocated budget cannot be approved automatically. Instead, flag it, restrict processing, and escalate to the Senior Operations Lead. Ensure integration with Accounting, Field Operations, Enumerator Management, and Legal Documentation modules so that expenses are reconciled, contracts validated, and enumerator payments aligned. Provide alerts when budgets approach thresholds and block unauthorized approvals."
+
+Would you like me to expand this into a full workflow diagram (showing how it connects to your other modules step by step), or keep it as a text-only system prompt for now?
+
+am using replit with this project and please give full prompt
+Perfect — since you’re building this on Replit, I’ll give you a full system prompt you can drop directly into your project. This will define the Budget & Expenses module, link it to your other modules, and enforce the restriction on approvals when expenses exceed the budget.
+
+Here’s the complete prompt:
+
+🔧 Full Prompt for Budget & Expenses Module
+Code
+You are the Budget & Expenses Module in a multi‑system operational app.  
+Your responsibilities are:
+
+1. **Budget Allocation**
+   - Define and store budgets per project, team, or activity.
+   - Link allocations to the Accounting Module, Field Operations App, Enumerator Management, and Legal Documentation Module.
+
+2. **Expense Tracking**
+   - Record expenses with category, date, amount, and responsible staff.
+   - Sync automatically with:
+     - Enumerator compensation records
+     - Procurement and logistics costs
+     - Office/device operations
+
+3. **Approval Workflow**
+   - If Expense.Amount ≤ Budget.Remaining → Approve or route to manager.
+   - If Expense.Amount > Budget.Remaining → Flag as “Over Budget,” restrict approval, and escalate to **Senior Operations Lead**.
+   - No expense exceeding budget can be auto‑approved.
+
+4. **Integration Rules**
+   - Accounting Module → reconcile expenses and generate reports.
+   - Field Operations App → link enumerator payments and site assignments.
+   - Legal Module → validate contracts and compliance before approval.
+   - Logistics Module → track office space, devices, and operational costs.
+
+5. **Notifications**
+   - Alert managers when expenses reach 80% of allocated budget.
+   - Hard stop when budget is exceeded — requires override by Senior Operations Lead.
+
+6. **Restriction Logic**
+   Pseudocode:
+IF Expense.Amount <= Budget.Remaining THEN ApproveExpense() ELSE FlagExpense("Over Budget") RequireApproval(Role = "Senior Operations Lead") LockTransactionUntilApproved() END IF
+
+Code
+
+7. **System Behavior**
+- Always enforce budget limits.
+- Always escalate over‑budget expenses.
+- Always maintain integration with other modules.
+- Always provide clear alerts and logs for transparency.
+👉 This prompt is ready to paste into your Replit project as the system definition for your Budget & Expenses module. It ensures strict enforcement of budget rules while keeping everything linked to your other modules.
+
+Would you like me to also draft the JSON schema for expenses and budgets (so you can implement it directly in code), or keep this as a pure natural‑language system prompt?
+
+Create for me a prompt for reporting module to include al the type of reports and intergrate them with other reports full reports functional and use full to all type of levels using replit for the PACT platform of the field operation system inlcuding the financial report analytic report project cost reports as well auditing reports and overall reports
+Got it ✅ — you want a full system prompt for a Reporting Module in your PACT platform (field operations system), designed to run on Replit. This module should generate all types of reports (financial, analytic, project cost, auditing, overall summaries) and integrate seamlessly with other modules. Here’s a comprehensive prompt you can drop into your project:
+
+📊 Full Prompt for Reporting Module (PACT Platform)
+Code
+You are the Reporting Module of the PACT Field Operations System.  
+Your responsibilities are:
+
+1. **Report Types**
+   - **Financial Reports**: Track income, expenses, budgets, reconciliations, and cash flow. Integrate with the Accounting Module and Budget & Expenses Module.
+   - **Analytic Reports**: Provide performance metrics, KPIs, enumerator productivity, and operational efficiency. Integrate with the Field Operations App and Enumerator Management Module.
+   - **Project Cost Reports**: Calculate project-level costs, resource allocation, and variance against planned budgets. Integrate with Project Management and Logistics Modules.
+   - **Auditing Reports**: Generate compliance, contract validation, and transaction audit trails. Integrate with Legal Documentation and Accounting Modules.
+   - **Overall Reports**: Provide executive-level summaries combining financial, operational, and analytic insights for decision-making.
+
+2. **Integration Rules**
+   - **Accounting Module** → Pull financial transactions and reconciliations.
+   - **Budget & Expenses Module** → Compare expenses against allocated budgets.
+   - **Field Operations App** → Include enumerator activity, site assignments, and field performance.
+   - **Enumerator Management Module** → Track compensation, contracts, and IDs.
+   - **Legal Documentation Module** → Validate compliance and contract-based expenses.
+   - **Logistics Module** → Include office space, devices, and operational costs.
+
+3. **Functional Requirements**
+   - Reports must be **multi-level**:
+     - **Operational Level** → Detailed reports for field managers and enumerators.
+     - **Managerial Level** → Consolidated reports for project leads and accountants.
+     - **Executive Level** → High-level summaries for directors and stakeholders.
+   - Reports must be **dynamic**:
+     - Allow filtering by project, team, date range, or expense category.
+     - Provide drill-down capability from summary to detailed transactions.
+   - Reports must be **export-ready**:
+     - Structured outputs for dashboards, charts, and analytics.
+     - Compatible with visualization tools and external auditing systems.
+
+4. **System Behavior**
+   - Always generate complete, accurate, and reconciled reports.
+   - Always integrate data across modules for consistency.
+   - Always enforce compliance and auditing standards.
+   - Always provide clear summaries and detailed breakdowns.
+
+5. **Sample Logic**
+FUNCTION GenerateReport(type, filters): CollectDataFromModules(type, filters) ValidateDataIntegrity() IF type == "Financial": IncludeBudgetComparison() IF type == "Auditing": IncludeComplianceChecks() FormatReportForLevel(filters.level) ReturnReport() END FUNCTION
+
+Code
+
+6. **Notifications**
+- Send alerts when reports reveal anomalies (e.g., over-budget expenses, compliance issues).
+- Provide scheduled reporting (daily, weekly, monthly) for managers and executives.
+👉 This prompt ensures your Reporting Module is functional, integrated, and useful across all organizational levels. It ties together financial, analytic, project cost, auditing, and overall reports into one unified system.
+
+Would you like me to also design a JSON schema for the reports (so you can implement structured outputs in Replit), or keep this as a natural-language system definition?
+
+give me one prompt with al notification code and intergratin
+Perfect — let’s unify everything into one full system prompt for your PACT Reporting Module that includes:
+
+All report types (financial, analytic, project cost, auditing, overall)
+
+Integration with other modules (accounting, budget, field ops, enumerator, legal, logistics)
+
+Notification logic (thresholds, anomalies, scheduled alerts)
+
+Functional behavior across all organizational levels
+
+Here’s the complete prompt you can drop into your Replit project:
+
+📊 Unified Prompt for PACT Reporting Module
+Code
+You are the Reporting Module of the PACT Field Operations System.  
+Your responsibilities are:
+
+1. **Report Types**
+   - Financial Reports → income, expenses, budgets, reconciliations, cash flow.
+   - Analytic Reports → KPIs, enumerator productivity, operational efficiency.
+   - Project Cost Reports → project-level costs, resource allocation, variance vs. planned budgets.
+   - Auditing Reports → compliance, contract validation, transaction audit trails.
+   - Overall Reports → executive summaries combining financial, operational, and analytic insights.
+
+2. **Integration Rules**
+   - Accounting Module → pull transactions, reconciliations, and financial statements.
+   - Budget & Expenses Module → compare expenses vs. allocated budgets.
+   - Field Operations App → include enumerator activity, site assignments, and field performance.
+   - Enumerator Management Module → track compensation, contracts, and IDs.
+   - Legal Documentation Module → validate compliance and contract-based expenses.
+   - Logistics Module → include office space, devices, and operational costs.
+
+3. **Functional Requirements**
+   - Reports must be **multi-level**:
+     - Operational → detailed reports for field managers and enumerators.
+     - Managerial → consolidated reports for project leads and accountants.
+     - Executive → high-level summaries for directors and stakeholders.
+   - Reports must be **dynamic**:
+     - Filter by project, team, date range, or expense category.
+     - Drill-down capability from summary to detailed transactions.
+   - Reports must be **export-ready**:
+     - Structured outputs for dashboards, charts, and analytics.
+     - Compatible with visualization tools and external auditing systems.
+
+4. **Notification Logic**
+   - Alert managers when expenses reach 80% of allocated budget.
+   - Flag anomalies (e.g., over-budget expenses, compliance issues, missing contracts).
+   - Scheduled reporting:
+     - Daily → operational reports for managers.
+     - Weekly → consolidated reports for accountants.
+     - Monthly → executive summaries for directors.
+   - Escalation:
+     - Over-budget → notify Senior Operations Lead.
+     - Compliance failure → notify Legal & Audit team.
+     - Critical anomaly → notify Executive Director.
+
+5. **System Behavior**
+   - Always generate complete, accurate, reconciled reports.
+   - Always integrate data across modules for consistency.
+   - Always enforce compliance and auditing standards.
+   - Always provide clear summaries and detailed breakdowns.
+
+6. **Sample Logic**
+FUNCTION GenerateReport(type, filters): CollectDataFromModules(type, filters) ValidateDataIntegrity() IF type == "Financial": IncludeBudgetComparison() IF type == "Auditing": IncludeComplianceChecks() FormatReportForLevel(filters.level) TriggerNotifications(type, filters) ReturnReport() END FUNCTION
+
+FUNCTION TriggerNotifications(type, filters): IF Budget.Usage >= 80%: SendAlert("Budget threshold reached", Manager) IF Expense.Amount > Budget.Remaining: SendAlert("Over Budget Expense", SeniorOperationsLead) IF ComplianceIssue == TRUE: SendAlert("Compliance Failure", LegalAuditTeam) ScheduleReportDelivery(type, filters.level) END FUNCTION
+
+Code
+✅ This one unified prompt defines the Reporting Module with all integrations and notification code. It ensures your reports are functional, multi-level, and actionable across the entire PACT platform.
+
+Would you like me to also design a JSON schema for the reports and notifications (so you can implement structured outputs directly in Replit), or keep this as a natural-language system definition?
+
+Got it ✅ — here’s a single unified system prompt for your PACT Reporting Module that includes all report types, full integration across modules, and complete notification logic. This is written so you can drop it directly into your Replit project as the definition for the module.
+
+📊 Unified Prompt for PACT Reporting Module (with Notifications & Integration)
+Code
+You are the Reporting Module of the PACT Field Operations System.  
+Your responsibilities are:
+
+1. **Report Types**
+   - Financial Reports → income, expenses, budgets, reconciliations, cash flow.
+   - Analytic Reports → KPIs, enumerator productivity, operational efficiency.
+   - Project Cost Reports → project-level costs, resource allocation, variance vs. planned budgets.
+   - Auditing Reports → compliance, contract validation, transaction audit trails.
+   - Overall Reports → executive summaries combining financial, operational, and analytic insights.
+
+2. **Integration Rules**
+   - Accounting Module → pull transactions, reconciliations, and financial statements.
+   - Budget & Expenses Module → compare expenses vs. allocated budgets.
+   - Field Operations App → include enumerator activity, site assignments, and field performance.
+   - Enumerator Management Module → track compensation, contracts, and IDs.
+   - Legal Documentation Module → validate compliance and contract-based expenses.
+   - Logistics Module → include office space, devices, and operational costs.
+
+3. **Functional Requirements**
+   - Reports must be **multi-level**:
+     - Operational → detailed reports for field managers and enumerators.
+     - Managerial → consolidated reports for project leads and accountants.
+     - Executive → high-level summaries for directors and stakeholders.
+   - Reports must be **dynamic**:
+     - Filter by project, team, date range, or expense category.
+     - Drill-down capability from summary to detailed transactions.
+   - Reports must be **export-ready**:
+     - Structured outputs for dashboards, charts, and analytics.
+     - Compatible with visualization tools and external auditing systems.
+
+4. **Notification Logic**
+   - **Threshold Alerts**
+     - Alert managers when expenses reach 80% of allocated budget.
+     - Flag anomalies (over-budget expenses, compliance issues, missing contracts).
+   - **Escalation**
+     - Over-budget → notify Senior Operations Lead.
+     - Compliance failure → notify Legal & Audit team.
+     - Critical anomaly → notify Executive Director.
+   - **Scheduled Reporting**
+     - Daily → operational reports for managers.
+     - Weekly → consolidated reports for accountants.
+     - Monthly → executive summaries for directors.
+
+5. **System Behavior**
+   - Always generate complete, accurate, reconciled reports.
+   - Always integrate data across modules for consistency.
+   - Always enforce compliance and auditing standards.
+   - Always provide clear summaries and detailed breakdowns.
+
+6. **Sample Logic**
+FUNCTION GenerateReport(type, filters): CollectDataFromModules(type, filters) ValidateDataIntegrity() IF type == "Financial": IncludeBudgetComparison() IF type == "Auditing": IncludeComplianceChecks() FormatReportForLevel(filters.level) TriggerNotifications(type, filters) ReturnReport() END FUNCTION
+
+FUNCTION TriggerNotifications(type, filters): IF Budget.Usage >= 80%: SendAlert("Budget threshold reached", Manager) IF Expense.Amount > Budget.Remaining: SendAlert("Over Budget Expense", SeniorOperationsLead) IF ComplianceIssue == TRUE: SendAlert("Compliance Failure", LegalAuditTeam) IF CriticalAnomaly == TRUE: SendAlert("Critical Anomaly Detected", ExecutiveDirector) ScheduleReportDelivery(type, filters.level) END FUNCTION
+
+FUNCTION ScheduleReportDelivery(type, level): IF level == "Operational": DeliverReport("Daily", Managers) IF level == "Managerial": DeliverReport("Weekly", Accountants) IF level == "Executive": DeliverReport("Monthly", Directors) END FUNCTION
+
+Code
+✅ This one unified prompt defines the Reporting Module with all integrations and notification code. It ensures your reports are functional, multi-level, and actionable across the entire PACT platform.
+
+Would you like me to also design a JSON schema for the reports and notifications so you can implement structured outputs directly in Replit (e.g., for dashboards and APIs)?
+
+am buliding webapp in the same time I want to convert that to be an Mobile Application the webapp and the paltform am using replit and git hub as well supabase as database in my repository I've the code wich AI tools I can use to build the Mobile app with Cheep price or how I can convert the website to be an mobile application give me the best options and suggestions how to connect the repository to build the APK or IOS
+Quick Answer: The cheapest and most practical way to convert your existing web app (Replit + GitHub + Supabase) into a mobile app is to use AI-assisted app builders (like Replit’s AI App Builder) or website-to-app converters (like MobiLoud, AppMySite, or PWA-to-native wrappers). You can connect your GitHub repository to CI/CD services (like GitHub Actions or Expo EAS) to automatically build APK (Android) and IPA (iOS) files from your code.
+
+🔑 Best Options for Converting Web App → Mobile App
+1. Replit AI App Builder
+Lets you generate apps directly from prompts and integrate with your existing code.
+
+Built-in support for cloud services, authentication, and databases.
+
+Works well with Supabase since it’s API-driven.
+
+Cheap option because you don’t need extra infrastructure.
+
+2. MobiLoud
+Converts any website into a native mobile app (Android + iOS).
+
+Handles push notifications, offline caching, and app store publishing.
+
+Best for fast conversion with minimal coding.
+
+3. AppMySite / AppInstitute / Other AI Builders
+Drag-and-drop AI-assisted platforms that wrap your web app into native shells.
+
+Good for budget-conscious projects.
+
+Provide APK/IPA builds without needing deep native coding.
+
+4. Progressive Web App (PWA) → Native Wrapper
+Turn your web app into a PWA and then wrap it using tools like:
+
+Capacitor (by Ionic) → integrates with GitHub, builds native apps.
+
+Expo (React Native) → connects to GitHub, builds APK/IPA with EAS Build.
+
+This is developer-friendly and cost-effective if you already have React/JS skills.
+
+🔗 Connecting GitHub Repository to Build APK/IPA
+Set up CI/CD
+
+Use GitHub Actions or Expo EAS Build to automate builds.
+
+Every push to main can trigger a new APK/IPA build.
+
+Supabase Integration
+
+Supabase provides REST/GraphQL APIs → mobile app can consume the same backend.
+
+No need to change your database setup.
+
+Build Process
+
+For Android: Generate APK/AAB using Gradle or Expo.
+
+For iOS: Generate IPA using Xcode or Expo EAS (requires Apple Developer account).
+
+Deployment
+
+Upload APK to Google Play Console.
+
+Upload IPA to Apple App Store Connect.
+
+Use TestFlight for iOS testing.
+
+💡 Suggested Path for You
+Since you’re already using Replit + GitHub + Supabase, the most cost-effective route is:
+
+Wrap your web app as a PWA.
+
+Use Capacitor or Expo to generate native builds.
+
+Connect GitHub → CI/CD pipeline (GitHub Actions or Expo EAS).
+
+Deploy APK/IPA to app stores.
+
+This way, you don’t rebuild everything — you reuse your existing codebase and database.
+
+✅ Summary: Use Replit AI App Builder or a PWA wrapper (Capacitor/Expo) for cheap conversion. Connect your GitHub repo to CI/CD pipelines to auto-build APK/IPA. Supabase backend works seamlessly with mobile apps since it’s API-first.
+
+Would you like me to draft a step-by-step GitHub Actions workflow file (YAML) that automatically builds your APK from your repository? That would give you a ready-to-use pipeline.
+
+to link project in replit with replit apk
+Got it 👍 — you want to link your Replit project so you can generate an APK (Android app) from it. Since Replit itself doesn’t directly export APKs, the process is about connecting your Replit codebase (via GitHub) to a mobile build pipeline. Here’s the step‑by‑step roadmap:
+
+🔗 Linking Replit Project → APK Build
+1. Push Your Replit Project to GitHub
+In Replit, connect your project to GitHub (via the Version Control tab).
+
+This ensures your code is synced and ready for CI/CD pipelines.
+
+2. Choose a Mobile Framework / Wrapper
+Since your project is a web app:
+
+Option A: Progressive Web App (PWA) → Native Wrapper
+
+Use Capacitor (Ionic) or Cordova to wrap your web app into a native shell.
+
+This lets you generate APK/IPA while reusing your existing web code.
+
+Option B: React Native / Expo
+
+If your frontend is React‑based, you can port it into Expo and connect Supabase APIs.
+
+Expo has EAS Build, which can generate APK/IPA directly from GitHub.
+
+3. Set Up GitHub Actions (CI/CD)
+Create a workflow file in your repo (e.g., .github/workflows/build.yml) to automate APK builds.
+
+Example (for Expo/React Native):
+
+yaml
+name: Build APK
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+      - name: Install dependencies
+        run: npm install
+      - name: Build Android APK
+        run: npx expo build:android --non-interactive
+This will generate an APK whenever you push to main.
+
+4. Connect Supabase
+Supabase is API‑first, so your mobile app can use the same endpoints as your web app.
+
+Store your Supabase keys in GitHub Secrets and inject them during build.
+
+5. Test & Deploy
+Download the APK from your GitHub Actions build artifacts.
+
+Test on Android Emulator or physical device.
+
+Upload to Google Play Console for distribution.
+
+📱 For iOS (IPA Build)
+Use Expo EAS Build or Capacitor with Xcode.
+
+Requires an Apple Developer account.
+
+You can automate IPA builds with GitHub Actions + EAS.
+
+💡 Best Low‑Cost Options
+Expo + EAS Build → cheapest and easiest if you’re using React.
+
+Capacitor → best if you want to wrap your existing web app quickly.
+
+MobiLoud / AppMySite → no‑code wrappers if you want instant conversion.
+
+✅ Summary: Link your Replit project to GitHub → wrap your web app with Capacitor or Expo → set up GitHub Actions to build APK/IPA → connect Supabase via API → deploy to app stores.
+
+Would you like me to draft a ready‑to‑use Capacitor setup script that takes your existing web app and outputs an APK? That would give you a direct path without rewriting your frontend.
+
+Today
+Create for me a prompt for replit to use signtures upon receiving mony in wallet and confirmation signtures to the system as well the can signe any docummets form their Account useing the uuid or phone or email or hand writing as signture and each transaction with timestamp please
+Got it ✅ — you want a full system prompt for your Replit project that defines how signatures are handled in your platform. This includes:
+
+Signatures upon receiving money in a wallet
+
+Confirmation signatures in the system
+
+Ability to sign documents from an account (via UUID, phone, email, or handwriting)
+
+Each transaction recorded with a timestamp
+
+Here’s a complete prompt specification you can drop into your Replit project:
+
+🔐 Unified Prompt for Signature & Transaction Module
+Code
+You are the Signature & Transaction Module of the PACT Platform.  
+Your responsibilities are:
+
+1. **Wallet Signatures**
+   - Upon receiving money in a wallet, automatically generate a digital signature.
+   - Signature must include:
+     - Transaction UUID
+     - Sender and Receiver identifiers (phone, email, or account ID)
+     - Timestamp (ISO 8601 format)
+     - Hash of transaction details for integrity
+
+2. **Confirmation Signatures**
+   - Every transaction must be confirmed with a signature before being finalized.
+   - Confirmation signature can be generated using:
+     - UUID (system-generated unique identifier)
+     - Phone number (linked to account)
+     - Email (linked to account)
+     - Handwriting signature (uploaded or drawn by user)
+   - Store confirmation signature in the system audit log.
+
+3. **Document Signing**
+   - Users can sign any document from their account.
+   - Supported signature methods:
+     - UUID-based digital signature
+     - Phone or email verification signature
+     - Handwriting signature (image or drawing input)
+   - Each signed document must include:
+     - Document ID
+     - User ID
+     - Signature method
+     - Timestamp
+
+4. **Integration Rules**
+   - Link signatures to:
+     - **Wallet Module** → for financial transactions
+     - **Reporting Module** → for auditing and compliance
+     - **Legal Documentation Module** → for contract validation
+     - **Enumerator Management Module** → for signed contracts and IDs
+   - Ensure all signatures are immutable and stored securely.
+
+5. **Notification Logic**
+   - Notify user when:
+     - Money is received and signature is generated
+     - Document is signed successfully
+     - Transaction confirmation is pending
+   - Notify administrators when:
+     - Signature mismatch or tampering is detected
+     - Transaction exceeds budget or compliance rules
+
+6. **System Behavior**
+   - Always enforce signature validation before approving transactions.
+   - Always attach timestamp to signatures and documents.
+   - Always store signatures in secure, immutable logs.
+   - Always provide audit trail for reporting and compliance.
+
+7. **Sample Logic**
+FUNCTION ProcessTransaction(transaction): signature = GenerateSignature(transaction.UUID, transaction.UserID, transaction.Amount, CurrentTimestamp) StoreSignature(signature) NotifyUser("Transaction signed and confirmed", transaction.UserID) Return signature END FUNCTION
+
+FUNCTION SignDocument(document, user, method): signature = GenerateSignature(document.ID, user.ID, method, CurrentTimestamp) AttachSignatureToDocument(document, signature) StoreSignature(signature) NotifyUser("Document signed successfully", user.ID) Return signature END FUNCTION
+
+Code
+✅ This prompt ensures every wallet transaction, document signing, and confirmation is tied to a signature + timestamp, with integration across your modules and full audit logging.
+
+Would you like me to also design a JSON schema for signatures and transactions (so you can implement it directly in Supabase and Replit)? That would give you a ready‑to‑use database structure.
+
+as well I want to have budget vs actual cost for each project and task as well and the any report should by as well filtered by Project and months overall modules and pages that ar exciting
+Perfect ✅ — let’s extend your PACT Reporting Module prompt to include Budget vs Actual Cost tracking for each project and task, plus filters by project and month, and ensure reports are exciting, functional, and integrated across modules and Pages.
+
+Here’s the full unified prompt you can use in Replit:
+
+📊 Unified Prompt for PACT Reporting Module (Budget vs Actual + Filters)
+Code
+You are the Reporting Module of the PACT Field Operations System.  
+Your responsibilities are:
+
+1. **Report Types**
+   - Financial Reports → income, expenses, budgets, reconciliations, cash flow.
+   - Analytic Reports → KPIs, enumerator productivity, operational efficiency.
+   - Project Cost Reports → planned vs actual costs, resource allocation, variance analysis.
+   - Auditing Reports → compliance, contract validation, transaction audit trails.
+   - Overall Reports → executive summaries combining financial, operational, and analytic insights.
+
+2. **Budget vs Actual Tracking**
+   - For each project and task:
+     - Record planned budget.
+     - Track actual costs in real time.
+     - Calculate variance (Budget – Actual).
+     - Flag over-budget tasks and escalate to Senior Operations Lead.
+   - Provide visual comparisons (tables, charts) for managers and executives.
+   - Integrate with Budget & Expenses Module for reconciliation.
+
+3. **Filtering & Drill-Down**
+   - Reports must be filterable by:
+     - Project
+     - Task
+     - Month
+     - Team or department
+   - Allow drill-down from overall summary → project → task → transaction.
+   - Provide export-ready outputs for dashboards and Pages.
+
+4. **Integration Rules**
+   - Accounting Module → financial transactions and reconciliations.
+   - Budget & Expenses Module → planned vs actual cost comparisons.
+   - Field Operations App → enumerator activity and site assignments.
+   - Enumerator Management Module → compensation, contracts, IDs.
+   - Legal Documentation Module → compliance and contract validation.
+   - Logistics Module → office space, devices, and operational costs.
+
+5. **Notification Logic**
+   - Alert managers when actual costs reach 80% of budget.
+   - Flag anomalies (over-budget, compliance issues, missing contracts).
+   - Escalate:
+     - Over-budget → Senior Operations Lead.
+     - Compliance failure → Legal & Audit team.
+     - Critical anomaly → Executive Director.
+   - Scheduled reporting:
+     - Daily → operational reports.
+     - Weekly → consolidated reports.
+     - Monthly → executive summaries.
+
+6. **System Behavior**
+   - Always generate reconciled reports with budget vs actual comparisons.
+   - Always integrate across modules for consistency.
+   - Always enforce compliance and auditing standards.
+   - Always provide clear summaries and detailed breakdowns.
+
+7. **Sample Logic**
+FUNCTION GenerateReport(type, filters): CollectDataFromModules(type, filters) ValidateDataIntegrity() IF type == "Financial": IncludeBudgetComparison() IF type == "ProjectCost": CalculateVariance(Budget, Actual) FlagOverBudgetTasks() IF type == "Auditing": IncludeComplianceChecks() FormatReportForLevel(filters.level) TriggerNotifications(type, filters) ReturnReport() END FUNCTION
+
+FUNCTION TriggerNotifications(type, filters): IF ActualCost >= 0.8 * Budget: SendAlert("Budget threshold reached", Manager) IF ActualCost > Budget: SendAlert("Over Budget Expense", SeniorOperationsLead) IF ComplianceIssue == TRUE: SendAlert("Compliance Failure", LegalAuditTeam) ScheduleReportDelivery(type, filters.level) END FUNCTION
+
+Code
+
+8. **Pages Integration**
+- Reports must be accessible as **Pages** for interactive editing and collaboration.
+- Each Page should allow:
+  - Filtering by project and month.
+  - Export of budget vs actual tables and charts.
+  - Linking to other modules for drill-down.
+✅ This prompt ensures your reports are exciting, functional, and multi-level, with budget vs actual tracking, filters by project/month, and integration across modules and Pages.
+
+Would you like me to also design a JSON schema for Budget vs Actual reports (projects, tasks, months, variance) so you can implement it directly in Supabase and connect it to your Replit app?
+
+Please give me full code which including all the points please and notifications code as welll
+See my thinking
+Full backend code for PACT platform modules with signatures, budget vs actual, reporting, and notifications
+Below is a complete, ready-to-adapt backend stack covering:
+
+Signature & Transaction module (wallet receives, document signing, confirmation signatures, timestamped logging)
+
+Budget & Expenses with approval restrictions and Budget vs Actual (project/task-level)
+
+Reporting module (financial, analytics, project cost, auditing, overall) with filters by project/task/month
+
+Notifications (thresholds, anomalies, escalations, schedules)
+
+Supabase schema (SQL), REST API (Express + TypeScript), and scheduled jobs
+
+Integration hooks across modules
+
+You can paste this into your Replit project, connect to Supabase, and deploy. Adjust names and environment variables as needed.
+
+Environment variables
+Create a .env file in Replit (Secrets) with:
+
+Code
+SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=YOUR_SERVICE_ROLE_KEY
+SUPABASE_ANON_KEY=YOUR_ANON_KEY
+JWT_SECRET=supersecret
+NOTIFY_EMAIL_FROM=no-reply@pact-platform.org
+NOTIFY_SMS_SENDER=PACT
+Supabase SQL schema
+Use this SQL in Supabase SQL editor to create tables, indexes, and policies.
+
+sql
+-- Users
+create table if not exists users (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  email text unique,
+  phone text unique,
+  role text not null check (role in ('Enumerator','Manager','Accountant','SeniorOperationsLead','LegalAudit','ExecutiveDirector')),
+  created_at timestamptz not null default now()
+);
+
+-- Projects
+create table if not exists projects (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  code text unique not null,
+  manager_id uuid references users(id),
+  start_date date,
+  end_date date,
+  created_at timestamptz not null default now()
+);
+
+-- Tasks
+create table if not exists tasks (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid references projects(id) on delete cascade,
+  name text not null,
+  owner_id uuid references users(id),
+  start_date date,
+  end_date date,
+  created_at timestamptz not null default now()
+);
+
+-- Budgets (project/task)
+create table if not exists budgets (
+  id uuid primary key default gen_random_uuid(),
+  scope_type text not null check (scope_type in ('Project','Task')),
+  scope_id uuid not null,
+  currency text not null default 'USD',
+  amount numeric(14,2) not null,
+  approved_by uuid references users(id),
+  created_at timestamptz not null default now(),
+  unique (scope_type, scope_id)
+);
+
+-- Expenses
+create table if not exists expenses (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid references projects(id) on delete set null,
+  task_id uuid references tasks(id) on delete set null,
+  reporter_id uuid references users(id),
+  description text,
+  category text,
+  currency text not null default 'USD',
+  amount numeric(14,2) not null,
+  status text not null check (status in ('Pending','Approved','Rejected','OverBudgetPending')),
+  created_at timestamptz not null default now()
+);
+
+create index on expenses (project_id, task_id, created_at);
+
+-- Wallets
+create table if not exists wallets (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references users(id) unique,
+  currency text not null default 'USD',
+  balance numeric(14,2) not null default 0,
+  updated_at timestamptz not null default now()
+);
+
+-- Wallet transactions (income/outgoing)
+create table if not exists wallet_transactions (
+  id uuid primary key default gen_random_uuid(),
+  wallet_id uuid references wallets(id),
+  direction text not null check (direction in ('IN','OUT')),
+  amount numeric(14,2) not null,
+  currency text not null default 'USD',
+  reference text,
+  created_at timestamptz not null default now()
+);
+
+-- Signatures (transactions, documents, confirmations)
+create table if not exists signatures (
+  id uuid primary key default gen_random_uuid(),
+  subject_type text not null check (subject_type in ('Transaction','Document','Expense','Budget')),
+  subject_id uuid not null,
+  user_id uuid references users(id),
+  method text not null check (method in ('UUID','Phone','Email','Handwriting')),
+  signature_hash text not null,
+  timestamp timestamptz not null default now(),
+  metadata jsonb default '{}'::jsonb
+);
+
+-- Documents
+create table if not exists documents (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid references users(id),
+  project_id uuid references projects(id),
+  task_id uuid references tasks(id),
+  title text not null,
+  content_url text,
+  status text not null default 'Unsigned' check (status in ('Unsigned','Signed')),
+  created_at timestamptz not null default now()
+);
+
+-- Audit logs
+create table if not exists audit_logs (
+  id uuid primary key default gen_random_uuid(),
+  event_type text not null,
+  entity_type text not null,
+  entity_id uuid,
+  actor_id uuid references users(id),
+  details jsonb,
+  created_at timestamptz not null default now()
+);
+
+-- Reports cache (for scheduled builds)
+create table if not exists reports (
+  id uuid primary key default gen_random_uuid(),
+  type text not null check (type in ('Financial','Analytic','ProjectCost','Auditing','Overall')),
+  scope jsonb not null, -- {project_id, task_id, month}
+  level text not null check (level in ('Operational','Managerial','Executive')),
+  data jsonb not null,
+  generated_at timestamptz not null default now()
+);
+
+-- Notifications queue
+create table if not exists notifications (
+  id uuid primary key default gen_random_uuid(),
+  recipient_id uuid references users(id),
+  channel text not null check (channel in ('Email','SMS','InApp')),
+  subject text,
+  body text,
+  payload jsonb,
+  status text not null default 'Queued' check (status in ('Queued','Sent','Failed')),
+  created_at timestamptz not null default now(),
+  sent_at timestamptz
+);
+
+-- Helper view: actual costs per scope
+create or replace view v_actual_costs as
+select
+  'Project'::text as scope_type,
+  e.project_id as scope_id,
+  sum(e.amount) as actual_cost
+from expenses e
+where e.status in ('Approved','OverBudgetPending')
+group by e.project_id
+union all
+select
+  'Task'::text as scope_type,
+  e.task_id as scope_id,
+  sum(e.amount) as actual_cost
+from expenses e
+where e.status in ('Approved','OverBudgetPending')
+group by e.task_id;
+
+-- Indexes for performance
+create index if not exists idx_budgets_scope on budgets (scope_type, scope_id);
+create index if not exists idx_signatures_subject on signatures (subject_type, subject_id);
+create index if not exists idx_reports_scope on reports using gin (scope);
+create index if not exists idx_notifications_status on notifications (status);
+
+-- Optional RLS policies (enable RLS per table and add policies per role as needed)
+Server code (Node.js + TypeScript + Express)
+Install dependencies in Replit:
+
+Code
+npm init -y
+npm i express cors jsonwebtoken @supabase/supabase-js zod bcrypt js-sha256 node-cron
+npm i -D typescript ts-node nodemon @types/node @types/express @types/jsonwebtoken @types/cors
+npx tsc --init
+Create src/server.ts:
+
+ts
+import express from 'express';
+import cors from 'cors';
+import jwt from 'jsonwebtoken';
+import { createClient } from '@supabase/supabase-js';
+import { z } from 'zod';
+import cron from 'node-cron';
+import { sha256 } from 'js-sha256';
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+// Env
+const SUPABASE_URL = process.env.SUPABASE_URL!;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const JWT_SECRET = process.env.JWT_SECRET || 'devsecret';
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+// Auth middleware (simple JWT)
+function auth(requiredRoles?: string[]) {
+  return (req: any, res: any, next: any) => {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) return res.status(401).json({ error: 'Unauthorized' });
+    try {
+      const payload = jwt.verify(token, JWT_SECRET) as any;
+      req.user = payload;
+      if (requiredRoles && !requiredRoles.includes(payload.role)) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+      next();
+    } catch (e) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+  };
+}
+
+// Helpers
+async function queueNotification(recipient_id: string, channel: 'Email'|'SMS'|'InApp', subject: string, body: string, payload: any = {}) {
+  await supabase.from('notifications').insert({
+    recipient_id, channel, subject, body, payload
+  });
+}
+
+async function audit(event_type: string, entity_type: string, entity_id: string | null, actor_id: string | null, details: any) {
+  await supabase.from('audit_logs').insert({
+    event_type, entity_type, entity_id, actor_id, details
+  });
+}
+
+function isoNow() {
+  return new Date().toISOString();
+}
+
+function makeSignatureHash(input: any) {
+  return sha256(JSON.stringify(input));
+}
+
+// ROUTES
+
+// 1) Wallet: receive money and auto-sign
+app.post('/wallets/:wallet_id/receive', auth(), async (req, res) => {
+  const { wallet_id } = req.params;
+  const schema = z.object({
+    amount: z.number().positive(),
+    currency: z.string().default('USD'),
+    reference: z.string().optional()
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json(parsed.error);
+
+  const { amount, currency, reference } = parsed.data;
+
+  const { data: wallet } = await supabase.from('wallets').select('*').eq('id', wallet_id).single();
+  if (!wallet) return res.status(404).json({ error: 'Wallet not found' });
+
+  // Insert transaction
+  const { data: tx, error: txErr } = await supabase.from('wallet_transactions').insert({
+    wallet_id,
+    direction: 'IN',
+    amount,
+    currency,
+    reference
+  }).select('*').single();
+  if (txErr) return res.status(500).json({ error: txErr.message });
+
+  // Update balance
+  const newBalance = Number(wallet.balance) + amount;
+  await supabase.from('wallets').update({ balance: newBalance, updated_at: isoNow() }).eq('id', wallet_id);
+
+  // Create signature (Transaction)
+  const sigInput = {
+    subject_type: 'Transaction',
+    subject_id: tx.id,
+    user_id: req.user.id,
+    method: 'UUID',
+    timestamp: isoNow(),
+    details: { wallet_id, amount, currency, reference }
+  };
+  const signature_hash = makeSignatureHash(sigInput);
+
+  await supabase.from('signatures').insert({
+    subject_type: 'Transaction',
+    subject_id: tx.id,
+    user_id: req.user.id,
+    method: 'UUID',
+    signature_hash,
+    timestamp: isoNow(),
+    metadata: sigInput.details
+  });
+
+  await audit('WalletReceive', 'Wallet', wallet_id, req.user.id, { tx_id: tx.id, amount, newBalance });
+
+  // Notify user
+  await queueNotification(wallet.user_id, 'InApp', 'Money received', `An amount of ${amount} ${currency} was received to your wallet.`, { tx_id: tx.id });
+
+  return res.json({ transaction: tx, balance: newBalance });
+});
+
+// 2) Document signing
+app.post('/documents/:document_id/sign', auth(), async (req, res) => {
+  const { document_id } = req.params;
+  const schema = z.object({
+    method: z.enum(['UUID','Phone','Email','Handwriting']),
+    handwriting_image_url: z.string().optional()
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json(parsed.error);
+
+  const { data: doc, error: docErr } = await supabase.from('documents').select('*').eq('id', document_id).single();
+  if (docErr || !doc) return res.status(404).json({ error: 'Document not found' });
+
+  const sigInput = {
+    subject_type: 'Document',
+    subject_id: document_id,
+    user_id: req.user.id,
+    method: parsed.data.method,
+    timestamp: isoNow(),
+    details: { handwriting_image_url: parsed.data.handwriting_image_url }
+  };
+  const signature_hash = makeSignatureHash(sigInput);
+
+  await supabase.from('signatures').insert({
+    subject_type: 'Document',
+    subject_id: document_id,
+    user_id: req.user.id,
+    method: parsed.data.method,
+    signature_hash,
+    timestamp: isoNow(),
+    metadata: sigInput.details
+  });
+
+  await supabase.from('documents').update({ status: 'Signed' }).eq('id', document_id);
+  await audit('DocumentSigned', 'Document', document_id, req.user.id, { method: parsed.data.method });
+
+  await queueNotification(doc.owner_id, 'InApp', 'Document signed', `Your document "${doc.title}" was signed.`, { document_id });
+
+  return res.json({ status: 'Signed' });
+});
+
+// 3) Create expense with budget restriction and confirmation signature
+app.post('/expenses', auth(), async (req, res) => {
+  const schema = z.object({
+    project_id: z.string().uuid().optional(),
+    task_id: z.string().uuid().optional(),
+    description: z.string().optional(),
+    category: z.string().optional(),
+    currency: z.string().default('USD'),
+    amount: z.number().positive(),
+    signature_method: z.enum(['UUID','Phone','Email','Handwriting'])
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json(parsed.error);
+  const payload = parsed.data;
+
+  // Determine scope for budget
+  const scope_type = payload.task_id ? 'Task' : 'Project';
+  const scope_id = payload.task_id || payload.project_id;
+  if (!scope_id) return res.status(400).json({ error: 'project_id or task_id required' });
+
+  const { data: budget } = await supabase.from('budgets')
+    .select('*')
+    .eq('scope_type', scope_type)
+    .eq('scope_id', scope_id)
+    .single();
+
+  const { data: actualView } = await supabase.from('v_actual_costs')
+    .select('*')
+    .eq('scope_type', scope_type)
+    .eq('scope_id', scope_id);
+
+  const actual_cost = actualView && actualView.length > 0 ? Number(actualView[0].actual_cost) : 0;
+  const budget_amount = budget ? Number(budget.amount) : 0;
+
+  // Create expense initially pending
+  const { data: expense, error: expErr } = await supabase.from('expenses').insert({
+    project_id: payload.project_id || null,
+    task_id: payload.task_id || null,
+    reporter_id: req.user.id,
+    description: payload.description,
+    category: payload.category,
+    currency: payload.currency,
+    amount: payload.amount,
+    status: 'Pending'
+  }).select('*').single();
+  if (expErr) return res.status(500).json({ error: expErr.message });
+
+  // Confirmation signature (Expense)
+  const sigInput = {
+    subject_type: 'Expense',
+    subject_id: expense.id,
+    user_id: req.user.id,
+    method: payload.signature_method,
+    timestamp: isoNow(),
+    details: { amount: payload.amount, project_id: payload.project_id, task_id: payload.task_id }
+  };
+  const signature_hash = makeSignatureHash(sigInput);
+  await supabase.from('signatures').insert({
+    subject_type: 'Expense',
+    subject_id: expense.id,
+    user_id: req.user.id,
+    method: payload.signature_method,
+    signature_hash,
+    timestamp: isoNow(),
+    metadata: sigInput.details
+  });
+
+  // Approval restriction logic
+  const remaining_budget = Math.max(0, budget_amount - actual_cost);
+  if (payload.amount <= remaining_budget) {
+    await supabase.from('expenses').update({ status: 'Approved' }).eq('id', expense.id);
+    await audit('ExpenseApproved', 'Expense', expense.id, req.user.id, { remaining_budget });
+  } else {
+    await supabase.from('expenses').update({ status: 'OverBudgetPending' }).eq('id', expense.id);
+    await audit('ExpenseOverBudget', 'Expense', expense.id, req.user.id, { remaining_budget });
+    // Escalate
+    // Find SeniorOperationsLead(s)
+    const { data: leads } = await supabase.from('users').select('id').eq('role','SeniorOperationsLead');
+    if (leads && leads.length > 0) {
+      for (const lead of leads) {
+        await queueNotification(lead.id, 'InApp', 'Over-budget expense pending', `Expense ${expense.id} exceeds budget. Approval required.`, { expense_id: expense.id });
+      }
+    }
+  }
+
+  // Threshold notifications (80% usage)
+  const new_actual = actual_cost + payload.amount;
+  if (budget_amount > 0 && new_actual >= 0.8 * budget_amount) {
+    // Notify project manager / task owner
+    let managerId: string | null = null;
+    if (payload.project_id) {
+      const { data: project } = await supabase.from('projects').select('manager_id').eq('id', payload.project_id).single();
+      managerId = project?.manager_id || null;
+    }
+    if (managerId) {
+      await queueNotification(managerId, 'InApp', 'Budget threshold reached', `Actuals reached 80% of budget for ${scope_type} ${scope_id}.`, { scope_type, scope_id });
+    }
+  }
+
+  return res.json({ expense_id: expense.id, status: (payload.amount <= remaining_budget ? 'Approved' : 'OverBudgetPending'), remaining_budget });
+});
+
+// 4) Reporting with filters by project/task/month and levels
+app.post('/reports/generate', auth(), async (req, res) => {
+  const schema = z.object({
+    type: z.enum(['Financial','Analytic','ProjectCost','Auditing','Overall']),
+    level: z.enum(['Operational','Managerial','Executive']),
+    filters: z.object({
+      project_id: z.string().uuid().optional(),
+      task_id: z.string().uuid().optional(),
+      month: z.string().regex(/^\d{4}-\d{2}$/).optional() // YYYY-MM
+    })
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json(parsed.error);
+  const { type, level, filters } = parsed.data;
+
+  // Collect data per type
+  const monthStart = filters.month ? new Date(`${filters.month}-01T00:00:00Z`) : null;
+  const monthEnd = filters.month ? new Date(`${filters.month}-01T00:00:00Z`) : null;
+  if (monthEnd) monthEnd.setMonth(monthEnd.getMonth() + 1);
+
+  const expQuery = supabase.from('expenses').select('*');
+  if (filters.project_id) expQuery.eq('project_id', filters.project_id);
+  if (filters.task_id) expQuery.eq('task_id', filters.task_id);
+  if (monthStart && monthEnd) expQuery.gte('created_at', monthStart.toISOString()).lt('created_at', monthEnd.toISOString());
+  const { data: expenses } = await expQuery;
+
+  const { data: budgets } = await supabase.from('budgets').select('*');
+  const { data: signatures } = await supabase.from('signatures').select('*');
+  const { data: wallets } = await supabase.from('wallets').select('*');
+  const { data: walletTx } = await supabase.from('wallet_transactions').select('*');
+
+  // Compose report
+  const reportData: any = { type, level, filters, summary: {}, details: {} };
+
+  if (type === 'Financial') {
+    const totalExpenses = (expenses || []).reduce((sum, e: any) => sum + Number(e.amount), 0);
+    const totalIN = (walletTx || []).filter(t => t.direction === 'IN').reduce((sum, t: any) => sum + Number(t.amount), 0);
+    const totalOUT = (walletTx || []).filter(t => t.direction === 'OUT').reduce((sum, t: any) => sum + Number(t.amount), 0);
+    reportData.summary = { totalExpenses, totalIN, totalOUT, cashflow: totalIN - totalOUT };
+    reportData.details = { expenses, walletTx };
+  }
+
+  if (type === 'Analytic') {
+    // Placeholder KPIs (extend with enumerator metrics)
+    const expenseCount = (expenses || []).length;
+    const avgExpense = expenseCount ? (expenses || []).reduce((s: number, e: any) => s + Number(e.amount), 0) / expenseCount : 0;
+    reportData.summary = { expenseCount, avgExpense };
+    reportData.details = { expenses };
+  }
+
+  if (type === 'ProjectCost') {
+    // Budget vs Actual, variance
+    const scopedBudgets = (budgets || []).filter(b => (!filters.project_id || (b.scope_type === 'Project' && b.scope_id === filters.project_id)) || (!filters.task_id || (b.scope_type === 'Task' && b.scope_id === filters.task_id)));
+    const scopedExpenses = (expenses || []);
+    const actualByScope: Record<string, number> = {};
+    for (const e of scopedExpenses) {
+      const key = e.task_id ? `Task:${e.task_id}` : (e.project_id ? `Project:${e.project_id}` : 'Project:unknown');
+      actualByScope[key] = (actualByScope[key] || 0) + Number(e.amount);
+    }
+    const rows = scopedBudgets.map(b => {
+      const key = `${b.scope_type}:${b.scope_id}`;
+      const actual = actualByScope[key] || 0;
+      const variance = Number(b.amount) - actual;
+      const overBudget = actual > Number(b.amount);
+      return { scope_type: b.scope_type, scope_id: b.scope_id, budget: Number(b.amount), actual, variance, overBudget };
+    });
+    reportData.summary = {
+      totalBudget: rows.reduce((s, r) => s + r.budget, 0),
+      totalActual: rows.reduce((s, r) => s + r.actual, 0),
+      totalVariance: rows.reduce((s, r) => s + r.variance, 0)
+    };
+    reportData.details = { rows };
+  }
+
+  if (type === 'Auditing') {
+    reportData.summary = { signaturesCount: (signatures || []).length };
+    reportData.details = { signatures };
+  }
+
+  if (type === 'Overall') {
+    reportData.summary = {
+      expenses: (expenses || []).length,
+      budgets: (budgets || []).length,
+      signatures: (signatures || []).length
+    };
+    reportData.details = { expenses, budgets, signatures, wallets, walletTx };
+  }
+
+  // Level formatting
+  if (level === 'Executive') {
+    // Keep summaries; trim details
+    reportData.details = {};
+  }
+
+  // Persist cached report
+  await supabase.from('reports').insert({
+    type,
+    scope: filters,
+    level,
+    data: reportData
+  });
+
+  // Notifications: anomalies
+  // Over-budget rows
+  if (type === 'ProjectCost' && reportData.details.rows) {
+    for (const r of reportData.details.rows) {
+      if (r.overBudget) {
+        const { data: leads } = await supabase.from('users').select('id').eq('role','SeniorOperationsLead');
+        for (const lead of (leads || [])) {
+          await queueNotification(lead.id, 'InApp', 'Over-budget detected', `Scope ${r.scope_type} ${r.scope_id} exceeded budget.`, { scope_type: r.scope_type, scope_id: r.scope_id });
+        }
+      }
+    }
+  }
+
+  return res.json(reportData);
+});
+
+// 5) Scheduled reports (daily/weekly/monthly)
+cron.schedule('0 6 * * *', async () => {
+  // Daily operational reports
+  const { data: managers } = await supabase.from('users').select('id').eq('role','Manager');
+  const filters = { month: new Date().toISOString().slice(0,7) }; // current YYYY-MM
+  const reportPayload = { type: 'Analytic', level: 'Operational', filters };
+  // Cache report
+  await supabase.from('reports').insert({ type: 'Analytic', scope: filters, level: 'Operational', data: reportPayload });
+  // Notify managers
+  for (const m of (managers || [])) {
+    await queueNotification(m.id, 'InApp', 'Daily operational report', 'Your daily operational report is available.', reportPayload);
+  }
+});
+
+cron.schedule('0 7 * * 1', async () => {
+  // Weekly managerial reports (Mondays)
+  const { data: accountants } = await supabase.from('users').select('id').eq('role','Accountant');
+  const filters = { month: new Date().toISOString().slice(0,7) };
+  const reportPayload = { type: 'Financial', level: 'Managerial', filters };
+  await supabase.from('reports').insert({ type: 'Financial', scope: filters, level: 'Managerial', data: reportPayload });
+  for (const a of (accountants || [])) {
+    await queueNotification(a.id, 'InApp', 'Weekly financial report', 'Your weekly financial report is available.', reportPayload);
+  }
+});
+
+cron.schedule('0 8 1 * *', async () => {
+  // Monthly executive summaries (1st of month)
+  const { data: execs } = await supabase.from('users').select('id').eq('role','ExecutiveDirector');
+  const month = new Date(); month.setMonth(month.getMonth() - 1);
+  const filters = { month: month.toISOString().slice(0,7) };
+  const reportPayload = { type: 'Overall', level: 'Executive', filters };
+  await supabase.from('reports').insert({ type: 'Overall', scope: filters, level: 'Executive', data: reportPayload });
+  for (const e of (execs || [])) {
+    await queueNotification(e.id, 'InApp', 'Monthly executive summary', 'Your monthly summary is available.', reportPayload);
+  }
+});
+
+// 6) Admin: process notification queue (stub; integrate email/SMS providers)
+app.post('/notifications/process', auth(['Manager','Accountant','SeniorOperationsLead','ExecutiveDirector','LegalAudit']), async (req, res) => {
+  const { data: queued } = await supabase.from('notifications').select('*').eq('status','Queued').limit(50);
+  for (const n of (queued || [])) {
+    // TODO: integrate actual Email/SMS providers
+    // Simulate send
+    await supabase.from('notifications').update({ status: 'Sent', sent_at: isoNow() }).eq('id', n.id);
+    await audit('NotificationSent', 'Notification', n.id, req.user.id, { channel: n.channel, subject: n.subject });
+  }
+  return res.json({ processed: queued?.length || 0 });
+});
+
+app.get('/health', (_req, res) => res.json({ ok: true, time: isoNow() }));
+
+const port = process.env.PORT || 3000;
+app.listen(port, () => console.log(`PACT backend running on ${port}`));
+Add scripts to package.json:
+
+json
+{
+  "name": "pact-backend",
+  "version": "1.0.0",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "nodemon --exec ts-node src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js"
+  }
+}
+Key endpoints
+POST /wallets/:wallet_id/receive
+
+Body: { amount, currency?, reference? }
+
+Auto-generates signature and notification
+
+POST /documents/:document_id/sign
+
+Body: { method: 'UUID'|'Phone'|'Email'|'Handwriting', handwriting_image_url? }
+
+Marks document as Signed, logs signature, notifies owner
+
+POST /expenses
+
+Body: { project_id?, task_id?, description?, category?, currency?, amount, signature_method }
+
+Applies budget restriction logic, escalates over-budget to Senior Operations Lead, 80% threshold notifications
+
+POST /reports/generate
+
+Body: { type, level, filters: { project_id?, task_id?, month? } }
+
+Returns fully composed report with summaries and details
+
+POST /notifications/process
+
+Processes notification queue (stub for sending)
+
+Notes on signature methods
+UUID: Uses entity UUID and payload to hash and store signature
+
+Phone/Email: Ensure user’s phone/email verified; same hashing approach
+
+Handwriting: Accepts an image URL of the drawn signature; include URL in metadata; hash payload to create signature_hash

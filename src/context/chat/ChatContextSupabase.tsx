@@ -11,6 +11,7 @@ import { ChatService } from '@/services/ChatService';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 
 interface ChatContextType {
   chats: Chat[];
@@ -391,10 +392,33 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
             return bTime - aTime; // Descending order (newest first)
           });
         });
+
+        // Send push notification to other chat participants (fire and forget)
+        const chat = chats.find(c => c.id === chatId);
+        if (chat?.participants) {
+          const senderName = currentUser.fullName || currentUser.name || currentUser.username || 'Someone';
+          const messagePreview = content || (contentType === 'image' ? 'Sent an image' : contentType === 'file' ? 'Sent a file' : 'Sent a message');
+          
+          // Notify all participants except the sender
+          for (const participantId of chat.participants) {
+            if (participantId !== currentUser.id) {
+              void NotificationTriggerService.newMessage(
+                participantId,
+                senderName,
+                messagePreview,
+                chatId
+              ).catch(err => console.error('Failed to send message notification:', err));
+            }
+          }
+        }
+      } else {
+        throw new Error('Message was not saved - no response from database');
       }
     } catch (err: any) {
       console.error('Error sending message:', err);
-      setError(err.message || 'Failed to send message');
+      const errorMessage = err.message || 'Failed to send message';
+      setError(errorMessage);
+      throw err; // Re-throw so ChatWindow can show toast
     } finally {
       setIsSendingMessage(false);
     }

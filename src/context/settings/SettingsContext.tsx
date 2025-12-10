@@ -349,44 +349,55 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
   
   // Update data visibility settings
   const updateDataVisibilitySettings = async (settings: Partial<DataVisibilitySettings>) => {
-    if (!currentUser?.id) return;
+    if (!currentUser?.id) {
+      console.error('[Settings] Cannot update visibility settings: no current user');
+      return;
+    }
     
     try {
+      const newOptions = {
+        ...(dataVisibilitySettings?.options || {}),
+        ...(settings.options || {})
+      };
+      
       // First check if the user already has data visibility settings
       if (dataVisibilitySettings?.id) {
         // Update existing settings
         const { error } = await supabase
           .from('data_visibility_settings')
           .update({
-            options: {
-              ...dataVisibilitySettings.options,
-              ...(settings.options || {})
-            }
+            options: newOptions
           })
           .eq('id', dataVisibilitySettings.id);
         
         if (error) throw error;
+        
+        // Update local state
+        setDataVisibilitySettings(prev => ({
+          ...prev,
+          options: newOptions,
+          user_id: currentUser.id
+        }));
       } else {
-        // Create new data visibility settings
-        const { error } = await supabase
+        // Create new data visibility settings and get the ID back
+        const { data: insertedData, error } = await supabase
           .from('data_visibility_settings')
           .insert([{ 
             user_id: currentUser.id, 
-            options: settings.options || {}
-          }]);
+            options: newOptions
+          }])
+          .select()
+          .single();
         
         if (error) throw error;
+        
+        // Update local state with the new record including ID
+        setDataVisibilitySettings({
+          id: insertedData.id,
+          user_id: currentUser.id,
+          options: newOptions
+        });
       }
-      
-      // Update local state
-      setDataVisibilitySettings(prev => ({
-        ...prev,
-        options: {
-          ...(prev?.options || {}),
-          ...(settings.options || {})
-        },
-        user_id: currentUser.id
-      }));
       
       toast({
         title: "Visibility settings updated",
@@ -505,4 +516,10 @@ export const useSettings = () => {
     throw new Error('useSettings must be used within a SettingsProvider');
   }
   return context;
+};
+
+// Safe hook that returns null if outside provider - use for optional settings access
+export const useSettingsSafe = () => {
+  const context = useContext(SettingsContext);
+  return context ?? null;
 };

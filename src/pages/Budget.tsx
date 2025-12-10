@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { useBudget } from '@/context/budget/BudgetContext';
 import { useAppContext } from '@/context/AppContext';
 import { useToast } from '@/hooks/use-toast';
+import { useUserProjects } from '@/hooks/useUserProjects';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { GradientStatCard } from '@/components/ui/gradient-stat-card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -51,11 +52,12 @@ const formatCurrency = (cents: number) => {
 const BudgetPage = () => {
   const { currentUser, hasGranularPermission } = useAppContext();
   const { toast } = useToast();
+  const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
   const {
-    projectBudgets,
-    mmpBudgets,
-    budgetTransactions,
-    budgetAlerts,
+    projectBudgets: allProjectBudgets,
+    mmpBudgets: allMmpBudgets,
+    budgetTransactions: allBudgetTransactions,
+    budgetAlerts: allBudgetAlerts,
     stats,
     loading,
     refreshProjectBudgets,
@@ -72,6 +74,38 @@ const BudgetPage = () => {
   const canManageBudgets = hasGranularPermission('finances', 'update') || 
                            currentUser?.role === 'admin' || 
                            currentUser?.role === 'fom';
+
+  // PROJECT TEAM MEMBERSHIP FILTER
+  // Filter budgets to only show projects the user belongs to (admins see all)
+  const projectBudgets = useMemo(() => {
+    if (isAdminOrSuperUser) return allProjectBudgets;
+    if (userProjectIds.length === 0) return [];
+    return allProjectBudgets.filter(pb => userProjectIds.includes(pb.projectId));
+  }, [allProjectBudgets, userProjectIds, isAdminOrSuperUser]);
+
+  const mmpBudgets = useMemo(() => {
+    if (isAdminOrSuperUser) return allMmpBudgets;
+    if (userProjectIds.length === 0) return [];
+    return allMmpBudgets.filter(mb => mb.projectId && userProjectIds.includes(mb.projectId));
+  }, [allMmpBudgets, userProjectIds, isAdminOrSuperUser]);
+
+  const budgetTransactions = useMemo(() => {
+    if (isAdminOrSuperUser) return allBudgetTransactions;
+    if (userProjectIds.length === 0) return [];
+    return allBudgetTransactions.filter(bt => bt.projectId && userProjectIds.includes(bt.projectId));
+  }, [allBudgetTransactions, userProjectIds, isAdminOrSuperUser]);
+
+  const budgetAlerts = useMemo(() => {
+    if (isAdminOrSuperUser) return allBudgetAlerts;
+    if (userProjectIds.length === 0) return [];
+    // Filter alerts by matching their projectBudgetId to the filtered projectBudgets
+    const userProjectBudgetIds = projectBudgets.map(pb => pb.id);
+    const userMmpBudgetIds = mmpBudgets.map(mb => mb.id);
+    return allBudgetAlerts.filter(ba => 
+      (ba.projectBudgetId && userProjectBudgetIds.includes(ba.projectBudgetId)) ||
+      (ba.mmpBudgetId && userMmpBudgetIds.includes(ba.mmpBudgetId))
+    );
+  }, [allBudgetAlerts, userProjectIds, isAdminOrSuperUser, projectBudgets, mmpBudgets]);
 
   const handleRefresh = async () => {
     await Promise.all([

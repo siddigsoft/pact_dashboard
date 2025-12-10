@@ -23,8 +23,8 @@ interface PermissionPromptModalProps {
 const permissionConfig = {
   location: {
     icon: MapPin,
-    iconBg: 'bg-blue-100 dark:bg-blue-900/30',
-    iconColor: 'text-blue-600 dark:text-blue-400',
+    iconBg: 'bg-black/10 dark:bg-white/10',
+    iconColor: 'text-black dark:text-white',
     defaultTitle: 'Location Access',
     defaultDescription: 'PACT needs your location to track field visits and share your position with your team for effective coordination.',
     benefits: [
@@ -35,8 +35,8 @@ const permissionConfig = {
   },
   camera: {
     icon: Camera,
-    iconBg: 'bg-purple-100 dark:bg-purple-900/30',
-    iconColor: 'text-purple-600 dark:text-purple-400',
+    iconBg: 'bg-black/10 dark:bg-white/10',
+    iconColor: 'text-black dark:text-white',
     defaultTitle: 'Camera Access',
     defaultDescription: 'PACT needs camera access to capture site photos and document field conditions during visits.',
     benefits: [
@@ -47,8 +47,8 @@ const permissionConfig = {
   },
   notifications: {
     icon: Bell,
-    iconBg: 'bg-amber-100 dark:bg-amber-900/30',
-    iconColor: 'text-amber-600 dark:text-amber-400',
+    iconBg: 'bg-black/10 dark:bg-white/10',
+    iconColor: 'text-black dark:text-white',
     defaultTitle: 'Push Notifications',
     defaultDescription: 'Stay informed about new assignments, approval updates, and important team messages.',
     benefits: [
@@ -59,8 +59,8 @@ const permissionConfig = {
   },
   storage: {
     icon: HardDrive,
-    iconBg: 'bg-emerald-100 dark:bg-emerald-900/30',
-    iconColor: 'text-emerald-600 dark:text-emerald-400',
+    iconBg: 'bg-black/10 dark:bg-white/10',
+    iconColor: 'text-black dark:text-white',
     defaultTitle: 'Storage Access',
     defaultDescription: 'PACT needs storage access to save data offline and work in areas with limited connectivity.',
     benefits: [
@@ -107,7 +107,7 @@ export function PermissionPromptModal({
           <ul className="space-y-2">
             {config.benefits.map((benefit, index) => (
               <li key={index} className="flex items-start gap-2 text-sm">
-                <Shield className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
+                <Shield className="h-4 w-4 text-black dark:text-white mt-0.5 flex-shrink-0" />
                 <span>{benefit}</span>
               </li>
             ))}
@@ -117,7 +117,7 @@ export function PermissionPromptModal({
         <DialogFooter className="flex-col gap-2 sm:flex-col">
           <Button
             onClick={onAllow}
-            className="w-full min-h-[44px]"
+            className="w-full min-h-[44px] rounded-full bg-black dark:bg-white text-white dark:text-black hover:bg-black/90 dark:hover:bg-white/90"
             data-testid="button-allow-permission"
           >
             Allow Access
@@ -125,7 +125,7 @@ export function PermissionPromptModal({
           <Button
             variant="ghost"
             onClick={onDeny}
-            className="w-full min-h-[44px] text-muted-foreground"
+            className="w-full min-h-[44px] rounded-full text-muted-foreground"
             data-testid="button-deny-permission"
           >
             Not Now

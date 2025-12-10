@@ -3,9 +3,10 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { format } from 'date-fns';
-import { CalendarIcon, Plus, X } from 'lucide-react';
+import { CalendarIcon, Plus, X, UserCircle } from 'lucide-react';
 
 import { Project, ProjectType, ProjectStatus, ProjectTeamMember } from '@/types/project';
+import { useUser } from '@/context/user/UserContext';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -54,6 +55,7 @@ const formSchema = z.object({
   description: z.string().optional(),
   projectType: z.enum(['infrastructure', 'survey', 'compliance', 'monitoring', 'training', 'other']),
   status: z.enum(['draft', 'active', 'onHold', 'completed', 'cancelled']),
+  projectManager: z.string().optional(),
   startDate: z.date({
     required_error: 'Start date is required.',
   }),
@@ -88,6 +90,16 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
   isEditing = false 
 }) => {
   const { toast } = useToast();
+  const { users } = useUser();
+  
+  const projectManagerUsers = users?.filter(u => 
+    u.roles?.some(r => {
+      const role = r.toLowerCase();
+      const isFieldTeam = role === 'supervisor' || role === 'coordinator' || role === 'datacollector' || role === 'data collector';
+      const isPMRole = role.includes('projectmanager') || role.includes('project manager') || role === 'pm' || role === 'fieldopmanager' || role === 'admin';
+      return isPMRole && !isFieldTeam;
+    })
+  ) || [];
   const [selectedCountry, setSelectedCountry] = useState<string>(initialData?.location?.country || '');
   const [selectedRegion, setSelectedRegion] = useState<string>(initialData?.location?.region || '');
   const [selectedState, setSelectedState] = useState<string>(initialData?.location?.state || '');
@@ -112,6 +124,7 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
       endDate: initialData?.endDate ? new Date(initialData.endDate) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
       budgetTotal: initialData?.budget?.total || 0,
       budgetCurrency: initialData?.budget?.currency || 'USD',
+      projectManager: initialData?.team?.projectManager || '',
       country: initialData?.location?.country || '',
       region: initialData?.location?.region || '',
       selectedState: initialData?.location?.selectedStates && initialData.location.selectedStates.length > 0 
@@ -156,6 +169,7 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
         },
         team: {
           ...(initialData?.team || {}),
+          projectManager: values.projectManager,
           teamComposition: teamMembers
         },
         activities: initialData?.activities || [],
@@ -304,6 +318,38 @@ const ProjectForm: React.FC<ProjectFormProps> = ({
                         <SelectItem value="onHold">On Hold</SelectItem>
                         <SelectItem value="completed">Completed</SelectItem>
                         <SelectItem value="cancelled">Cancelled</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="projectManager"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="flex items-center gap-1.5">
+                      <UserCircle className="h-4 w-4" />
+                      Project Manager
+                    </FormLabel>
+                    <Select 
+                      onValueChange={field.onChange} 
+                      value={field.value || undefined}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select project manager" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="none">None</SelectItem>
+                        {projectManagerUsers.map((user) => (
+                          <SelectItem key={user.id} value={user.name}>
+                            {user.name}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                     <FormMessage />

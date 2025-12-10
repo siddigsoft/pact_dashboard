@@ -123,17 +123,36 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
 
       const { data, error } = await query.order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        // Suppress RLS permission errors - just log them
+        if (error.code === '42501' || error.message?.includes('permission') || error.message?.includes('RLS')) {
+          console.log('[DownPayment] No permission to fetch requests (expected for some roles)');
+          setRequests([]);
+          setLoading(false);
+          return;
+        }
+        throw error;
+      }
       
       console.log('[DownPayment] Fetched requests:', data?.length || 0);
       setRequests((data || []).map(transformFromDB));
     } catch (error: any) {
-      console.error('Failed to fetch down-payment requests:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to load down-payment requests',
-        variant: 'destructive',
-      });
+      // Only log and show error for unexpected errors, not permission issues
+      const isPermissionError = error.code === '42501' || 
+        error.message?.includes('permission') || 
+        error.message?.includes('RLS') ||
+        error.message?.includes('policy');
+      
+      if (!isPermissionError) {
+        console.error('Failed to fetch down-payment requests:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to load down-payment requests',
+          variant: 'destructive',
+        });
+      } else {
+        console.log('[DownPayment] Permission denied (expected for some roles)');
+      }
     } finally {
       setLoading(false);
     }

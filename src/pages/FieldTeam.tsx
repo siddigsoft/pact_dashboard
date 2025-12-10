@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { useUser } from '@/context/user/UserContext';
 import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
@@ -17,6 +16,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import GpsLocationCapture from '@/components/GpsLocationCapture';
+import { useUserProjects } from '@/hooks/useUserProjects';
+import { getUserStatus } from '@/utils/userStatusUtils';
 import {
   Users,
   MapPin,
@@ -108,7 +109,11 @@ const FieldTeam = () => {
       const matchesRole = roleFilter === 'all' || 
         (roleFilter === 'datacollector' && isDataCollector) ||
         user.role?.toLowerCase() === roleFilter.toLowerCase();
-      const matchesStatus = statusFilter === 'all' || user.availability === statusFilter;
+      const userStatus = getUserStatus(user);
+      const matchesStatus = statusFilter === 'all' || 
+        (statusFilter === 'online' && userStatus.type === 'online') ||
+        (statusFilter === 'offline' && userStatus.type === 'offline') ||
+        (statusFilter === 'busy' && userStatus.type === 'same-day');
       
       return matchesSearch && matchesRole && matchesStatus;
     });
@@ -130,7 +135,7 @@ const FieldTeam = () => {
   );
 
   const onlineUsers = useMemo(() => 
-    fieldTeamUsers.filter(u => u.availability === 'online'),
+    fieldTeamUsers.filter(u => getUserStatus(u).type === 'online'),
     [fieldTeamUsers]
   );
 
@@ -178,6 +183,10 @@ const FieldTeam = () => {
   const TeamMemberCard = ({ user }: { user: User }) => {
     const workload = calculateUserWorkload(user.id, siteVisits);
     const hasLocation = user.location?.latitude && user.location?.longitude;
+    const userStatus = getUserStatus(user);
+    
+    const statusColorClass = userStatus.type === 'online' ? 'bg-green-500' :
+                            userStatus.type === 'same-day' ? 'bg-amber-500' : 'bg-gray-400';
     
     return (
       <Card className="hover-elevate overflow-hidden" data-testid={`card-team-member-${user.id}`}>
@@ -190,7 +199,7 @@ const FieldTeam = () => {
                   {user.name?.substring(0, 2).toUpperCase() || 'U'}
                 </AvatarFallback>
               </Avatar>
-              <span className={`absolute -bottom-1 -right-1 h-4 w-4 rounded-full border-2 border-white ${getStatusColor(user.availability || 'offline')}`} />
+              <span className={`absolute -bottom-1 -right-1 h-4 w-4 rounded-full border-2 border-white ${statusColorClass}`} />
             </div>
             
             <div className="flex-1 min-w-0">
@@ -231,13 +240,13 @@ const FieldTeam = () => {
                 </Badge>
                 
                 <Badge 
-                  variant={user.availability === 'online' ? 'default' : 'secondary'} 
+                  variant={userStatus.type === 'online' ? 'default' : 'secondary'} 
                   className="text-xs"
                 >
-                  {user.availability === 'online' ? (
+                  {userStatus.type === 'online' ? (
                     <><Wifi className="h-3 w-3 mr-1" /> Online</>
-                  ) : user.availability === 'busy' ? (
-                    <><Activity className="h-3 w-3 mr-1" /> Busy</>
+                  ) : userStatus.type === 'same-day' ? (
+                    <><Activity className="h-3 w-3 mr-1" /> Active Today</>
                   ) : (
                     <><WifiOff className="h-3 w-3 mr-1" /> Offline</>
                   )}
@@ -478,6 +487,9 @@ const FieldTeam = () => {
                   
                   {filteredUsers.map(user => {
                     const hasGPS = user.location?.latitude && user.location?.longitude;
+                    const rowUserStatus = getUserStatus(user);
+                    const rowStatusColor = rowUserStatus.type === 'online' ? 'bg-green-500' :
+                                          rowUserStatus.type === 'same-day' ? 'bg-amber-500' : 'bg-gray-400';
                     return (
                       <div 
                         key={user.id} 
@@ -492,7 +504,7 @@ const FieldTeam = () => {
                                 {user.name?.substring(0, 2).toUpperCase()}
                               </AvatarFallback>
                             </Avatar>
-                            <span className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white ${getStatusColor(user.availability || 'offline')}`} />
+                            <span className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white ${rowStatusColor}`} />
                           </div>
                         </div>
                         
@@ -525,10 +537,10 @@ const FieldTeam = () => {
                         
                         <div className="col-span-2">
                           <Badge 
-                            variant={user.availability === 'online' ? 'default' : 'secondary'}
+                            variant={rowUserStatus.type === 'online' ? 'default' : 'secondary'}
                             className="text-xs"
                           >
-                            {user.availability === 'online' ? 'Online' : user.availability === 'busy' ? 'Busy' : 'Offline'}
+                            {rowUserStatus.type === 'online' ? 'Online' : rowUserStatus.type === 'same-day' ? 'Active Today' : 'Offline'}
                           </Badge>
                         </div>
                         

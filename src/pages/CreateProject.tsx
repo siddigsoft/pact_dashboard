@@ -41,21 +41,11 @@ const CreateProject = () => {
     }
   };
 
-  const handleSkipBudget = () => {
-    setShowBudgetDialog(false);
-    if (createdProject) {
-      navigate(`/projects/${createdProject.id}`);
-    }
-  };
-
   const handleDialogChange = (open: boolean) => {
-    // Prevent closing dialog while budget creation is in progress
-    if (!open && budgetLoading) {
+    // Prevent closing dialog - budget is mandatory
+    // Only allow closing after budget is created (which navigates away)
+    if (!open) {
       return;
-    }
-    
-    if (!open && createdProject) {
-      navigate(`/projects/${createdProject.id}`);
     }
     setShowBudgetDialog(open);
   };
@@ -129,13 +119,13 @@ const CreateProject = () => {
         <ProjectForm onSubmit={handleProjectSubmit} />
       </div>
 
-      {/* Budget Creation Dialog */}
+      {/* Budget Creation Dialog - Mandatory */}
       <Dialog open={showBudgetDialog} onOpenChange={handleDialogChange}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" hideCloseButton>
           <DialogHeader>
             <DialogTitle>Create Budget for {createdProject?.name}</DialogTitle>
             <DialogDescription>
-              Optionally set up a budget for this project now, or you can add it later from the Budget page.
+              A budget is required for all projects. Please set up the budget to continue.
             </DialogDescription>
           </DialogHeader>
 
@@ -257,10 +247,7 @@ const CreateProject = () => {
             </div>
           </div>
 
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={handleSkipBudget} disabled={budgetLoading}>
-              Skip for Now
-            </Button>
+          <DialogFooter>
             <Button 
               onClick={handleCreateBudget} 
               disabled={!totalBudget || parseFloat(totalBudget) <= 0 || budgetLoading}

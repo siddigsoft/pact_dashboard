@@ -1,7 +1,37 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">PACT Workflow</string>
-    <string name="title_activity_main">PACT Workflow</string>
-    <string name="package_name">com.pact.workflow</string>
-    <string name="custom_url_scheme">com.pact.workflow</string>
+    <string name="app_name">PACT Command Center</string>
+    <string name="title_activity_main">PACT Command Center</string>
+    <string name="package_name">com.pact.commandcenter</string>
+    <string name="custom_url_scheme">com.pact.commandcenter</string>
+    
+    <!-- App Shortcuts -->
+    <string name="shortcut_new_visit_short">New Visit</string>
+    <string name="shortcut_new_visit_long">Start New Site Visit</string>
+    <string name="shortcut_scan_qr_short">Scan QR</string>
+    <string name="shortcut_scan_qr_long">Scan Site QR Code</string>
+    <string name="shortcut_wallet_short">Wallet</string>
+    <string name="shortcut_wallet_long">View Wallet Balance</string>
+    <string name="shortcut_approvals_short">Approvals</string>
+    <string name="shortcut_approvals_long">Pending Approvals</string>
+    <string name="shortcut_disabled">Shortcut not available</string>
+    
+    <!-- Notification Channels -->
+    <string name="channel_default_name">General Notifications</string>
+    <string name="channel_default_description">General app notifications</string>
+    <string name="channel_urgent_name">Urgent Alerts</string>
+    <string name="channel_urgent_description">High priority alerts requiring immediate attention</string>
+    <string name="channel_sync_name">Sync Status</string>
+    <string name="channel_sync_description">Data synchronization updates</string>
+    <string name="channel_geofence_name">Location Alerts</string>
+    <string name="channel_geofence_description">Site arrival and departure notifications</string>
+    
+    <!-- Permission Rationales -->
+    <string name="permission_location_rationale">Location access is needed to track your position during site visits and enable geofencing alerts.</string>
+    <string name="permission_camera_rationale">Camera access is needed to capture photos during site visits.</string>
+    <string name="permission_notification_rationale">Notification permission is needed to receive alerts about approvals, sync status, and site updates.</string>
+    
+    <!-- Foreground Service -->
+    <string name="location_service_title">PACT Location Tracking</string>
+    <string name="location_service_text">Tracking your location during active site visit</string>
 </resources>
