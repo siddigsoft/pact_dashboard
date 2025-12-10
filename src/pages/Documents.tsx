@@ -7,7 +7,19 @@ import {
   ExternalLink, History, Clock, Wallet, Filter, X, PenLine,
   Briefcase, Home
 } from 'lucide-react';
-import { formatDistanceToNow, format, parseISO } from 'date-fns';
+import { formatDistanceToNow, format, parseISO, isValid } from 'date-fns';
+
+// Safe date parsing helper
+const safeFormatDate = (dateStr: string | null | undefined, formatStr: string, fallback?: string): string | undefined => {
+  if (!dateStr || typeof dateStr !== 'string') return fallback;
+  try {
+    const parsed = parseISO(dateStr);
+    if (!isValid(parsed)) return fallback;
+    return format(parsed, formatStr);
+  } catch {
+    return fallback;
+  }
+};
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -168,9 +180,10 @@ const DocumentsPage = () => {
           console.warn('MMP files fetch error:', mmpError);
         }
 
-        mmpFiles?.forEach((mmp: any) => {
+        (mmpFiles || []).forEach((mmp: any) => {
+          if (!mmp) return;
           const projectName = mmp.projects?.name || 'Unknown Project';
-          const monthBucket = mmp.created_at ? format(parseISO(mmp.created_at), 'yyyy-MM') : undefined;
+          const monthBucket = safeFormatDate(mmp.created_at, 'yyyy-MM');
           if (monthBucket) monthsSet.add(monthBucket);
           
           // Add the MMP file itself
@@ -194,9 +207,10 @@ const DocumentsPage = () => {
           const permits = mmp.permits || {};
           
           // Federal permits
-          if (permits.documents) {
+          if (Array.isArray(permits.documents)) {
             permits.documents.forEach((doc: any, idx: number) => {
-              const docMonth = doc.uploadedAt ? format(parseISO(doc.uploadedAt), 'yyyy-MM') : monthBucket;
+              if (!doc) return;
+              const docMonth = safeFormatDate(doc.uploadedAt, 'yyyy-MM', monthBucket);
               if (docMonth) monthsSet.add(docMonth);
               
               docs.push({
@@ -218,12 +232,14 @@ const DocumentsPage = () => {
           }
 
           // State permits
-          if (permits.statePermits) {
+          if (Array.isArray(permits.statePermits)) {
             permits.statePermits.forEach((sp: any) => {
+              if (!sp) return;
               if (sp.stateName) statesSet.add(sp.stateName);
               
-              sp.documents?.forEach((doc: any, idx: number) => {
-                const docMonth = doc.uploadedAt ? format(parseISO(doc.uploadedAt), 'yyyy-MM') : monthBucket;
+              (Array.isArray(sp.documents) ? sp.documents : []).forEach((doc: any, idx: number) => {
+                if (!doc) return;
+                const docMonth = safeFormatDate(doc.uploadedAt, 'yyyy-MM', monthBucket);
                 if (docMonth) monthsSet.add(docMonth);
                 
                 docs.push({
@@ -249,12 +265,14 @@ const DocumentsPage = () => {
           }
 
           // Local permits
-          if (permits.localPermits) {
+          if (Array.isArray(permits.localPermits)) {
             permits.localPermits.forEach((lp: any) => {
+              if (!lp) return;
               if (lp.state) statesSet.add(lp.state);
               
-              lp.documents?.forEach((doc: any, idx: number) => {
-                const docMonth = doc.uploadedAt ? format(parseISO(doc.uploadedAt), 'yyyy-MM') : monthBucket;
+              (Array.isArray(lp.documents) ? lp.documents : []).forEach((doc: any, idx: number) => {
+                if (!doc) return;
+                const docMonth = safeFormatDate(doc.uploadedAt, 'yyyy-MM', monthBucket);
                 if (docMonth) monthsSet.add(docMonth);
                 
                 docs.push({
@@ -283,8 +301,9 @@ const DocumentsPage = () => {
           // Locality permits array format
           if (Array.isArray(permits.localityPermits)) {
             permits.localityPermits.forEach((lp: any, idx: number) => {
+              if (!lp) return;
               if (lp.state) statesSet.add(lp.state);
-              const docMonth = lp.uploadedAt ? format(parseISO(lp.uploadedAt), 'yyyy-MM') : monthBucket;
+              const docMonth = safeFormatDate(lp.uploadedAt, 'yyyy-MM', monthBucket);
               if (docMonth) monthsSet.add(docMonth);
               
               docs.push({
@@ -320,8 +339,9 @@ const DocumentsPage = () => {
         .order('created_at', { ascending: false });
 
       if (!costError && costSubmissions) {
-        costSubmissions.forEach((cost: any) => {
-          const costMonth = cost.created_at ? format(parseISO(cost.created_at), 'yyyy-MM') : undefined;
+        (costSubmissions || []).forEach((cost: any) => {
+          if (!cost) return;
+          const costMonth = safeFormatDate(cost.created_at, 'yyyy-MM');
           if (costMonth) monthsSet.add(costMonth);
           const projectName = cost.projects?.name;
           
@@ -346,8 +366,9 @@ const DocumentsPage = () => {
           // Add any additional documents from the documents JSON field
           if (cost.documents && Array.isArray(cost.documents)) {
             cost.documents.forEach((doc: any, idx: number) => {
+              if (!doc) return;
               if (doc.fileUrl || doc.url) {
-                const docMonth = doc.uploadedAt ? format(parseISO(doc.uploadedAt), 'yyyy-MM') : costMonth;
+                const docMonth = safeFormatDate(doc.uploadedAt, 'yyyy-MM', costMonth);
                 if (docMonth) monthsSet.add(docMonth);
                 
                 docs.push({
@@ -379,9 +400,10 @@ const DocumentsPage = () => {
           .order('created_at', { ascending: false });
 
         if (!photoError && reportPhotos) {
-          reportPhotos.forEach((photo: any) => {
+          (reportPhotos || []).forEach((photo: any) => {
+            if (!photo) return;
             if (photo.photo_url) {
-              const photoMonth = photo.created_at ? format(parseISO(photo.created_at), 'yyyy-MM') : undefined;
+              const photoMonth = safeFormatDate(photo.created_at, 'yyyy-MM');
               if (photoMonth) monthsSet.add(photoMonth);
               
               docs.push({
@@ -816,7 +838,7 @@ const DocumentsPage = () => {
                               <SelectItem value="all">All Months</SelectItem>
                               {availableMonths.map(m => (
                                 <SelectItem key={m} value={m}>
-                                  {format(parseISO(`${m}-01`), 'MMMM yyyy')}
+                                  {safeFormatDate(`${m}-01`, 'MMMM yyyy', m)}
                                 </SelectItem>
                               ))}
                             </SelectContent>
