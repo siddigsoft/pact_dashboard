@@ -29,13 +29,15 @@ import {
   MapPin,
   Wifi,
   WifiOff,
-  RotateCcw
+  RotateCcw,
+  Clapperboard
 } from 'lucide-react';
 import { useUser } from '@/context/user/UserContext';
 import { useAppContext } from '@/context/AppContext';
 import { useCommunication } from '@/context/communications/CommunicationContext';
 import { useCallSounds } from '@/hooks/useCallSounds';
 import { useRealtimeTeamLocations } from '@/hooks/use-realtime-team-locations';
+import { JitsiCallModal } from '@/components/calls/JitsiCallModal';
 
 const MESSAGE_TEMPLATES = [
   { id: 1, label: "I'll call back", text: "Sorry I missed your call. I'll call you back shortly." },
@@ -67,6 +69,9 @@ const Calls = () => {
   const [customMessage, setCustomMessage] = useState('');
   const [activeFollowupTab, setActiveFollowupTab] = useState<'message' | 'notification'>('message');
   const [activeTab, setActiveTab] = useState<'contacts' | 'history'>('contacts');
+  const [showJitsiCall, setShowJitsiCall] = useState(false);
+  const [jitsiIsAudioOnly, setJitsiIsAudioOnly] = useState(false);
+  const [jitsiCallUser, setJitsiCallUser] = useState<{ id: string; name: string } | null>(null);
   
   const { stopSounds } = useCallSounds(callState.status);
   
@@ -139,6 +144,23 @@ const Calls = () => {
     const user = users.find(u => u.id === userId);
     if (user) {
       initiateCall(user);
+    }
+  };
+
+  const handleVideoCall = (userId: string) => {
+    const user = users.find(u => u.id === userId);
+    if (user) {
+      initiateCall(user);
+      // Video will be enabled via toggle after call connects
+    }
+  };
+
+  const handleJitsiCall = (userId: string, audioOnly: boolean = false) => {
+    const user = users.find(u => u.id === userId);
+    if (user) {
+      setJitsiCallUser({ id: user.id, name: user.name });
+      setJitsiIsAudioOnly(audioOnly);
+      setShowJitsiCall(true);
     }
   };
 
@@ -492,6 +514,7 @@ const Calls = () => {
                               onClick={() => toggleFavorite(user.id)}
                               className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                               data-testid={`favorite-${user.id}`}
+                              title="Toggle favorite"
                             >
                               <Star className={`h-4 w-4 ${isFavorite ? 'fill-amber-400 text-amber-400' : 'text-gray-400'}`} />
                             </button>
@@ -499,15 +522,33 @@ const Calls = () => {
                               onClick={() => navigate(`/chat?userId=${user.id}`)}
                               className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                               data-testid={`message-${user.id}`}
+                              title="Send message"
                             >
                               <MessageSquare className="h-4 w-4 text-gray-600 dark:text-gray-400" />
                             </button>
                             <button
                               onClick={() => handleStartCall(user.id)}
-                              className="h-8 px-3 rounded-full bg-black dark:bg-white text-white dark:text-black text-xs font-semibold flex items-center gap-1"
-                              data-testid={`call-${user.id}`}
+                              className="w-8 h-8 rounded-full flex items-center justify-center bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                              data-testid={`voice-call-${user.id}`}
+                              title="Voice call"
                             >
-                              <Phone className="h-3.5 w-3.5" />
+                              <Phone className="h-4 w-4 text-gray-700 dark:text-gray-300" />
+                            </button>
+                            <button
+                              onClick={() => handleVideoCall(user.id)}
+                              className="w-8 h-8 rounded-full flex items-center justify-center bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                              data-testid={`video-call-${user.id}`}
+                              title="Video call"
+                            >
+                              <Video className="h-4 w-4 text-gray-700 dark:text-gray-300" />
+                            </button>
+                            <button
+                              onClick={() => handleJitsiCall(user.id, false)}
+                              className="w-8 h-8 rounded-full flex items-center justify-center bg-blue-500 hover:bg-blue-600 transition-colors"
+                              data-testid={`jitsi-call-${user.id}`}
+                              title="Jitsi video call (reliable)"
+                            >
+                              <Clapperboard className="h-4 w-4 text-white" />
                             </button>
                           </div>
                         </div>
@@ -749,6 +790,24 @@ const Calls = () => {
           >
             <Phone className="h-5 w-5" />
           </button>
+        )}
+
+        {/* Jitsi Call Modal */}
+        {currentUser && (
+          <JitsiCallModal
+            isOpen={showJitsiCall}
+            onClose={() => {
+              setShowJitsiCall(false);
+              setJitsiCallUser(null);
+            }}
+            targetUser={jitsiCallUser ? { id: jitsiCallUser.id, name: jitsiCallUser.name } : undefined}
+            currentUser={{
+              id: currentUser.id,
+              name: currentUser.fullName || currentUser.name || 'User',
+              email: currentUser.email,
+            }}
+            isAudioOnly={jitsiIsAudioOnly}
+          />
         )}
       </div>
     </div>
