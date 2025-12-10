@@ -1008,6 +1008,45 @@ Also configure in **Authentication** → **URL Configuration**:
 
 | Setting | Value |
 |---------|-------|
-| **Site URL** | `https://pact-dashboard-831y.vercel.app` |
-| **Redirect URLs** | `https://pact-dashboard-831y.vercel.app/**` |
+| **Site URL** | `https://app.pactorg.com` |
+| **Redirect URLs** | `https://app.pactorg.com/**,https://pact-dashboard-831y.vercel.app/**` |
+
+---
+
+# DOMAIN SETUP GUIDE
+
+## Two Environments
+
+| Environment | Domain | Purpose |
+|-------------|--------|---------|
+| **Production** | `app.pactorg.com` | Main production site |
+| **Staging** | `pact-dashboard-831y.vercel.app` | Backup/staging environment |
+
+## Vercel Setup
+
+1. Go to **Vercel Dashboard** → **Your Project** → **Settings** → **Domains**
+2. Click **Add Domain**
+3. Enter: `app.pactorg.com`
+4. Vercel will show you DNS records to add
+
+## IONOS DNS Setup
+
+Add this **CNAME record** in IONOS:
+
+| Type | Host | Value | TTL |
+|------|------|-------|-----|
+| CNAME | `app` | `cname.vercel-dns.com` | Auto |
+
+**Note:** Wait 10-30 minutes for DNS propagation, then Vercel will auto-issue SSL.
+
+## Supabase Auth Settings
+
+In **Supabase Dashboard** → **Authentication** → **URL Configuration**:
+
+1. **Site URL:** `https://app.pactorg.com`
+2. **Redirect URLs:** Add both:
+   - `https://app.pactorg.com/**`
+   - `https://pact-dashboard-831y.vercel.app/**`
+
+This allows auth to work on both environments.
 
