@@ -36,6 +36,7 @@ const Index = () => {
   const navigate = useNavigate();
   const [isNavigating, setIsNavigating] = useState(false);
   const [isLoadingStats, setIsLoadingStats] = useState(true);
+  const [currentTime, setCurrentTime] = useState(new Date());
   const [stats, setStats] = useState<KPIStats>({
     liveSites: 0,
     activeTeams: 0,
@@ -56,11 +57,17 @@ const Index = () => {
     // Fetch real stats from database
     fetchDashboardStats();
 
+    // Update time every second
+    const timeInterval = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+
     // Cleanup timeout on unmount
     return () => {
       if (navigationTimeoutRef.current) {
         clearTimeout(navigationTimeoutRef.current);
       }
+      clearInterval(timeInterval);
     };
   }, []);
 
@@ -295,14 +302,35 @@ const Index = () => {
                 data-testid="img-logo"
                 className="h-14 w-14 md:h-16 md:w-16"
               />
-              <Badge 
-                variant="secondary" 
-                className="gap-1.5 text-xs"
-                data-testid="badge-status"
-              >
-                <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
-                System Operational
-              </Badge>
+              <div className="flex items-center gap-3 flex-wrap justify-center">
+                <Badge 
+                  variant="secondary" 
+                  className="gap-1.5 text-xs"
+                  data-testid="badge-status"
+                >
+                  <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
+                  System Operational
+                </Badge>
+                <Badge 
+                  variant="outline" 
+                  className="gap-1.5 text-xs font-mono"
+                  data-testid="badge-time"
+                >
+                  <Clock className="w-3 h-3" />
+                  {currentTime.toLocaleTimeString('en-US', { 
+                    hour: '2-digit', 
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: true 
+                  })}
+                  <span className="text-muted-foreground">|</span>
+                  {currentTime.toLocaleDateString('en-US', { 
+                    weekday: 'short',
+                    month: 'short', 
+                    day: 'numeric'
+                  })}
+                </Badge>
+              </div>
             </div>
 
             {/* Hero Headline */}
