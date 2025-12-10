@@ -41,21 +41,24 @@ export async function initializeCrashlytics(): Promise<boolean> {
     }
 
     try {
-      const { getApps, getApp, initializeApp } = await import('firebase/app');
-      let app;
-      if (getApps().length === 0) {
-        const { firebaseConfig, isFirebaseConfigured } = await import('@/config/firebase');
-        if (isFirebaseConfigured) {
-          app = initializeApp(firebaseConfig);
-        }
-      } else {
-        app = getApp();
-      }
+      const { firebaseConfig, isFirebaseConfigured } = await import('@/config/firebase');
       
-      if (app) {
-        const { getAnalytics } = await import('firebase/analytics');
-        analyticsInstance = getAnalytics(app);
-        console.log('[Crashlytics] Firebase Analytics initialized');
+      if (!isFirebaseConfigured) {
+        console.log('[Crashlytics] Firebase not configured - skipping Analytics initialization');
+      } else {
+        const { getApps, getApp, initializeApp } = await import('firebase/app');
+        let app;
+        if (getApps().length === 0) {
+          app = initializeApp(firebaseConfig);
+        } else {
+          app = getApp();
+        }
+        
+        if (app) {
+          const { getAnalytics } = await import('firebase/analytics');
+          analyticsInstance = getAnalytics(app);
+          console.log('[Crashlytics] Firebase Analytics initialized');
+        }
       }
     } catch (analyticsError) {
       console.warn('[Crashlytics] Firebase Analytics not available:', analyticsError);
