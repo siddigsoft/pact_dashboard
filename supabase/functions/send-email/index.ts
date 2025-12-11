@@ -158,40 +158,35 @@ serve(async (req) => {
     const portNum = Number(smtpPort)
     console.log(`SMTP Config: ${smtpHost}:${portNum}, user: ${smtpUser.substring(0, 5)}...`)
 
-    // Use deno-smtp library (more stable than denomailer)
-    const { SmtpClient } = await import('https://deno.land/x/smtp@v0.7.0/mod.ts')
+    // Use nodemailer via npm - compatible with Supabase Edge Functions
+    const nodemailer = await import('npm:nodemailer@6.9.8')
     
-    const client = new SmtpClient()
-    
-    // Connect with TLS for port 465, STARTTLS for other ports
-    if (portNum === 465) {
-      await client.connectTLS({
-        hostname: smtpHost,
-        port: portNum,
-        username: smtpUser,
-        password: smtpPassword,
-      })
-    } else {
-      await client.connect({
-        hostname: smtpHost,
-        port: portNum,
-        username: smtpUser,
-        password: smtpPassword,
-      })
-    }
+    // Create transporter with IONOS SMTP settings
+    const transporter = nodemailer.default.createTransport({
+      host: smtpHost,
+      port: portNum,
+      secure: portNum === 465, // true for 465, false for 587
+      auth: {
+        user: smtpUser,
+        pass: smtpPassword,
+      },
+      tls: {
+        rejectUnauthorized: false // Allow self-signed certs
+      }
+    })
 
     console.log(`Sending email to ${to}...`)
     
-    await client.send({
-      from: smtpUser,
+    const mailOptions = {
+      from: `"PACT Workflow" <${smtpUser}>`,
       to: to,
       subject: subject,
-      content: emailText || '',
+      text: emailText || '',
       html: emailHtml || undefined,
-    })
+    }
 
-    await client.close()
-    console.log(`Email sent successfully to ${to}`)
+    const info = await transporter.sendMail(mailOptions)
+    console.log(`Email sent successfully to ${to}, messageId: ${info.messageId}`)
 
     return new Response(
       JSON.stringify({ 
