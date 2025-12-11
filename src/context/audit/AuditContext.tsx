@@ -11,6 +11,7 @@ import {
 } from '@/types/audit-trail';
 import { v4 as uuidv4 } from 'uuid';
 import { supabase } from '@/integrations/supabase/client';
+import { useRealtimeTable } from '@/hooks/useRealtimeResource';
 
 interface AuditContextType {
   logs: AuditLogEntry[];
@@ -207,6 +208,10 @@ export function AuditProvider({ children }: { children: ReactNode }) {
     // Sync pending logs on mount
     syncToDatabase();
   }, [loadLogs, syncToDatabase]);
+
+  useRealtimeTable('audit_logs', loadLogs, {
+    enabled: !!currentUser,
+  });
 
   // Periodic sync of pending logs (every 5 minutes)
   useEffect(() => {

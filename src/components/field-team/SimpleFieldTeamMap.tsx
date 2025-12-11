@@ -13,6 +13,8 @@ import { CollectorMatch } from '@/utils/gpsMatchingUtils';
 import LeafletMapContainer from '@/components/map/LeafletMapContainer';
 import 'leaflet/dist/leaflet.css';
 
+
+
 interface SimpleFieldTeamMapProps {
   users: User[];
   siteVisits: SiteVisit[];
