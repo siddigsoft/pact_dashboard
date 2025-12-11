@@ -2,8 +2,8 @@
 import { z } from "zod";
 import { Project, ProjectType, ProjectStatus } from "@/types/project";
 
-// Validation schema for budget
-const budgetSchema = z.object({
+// Validation schema for budget - allows null, undefined, empty object, or complete budget object
+const completeBudgetSchema = z.object({
   total: z.number().min(0),
   currency: z.string().min(1),
   allocated: z.number().min(0),
@@ -11,6 +11,14 @@ const budgetSchema = z.object({
 }).refine(data => data.allocated + data.remaining <= data.total, {
   message: "Allocated and remaining amounts must not exceed total budget"
 });
+
+// Budget can be: null, undefined, empty object (treated as null), or a complete budget
+const budgetSchema = z.union([
+  completeBudgetSchema,
+  z.null(),
+  z.undefined(),
+  z.object({}).transform(() => null) // empty object becomes null
+]);
 
 // Validation schema for location
 const locationSchema = z.object({
@@ -38,7 +46,7 @@ export const projectValidationSchema = z.object({
   endDate: z.string().refine(date => !isNaN(Date.parse(date)), {
     message: "Invalid end date format"
   }),
-  budget: budgetSchema.nullable().optional(),
+  budget: budgetSchema,
   location: locationSchema,
   team: z.object({
     projectManager: z.string().optional(),

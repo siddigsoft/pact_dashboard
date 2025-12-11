@@ -2,11 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Camera, Upload, FileText, MapPin, Clock, User, AlertCircle, Navigation, Compass, ImageIcon, Save } from 'lucide-react';
+import { Camera, Upload, FileText, MapPin, Clock, User, AlertCircle, Navigation, Compass, ImageIcon, Save, Car, CheckCircle, X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { MMPSiteEntry } from '@/types/mmp';
@@ -44,7 +41,7 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
   const [notes, setNotes] = useState('');
   const [activities, setActivities] = useState('');
   const [photos, setPhotos] = useState<File[]>([]);
-  const [visitDuration, setVisitDuration] = useState(0); // Start at 0, will count up
+  const [visitDuration, setVisitDuration] = useState(0);
   const [visitStartTime, setVisitStartTime] = useState<Date | null>(null);
   const [coordinates, setCoordinates] = useState<{latitude: number; longitude: number; accuracy: number} | null>(null);
   const [isGettingLocation, setIsGettingLocation] = useState(false);
@@ -64,10 +61,8 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
 
   const locationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Check location permissions and start continuous monitoring when dialog opens
   useEffect(() => {
     if (open && site) {
-      // Reset location state when dialog opens
       setCoordinates(null);
       setLocationEnabled(false);
       setIsGettingLocation(false);
@@ -75,7 +70,6 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
       setAccuracyHistory([]);
       setFinishing(false);
 
-      // Load existing draft data if available
       if (site.additionalData) {
         const draftData = site.additionalData;
         setNotes(draftData.draft_notes || '');
@@ -85,8 +79,6 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
           setCoordinates(draftData.draft_coordinates);
           setLocationEnabled(true);
         }
-        // Note: Photos from draft are stored as URLs, not File objects
-        // They would need to be re-uploaded or handled differently
       } else {
         setNotes('');
         setActivities('');
@@ -94,15 +86,14 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
         setVisitDuration(0);
       }
 
-      setVisitStartTime(new Date()); // Start counting visit duration
+      setVisitStartTime(new Date());
       startLocationMonitoring();
 
-      // Set a timeout to close dialog if location is not obtained within 15 seconds
       locationTimeoutRef.current = setTimeout(() => {
         if (!coordinates && !locationEnabled) {
-          setShowLocationRequiredDialog(true); // Show notification dialog
+          setShowLocationRequiredDialog(true);
         }
-      }, 15000); // 15 seconds timeout
+      }, 15000);
     } else {
       setVisitStartTime(null);
       setVisitDuration(0);
@@ -114,7 +105,6 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
       }
     }
 
-    // Cleanup on unmount
     return () => {
       stopLocationMonitoring();
       if (cameraStream) {
@@ -127,19 +117,19 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
     };
   }, [open, site]);
 
-  // Clear location timeout when coordinates are successfully obtained
   useEffect(() => {
     if (coordinates && locationTimeoutRef.current) {
       clearTimeout(locationTimeoutRef.current);
       locationTimeoutRef.current = null;
     }
   }, [coordinates]);
+
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (visitStartTime && open) {
       interval = setInterval(() => {
         const now = new Date();
-        const elapsed = Math.floor((now.getTime() - visitStartTime.getTime()) / 1000 / 60); // minutes
+        const elapsed = Math.floor((now.getTime() - visitStartTime.getTime()) / 1000 / 60);
         setVisitDuration(elapsed);
       }, 1000);
     }
@@ -152,15 +142,13 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
     setIsGettingLocation(true);
 
     try {
-      // Check if geolocation is supported
       if (!navigator.geolocation) {
         setLocationEnabled(false);
         setIsGettingLocation(false);
-        setShowLocationRequiredDialog(true); // Show notification dialog
+        setShowLocationRequiredDialog(true);
         return;
       }
 
-      // Start watching position for continuous accuracy improvement
       const watchId = navigator.geolocation.watchPosition(
         (position) => {
           const newCoords = {
@@ -169,21 +157,17 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
             accuracy: position.coords.accuracy
           };
 
-          // Update accuracy history
           setAccuracyHistory(prev => {
             const newHistory = [...prev, position.coords.accuracy];
-            // Keep only last 10 readings
             return newHistory.slice(-10);
           });
 
-          // Update coordinates if accuracy is better or this is the first reading
           setCoordinates(prevCoords => {
             if (!prevCoords || position.coords.accuracy < prevCoords.accuracy) {
-              // Show toast only for significant accuracy improvements
               if (prevCoords && position.coords.accuracy <= 10 && prevCoords.accuracy > 10) {
                 toast({
                   title: 'Location Accuracy Improved!',
-                  description: `Accuracy now ±${position.coords.accuracy.toFixed(1)} meters - ready for submission.`,
+                  description: `Accuracy now ±${position.coords.accuracy.toFixed(1)} meters`,
                   variant: 'default'
                 });
               } else if (!prevCoords) {
@@ -205,12 +189,12 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
           console.error('Location watch error:', error);
           setLocationEnabled(false);
           setIsGettingLocation(false);
-          setShowLocationRequiredDialog(true); // Show notification dialog
+          setShowLocationRequiredDialog(true);
         },
         {
           enableHighAccuracy: true,
           timeout: 10000,
-          maximumAge: 5000 // Accept positions up to 5 seconds old
+          maximumAge: 5000
         }
       );
 
@@ -220,7 +204,7 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
       console.error('Location monitoring setup error:', error);
       setLocationEnabled(false);
       setIsGettingLocation(false);
-      setShowLocationRequiredDialog(true); // Show notification dialog
+      setShowLocationRequiredDialog(true);
     }
   };
 
@@ -236,12 +220,11 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
     setIsGettingLocation(true);
 
     try {
-      // Get a single high-accuracy position
       const position = await new Promise<GeolocationPosition>((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject, {
           enableHighAccuracy: true,
           timeout: 15000,
-          maximumAge: 0 // Force fresh reading
+          maximumAge: 0
         });
       });
 
@@ -294,7 +277,6 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
       setShowCamera(true);
       setShowPhotoOptions(false);
 
-      // Wait for video element to be ready
       setTimeout(() => {
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
@@ -319,14 +301,11 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
 
     if (!context) return;
 
-    // Set canvas size to match video
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
 
-    // Draw the video frame to canvas
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    // Convert canvas to blob
     canvas.toBlob((blob) => {
       if (blob) {
         const file = new File([blob], `photo-${Date.now()}.jpg`, { type: 'image/jpeg' });
@@ -355,21 +334,9 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
         description: 'Location access is required to complete the site visit.',
         variant: 'destructive'
       });
+      setFinishing(false);
       return;
     }
-
-    // TEMPORARILY DISABLED FOR TESTING - Re-enable accuracy check: coordinates.accuracy > 10
-    // Check location accuracy - must be 10 meters or better
-    /*
-    if (coordinates.accuracy > 10) {
-      toast({
-        title: 'Location Accuracy Too Low',
-        description: `Current accuracy is ±${coordinates.accuracy.toFixed(1)} meters. Please wait for better accuracy (≤10 meters) or use the compass icon to refresh location.`,
-        variant: 'destructive'
-      });
-      return;
-    }
-    */
 
     if (!activities.trim()) {
       toast({
@@ -377,6 +344,7 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
         description: 'Please describe the activities performed during the visit.',
         variant: 'destructive'
       });
+      setFinishing(false);
       return;
     }
 
@@ -386,18 +354,17 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
         description: 'At least one photo is required to complete the site visit.',
         variant: 'destructive'
       });
+      setFinishing(false);
       return;
     }
 
     try {
-      // Prepare coordinates in the format expected by the database (JSONB with latitude and longitude)
       const coordinatesJsonb = coordinates ? {
         latitude: coordinates.latitude,
         longitude: coordinates.longitude,
         accuracy: coordinates.accuracy
       } : {};
 
-      // Upload photos to storage first
       const photoUrls: string[] = [];
       const photoStoragePaths: string[] = [];
       
@@ -411,25 +378,24 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
         if (uploadError) {
           console.error('Error uploading photo:', uploadError);
           
-          // Check if it's a bucket not found error
           if (uploadError.message?.includes('Bucket not found') || uploadError.message?.includes('not found')) {
             toast({
               title: 'Storage Bucket Not Found',
-              description: 'The site-visit-photos storage bucket has not been created. Please contact your administrator to run the database migration.',
+              description: 'The site-visit-photos storage bucket has not been created.',
               variant: 'destructive'
             });
-            return; // Stop processing if bucket doesn't exist
+            setFinishing(false);
+            return;
           }
           
           toast({
             title: 'Photo Upload Error',
-            description: `Failed to upload ${photo.name}: ${uploadError.message || 'Unknown error'}. Please try again.`,
+            description: `Failed to upload ${photo.name}. Please try again.`,
             variant: 'destructive'
           });
-          continue; // Continue with other photos for other errors
+          continue;
         }
 
-        // Get public URL
         const { data: urlData } = supabase.storage
           .from('site-visit-photos')
           .getPublicUrl(fileName);
@@ -443,13 +409,13 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
       if (photoUrls.length === 0) {
         toast({
           title: 'Photo Upload Failed',
-          description: 'Failed to upload photos. Please try again or contact support if the issue persists.',
+          description: 'Failed to upload photos. Please try again.',
           variant: 'destructive'
         });
+        setFinishing(false);
         return;
       }
 
-      // Create report record
       const { data: reportData, error: reportError } = await supabase
         .from('reports')
         .insert({
@@ -473,7 +439,6 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
         throw new Error('Failed to create report record');
       }
 
-      // Link photos to report via report_photos table
       const reportPhotos = photoUrls.map((photoUrl, index) => ({
         report_id: reportData.id,
         photo_url: photoUrl,
@@ -486,7 +451,6 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
 
       if (photosError) {
         console.error('Error linking photos to report:', photosError);
-        // Don't throw here - report is already created, just log the error
         toast({
           title: 'Warning',
           description: 'Report created but some photos may not be linked properly.',
@@ -494,19 +458,17 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
         });
       }
 
-      // Call the parent onSubmit handler if provided
       const visitReportData: VisitReportData = {
         notes,
         activities,
         photos,
         visitDuration,
-        locationData: [], // Will be populated by location tracking
+        locationData: [],
         coordinates
       };
 
       await onSubmit(visitReportData);
 
-      // Reset form
       setNotes('');
       setActivities('');
       setPhotos([]);
@@ -545,11 +507,10 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
       return;
     }
 
-    // Check location accuracy - must be 10 meters or better for draft
     if (coordinates.accuracy > 10) {
       toast({
         title: 'Location Accuracy Too Low',
-        description: `Current accuracy is ±${coordinates.accuracy.toFixed(1)} meters. Please wait for better accuracy (≤10 meters) or use the compass icon to refresh location before saving as draft.`,
+        description: `Current accuracy is ±${coordinates.accuracy.toFixed(1)} meters. Please wait for better accuracy.`,
         variant: 'destructive'
       });
       return;
@@ -558,7 +519,6 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
     try {
       const now = new Date().toISOString();
 
-      // Upload photos to Supabase storage for draft
       const photoUrls: string[] = [];
       for (const photo of photos) {
         const fileName = `draft-photos/${site.id}/${Date.now()}-${photo.name}`;
@@ -569,21 +529,17 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
         if (uploadError) {
           console.error('Error uploading draft photo:', uploadError);
           
-          // Check if it's a bucket not found error
           if (uploadError.message?.includes('Bucket not found') || uploadError.message?.includes('not found')) {
             toast({
               title: 'Storage Bucket Not Found',
-              description: 'The site-visit-photos storage bucket has not been created. Please contact your administrator to run the database migration.',
+              description: 'The storage bucket has not been created.',
               variant: 'destructive'
             });
-            return; // Stop processing if bucket doesn't exist
+            return;
           }
-          
-          // For other errors, continue with other photos
           continue;
         }
 
-        // Get public URL
         const { data: urlData } = supabase.storage
           .from('site-visit-photos')
           .getPublicUrl(fileName);
@@ -593,7 +549,6 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
         }
       }
 
-      // Save draft data to site entry
       const draftData = {
         draft_notes: notes,
         draft_activities: activities,
@@ -602,7 +557,6 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
         draft_coordinates: coordinates,
         draft_saved_at: now,
         draft_location_accuracy: coordinates.accuracy,
-        // Ensure status remains "In Progress"
         status: 'In Progress'
       };
 
@@ -624,11 +578,10 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
 
       toast({
         title: 'Draft Saved',
-        description: 'Your site visit progress has been saved as a draft. You can continue and submit it later when you have better internet connection.',
+        description: 'Your site visit progress has been saved as a draft.',
         variant: 'default'
       });
 
-      // Close dialog without resetting form (since they might want to continue)
       onOpenChange(false);
 
     } catch (error) {
@@ -651,389 +604,382 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <MapPin className="h-5 w-5 text-blue-600" />
-            Complete Site Visit Report
-            {site?.additionalData?.draft_saved_at && (
-              <Badge variant="outline" className="ml-2 text-yellow-600 border-yellow-600">
-                Draft Loaded
-              </Badge>
-            )}
-          </DialogTitle>
-        </DialogHeader>
-
-        <div className="space-y-6">
-          {/* Location Status */}
-          <Card className={
-            !coordinates ? 'border-red-200 bg-red-50' :
-            coordinates.accuracy <= 10 ? 'border-green-200 bg-green-50' :
-            'border-yellow-200 bg-yellow-50'
-          }>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Navigation className={`h-5 w-5 ${
-                    !coordinates ? 'text-red-600' :
-                    coordinates.accuracy <= 10 ? 'text-green-600' :
-                    'text-yellow-600'
-                  }`} />
-                  Location Status
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-white dark:bg-neutral-900 border-0 shadow-2xl rounded-3xl p-0">
+        {/* Header - Uber style black */}
+        <div className="bg-black dark:bg-white px-6 py-5 sticky top-0 z-10">
+          <DialogHeader>
+            <DialogTitle className="flex items-center justify-between text-white dark:text-black">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-white dark:bg-black flex items-center justify-center">
+                  <Car className="h-5 w-5 text-black dark:text-white" />
                 </div>
-                {coordinates && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={refreshLocation}
-                    disabled={isGettingLocation}
-                    className="flex items-center gap-1"
-                  >
-                    <Compass className="h-4 w-4" />
-                    {isGettingLocation ? 'Refreshing...' : 'Refresh'}
-                  </Button>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {isGettingLocation && !coordinates ? (
-                <div className="flex items-center gap-2 text-blue-600">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-                  Initializing location monitoring...
-                </div>
-              ) : coordinates ? (
-                <div className="space-y-2">
-                  <div className="text-sm text-gray-600">
-                    <strong>Coordinates:</strong> {coordinates.latitude.toFixed(6)}, {coordinates.longitude.toFixed(6)}
-                    <br />
-                    <strong>Current Accuracy:</strong> ±{coordinates.accuracy.toFixed(1)} meters
-                    <br />
-                    <strong>Required:</strong> ≤10 meters for submission
-                  </div>
-                  <p className="text-sm text-gray-600">
-                    Click "Refresh" for immediate accuracy check, or wait for automatic improvement to ≤10 meters.
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-red-600">
-                    <AlertCircle className="h-4 w-4" />
-                    Location access required
-                  </div>
-                  <p className="text-sm text-gray-600">
-                    Please enable location permissions in your browser to start location monitoring.
-                  </p>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={startLocationMonitoring}
-                    disabled={isGettingLocation}
-                  >
-                    <Navigation className="h-4 w-4 mr-2" />
-                    Start Location Monitoring
-                  </Button>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Site Information */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Site Information</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="flex items-center gap-2">
-                  <MapPin className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm font-medium">Location:</span>
-                  <span className="text-sm">{site.locality || site.state || 'N/A'}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <User className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm font-medium">Site ID:</span>
-                  <span className="text-sm">{site.siteCode || site.id}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <User className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm font-medium">Site Name:</span>
-                  <span className="text-sm">{site.siteName || 'N/A'}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm font-medium">Status:</span>
-                  <Badge variant="secondary">{site.status}</Badge>
-                </div>
-                <div className="flex items-center gap-2">
-                  <User className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm font-medium">Enumerator:</span>
-                  <span className="text-sm">{currentUser?.full_name || currentUser?.username || currentUser?.email || 'Unknown'}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <MapPin className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm font-medium">Activity:</span>
-                  <span className="text-sm">{site.siteActivity || 'N/A'}</span>
-                </div>
-                <div className="flex items-center gap-2 col-span-2">
-                  <Clock className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm font-medium">Visit Duration:</span>
-                  <Badge variant="outline" className="text-green-600 border-green-600">
-                    {formatDuration(visitDuration)} (Auto-counting)
-                  </Badge>
+                <div>
+                  <span className="text-lg font-bold block">Complete Site Visit</span>
+                  <span className="text-sm text-white/60 dark:text-black/60 font-normal">
+                    {site.siteName}
+                  </span>
                 </div>
               </div>
-            </CardContent>
-          </Card>
+              {site?.additionalData?.draft_saved_at && (
+                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-white/20 text-white dark:bg-black/20 dark:text-black">
+                  Draft Loaded
+                </span>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+        </div>
+
+        <div className="p-6 space-y-5">
+          {/* Location Status - Floating Card */}
+          <div className="rounded-2xl p-5 shadow-lg bg-gray-50 dark:bg-neutral-800">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                  !coordinates ? 'bg-black/10 dark:bg-white/10' :
+                  coordinates.accuracy <= 10 ? 'bg-black dark:bg-white' :
+                  'bg-black/50 dark:bg-white/50'
+                }`}>
+                  <Navigation className={`h-6 w-6 ${
+                    !coordinates ? 'text-black/40 dark:text-white/40' :
+                    coordinates.accuracy <= 10 ? 'text-white dark:text-black' :
+                    'text-white dark:text-black'
+                  }`} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-black dark:text-white">Location Status</h3>
+                  <p className="text-sm text-black/50 dark:text-white/50">
+                    {!coordinates ? 'Acquiring location...' :
+                     coordinates.accuracy <= 10 ? 'Excellent accuracy' :
+                     'Improving accuracy...'}
+                  </p>
+                </div>
+              </div>
+              {coordinates && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={refreshLocation}
+                  disabled={isGettingLocation}
+                  className="rounded-full border-black/20 dark:border-white/20"
+                >
+                  <Compass className="h-4 w-4 mr-1" />
+                  {isGettingLocation ? 'Refreshing...' : 'Refresh'}
+                </Button>
+              )}
+            </div>
+            
+            {isGettingLocation && !coordinates ? (
+              <div className="flex items-center gap-2 text-black/60 dark:text-white/60">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-black dark:border-white"></div>
+                Initializing location monitoring...
+              </div>
+            ) : coordinates ? (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-black/50 dark:text-white/50">Accuracy</span>
+                  <span className="font-mono font-bold text-black dark:text-white">
+                    ±{coordinates.accuracy.toFixed(1)}m
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-black/50 dark:text-white/50">Coordinates</span>
+                  <span className="font-mono text-sm text-black/70 dark:text-white/70">
+                    {coordinates.latitude.toFixed(6)}, {coordinates.longitude.toFixed(6)}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-black/60 dark:text-white/60">
+                  <AlertCircle className="h-4 w-4" />
+                  Location access required
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={startLocationMonitoring}
+                  disabled={isGettingLocation}
+                  className="rounded-full border-black/20 dark:border-white/20"
+                >
+                  <Navigation className="h-4 w-4 mr-2" />
+                  Start Location Monitoring
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {/* Site Information - Floating Card */}
+          <div className="rounded-2xl p-5 shadow-lg bg-gray-50 dark:bg-neutral-800">
+            <h3 className="text-xs font-bold text-black/50 dark:text-white/50 uppercase tracking-wider mb-4">
+              Site Information
+            </h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs text-black/40 dark:text-white/40 uppercase">Location</p>
+                <p className="text-sm font-semibold text-black dark:text-white">{site.locality || site.state || 'N/A'}</p>
+              </div>
+              <div>
+                <p className="text-xs text-black/40 dark:text-white/40 uppercase">Site ID</p>
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-black text-white dark:bg-white dark:text-black">
+                  {site.siteCode || site.id?.slice(0, 8)}
+                </span>
+              </div>
+              <div>
+                <p className="text-xs text-black/40 dark:text-white/40 uppercase">Activity</p>
+                <p className="text-sm font-semibold text-black dark:text-white">{site.siteActivity || 'N/A'}</p>
+              </div>
+              <div>
+                <p className="text-xs text-black/40 dark:text-white/40 uppercase">Duration</p>
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-black/10 text-black dark:bg-white/10 dark:text-white">
+                  <Clock className="h-3 w-3 mr-1" />
+                  {formatDuration(visitDuration)}
+                </span>
+              </div>
+            </div>
+          </div>
 
           {/* Activities Performed */}
-          <div className="space-y-2">
-            <Label htmlFor="activities" className="text-base font-medium">
-              Activities Performed <span className="text-red-500">*</span>
+          <div className="space-y-3">
+            <Label htmlFor="activities" className="text-xs font-bold text-black/50 dark:text-white/50 uppercase tracking-wider">
+              Activities Performed <span className="text-black dark:text-white">*</span>
             </Label>
             <Textarea
               id="activities"
-              placeholder="Describe the activities performed during the site visit (e.g., monitoring, data collection, assessments, etc.)..."
+              placeholder="Describe the activities performed during the site visit..."
               value={activities}
               onChange={(e) => setActivities(e.target.value)}
               rows={4}
-              className="resize-none"
+              className="resize-none rounded-xl border-0 bg-gray-50 dark:bg-neutral-800 text-black dark:text-white placeholder:text-black/40 dark:placeholder:text-white/40"
             />
           </div>
 
           {/* Notes */}
-          <div className="space-y-2">
-            <Label htmlFor="notes" className="text-base font-medium">
+          <div className="space-y-3">
+            <Label htmlFor="notes" className="text-xs font-bold text-black/50 dark:text-white/50 uppercase tracking-wider">
               Additional Notes
             </Label>
             <Textarea
               id="notes"
-              placeholder="Any additional observations, issues encountered, recommendations, or important findings..."
+              placeholder="Any additional observations, issues, or recommendations..."
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={3}
-              className="resize-none"
+              className="resize-none rounded-xl border-0 bg-gray-50 dark:bg-neutral-800 text-black dark:text-white placeholder:text-black/40 dark:placeholder:text-white/40"
             />
-
           </div>
 
-          {/* Photo Upload */}
-          <div className="space-y-3">
-            <Label className="text-base font-medium">
-              Site Photos <span className="text-red-600 font-bold text-lg">*</span>
-            </Label>
-            <div className="flex items-center gap-2">
+          {/* Photo Upload - Floating Card */}
+          <div className="rounded-2xl p-5 shadow-lg bg-gray-50 dark:bg-neutral-800">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-xs font-bold text-black/50 dark:text-white/50 uppercase tracking-wider">
+                  Site Photos <span className="text-black dark:text-white">*</span>
+                </h3>
+                <p className="text-xs text-black/40 dark:text-white/40 mt-1">
+                  At least one photo required
+                </p>
+              </div>
               <Button
                 type="button"
-                variant="outline"
                 onClick={() => setShowPhotoOptions(true)}
-                className="flex items-center gap-2"
+                className="rounded-full bg-black hover:bg-black/90 dark:bg-white dark:hover:bg-white/90 dark:text-black font-semibold gap-2"
               >
                 <Camera className="h-4 w-4" />
                 Add Photos
               </Button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                accept="image/*"
-                onChange={handlePhotoUpload}
-                className="hidden"
-              />
-              <input
-                ref={cameraInputRef}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                onChange={handlePhotoUpload}
-                className="hidden"
-              />
             </div>
-            <p className="text-sm text-muted-foreground">
-              At least one photo is required. Take multiple photos of the site, equipment, activities, or any relevant observations. You can add as many photos as needed.
-            </p>
-
-            {/* Photo Options Modal */}
-            <Dialog open={showPhotoOptions} onOpenChange={setShowPhotoOptions}>
-              <DialogContent className="max-w-sm">
-                <DialogHeader>
-                  <DialogTitle className="flex items-center gap-2">
-                    <Camera className="h-5 w-5 text-blue-600" />
-                    Add Photos
-                  </DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={openCamera}
-                    className="w-full flex items-center gap-2 justify-start h-12"
-                  >
-                    <Camera className="h-5 w-5 text-blue-600" />
-                    <div className="text-left">
-                      <div className="font-medium">Open Camera</div>
-                      <div className="text-sm text-muted-foreground">Take a new photo</div>
-                    </div>
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      fileInputRef.current?.click();
-                      setShowPhotoOptions(false);
-                    }}
-                    className="w-full flex items-center gap-2 justify-start h-12"
-                  >
-                    <ImageIcon className="h-5 w-5 text-green-600" />
-                    <div className="text-left">
-                      <div className="font-medium">Upload from Gallery</div>
-                      <div className="text-sm text-muted-foreground">Select from existing photos</div>
-                    </div>
-                  </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
-
-            {/* Camera Modal */}
-            <Dialog open={showCamera} onOpenChange={closeCamera}>
-              <DialogContent className="max-w-md">
-                <DialogHeader>
-                  <DialogTitle className="flex items-center gap-2">
-                    <Camera className="h-5 w-5 text-blue-600" />
-                    Take Photo
-                  </DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div className="relative bg-black rounded-lg overflow-hidden">
-                    <video
-                      ref={videoRef}
-                      autoPlay
-                      playsInline
-                      muted
-                      className="w-full h-64 object-cover"
-                    />
-                    <canvas ref={canvasRef} className="hidden" />
-                  </div>
-                  <div className="flex gap-2 justify-center">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={closeCamera}
-                      className="flex-1"
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      type="button"
-                      onClick={capturePhoto}
-                      className="flex-1 bg-blue-600 hover:bg-blue-700"
-                    >
-                      <Camera className="h-4 w-4 mr-2" />
-                      Capture
-                    </Button>
-                  </div>
-                </div>
-              </DialogContent>
-            </Dialog>
+            
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept="image/*"
+              onChange={handlePhotoUpload}
+              className="hidden"
+            />
+            <input
+              ref={cameraInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={handlePhotoUpload}
+              className="hidden"
+            />
 
             {photos.length > 0 && (
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {photos.map((photo, index) => (
-                  <div key={index} className="relative group">
-                    <img
-                      src={URL.createObjectURL(photo)}
-                      alt={`Site photo ${index + 1}`}
-                      className="w-full h-24 object-cover rounded-lg border"
-                    />
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => removePhoto(index)}
-                      className="absolute top-1 right-1 h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      ×
-                    </Button>
-                    <div className="absolute bottom-1 left-1 bg-black bg-opacity-50 text-white text-xs px-2 py-1 rounded">
-                      {index + 1}
+              <div className="space-y-3">
+                <div className="grid grid-cols-3 gap-3">
+                  {photos.map((photo, index) => (
+                    <div key={index} className="relative group">
+                      <img
+                        src={URL.createObjectURL(photo)}
+                        alt={`Site photo ${index + 1}`}
+                        className="w-full h-20 object-cover rounded-xl"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removePhoto(index)}
+                        className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                      <div className="absolute bottom-1 left-1 px-2 py-0.5 rounded-full bg-black text-white text-xs font-bold">
+                        {index + 1}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 text-black dark:text-white" />
+                  <span className="text-sm font-medium text-black dark:text-white">
+                    {photos.length} photo{photos.length !== 1 ? 's' : ''} added
+                  </span>
+                </div>
               </div>
-            )}
-            {photos.length > 0 && (
-              <p className="text-sm text-green-600">
-                ✓ {photos.length} photo{photos.length !== 1 ? 's' : ''} added
-              </p>
             )}
           </div>
         </div>
 
-        {/* Location Required Notification Dialog */}
-        <Dialog open={showLocationRequiredDialog} onOpenChange={(open) => {
-          if (!open) {
-            setShowLocationRequiredDialog(false);
-            onOpenChange(false); // Close main dialog and return to sites list
-          }
-        }}>
-          <DialogContent className="max-w-md">
+        {/* Photo Options Modal - Uber style */}
+        <Dialog open={showPhotoOptions} onOpenChange={setShowPhotoOptions}>
+          <DialogContent className="max-w-sm bg-white dark:bg-neutral-900 border-0 shadow-2xl rounded-3xl p-6">
             <DialogHeader>
-              <DialogTitle className="flex items-center gap-2 text-red-600">
-                <AlertCircle className="h-5 w-5" />
-                Location Access Required
+              <DialogTitle className="flex items-center gap-3 text-black dark:text-white">
+                <div className="w-10 h-10 rounded-full bg-black dark:bg-white flex items-center justify-center">
+                  <Camera className="h-5 w-5 text-white dark:text-black" />
+                </div>
+                Add Photos
               </DialogTitle>
             </DialogHeader>
-            <div className="space-y-4">
-              <div className="text-center">
-                <MapPin className="h-12 w-12 text-red-500 mx-auto mb-4" />
-                <p className="text-lg font-medium text-gray-900 mb-2">
-                  Sorry, you can't complete the site visit without location enabled.
-                </p>
-                <p className="text-sm text-gray-600">
-                  Location access is required to ensure accurate site visit reporting and compliance with monitoring requirements.
-                </p>
-              </div>
-              <div className="flex gap-2 justify-center">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setShowLocationRequiredDialog(false);
-                    onOpenChange(false); // Close main dialog and return to sites list
-                  }}
-                  className="flex-1"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  onClick={() => {
-                    setShowLocationRequiredDialog(false);
-                    // Try to request location permission again
-                    startLocationMonitoring();
-                  }}
-                  className="flex-1 bg-blue-600 hover:bg-blue-700"
-                >
-                  <Navigation className="h-4 w-4 mr-2" />
-                  Enable Location
-                </Button>
-              </div>
+            <div className="space-y-3 mt-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={openCamera}
+                className="w-full h-14 rounded-xl border-black/10 dark:border-white/10 justify-start gap-4"
+              >
+                <div className="w-10 h-10 rounded-full bg-black/5 dark:bg-white/5 flex items-center justify-center">
+                  <Camera className="h-5 w-5 text-black dark:text-white" />
+                </div>
+                <div className="text-left">
+                  <div className="font-semibold text-black dark:text-white">Open Camera</div>
+                  <div className="text-xs text-black/50 dark:text-white/50">Take a new photo</div>
+                </div>
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  fileInputRef.current?.click();
+                  setShowPhotoOptions(false);
+                }}
+                className="w-full h-14 rounded-xl border-black/10 dark:border-white/10 justify-start gap-4"
+              >
+                <div className="w-10 h-10 rounded-full bg-black/5 dark:bg-white/5 flex items-center justify-center">
+                  <ImageIcon className="h-5 w-5 text-black dark:text-white" />
+                </div>
+                <div className="text-left">
+                  <div className="font-semibold text-black dark:text-white">Upload from Gallery</div>
+                  <div className="text-xs text-black/50 dark:text-white/50">Select existing photos</div>
+                </div>
+              </Button>
             </div>
           </DialogContent>
         </Dialog>
 
-        <DialogFooter className="flex-col sm:flex-row gap-2">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <AlertCircle className="h-4 w-4" />
-            {!coordinates ? 'Location access required.' :
-             coordinates.accuracy > 10 ? 'Location accuracy must be ≤10 meters to save draft.' :
-             'Ready to save draft or submit.'}
+        {/* Camera Modal - Uber style */}
+        <Dialog open={showCamera} onOpenChange={closeCamera}>
+          <DialogContent className="max-w-md bg-black border-0 shadow-2xl rounded-3xl p-0 overflow-hidden">
+            <div className="relative">
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className="w-full h-72 object-cover"
+              />
+              <canvas ref={canvasRef} className="hidden" />
+            </div>
+            <div className="p-4 flex gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={closeCamera}
+                className="flex-1 h-12 rounded-full border-white/20 text-white"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={capturePhoto}
+                className="flex-1 h-12 rounded-full bg-white hover:bg-white/90 text-black font-bold gap-2"
+              >
+                <Camera className="h-5 w-5" />
+                Capture
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Location Required Dialog - Uber style */}
+        <Dialog open={showLocationRequiredDialog} onOpenChange={(open) => {
+          if (!open) {
+            setShowLocationRequiredDialog(false);
+            onOpenChange(false);
+          }
+        }}>
+          <DialogContent className="max-w-sm bg-white dark:bg-neutral-900 border-0 shadow-2xl rounded-3xl p-6 text-center">
+            <div className="w-16 h-16 rounded-full bg-black/10 dark:bg-white/10 mx-auto mb-4 flex items-center justify-center">
+              <MapPin className="h-8 w-8 text-black dark:text-white" />
+            </div>
+            <h3 className="text-xl font-bold text-black dark:text-white mb-2">Location Required</h3>
+            <p className="text-sm text-black/50 dark:text-white/50 mb-6">
+              Location access is required for accurate site visit reporting and compliance.
+            </p>
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowLocationRequiredDialog(false);
+                  onOpenChange(false);
+                }}
+                className="flex-1 h-12 rounded-full border-black/20 dark:border-white/20"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  setShowLocationRequiredDialog(false);
+                  startLocationMonitoring();
+                }}
+                className="flex-1 h-12 rounded-full bg-black hover:bg-black/90 dark:bg-white dark:hover:bg-white/90 dark:text-black font-bold gap-2"
+              >
+                <Navigation className="h-5 w-5" />
+                Enable
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Footer - Action Buttons */}
+        <DialogFooter className="p-6 pt-0 flex-col gap-4 bg-white dark:bg-neutral-900">
+          {/* Status indicator */}
+          <div className="flex items-center justify-center gap-2 text-xs text-black/40 dark:text-white/40">
+            <AlertCircle className="h-3.5 w-3.5" />
+            {!coordinates ? 'Waiting for location...' :
+             coordinates.accuracy > 10 ? `Accuracy: ±${coordinates.accuracy.toFixed(0)}m (improving...)` :
+             'Ready to submit'}
           </div>
-          <div className="flex gap-2">
+          
+          <div className="flex gap-3 w-full">
             <Button
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
               disabled={isSubmitting}
+              className="flex-1 h-12 rounded-full border-black/20 dark:border-white/20 font-semibold"
             >
               Cancel
             </Button>
@@ -1041,19 +987,19 @@ export const VisitReportDialog: React.FC<VisitReportDialogProps> = ({
               type="button"
               onClick={handleSaveDraft}
               disabled={isSubmitting || !locationEnabled || !coordinates || coordinates.accuracy > 10}
-              className="flex items-center gap-2 bg-yellow-600 hover:bg-yellow-700"
+              className="h-12 rounded-full bg-black/10 hover:bg-black/20 dark:bg-white/10 dark:hover:bg-white/20 text-black dark:text-white font-semibold gap-2 px-5"
             >
               <Save className="h-4 w-4" />
-              Save as Draft
+              Draft
             </Button>
             <Button
               type="button"
               onClick={handleSubmit}
               disabled={isSubmitting || !locationEnabled || !coordinates || !activities.trim() || photos.length === 0}
-              className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
+              className="flex-1 h-12 rounded-full bg-black hover:bg-black/90 dark:bg-white dark:hover:bg-white/90 dark:text-black font-bold gap-2"
             >
-              <FileText className="h-4 w-4" />
-              {isSubmitting ? 'Saving Visit...' : 'Finish Visit'}
+              <CheckCircle className="h-5 w-5" />
+              {isSubmitting ? 'Submitting...' : 'Finish Visit'}
             </Button>
           </div>
         </DialogFooter>

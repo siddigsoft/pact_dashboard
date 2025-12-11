@@ -203,7 +203,7 @@ Use pre-built templates:
 - **Field Supervisor**: Team management
 - **Finance Officer**: Payment processing
 - **Data Analyst**: Reporting access
-- **Regional Coordinator**: Regional operations
+- **State Coordinator**: State-level operations
 - **HR Manager**: User administration
 - **Auditor**: Compliance review
 - **Technical Support**: System maintenance

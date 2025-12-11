@@ -157,7 +157,7 @@ export const MobileTextarea = forwardRef<HTMLTextAreaElement, MobileTextareaProp
           {showCount && maxLength && (
             <p className={cn(
               'text-xs',
-              charCount > maxLength * 0.9 ? 'text-amber-500' : 'text-muted-foreground'
+              charCount > maxLength * 0.9 ? 'text-black dark:text-white font-medium' : 'text-muted-foreground'
             )}>
               {charCount}/{maxLength}
             </p>
@@ -251,7 +251,7 @@ export function MobileFormProgress({
       </div>
       <div className="h-2 bg-muted rounded-full overflow-hidden">
         <div 
-          className="h-full bg-primary transition-all duration-300 rounded-full"
+          className="h-full bg-black dark:bg-white transition-all duration-300 rounded-full"
           style={{ width: `${(currentStep / totalSteps) * 100}%` }}
         />
       </div>
@@ -284,8 +284,8 @@ export function MobileSuccessState({
       'flex flex-col items-center justify-center text-center p-6 space-y-4',
       className
     )}>
-      <div className="h-16 w-16 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
-        <Check className="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
+      <div className="h-16 w-16 rounded-full bg-black/10 dark:bg-white/10 flex items-center justify-center">
+        <Check className="h-8 w-8 text-black dark:text-white" />
       </div>
       <h2 className="text-xl font-semibold">{title}</h2>
       {message && (
@@ -294,7 +294,7 @@ export function MobileSuccessState({
       {onAction && (
         <Button 
           onClick={onAction}
-          className="min-h-[44px] min-w-[120px] mt-4"
+          className="min-h-[44px] min-w-[120px] mt-4 rounded-full bg-black dark:bg-white text-white dark:text-black hover:bg-black/90 dark:hover:bg-white/90"
           data-testid="button-success-action"
         >
           {actionLabel}

@@ -38,7 +38,7 @@ const AdminUsersTable: React.FC<AdminUsersTableProps> = ({ users }) => {
     
     // Check the roles array if it exists
     if (user.roles && Array.isArray(user.roles)) {
-      return user.roles.includes('admin');
+      return user.roles.includes('admin' as any);
     }
     
     return false;

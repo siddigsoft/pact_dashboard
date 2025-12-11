@@ -1,18 +1,27 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/context/user/UserContext';
-import { Hand, Loader2, CheckCircle, Wallet, Car, User, AlertCircle, Banknote } from 'lucide-react';
+import { Hand, Loader2, CheckCircle, Wallet, Car, User, AlertCircle, Banknote, ShieldX, MapPinOff } from 'lucide-react';
 import { useClaimFeeCalculation, type ClaimFeeBreakdown } from '@/hooks/use-claim-fee-calculation';
 import { CLASSIFICATION_LABELS, CLASSIFICATION_COLORS } from '@/types/classification';
+import { useClassification } from '@/context/classification/ClassificationContext';
+import { getStateName, getLocalityName } from '@/data/sudanStates';
+import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
+import { useAuditLog } from '@/hooks/use-audit-log';
+import { calculateConfirmationDeadlines } from '@/utils/confirmationDeadlines';
+import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 
 interface ClaimSiteButtonProps {
   siteId: string;
   siteName: string;
   userId: string;
+  state?: string;
+  locality?: string;
+  scheduledDate?: string;
   onClaimed?: () => void;
   disabled?: boolean;
   variant?: 'default' | 'outline' | 'ghost';
@@ -24,6 +33,9 @@ export function ClaimSiteButton({
   siteId,
   siteName,
   userId,
+  state,
+  locality,
+  scheduledDate,
   onClaimed,
   disabled = false,
   variant = 'default',
@@ -37,12 +49,97 @@ export function ClaimSiteButton({
   const { toast } = useToast();
   const { currentUser } = useUser();
   const { calculateFeeForClaim, loading: calculatingFee } = useClaimFeeCalculation();
+  const { getUserClassification } = useClassification();
+  const { isSuperAdmin } = useSuperAdmin();
+  const { logSiteVisitEvent } = useAuditLog();
 
   const isFieldWorker = currentUser?.role === 'dataCollector' || 
                         currentUser?.role === 'datacollector' || 
                         currentUser?.role === 'coordinator';
   
   const canSeeBreakdown = !isFieldWorker;
+
+  // PERMISSION CHECK 1: User must have an active classification to claim sites
+  const userClassification = useMemo(() => {
+    if (!currentUser?.id) return null;
+    return getUserClassification(currentUser.id);
+  }, [currentUser?.id, getUserClassification]);
+  
+  const hasClassification = !!userClassification;
+  
+  // PERMISSION CHECK 2: Site must be in user's assigned locality
+  const localityCheck = useMemo(() => {
+    if (!currentUser || !isFieldWorker || isSuperAdmin) {
+      // Non-field workers (admin, FOM, etc) and SuperAdmins can claim any site
+      return { canClaim: true, reason: null };
+    }
+    
+    const userStateId = currentUser.stateId;
+    const userLocalityId = currentUser.localityId;
+    
+    // User must have geographic assignment
+    if (!userStateId) {
+      return { 
+        canClaim: false, 
+        reason: 'Your profile has no state assigned. Contact your supervisor.' 
+      };
+    }
+    
+    const userStateName = getStateName(userStateId)?.toLowerCase().trim() || '';
+    const userLocalityName = userLocalityId ? getLocalityName(userStateId, userLocalityId)?.toLowerCase().trim() : '';
+    
+    const siteState = (state || '').toLowerCase().trim();
+    const siteLocality = (locality || '').toLowerCase().trim();
+    
+    // Check state match
+    const stateMatches = siteState === userStateName || 
+                         siteState.includes(userStateName) || 
+                         userStateName.includes(siteState);
+    
+    if (!stateMatches) {
+      return { 
+        canClaim: false, 
+        reason: `This site is in ${state || 'unknown state'}, but you are assigned to ${getStateName(userStateId) || 'unknown'}.` 
+      };
+    }
+    
+    // If user has locality assigned, check locality match
+    if (userLocalityId && userLocalityName) {
+      const localityMatches = siteLocality === userLocalityName || 
+                              siteLocality.includes(userLocalityName) || 
+                              userLocalityName.includes(siteLocality);
+      
+      if (!localityMatches) {
+        return { 
+          canClaim: false, 
+          reason: `This site is in ${locality || 'unknown locality'}, but you are assigned to ${getLocalityName(userStateId, userLocalityId) || 'unknown'}.` 
+        };
+      }
+    }
+    
+    return { canClaim: true, reason: null };
+  }, [currentUser, isFieldWorker, isSuperAdmin, state, locality]);
+
+  // Combined permission check for field workers
+  const canClaimSite = useMemo(() => {
+    // Non-field workers and SuperAdmins can claim (they are typically assigning, not claiming)
+    if (!isFieldWorker || isSuperAdmin) return { allowed: true, reason: null };
+    
+    // Field workers need classification
+    if (!hasClassification) {
+      return { 
+        allowed: false, 
+        reason: 'You must have an active classification to claim sites. Contact your supervisor to get classified.' 
+      };
+    }
+    
+    // Field workers need matching locality
+    if (!localityCheck.canClaim) {
+      return { allowed: false, reason: localityCheck.reason };
+    }
+    
+    return { allowed: true, reason: null };
+  }, [isFieldWorker, isSuperAdmin, hasClassification, localityCheck]);
 
   const handleInitiateClaim = async () => {
     if (claiming || claimed || disabled) return;
@@ -80,6 +177,12 @@ export function ClaimSiteButton({
 
       if (error) {
         console.error('Claim RPC error:', error);
+        logSiteVisitEvent('claim', siteId, siteName, `Site claim failed: ${error.message}`, {
+          severity: 'error',
+          success: false,
+          errorMessage: error.message,
+          metadata: { userId, siteId },
+        });
         toast({
           title: 'Claim Failed',
           description: error.message || 'Could not claim this site. Please try again.',
@@ -94,6 +197,71 @@ export function ClaimSiteButton({
         // Fee is now saved atomically by the RPC, no need for separate update
         const finalFee = result.enumerator_fee ?? feeBreakdown.enumeratorFee;
         const finalTotal = result.total_payout ?? feeBreakdown.totalPayout;
+
+        // Set confirmation deadlines for the claimed site visit
+        let visitDate = scheduledDate;
+        
+        // If no scheduled date provided, fetch it from the database
+        if (!visitDate) {
+          const { data: siteData } = await supabase
+            .from('site_visits')
+            .select('due_date, visit_data')
+            .eq('id', siteId)
+            .single();
+          
+          visitDate = siteData?.due_date || (siteData?.visit_data as any)?.scheduledDate;
+        }
+        
+        // Set confirmation tracking fields if we have a visit date
+        if (visitDate) {
+          const confirmationDeadlines = calculateConfirmationDeadlines(visitDate);
+          
+          // Fetch current visit_data to merge with confirmation fields
+          const { data: currentData } = await supabase
+            .from('site_visits')
+            .select('visit_data')
+            .eq('id', siteId)
+            .single();
+          
+          const existingVisitData = (currentData?.visit_data as Record<string, unknown>) || {};
+          
+          // Merge confirmation tracking fields into visit_data
+          const updatedVisitData = {
+            ...existingVisitData,
+            confirmation_deadline: confirmationDeadlines.confirmation_deadline,
+            confirmation_status: confirmationDeadlines.confirmation_status,
+            autorelease_at: confirmationDeadlines.autorelease_at,
+          };
+          
+          await supabase
+            .from('site_visits')
+            .update({
+              visit_data: updatedVisitData,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', siteId);
+        }
+
+        logSiteVisitEvent('claim', siteId, siteName, `Site "${siteName}" claimed successfully`, {
+          workflowStep: 'in_progress',
+          metadata: { fee: finalFee, totalPayout: finalTotal, userId },
+        });
+
+        // Send notification (and email for high priority) to the claimer
+        NotificationTriggerService.siteAssigned(userId, siteName, siteId);
+        
+        // Send notifications to supervisors/admins about the claim
+        if (currentUser) {
+          NotificationTriggerService.siteClaimNotification(
+            userId,
+            currentUser.fullName || currentUser.name || 'A team member',
+            currentUser.role || 'data_collector',
+            siteName,
+            siteId,
+            currentUser.hubId,
+            undefined
+          );
+        }
 
         setClaimed(true);
         toast({
@@ -115,6 +283,12 @@ export function ClaimSiteButton({
           description = 'This site is no longer available for claiming.';
         }
 
+        logSiteVisitEvent('claim', siteId, siteName, `Site claim rejected: ${description}`, {
+          severity: 'warning',
+          success: false,
+          errorMessage: result.error,
+          metadata: { userId, siteId, errorCode: result.error },
+        });
         toast({
           title: 'Could Not Claim Site',
           description,
@@ -123,6 +297,13 @@ export function ClaimSiteButton({
       }
     } catch (err) {
       console.error('Claim error:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      logSiteVisitEvent('claim', siteId, siteName, `Site claim error: ${errorMessage}`, {
+        severity: 'error',
+        success: false,
+        errorMessage,
+        metadata: { userId, siteId },
+      });
       toast({
         title: 'Claim Failed',
         description: 'An unexpected error occurred. Please try again.',
@@ -144,6 +325,47 @@ export function ClaimSiteButton({
       >
         <CheckCircle className="h-4 w-4 mr-2" />
         Claimed
+      </Button>
+    );
+  }
+
+  // Show blocked button if user cannot claim due to permission restrictions
+  if (!canClaimSite.allowed && isFieldWorker) {
+    const isClassificationIssue = !hasClassification;
+    const isLocalityIssue = !localityCheck.canClaim;
+    
+    return (
+      <Button
+        variant="outline"
+        size={size}
+        className={`bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800 cursor-not-allowed ${className}`}
+        disabled
+        onClick={() => {
+          toast({
+            title: 'Cannot Claim Site',
+            description: canClaimSite.reason || 'You do not have permission to claim this site.',
+            variant: 'destructive'
+          });
+        }}
+        data-testid={`button-blocked-${siteId}`}
+        title={canClaimSite.reason || 'Cannot claim this site'}
+      >
+        {isClassificationIssue ? (
+          <>
+            <ShieldX className="h-4 w-4 mr-2" />
+            No Classification
+          </>
+        ) : isLocalityIssue ? (
+          <>
+            <MapPinOff className="h-4 w-4 mr-2" />
+            Wrong Location
+          </>
+        ) : (
+          <>
+            <AlertCircle className="h-4 w-4 mr-2" />
+            Cannot Claim
+          </>
+        )}
       </Button>
     );
   }

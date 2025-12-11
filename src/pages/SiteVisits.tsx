@@ -8,7 +8,8 @@ import { useAppContext } from "@/context/AppContext";
 import { useAuthorization } from "@/hooks/use-authorization";
 import { SiteVisit } from "@/types";
 import { Link } from "react-router-dom";
-import { Plus, ChevronLeft, Search, MapPin, Clock, AlertTriangle, Building2 } from "lucide-react";
+import { Plus, ChevronLeft, Search, MapPin, Clock, AlertTriangle, Building2, FileText, Wallet, History, ExternalLink, User } from "lucide-react";
+import { formatDistanceToNow } from 'date-fns';
 import { useSiteVisitContext } from "@/context/siteVisit/SiteVisitContext";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { format, isValid } from "date-fns";
@@ -28,10 +29,13 @@ import { useMMP } from "@/context/mmp/MMPContext";
 import LeafletMapContainer from '@/components/map/LeafletMapContainer';
 import { sudanStates, getStateName, getLocalityName } from '@/data/sudanStates';
 import { supabase } from '@/integrations/supabase/client';
+import { useUserProjects } from '@/hooks/useUserProjects';
+import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 
 const SiteVisits = () => {
   const { currentUser, hasRole } = useAppContext();
   const { canViewAllSiteVisits, checkPermission, hasAnyRole } = useAuthorization();
+  const { isSuperAdmin } = useSuperAdmin();
   const { siteVisits } = useSiteVisitContext();
   const { mmpFiles } = useMMP();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -69,8 +73,26 @@ const SiteVisits = () => {
     mapDefaultZoom = countryCenters[countryParam].zoom;
   }
 
-  // Page-level access guard: require read permission or admin
-  const canAccess = checkPermission('site_visits', 'read') || hasAnyRole(['admin']);
+  // Check if user is a data collector based on role name (for access check)
+  const isDataCollectorForAccess = useMemo(() => {
+    if (!currentUser) return false;
+    const role = (currentUser.role || '').toLowerCase().replace(/[\s_-]/g, '');
+    return role === 'datacollector' || role.includes('datacollector');
+  }, [currentUser]);
+
+  // Check if user is a coordinator based on role name (for access check)
+  const isCoordinatorForAccess = useMemo(() => {
+    if (!currentUser) return false;
+    const role = (currentUser.role || '').toLowerCase().replace(/[\s_-]/g, '');
+    return role === 'coordinator' || role.includes('coordinator');
+  }, [currentUser]);
+
+  // Page-level access guard: require read permission, admin, data collector, or coordinator role
+  // Data Collectors and Coordinators are field workers who MUST have access to site visits
+  const canAccess = checkPermission('site_visits', 'read') || 
+                   hasAnyRole(['admin', 'Admin', 'DataCollector', 'Data Collector', 'Coordinator', 'ict', 'ICT', 'Supervisor', 'supervisor']) ||
+                   isDataCollectorForAccess ||
+                   isCoordinatorForAccess;
   if (!canAccess) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -171,6 +193,15 @@ const SiteVisits = () => {
     fetchHubName();
   }, [isSupervisor, supervisorHubId]);
 
+  // Get user's project team memberships from projects table (team.members, team.teamComposition)
+  const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
+
+  // Check if user can view all projects (admins, ICT, FOM, super admins don't need team membership filter)
+  const canViewAllProjects = useMemo(() => {
+    if (isAdminOrSuperUser) return true;
+    return hasAnyRole(['admin', 'Admin', 'ict', 'ICT', 'fom', 'Field Operation Manager (FOM)', 'Field Operations Manager']);
+  }, [hasAnyRole, isAdminOrSuperUser]);
+
   // Get user's geographic assignment from profile (state and locality)
   // Works for both data collectors and coordinators who can claim sites within their locality
   const userGeographicInfo = useMemo(() => {
@@ -245,9 +276,50 @@ const SiteVisits = () => {
   useEffect(() => {
     const canViewAll = canViewAllSiteVisits();
     
+    // SuperAdmin can see ALL site visits without any restrictions
+    if (isSuperAdmin) {
+      let filtered = [...siteVisits];
+      
+      // Apply status filter if set
+      if (statusFilter && statusFilter !== "all") {
+        filtered = filtered.filter(visit => 
+          visit.status?.toLowerCase() === statusFilter.toLowerCase()
+        );
+      }
+      
+      // Apply search filter
+      if (searchTerm.trim()) {
+        const search = searchTerm.toLowerCase();
+        filtered = filtered.filter(visit =>
+          (visit.siteName && visit.siteName.toLowerCase().includes(search)) ||
+          (visit.siteCode && visit.siteCode.toLowerCase().includes(search)) ||
+          (visit.locality && visit.locality.toLowerCase().includes(search)) ||
+          (visit.state && visit.state.toLowerCase().includes(search))
+        );
+      }
+      
+      // Sort filtered visits
+      filtered.sort((a, b) => {
+        if (sortBy === "dueDate") {
+          return new Date(a.dueDate || 0).getTime() - new Date(b.dueDate || 0).getTime();
+        } else if (sortBy === "priority") {
+          const priorityOrder = { high: 0, medium: 1, low: 2 };
+          return (priorityOrder[a.priority as keyof typeof priorityOrder] || 2) - 
+                 (priorityOrder[b.priority as keyof typeof priorityOrder] || 2);
+        }
+        return 0;
+      });
+      
+      setFilteredVisits(filtered);
+      return;
+    }
+    
     // For field workers (data collectors and coordinators), apply special filtering logic:
     // - "dispatched" status: show ONLY dispatched visits matching user's state AND locality
+    //   This is where geographic filtering applies - users can only SEE and CLAIM sites in their locality
     // - "assigned", "accepted", "ongoing", "completed": filter by assignedTo === currentUser.id
+    //   No additional geo filter here - users must see work assigned to them regardless of location
+    //   (ClaimSiteButton/AcceptSiteButton enforce locality rules at claim time, not view time)
     // - Other statuses or "all": filter by assignedTo === currentUser.id
     let filtered: SiteVisit[];
     
@@ -369,6 +441,29 @@ const SiteVisits = () => {
       );
     }
 
+    // Apply project team membership filter
+    // Users can only see sites from projects they're team members of (unless they can view all projects)
+    // Exception: Field workers (data collectors, coordinators) can see dispatched sites in their locality even without project membership
+    if (!canViewAllProjects) {
+      const beforeCount = filtered.length;
+      filtered = filtered.filter(visit => {
+        const projectId = visit.mmpDetails?.projectId;
+        const isDispatched = visit.status?.toLowerCase() === 'dispatched';
+        
+        // Field workers can see dispatched sites in their locality (already filtered by geography)
+        // This is the ONLY exception to the project membership rule
+        if (isFieldWorker && isDispatched) return true;
+        
+        // All other sites require project membership
+        // If visit has no project ID, we can't verify membership, so hide it
+        if (!projectId) return false;
+        
+        // Check if user is a team member of this project
+        return userProjectIds.includes(projectId);
+      });
+      console.log(`👥 Project team filter: ${filtered.length} of ${beforeCount} sites visible (user is in ${userProjectIds.length} projects)`);
+    }
+
     filtered.sort((a, b) => {
       switch (sortBy) {
         case "dueDate":
@@ -398,7 +493,7 @@ const SiteVisits = () => {
       }
       setSelectedVisit(selected || null);
     }
-  }, [currentUser, siteVisits, statusFilter, searchTerm, sortBy, view, hubParam, regionParam, monthParam, isFieldWorker, canViewAllSiteVisits, isSupervisor, supervisorHubName]);
+  }, [currentUser, siteVisits, statusFilter, searchTerm, sortBy, view, hubParam, regionParam, monthParam, isFieldWorker, canViewAllSiteVisits, isSupervisor, supervisorHubName, canViewAllProjects, userProjectIds, isSuperAdmin]);
 
   const handleRemoveFilter = (filterType: string) => {
     setActiveFilters(prev => ({
@@ -747,11 +842,13 @@ const SiteVisits = () => {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => navigate("/dashboard")}
+            asChild
             data-testid="button-back-dashboard-fom"
           >
-            <ChevronLeft className="h-4 w-4 mr-2" />
-            Dashboard
+            <Link to="/dashboard">
+              <ChevronLeft className="h-4 w-4 mr-2" />
+              Dashboard
+            </Link>
           </Button>
         </div>
 
@@ -818,11 +915,37 @@ const SiteVisits = () => {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => navigate("/dashboard")}
+            asChild
             data-testid="button-back-dashboard"
           >
-            <ChevronLeft className="h-4 w-4 mr-2" />
-            Dashboard
+            <Link to="/dashboard">
+              <ChevronLeft className="h-4 w-4 mr-2" />
+              Dashboard
+            </Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild data-testid="link-documents">
+            <Link to="/documents">
+              <FileText className="h-4 w-4 mr-2" />
+              Documents
+            </Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild data-testid="link-wallet-reports">
+            <Link to="/wallet-reports">
+              <Wallet className="h-4 w-4 mr-2" />
+              Wallet Reports
+            </Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild data-testid="link-audit-logs">
+            <Link to="/audit-logs">
+              <History className="h-4 w-4 mr-2" />
+              Audit Logs
+            </Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild data-testid="link-map">
+            <Link to="/map">
+              <MapPin className="h-4 w-4 mr-2" />
+              Map
+            </Link>
           </Button>
           {!isFieldWorker && (checkPermission('site_visits', 'create') || hasAnyRole(['admin'])) && (
             <Button 

@@ -262,7 +262,7 @@ const WalletPage = () => {
   }
 
   return (
-    <div className="relative min-h-screen">
+    <div className="relative min-h-screen overflow-y-auto max-h-screen">
       {/* Cyber Background with Animated Grid */}
       <div className="fixed inset-0 bg-gradient-to-br from-slate-950 via-blue-950 to-purple-950 -z-10">
         <div className="absolute inset-0 bg-[linear-gradient(rgba(59,130,246,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(59,130,246,0.05)_1px,transparent_1px)] bg-[size:50px_50px] [mask-image:radial-gradient(ellipse_80%_50%_at_50%_0%,#000,transparent)]"></div>
@@ -293,42 +293,46 @@ const WalletPage = () => {
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-2 flex-wrap justify-center sm:justify-start">
                 <button
                   type="button"
                   onClick={handleRefresh}
-                  className="px-3 py-1.5 text-sm rounded-md bg-gradient-to-r from-slate-900/50 to-blue-900/50 border border-blue-500/30 text-blue-300 hover:border-blue-400 hover:shadow-[0_0_15px_rgba(59,130,246,0.3)] transition-all backdrop-blur-xl inline-flex items-center focus:outline-none focus:ring-2 focus:ring-blue-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px]"
+                  className="px-3 py-2 text-sm rounded-md bg-gradient-to-r from-slate-900/50 to-blue-900/50 border border-blue-500/30 text-blue-300 hover:border-blue-400 hover:shadow-[0_0_15px_rgba(59,130,246,0.3)] transition-all backdrop-blur-xl inline-flex items-center focus:outline-none focus:ring-2 focus:ring-blue-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px] w-full sm:w-auto"
                   data-testid="button-refresh-wallet"
                 >
                   <RefreshCw className="w-4 h-4 mr-2" />
-                  REFRESH
+                  <span className="hidden xs:inline">REFRESH</span>
+                  <span className="xs:hidden">↻</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => exportTransactionsToCSV(filteredTransactions, wallet)}
-                  className="px-3 py-1.5 text-sm rounded-md bg-gradient-to-r from-green-900/50 to-emerald-900/50 border border-green-500/30 text-green-300 hover:border-green-400 hover:shadow-[0_0_15px_rgba(34,197,94,0.3)] transition-all backdrop-blur-xl inline-flex items-center focus:outline-none focus:ring-2 focus:ring-green-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px]"
+                  className="px-3 py-2 text-sm rounded-md bg-gradient-to-r from-green-900/50 to-emerald-900/50 border border-green-500/30 text-green-300 hover:border-green-400 hover:shadow-[0_0_15px_rgba(34,197,94,0.3)] transition-all backdrop-blur-xl inline-flex items-center focus:outline-none focus:ring-2 focus:ring-green-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px] w-full sm:w-auto"
                   data-testid="button-export-csv"
                 >
                   <Download className="w-4 h-4 mr-2" />
-                  CSV
+                  <span className="hidden xs:inline">CSV</span>
+                  <span className="xs:hidden">CSV</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => exportTransactionsToPDF(filteredTransactions, wallet, DEFAULT_CURRENCY)}
-                  className="px-3 py-1.5 text-sm rounded-md bg-gradient-to-r from-red-900/50 to-pink-900/50 border border-red-500/30 text-red-300 hover:border-red-400 hover:shadow-[0_0_15px_rgba(239,68,68,0.3)] transition-all backdrop-blur-xl inline-flex items-center focus:outline-none focus:ring-2 focus:ring-red-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px]"
+                  className="px-3 py-2 text-sm rounded-md bg-gradient-to-r from-red-900/50 to-pink-900/50 border border-red-500/30 text-red-300 hover:border-red-400 hover:shadow-[0_0_15px_rgba(239,68,68,0.3)] transition-all backdrop-blur-xl inline-flex items-center focus:outline-none focus:ring-2 focus:ring-red-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px] w-full sm:w-auto"
                   data-testid="button-export-pdf"
                 >
                   <Download className="w-4 h-4 mr-2" />
-                  PDF
+                  <span className="hidden xs:inline">PDF</span>
+                  <span className="xs:hidden">PDF</span>
                 </button>
                 <button
                   type="button"
                   onClick={handleClearAllFilters}
-                  className="px-3 py-1.5 text-sm rounded-md bg-gradient-to-r from-orange-900/50 to-amber-900/50 border border-orange-500/30 text-orange-300 hover:border-orange-400 hover:shadow-[0_0_15px_rgba(249,115,22,0.3)] transition-all backdrop-blur-xl inline-flex items-center focus:outline-none focus:ring-2 focus:ring-orange-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px]"
+                  className="px-3 py-2 text-sm rounded-md bg-gradient-to-r from-orange-900/50 to-amber-900/50 border border-orange-500/30 text-orange-300 hover:border-orange-400 hover:shadow-[0_0_15px_rgba(249,115,22,0.3)] transition-all backdrop-blur-xl inline-flex items-center focus:outline-none focus:ring-2 focus:ring-orange-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px] w-full sm:w-auto"
                   data-testid="button-clear-filters"
                 >
                   <X className="w-4 h-4 mr-2" />
-                  CLEAR FILTERS
+                  <span className="hidden xs:inline">CLEAR FILTERS</span>
+                  <span className="xs:hidden">✕</span>
                 </button>
             <Dialog open={withdrawalDialogOpen} onOpenChange={setWithdrawalDialogOpen}>
               <DialogTrigger asChild>
@@ -440,16 +444,16 @@ const WalletPage = () => {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <Card className="bg-gradient-to-br from-slate-900/80 to-blue-900/80 border-blue-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(59,130,246,0.2)]">
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium uppercase tracking-wide text-blue-300">
+            <CardTitle className="text-xs sm:text-sm font-medium uppercase tracking-wide text-blue-300">
               Current Balance
             </CardTitle>
-            <WalletIcon className="w-5 h-5 text-blue-400" />
+            <WalletIcon className="w-4 h-4 sm:w-5 sm:h-5 text-blue-400" />
           </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold tabular-nums bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">
+          <CardContent className="pt-0">
+            <div className="text-xl sm:text-3xl font-bold tabular-nums bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">
               {formatCurrency(currentBalance)}
             </div>
             <p className="text-xs text-blue-300/70 mt-1">
@@ -460,52 +464,52 @@ const WalletPage = () => {
 
         <Card className="bg-gradient-to-br from-slate-900/80 to-purple-900/80 border-purple-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(168,85,247,0.2)]">
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium uppercase tracking-wide text-purple-300">
+            <CardTitle className="text-xs sm:text-sm font-medium uppercase tracking-wide text-purple-300">
               Total Earned
             </CardTitle>
-            <TrendingUp className="w-5 h-5 text-green-400" />
+            <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-green-400" />
           </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold tabular-nums bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
+          <CardContent className="pt-0">
+            <div className="text-xl sm:text-3xl font-bold tabular-nums bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
               {formatCurrency(stats?.totalEarned || 0)}
             </div>
             <p className="text-xs text-purple-300/70 mt-1 flex items-center gap-1">
               <Receipt className="w-3 h-3" />
-              {stats?.completedSiteVisits || 0} site visits completed
+              {stats?.completedSiteVisits || 0} visits
             </p>
           </CardContent>
         </Card>
 
         <Card className="bg-gradient-to-br from-slate-900/80 to-orange-900/80 border-orange-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(251,146,60,0.2)]">
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium uppercase tracking-wide text-orange-300">
+            <CardTitle className="text-xs sm:text-sm font-medium uppercase tracking-wide text-orange-300">
               Pending Withdrawals
             </CardTitle>
-            <Clock className="w-5 h-5 text-orange-400 animate-pulse" />
+            <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-orange-400 animate-pulse" />
           </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold tabular-nums bg-gradient-to-r from-orange-400 to-red-400 bg-clip-text text-transparent">
+          <CardContent className="pt-0">
+            <div className="text-xl sm:text-3xl font-bold tabular-nums bg-gradient-to-r from-orange-400 to-red-400 bg-clip-text text-transparent">
               {formatCurrency(stats?.pendingWithdrawals || 0)}
             </div>
             <p className="text-xs text-orange-300/70 mt-1">
-              {pendingWithdrawals.length} request{pendingWithdrawals.length !== 1 ? 's' : ''} awaiting approval
+              {pendingWithdrawals.length} request{pendingWithdrawals.length !== 1 ? 's' : ''}
             </p>
           </CardContent>
         </Card>
 
         <Card className="bg-gradient-to-br from-slate-900/80 to-cyan-900/80 border-cyan-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(34,211,238,0.2)]">
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium uppercase tracking-wide text-cyan-300">
+            <CardTitle className="text-xs sm:text-sm font-medium uppercase tracking-wide text-cyan-300">
               Total Withdrawn
             </CardTitle>
-            <TrendingDown className="w-5 h-5 text-cyan-400" />
+            <TrendingDown className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400" />
           </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold tabular-nums bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+          <CardContent className="pt-0">
+            <div className="text-xl sm:text-3xl font-bold tabular-nums bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
               {formatCurrency(stats?.totalWithdrawn || 0)}
             </div>
             <p className="text-xs text-cyan-300/70 mt-1">
-              {completedWithdrawals.length} approved withdrawal{completedWithdrawals.length !== 1 ? 's' : ''}
+              {completedWithdrawals.length} approved
             </p>
           </CardContent>
         </Card>
@@ -722,36 +726,68 @@ const WalletPage = () => {
                   <p>No site visit earnings yet</p>
                 </div>
               ) : (
-                <div className="rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Site Visit ID</TableHead>
-                        <TableHead>Description</TableHead>
-                        <TableHead>Date</TableHead>
-                        <TableHead className="text-right">Amount</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {siteVisitEarnings.map((transaction) => (
-                        <TableRow key={transaction.id}>
-                          <TableCell className="font-mono text-sm">
-                            {transaction.siteVisitId?.slice(0, 8)}...
-                          </TableCell>
-                          <TableCell className="max-w-xs truncate">
-                            {transaction.description || 'Site visit fee'}
-                          </TableCell>
-                          <TableCell className="text-sm text-muted-foreground">
-                            {format(new Date(transaction.createdAt), 'MMM dd, yyyy')}
-                          </TableCell>
-                          <TableCell className="text-right font-semibold tabular-nums text-green-600">
-                            +{formatCurrency(transaction.amount, transaction.currency)}
-                          </TableCell>
+                <>
+                  {/* Mobile Card Layout */}
+                  <div className="block sm:hidden space-y-3">
+                    {siteVisitEarnings.map((transaction) => (
+                      <div key={transaction.id} className="bg-slate-800/50 rounded-lg p-4 border border-slate-700/50">
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-slate-200 truncate">
+                              {transaction.description || 'Site visit fee'}
+                            </p>
+                            <p className="text-xs text-slate-400 mt-1">
+                              ID: {transaction.siteVisitId?.slice(0, 8)}...
+                            </p>
+                          </div>
+                          <div className="text-right ml-2">
+                            <p className="text-lg font-bold text-green-400 tabular-nums">
+                              +{formatCurrency(transaction.amount, transaction.currency)}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between text-xs text-slate-400">
+                          <span>{format(new Date(transaction.createdAt), 'MMM dd, yyyy')}</span>
+                          {transaction.balanceAfter !== undefined && (
+                            <span>Balance: {formatCurrency(transaction.balanceAfter, transaction.currency)}</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Desktop Table Layout */}
+                  <div className="hidden sm:block rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Site Visit ID</TableHead>
+                          <TableHead>Description</TableHead>
+                          <TableHead>Date</TableHead>
+                          <TableHead className="text-right">Amount</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+                      </TableHeader>
+                      <TableBody>
+                        {siteVisitEarnings.map((transaction) => (
+                          <TableRow key={transaction.id}>
+                            <TableCell className="font-mono text-sm">
+                              {transaction.siteVisitId?.slice(0, 8)}...
+                            </TableCell>
+                            <TableCell className="max-w-xs truncate">
+                              {transaction.description || 'Site visit fee'}
+                            </TableCell>
+                            <TableCell className="text-sm text-muted-foreground">
+                              {format(new Date(transaction.createdAt), 'MMM dd, yyyy')}
+                            </TableCell>
+                            <TableCell className="text-right font-semibold tabular-nums text-green-600">
+                              +{formatCurrency(transaction.amount, transaction.currency)}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>
@@ -801,48 +837,86 @@ const WalletPage = () => {
                   <p>No transactions found</p>
                 </div>
               ) : (
-                <div className="rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-[120px]">Type</TableHead>
-                        <TableHead>Description</TableHead>
-                        <TableHead>Date</TableHead>
-                        <TableHead className="text-right">Amount</TableHead>
-                        <TableHead className="text-right">Balance After</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredTransactions.map((transaction) => (
-                        <TableRow key={transaction.id} data-testid={`row-transaction-${transaction.id}`}>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              {getTransactionIcon(transaction.type)}
-                              <span className="text-sm capitalize">
-                                {transaction.type.replace('_', ' ')}
-                              </span>
-                            </div>
-                          </TableCell>
-                          <TableCell className="max-w-md truncate">
-                            {transaction.description || '-'}
-                          </TableCell>
-                          <TableCell className="text-sm text-muted-foreground">
-                            {format(new Date(transaction.createdAt), 'MMM dd, yyyy HH:mm')}
-                          </TableCell>
-                          <TableCell className={`text-right font-semibold tabular-nums ${transaction.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                <>
+                  {/* Mobile Card Layout */}
+                  <div className="block sm:hidden space-y-3">
+                    {filteredTransactions.map((transaction) => (
+                      <div key={transaction.id} className="bg-slate-800/50 rounded-lg p-4 border border-slate-700/50">
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            {getTransactionIcon(transaction.type)}
+                            <span className="text-sm font-medium capitalize text-slate-200">
+                              {transaction.type.replace('_', ' ')}
+                            </span>
+                          </div>
+                          <div className={`text-lg font-bold tabular-nums ${transaction.amount >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                             {transaction.amount >= 0 ? '+' : ''}
                             {formatCurrency(transaction.amount, transaction.currency)}
-                          </TableCell>
-                          <TableCell className="text-right tabular-nums font-medium">
-                            {transaction.balanceAfter !== undefined
-                              ? formatCurrency(transaction.balanceAfter, transaction.currency)
-                              : '-'}
-                          </TableCell>
+                          </div>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <p className="text-sm text-slate-300 leading-relaxed">
+                            {transaction.description || '-'}
+                          </p>
+                          
+                          <div className="flex items-center justify-between text-xs text-slate-400">
+                            <span>{format(new Date(transaction.createdAt), 'MMM dd, yyyy HH:mm')}</span>
+                            {transaction.balanceAfter !== undefined && (
+                              <span className="font-medium">
+                                Balance: {formatCurrency(transaction.balanceAfter, transaction.currency)}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Desktop Table Layout */}
+                  <div className="hidden sm:block rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-[120px]">Type</TableHead>
+                          <TableHead>Description</TableHead>
+                          <TableHead>Date</TableHead>
+                          <TableHead className="text-right">Amount</TableHead>
+                          <TableHead className="text-right">Balance After</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+                      </TableHeader>
+                      <TableBody>
+                        {filteredTransactions.map((transaction) => (
+                          <TableRow key={transaction.id} data-testid={`row-transaction-${transaction.id}`}>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                {getTransactionIcon(transaction.type)}
+                                <span className="text-sm capitalize">
+                                  {transaction.type.replace('_', ' ')}
+                                </span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="max-w-md truncate">
+                              {transaction.description || '-'}
+                            </TableCell>
+                            <TableCell className="text-sm text-muted-foreground">
+                              {format(new Date(transaction.createdAt), 'MMM dd, yyyy HH:mm')}
+                            </TableCell>
+                            <TableCell className={`text-right font-semibold tabular-nums ${transaction.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                              {transaction.amount >= 0 ? '+' : ''}
+                              {formatCurrency(transaction.amount, transaction.currency)}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums font-medium">
+                              {transaction.balanceAfter !== undefined
+                                ? formatCurrency(transaction.balanceAfter, transaction.currency)
+                                : '-'}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>
@@ -902,56 +976,115 @@ const WalletPage = () => {
                   <p>No {withdrawalStatusFilter !== 'all' ? withdrawalStatusFilter : ''} withdrawal requests found</p>
                 </div>
               ) : (
-                <div className="rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Amount</TableHead>
-                        <TableHead>Reason</TableHead>
-                        <TableHead>Method</TableHead>
-                        <TableHead>Requested</TableHead>
-                        <TableHead>Supervisor Notes</TableHead>
-                        <TableHead>Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {displayWithdrawals.map((request) => (
-                        <TableRow key={request.id} data-testid={`row-withdrawal-${request.id}`}>
-                          <TableCell>{getWithdrawalStatusBadge(request.status)}</TableCell>
-                          <TableCell className="font-semibold tabular-nums">
-                            {formatCurrency(request.amount, request.currency)}
-                          </TableCell>
-                          <TableCell className="max-w-xs truncate">
-                            {request.requestReason || '-'}
-                          </TableCell>
-                          <TableCell className="text-sm text-muted-foreground">
-                            {request.paymentMethod || '-'}
-                          </TableCell>
-                          <TableCell className="text-sm text-muted-foreground">
-                            {format(new Date(request.createdAt), 'MMM dd, yyyy HH:mm')}
-                          </TableCell>
-                          <TableCell className="max-w-xs truncate">
-                            {request.supervisorNotes || '-'}
-                          </TableCell>
-                          <TableCell>
-                            {request.status === 'pending' && (
-                              <button
-                                type="button"
-                                onClick={() => cancelWithdrawalRequest(request.id)}
-                                className="px-3 py-1.5 text-sm rounded-md bg-red-900/20 hover:bg-red-900/30 text-red-300 border border-red-500/30 transition inline-flex items-center focus:outline-none focus:ring-2 focus:ring-red-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px]"
-                                data-testid={`button-cancel-${request.id}`}
-                              >
-                                <X className="w-3 h-3 mr-1" />
-                                Cancel
-                              </button>
-                            )}
-                          </TableCell>
+                <>
+                  {/* Mobile Card Layout */}
+                  <div className="block sm:hidden space-y-3">
+                    {displayWithdrawals.map((request) => (
+                      <div key={request.id} className="bg-slate-800/50 rounded-lg p-4 border border-slate-700/50">
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            {getWithdrawalStatusBadge(request.status)}
+                          </div>
+                          <div className="text-right">
+                            <p className="text-lg font-bold tabular-nums text-slate-200">
+                              {formatCurrency(request.amount, request.currency)}
+                            </p>
+                            <p className="text-xs text-slate-400">
+                              {format(new Date(request.createdAt), 'MMM dd, yyyy')}
+                            </p>
+                          </div>
+                        </div>
+                        
+                        <div className="space-y-2 mb-3">
+                          {request.requestReason && (
+                            <div>
+                              <p className="text-xs font-medium text-slate-400 mb-1">Reason</p>
+                              <p className="text-sm text-slate-300">{request.requestReason}</p>
+                            </div>
+                          )}
+                          
+                          {request.paymentMethod && (
+                            <div>
+                              <p className="text-xs font-medium text-slate-400 mb-1">Payment Method</p>
+                              <p className="text-sm text-slate-300">{request.paymentMethod}</p>
+                            </div>
+                          )}
+                          
+                          {request.supervisorNotes && (
+                            <div>
+                              <p className="text-xs font-medium text-slate-400 mb-1">Supervisor Notes</p>
+                              <p className="text-sm text-slate-300">{request.supervisorNotes}</p>
+                            </div>
+                          )}
+                        </div>
+                        
+                        {request.status === 'pending' && (
+                          <button
+                            type="button"
+                            onClick={() => cancelWithdrawalRequest(request.id)}
+                            className="w-full px-3 py-2 text-sm rounded-md bg-red-900/20 hover:bg-red-900/30 text-red-300 border border-red-500/30 transition inline-flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-red-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px]"
+                            data-testid={`button-cancel-${request.id}`}
+                          >
+                            <X className="w-3 h-3 mr-1" />
+                            Cancel Request
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Desktop Table Layout */}
+                  <div className="hidden sm:block rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Amount</TableHead>
+                          <TableHead>Reason</TableHead>
+                          <TableHead>Method</TableHead>
+                          <TableHead>Requested</TableHead>
+                          <TableHead>Supervisor Notes</TableHead>
+                          <TableHead>Actions</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+                      </TableHeader>
+                      <TableBody>
+                        {displayWithdrawals.map((request) => (
+                          <TableRow key={request.id} data-testid={`row-withdrawal-${request.id}`}>
+                            <TableCell>{getWithdrawalStatusBadge(request.status)}</TableCell>
+                            <TableCell className="font-semibold tabular-nums">
+                              {formatCurrency(request.amount, request.currency)}
+                            </TableCell>
+                            <TableCell className="max-w-xs truncate">
+                              {request.requestReason || '-'}
+                            </TableCell>
+                            <TableCell className="text-sm text-muted-foreground">
+                              {request.paymentMethod || '-'}
+                            </TableCell>
+                            <TableCell className="text-sm text-muted-foreground">
+                              {format(new Date(request.createdAt), 'MMM dd, yyyy HH:mm')}
+                            </TableCell>
+                            <TableCell className="max-w-xs truncate">
+                              {request.supervisorNotes || '-'}
+                            </TableCell>
+                            <TableCell>
+                              {request.status === 'pending' && (
+                                <button
+                                  type="button"
+                                  onClick={() => cancelWithdrawalRequest(request.id)}
+                                  className="px-3 py-1.5 text-sm rounded-md bg-red-900/20 hover:bg-red-900/30 text-red-300 border border-red-500/30 transition inline-flex items-center focus:outline-none focus:ring-2 focus:ring-red-400/70 focus:ring-offset-2 focus:ring-offset-slate-950 min-h-[44px]"
+                                  data-testid={`button-cancel-${request.id}`}
+                                >
+                                  <X className="w-3 h-3 mr-1" />
+                                  Cancel
+                                </button>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>
@@ -970,42 +1103,83 @@ const WalletPage = () => {
                   <p>No site visit earnings yet</p>
                 </div>
               ) : (
-                <div className="rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Site Visit ID</TableHead>
-                        <TableHead>Description</TableHead>
-                        <TableHead>Date Earned</TableHead>
-                        <TableHead className="text-right">Amount</TableHead>
-                        <TableHead className="text-right">Balance After</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {siteVisitEarnings.map((transaction) => (
-                        <TableRow key={transaction.id}>
-                          <TableCell className="font-mono text-sm">
-                            {transaction.siteVisitId?.slice(0, 12)}...
-                          </TableCell>
-                          <TableCell className="max-w-md truncate">
-                            {transaction.description || 'Site visit fee'}
-                          </TableCell>
-                          <TableCell className="text-sm text-muted-foreground">
-                            {format(new Date(transaction.createdAt), 'MMM dd, yyyy HH:mm')}
-                          </TableCell>
-                          <TableCell className="text-right font-semibold tabular-nums text-green-600">
+                <>
+                  {/* Mobile Card Layout */}
+                  <div className="block sm:hidden space-y-3">
+                    {siteVisitEarnings.map((transaction) => (
+                      <div key={transaction.id} className="bg-slate-800/50 rounded-lg p-4 border border-slate-700/50">
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <Receipt className="w-4 h-4 text-green-500" />
+                            <span className="text-sm font-medium text-slate-200">Site Visit Fee</span>
+                          </div>
+                          <div className="text-lg font-bold tabular-nums text-green-400">
                             +{formatCurrency(transaction.amount, transaction.currency)}
-                          </TableCell>
-                          <TableCell className="text-right tabular-nums font-medium">
-                            {transaction.balanceAfter !== undefined
-                              ? formatCurrency(transaction.balanceAfter, transaction.currency)
-                              : '-'}
-                          </TableCell>
+                          </div>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2 text-xs text-slate-400">
+                            <span className="font-mono bg-slate-700/50 px-2 py-1 rounded text-slate-300">
+                              {transaction.siteVisitId?.slice(0, 8)}...
+                            </span>
+                          </div>
+                          
+                          <p className="text-sm text-slate-300 leading-relaxed">
+                            {transaction.description || 'Site visit fee'}
+                          </p>
+                          
+                          <div className="flex items-center justify-between text-xs text-slate-400">
+                            <span>{format(new Date(transaction.createdAt), 'MMM dd, yyyy HH:mm')}</span>
+                            {transaction.balanceAfter !== undefined && (
+                              <span className="font-medium">
+                                Balance: {formatCurrency(transaction.balanceAfter, transaction.currency)}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Desktop Table Layout */}
+                  <div className="hidden sm:block rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Site Visit ID</TableHead>
+                          <TableHead>Description</TableHead>
+                          <TableHead>Date Earned</TableHead>
+                          <TableHead className="text-right">Amount</TableHead>
+                          <TableHead className="text-right">Balance After</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+                      </TableHeader>
+                      <TableBody>
+                        {siteVisitEarnings.map((transaction) => (
+                          <TableRow key={transaction.id}>
+                            <TableCell className="font-mono text-sm">
+                              {transaction.siteVisitId?.slice(0, 12)}...
+                            </TableCell>
+                            <TableCell className="max-w-md truncate">
+                              {transaction.description || 'Site visit fee'}
+                            </TableCell>
+                            <TableCell className="text-sm text-muted-foreground">
+                              {format(new Date(transaction.createdAt), 'MMM dd, yyyy HH:mm')}
+                            </TableCell>
+                            <TableCell className="text-right font-semibold tabular-nums text-green-600">
+                              +{formatCurrency(transaction.amount, transaction.currency)}
+                            </TableCell>
+                            <TableCell className="text-right tabular-nums font-medium">
+                              {transaction.balanceAfter !== undefined
+                                ? formatCurrency(transaction.balanceAfter, transaction.currency)
+                                : '-'}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>

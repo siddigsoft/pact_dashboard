@@ -10,6 +10,7 @@ import {
   ProcessPayment,
   DownPaymentStatus,
 } from '@/types/down-payment';
+import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 
 interface DownPaymentContextType {
   requests: DownPaymentRequest[];
@@ -123,17 +124,36 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
 
       const { data, error } = await query.order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        // Suppress RLS permission errors - just log them
+        if (error.code === '42501' || error.message?.includes('permission') || error.message?.includes('RLS')) {
+          console.log('[DownPayment] No permission to fetch requests (expected for some roles)');
+          setRequests([]);
+          setLoading(false);
+          return;
+        }
+        throw error;
+      }
       
       console.log('[DownPayment] Fetched requests:', data?.length || 0);
       setRequests((data || []).map(transformFromDB));
     } catch (error: any) {
-      console.error('Failed to fetch down-payment requests:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to load down-payment requests',
-        variant: 'destructive',
-      });
+      // Only log and show error for unexpected errors, not permission issues
+      const isPermissionError = error.code === '42501' || 
+        error.message?.includes('permission') || 
+        error.message?.includes('RLS') ||
+        error.message?.includes('policy');
+      
+      if (!isPermissionError) {
+        console.error('Failed to fetch down-payment requests:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to load down-payment requests',
+          variant: 'destructive',
+        });
+      } else {
+        console.log('[DownPayment] Permission denied (expected for some roles)');
+      }
     } finally {
       setLoading(false);
     }
@@ -227,6 +247,8 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
 
   const supervisorApprove = async (data: ApproveDownPaymentRequest): Promise<boolean> => {
     try {
+      const request = requests.find(r => r.id === data.requestId);
+      
       const { error } = await supabase
         .from('down_payment_requests')
         .update({
@@ -241,6 +263,21 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         .eq('id', data.requestId);
 
       if (error) throw error;
+
+      // Send email notification to requester
+      if (request?.requestedBy) {
+        await NotificationTriggerService.send({
+          userId: request.requestedBy,
+          title: 'Down-Payment Request Approved by Supervisor',
+          message: `Your down-payment request for "${request.siteName}" (${request.requestedAmount.toLocaleString()} SDG) has been approved by supervisor and forwarded to admin.`,
+          type: 'success',
+          category: 'financial',
+          priority: 'high',
+          link: '/down-payment-approval',
+          sendEmail: true,
+          emailActionLabel: 'View Request'
+        });
+      }
 
       toast({
         title: 'Request Approved',
@@ -262,6 +299,8 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
 
   const supervisorReject = async (data: RejectDownPaymentRequest): Promise<boolean> => {
     try {
+      const request = requests.find(r => r.id === data.requestId);
+      
       const { error } = await supabase
         .from('down_payment_requests')
         .update({
@@ -275,6 +314,21 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         .eq('id', data.requestId);
 
       if (error) throw error;
+
+      // Send email notification to requester
+      if (request?.requestedBy) {
+        await NotificationTriggerService.send({
+          userId: request.requestedBy,
+          title: 'Down-Payment Request Rejected',
+          message: `Your down-payment request for "${request.siteName}" (${request.requestedAmount.toLocaleString()} SDG) has been rejected by supervisor. Reason: ${data.rejectionReason || 'Not specified'}`,
+          type: 'error',
+          category: 'financial',
+          priority: 'high',
+          link: '/down-payment-approval',
+          sendEmail: true,
+          emailActionLabel: 'View Details'
+        });
+      }
 
       toast({
         title: 'Request Rejected',
@@ -297,6 +351,8 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
 
   const adminApprove = async (data: ApproveDownPaymentRequest): Promise<boolean> => {
     try {
+      const request = requests.find(r => r.id === data.requestId);
+      
       const { error } = await supabase
         .from('down_payment_requests')
         .update({
@@ -310,6 +366,21 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         .eq('id', data.requestId);
 
       if (error) throw error;
+
+      // Send email notification to requester
+      if (request?.requestedBy) {
+        await NotificationTriggerService.send({
+          userId: request.requestedBy,
+          title: 'Down-Payment Request Fully Approved',
+          message: `Your down-payment request for "${request.siteName}" (${request.requestedAmount.toLocaleString()} SDG) has been approved and is ready for payment processing.`,
+          type: 'success',
+          category: 'financial',
+          priority: 'high',
+          link: '/wallet',
+          sendEmail: true,
+          emailActionLabel: 'View Wallet'
+        });
+      }
 
       toast({
         title: 'Request Approved',
@@ -331,6 +402,8 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
 
   const adminReject = async (data: RejectDownPaymentRequest): Promise<boolean> => {
     try {
+      const request = requests.find(r => r.id === data.requestId);
+      
       const { error } = await supabase
         .from('down_payment_requests')
         .update({
@@ -344,6 +417,21 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
         .eq('id', data.requestId);
 
       if (error) throw error;
+
+      // Send email notification to requester
+      if (request?.requestedBy) {
+        await NotificationTriggerService.send({
+          userId: request.requestedBy,
+          title: 'Down-Payment Request Rejected by Admin',
+          message: `Your down-payment request for "${request.siteName}" (${request.requestedAmount.toLocaleString()} SDG) has been rejected by admin. Reason: ${data.rejectionReason || 'Not specified'}`,
+          type: 'error',
+          category: 'financial',
+          priority: 'high',
+          link: '/down-payment-approval',
+          sendEmail: true,
+          emailActionLabel: 'View Details'
+        });
+      }
 
       toast({
         title: 'Request Rejected',
