@@ -55,11 +55,14 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
     onClose();
   };
 
-  const handleStartChat = (entityId: string, entityType: 'siteVisit' | 'mmpFile' | 'transaction' | 'chat') => {
+  const handleStartChat = (entityId: string, entityType: string) => {
     if (entityType === 'chat') {
       navigate('/chat');
     } else if (entityType === 'siteVisit' || entityType === 'mmpFile') {
-      openChatForEntity(entityId, entityType);
+      openChatForEntity(entityId, entityType as 'siteVisit' | 'mmpFile');
+      navigate('/chat');
+    } else {
+      // Fallback to chat page for other entity types
       navigate('/chat');
     }
     onClose();
@@ -211,6 +214,86 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
         >
           <MessageSquare className="h-3 w-3 mr-1" />
           Discuss
+        </Button>
+      );
+    }
+    
+    // SOS Alert action buttons - Call, Chat, View Location
+    if (notification.title?.includes('SOS') || notification.title?.includes('EMERGENCY')) {
+      const sosUserId = notification.relatedEntityId;
+      const sosUser = sosUserId ? users.find(u => u.id === sosUserId) : null;
+      
+      return (
+        <>
+          <Button 
+            variant="destructive" 
+            size="sm"
+            className="h-7"
+            onClick={(e) => { 
+              e.stopPropagation();
+              if (sosUser) {
+                initiateCall(sosUser);
+                onClose();
+              } else {
+                navigate('/calls');
+                onClose();
+              }
+            }}
+            data-testid="button-sos-call"
+          >
+            <Phone className="h-3 w-3 mr-1" />
+            Call Now
+          </Button>
+          <Button 
+            variant="outline" 
+            size="sm"
+            className="h-7"
+            onClick={(e) => { 
+              e.stopPropagation();
+              navigate('/chat');
+              onClose();
+            }}
+            data-testid="button-sos-chat"
+          >
+            <MessageSquare className="h-3 w-3 mr-1" />
+            Chat
+          </Button>
+          {notification.link && (
+            <Button 
+              variant="outline" 
+              size="sm"
+              className="h-7"
+              onClick={(e) => { 
+                e.stopPropagation();
+                navigate(notification.link!);
+                onClose();
+              }}
+              data-testid="button-sos-location"
+            >
+              <AlertCircle className="h-3 w-3 mr-1" />
+              View
+            </Button>
+          )}
+        </>
+      );
+    }
+    
+    // Call-related notifications
+    if (notification.relatedEntityType === 'call' || notification.title?.toLowerCase().includes('call')) {
+      return (
+        <Button 
+          variant="outline" 
+          size="sm"
+          className="h-7"
+          onClick={(e) => { 
+            e.stopPropagation();
+            navigate('/calls');
+            onClose();
+          }}
+          data-testid="button-view-calls"
+        >
+          <Phone className="h-3 w-3 mr-1" />
+          View Calls
         </Button>
       );
     }
