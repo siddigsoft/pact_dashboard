@@ -1,9 +1,10 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useActiveVisit } from '@/context/ActiveVisitContext';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
+import { calculateDistance } from '@/utils/collectorUtils';
 import { 
   MapPin, 
   Clock, 
@@ -28,6 +29,8 @@ import {
   CloudOff,
   Cloud
 } from 'lucide-react';
+
+const SITE_VISIT_COMPLETION_PROXIMITY_METERS = 25;
 import { motion, AnimatePresence, PanInfo } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { hapticPresets } from '@/lib/haptics';
@@ -132,6 +135,20 @@ export function ActiveVisitOverlay({
   }, [activeVisit?.notes]);
 
   if (!activeVisit) return null;
+
+  const distanceToSite = useMemo(() => {
+    if (!activeVisit.coordinates || !activeVisit.targetCoordinates) return null;
+    const distanceKm = calculateDistance(
+      activeVisit.coordinates.latitude,
+      activeVisit.coordinates.longitude,
+      activeVisit.targetCoordinates.latitude,
+      activeVisit.targetCoordinates.longitude
+    );
+    return distanceKm * 1000;
+  }, [activeVisit.coordinates, activeVisit.targetCoordinates]);
+
+  const isWithinProximity = distanceToSite !== null && distanceToSite <= SITE_VISIT_COMPLETION_PROXIMITY_METERS;
+  const canComplete = activeVisit.photoCount > 0 && isWithinProximity;
 
   const formatTime = (seconds: number) => {
     const hrs = Math.floor(seconds / 3600);
@@ -700,7 +717,7 @@ export function ActiveVisitOverlay({
               <Button 
                 className="w-full h-14 text-base gap-2 rounded-full bg-black hover:bg-black/90 dark:bg-white dark:hover:bg-white/90 dark:text-black font-bold"
                 onClick={handleComplete}
-                disabled={isCompleting || activeVisit.photoCount === 0}
+                disabled={isCompleting || !canComplete}
                 data-testid="button-complete-visit"
                 aria-label={isCompleting ? 'Completing visit' : 'Complete site visit'}
               >
@@ -717,7 +734,14 @@ export function ActiveVisitOverlay({
                 )}
               </Button>
               
-              {activeVisit.photoCount === 0 && (
+              {!isWithinProximity && (
+                <p className="text-xs text-center text-amber-600 dark:text-amber-400">
+                  You must be within {SITE_VISIT_COMPLETION_PROXIMITY_METERS}m of the site to complete.
+                  {distanceToSite !== null && ` Current distance: ${distanceToSite.toFixed(0)}m`}
+                </p>
+              )}
+              
+              {isWithinProximity && activeVisit.photoCount === 0 && (
                 <p className="text-xs text-center text-black/40 dark:text-white/40">
                   At least 1 photo is required to complete the visit
                 </p>
