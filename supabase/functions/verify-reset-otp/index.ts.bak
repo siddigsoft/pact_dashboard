@@ -90,29 +90,22 @@ serve(async (req) => {
 
       if (smtpHost && smtpPort && smtpUser && smtpPassword) {
         try {
-          const { SmtpClient } = await import('https://deno.land/x/smtp@v0.7.0/mod.ts')
+          const { SMTPClient } = await import('https://deno.land/x/denomailer@1.6.0/mod.ts')
           
           const portNum = Number(smtpPort)
-          console.log(`Connecting to SMTP: ${smtpHost}:${portNum}`)
+          // IONOS uses port 587 with STARTTLS, port 465 with implicit TLS
+          const useImplicitTLS = portNum === 465
           
-          const client = new SmtpClient()
+          console.log(`Connecting to SMTP: ${smtpHost}:${portNum}, TLS: ${useImplicitTLS}`)
           
-          // Connect with TLS for port 465, STARTTLS for other ports
-          if (portNum === 465) {
-            await client.connectTLS({
+          const client = new SMTPClient({
+            connection: {
               hostname: smtpHost,
               port: portNum,
-              username: smtpUser,
-              password: smtpPassword,
-            })
-          } else {
-            await client.connect({
-              hostname: smtpHost,
-              port: portNum,
-              username: smtpUser,
-              password: smtpPassword,
-            })
-          }
+              tls: useImplicitTLS,
+              auth: { username: smtpUser, password: smtpPassword },
+            },
+          })
 
           const recipientName = userData.full_name || 'User'
           const resetLink = `https://app.pactorg.com/reset-password?email=${encodeURIComponent(email)}`
@@ -154,7 +147,7 @@ serve(async (req) => {
           `
 
           await client.send({
-            from: smtpUser,
+            from: `PACT Workflow <${smtpUser}>`,
             to: email,
             subject: 'PACT Password Reset Code',
             content: `Hello ${recipientName},\n\nYour password reset code is: ${generatedOtp}\n\nThis code expires in 15 minutes.\n\nClick here to reset your password: ${resetLink}\n\n- PACT Workflow Platform`,
@@ -184,8 +177,8 @@ serve(async (req) => {
           } catch (logError) {
             console.error('Audit log insert failed:', logError)
           }
-        } catch (emailError) {
-          const errMsg = (emailError as Error)?.message || 'Unknown SMTP error'
+        } catch (emailError: unknown) {
+          const errMsg = emailError instanceof Error ? emailError.message : 'Unknown SMTP error'
           console.error('Email sending error:', errMsg)
           
           // Log failed email to audit_logs
