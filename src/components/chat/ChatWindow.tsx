@@ -32,7 +32,11 @@ import { useToast } from '@/hooks/use-toast';
 import { uploadChatAttachment, getContentTypeFromFile, formatFileSize, ChatAttachment } from '@/utils/chatUpload';
 import { JitsiCallModal } from '@/components/calls/JitsiCallModal';
 
-const ChatWindow: React.FC = () => {
+interface ChatWindowProps {
+  hideHeader?: boolean;
+}
+
+const ChatWindow: React.FC<ChatWindowProps> = ({ hideHeader = false }) => {
   const navigate = useNavigate();
   const { activeChat, getChatMessages, sendMessage, setActiveChat, isSendingMessage, typingUsers, sendTypingIndicator } = useChat();
   const { initiateCall } = useCommunication();
@@ -281,6 +285,7 @@ const ChatWindow: React.FC = () => {
 
   return (
     <div className="flex flex-col h-full bg-white dark:bg-black" data-testid="chat-window">
+      {!hideHeader && (
       <div className="px-4 py-3 flex items-center justify-between bg-black sticky top-0 z-10">
         <div className="flex items-center gap-3">
           <Button
@@ -370,6 +375,7 @@ const ChatWindow: React.FC = () => {
           </Button>
         </div>
       </div>
+      )}
       
       <ScrollArea className="flex-1 px-4 py-6">
         <div className="space-y-4 pb-4">
