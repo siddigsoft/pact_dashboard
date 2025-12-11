@@ -12,6 +12,13 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
+import notificationSoundService from '@/services/NotificationSoundService';
+
+interface TypingUser {
+  id: string;
+  name: string;
+  timestamp: number;
+}
 
 interface ChatContextType {
   chats: Chat[];
@@ -21,6 +28,7 @@ interface ChatContextType {
   isLoading: boolean;
   isSendingMessage: boolean;
   error: string | null;
+  typingUsers: Record<string, TypingUser[]>;
   setActiveChat: (chat: Chat | null) => void;
   setActiveChatId: (chatId: string | null) => void;
   sendMessage: (chatId: string, content: string, contentType?: "text" | "image" | "file" | "location" | "audio", attachments?: any, metadata?: any) => Promise<void>;
@@ -31,6 +39,7 @@ interface ChatContextType {
   getChatMessages: (chatId: string) => ChatMessage[] | undefined;
   getUnreadMessagesCount: () => number;
   clearError: () => void;
+  sendTypingIndicator: (chatId: string) => void;
 }
 
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
@@ -39,10 +48,13 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [chats, setChats] = useState<Chat[]>([]);
   const [messages, setMessages] = useState<Record<string, ChatMessage[]>>({});
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  const [activeChatDirect, setActiveChatDirect] = useState<Chat | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isSendingMessage, setIsSendingMessage] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [channels, setChannels] = useState<RealtimeChannel[]>([]);
+  const [typingUsers, setTypingUsers] = useState<Record<string, TypingUser[]>>({});
+  const [typingChannel, setTypingChannel] = useState<RealtimeChannel | null>(null);
   const { currentUser, users } = useUser();
   const { toast } = useToast();
 
@@ -54,6 +66,17 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
     };
   }, [channels]);
+
+  // Sync activeChatDirect with chats when chats are updated (e.g., with new messages)
+  useEffect(() => {
+    if (activeChatDirect) {
+      const updatedChat = chats.find(c => c.id === activeChatDirect.id);
+      if (updatedChat && (updatedChat.lastMessage !== activeChatDirect.lastMessage || 
+          updatedChat.name !== activeChatDirect.name)) {
+        setActiveChatDirect(updatedChat);
+      }
+    }
+  }, [chats, activeChatDirect]);
 
   // Load chats when user is available
   useEffect(() => {
@@ -78,6 +101,89 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try { supabase.removeChannel(channel); } catch {}
     };
   }, [currentUser?.id]);
+
+  // Set up typing indicator channel
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    
+    let mounted = true;
+    const channel = supabase.channel('typing-indicators')
+      .on('broadcast', { event: 'typing' }, (payload) => {
+        const { chatId, userId, userName } = payload.payload as { chatId: string; userId: string; userName: string };
+        
+        // Ignore own typing events
+        if (userId === currentUser.id) return;
+        
+        setTypingUsers(prev => {
+          const chatTypers = prev[chatId] || [];
+          const existingIndex = chatTypers.findIndex(t => t.id === userId);
+          const newTyper: TypingUser = { id: userId, name: userName, timestamp: Date.now() };
+          
+          if (existingIndex >= 0) {
+            const updated = [...chatTypers];
+            updated[existingIndex] = newTyper;
+            return { ...prev, [chatId]: updated };
+          } else {
+            return { ...prev, [chatId]: [...chatTypers, newTyper] };
+          }
+        });
+      });
+    
+    // Await subscription before exposing channel
+    channel.subscribe((status) => {
+      if (status === 'SUBSCRIBED' && mounted) {
+        console.log('[Chat] Typing indicator channel subscribed');
+        setTypingChannel(channel);
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        console.error('[Chat] Typing indicator channel failed:', status);
+      }
+    });
+    
+    return () => {
+      mounted = false;
+      supabase.removeChannel(channel);
+      setTypingChannel(null);
+    };
+  }, [currentUser?.id]);
+
+  // Clean up stale typing indicators (older than 3 seconds)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = Date.now();
+      setTypingUsers(prev => {
+        const updated: Record<string, TypingUser[]> = {};
+        for (const [chatId, typers] of Object.entries(prev)) {
+          const filtered = typers.filter(t => now - t.timestamp < 3000);
+          if (filtered.length > 0) {
+            updated[chatId] = filtered;
+          }
+        }
+        return updated;
+      });
+    }, 1000);
+    
+    return () => clearInterval(interval);
+  }, []);
+
+  const sendTypingIndicator = useCallback((chatId: string) => {
+    if (!typingChannel || !currentUser?.id) return;
+    
+    typingChannel.send({
+      type: 'broadcast',
+      event: 'typing',
+      payload: {
+        chatId,
+        userId: currentUser.id,
+        userName: currentUser.fullName || currentUser.name || 'User',
+      },
+    }).then((result) => {
+      if (result !== 'ok') {
+        console.warn('[Chat] Failed to send typing indicator:', result);
+      }
+    }).catch((err) => {
+      console.error('[Chat] Error sending typing indicator:', err);
+    });
+  }, [typingChannel, currentUser]);
 
   const loadChats = async (userId: string) => {
     setIsLoading(true);
@@ -240,11 +346,21 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const activeChat = activeChatId ? chats.find(c => c.id === activeChatId) || null : null;
+  // Compute activeChat: prefer direct storage, fallback to lookup
+  const activeChat = activeChatDirect || (activeChatId ? chats.find(c => c.id === activeChatId) || null : null);
 
   const setActiveChat = (chat: Chat | null) => {
+    // Store the chat directly to avoid race conditions
+    setActiveChatDirect(chat);
     setActiveChatId(chat?.id || null);
     if (chat?.id) {
+      // Ensure the chat is in the chats array
+      setChats(prev => {
+        if (chat && !prev.some(c => c.id === chat.id)) {
+          return [...prev, chat];
+        }
+        return prev;
+      });
       // Load messages when chat is activated
       loadChatMessages(chat.id);
       // Subscribe to realtime updates for this chat
@@ -292,6 +408,11 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
               [chatId]: [...existing, chatMessage]
             };
           });
+          
+          // Play notification sound if message is from someone else
+          if (newMessage.sender_id !== currentUser?.id) {
+            notificationSoundService.play('message');
+          }
           
           // Update chat's last message and re-sort chats
           setChats(prevChats => {
@@ -627,6 +748,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     isLoading,
     isSendingMessage,
     error,
+    typingUsers,
     setActiveChat,
     setActiveChatId,
     sendMessage,
@@ -637,6 +759,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     getChatMessages,
     getUnreadMessagesCount,
     clearError,
+    sendTypingIndicator,
   };
 
   return (

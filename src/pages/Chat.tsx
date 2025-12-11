@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useState, useRef } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAppContext } from '@/context/AppContext';
 import { useViewMode } from '@/context/ViewModeContext';
 import { useChat } from '@/context/chat/ChatContextSupabase';
@@ -27,12 +27,15 @@ import {
   CheckCheck,
   Sparkles,
   Clock,
-  RotateCcw
+  RotateCcw,
+  Clapperboard
 } from 'lucide-react';
+import { JitsiCallModal } from '@/components/calls/JitsiCallModal';
 
 const Chat: React.FC = () => {
   const { currentUser } = useAppContext();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { viewMode } = useViewMode();
   const { toast } = useToast();
   const isMobile = viewMode === 'mobile';
@@ -40,10 +43,13 @@ const Chat: React.FC = () => {
   const [activeView, setActiveView] = useState<'list' | 'chat'>('list');
   const [activeTab, setActiveTab] = useState<'contacts' | 'conversations'>('conversations');
   const [contactPage, setContactPage] = useState(1);
+  const [showJitsiCall, setShowJitsiCall] = useState(false);
+  const [jitsiIsAudioOnly, setJitsiIsAudioOnly] = useState(false);
   const CONTACTS_PAGE_SIZE = 10;
   const { chats, activeChat, setActiveChat, createChat, isLoading } = useChat();
   const { initiateCall } = useCommunication();
   const { users } = useUser();
+  const lastProcessedParamRef = useRef<string | null>(null);
   
   const { onlineUserIds } = useRealtimeTeamLocations({ enabled: true });
 
@@ -52,6 +58,51 @@ const Chat: React.FC = () => {
       navigate('/login');
     }
   }, [currentUser, navigate]);
+
+  useEffect(() => {
+    const userId = searchParams.get('userId');
+    const chatId = searchParams.get('chatId');
+    const paramKey = userId || chatId;
+    
+    if (!paramKey || lastProcessedParamRef.current === paramKey) return;
+    
+    if (chatId && chats.length > 0) {
+      const existingChat = chats.find(c => c.id === chatId);
+      if (existingChat) {
+        lastProcessedParamRef.current = paramKey;
+        setActiveChat(existingChat);
+        setActiveTab('conversations');
+        if (isMobile) setActiveView('chat');
+        setSearchParams({}, { replace: true });
+      }
+    } else if (userId && users.length > 0 && currentUser) {
+      const targetUser = users.find(u => u.id === userId);
+      if (targetUser) {
+        lastProcessedParamRef.current = paramKey;
+        const existingChat = chats.find(c => 
+          c.type === 'private' && 
+          c.participants?.includes(userId) && 
+          c.participants?.includes(currentUser.id)
+        );
+        
+        if (existingChat) {
+          setActiveChat(existingChat);
+          setActiveTab('conversations');
+          if (isMobile) setActiveView('chat');
+        } else {
+          const userName = targetUser.fullName || targetUser.name || targetUser.username || 'User';
+          createChat([userId], userName, 'private').then(chat => {
+            if (chat) {
+              setActiveChat(chat);
+              setActiveTab('conversations');
+              if (isMobile) setActiveView('chat');
+            }
+          });
+        }
+        setSearchParams({}, { replace: true });
+      }
+    }
+  }, [searchParams, chats, users, currentUser, isMobile, setActiveChat, createChat, setSearchParams]);
 
   const handleSelectChat = (chatId: string) => {
     const chat = chats.find(c => c.id === chatId);
@@ -121,6 +172,20 @@ const Chat: React.FC = () => {
     }
     initiateCall(targetUser);
     navigate('/calls');
+  };
+
+  const handleJitsiCall = (audioOnly: boolean = false) => {
+    const targetUser = getTargetUser();
+    if (!targetUser) {
+      toast({
+        title: 'Cannot call',
+        description: activeChat?.type === 'group' ? 'Group calls coming soon' : 'Select a chat first',
+        variant: 'destructive',
+      });
+      return;
+    }
+    setJitsiIsAudioOnly(audioOnly);
+    setShowJitsiCall(true);
   };
 
   const filteredChats = chats.filter(chat => 
@@ -514,8 +579,17 @@ const Chat: React.FC = () => {
                     onClick={handleVideoCall}
                     className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center"
                     data-testid="button-video-call"
+                    title="WebRTC Video Call"
                   >
                     <Video className="h-4 w-4 text-white" />
+                  </button>
+                  <button 
+                    onClick={() => handleJitsiCall(false)}
+                    className="w-8 h-8 rounded-full bg-blue-500/80 flex items-center justify-center"
+                    data-testid="button-jitsi-call"
+                    title="Jitsi Video Call (Backup)"
+                  >
+                    <Clapperboard className="h-4 w-4 text-white" />
                   </button>
                 </div>
               </div>
@@ -531,9 +605,9 @@ const Chat: React.FC = () => {
 
   // WEB VIEW - Uber Style Black/White Theme
   return (
-    <div className="h-full w-full flex bg-white dark:bg-black rounded-lg overflow-hidden border border-gray-200 dark:border-gray-800" data-testid="chat-page">
+    <div className="h-full w-full flex bg-white dark:bg-black overflow-hidden" data-testid="chat-page">
       {/* Left Panel - Conversation List */}
-      <div className="w-[340px] h-full flex flex-col shrink-0 border-r border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950">
+      <div className="w-[340px] min-w-[340px] max-w-[340px] h-full flex flex-col flex-shrink-0 border-r border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950">
         {/* Header with Search */}
         <div className="p-4 border-b border-gray-200 dark:border-gray-800">
           <div className="flex items-center justify-between mb-3">
@@ -768,7 +842,7 @@ const Chat: React.FC = () => {
       </div>
 
       {/* Right Panel - Chat Window */}
-      <div className="flex-1 h-full flex flex-col bg-white dark:bg-black">
+      <div className="flex-1 min-w-0 h-full flex flex-col bg-white dark:bg-black overflow-hidden">
         {activeChat ? (
           <ChatWindow />
         ) : (
@@ -793,6 +867,26 @@ const Chat: React.FC = () => {
           </div>
         )}
       </div>
+
+      {currentUser && (
+        <JitsiCallModal
+          isOpen={showJitsiCall}
+          onClose={() => setShowJitsiCall(false)}
+          targetUser={getTargetUser() ? {
+            id: getTargetUser()!.id,
+            name: getTargetUser()!.fullName || getTargetUser()!.name || 'User',
+            avatar: getTargetUser()!.avatar,
+            email: getTargetUser()!.email
+          } : undefined}
+          currentUser={{
+            id: currentUser.id,
+            name: currentUser.fullName || currentUser.name || 'You',
+            avatar: currentUser.avatar,
+            email: currentUser.email
+          }}
+          isAudioOnly={jitsiIsAudioOnly}
+        />
+      )}
     </div>
   );
 };

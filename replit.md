@@ -1,7 +1,7 @@
-# PACT Workflow Platform
+# PACT Command Center
 
 ## Overview
-The PACT (Planning, Approval, Coordination, and Tracking) Workflow Platform is a comprehensive field operations management system designed to streamline Monthly Monitoring Plans (MMPs), site visits, and field team coordination. Its core purpose is to enhance efficiency, transparency, and accountability in field operations by offering multi-tier user management, robust role-based access control, real-time collaboration, detailed MMP and site visit workflows, real-time location sharing, advanced financial tracking, comprehensive reporting, and a mobile-responsive Mission Control Dashboard with role-aware navigation. This end-to-end solution optimizes field operations for various organizations.
+**PACT Command Center** is the centralized Field Operations Command Center designed for comprehensive management of humanitarian and development field operations. The platform serves as a unified command hub that enables organizations to plan, coordinate, execute, and monitor all field activities from a single integrated interface. It streamlines Monthly Monitoring Plans (MMPs), site visits, and field team coordination while enhancing efficiency, transparency, and accountability through multi-tier user management, robust role-based access control (12 specialized roles), real-time collaboration with voice/video calling, detailed MMP and site visit workflows, real-time GPS location sharing, advanced financial tracking with Bank of Khartoum integration, comprehensive reporting, and a mobile-responsive Mission Control Dashboard with role-aware navigation. The platform features IONOS SMTP email notifications (noreply@pactorg.com), popup notifications with action buttons, and complete offline mobile capability for field teams in remote areas.
 
 ## User Preferences
 Preferred communication style: Simple, everyday language.

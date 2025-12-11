@@ -21,19 +21,19 @@ const documentationSections: Section[] = [
   {
     title: "1. Introduction",
     content: [
-      "PACT stands for Planning, Approval, Coordination, and Tracking. The PACT Workflow Platform is a comprehensive field operations management system designed to streamline Monthly Monitoring Plans (MMPs), site visits, field team coordination, financial tracking, and mobile field operations with offline support."
+      "PACT Command Center is the centralized Field Operations Command Center designed for comprehensive management of humanitarian and development field operations. The platform serves as a unified command hub that enables organizations to plan, coordinate, execute, and monitor all field activities from a single integrated interface."
     ],
     subsections: [
       {
-        title: "1.1 What is PACT?",
+        title: "1.1 About PACT Command Center",
         content: [
-          "Monthly Monitoring Plans (MMPs) management",
-          "Site visits and field data collection",
-          "Field team coordination",
-          "Financial tracking and approvals",
-          "Real-time location sharing",
-          "Role-based access control",
-          "Mobile field operations with offline support"
+          "Monthly Monitoring Plans (MMPs) - Strategic planning and site targeting for field activities",
+          "Site Visit Management - End-to-end coordination with GPS tracking and photo documentation",
+          "Team Coordination Center - Real-time location sharing, voice/video calling (WebRTC & Jitsi), and instant messaging",
+          "Financial Control System - Budgets, digital wallets, cost submissions, multi-tier approvals, and Bank of Khartoum integration",
+          "Role-Based Security - 12 specialized user roles with granular permission control",
+          "Mobile-First Design - Native Android app with full offline capability for remote field operations",
+          "Email Notifications - IONOS SMTP integration (noreply@pactorg.com) with popup action buttons"
         ]
       },
       {
@@ -303,7 +303,7 @@ const documentationSections: Section[] = [
           "Field Supervisor: Managing field operations",
           "Finance Officer: Financial operations and approvals",
           "Data Analyst: Reporting and data analysis",
-          "Regional Coordinator: Regional activity coordination",
+          "State Coordinator: State-level activity coordination",
           "HR Manager: User account management",
           "Auditor: Read-only compliance review",
           "Technical Support: System configuration and support"

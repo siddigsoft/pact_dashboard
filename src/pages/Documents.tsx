@@ -1,13 +1,52 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { 
   FileText, Search, Download, Eye, Calendar, MapPin, Building2, 
   FolderOpen, RefreshCw, FileSpreadsheet, Receipt, Shield, Hash,
   ArrowUpDown, ChevronDown, ChevronUp, File, Image, Folder,
   ExternalLink, History, Clock, Wallet, Filter, X, PenLine,
-  Briefcase, Home
+  Briefcase, Home, ChevronLeft, ChevronRight, Loader2
 } from 'lucide-react';
 import { formatDistanceToNow, format, parseISO, isValid } from 'date-fns';
+
+// Cache configuration
+const CACHE_KEY = 'pact_documents_cache';
+const CACHE_EXPIRY_MS = 5 * 60 * 1000; // 5 minutes cache
+
+interface CachedData {
+  documents: Document[];
+  timestamp: number;
+  availableMonths: string[];
+  availableStates: string[];
+}
+
+const getFromCache = (): CachedData | null => {
+  try {
+    const cached = sessionStorage.getItem(CACHE_KEY);
+    if (!cached) return null;
+    const data = JSON.parse(cached) as CachedData;
+    if (Date.now() - data.timestamp > CACHE_EXPIRY_MS) {
+      sessionStorage.removeItem(CACHE_KEY);
+      return null;
+    }
+    return data;
+  } catch {
+    return null;
+  }
+};
+
+const saveToCache = (documents: Document[], availableMonths: string[], availableStates: string[]) => {
+  try {
+    const data: CachedData = { documents, timestamp: Date.now(), availableMonths, availableStates };
+    sessionStorage.setItem(CACHE_KEY, JSON.stringify(data));
+  } catch (e) {
+    console.warn('Failed to cache documents:', e);
+  }
+};
+
+const clearCache = () => {
+  sessionStorage.removeItem(CACHE_KEY);
+};
 
 // Safe date parsing helper
 const safeFormatDate = (dateStr: string | null | undefined, formatStr: string, fallback?: string): string | undefined => {
@@ -111,11 +150,16 @@ const categoryColors: Record<string, string> = {
 type SortField = 'indexNo' | 'fileName' | 'uploadedAt' | 'category';
 type SortDirection = 'asc' | 'desc';
 
+// Page size options
+const PAGE_SIZE_OPTIONS = [25, 50, 100, 200];
+const DEFAULT_PAGE_SIZE = 50;
+
 const DocumentsPage = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -123,6 +167,12 @@ const DocumentsPage = () => {
   const [sortField, setSortField] = useState<SortField>('uploadedAt');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [activeTab, setActiveTab] = useState('all');
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [useLazyLoad, setUseLazyLoad] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(DEFAULT_PAGE_SIZE);
   
   // New advanced filters
   const [projectFilter, setProjectFilter] = useState<string>('all');
@@ -137,6 +187,9 @@ const DocumentsPage = () => {
   const [hubs, setHubs] = useState<Hub[]>([]);
   const [availableMonths, setAvailableMonths] = useState<string[]>([]);
   const [availableStates, setAvailableStates] = useState<string[]>([]);
+  
+  // Cache status
+  const [fromCache, setFromCache] = useState(false);
 
   // Fetch filter options (projects, hubs, etc.)
   const fetchFilterOptions = async () => {
@@ -161,8 +214,23 @@ const DocumentsPage = () => {
     }
   };
 
-  const fetchDocuments = async () => {
+  const fetchDocuments = async (forceRefresh = false) => {
     setLoading(true);
+    setFromCache(false);
+    
+    // Check cache first (unless force refresh)
+    if (!forceRefresh) {
+      const cached = getFromCache();
+      if (cached) {
+        setDocuments(cached.documents);
+        setAvailableMonths(cached.availableMonths);
+        setAvailableStates(cached.availableStates);
+        setFromCache(true);
+        setLoading(false);
+        return;
+      }
+    }
+    
     try {
       const docs: Document[] = [];
       let indexCounter = 1;
@@ -433,10 +501,14 @@ const DocumentsPage = () => {
       });
 
       // Set available months and states for filters
-      setAvailableMonths(Array.from(monthsSet).sort((a, b) => b.localeCompare(a)));
-      setAvailableStates(Array.from(statesSet).sort());
-
+      const months = Array.from(monthsSet).sort((a, b) => b.localeCompare(a));
+      const states = Array.from(statesSet).sort();
+      setAvailableMonths(months);
+      setAvailableStates(states);
       setDocuments(docs);
+      
+      // Save to cache
+      saveToCache(docs, months, states);
     } catch (error) {
       console.error('Error fetching documents:', error);
       toast({
@@ -448,7 +520,25 @@ const DocumentsPage = () => {
       setLoading(false);
     }
   };
-
+  
+  // Force refresh handler (clears cache)
+  const handleRefresh = () => {
+    clearCache();
+    setCurrentPage(1);
+    setVisibleCount(pageSize);
+    fetchDocuments(true);
+  };
+  
+  // Lazy loading with IntersectionObserver
+  const loadMore = useCallback(() => {
+    if (loadingMore) return;
+    setLoadingMore(true);
+    setTimeout(() => {
+      setVisibleCount(prev => prev + pageSize);
+      setLoadingMore(false);
+    }, 100);
+  }, [loadingMore, pageSize]);
+  
   useEffect(() => {
     // Fetch filter options first, then documents
     const loadData = async () => {
@@ -469,6 +559,8 @@ const DocumentsPage = () => {
     setHubFilter('all');
     setStateFilter('all');
     setHasSignatureFilter('all');
+    setCurrentPage(1);
+    setVisibleCount(pageSize);
   };
 
   // Count active advanced filters
@@ -478,7 +570,8 @@ const DocumentsPage = () => {
     stateFilter !== 'all'
   ].filter(Boolean).length;
 
-  const filteredDocuments = useMemo(() => {
+  // All filtered documents (before pagination)
+  const allFilteredDocuments = useMemo(() => {
     let filtered = documents.filter(doc => {
       const matchesSearch = searchTerm === '' || 
         doc.fileName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -529,6 +622,92 @@ const DocumentsPage = () => {
 
     return filtered;
   }, [documents, searchTerm, categoryFilter, statusFilter, sourceFilter, projectFilter, monthFilter, stateFilter, activeTab, sortField, sortDirection]);
+  
+  // Pagination calculations
+  const totalPages = Math.ceil(allFilteredDocuments.length / pageSize);
+  const startIndex = (currentPage - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
+  
+  // Paginated or lazy-loaded documents
+  const filteredDocuments = useMemo(() => {
+    if (useLazyLoad) {
+      return allFilteredDocuments.slice(0, visibleCount);
+    }
+    return allFilteredDocuments.slice(startIndex, endIndex);
+  }, [allFilteredDocuments, useLazyLoad, visibleCount, startIndex, endIndex]);
+  
+  // Pagination handlers
+  const goToPage = (page: number) => {
+    setCurrentPage(Math.max(1, Math.min(page, totalPages)));
+  };
+  
+  const hasMoreToLoad = useLazyLoad && visibleCount < allFilteredDocuments.length;
+  
+  // Reset page and visibleCount when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+    setVisibleCount(pageSize);
+  }, [searchTerm, categoryFilter, statusFilter, sourceFilter, projectFilter, monthFilter, stateFilter, activeTab, pageSize]);
+  
+  // Clamp currentPage when data length changes to prevent empty results
+  useEffect(() => {
+    if (allFilteredDocuments.length === 0) {
+      if (currentPage !== 1) setCurrentPage(1);
+      return;
+    }
+    const maxPage = Math.ceil(allFilteredDocuments.length / pageSize);
+    if (currentPage > maxPage) {
+      setCurrentPage(Math.max(1, maxPage));
+    }
+  }, [allFilteredDocuments.length, pageSize, currentPage]);
+  
+  // Sync visibleCount when switching to lazy-load mode
+  useEffect(() => {
+    if (useLazyLoad) {
+      setVisibleCount(pageSize);
+    }
+  }, [useLazyLoad, pageSize]);
+  
+  // Sentinel tracking for IntersectionObserver
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const [sentinelNode, setSentinelNode] = useState<HTMLDivElement | null>(null);
+  
+  // Callback ref to track when sentinel element enters/exits DOM
+  const sentinelRef = useCallback((node: HTMLDivElement | null) => {
+    setSentinelNode(node);
+  }, []);
+  
+  // IntersectionObserver setup with proper cleanup
+  useEffect(() => {
+    // Disconnect existing observer
+    if (observerRef.current) {
+      observerRef.current.disconnect();
+      observerRef.current = null;
+    }
+    
+    // Only observe when lazy load is enabled, there's more to load, and sentinel exists
+    if (!useLazyLoad || !hasMoreToLoad || !sentinelNode) {
+      return;
+    }
+    
+    observerRef.current = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          loadMore();
+        }
+      },
+      { threshold: 0.1, rootMargin: '150px' }
+    );
+    
+    observerRef.current.observe(sentinelNode);
+    
+    return () => {
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+        observerRef.current = null;
+      }
+    };
+  }, [useLazyLoad, hasMoreToLoad, loadMore, sentinelNode]);
 
   const stats = useMemo(() => ({
     total: documents.length,
@@ -637,10 +816,16 @@ const DocumentsPage = () => {
               Wallet Reports
             </Link>
           </Button>
-          <Button variant="outline" size="sm" onClick={fetchDocuments} data-testid="button-refresh-documents">
+          <Button variant="outline" size="sm" onClick={handleRefresh} data-testid="button-refresh-documents">
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh
           </Button>
+          {fromCache && (
+            <Badge variant="secondary" className="text-xs">
+              <Clock className="h-3 w-3 mr-1" />
+              Cached
+            </Badge>
+          )}
         </div>
       </div>
 
@@ -992,12 +1177,128 @@ const DocumentsPage = () => {
                 </div>
               )}
 
-              {/* Results summary */}
-              {filteredDocuments.length > 0 && (
+              {/* Lazy load trigger */}
+              {useLazyLoad && hasMoreToLoad && (
+                <div ref={sentinelRef} className="py-4 flex justify-center">
+                  {loadingMore ? (
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Loading more...
+                    </div>
+                  ) : (
+                    <Button variant="outline" size="sm" onClick={loadMore} data-testid="button-load-more">
+                      Load More ({allFilteredDocuments.length - visibleCount} remaining)
+                    </Button>
+                  )}
+                </div>
+              )}
+
+              {/* Pagination Controls */}
+              {!useLazyLoad && allFilteredDocuments.length > 0 && (
                 <div className="mt-4 pt-4 border-t border-border">
-                  <p className="text-sm text-muted-foreground text-center">
-                    Showing {filteredDocuments.length} of {documents.length} documents
-                  </p>
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+                    {/* Page size selector */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-muted-foreground">Show:</span>
+                      <Select value={pageSize.toString()} onValueChange={(v) => setPageSize(Number(v))}>
+                        <SelectTrigger className="w-[80px]" data-testid="select-page-size">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {PAGE_SIZE_OPTIONS.map(size => (
+                            <SelectItem key={size} value={size.toString()}>{size}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <span className="text-sm text-muted-foreground">per page</span>
+                      
+                      {/* Toggle lazy load */}
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => setUseLazyLoad(!useLazyLoad)}
+                        className="ml-2 text-xs"
+                        data-testid="button-toggle-lazy-load"
+                      >
+                        {useLazyLoad ? 'Use Pages' : 'Use Scroll'}
+                      </Button>
+                    </div>
+                    
+                    {/* Page navigation */}
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => goToPage(1)}
+                        disabled={currentPage === 1}
+                        data-testid="button-first-page"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                        <ChevronLeft className="h-4 w-4 -ml-2" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => goToPage(currentPage - 1)}
+                        disabled={currentPage === 1}
+                        data-testid="button-prev-page"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                      
+                      <div className="flex items-center gap-1 px-2">
+                        <span className="text-sm font-medium">{currentPage}</span>
+                        <span className="text-sm text-muted-foreground">of</span>
+                        <span className="text-sm font-medium">{totalPages || 1}</span>
+                      </div>
+                      
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => goToPage(currentPage + 1)}
+                        disabled={currentPage >= totalPages}
+                        data-testid="button-next-page"
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => goToPage(totalPages)}
+                        disabled={currentPage >= totalPages}
+                        data-testid="button-last-page"
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                        <ChevronRight className="h-4 w-4 -ml-2" />
+                      </Button>
+                    </div>
+                    
+                    {/* Results summary */}
+                    <p className="text-sm text-muted-foreground">
+                      Showing {startIndex + 1}-{Math.min(endIndex, allFilteredDocuments.length)} of {allFilteredDocuments.length} documents
+                      {allFilteredDocuments.length !== documents.length && ` (${documents.length} total)`}
+                    </p>
+                  </div>
+                </div>
+              )}
+              
+              {/* Lazy load results summary */}
+              {useLazyLoad && filteredDocuments.length > 0 && (
+                <div className="mt-4 pt-4 border-t border-border">
+                  <div className="flex items-center justify-between">
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={() => setUseLazyLoad(false)}
+                      className="text-xs"
+                      data-testid="button-switch-to-pages"
+                    >
+                      Switch to Pages
+                    </Button>
+                    <p className="text-sm text-muted-foreground text-center">
+                      Showing {filteredDocuments.length} of {allFilteredDocuments.length} documents
+                    </p>
+                  </div>
                 </div>
               )}
             </CardContent>

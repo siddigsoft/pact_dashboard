@@ -1,5 +1,6 @@
 
 import { toast } from "@/hooks/toast";
+import notificationSoundService from './NotificationSoundService';
 
 type NotificationType = 'info' | 'success' | 'warning' | 'error' | 'chat';
 
@@ -14,6 +15,7 @@ interface NotificationOptions {
   entityId?: string;
   entityType?: 'siteVisit' | 'mmpFile' | 'transaction' | 'chat';
   showToast?: boolean;
+  playSound?: boolean;
 }
 
 // Default durations by notification type (in milliseconds)
@@ -43,6 +45,22 @@ const mapNotificationTypeToToastVariant = (
   }
 };
 
+// Map notification type to sound type
+const mapNotificationTypeToSound = (type: NotificationType): 'notification' | 'success' | 'error' | 'warning' | 'message' => {
+  switch(type) {
+    case 'success':
+      return 'success';
+    case 'error':
+      return 'error';
+    case 'warning':
+      return 'warning';
+    case 'chat':
+      return 'message';
+    default:
+      return 'notification';
+  }
+};
+
 export const NotificationService = {
   /**
    * Send a notification that can appear as both a toast and in the notification center
@@ -55,11 +73,17 @@ export const NotificationService = {
       duration,
       important = false,
       showToast = true,
+      playSound = true,
       userId,
       entityId,
       entityType,
       link
     } = options;
+    
+    // Play notification sound
+    if (playSound) {
+      notificationSoundService.play(mapNotificationTypeToSound(type));
+    }
     
     // Show toast notification
     if (showToast) {
@@ -79,7 +103,12 @@ export const NotificationService = {
   /**
    * Show only a toast notification (doesn't add to notification center)
    */
-  toast: (title: string, message: string, type: NotificationType = 'info', important: boolean = false) => {
+  toast: (title: string, message: string, type: NotificationType = 'info', important: boolean = false, playSound: boolean = true) => {
+    // Play notification sound
+    if (playSound) {
+      notificationSoundService.play(mapNotificationTypeToSound(type));
+    }
+    
     // Map notification types to toast variants
     const toastVariant = mapNotificationTypeToToastVariant(type);
     
@@ -95,28 +124,28 @@ export const NotificationService = {
   /**
    * Create a success notification
    */
-  success: (title: string, message: string, important: boolean = false) => {
-    NotificationService.toast(title, message, 'success', important);
+  success: (title: string, message: string, important: boolean = false, playSound: boolean = true) => {
+    NotificationService.toast(title, message, 'success', important, playSound);
   },
   
   /**
    * Create an error notification
    */
-  error: (title: string, message: string, important: boolean = false) => {
-    NotificationService.toast(title, message, 'error', important);
+  error: (title: string, message: string, important: boolean = false, playSound: boolean = true) => {
+    NotificationService.toast(title, message, 'error', important, playSound);
   },
   
   /**
    * Create a warning notification
    */
-  warning: (title: string, message: string, important: boolean = false) => {
-    NotificationService.toast(title, message, 'warning', important);
+  warning: (title: string, message: string, important: boolean = false, playSound: boolean = true) => {
+    NotificationService.toast(title, message, 'warning', important, playSound);
   },
   
   /**
    * Create an info notification
    */
-  info: (title: string, message: string, important: boolean = false) => {
-    NotificationService.toast(title, message, 'info', important);
+  info: (title: string, message: string, important: boolean = false, playSound: boolean = true) => {
+    NotificationService.toast(title, message, 'info', important, playSound);
   }
 };

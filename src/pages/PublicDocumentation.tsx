@@ -7,7 +7,7 @@ import { FileText, Download, BookOpen, ListChecks, Loader2, Eye, ChevronRight } 
 import { generateUserManualPDF, generateUserManualDOCX, generateWorkflowsPDF, generateWorkflowsDOCX } from '@/lib/docs-export';
 
 const tableOfContents = [
-  { id: 1, title: "Introduction", sections: ["What is PACT?", "Key Benefits", "System Requirements"] },
+  { id: 1, title: "Introduction", sections: ["About PACT Command Center", "Key Benefits", "System Requirements"] },
   { id: 2, title: "Complete System Workflow A to Z", sections: ["Phase 1: Setup & Planning", "Phase 2: MMP Lifecycle", "Phase 3: Dispatch & Claiming", "Phase 4: Field Operations", "Phase 5: Financial Processing", "Role Responsibilities Matrix"] },
   { id: 3, title: "Getting Started", sections: ["Account Registration", "Logging In", "Forgot Password", "First-Time Setup"] },
   { id: 4, title: "Dashboard Overview", sections: ["Dashboard Zones", "Quick Actions", "Notifications", "Live Mode Toggle"] },
@@ -141,21 +141,21 @@ export default function PublicDocumentation() {
             <div className="grid gap-6 md:grid-cols-2">
               <Card>
                 <CardHeader>
-                  <CardTitle>What is PACT?</CardTitle>
-                  <CardDescription>Field Operations Management System</CardDescription>
+                  <CardTitle>About PACT Command Center</CardTitle>
+                  <CardDescription>Centralized Field Operations Command Center</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <p className="text-sm text-muted-foreground">
-                    The PACT Workflow Platform is a comprehensive field operations management system designed to streamline:
+                    PACT Command Center is the centralized Field Operations Command Center designed for comprehensive management of humanitarian and development field operations. It delivers:
                   </p>
                   <ul className="text-sm space-y-2">
-                    <li className="flex items-center gap-2"><ChevronRight className="h-4 w-4 text-primary" /> Monthly Monitoring Plans (MMPs)</li>
-                    <li className="flex items-center gap-2"><ChevronRight className="h-4 w-4 text-primary" /> Site visits and field data collection</li>
-                    <li className="flex items-center gap-2"><ChevronRight className="h-4 w-4 text-primary" /> Field team coordination</li>
-                    <li className="flex items-center gap-2"><ChevronRight className="h-4 w-4 text-primary" /> Financial tracking and approvals</li>
-                    <li className="flex items-center gap-2"><ChevronRight className="h-4 w-4 text-primary" /> Real-time location sharing</li>
-                    <li className="flex items-center gap-2"><ChevronRight className="h-4 w-4 text-primary" /> Role-based access control</li>
-                    <li className="flex items-center gap-2"><ChevronRight className="h-4 w-4 text-primary" /> Mobile field operations with offline support</li>
+                    <li className="flex items-center gap-2"><ChevronRight className="h-4 w-4 text-primary" /> Monthly Monitoring Plans (MMPs) - Strategic planning and site targeting</li>
+                    <li className="flex items-center gap-2"><ChevronRight className="h-4 w-4 text-primary" /> Site Visit Management - GPS tracking and photo documentation</li>
+                    <li className="flex items-center gap-2"><ChevronRight className="h-4 w-4 text-primary" /> Team Coordination - Voice/video calling and real-time messaging</li>
+                    <li className="flex items-center gap-2"><ChevronRight className="h-4 w-4 text-primary" /> Financial Control - Wallets, approvals, and Bank of Khartoum integration</li>
+                    <li className="flex items-center gap-2"><ChevronRight className="h-4 w-4 text-primary" /> 12 Specialized User Roles - Granular permission control</li>
+                    <li className="flex items-center gap-2"><ChevronRight className="h-4 w-4 text-primary" /> Mobile-First Design - Full offline capability for remote areas</li>
+                    <li className="flex items-center gap-2"><ChevronRight className="h-4 w-4 text-primary" /> Email Notifications - IONOS SMTP with popup action buttons</li>
                   </ul>
                 </CardContent>
               </Card>
