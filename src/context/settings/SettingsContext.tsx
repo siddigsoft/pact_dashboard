@@ -1,8 +1,9 @@
 
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '../user/UserContext';
+import { useRealtimeResource } from '@/hooks/useRealtimeResource';
 
 // Define types for settings tables
 export type UserSettings = {
@@ -134,162 +135,114 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
   const [menuPreferences, setMenuPreferences] = useState<MenuPreferences>(DEFAULT_MENU_PREFERENCES);
   const [dashboardPreferences, setDashboardPreferences] = useState<DashboardPreferences>(DEFAULT_DASHBOARD_PREFERENCES);
 
-  // Fetch settings function
-  const fetchSettings = React.useCallback(async () => {
-    if (!currentUser?.id) return;
-    
+  const fetchSettings = useCallback(async () => {
+    if (!currentUser?.id) {
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setError(null);
-      try {
-        // user_settings - use limit(1) to handle duplicates gracefully
-        const { data: userDataArray, error: userError } = await supabase
-          .from('user_settings')
-          .select('*')
-          .eq('user_id', currentUser.id)
-          .limit(1);
+    try {
+      // user_settings - use limit(1) to handle duplicates gracefully
+      const { data: userDataArray, error: userError } = await supabase
+        .from('user_settings')
+        .select('*')
+        .eq('user_id', currentUser.id)
+        .limit(1);
 
-        if (userError) {
-          console.error('Error fetching user settings:', userError);
-          setError('Failed to fetch user settings');
-        }
-        const userData = userDataArray?.[0];
-        if (userData) {
-          setUserSettings(userData);
-          if (userData.settings?.theme) {
-            setAppearanceSettings(prev => ({
-              ...prev,
-              darkMode: userData.settings.theme === 'dark',
-              theme: userData.settings.theme === 'system' ? 'default' : userData.settings.theme,
-            }));
-          }
-          if (userData.settings?.notificationPreferences) {
-            const savedPrefs = userData.settings.notificationPreferences;
-            setNotificationSettings({
-              enabled: savedPrefs.enabled ?? defaultNotificationSettings.enabled,
-              email: savedPrefs.email ?? defaultNotificationSettings.email,
-              sound: savedPrefs.sound ?? defaultNotificationSettings.sound,
-              browserPush: savedPrefs.browserPush ?? defaultNotificationSettings.browserPush,
-              vibration: savedPrefs.vibration ?? defaultNotificationSettings.vibration,
-              categories: {
-                assignments: savedPrefs.categories?.assignments ?? defaultNotificationSettings.categories.assignments,
-                approvals: savedPrefs.categories?.approvals ?? defaultNotificationSettings.categories.approvals,
-                financial: savedPrefs.categories?.financial ?? defaultNotificationSettings.categories.financial,
-                team: savedPrefs.categories?.team ?? defaultNotificationSettings.categories.team,
-                system: savedPrefs.categories?.system ?? defaultNotificationSettings.categories.system,
-              },
-              quietHours: {
-                enabled: savedPrefs.quietHours?.enabled ?? defaultNotificationSettings.quietHours.enabled,
-                startHour: savedPrefs.quietHours?.startHour ?? defaultNotificationSettings.quietHours.startHour,
-                endHour: savedPrefs.quietHours?.endHour ?? defaultNotificationSettings.quietHours.endHour,
-              },
-              frequency: savedPrefs.frequency ?? defaultNotificationSettings.frequency,
-              autoDeleteDays: savedPrefs.autoDeleteDays ?? defaultNotificationSettings.autoDeleteDays,
-            });
-          }
-          if (userData.settings?.menuPreferences) {
-            setMenuPreferences({ ...DEFAULT_MENU_PREFERENCES, ...userData.settings.menuPreferences });
-          }
-          if (userData.settings?.dashboardPreferences) {
-            setDashboardPreferences({ ...DEFAULT_DASHBOARD_PREFERENCES, ...userData.settings.dashboardPreferences });
-          }
-        }
-
-
-        // data_visibility_settings - use limit(1) to handle duplicates gracefully
-        const { data: visibilityDataArray, error: visibilityError } = await supabase
-          .from('data_visibility_settings')
-          .select('*')
-          .eq('user_id', currentUser.id)
-          .limit(1);
-        if (visibilityError) {
-          console.error('Error fetching data visibility settings:', visibilityError);
-        }
-        const visibilityData = visibilityDataArray?.[0];
-        if (visibilityData) setDataVisibilitySettings(visibilityData);
-
-        // dashboard_settings - use limit(1) to handle duplicates gracefully
-        const { data: dashboardDataArray, error: dashboardError } = await supabase
-          .from('dashboard_settings')
-          .select('*')
-          .eq('user_id', currentUser.id)
-          .limit(1);
-        if (dashboardError) {
-          console.error('Error fetching dashboard settings:', dashboardError);
-        }
-        const dashboardData = dashboardDataArray?.[0];
-        if (dashboardData) setDashboardSettings(dashboardData);
-      } catch (err) {
-        console.error('Error in fetchSettings:', err);
-        setError('An unexpected error occurred while fetching settings');
-      } finally {
-        setLoading(false);
+      if (userError) {
+        console.error('Error fetching user settings:', userError);
+        setError('Failed to fetch user settings');
       }
+      const userData = userDataArray?.[0];
+      if (userData) {
+        setUserSettings(userData);
+        if (userData.settings?.theme) {
+          setAppearanceSettings(prev => ({
+            ...prev,
+            darkMode: userData.settings.theme === 'dark',
+            theme: userData.settings.theme === 'system' ? 'default' : userData.settings.theme,
+          }));
+        }
+        if (userData.settings?.notificationPreferences) {
+          const savedPrefs = userData.settings.notificationPreferences;
+          setNotificationSettings({
+            enabled: savedPrefs.enabled ?? defaultNotificationSettings.enabled,
+            email: savedPrefs.email ?? defaultNotificationSettings.email,
+            sound: savedPrefs.sound ?? defaultNotificationSettings.sound,
+            browserPush: savedPrefs.browserPush ?? defaultNotificationSettings.browserPush,
+            vibration: savedPrefs.vibration ?? defaultNotificationSettings.vibration,
+            categories: {
+              assignments: savedPrefs.categories?.assignments ?? defaultNotificationSettings.categories.assignments,
+              approvals: savedPrefs.categories?.approvals ?? defaultNotificationSettings.categories.approvals,
+              financial: savedPrefs.categories?.financial ?? defaultNotificationSettings.categories.financial,
+              team: savedPrefs.categories?.team ?? defaultNotificationSettings.categories.team,
+              system: savedPrefs.categories?.system ?? defaultNotificationSettings.categories.system,
+            },
+            quietHours: {
+              enabled: savedPrefs.quietHours?.enabled ?? defaultNotificationSettings.quietHours.enabled,
+              startHour: savedPrefs.quietHours?.startHour ?? defaultNotificationSettings.quietHours.startHour,
+              endHour: savedPrefs.quietHours?.endHour ?? defaultNotificationSettings.quietHours.endHour,
+            },
+            frequency: savedPrefs.frequency ?? defaultNotificationSettings.frequency,
+            autoDeleteDays: savedPrefs.autoDeleteDays ?? defaultNotificationSettings.autoDeleteDays,
+          });
+        }
+        if (userData.settings?.menuPreferences) {
+          setMenuPreferences({ ...DEFAULT_MENU_PREFERENCES, ...userData.settings.menuPreferences });
+        }
+        if (userData.settings?.dashboardPreferences) {
+          setDashboardPreferences({ ...DEFAULT_DASHBOARD_PREFERENCES, ...userData.settings.dashboardPreferences });
+        }
+      }
+
+
+      // data_visibility_settings - use limit(1) to handle duplicates gracefully
+      const { data: visibilityDataArray, error: visibilityError } = await supabase
+        .from('data_visibility_settings')
+        .select('*')
+        .eq('user_id', currentUser.id)
+        .limit(1);
+      if (visibilityError) {
+        console.error('Error fetching data visibility settings:', visibilityError);
+      }
+      const visibilityData = visibilityDataArray?.[0];
+      if (visibilityData) setDataVisibilitySettings(visibilityData);
+
+      // dashboard_settings - use limit(1) to handle duplicates gracefully
+      const { data: dashboardDataArray, error: dashboardError } = await supabase
+        .from('dashboard_settings')
+        .select('*')
+        .eq('user_id', currentUser.id)
+        .limit(1);
+      if (dashboardError) {
+        console.error('Error fetching dashboard settings:', dashboardError);
+      }
+      const dashboardData = dashboardDataArray?.[0];
+      if (dashboardData) setDashboardSettings(dashboardData);
+    } catch (err) {
+      console.error('Error in fetchSettings:', err);
+      setError('An unexpected error occurred while fetching settings');
+    } finally {
+      setLoading(false);
+    }
   }, [currentUser?.id]);
 
   // Fetch settings from the database when the component mounts
   useEffect(() => {
-    if (!currentUser?.id) return;
-
     fetchSettings();
+  }, [fetchSettings]);
 
-    // Set up real-time subscriptions for settings
-    const settingsChannel = supabase
-      .channel('settings-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'user_settings',
-          filter: `user_id=eq.${currentUser.id}`
-        },
-        (payload) => {
-          console.log('User settings change detected:', payload);
-          fetchSettings();
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'data_visibility_settings',
-          filter: `user_id=eq.${currentUser.id}`
-        },
-        (payload) => {
-          console.log('Data visibility settings change detected:', payload);
-          fetchSettings();
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'dashboard_settings',
-          filter: `user_id=eq.${currentUser.id}`
-        },
-        (payload) => {
-          console.log('Dashboard settings change detected:', payload);
-          fetchSettings();
-        }
-      )
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          console.log('✅ Settings real-time subscription active');
-        } else if (status === 'CHANNEL_ERROR') {
-          console.error('❌ Settings real-time subscription error - Check if replication is enabled in Supabase');
-        } else if (status === 'TIMED_OUT') {
-          console.warn('⏱️ Settings real-time subscription timed out');
-        } else {
-          console.log('Settings subscription status:', status);
-        }
-      });
-
-    return () => {
-      supabase.removeChannel(settingsChannel);
-    };
-  }, [currentUser?.id, fetchSettings]);
+  useRealtimeResource({
+    configs: [
+      { table: 'user_settings', filter: currentUser?.id ? `user_id=eq.${currentUser.id}` : undefined },
+      { table: 'data_visibility_settings', filter: currentUser?.id ? `user_id=eq.${currentUser.id}` : undefined },
+      { table: 'dashboard_settings', filter: currentUser?.id ? `user_id=eq.${currentUser.id}` : undefined },
+    ],
+    onRefresh: fetchSettings,
+    enabled: !!currentUser?.id,
+  });
   
   const updateUserSettings = async (settings: Partial<UserSettings['settings']>) => {
     if (!currentUser?.id) return;
