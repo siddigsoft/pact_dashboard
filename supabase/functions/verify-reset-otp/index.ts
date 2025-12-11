@@ -47,7 +47,7 @@ serve(async (req) => {
     if (action === 'generate') {
       const { data: userData, error: lookupError } = await supabase
         .from('profiles')
-        .select('id, name, email')
+        .select('id, full_name, email')
         .eq('email', email.toLowerCase())
         .maybeSingle()
 
@@ -84,30 +84,38 @@ serve(async (req) => {
       }
 
       const smtpHost = Deno.env.get('SMTP_HOST')
-      const smtpPort = Deno.env.get('SMTP_PORT')
+      const smtpPort = Deno.env.get('SMTP_PORT') || '465'
       const smtpUser = Deno.env.get('SMTP_USER')
       const smtpPassword = Deno.env.get('SMTP_PASSWORD')
 
-      if (smtpHost && smtpPort && smtpUser && smtpPassword) {
+      console.log(`SMTP Config Check: host=${smtpHost ? 'SET' : 'MISSING'}, port=${smtpPort}, user=${smtpUser ? smtpUser.substring(0,5)+'...' : 'MISSING'}, pass=${smtpPassword ? 'SET' : 'MISSING'}`)
+
+      if (smtpHost && smtpUser && smtpPassword) {
         try {
-          const { SMTPClient } = await import('https://deno.land/x/denomailer@1.6.0/mod.ts')
+          // Use nodemailer via npm - compatible with Supabase Edge Functions
+          const nodemailer = await import('npm:nodemailer@6.9.8')
           
           const portNum = Number(smtpPort)
-          // IONOS uses port 587 with STARTTLS, port 465 with implicit TLS
-          const useImplicitTLS = portNum === 465
+          console.log(`Attempting SMTP connection to ${smtpHost}:${portNum}`)
           
-          console.log(`Connecting to SMTP: ${smtpHost}:${portNum}, TLS: ${useImplicitTLS}`)
-          
-          const client = new SMTPClient({
-            connection: {
-              hostname: smtpHost,
-              port: portNum,
-              tls: useImplicitTLS,
-              auth: { username: smtpUser, password: smtpPassword },
+          // Create transporter with IONOS SMTP settings
+          const transporter = nodemailer.default.createTransport({
+            host: smtpHost,
+            port: portNum,
+            secure: portNum === 465, // true for 465, false for 587
+            auth: {
+              user: smtpUser,
+              pass: smtpPassword,
             },
+            tls: {
+              rejectUnauthorized: false // Allow self-signed certs
+            }
           })
 
-          const recipientName = userData.name || 'User'
+          console.log('Nodemailer transporter created')
+
+          const recipientName = userData.full_name || 'User'
+          const resetLink = `https://app.pactorg.com/reset-password?email=${encodeURIComponent(email)}`
           const emailHtml = `
             <!DOCTYPE html>
             <html>
@@ -127,28 +135,106 @@ serve(async (req) => {
                   <span style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #1a1a2e;">${generatedOtp}</span>
                 </div>
                 <p style="color: #666; font-size: 14px; line-height: 1.5;">This code expires in 15 minutes. If you didn't request this reset, please ignore this email.</p>
+                <div style="text-align: center; margin: 25px 0;">
+                  <a href="${resetLink}" style="display: inline-block; padding: 14px 30px; background-color: #9b87f5; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
+                    Reset Password
+                  </a>
+                </div>
+                <p style="color: #999; font-size: 12px; text-align: center; margin-top: 15px;">
+                  Or copy this link: <a href="${resetLink}" style="color: #9b87f5;">${resetLink}</a>
+                </p>
                 <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
-                <p style="color: #999; font-size: 12px; text-align: center;">This is an automated message from PACT Workflow Platform. Please do not reply to this email.</p>
+                <p style="color: #999; font-size: 12px; text-align: center;">
+                  This is an automated message from PACT Workflow Platform.<br>
+                  ICT Team - PACT Command Center Platform
+                </p>
               </div>
             </body>
             </html>
           `
 
-          await client.send({
-            from: `PACT Workflow <${smtpUser}>`,
+          const mailOptions = {
+            from: `"PACT Workflow" <${smtpUser}>`,
             to: email,
             subject: 'PACT Password Reset Code',
-            content: `Hello ${recipientName},\n\nYour password reset code is: ${generatedOtp}\n\nThis code expires in 15 minutes.\n\n- PACT Workflow Platform`,
+            text: `Hello ${recipientName},\n\nYour password reset code is: ${generatedOtp}\n\nThis code expires in 15 minutes.\n\nClick here to reset your password: ${resetLink}\n\n- PACT Workflow Platform`,
             html: emailHtml,
-          })
+          }
 
-          await client.close()
-          console.log(`Password reset email sent successfully to ${email}`)
+          const info = await transporter.sendMail(mailOptions)
+          console.log(`Password reset email sent successfully to ${email}, messageId: ${info.messageId}`)
+          
+          // Log successful email to audit_logs
+          try {
+            await supabase.from('audit_logs').insert({
+              action: 'email_sent',
+              entity_type: 'email',
+              entity_name: 'Password Reset OTP',
+              description: `Password reset code sent to ${email}`,
+              success: true,
+              actor_id: String(userData.id),
+              actor_name: recipientName,
+              metadata: {
+                recipient: email,
+                subject: 'PACT Password Reset Code',
+                emailType: 'password_reset',
+                provider: 'IONOS SMTP'
+              }
+            })
+          } catch (logError) {
+            console.error('Audit log insert failed:', logError)
+          }
         } catch (emailError) {
-          console.error('Email sending error:', emailError)
+          const errMsg = (emailError as Error)?.message || 'Unknown SMTP error'
+          console.error('Email sending error:', errMsg)
+          
+          // Log failed email to audit_logs
+          try {
+            await supabase.from('audit_logs').insert({
+              action: 'email_failed',
+              entity_type: 'email',
+              entity_name: 'Password Reset OTP',
+              description: `Failed to send password reset code to ${email}`,
+              success: false,
+              error_message: errMsg,
+              actor_id: String(userData.id),
+              actor_name: userData.full_name || 'User',
+              metadata: {
+                recipient: email,
+                subject: 'PACT Password Reset Code',
+                emailType: 'password_reset',
+                provider: 'IONOS SMTP',
+                error: errMsg
+              }
+            })
+          } catch (logError) {
+            console.error('Audit log insert failed:', logError)
+          }
         }
       } else {
         console.log(`[DEV MODE] Password reset OTP for ${email}: ${generatedOtp}`)
+        
+        // Log missing SMTP config
+        try {
+          await supabase.from('audit_logs').insert({
+            action: 'email_skipped',
+            entity_type: 'email',
+            entity_name: 'Password Reset OTP',
+            description: `SMTP not configured - password reset code for ${email} not sent`,
+            success: false,
+            error_message: 'SMTP credentials not configured in Edge Function secrets',
+            actor_id: String(userData.id),
+            actor_name: userData.full_name || 'User',
+            metadata: {
+              recipient: email,
+              subject: 'PACT Password Reset Code',
+              emailType: 'password_reset',
+              reason: 'missing_smtp_config'
+            }
+          })
+        } catch (logError) {
+          console.error('Audit log insert failed:', logError)
+        }
       }
 
       return new Response(
