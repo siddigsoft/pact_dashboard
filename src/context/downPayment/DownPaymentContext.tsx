@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '../user/UserContext';
 import { useToast } from '@/hooks/use-toast';
+import { useRealtimeTable } from '@/hooks/useRealtimeResource';
 import {
   DownPaymentRequest,
   CreateDownPaymentRequest,
@@ -162,6 +163,10 @@ export function DownPaymentProvider({ children }: { children: React.ReactNode })
   useEffect(() => {
     refreshRequests();
   }, [refreshRequests]);
+
+  useRealtimeTable('down_payment_requests', refreshRequests, {
+    enabled: !!currentUser,
+  });
 
   const createRequest = async (request: CreateDownPaymentRequest): Promise<boolean> => {
     try {
