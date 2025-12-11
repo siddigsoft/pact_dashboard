@@ -1,4 +1,4 @@
-# PACT Workflow Platform - Complete User Manual
+# PACT Command Center - Complete User Manual
 
 **Version 3.0 | Last Updated: December 2025**
 
@@ -20,15 +20,27 @@
 
 ## 1. Introduction
 
-### 1.1 What is PACT?
+### 1.1 About PACT Command Center
 
-PACT (Planning, Approval, Coordination, and Tracking) is a comprehensive field operations management platform designed to streamline:
+**PACT Command Center** is the centralized Field Operations Command Center designed for comprehensive management of humanitarian and development field operations. The platform serves as a unified command hub that enables organizations to plan, coordinate, execute, and monitor all field activities from a single integrated interface.
 
-- **Monthly Monitoring Plans (MMPs)** - Plan and track field activities
-- **Site Visits** - Manage and coordinate field visits
-- **Team Coordination** - Real-time location sharing and communication
-- **Financial Tracking** - Budgets, wallets, cost submissions, and approvals
-- **Reporting** - Comprehensive analytics and export capabilities
+**What PACT Command Center Delivers:**
+
+- **Unified Operations Management** - Single platform for all field operations coordination
+- **Real-Time Command & Control** - Live monitoring of team locations, activities, and status
+- **Enterprise-Grade Security** - Role-based access control with 12 specialized user roles
+- **Financial Oversight** - Complete budget tracking, wallet management, and approval workflows
+- **Mobile-First Design** - Full offline capability for field teams in remote areas
+- **Comprehensive Reporting** - Analytics, audit trails, and exportable reports
+
+**Core Modules:**
+
+- **Monthly Monitoring Plans (MMPs)** - Strategic planning and site targeting for field activities
+- **Site Visit Management** - End-to-end coordination of field visits with GPS tracking and photo documentation
+- **Team Coordination Center** - Real-time location sharing, voice/video calling, and instant messaging
+- **Financial Control System** - Budgets, digital wallets, cost submissions, multi-tier approvals, and Bank of Khartoum integration
+- **Reporting & Analytics** - Comprehensive dashboards, custom reports, and data export capabilities
+- **Document Management** - Centralized document storage with digital signature verification
 
 ### 1.2 Platform Environments
 
@@ -1021,7 +1033,7 @@ Submitted -> Supervisor Review -> Finance Review -> Approved/Rejected -> Process
 
 ---
 
-**PACT Workflow Platform**
-*Enhancing Field Operations Efficiency*
+**PACT Command Center**
+*Centralized Field Operations Command Center*
 
 Copyright 2025 PACT Consultancy. All rights reserved.
