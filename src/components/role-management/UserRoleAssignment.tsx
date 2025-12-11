@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -148,9 +147,8 @@ export const UserRoleAssignment: React.FC<UserRoleAssignmentProps> = ({
                   <TableHeader>
                     <TableRow>
                       <TableHead>User</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Additional Roles</TableHead>
-                      <TableHead className="w-20">Actions</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead className="w-20">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -168,12 +166,6 @@ export const UserRoleAssignment: React.FC<UserRoleAssignmentProps> = ({
                           </div>
                         </TableCell>
                         <TableCell className="text-gray-500">{user.email}</TableCell>
-                        <TableCell>
-                          <div className="flex gap-1 flex-wrap">
-                            {/* This would show other roles the user has */}
-                            <Badge variant="outline" className="text-xs">+2 roles</Badge>
-                          </div>
-                        </TableCell>
                         <TableCell>
                           <Button
                             variant="ghost"
