@@ -108,6 +108,7 @@ serve(async (req) => {
           })
 
           const recipientName = userData.name || 'User'
+          const resetLink = `https://app.pactorg.com/reset-password?email=${encodeURIComponent(email)}`
           const emailHtml = `
             <!DOCTYPE html>
             <html>
@@ -127,8 +128,19 @@ serve(async (req) => {
                   <span style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #1a1a2e;">${generatedOtp}</span>
                 </div>
                 <p style="color: #666; font-size: 14px; line-height: 1.5;">This code expires in 15 minutes. If you didn't request this reset, please ignore this email.</p>
+                <div style="text-align: center; margin: 25px 0;">
+                  <a href="${resetLink}" style="display: inline-block; padding: 14px 30px; background-color: #9b87f5; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
+                    Reset Password
+                  </a>
+                </div>
+                <p style="color: #999; font-size: 12px; text-align: center; margin-top: 15px;">
+                  Or copy this link: <a href="${resetLink}" style="color: #9b87f5;">${resetLink}</a>
+                </p>
                 <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
-                <p style="color: #999; font-size: 12px; text-align: center;">This is an automated message from PACT Workflow Platform. Please do not reply to this email.</p>
+                <p style="color: #999; font-size: 12px; text-align: center;">
+                  This is an automated message from PACT Workflow Platform.<br>
+                  ICT Team - PACT Command Center Platform
+                </p>
               </div>
             </body>
             </html>
@@ -138,7 +150,7 @@ serve(async (req) => {
             from: `PACT Workflow <${smtpUser}>`,
             to: email,
             subject: 'PACT Password Reset Code',
-            content: `Hello ${recipientName},\n\nYour password reset code is: ${generatedOtp}\n\nThis code expires in 15 minutes.\n\n- PACT Workflow Platform`,
+            content: `Hello ${recipientName},\n\nYour password reset code is: ${generatedOtp}\n\nThis code expires in 15 minutes.\n\nClick here to reset your password: ${resetLink}\n\n- PACT Workflow Platform`,
             html: emailHtml,
           })
 
