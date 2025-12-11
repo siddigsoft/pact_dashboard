@@ -1,25 +1,20 @@
-# PACT Workflow Platform - User Manual
+# PACT Workflow Platform - Complete User Manual
 
-**Version 2.0 | Last Updated: December 2025**
+**Version 3.0 | Last Updated: December 2025**
 
 ---
 
 ## Table of Contents
 
 1. [Introduction](#1-introduction)
-2. [Getting Started](#2-getting-started)
+2. [System Architecture](#2-system-architecture)
 3. [User Roles & Permissions](#3-user-roles--permissions)
-4. [Dashboard](#4-dashboard)
-5. [Monthly Monitoring Plans (MMP)](#5-monthly-monitoring-plans-mmp)
-6. [Site Visits](#6-site-visits)
-7. [Field Team Management](#7-field-team-management)
-8. [Financial Operations](#8-financial-operations)
-9. [Communication Features](#9-communication-features)
-10. [Documents & Signatures](#10-documents--signatures)
-11. [Reports & Analytics](#11-reports--analytics)
-12. [Settings & Configuration](#12-settings--configuration)
-13. [Mobile App Features](#13-mobile-app-features)
-14. [Troubleshooting](#14-troubleshooting)
+4. [Complete Page Reference](#4-complete-page-reference)
+5. [Database Tables & Relationships](#5-database-tables--relationships)
+6. [Workflows & Processes](#6-workflows--processes)
+7. [Communication Features](#7-communication-features)
+8. [Mobile App Features](#8-mobile-app-features)
+9. [Troubleshooting](#9-troubleshooting)
 
 ---
 
@@ -35,65 +30,37 @@ PACT (Planning, Approval, Coordination, and Tracking) is a comprehensive field o
 - **Financial Tracking** - Budgets, wallets, cost submissions, and approvals
 - **Reporting** - Comprehensive analytics and export capabilities
 
-### 1.2 Key Features
+### 1.2 Platform Environments
 
-| Feature | Description |
-|---------|-------------|
-| Real-time Dashboard | Live statistics and operational overview |
-| MMP Management | Upload, edit, verify, and track monitoring plans |
-| Site Visit Workflow | Create, assign, track, and complete field visits |
-| GPS Location Sharing | Real-time team location with accuracy indicators |
-| Video & Voice Calls | WebRTC and Jitsi-based calling |
-| Chat & Messaging | Real-time team communication |
-| Digital Signatures | Secure document and transaction signing |
-| Financial Management | Wallets, budgets, cost submissions, approvals |
-| Offline Support | Work without internet on mobile devices |
-| Push Notifications | Stay updated with actionable alerts |
-
-### 1.3 Supported Platforms
-
-- **Web Application**: Modern browsers (Chrome, Firefox, Safari, Edge)
-- **Mobile App**: Android APK with offline capabilities
-- **Production URL**: `app.pactorg.com`
-- **Staging URL**: Vercel deployment for testing
+| Environment | URL | Purpose |
+|-------------|-----|---------|
+| Production | `app.pactorg.com` | Live production system |
+| Staging | Vercel URL | Testing and development |
 
 ---
 
-## 2. Getting Started
+## 2. System Architecture
 
-### 2.1 Accessing the Platform
+### 2.1 Technology Stack
 
-1. Navigate to the PACT login page
-2. Enter your email address and password
-3. Click "Sign In" to access the dashboard
+| Component | Technology |
+|-----------|------------|
+| Frontend | React 18, TypeScript, Tailwind CSS, Shadcn UI |
+| Backend | Supabase (PostgreSQL), Edge Functions |
+| Real-time | Supabase Realtime, WebRTC |
+| Authentication | Supabase Auth, Google OAuth, 2FA |
+| Mobile | Capacitor (Android/iOS) |
+| Email | IONOS SMTP (noreply@pactorg.com) |
 
-### 2.2 First-Time Registration
+### 2.2 Core Features
 
-1. Click "Sign Up" on the login page
-2. Fill in your personal information:
-   - Full Name
-   - Email Address
-   - Phone Number
-   - Password (minimum 8 characters)
-3. Select your role (if self-registration is enabled)
-4. Complete email verification
-5. Wait for admin approval (if required)
-
-### 2.3 Two-Factor Authentication (2FA)
-
-For enhanced security, you can enable 2FA:
-
-1. Go to **Settings** > **Security**
-2. Click "Enable Two-Factor Authentication"
-3. Scan the QR code with an authenticator app
-4. Enter the verification code to confirm
-
-### 2.4 Password Recovery
-
-1. Click "Forgot Password" on the login page
-2. Enter your email address
-3. Check your email for the reset link
-4. Create a new password
+- Real-time Dashboard with live statistics
+- Role-based access control (RBAC)
+- Offline-first mobile support
+- Digital signatures with OTP verification
+- Video/Voice calling (WebRTC & Jitsi)
+- Push notifications
+- Comprehensive audit logging
 
 ---
 
@@ -101,635 +68,956 @@ For enhanced security, you can enable 2FA:
 
 ### 3.1 System Roles
 
-| Role | Category | Description |
-|------|----------|-------------|
-| **SuperAdmin** | Administrative | Full system access, manages all users and settings |
-| **Admin** | Administrative | User management, system configuration |
-| **Project Manager** | Administrative | Full project oversight, budget approval, team coordination |
-| **Field Operation Manager (FOM)** | Field | Manages field operations, coordinates supervisors |
-| **Senior Operations Lead** | Administrative | High-level operations oversight |
-| **Supervisor** | Field | Supervises data collectors, reviews submissions |
-| **Coordinator** | Field | Regional coordination, site visit management |
-| **Finance Officer** | Financial | Financial operations, expense approvals |
-| **Data Collector** | Field | Conducts site visits, submits data |
-| **ICT** | Technical | Technical support, system maintenance |
-| **Reviewer** | Administrative | Reviews and validates submissions |
-| **Data Analyst** | Technical | Data analysis, report generation |
+| Role | Category | Description | Key Permissions |
+|------|----------|-------------|-----------------|
+| **SuperAdmin** | Administrative | Full system control | All permissions, system configuration |
+| **Admin** | Administrative | User and system management | Users, roles, settings management |
+| **Project Manager** | Administrative | Project oversight | Projects CRUD, MMP approve, finances approve |
+| **Field Operation Manager (FOM)** | Field | Field operations management | Site visits, team coordination, approvals |
+| **Senior Operations Lead** | Administrative | Senior leadership with override | Budget override, final approvals |
+| **Supervisor** | Field | Team supervision | Site visits assign/update, submissions review |
+| **Coordinator** | Field | Regional coordination | Site visits create/assign, MMP updates |
+| **Finance Officer** | Financial | Financial operations | Finances CRUD, approvals, reports |
+| **Data Collector** | Field | Field data collection | Site visits claim/complete, costs submit |
+| **ICT** | Technical | Technical support | System maintenance, audit logs |
+| **Reviewer** | Administrative | Quality assurance | Submissions review, data validation |
+| **Data Analyst** | Technical | Data analysis | Reports read/create, data export |
 
-### 3.2 Permission Categories
+### 3.2 Permission Matrix
 
-**Resources:**
-- `users` - User management
-- `roles` - Role assignment
-- `projects` - Project management
-- `mmp` - Monthly Monitoring Plans
-- `site_visits` - Site visit operations
-- `finances` - Financial transactions
-- `reports` - Reporting and analytics
-- `wallets` - Wallet management
-- `audit_logs` - Audit trail access
-- `settings` - System configuration
-
-**Actions:**
-- `create` - Create new records
-- `read` - View records
-- `update` - Modify records
-- `delete` - Remove records
-- `approve` - Approve submissions
-- `assign` - Assign tasks/users
-- `archive` - Archive records
-- `restore` - Restore archived items
-- `override` - Override restrictions
-
-### 3.3 Role Management
-
-**For Administrators:**
-
-1. Navigate to **Planning & Setup** > **Role Management**
-2. View existing roles and their permissions
-3. Create custom roles with specific permissions
-4. Assign roles to users
-5. Test permissions using the Permission Tester tool
+| Resource | Actions Available |
+|----------|-------------------|
+| `users` | create, read, update, delete, assign |
+| `roles` | create, read, update, delete, assign |
+| `projects` | create, read, update, delete, approve, assign, archive |
+| `mmp` | create, read, update, delete, approve, assign |
+| `site_visits` | create, read, update, delete, approve, assign |
+| `finances` | create, read, update, approve, override |
+| `reports` | create, read |
+| `wallets` | read, approve, override |
+| `audit_logs` | read |
+| `settings` | read, update |
 
 ---
 
-## 4. Dashboard
+## 4. Complete Page Reference
 
-### 4.1 Overview
-
-The Mission Control Dashboard provides a real-time overview of operations, organized into zones:
-
-**For Desktop:**
-- Full dashboard with all zones visible
-- Interactive statistics cards
-- Quick action buttons
-- Live notifications feed
-
-**For Mobile:**
-- Simplified grid view
-- Touch-optimized interface
-- Quick access to common actions
-
-### 4.2 Dashboard Zones
-
-| Zone | Content |
-|------|---------|
-| **Overview Zone** | Total projects, active MMPs, pending visits, team online |
-| **Operations Zone** | Active site visits, completion rates, urgent items |
-| **Financial Zone** | Budget utilization, pending approvals, wallet balances |
-| **Team Zone** | Online team members, location map, recent activity |
-| **Performance Zone** | Charts, trends, KPIs |
-| **ICT Zone** | System status, sync indicators, error logs |
-
-### 4.3 Real-Time Statistics
-
-The dashboard displays live data from the database:
-- Active users count
-- Pending site visits
-- Budget utilization percentage
-- Team locations on map
+### 4.1 Public Pages (No Authentication Required)
 
 ---
 
-## 5. Monthly Monitoring Plans (MMP)
+#### Landing Page (`/`)
 
-### 5.1 What is an MMP?
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | Welcome page introducing PACT platform to visitors |
+| **How It Works** | Displays platform branding, live clock, system status, and key statistics. Users can click "Get Started" to proceed to login |
+| **Who Can Access** | Everyone (public) |
+| **Connected Pages** | Auth (`/auth`), Register (`/register`) |
+| **Database Tables** | None (static content) |
+| **Key Features** | System operational status indicator, platform statistics display, animated background |
 
-An MMP (Monthly Monitoring Plan) defines the sites to visit and activities to complete within a specific month. Each MMP contains:
+---
 
-- Target sites with GPS coordinates
-- Planned activities
-- Assigned teams
-- Timeline and deadlines
-- Budget allocation
+#### Authentication Page (`/auth`)
 
-### 5.2 MMP Lifecycle
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | User login and authentication |
+| **How It Works** | Users enter email/password or use Google OAuth. Supports 2FA verification. Shows security features and platform stats |
+| **Who Can Access** | Everyone (public) |
+| **Connected Pages** | Dashboard (`/dashboard`), Register (`/register`), Forgot Password (`/forgot-password`) |
+| **Database Tables** | `profiles`, `user_roles` |
+| **Key Features** | Email/password login, Google OAuth, "Forgot Password?" link, 2FA support, mobile-optimized view |
+
+---
+
+#### Registration Page (`/register`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | New user account creation |
+| **How It Works** | Multi-step form: 1) Select role category (Field Team/Management), 2) Choose specific role, 3) Enter personal details, 4) Upload avatar, 5) Select hub/state/locality for field roles |
+| **Who Can Access** | Everyone (public) |
+| **Connected Pages** | Registration Success (`/registration-success`), Auth (`/auth`) |
+| **Database Tables** | `profiles`, `user_roles` |
+| **Key Features** | Role selection, avatar upload, hub/state/locality selection, form validation |
+
+---
+
+#### Forgot Password (`/forgot-password`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | Initiate password reset process |
+| **How It Works** | User enters email, system sends OTP verification code via IONOS SMTP |
+| **Who Can Access** | Everyone (public) |
+| **Connected Pages** | Reset Password (`/reset-password`), Auth (`/auth`) |
+| **Database Tables** | `profiles` |
+| **Key Features** | Email validation, OTP generation, "Back to Login" navigation |
+
+---
+
+#### Reset Password (`/reset-password`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | Complete password reset with OTP verification |
+| **How It Works** | User enters OTP code received via email, then sets new password |
+| **Who Can Access** | Users with valid OTP |
+| **Connected Pages** | Auth (`/auth`) |
+| **Database Tables** | `profiles` |
+| **Key Features** | OTP verification, password strength validation, secure password update |
+
+---
+
+### 4.2 Protected Pages (Authentication Required)
+
+---
+
+#### Dashboard (`/dashboard`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | Central command center showing real-time operational overview |
+| **How It Works** | Displays role-specific zones with live statistics, charts, team locations, and quick actions. Data refreshes automatically via Supabase Realtime |
+| **Who Can Access** | All authenticated users |
+| **Connected Pages** | All major sections (MMP, Site Visits, Projects, Field Team, etc.) |
+| **Database Tables** | `profiles`, `mmp_files`, `projects`, `site_visits`, `notifications` |
+| **Key Features** | Overview Zone, Operations Zone, Financial Zone, Team Zone, Performance Zone, ICT Zone |
+
+**Dashboard Zones by Role:**
+- **SuperAdmin/Admin**: All zones visible
+- **Project Manager**: Projects, MMPs, Team, Performance
+- **FOM**: Operations, Team, Site Visits
+- **Data Collector**: My Visits, Tasks, Location
+
+---
+
+#### MMP Management (`/mmp`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | View and manage Monthly Monitoring Plans |
+| **How It Works** | Lists all MMPs with filtering by status, month, year. Users can search, sort, and access individual MMP details |
+| **Who Can Access** | All authenticated users (view varies by role) |
+| **Connected Pages** | MMP Upload (`/mmp/upload`), MMP Detail (`/mmp/:id`), Edit MMP (`/mmp/:id/edit`) |
+| **Database Tables** | `mmp_files`, `profiles` |
+| **Key Features** | Status filtering, search, pagination, bulk actions, export |
+
+---
+
+#### MMP Upload (`/mmp/upload`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | Upload new MMP files via CSV |
+| **How It Works** | 1) Download CSV template, 2) Fill in site data, 3) Upload file, 4) System validates and parses data, 5) Review parsed entries, 6) Confirm upload |
+| **Who Can Access** | Admin, Project Manager, Coordinator |
+| **Connected Pages** | MMP List (`/mmp`), MMP Detail (`/mmp/:id`) |
+| **Database Tables** | `mmp_files`, `site_entries` |
+| **Key Features** | CSV template download, Zod validation, duplicate detection, rollback support |
+
+---
+
+#### MMP Detail View (`/mmp/:id`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | View complete MMP information and site entries |
+| **How It Works** | Displays MMP metadata, site list with GPS coordinates, status, assigned team, and action buttons based on current stage |
+| **Who Can Access** | All authenticated users |
+| **Connected Pages** | Edit MMP, Verification, Review Assign Coordinators |
+| **Database Tables** | `mmp_files`, `site_entries`, `profiles` |
+| **Key Features** | Site table with GPS, status workflow, export options, map view |
+
+---
+
+#### MMP Verification (`/mmp/verify/:id`, `/mmp/:id/verification`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | Verify MMP data quality before approval |
+| **How It Works** | System runs validation checks on GPS coordinates, duplicates, completeness. Reviewer can approve or reject with comments |
+| **Who Can Access** | Admin, Project Manager, Reviewer |
+| **Connected Pages** | MMP Detail, Approval Dashboard |
+| **Database Tables** | `mmp_files`, `site_entries` |
+| **Key Features** | GPS validation, duplicate check, data completeness, approval workflow |
+
+---
+
+#### Edit MMP (`/mmp/:id/edit`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | Modify existing MMP details and site entries |
+| **How It Works** | Form-based editing of MMP metadata and site list. Changes tracked in modification history |
+| **Who Can Access** | Admin, Project Manager, Coordinator |
+| **Connected Pages** | MMP Detail, MMP List |
+| **Database Tables** | `mmp_files`, `site_entries` |
+| **Key Features** | Inline editing, GPS coordinate updates, status management |
+
+---
+
+#### Review Assign Coordinators (`/mmp/:id/review-assign-coordinators`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | Assign coordinators to MMP sites |
+| **How It Works** | Displays unassigned sites grouped by state/locality. Admin selects coordinators and assigns them to sites |
+| **Who Can Access** | Admin, Project Manager, FOM |
+| **Connected Pages** | MMP Detail, Users |
+| **Database Tables** | `mmp_files`, `profiles`, `user_roles` |
+| **Key Features** | Bulk assignment, coordinator filtering, geographic grouping |
+
+---
+
+#### Site Visits (`/site-visits`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | Manage all site visit operations |
+| **How It Works** | Lists site visits with status filters. Data collectors see available visits to claim. Supervisors see visits to review |
+| **Who Can Access** | All authenticated users |
+| **Connected Pages** | Create Site Visit, Site Visit Detail |
+| **Database Tables** | `site_visits`, `profiles`, `mmp_files` |
+| **Key Features** | Status filtering, claim system, GPS tracking, cost submissions |
+
+---
+
+#### Site Visit Detail (`/site-visits/:id`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | View and manage individual site visit |
+| **How It Works** | Shows visit details, GPS location, photos, costs, status history. Data collectors can start/complete visits, submit costs |
+| **Who Can Access** | Assigned user, Supervisor, Admin |
+| **Connected Pages** | Site Visits list, Cost Submission, Edit Site Visit |
+| **Database Tables** | `site_visits`, `profiles`, `cost_submissions` |
+| **Key Features** | Visit timeline, GPS capture, photo upload, cost tracking, status workflow |
+
+---
+
+#### Create Site Visit (`/site-visits/create`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | Create new site visit manually |
+| **How It Works** | Form to enter site details, select from MMP or enter manually, assign data collector |
+| **Who Can Access** | Coordinator, Supervisor, Admin |
+| **Connected Pages** | Site Visits, MMP selection |
+| **Database Tables** | `site_visits`, `mmp_files`, `profiles` |
+| **Key Features** | MMP linking, GPS entry, collector assignment |
+
+---
+
+#### Create Site Visit from MMP (`/site-visits/create/mmp`, `/site-visits/create/mmp/:id`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | Create site visits directly from MMP entries |
+| **How It Works** | Select MMP, view available sites, batch create visits for selected sites |
+| **Who Can Access** | Coordinator, Supervisor, Admin |
+| **Connected Pages** | MMP List, Site Visits |
+| **Database Tables** | `site_visits`, `mmp_files`, `site_entries` |
+| **Key Features** | MMP site selection, batch creation, auto-populate GPS |
+
+---
+
+#### Calls (`/calls`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | Voice and video calling between team members |
+| **How It Works** | Users select contact, choose call method (Direct WebRTC or Jitsi Meet), initiate call. Recipient receives notification and can accept/reject |
+| **Who Can Access** | All authenticated users |
+| **Connected Pages** | Chat, Field Team |
+| **Database Tables** | `profiles` (for contacts), real-time signaling via Supabase |
+| **Key Features** | WebRTC peer-to-peer calls, Jitsi Meet video rooms, incoming call notifications, call history |
+
+**Call Flow:**
+1. Caller selects contact from list
+2. Caller chooses call method: Direct (WebRTC) or Jitsi Meet
+3. Signal sent to recipient via Supabase Realtime
+4. Recipient sees incoming call popup with ringtone
+5. Recipient accepts (joins call) or rejects
+6. Both parties connected in audio/video call
+7. Call controls: mute, video toggle, end call
+
+---
+
+#### Chat (`/chat`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | Real-time messaging between team members |
+| **How It Works** | Users can start conversations, send text/files, see typing indicators and read receipts |
+| **Who Can Access** | All authenticated users |
+| **Connected Pages** | Calls, Field Team |
+| **Database Tables** | `messages`, `conversations`, `profiles` |
+| **Key Features** | Real-time messaging, typing indicators, file attachments, read receipts, message search |
+
+---
+
+#### Field Team (`/field-team`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | View team members and their real-time locations |
+| **How It Works** | Displays team list with online/offline status. Interactive map shows GPS locations with accuracy indicators |
+| **Who Can Access** | All authenticated users |
+| **Connected Pages** | Calls, Chat, User Detail |
+| **Database Tables** | `profiles`, `team_locations` |
+| **Key Features** | Live location map, GPS accuracy (green/yellow/red), online status, team filtering |
+
+---
+
+#### Projects (`/projects`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | Manage all projects |
+| **How It Works** | Lists projects with status, dates, team. Users can create, edit, and manage project activities |
+| **Who Can Access** | All authenticated users (actions vary by role) |
+| **Connected Pages** | Create Project, Project Detail, MMP |
+| **Database Tables** | `projects`, `project_activities`, `profiles` |
+| **Key Features** | Project CRUD, activity management, team assignment, budget tracking |
+
+---
+
+#### Project Detail (`/projects/:id`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | View and manage individual project |
+| **How It Works** | Shows project overview, activities, team, budget, and linked MMPs |
+| **Who Can Access** | Project team members, Admin |
+| **Connected Pages** | Edit Project, Team Management, Activities |
+| **Database Tables** | `projects`, `project_activities`, `project_settings` |
+| **Key Features** | Activity timeline, team management, budget overview, status workflow |
+
+---
+
+#### Create Project (`/projects/create`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | Create new project |
+| **How It Works** | Form with project details: name, description, dates, location, type, team, budget |
+| **Who Can Access** | Admin, Project Manager |
+| **Connected Pages** | Projects list |
+| **Database Tables** | `projects` |
+| **Key Features** | Multi-step form, location picker, team selection, budget setup |
+
+---
+
+#### Project Team Management (`/projects/:id/team`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | Manage project team members |
+| **How It Works** | Add/remove team members, assign roles within project |
+| **Who Can Access** | Project Manager, Admin |
+| **Connected Pages** | Project Detail, Users |
+| **Database Tables** | `projects`, `profiles` |
+| **Key Features** | Team composition, role assignment, workload view |
+
+---
+
+#### Users (`/users`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | User management and administration |
+| **How It Works** | Lists all users with search/filter. Admins can edit profiles, assign roles, manage status |
+| **Who Can Access** | Admin, SuperAdmin |
+| **Connected Pages** | User Detail, Role Management |
+| **Database Tables** | `profiles`, `user_roles` |
+| **Key Features** | User search, role filtering, status management, bulk actions |
+
+---
+
+#### User Detail (`/users/:id`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | View and edit individual user profile |
+| **How It Works** | Displays user info, roles, activity history. Admins can edit profile, manage roles |
+| **Who Can Access** | Admin, SuperAdmin, User themselves |
+| **Connected Pages** | Users list, Role Management |
+| **Database Tables** | `profiles`, `user_roles`, `notifications` |
+| **Key Features** | Profile editing, role management, activity log, status toggle |
+
+---
+
+#### Role Management (`/role-management`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | Create and manage custom roles with permissions |
+| **How It Works** | View existing roles, create custom roles with specific permissions, assign roles to users |
+| **Who Can Access** | Admin, SuperAdmin |
+| **Connected Pages** | Users, User Detail |
+| **Database Tables** | `roles`, `permissions`, `user_roles` |
+| **Key Features** | Role templates, permission matrix, user assignment, permission testing |
+
+---
+
+#### Wallet (`/wallet`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | View personal wallet and transaction history |
+| **How It Works** | Shows current balance, transaction list, withdrawal requests |
+| **Who Can Access** | All authenticated users (own wallet) |
+| **Connected Pages** | Withdrawal Approval, Finance Approval |
+| **Database Tables** | `wallets`, `wallet_transactions` |
+| **Key Features** | Balance display, transaction history, withdrawal request |
+
+---
+
+#### Admin Wallets (`/admin/wallets`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | Manage all user wallets |
+| **How It Works** | Lists all wallets with balances. Admins can view details, adjust balances, process transactions |
+| **Who Can Access** | Finance Officer, Admin |
+| **Connected Pages** | Admin Wallet Detail |
+| **Database Tables** | `wallets`, `profiles` |
+| **Key Features** | Wallet overview, balance adjustments, bulk operations |
+
+---
+
+#### Finance Approval (`/finance-approval`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | Approve cost submissions and financial requests |
+| **How It Works** | Lists pending approvals with details. Finance officers review, approve/reject with comments |
+| **Who Can Access** | Finance Officer, Admin |
+| **Connected Pages** | Cost Submission, Wallet |
+| **Database Tables** | `cost_submissions`, `wallets`, `approval_logs` |
+| **Key Features** | Approval queue, receipt viewing, batch processing, shortfall warnings |
+
+---
+
+#### Down Payment Approval (`/down-payment-approval`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | Approve down payment requests before field activities |
+| **How It Works** | Lists pending down payment requests. Two-tier approval: Supervisor then Finance |
+| **Who Can Access** | Supervisor, Finance Officer, Admin |
+| **Connected Pages** | Budget, Wallet |
+| **Database Tables** | `down_payments`, `approvals`, `wallets` |
+| **Key Features** | Two-tier approval, budget check, justification review |
+
+---
+
+#### Withdrawal Approval (`/withdrawal-approval`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | Approve wallet withdrawal requests |
+| **How It Works** | Lists pending withdrawals. Finance officers verify and process |
+| **Who Can Access** | Finance Officer, Admin |
+| **Connected Pages** | Wallet, Admin Wallets |
+| **Database Tables** | `wallets`, `withdrawal_requests` |
+| **Key Features** | Withdrawal queue, bank details verification, batch processing |
+
+---
+
+#### Supervisor Approvals (`/supervisor-approvals`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | Review and approve site visit submissions |
+| **How It Works** | Lists completed site visits pending supervisor review. Can approve, reject, or request revision |
+| **Who Can Access** | Supervisor, FOM |
+| **Connected Pages** | Site Visits, Site Visit Detail |
+| **Database Tables** | `site_visits`, `approvals` |
+| **Key Features** | Submission review, GPS verification, photo review, approval workflow |
+
+---
+
+#### Budget (`/budget`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | Manage project and task-level budgets |
+| **How It Works** | Displays budget allocation, utilization, variance analysis. Alerts at 80% utilization |
+| **Who Can Access** | Project Manager, Finance Officer, Admin |
+| **Connected Pages** | Projects, Cost Submission |
+| **Database Tables** | `budgets`, `projects`, `cost_submissions` |
+| **Key Features** | Budget tracking, variance analysis (CPI, SPI), spending restrictions, override capability |
+
+---
+
+#### Cost Submission (`/cost-submission`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | Submit costs incurred during field activities |
+| **How It Works** | Data collectors submit costs with type, amount, description, and receipt photo |
+| **Who Can Access** | Data Collector, Coordinator |
+| **Connected Pages** | Site Visits, Finance Approval |
+| **Database Tables** | `cost_submissions`, `site_visits` |
+| **Key Features** | Cost categories, receipt upload, auto-calculation, submission history |
+
+---
+
+#### Reports (`/reports`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | Generate and view operational reports |
+| **How It Works** | Select report type, set date range and filters, generate report. Export to PDF/Excel |
+| **Who Can Access** | All authenticated users (content varies by role) |
+| **Connected Pages** | All data pages |
+| **Database Tables** | All tables (read-only) |
+| **Key Features** | Multiple report types, date filtering, PDF/Excel export |
+
+**Report Types:**
+- Site Visit Summary
+- Financial Report
+- Team Performance
+- MMP Progress
+- Wallet Transactions
+- Audit Logs
+
+---
+
+#### Documents (`/documents`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | Document management and storage |
+| **How It Works** | Upload, organize, and share documents. Supports multiple file types |
+| **Who Can Access** | All authenticated users |
+| **Connected Pages** | Signatures |
+| **Database Tables** | `documents`, `document_signatures` |
+| **Key Features** | Upload, categorization, search, sharing, version history |
+
+---
+
+#### Signatures (`/signatures`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | Digital signature management |
+| **How It Works** | Sign documents using handwritten signature, OTP verification, or biometric (mobile) |
+| **Who Can Access** | All authenticated users |
+| **Connected Pages** | Documents, Wallet |
+| **Database Tables** | `signatures`, `signature_audit_logs` |
+| **Key Features** | Multiple verification methods, SHA-256 hashing, audit trail |
+
+---
+
+#### Notifications (`/notifications`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | View all system notifications |
+| **How It Works** | Lists notifications with read/unread status. Click to navigate to related item |
+| **Who Can Access** | All authenticated users |
+| **Connected Pages** | All pages (via notification links) |
+| **Database Tables** | `notifications` |
+| **Key Features** | Mark as read, filtering, actionable links, bulk actions |
+
+---
+
+#### Settings (`/settings`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | User preferences and account settings |
+| **How It Works** | Configure profile, notifications, security, and display preferences |
+| **Who Can Access** | All authenticated users |
+| **Connected Pages** | Profile, Security |
+| **Database Tables** | `profiles`, `user_settings` |
+| **Key Features** | Profile editing, 2FA setup, notification preferences, theme selection |
+
+---
+
+#### Audit Logs (`/audit-logs`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | View system activity history |
+| **How It Works** | Comprehensive log of all system actions with filters |
+| **Who Can Access** | Admin, ICT, SuperAdmin |
+| **Connected Pages** | All pages (audit references) |
+| **Database Tables** | `audit_logs` |
+| **Key Features** | Action filtering, user filtering, date range, export |
+
+---
+
+#### Email Tracking (`/email-tracking`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | Track sent email notifications |
+| **How It Works** | Lists all emails sent via IONOS SMTP with delivery status |
+| **Who Can Access** | Admin, ICT |
+| **Connected Pages** | Settings |
+| **Database Tables** | `email_logs` |
+| **Key Features** | Delivery status, recipient filtering, date filtering |
+
+---
+
+#### Hub Operations (`/hub-operations`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | Manage hub-based field operations |
+| **How It Works** | View and manage hubs, states, localities. Assign teams to geographic areas |
+| **Who Can Access** | Admin, FOM |
+| **Connected Pages** | Field Team, Users |
+| **Database Tables** | `profiles`, `hubs`, `states`, `localities` |
+| **Key Features** | Geographic hierarchy, team assignment, workload distribution |
+
+---
+
+#### Tracker Preparation Plan (`/tracker-preparation-plan`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | Analyze planned vs actual site coverage |
+| **How It Works** | Compares MMP targets with completed visits, identifies gaps, prepares invoice data |
+| **Who Can Access** | Project Manager, Finance Officer, Admin |
+| **Connected Pages** | MMP, Site Visits, Reports |
+| **Database Tables** | `mmp_files`, `site_visits` |
+| **Key Features** | Coverage analysis, gap identification, invoice preparation |
+
+---
+
+#### Classifications (`/classifications`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | Manage user classifications and categories |
+| **How It Works** | Define classification types, assign to users, configure fee structures |
+| **Who Can Access** | Admin |
+| **Connected Pages** | Classification Fees, Users |
+| **Database Tables** | `classifications` |
+| **Key Features** | Classification CRUD, user assignment |
+
+---
+
+#### Classification Fee Management (`/classification-fees`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | Configure fees per classification |
+| **How It Works** | Set transport costs, daily allowances, and other fees based on classification |
+| **Who Can Access** | Admin, Finance Officer |
+| **Connected Pages** | Classifications, Cost Submission |
+| **Database Tables** | `classification_fees` |
+| **Key Features** | Fee structure, rate configuration |
+
+---
+
+#### Advanced Map (`/map`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | Interactive map with all operational data |
+| **How It Works** | Leaflet-based map showing sites, team locations, visit status with layers and filters |
+| **Who Can Access** | All authenticated users |
+| **Connected Pages** | Field Team, Site Visits, MMP |
+| **Database Tables** | `mmp_files`, `site_visits`, `profiles` |
+| **Key Features** | Multiple layers, clustering, GPS accuracy, real-time updates |
+
+---
+
+#### Calendar (`/calendar`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | View scheduled activities and deadlines |
+| **How It Works** | Calendar view of site visits, MMP deadlines, project milestones |
+| **Who Can Access** | All authenticated users |
+| **Connected Pages** | Site Visits, Projects |
+| **Database Tables** | `site_visits`, `projects`, `project_activities` |
+| **Key Features** | Month/week/day views, event filtering, quick create |
+
+---
+
+#### Archive (`/archive`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | Access archived items |
+| **How It Works** | Lists archived MMPs, projects, and visits. Admins can restore items |
+| **Who Can Access** | Admin, Supervisor, FOM |
+| **Connected Pages** | MMP, Projects, Site Visits |
+| **Database Tables** | All tables with archive flag |
+| **Key Features** | Archive browsing, restore capability, permanent delete |
+
+---
+
+#### Approval Dashboard (`/approval-dashboard`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | Central hub for all pending approvals |
+| **How It Works** | Aggregates pending approvals across MMP, site visits, finances, down payments |
+| **Who Can Access** | Supervisor, Finance Officer, Admin |
+| **Connected Pages** | All approval pages |
+| **Database Tables** | All approval-related tables |
+| **Key Features** | Unified view, quick actions, priority sorting |
+
+---
+
+#### Coordinator Dashboard (`/coordinator-dashboard`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | Coordinator-specific operational view |
+| **How It Works** | Shows sites in coordinator's area, pending verifications, team status |
+| **Who Can Access** | Coordinator |
+| **Connected Pages** | Sites for Verification, Coordinator Sites |
+| **Database Tables** | `mmp_files`, `site_visits`, `profiles` |
+| **Key Features** | Area-specific data, verification queue, team overview |
+
+---
+
+#### Sites for Verification (`/coordinator/sites-for-verification`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | Verify sites assigned to coordinator |
+| **How It Works** | Lists sites needing verification. Coordinator confirms GPS, status, readiness |
+| **Who Can Access** | Coordinator |
+| **Connected Pages** | Coordinator Dashboard, MMP |
+| **Database Tables** | `mmp_files`, `site_entries` |
+| **Key Features** | Verification checklist, GPS confirmation, bulk actions |
+
+---
+
+#### Coordinator Sites (`/coordinator/sites`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | Manage sites in coordinator's area |
+| **How It Works** | Full site management for assigned geographic area |
+| **Who Can Access** | Coordinator |
+| **Connected Pages** | Site Visits, MMP |
+| **Database Tables** | `mmp_files`, `site_entries`, `site_visits` |
+| **Key Features** | Site listing, status management, visit creation |
+
+---
+
+#### Super Admin Management (`/super-admin-management`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | Super admin system controls |
+| **How It Works** | Full system configuration, user management, role assignment |
+| **Who Can Access** | SuperAdmin only |
+| **Connected Pages** | All pages |
+| **Database Tables** | All tables |
+| **Key Features** | System configuration, user promotion, data management |
+
+---
+
+#### Audit Compliance (`/audit-compliance`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | Monitor system compliance and security |
+| **How It Works** | Compliance reports, security audits, anomaly detection |
+| **Who Can Access** | Admin, ICT |
+| **Connected Pages** | Audit Logs |
+| **Database Tables** | `audit_logs`, all tables |
+| **Key Features** | Compliance scoring, security alerts, recommendations |
+
+---
+
+#### Monitoring Plan (`/monitoring-plan`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | Plan and schedule monitoring activities |
+| **How It Works** | Create monitoring schedules, assign resources, track progress |
+| **Who Can Access** | Project Manager, FOM |
+| **Connected Pages** | MMP, Site Visits, Calendar |
+| **Database Tables** | `mmp_files`, `projects` |
+| **Key Features** | Schedule creation, resource allocation, progress tracking |
+
+---
+
+#### Field Operation Manager (`/field-operation-manager`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | FOM-specific operational dashboard |
+| **How It Works** | Overview of all field operations, team performance, pending actions |
+| **Who Can Access** | FOM |
+| **Connected Pages** | Site Visits, Field Team, Approvals |
+| **Database Tables** | `site_visits`, `profiles`, `mmp_files` |
+| **Key Features** | Operations overview, team management, approval queue |
+
+---
+
+#### Global Search (`/search`)
+
+| Attribute | Details |
+|-----------|---------|
+| **Purpose** | Search across all system data |
+| **How It Works** | Full-text search across users, MMPs, projects, site visits |
+| **Who Can Access** | All authenticated users |
+| **Connected Pages** | All pages (via search results) |
+| **Database Tables** | All searchable tables |
+| **Key Features** | Full-text search, result categorization, quick navigation |
+
+---
+
+## 5. Database Tables & Relationships
+
+### 5.1 Core Tables
+
+| Table | Purpose | Key Relationships |
+|-------|---------|-------------------|
+| `profiles` | User accounts | Links to `user_roles`, `notifications`, `wallets` |
+| `user_roles` | Role assignments | Links to `profiles`, `roles` |
+| `roles` | Role definitions | Links to `permissions` |
+| `permissions` | Permission definitions | Links to `roles` |
+| `projects` | Project management | Links to `project_activities`, `project_settings` |
+| `project_activities` | Project tasks | Links to `projects` |
+| `mmp_files` | Monthly Monitoring Plans | Links to `site_entries`, `profiles` |
+| `site_visits` | Field visits | Links to `profiles`, `cost_submissions` |
+| `wallets` | Financial accounts | Links to `profiles`, `wallet_transactions` |
+| `notifications` | System notifications | Links to `profiles` |
+| `audit_logs` | Activity history | Links to `profiles` |
+
+### 5.2 Entity Relationship Diagram
 
 ```
-Draft → Under Review → Approved → In Progress → Completed → Archived
+profiles (users)
+    |
+    +-- user_roles -- roles -- permissions
+    |
+    +-- notifications
+    |
+    +-- wallets -- wallet_transactions
+    |
+    +-- dashboard_settings
+    |
+    +-- user_settings
+
+projects
+    |
+    +-- project_activities
+    |
+    +-- project_settings
+    |
+    +-- mmp_files
+            |
+            +-- site_entries
+                    |
+                    +-- site_visits
+                            |
+                            +-- cost_submissions
 ```
 
-### 5.3 Creating an MMP
-
-**Method 1: Manual Entry**
-1. Go to **MMP Management** > **Create MMP**
-2. Fill in plan details (name, month, project)
-3. Add sites manually with coordinates
-4. Set activities and timelines
-5. Submit for approval
-
-**Method 2: CSV Upload**
-1. Go to **MMP Management** > **Upload MMP**
-2. Download the CSV template
-3. Fill in site data in the spreadsheet
-4. Upload the completed CSV file
-5. Review parsed data for accuracy
-6. Confirm upload
-
-### 5.4 MMP Verification
-
-Before approval, MMPs undergo verification:
-
-1. **GPS Validation** - Coordinates are within valid ranges
-2. **Duplicate Check** - No duplicate site entries
-3. **Data Completeness** - All required fields are filled
-4. **Budget Validation** - Activities align with budget
-
-### 5.5 Editing an MMP
-
-1. Navigate to the MMP detail page
-2. Click "Edit MMP"
-3. Modify sites, activities, or assignments
-4. Save changes
-5. Re-submit for approval if required
-
 ---
 
-## 6. Site Visits
+## 6. Workflows & Processes
 
-### 6.1 Site Visit Workflow
+### 6.1 MMP Workflow
 
 ```
-Planned → Assigned → Claimed → In Progress → Submitted → Reviewed → Approved
+Draft -> Under Review -> Verified -> Approved -> In Progress -> Completed -> Archived
 ```
 
-### 6.2 Creating a Site Visit
+### 6.2 Site Visit Workflow
 
-**From MMP:**
-1. Open an approved MMP
-2. Click on a site
-3. Select "Create Visit"
-4. Assign a data collector
-5. Set visit date
+```
+Planned -> Assigned -> Claimed -> In Progress -> Submitted -> Reviewed -> Approved
+```
 
-**Direct Creation:**
-1. Go to **Field Operations** > **Site Visits**
-2. Click "Create Visit"
-3. Select project and MMP (if applicable)
-4. Enter site details
-5. Assign team member
+### 6.3 Financial Approval Workflow
 
-### 6.3 Claiming a Site Visit
-
-Data collectors can claim available visits:
-
-1. View available visits in "My Site Visits"
-2. Filter by location, date, or priority
-3. Click "Claim" on a visit
-4. Confirm assignment
-5. Visit is now assigned to you
-
-### 6.4 Conducting a Site Visit
-
-1. Start the visit by clicking "Begin Visit"
-2. GPS location is captured automatically
-3. Complete required data collection
-4. Take photos if required
-5. Submit any costs incurred
-6. Mark visit as complete
-7. Submit for review
-
-### 6.5 Site Visit Details
-
-Each visit record includes:
-- Site information (name, coordinates, locality)
-- Assigned collector and supervisor
-- Start/end timestamps with GPS accuracy
-- Collected data and photos
-- Cost submissions
-- Status history
+```
+Submitted -> Supervisor Review -> Finance Review -> Approved/Rejected -> Processed
+```
 
 ---
 
-## 7. Field Team Management
+## 7. Communication Features
 
-### 7.1 Team Overview
+### 7.1 Video/Voice Calling
 
-Navigate to **Field Operations** > **Field Team** to see:
-- All team members with roles
-- Online/offline status
-- Current location (if sharing enabled)
-- Recent activity
+**Two Methods Available:**
 
-### 7.2 Real-Time Location Tracking
+| Method | Technology | Best For |
+|--------|------------|----------|
+| Direct Call | WebRTC (peer-to-peer) | Fast 1-on-1 calls, good internet |
+| Jitsi Meet | Server-mediated | Reliable calls, poor connectivity |
 
-**For Team Members:**
-1. Enable location sharing in Settings
-2. Allow GPS permissions when prompted
-3. Your location updates automatically
+**Call Flow:**
+1. Select contact from team list
+2. Click phone (audio) or video icon
+3. Choose call method in dialog
+4. Recipient receives incoming call popup
+5. Accept to join, Reject to decline
+6. Call connected with controls (mute, video, end)
 
-**For Supervisors/Managers:**
-1. View team locations on the interactive map
-2. Color-coded accuracy indicators:
-   - Green: High accuracy (< 10m)
-   - Yellow: Medium accuracy (10-50m)
-   - Red: Low accuracy (> 50m)
-3. Click on a team member for details
+### 7.2 Chat Messaging
 
-### 7.3 Hub Operations
-
-The Hub Operations page allows management of:
-- Hub assignments
-- State and locality groupings
-- Team distribution across regions
-- Workload balancing
-
----
-
-## 8. Financial Operations
-
-### 8.1 Wallets
-
-Each user/project can have a wallet for:
-- Receiving funds
-- Making payments
-- Tracking balance history
-
-**Wallet Actions:**
-- View balance and transactions
-- Request withdrawal
-- Submit for top-up
-
-### 8.2 Cost Submissions
-
-Field workers submit costs during site visits:
-
-1. Open active site visit
-2. Click "Submit Cost"
-3. Select cost type (transport, meals, materials)
-4. Enter amount
-5. Upload receipt photo (required)
-6. Add description
-7. Submit for approval
-
-### 8.3 Down Payment Requests
-
-Before field activities, request advance payments:
-
-1. Go to **Finance** > **Down Payment**
-2. Click "Request Down Payment"
-3. Select project and activity
-4. Enter requested amount with justification
-5. Submit for approval
-
-### 8.4 Approval Workflows
-
-**Two-Tier Approval Process:**
-
-1. **First Level** - Supervisor approval
-2. **Second Level** - Finance Officer approval
-
-**Finance Approval Page Features:**
-- Real-time wallet balances
-- Shortfall warnings
-- Batch processing
-- Receipt viewing
-- Audit trail
-
-### 8.5 Budget Management
-
-**Budget Features:**
-- Task-level budget tracking
-- Variance analysis (CPI, SPI, EAC)
-- 80% utilization alerts
-- Spending restrictions
-- Override capabilities for authorized users
-
----
-
-## 9. Communication Features
-
-### 9.1 Chat & Messaging
-
-**Accessing Chat:**
-1. Click the **Chat** icon in the sidebar
-2. Select a conversation or start new
-3. Type your message
-4. Send text, images, or files
-
-**Features:**
-- Real-time messaging
+- Real-time text messaging
 - Typing indicators
 - Read receipts
 - File attachments
-- Group conversations
-
-### 9.2 Video & Voice Calls
-
-**Making a Call:**
-1. Go to **Communication** > **Calls**
-2. Search for the contact
-3. Click the phone or video icon
-4. Choose call method:
-   - **Direct Call (WebRTC)** - Peer-to-peer, fastest
-   - **Jitsi Meet** - Server-based, most reliable
-
-**Receiving a Call:**
-1. Incoming call notification appears
-2. Click "Accept" to answer or "Reject" to decline
-3. For Jitsi calls, you'll join the same video room
-
-**Call Features:**
-- Mute/unmute audio
-- Turn camera on/off
-- Screen sharing
-- Chat during call
-- Full-screen mode
-
-### 9.3 Notifications
-
-**Notification Types:**
-- Incoming messages
-- Call notifications
-- Site visit updates
-- Approval requests
-- System alerts
-
-**Actionable Notifications:**
-- Click "Open" to navigate to the related item
-- Click "OK" to dismiss
-
-**Sound Settings:**
-1. Go to Settings > Notifications
-2. Enable/disable sounds
-3. Adjust volume
-4. Test notification sounds
+- Conversation history
 
 ---
 
-## 10. Documents & Signatures
+## 8. Mobile App Features
 
-### 10.1 Document Management
-
-**Uploading Documents:**
-1. Go to **Documents**
-2. Click "Upload Document"
-3. Select file from device
-4. Add title and description
-5. Set visibility permissions
-6. Upload
-
-**Document Types Supported:**
-- PDF, DOCX, XLSX
-- Images (JPG, PNG)
-- CSV files
-
-### 10.2 Digital Signatures
-
-**Signature Methods:**
-1. **Handwritten** - Draw signature on screen
-2. **OTP Verification** - Email or SMS code
-3. **Biometric** - Fingerprint (mobile only)
-
-**Signing a Document:**
-1. Open document requiring signature
-2. Click "Sign Document"
-3. Choose verification method
-4. Complete verification
-5. Signature is recorded with timestamp and hash
-
-**Signature Security:**
-- SHA-256 hashing
-- Audit logging
-- Tamper detection
-- Cryptographically secure OTP
-
----
-
-## 11. Reports & Analytics
-
-### 11.1 Available Reports
-
-| Report | Description |
-|--------|-------------|
-| Site Visit Summary | Completion rates, timelines, status |
-| Financial Report | Budget vs actual, cost breakdown |
-| Team Performance | Visits per collector, response times |
-| MMP Progress | Planned vs completed activities |
-| Wallet Transactions | All financial movements |
-| Audit Log | System activity history |
-
-### 11.2 Generating Reports
-
-1. Go to **Reports**
-2. Select report type
-3. Set date range and filters
-4. Click "Generate"
-5. View in browser or export
-
-### 11.3 Export Options
-
-- **PDF** - Formatted document with charts
-- **Excel** - Editable spreadsheet
-- **CSV** - Raw data for analysis
-
-### 11.4 Tracker Preparation Plan
-
-Specialized report for:
-- Planned vs actual site coverage
-- Invoice preparation
-- Real-time progress updates
-- Gap analysis
-
----
-
-## 12. Settings & Configuration
-
-### 12.1 User Profile
-
-1. Click your avatar in the header
-2. Select "Profile"
-3. Update:
-   - Profile photo
-   - Display name
-   - Phone number
-   - Notification preferences
-
-### 12.2 Security Settings
-
-- Change password
-- Enable 2FA
-- View active sessions
-- Revoke device access
-
-### 12.3 Notification Preferences
-
-Configure which notifications you receive:
-- Push notifications
-- Email notifications
-- Sound alerts
-- Quiet hours
-
-### 12.4 Theme Settings
-
-- Light mode
-- Dark mode
-- System preference (auto)
-
-### 12.5 Data Visibility
-
-Control what data is visible based on:
-- Role permissions
-- Project assignments
-- Geographic scope
-
----
-
-## 13. Mobile App Features
-
-### 13.1 Installation
-
-1. Download APK from provided link
-2. Enable "Install from unknown sources"
-3. Install the application
-4. Grant required permissions
-
-### 13.2 Offline Capabilities
+### 8.1 Offline Capabilities
 
 **Works Offline:**
-- View cached MMP lists
+- View cached MMPs
 - Complete site visits
 - Capture GPS locations
 - Take photos
-- Submit cost entries
+- Submit costs (queued)
 
 **Requires Connection:**
 - Real-time dashboard
 - Chat and calls
 - Live location map
 - Push notifications
-- User management
 
-### 13.3 Sync Management
+### 8.2 Sync Process
 
-**Automatic Sync:**
-- Syncs when connection restored
-- Exponential backoff retry
-- Conflict resolution
-
-**Manual Sync:**
-1. Pull down to refresh
-2. Or tap "Sync Now" button
-3. View sync progress
-
-### 13.4 Mobile-Specific Features
-
-- Touch-optimized UI
-- Biometric login (fingerprint/face)
-- Camera integration for photos
-- Native GPS with high accuracy
-- Push notifications
-- Battery-efficient location tracking
-
-### 13.5 Permissions Required
-
-| Permission | Purpose |
-|------------|---------|
-| Camera | Photo capture for site visits |
-| Location | GPS tracking and site verification |
-| Storage | Offline data and photo storage |
-| Notifications | Push alerts |
-| Microphone | Voice/video calls |
+1. Changes saved locally
+2. Automatic sync when online
+3. Conflict resolution (last-write-wins)
+4. Manual "Sync Now" button available
 
 ---
 
-## 14. Troubleshooting
+## 9. Troubleshooting
 
-### 14.1 Login Issues
+### 9.1 Common Issues
 
-**Problem: Cannot login**
-- Check email/password spelling
-- Reset password if forgotten
-- Clear browser cache
-- Try different browser
+| Issue | Solution |
+|-------|----------|
+| Cannot login | Check email/password, try forgot password |
+| Page not loading | Clear cache, check internet |
+| Call not connecting | Try Jitsi method, check permissions |
+| Data not syncing | Tap Sync Now, check connection |
+| Location not working | Enable GPS, grant permissions |
 
-**Problem: 2FA code not working**
-- Ensure device time is correct
-- Use latest code (they expire in 30 seconds)
-- Contact admin to reset 2FA
+### 9.2 Contact Support
 
-### 14.2 Location Issues
-
-**Problem: Location not updating**
-- Check GPS is enabled
-- Grant location permission
-- Move to area with better signal
-- Restart the app
-
-**Problem: Low GPS accuracy**
-- Wait for better satellite lock
-- Move away from buildings
-- Enable high accuracy mode
-
-### 14.3 Call Issues
-
-**Problem: Call not connecting**
-- Check internet connection
-- Try Jitsi method instead of Direct
-- Grant camera/microphone permissions
-- Ensure other person is online
-
-**Problem: No audio/video**
-- Check device permissions
-- Test microphone/camera in other apps
-- Restart the call
-
-### 14.4 Sync Issues
-
-**Problem: Data not syncing**
-- Check internet connection
-- Tap "Sync Now" manually
-- Check for error messages
-- Restart the app
-
-**Problem: Sync conflicts**
-- Review conflict details
-- Choose resolution strategy
-- Contact support if data lost
-
-### 14.5 Performance Issues
-
-**Problem: App is slow**
-- Clear browser cache
-- Close unused tabs
-- Update browser
-- Check internet speed
-
-**Problem: Mobile app crashing**
-- Update to latest version
-- Clear app cache
-- Restart device
-- Reinstall app
-
----
-
-## Quick Reference
-
-### Keyboard Shortcuts (Web)
-
-| Shortcut | Action |
-|----------|--------|
-| `/` | Open search |
-| `n` | New item |
-| `?` | Help menu |
-| `Esc` | Close dialog |
-
-### Status Colors
-
-| Color | Meaning |
-|-------|---------|
-| Green | Active/Approved/Online |
-| Yellow | Pending/Warning |
-| Red | Rejected/Error/Urgent |
-| Blue | In Progress/Information |
-| Gray | Inactive/Archived |
-
-### Contact Support
-
-For technical issues or questions:
-- Email: `noreply@pactorg.com`
-- In-app chat support
-- Help documentation
+- Email: noreply@pactorg.com
+- In-app help section
+- System documentation
 
 ---
 
