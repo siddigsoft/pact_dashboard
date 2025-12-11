@@ -121,6 +121,19 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
   const isWalletPage = location.pathname === '/wallet';
   const isChatPage = location.pathname === '/chat';
   const isCallsPage = location.pathname === '/calls';
+  const isDashboardPage = location.pathname === '/dashboard';
+  const isSettingsPage = location.pathname === '/settings';
+  const isSiteVisitsPage = location.pathname === '/site-visits' || location.pathname.startsWith('/site-visits/');
+  const isFieldTeamPage = location.pathname === '/field-team';
+  const isCalendarPage = location.pathname === '/calendar';
+  const isSignaturesPage = location.pathname === '/signatures';
+  const isCostSubmissionPage = location.pathname === '/cost-submission';
+  
+  // Pages with custom headers (hide MobileAppHeader)
+  const pagesWithCustomHeaders = isNotificationsPage || isWalletPage || isChatPage || isCallsPage;
+  
+  // Pages that should not show the refresh bar
+  const pagesWithoutRefreshBar = isNotificationsPage || isWalletPage || isChatPage || isCallsPage || isDashboardPage || isSettingsPage || isSiteVisitsPage || isFieldTeamPage || isCalendarPage || isSignaturesPage || isCostSubmissionPage;
 
   return (
     <TooltipProvider>
@@ -131,7 +144,7 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
           {!isMobile && !isTablet && <AppSidebar />}
           <SidebarInset className={`${isMobile ? 'bg-gray-50 dark:bg-gray-900' : ''} relative z-0 flex flex-col min-w-0 overflow-x-hidden min-h-0`}>
             {isMobile ? (
-              !(isNotificationsPage || isWalletPage || isChatPage || isCallsPage) && (
+              !pagesWithCustomHeaders && (
                 <MobileAppHeader
                   toggleSidebar={toggleSidebar}
                   title={getPageTitle()}
@@ -143,9 +156,9 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
             ) : (
               <Navbar />
             )}
-            {/* Global Refresh Bar - Available on all pages except notifications, wallet, chat, and calls on mobile */}
-            {!(isMobile && (isNotificationsPage || isWalletPage || isChatPage || isCallsPage)) && <GlobalRefreshBar />}
-            <div className={`flex-1 flex flex-col ${isMobile ? ((isNotificationsPage || isWalletPage || isChatPage || isCallsPage) ? 'px-0 pb-12 pt-0' : 'px-1 pb-12 pt-10') : 'p-1 md:p-1.5 lg:p-2'} ${isMobile ? 'bg-gray-50 dark:bg-gray-900 overflow-y-auto overflow-x-hidden' : 'bg-slate-50/70 dark:bg-gray-900/70 scroll-container overflow-y-auto'} relative z-0 min-w-0 min-h-0`}>
+            {/* Global Refresh Bar - Hidden on specific mobile pages */}
+            {!(isMobile && pagesWithoutRefreshBar) && <GlobalRefreshBar />}
+            <div className={`flex-1 flex flex-col ${isMobile ? (pagesWithCustomHeaders ? 'px-0 pb-12 pt-0' : (pagesWithoutRefreshBar ? 'px-1 pb-12 pt-16' : 'px-1 pb-12 pt-10')) : 'p-1 md:p-1.5 lg:p-2'} ${isMobile ? 'bg-gray-50 dark:bg-gray-900 overflow-y-auto overflow-x-hidden' : 'bg-slate-50/70 dark:bg-gray-900/70 scroll-container overflow-y-auto'} relative z-0 min-w-0 min-h-0`}>
               {children || <Outlet />}
             </div>
             {isMobile && <MobileBottomNav />}
