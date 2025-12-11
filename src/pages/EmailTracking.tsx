@@ -251,21 +251,24 @@ export default function EmailTracking() {
 
     setSendingTest(true);
     try {
-      // Use Supabase Auth password reset - this goes through IONOS SMTP configured in Dashboard
-      const { error } = await supabase.auth.resetPasswordForEmail(testEmail, {
-        redirectTo: `${window.location.origin}/reset-password`,
+      // Use custom OTP Edge Function - sends through IONOS SMTP
+      const { data, error } = await supabase.functions.invoke('verify-reset-otp', {
+        body: { 
+          email: testEmail.toLowerCase(),
+          action: 'generate'
+        },
       });
 
-      const success = !error;
-      const errorMessage = error?.message;
+      const success = data?.success && !error;
+      const errorMessage = error?.message || data?.error;
 
       // Store log locally for immediate display
-      storeLocalEmailLog(testEmail, 'Password Reset Test (SMTP)', success, errorMessage);
+      storeLocalEmailLog(testEmail, 'Password Reset Test (IONOS SMTP)', success, errorMessage);
 
       if (success) {
         toast({
-          title: 'Password reset email sent',
-          description: `Test email sent to ${testEmail} via IONOS SMTP. Check inbox (and spam folder).`,
+          title: 'Password reset code sent',
+          description: `6-digit code sent to ${testEmail} via IONOS SMTP. Check inbox (and spam folder).`,
         });
         setTestEmail('');
       } else {
@@ -278,7 +281,7 @@ export default function EmailTracking() {
       // Refresh logs after storing
       setTimeout(fetchEmailLogs, 500);
     } catch (error: any) {
-      storeLocalEmailLog(testEmail, 'Password Reset Test (SMTP)', false, error.message);
+      storeLocalEmailLog(testEmail, 'Password Reset Test (IONOS SMTP)', false, error.message);
       toast({
         title: 'Error',
         description: error.message || 'Failed to send test email',
