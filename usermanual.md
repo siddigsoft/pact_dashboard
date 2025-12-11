@@ -1997,8 +1997,9 @@ STAGE 4: FIELD EXECUTION
 │     • Photos    │
 │     • Survey    │
 │       Forms     │
-│     • OTP       │
-│       Verify    │
+│     • Digital   │
+│       Signature │
+│       (handwriting)
 └────────┬────────┘
          │
          ▼
