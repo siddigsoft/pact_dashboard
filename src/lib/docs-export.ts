@@ -303,7 +303,7 @@ const documentationSections: Section[] = [
           "Field Supervisor: Managing field operations",
           "Finance Officer: Financial operations and approvals",
           "Data Analyst: Reporting and data analysis",
-          "Regional Coordinator: Regional activity coordination",
+          "State Coordinator: State-level activity coordination",
           "HR Manager: User account management",
           "Auditor: Read-only compliance review",
           "Technical Support: System configuration and support"
