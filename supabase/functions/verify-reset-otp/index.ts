@@ -92,11 +92,17 @@ serve(async (req) => {
         try {
           const { SMTPClient } = await import('https://deno.land/x/denomailer@1.6.0/mod.ts')
           
+          const portNum = Number(smtpPort)
+          // IONOS uses port 587 with STARTTLS, port 465 with implicit TLS
+          const useImplicitTLS = portNum === 465
+          
+          console.log(`Connecting to SMTP: ${smtpHost}:${portNum}, TLS: ${useImplicitTLS}`)
+          
           const client = new SMTPClient({
             connection: {
               hostname: smtpHost,
-              port: Number(smtpPort),
-              tls: true,
+              port: portNum,
+              tls: useImplicitTLS,
               auth: { username: smtpUser, password: smtpPassword },
             },
           })

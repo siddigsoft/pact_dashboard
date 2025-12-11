@@ -1,0 +1,48 @@
+# Files and folders excluded from Docker build context
+# Keep package*.json and lockfiles to maximize cache hits
+
+# VCS / IDE / CI
+.git
+.github
+.gitignore
+.vscode
+.idea
+.editorconfig
+.husky
+
+# Dependency caches
+node_modules
+.pnpm-store
+.cache
+.turbo
+
+# Build outputs
+.dist
+/dist
+.next
+out
+build
+
+# Tests & coverage
+coverage
+cypress
+**/__tests__
+**/__mocks__
+
+# Logs & temp
+*.log
+logs
+.tmp
+.tmp/**
+tmp
+temp
+.DS_Store
+
+# Misc project dirs often not needed for build
+scripts
+reports
+storybook-static
+
+# Supabase or local data caches (adjust as needed)
+supabase/.temp
+supabase/.cache
