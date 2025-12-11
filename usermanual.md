@@ -909,7 +909,342 @@ SPECIAL TRANSITIONS:
 
 ---
 
-## 6. MMP Lifecycle
+## 6. Sites Registry & Indexing System
+
+### 6.1 Sites Registry Overview
+
+**Implementation Files:**
+- Registry Matcher: `src/utils/sitesRegistryMatcher.ts`
+- MMP Upload Logic: `src/utils/mmpFileUpload.ts`
+- Hub Operations Page: `src/pages/HubOperations.tsx`
+- Database Table: `sites_registry`
+
+The Sites Registry is the **master database of all sites** where field visits can occur. It serves as the single source of truth for site information, GPS coordinates, and historical visit data.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         SITES REGISTRY ARCHITECTURE                         │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+                           ┌───────────────────────────────────┐
+                           │        SITES REGISTRY             │
+                           │     (Master Site Database)        │
+                           │                                   │
+                           │  • site_code (unique identifier)  │
+                           │  • site_name                      │
+                           │  • state_name / state_id          │
+                           │  • locality_name / locality_id    │
+                           │  • gps_latitude / gps_longitude   │
+                           │  • hub_name                       │
+                           │  • activity_type                  │
+                           │  • mmp_count (usage counter)      │
+                           │  • status (registered/verified)   │
+                           └───────────────┬───────────────────┘
+                                           │
+                ┌──────────────────────────┼──────────────────────────┐
+                │                          │                          │
+                ▼                          ▼                          ▼
+    ┌───────────────────┐      ┌───────────────────┐      ┌───────────────────┐
+    │  MMP Site Entry   │      │  MMP Site Entry   │      │  MMP Site Entry   │
+    │  (January 2025)   │      │  (February 2025)  │      │  (March 2025)     │
+    │                   │      │                   │      │                   │
+    │ registry_site_id ─┼──────│ registry_site_id ─┼──────│ registry_site_id ─┤
+    │  ↑ Links back to  │      │  ↑ Same site!     │      │  ↑ Same site!     │
+    │    master record  │      │    Reused ID      │      │    Reused ID      │
+    └───────────────────┘      └───────────────────┘      └───────────────────┘
+```
+
+### 6.2 Duplicate Site Detection & Prevention
+
+When an MMP file is uploaded, the system checks for duplicates **within the same month** to prevent monitoring the same site twice.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     DUPLICATE DETECTION WORKFLOW                            │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+                    ┌─────────────────────────────────┐
+                    │     CSV FILE UPLOADED           │
+                    │     Month: "December 2025"      │
+                    │     Sites: 50 entries           │
+                    └───────────────┬─────────────────┘
+                                    │
+                                    ▼
+              ┌─────────────────────────────────────────────┐
+              │         CHECK 1: SAME-MONTH DUPLICATES      │
+              │                                             │
+              │  Query existing MMPs for December 2025      │
+              │  Get all mmp_site_entries from those MMPs   │
+              └─────────────────────┬───────────────────────┘
+                                    │
+                  ┌─────────────────┴─────────────────┐
+                  │                                   │
+                  ▼                                   ▼
+    ┌─────────────────────────┐         ┌─────────────────────────┐
+    │   MATCH BY SITE_CODE    │         │  MATCH BY COMPOSITE KEY │
+    │                         │         │                         │
+    │  Exact site_code match  │   OR    │  site_name + state +    │
+    │  (highest priority)     │         │  locality combination   │
+    └───────────────┬─────────┘         └───────────────┬─────────┘
+                    │                                   │
+                    └─────────────┬─────────────────────┘
+                                  │
+                    ┌─────────────┴─────────────────┐
+                    │                               │
+                    ▼                               ▼
+        ┌───────────────────┐           ┌───────────────────┐
+        │   DUPLICATE       │           │   NO DUPLICATE    │
+        │   FOUND           │           │                   │
+        │                   │           │   Proceed with    │
+        │   BLOCK UPLOAD    │           │   registry lookup │
+        │   Show error:     │           │                   │
+        │   "Site already   │           └───────────────────┘
+        │    exists for     │
+        │    December 2025" │
+        └───────────────────┘
+
+DUPLICATE DETECTION CRITERIA:
+═══════════════════════════════════════════════════════════════════════════════
+│ Priority │ Match Type           │ Condition                                  │
+├──────────┼──────────────────────┼────────────────────────────────────────────│
+│    1     │ Site Code Match      │ site_code matches (case-insensitive)       │
+│    2     │ Composite Key Match  │ site_name + state + locality all match     │
+═══════════════════════════════════════════════════════════════════════════════
+```
+
+### 6.3 Site Index Assignment Logic
+
+When sites are uploaded, the system determines whether to **create new registry entries** or **link to existing ones**.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    SITE INDEX ASSIGNMENT DECISION TREE                      │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+                         ┌────────────────────────┐
+                         │  FOR EACH SITE IN CSV  │
+                         │  Extract: site_code,   │
+                         │  site_name, state,     │
+                         │  locality              │
+                         └───────────┬────────────┘
+                                     │
+                                     ▼
+                    ┌────────────────────────────────────┐
+                    │  STEP 1: EXACT CODE MATCH          │
+                    │  Does site_code exist in registry? │
+                    └────────────────┬───────────────────┘
+                                     │
+                    ┌────────────────┴────────────────┐
+                    │                                 │
+                    ▼                                 ▼
+           ┌───────────────┐                ┌───────────────┐
+           │     YES       │                │      NO       │
+           │               │                │               │
+           │  REUSE ID     │                │   CONTINUE    │
+           │  Link to      │                │   MATCHING    │
+           │  existing     │                │               │
+           │  registry     │                └───────┬───────┘
+           │  entry        │                        │
+           └───────────────┘                        ▼
+                                   ┌────────────────────────────────────┐
+                                   │  STEP 2: NAME + STATE + LOCALITY   │
+                                   │  Does combination exist?           │
+                                   └────────────────┬───────────────────┘
+                                                    │
+                                   ┌────────────────┴────────────────┐
+                                   │                                 │
+                                   ▼                                 ▼
+                          ┌───────────────┐                ┌───────────────┐
+                          │     YES       │                │      NO       │
+                          │               │                │               │
+                          │  REUSE ID     │                │   CONTINUE    │
+                          │  Link to      │                │   MATCHING    │
+                          │  existing     │                │               │
+                          │  registry     │                └───────┬───────┘
+                          └───────────────┘                        │
+                                                                   ▼
+                                                  ┌────────────────────────────┐
+                                                  │  STEP 3: NAME + STATE ONLY │
+                                                  │  Fallback partial match    │
+                                                  └────────────────┬───────────┘
+                                                                   │
+                                                  ┌────────────────┴────────────┐
+                                                  │                             │
+                                                  ▼                             ▼
+                                         ┌───────────────┐            ┌───────────────┐
+                                         │     YES       │            │      NO       │
+                                         │               │            │               │
+                                         │  REUSE ID     │            │ CREATE NEW    │
+                                         │  (may need    │            │ REGISTRY SITE │
+                                         │   review)     │            │               │
+                                         └───────────────┘            │ Generate code │
+                                                                      │ as: ST-LO-    │
+                                                                      │ NAM-123456    │
+                                                                      └───────────────┘
+
+SUMMARY - SITE INDEX BEHAVIOR:
+═══════════════════════════════════════════════════════════════════════════════
+│ Scenario                              │ Action                               │
+├───────────────────────────────────────┼──────────────────────────────────────│
+│ Site exists in registry               │ REUSE existing registry_site_id      │
+│                                       │ Increment mmp_count on registry      │
+├───────────────────────────────────────┼──────────────────────────────────────│
+│ Site NOT in registry                  │ CREATE new registry entry            │
+│                                       │ Generate unique site_code            │
+│                                       │ Set mmp_count = 1                    │
+├───────────────────────────────────────┼──────────────────────────────────────│
+│ Same site in same month               │ BLOCK - Duplicate not allowed        │
+├───────────────────────────────────────┼──────────────────────────────────────│
+│ Same site in different month          │ ALLOWED - Reuse registry, new entry  │
+═══════════════════════════════════════════════════════════════════════════════
+```
+
+### 6.4 GPS Coordinate Lifecycle
+
+**Implementation Files:**
+- GPS Save to Registry: `src/utils/sitesRegistryMatcher.ts` → `saveGPSToRegistry()`
+- Location Capture: `src/utils/locationUtils.ts`, `src/utils/gpsMatchingUtils.ts`
+- Mobile GPS: `src/components/mobile/MobileSiteVisitComm.tsx`
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        GPS COORDINATE LIFECYCLE                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+PHASE 1: INITIAL UPLOAD (No GPS)
+════════════════════════════════════════════════════════════════════════════════
+
+    ┌─────────────────┐          ┌─────────────────┐
+    │  CSV UPLOAD     │          │  REGISTRY LOOKUP │
+    │  Site: "Aroma   │─────────►│  No GPS coords   │
+    │   Health Post"  │          │  gps_latitude:   │
+    │  (no GPS data)  │          │    NULL          │
+    └─────────────────┘          └─────────────────┘
+
+
+PHASE 2: FIRST FIELD VISIT (GPS Captured)
+════════════════════════════════════════════════════════════════════════════════
+
+    ┌─────────────────┐          ┌─────────────────┐          ┌─────────────────┐
+    │  DATA COLLECTOR │          │  GPS CAPTURE    │          │  SITE VISIT     │
+    │  Starts Visit   │─────────►│  at Site        │─────────►│  RECORD         │
+    │  at Aroma       │          │  lat: 15.4321   │          │  start_latitude │
+    │  Health Post    │          │  lng: 36.1234   │          │  start_longitude│
+    └─────────────────┘          └─────────────────┘          └─────────────────┘
+                                                                      │
+                                                                      ▼
+                                                              ┌─────────────────┐
+                                                              │  VISIT COMPLETE │
+                                                              │                 │
+                                                              │  Trigger:       │
+                                                              │  saveGPSTo      │
+                                                              │  Registry()     │
+                                                              └────────┬────────┘
+                                                                       │
+                                                                       ▼
+                                 ┌──────────────────────────────────────────────┐
+                                 │           SITES REGISTRY UPDATED             │
+                                 │                                              │
+                                 │  Site: Aroma Health Post                     │
+                                 │  gps_latitude:  15.4321  ← NOW POPULATED!    │
+                                 │  gps_longitude: 36.1234  ← NOW POPULATED!    │
+                                 │  updated_at: 2025-12-01                      │
+                                 └──────────────────────────────────────────────┘
+
+
+PHASE 3: FUTURE VISITS (GPS Pre-populated)
+════════════════════════════════════════════════════════════════════════════════
+
+    ┌─────────────────┐          ┌─────────────────┐          ┌─────────────────┐
+    │  NEW MMP        │          │  REGISTRY MATCH │          │  MMP SITE ENTRY │
+    │  January 2026   │─────────►│  registry_site_ │─────────►│  GPS AUTO-      │
+    │  Same site:     │          │  id LINKED      │          │  POPULATED!     │
+    │  Aroma Health   │          │                 │          │                 │
+    └─────────────────┘          └─────────────────┘          └─────────────────┘
+                                         │
+                                         ▼
+                           ┌───────────────────────────────┐
+                           │  registry_linkage JSON:       │
+                           │  {                            │
+                           │    registry_site_id: "...",   │
+                           │    gps: {                     │
+                           │      latitude: 15.4321,       │
+                           │      longitude: 36.1234       │
+                           │    }                          │
+                           │  }                            │
+                           └───────────────────────────────┘
+
+GPS ENRICHMENT RULES:
+═══════════════════════════════════════════════════════════════════════════════
+│ Match Type      │ Confidence │ Auto-Accept │ GPS Populated                  │
+├─────────────────┼────────────┼─────────────┼────────────────────────────────│
+│ exact_code      │   100%     │     YES     │ Automatically from registry    │
+│ name_location   │    85%     │     NO      │ Requires manual review         │
+│ partial_state   │    70%     │     NO      │ Requires manual review         │
+│ fuzzy_name      │    50%     │     NO      │ Requires manual review         │
+│ not_found       │     0%     │     N/A     │ GPS captured on first visit    │
+═══════════════════════════════════════════════════════════════════════════════
+```
+
+### 6.5 Registry Linkage Data Structure
+
+Each MMP site entry stores a `registry_linkage` JSON object that tracks the connection to the master registry:
+
+```
+REGISTRY_LINKAGE JSON STRUCTURE (stored in mmp_site_entries.additional_data):
+═══════════════════════════════════════════════════════════════════════════════
+
+{
+  "registry_linkage": {
+    // Master Registry Reference
+    "registry_site_id": "uuid-of-master-site",
+    "registry_site_code": "KS-AR-AHP-123456",
+    
+    // GPS Coordinates (from registry)
+    "gps": {
+      "latitude": 15.4321,
+      "longitude": 36.1234,
+      "accuracy_meters": 5.2
+    },
+    
+    // Administrative Hierarchy
+    "state_id": "state-uuid",
+    "state_name": "Kassala",
+    "locality_id": "locality-uuid",
+    "locality_name": "Aroma",
+    
+    // Original Query (what was searched)
+    "query": {
+      "site_code": "AHP-001",
+      "site_name": "Aroma Health Post",
+      "state": "Kassala",
+      "locality": "Aroma"
+    },
+    
+    // Match Confidence Info
+    "match": {
+      "type": "exact_code",
+      "confidence": 1.0,
+      "confidence_level": "high",
+      "rule_applied": "exact_site_code_match",
+      "candidates_count": 1,
+      "auto_accepted": true,
+      "requires_review": false
+    },
+    
+    // Audit Trail
+    "audit": {
+      "matched_at": "2025-12-01T10:30:00Z",
+      "matched_by": "user-uuid",
+      "source_workflow": "mmp_upload"
+    }
+  }
+}
+```
+
+---
+
+## 7. MMP Lifecycle
 
 ### 6.1 MMP Workflow Diagram
 
@@ -1360,7 +1695,650 @@ CALLER (User A)                                             RECEIVER (User B)
 
 ---
 
-## 10. Database Architecture
+## 10. Complete Site Visit Cycle (End-to-End)
+
+### 10.1 From MMP Upload to Payment - Complete Journey
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│               COMPLETE SITE VISIT CYCLE: UPLOAD TO PAYMENT                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════════════════════
+STAGE 1: MMP CREATION & UPLOAD
+═══════════════════════════════════════════════════════════════════════════════
+
+[ADMIN/PM]                                [SYSTEM]
+    │                                         │
+    ▼                                         │
+┌─────────────────┐                           │
+│ 1. Prepare CSV  │                           │
+│    file with    │                           │
+│    site data    │                           │
+└────────┬────────┘                           │
+         │                                    │
+         ▼                                    ▼
+┌─────────────────┐   Upload    ┌─────────────────┐
+│ 2. Upload CSV   │────────────►│ 3. Parse CSV    │
+│    to system    │             │    Validate     │
+└─────────────────┘             │    Format       │
+                                └────────┬────────┘
+                                         │
+                                         ▼
+                                ┌─────────────────┐
+                                │ 4. Duplicate    │
+                                │    Check        │
+                                │    (Same month) │
+                                └────────┬────────┘
+                                         │
+                      ┌──────────────────┴──────────────────┐
+                      │                                     │
+                      ▼                                     ▼
+              ┌───────────────┐                     ┌───────────────┐
+              │ DUPLICATES    │                     │ NO DUPLICATES │
+              │ FOUND         │                     │               │
+              │               │                     │ Continue      │
+              │ UPLOAD        │                     │               │
+              │ BLOCKED       │                     └───────┬───────┘
+              └───────────────┘                             │
+                                                            ▼
+                                                   ┌─────────────────┐
+                                                   │ 5. Registry     │
+                                                   │    Lookup       │
+                                                   │                 │
+                                                   │ Match sites to  │
+                                                   │ Sites Registry  │
+                                                   └────────┬────────┘
+                                                            │
+                                          ┌─────────────────┴─────────────────┐
+                                          │                                   │
+                                          ▼                                   ▼
+                                 ┌───────────────┐               ┌───────────────┐
+                                 │ SITE FOUND    │               │ SITE NOT      │
+                                 │               │               │ FOUND         │
+                                 │ Link to       │               │               │
+                                 │ registry_     │               │ CREATE new    │
+                                 │ site_id       │               │ registry      │
+                                 │               │               │ entry         │
+                                 │ Inherit GPS   │               │ Generate      │
+                                 │ if available  │               │ site_code     │
+                                 └───────┬───────┘               └───────┬───────┘
+                                         │                               │
+                                         └───────────────┬───────────────┘
+                                                         │
+                                                         ▼
+                                                ┌─────────────────┐
+                                                │ 6. Create MMP   │
+                                                │    Record       │
+                                                │    Status:DRAFT │
+                                                └────────┬────────┘
+                                                         │
+                                                         ▼
+                                                ┌─────────────────┐
+                                                │ 7. Create Site  │
+                                                │    Entries      │
+                                                │    (mmp_site_   │
+                                                │    entries)     │
+                                                └─────────────────┘
+
+═══════════════════════════════════════════════════════════════════════════════
+STAGE 2: APPROVAL WORKFLOW
+═══════════════════════════════════════════════════════════════════════════════
+
+[PM/ADMIN]              [SUPERVISOR]              [FOM]
+    │                       │                       │
+    ▼                       │                       │
+┌─────────────────┐         │                       │
+│ 8. Submit MMP   │         │                       │
+│    for Review   │         │                       │
+│    Status:      │         │                       │
+│    SUBMITTED    │         │                       │
+└────────┬────────┘         │                       │
+         │                  │                       │
+         │   Notification   │                       │
+         └─────────────────►│                       │
+                            ▼                       │
+                   ┌─────────────────┐              │
+                   │ 9. Supervisor   │              │
+                   │    Review       │              │
+                   │    • Verify     │              │
+                   │      sites      │              │
+                   │    • Check      │              │
+                   │      permits    │              │
+                   └────────┬────────┘              │
+                            │                       │
+                    ┌───────┴───────┐               │
+                    │               │               │
+                    ▼               ▼               │
+           ┌──────────────┐ ┌──────────────┐        │
+           │ REJECT       │ │ APPROVE      │        │
+           │              │ │              │        │
+           │ Return to    │ │ Forward to   │───────►│
+           │ DRAFT with   │ │ FOM          │        │
+           │ comments     │ │              │        ▼
+           └──────────────┘ └──────────────┘ ┌─────────────────┐
+                                             │ 10. FOM Final   │
+                                             │     Approval    │
+                                             │     • Budget    │
+                                             │       check     │
+                                             │     • Timeline  │
+                                             │       verify    │
+                                             └────────┬────────┘
+                                                      │
+                                              ┌───────┴───────┐
+                                              │               │
+                                              ▼               ▼
+                                     ┌──────────────┐ ┌──────────────┐
+                                     │ REJECT       │ │ APPROVE      │
+                                     │              │ │              │
+                                     │ Return for   │ │ Status:      │
+                                     │ revision     │ │ APPROVED     │
+                                     └──────────────┘ └──────┬───────┘
+                                                             │
+                                                             ▼
+                                                    ┌─────────────────┐
+                                                    │ 11. Sites       │
+                                                    │     Generated   │
+                                                    │     as Site     │
+                                                    │     Visits      │
+                                                    └─────────────────┘
+
+═══════════════════════════════════════════════════════════════════════════════
+STAGE 3: DISPATCH & CLAIMING
+═══════════════════════════════════════════════════════════════════════════════
+
+[COORDINATOR]                              [DATA COLLECTOR]
+     │                                          │
+     ▼                                          │
+┌─────────────────┐                             │
+│ 12. Dispatch    │                             │
+│     Sites       │                             │
+│                 │                             │
+│     Status:     │                             │
+│     DISPATCHED  │                             │
+└────────┬────────┘                             │
+         │                                      │
+         │    Push Notification                 │
+         └─────────────────────────────────────►│
+                                                ▼
+                                       ┌─────────────────┐
+                                       │ 13. View        │
+                                       │     Available   │
+                                       │     Sites       │
+                                       │     (Filtered   │
+                                       │      by hub/    │
+                                       │      state)     │
+                                       └────────┬────────┘
+                                                │
+                                                ▼
+                                       ┌─────────────────┐
+                                       │ 14. CLAIM Site  │
+                                       │                 │
+                                       │     First-claim │
+                                       │     wins!       │
+                                       │                 │
+                                       │     Status:     │
+                                       │     ASSIGNED    │
+                                       └────────┬────────┘
+                                                │
+                                                ▼
+                                       ┌─────────────────┐
+                                       │ 15. CONFIRM     │
+                                       │     Assignment  │
+                                       │                 │
+                                       │     Deadline:   │
+                                       │     2 days pre  │
+                                       │                 │
+                                       │     Status:     │
+                                       │     ACCEPTED    │
+                                       └─────────────────┘
+
+═══════════════════════════════════════════════════════════════════════════════
+STAGE 4: FIELD EXECUTION
+═══════════════════════════════════════════════════════════════════════════════
+
+[DATA COLLECTOR - MOBILE APP]
+         │
+         ▼
+┌─────────────────┐
+│ 16. START VISIT │
+│                 │
+│     • GPS       │
+│       Capture   │
+│     • Timestamp │
+│                 │
+│     Status:     │
+│     ONGOING     │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ 17. DATA        │
+│     COLLECTION  │
+│                 │
+│     • Photos    │
+│     • Survey    │
+│       Forms     │
+│     • OTP       │
+│       Verify    │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ 18. END VISIT   │
+│                 │
+│     • GPS       │
+│       End       │
+│       Location  │
+│     • Duration  │
+│       Calc      │
+│                 │
+│     Status:     │
+│     COMPLETED   │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ 19. GPS SAVED   │
+│     TO REGISTRY │
+│                 │
+│     saveGPSTo   │
+│     Registry()  │
+│                 │
+│     Future      │
+│     visits get  │
+│     GPS auto!   │
+└─────────────────┘
+
+═══════════════════════════════════════════════════════════════════════════════
+STAGE 5: COST SUBMISSION & APPROVAL
+═══════════════════════════════════════════════════════════════════════════════
+
+[DATA COLLECTOR]     [SUPERVISOR]      [FINANCE]         [FOM]
+     │                    │               │                │
+     ▼                    │               │                │
+┌─────────────────┐       │               │                │
+│ 20. Submit      │       │               │                │
+│     Costs       │       │               │                │
+│                 │       │               │                │
+│     • Transport │       │               │                │
+│     • Meals     │       │               │                │
+│     • Receipts  │       │               │                │
+│       (photos)  │       │               │                │
+└────────┬────────┘       │               │                │
+         │                │               │                │
+         │ Notification   │               │                │
+         └───────────────►│               │                │
+                          ▼               │                │
+                 ┌─────────────────┐      │                │
+                 │ 21. Supervisor  │      │                │
+                 │     Review      │      │                │
+                 │     (2hr SLA)   │      │                │
+                 │                 │      │                │
+                 │     Verify      │      │                │
+                 │     receipts    │      │                │
+                 └────────┬────────┘      │                │
+                          │               │                │
+                   ┌──────┴──────┐        │                │
+                   │             │        │                │
+                   ▼             ▼        │                │
+          ┌───────────┐  ┌───────────┐    │                │
+          │  REJECT   │  │  APPROVE  │    │                │
+          │           │  │           │───►│                │
+          │  Request  │  │  Forward  │    │                │
+          │  changes  │  │  to       │    ▼                │
+          └───────────┘  │  Finance  │ ┌─────────────────┐ │
+                         └───────────┘ │ 22. Finance     │ │
+                                       │     Review      │ │
+                                       │     (12hr SLA)  │ │
+                                       │                 │ │
+                                       │     Budget      │ │
+                                       │     check       │ │
+                                       └────────┬────────┘ │
+                                                │          │
+                                         ┌──────┴──────┐   │
+                                         │             │   │
+                                         ▼             ▼   │
+                                ┌───────────┐  ┌───────────┐│
+                                │  REJECT   │  │  APPROVE  ││
+                                │           │  │           ││
+                                │  Policy   │  │  Forward  │▼
+                                │  issue    │  │  to FOM   │
+                                └───────────┘  └─────┬─────┘
+                                                     │
+                                                     ▼
+                                            ┌─────────────────┐
+                                            │ 23. FOM Final   │
+                                            │     Approval    │
+                                            │     (24hr SLA)  │
+                                            │                 │
+                                            │     Final       │
+                                            │     sign-off    │
+                                            └────────┬────────┘
+                                                     │
+                                                     ▼
+                                            ┌─────────────────┐
+                                            │ 24. PAYMENT     │
+                                            │     APPROVED    │
+                                            │                 │
+                                            │     Wallet      │
+                                            │     credited    │
+                                            └─────────────────┘
+
+═══════════════════════════════════════════════════════════════════════════════
+STAGE 6: PAYMENT PROCESSING
+═══════════════════════════════════════════════════════════════════════════════
+
+[FINANCE OFFICER]                         [DATA COLLECTOR]
+       │                                        │
+       ▼                                        │
+┌─────────────────┐                             │
+│ 25. Process     │                             │
+│     Bank        │                             │
+│     Transfer    │                             │
+│                 │                             │
+│     Bank of     │                             │
+│     Khartoum    │                             │
+│                 │                             │
+│     MANUAL      │                             │
+│     ENTRY       │                             │
+│     (No AI!)    │                             │
+└────────┬────────┘                             │
+         │                                      │
+         ▼                                      │
+┌─────────────────┐                             │
+│ 26. Enter       │                             │
+│     Receipt     │                             │
+│     Details     │                             │
+│                 │                             │
+│     • Trans ID  │                             │
+│     • Amount    │                             │
+│     • Date      │                             │
+│     • Receipt # │                             │
+└────────┬────────┘                             │
+         │                                      │
+         ▼                                      │
+┌─────────────────┐                             │
+│ 27. Mark as     │    Email Notification       │
+│     Transferred │─────────────────────────────►│
+│                 │                             │
+│     Wallet      │                             ▼
+│     updated     │                    ┌─────────────────┐
+│                 │                    │ 28. Receive     │
+│     Audit       │                    │     Payment     │
+│     logged      │                    │     Confirm     │
+└─────────────────┘                    │                 │
+                                       │     VISIT       │
+                                       │     COMPLETE!   │
+                                       └─────────────────┘
+```
+
+### 10.2 Payment Methods
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        PAYMENT METHODS & CHANNELS                           │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+                          ┌───────────────────┐
+                          │   APPROVED COST   │
+                          │   SUBMISSION      │
+                          └─────────┬─────────┘
+                                    │
+                                    ▼
+                          ┌───────────────────┐
+                          │   WALLET CREDIT   │
+                          │                   │
+                          │   User's digital  │
+                          │   wallet balance  │
+                          │   increased       │
+                          └─────────┬─────────┘
+                                    │
+                                    ▼
+                          ┌───────────────────┐
+                          │   WITHDRAWAL      │
+                          │   REQUEST         │
+                          │                   │
+                          │   User requests   │
+                          │   bank transfer   │
+                          └─────────┬─────────┘
+                                    │
+                                    ▼
+                          ┌───────────────────┐
+                          │   BANK OF         │
+                          │   KHARTOUM        │
+                          │                   │
+                          │   Manual Transfer │
+                          │   (No AI/auto!)   │
+                          └─────────┬─────────┘
+                                    │
+                                    ▼
+                          ┌───────────────────┐
+                          │   RECEIPT ENTRY   │
+                          │                   │
+                          │   Finance Officer │
+                          │   enters:         │
+                          │   • Transaction # │
+                          │   • Amount        │
+                          │   • Date          │
+                          │   • Bank receipt  │
+                          └─────────┬─────────┘
+                                    │
+                                    ▼
+                          ┌───────────────────┐
+                          │   EMAIL NOTIF     │
+                          │                   │
+                          │   noreply@        │
+                          │   pactorg.com     │
+                          │   (IONOS SMTP)    │
+                          └───────────────────┘
+
+IMPORTANT: NO AI/AUTOMATED CHARGES
+═══════════════════════════════════════════════════════════════════════════════
+All bank transfers are MANUAL:
+• Finance Officer initiates transfer via Bank of Khartoum
+• Receipt details entered manually into system
+• No automated payment processing
+• No AI-based receipt validation
+• Human verification required at every step
+═══════════════════════════════════════════════════════════════════════════════
+```
+
+---
+
+## 11. Project Features & Team Visibility
+
+### 11.1 Project Structure
+
+**Implementation Files:**
+- Project Detail: `src/pages/projects/ProjectDetail.tsx`
+- Team Management: `src/components/project/TeamMemberCard.tsx`
+- Permission Guards: `src/components/PermissionGuard.tsx`
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          PROJECT STRUCTURE                                   │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+                         ┌────────────────────────┐
+                         │       PROJECT          │
+                         │                        │
+                         │  • name                │
+                         │  • description         │
+                         │  • start_date          │
+                         │  • end_date            │
+                         │  • status              │
+                         │  • budget              │
+                         │  • hub_id              │
+                         └───────────┬────────────┘
+                                     │
+          ┌──────────────────────────┼──────────────────────────┐
+          │                          │                          │
+          ▼                          ▼                          ▼
+┌───────────────────┐    ┌───────────────────┐    ┌───────────────────┐
+│   TEAM MEMBERS    │    │   PROJECT         │    │   MMPs            │
+│                   │    │   ACTIVITIES      │    │                   │
+│ • project_members │    │                   │    │ • mmp_files       │
+│   table           │    │ • project_        │    │ • linked via      │
+│                   │    │   activities      │    │   project_id      │
+│ Users assigned    │    │   table           │    │                   │
+│ to this project   │    │                   │    │ Monthly plans     │
+│ with specific     │    │ Tasks/activities  │    │ for this project  │
+│ roles             │    │ within project    │    │                   │
+└───────────────────┘    └───────────────────┘    └───────────────────┘
+          │                          │                          │
+          ▼                          ▼                          ▼
+┌───────────────────┐    ┌───────────────────┐    ┌───────────────────┐
+│ SITE VISITS       │    │ BUDGETS           │    │ DOCUMENTS         │
+│                   │    │                   │    │                   │
+│ Generated from    │    │ Budget allocations│    │ Project documents │
+│ MMPs for this     │    │ and tracking      │    │ and attachments   │
+│ project           │    │                   │    │                   │
+└───────────────────┘    └───────────────────┘    └───────────────────┘
+```
+
+### 11.2 Team Member vs Non-Member Visibility
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    PROJECT VISIBILITY MATRIX                                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+                    ┌─────────────────────────────────────────────────────────┐
+                    │                     TEAM MEMBER                          │
+                    │              (Assigned to Project)                       │
+                    ├─────────────────────────────────────────────────────────┤
+                    │                                                         │
+                    │  CAN VIEW:                                              │
+                    │  ✓ Full project details                                 │
+                    │  ✓ All team members & contacts                          │
+                    │  ✓ Project activities & tasks                           │
+                    │  ✓ Site visits (assigned to them or viewable by role)   │
+                    │  ✓ MMP list and details                                 │
+                    │  ✓ Budget information (if role permits)                 │
+                    │  ✓ Documents & attachments                              │
+                    │  ✓ Real-time notifications for project updates          │
+                    │                                                         │
+                    │  CAN DO (based on role):                                │
+                    │  ✓ Claim site visits (Data Collector)                   │
+                    │  ✓ Approve submissions (Supervisor/Finance)             │
+                    │  ✓ Upload MMPs (PM/Admin)                               │
+                    │  ✓ Edit project details (PM/Admin)                      │
+                    │                                                         │
+                    └─────────────────────────────────────────────────────────┘
+
+                    ┌─────────────────────────────────────────────────────────┐
+                    │                   NON-TEAM MEMBER                        │
+                    │             (Not Assigned to Project)                    │
+                    ├─────────────────────────────────────────────────────────┤
+                    │                                                         │
+                    │  CAN VIEW (if role permits general access):             │
+                    │  ○ Project name & basic info (list view only)           │
+                    │  ○ Public project status                                │
+                    │  ✗ Cannot view team members                             │
+                    │  ✗ Cannot view project activities                       │
+                    │  ✗ Cannot view site visits                              │
+                    │  ✗ Cannot view MMPs                                     │
+                    │  ✗ Cannot view budget details                           │
+                    │  ✗ Cannot view documents                                │
+                    │                                                         │
+                    │  CANNOT DO:                                             │
+                    │  ✗ Claim any site visits                                │
+                    │  ✗ Make any approvals                                   │
+                    │  ✗ Upload MMPs                                          │
+                    │  ✗ Edit anything                                        │
+                    │                                                         │
+                    │  EXCEPTION: Admins & Super Admins have global access    │
+                    │                                                         │
+                    └─────────────────────────────────────────────────────────┘
+
+ROLE-BASED ACCESS WITHIN PROJECTS:
+═══════════════════════════════════════════════════════════════════════════════
+│ Role               │ Project Details │ Team │ Tasks │ Visits │ Budget │ MMP │
+├────────────────────┼─────────────────┼──────┼───────┼────────┼────────┼─────│
+│ Admin/Super Admin  │      FULL       │ FULL │ FULL  │  FULL  │  FULL  │FULL │
+│ FOM                │      FULL       │ FULL │ FULL  │  FULL  │  FULL  │FULL │
+│ Project Manager    │      FULL       │ FULL │ FULL  │  FULL  │  READ  │FULL │
+│ State Coordinator  │      READ       │ READ │ READ  │ ASSIGN │  READ  │READ │
+│ Supervisor         │      READ       │ READ │ READ  │ MANAGE │  NONE  │READ │
+│ Data Collector     │      READ       │ READ │ READ  │ CLAIM  │  NONE  │READ │
+│ Finance Officer    │      READ       │ READ │ NONE  │  READ  │  FULL  │READ │
+│ Reviewer           │      READ       │ READ │ READ  │  READ  │  READ  │READ │
+│ Non-member         │      NONE       │ NONE │ NONE  │  NONE  │  NONE  │NONE │
+═══════════════════════════════════════════════════════════════════════════════
+```
+
+### 11.3 Task Visibility Within Projects
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                       TASK VISIBILITY RULES                                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+PROJECT ACTIVITIES/TASKS:
+─────────────────────────
+
+┌───────────────────┐     ┌───────────────────┐     ┌───────────────────┐
+│ TASK CREATED      │     │ TASK ASSIGNED     │     │ TASK VISIBLE      │
+│                   │     │                   │     │                   │
+│ By: PM/Admin      │────►│ To: Team Member   │────►│ To: Assignee +    │
+│                   │     │                   │     │    Supervisors +  │
+│                   │     │                   │     │    Project Leads  │
+└───────────────────┘     └───────────────────┘     └───────────────────┘
+
+VISIBILITY RULES:
+═══════════════════════════════════════════════════════════════════════════════
+│ User Type                │ Can See                                          │
+├──────────────────────────┼──────────────────────────────────────────────────│
+│ Task Assignee            │ • Their assigned tasks                           │
+│                          │ • Task details, deadlines, requirements          │
+│                          │ • Can update progress                            │
+├──────────────────────────┼──────────────────────────────────────────────────│
+│ Supervisor (same hub)    │ • All tasks for team members they supervise      │
+│                          │ • Can reassign tasks                             │
+│                          │ • Can approve task completion                    │
+├──────────────────────────┼──────────────────────────────────────────────────│
+│ PM/FOM                   │ • All tasks in the project                       │
+│                          │ • Full create/edit/delete access                 │
+│                          │ • Can assign to any team member                  │
+├──────────────────────────┼──────────────────────────────────────────────────│
+│ Admin/Super Admin        │ • All tasks across all projects                  │
+│                          │ • Global oversight                               │
+├──────────────────────────┼──────────────────────────────────────────────────│
+│ Non-team member          │ • Cannot see any tasks                           │
+═══════════════════════════════════════════════════════════════════════════════
+
+SITE VISIT VISIBILITY (Special Rules):
+───────────────────────────────────────
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                             │
+│  DATA COLLECTOR VIEW:                                                       │
+│  • See DISPATCHED sites in their hub/state/locality (for claiming)         │
+│  • See ASSIGNED/ACCEPTED sites assigned to them                            │
+│  • See ONGOING/COMPLETED sites they executed                                │
+│  • CANNOT see sites assigned to other collectors                            │
+│                                                                             │
+│  SUPERVISOR VIEW:                                                           │
+│  • See ALL sites for their team (regardless of status)                      │
+│  • Can reassign sites between team members                                  │
+│  • Can dispatch sites to specific collectors                                │
+│                                                                             │
+│  COORDINATOR VIEW:                                                          │
+│  • See ALL sites in their state                                             │
+│  • Can dispatch and assign                                                  │
+│  • Can view collector assignments                                           │
+│                                                                             │
+│  FOM/ADMIN VIEW:                                                            │
+│  • Global view of all sites                                                 │
+│  • Full management capabilities                                             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 12. Database Architecture
 
 ### 10.1 Core Tables
 
