@@ -96,7 +96,7 @@ jobs:
           script: |
             cd ${{ secrets.APP_DIR }}
             DH_USER_LC=$(echo "mukisavaniah" | tr '[:upper:]' '[:lower:]')
-            cat > .env <<EOF
+            cat > .env <<-EOF
             DOCKERHUB_USERNAME=$DH_USER_LC
             VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}
             VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}
