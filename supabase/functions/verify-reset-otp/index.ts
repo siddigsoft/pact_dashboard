@@ -84,34 +84,46 @@ serve(async (req) => {
       }
 
       const smtpHost = Deno.env.get('SMTP_HOST')
-      const smtpPort = Deno.env.get('SMTP_PORT')
+      const smtpPort = Deno.env.get('SMTP_PORT') || '465'
       const smtpUser = Deno.env.get('SMTP_USER')
       const smtpPassword = Deno.env.get('SMTP_PASSWORD')
 
-      if (smtpHost && smtpPort && smtpUser && smtpPassword) {
+      console.log(`SMTP Config Check: host=${smtpHost ? 'SET' : 'MISSING'}, port=${smtpPort}, user=${smtpUser ? smtpUser.substring(0,5)+'...' : 'MISSING'}, pass=${smtpPassword ? 'SET' : 'MISSING'}`)
+
+      if (smtpHost && smtpUser && smtpPassword) {
         try {
           const { SmtpClient } = await import('https://deno.land/x/smtp@v0.7.0/mod.ts')
           
           const portNum = Number(smtpPort)
-          console.log(`Connecting to SMTP: ${smtpHost}:${portNum}`)
+          console.log(`Attempting SMTP connection to ${smtpHost}:${portNum}`)
           
           const client = new SmtpClient()
           
-          // Connect with TLS for port 465, STARTTLS for other ports
-          if (portNum === 465) {
-            await client.connectTLS({
-              hostname: smtpHost,
-              port: portNum,
-              username: smtpUser,
-              password: smtpPassword,
-            })
-          } else {
-            await client.connect({
-              hostname: smtpHost,
-              port: portNum,
-              username: smtpUser,
-              password: smtpPassword,
-            })
+          // Use TLS connection (port 465) for maximum compatibility
+          // IONOS supports both 465 (SSL/TLS) and 587 (STARTTLS)
+          try {
+            if (portNum === 465) {
+              console.log('Using connectTLS for port 465...')
+              await client.connectTLS({
+                hostname: smtpHost,
+                port: portNum,
+                username: smtpUser,
+                password: smtpPassword,
+              })
+            } else {
+              // Port 587 uses STARTTLS
+              console.log(`Using connect for port ${portNum} (STARTTLS)...`)
+              await client.connect({
+                hostname: smtpHost,
+                port: portNum,
+                username: smtpUser,
+                password: smtpPassword,
+              })
+            }
+            console.log('SMTP connection established successfully')
+          } catch (connErr) {
+            console.error('SMTP connection failed:', connErr)
+            throw connErr
           }
 
           const recipientName = userData.full_name || 'User'
