@@ -638,10 +638,32 @@ export function MobileAuthScreen({ onAuthSuccess }: MobileAuthScreenProps) {
               type="button"
               className="w-full text-center text-xs text-black/40 dark:text-white/40 mt-4 py-2 font-medium touch-manipulation"
               data-testid="button-forgot-password"
-              onClick={() => hapticPresets.buttonPress()}
+              onClick={() => {
+                hapticPresets.buttonPress();
+                navigate('/forgot-password');
+              }}
             >
               Forgot your password?
             </button>
+
+            {/* Sign Up Section */}
+            <div className="mt-4 pt-4 border-t border-black/10 dark:border-white/10">
+              <p className="text-center text-xs text-black/50 dark:text-white/50 mb-3">
+                Don't have an account?
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full h-11 text-sm font-semibold rounded-full gap-2 border-black/20 dark:border-white/20"
+                onClick={() => {
+                  hapticPresets.buttonPress();
+                  navigate('/register');
+                }}
+                data-testid="button-mobile-signup"
+              >
+                Create Account
+              </Button>
+            </div>
           </div>
         </div>
       </div>
