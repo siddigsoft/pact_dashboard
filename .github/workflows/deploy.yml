@@ -3,7 +3,6 @@ name: Deploy to VPS
 on:
   push:
     branches:
-      
       - master_backup
 
 jobs:
@@ -25,12 +24,19 @@ jobs:
       - name: Build project
         run: npm run build
 
-      - name: Deploy to VPS via SSH
+      - name: Deploy to VPS via SSH (Hardcoded Key for Testing)
         uses: appleboy/ssh-action@v1.2.0
         with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
+          host: 209.38.78.38
+          username: root
+          key: |
+            -----BEGIN OPENSSH PRIVATE KEY-----
+            b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
+            QyNTUxOQAAACCiuuDa9zYl5zmknsJpbAIPHByKUfpWuma+XFm/aj54OQAAAJDn+7H85/ux
+            /AAAAAtzc2gtZWQyNTUxOQAAACCiuuDa9zYl5zmknsJpbAIPHByKUfpWuma+XFm/aj54OQ
+            AAAECPMfc/1PwFqCYgv4VGK6QR4IFItzQXtzjMi6fvmgHWDKK64Nr3NiXnOaSewmlsAg8c
+            HIpR+la6Zr5cWb9qPng5AAAACnZwcy1hY2Nlc3MBAgM=
+            -----END OPENSSH PRIVATE KEY-----
           script: |
             cd /home/deploy/pact_dashboard
             git pull origin master_backup
