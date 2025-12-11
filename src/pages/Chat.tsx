@@ -52,6 +52,19 @@ const Chat: React.FC = () => {
   const lastProcessedParamRef = useRef<string | null>(null);
   
   const { onlineUserIds } = useRealtimeTeamLocations({ enabled: true });
+  const headerRef = useRef<HTMLDivElement | null>(null);
+  const [headerHeight, setHeaderHeight] = useState<number>(140);
+
+  useEffect(() => {
+    if (!isMobile) return;
+    const updateHeaderHeight = () => {
+      const h = headerRef.current?.offsetHeight || 140;
+      setHeaderHeight(h);
+    };
+    updateHeaderHeight();
+    window.addEventListener('resize', updateHeaderHeight);
+    return () => window.removeEventListener('resize', updateHeaderHeight);
+  }, [isMobile]);
 
   useEffect(() => {
     if (!currentUser) {
@@ -281,13 +294,14 @@ const Chat: React.FC = () => {
     return (
       <div 
         className="h-full flex flex-col bg-white dark:bg-black" 
-        style={{ paddingBottom: 'env(safe-area-inset-bottom)', paddingTop: 'env(safe-area-inset-top)' }}
+        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
         data-testid="chat-page"
       >
         {activeView === 'list' ? (
           <div className="flex flex-col h-full">
             {/* Compact Header with safe area for notch */}
             <header 
+              ref={headerRef}
               className="fixed top-0 left-0 right-0 shrink-0 bg-black px-3 pb-3 z-50"
               style={{ paddingTop: 'calc(env(safe-area-inset-top) + 12px)' }}
             >
@@ -357,8 +371,8 @@ const Chat: React.FC = () => {
               )}
             </header>
             
-            {/* Content with padding for fixed header */}
-            <div style={{ paddingTop: 'calc(env(safe-area-inset-top) + 140px)' }}>
+            {/* Content positioned exactly below fixed header */}
+            <div style={{ paddingTop: `${headerHeight}px` }}>
               {/* Search */}
               <div className="px-3 py-2 bg-white dark:bg-black border-b border-gray-100 dark:border-gray-900">
               <div className="relative">
@@ -595,7 +609,7 @@ const Chat: React.FC = () => {
               </div>
             </header>
             <div className="flex-1 overflow-hidden">
-              <ChatWindow />
+              <ChatWindow hideHeader={true} />
             </div>
           </div>
         )}
