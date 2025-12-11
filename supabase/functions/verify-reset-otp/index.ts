@@ -92,39 +92,27 @@ serve(async (req) => {
 
       if (smtpHost && smtpUser && smtpPassword) {
         try {
-          const { SmtpClient } = await import('https://deno.land/x/smtp@v0.7.0/mod.ts')
+          // Use nodemailer via npm - compatible with Supabase Edge Functions
+          const nodemailer = await import('npm:nodemailer@6.9.8')
           
           const portNum = Number(smtpPort)
           console.log(`Attempting SMTP connection to ${smtpHost}:${portNum}`)
           
-          const client = new SmtpClient()
-          
-          // Use TLS connection (port 465) for maximum compatibility
-          // IONOS supports both 465 (SSL/TLS) and 587 (STARTTLS)
-          try {
-            if (portNum === 465) {
-              console.log('Using connectTLS for port 465...')
-              await client.connectTLS({
-                hostname: smtpHost,
-                port: portNum,
-                username: smtpUser,
-                password: smtpPassword,
-              })
-            } else {
-              // Port 587 uses STARTTLS
-              console.log(`Using connect for port ${portNum} (STARTTLS)...`)
-              await client.connect({
-                hostname: smtpHost,
-                port: portNum,
-                username: smtpUser,
-                password: smtpPassword,
-              })
+          // Create transporter with IONOS SMTP settings
+          const transporter = nodemailer.default.createTransport({
+            host: smtpHost,
+            port: portNum,
+            secure: portNum === 465, // true for 465, false for 587
+            auth: {
+              user: smtpUser,
+              pass: smtpPassword,
+            },
+            tls: {
+              rejectUnauthorized: false // Allow self-signed certs
             }
-            console.log('SMTP connection established successfully')
-          } catch (connErr) {
-            console.error('SMTP connection failed:', connErr)
-            throw connErr
-          }
+          })
+
+          console.log('Nodemailer transporter created')
 
           const recipientName = userData.full_name || 'User'
           const resetLink = `https://app.pactorg.com/reset-password?email=${encodeURIComponent(email)}`
@@ -165,16 +153,16 @@ serve(async (req) => {
             </html>
           `
 
-          await client.send({
-            from: smtpUser,
+          const mailOptions = {
+            from: `"PACT Workflow" <${smtpUser}>`,
             to: email,
             subject: 'PACT Password Reset Code',
-            content: `Hello ${recipientName},\n\nYour password reset code is: ${generatedOtp}\n\nThis code expires in 15 minutes.\n\nClick here to reset your password: ${resetLink}\n\n- PACT Workflow Platform`,
+            text: `Hello ${recipientName},\n\nYour password reset code is: ${generatedOtp}\n\nThis code expires in 15 minutes.\n\nClick here to reset your password: ${resetLink}\n\n- PACT Workflow Platform`,
             html: emailHtml,
-          })
+          }
 
-          await client.close()
-          console.log(`Password reset email sent successfully to ${email}`)
+          const info = await transporter.sendMail(mailOptions)
+          console.log(`Password reset email sent successfully to ${email}, messageId: ${info.messageId}`)
           
           // Log successful email to audit_logs
           try {
