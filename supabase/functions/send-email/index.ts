@@ -158,31 +158,32 @@ serve(async (req) => {
     const portNum = Number(smtpPort)
     console.log(`SMTP Config: ${smtpHost}:${portNum}, user: ${smtpUser.substring(0, 5)}...`)
 
-    const { SMTPClient } = await import('https://deno.land/x/denomailer@1.6.0/mod.ts')
+    // Use deno-smtp library (more stable than denomailer)
+    const { SmtpClient } = await import('https://deno.land/x/smtp@v0.7.0/mod.ts')
     
-    const connectionConfig: any = {
-      hostname: smtpHost,
-      port: portNum,
-      auth: {
+    const client = new SmtpClient()
+    
+    // Connect with TLS for port 465, STARTTLS for other ports
+    if (portNum === 465) {
+      await client.connectTLS({
+        hostname: smtpHost,
+        port: portNum,
         username: smtpUser,
         password: smtpPassword,
-      },
-    }
-
-    if (portNum === 465) {
-      connectionConfig.tls = true
+      })
     } else {
-      connectionConfig.tls = false
+      await client.connect({
+        hostname: smtpHost,
+        port: portNum,
+        username: smtpUser,
+        password: smtpPassword,
+      })
     }
-
-    console.log(`Creating SMTP connection (port ${portNum}, tls: ${connectionConfig.tls})`)
-    
-    const client = new SMTPClient({ connection: connectionConfig })
 
     console.log(`Sending email to ${to}...`)
     
     await client.send({
-      from: `PACT Workflow <${smtpUser}>`,
+      from: smtpUser,
       to: to,
       subject: subject,
       content: emailText || '',
