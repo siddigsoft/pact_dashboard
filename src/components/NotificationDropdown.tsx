@@ -4,7 +4,7 @@ import { DropdownMenuContent, DropdownMenuLabel, DropdownMenuSeparator } from '@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Bell, CheckCheck, AlertCircle, CheckCircle2, Clock, Phone, MessageSquare, Search, Calendar, X } from 'lucide-react';
+import { Bell, CheckCheck, AlertCircle, CheckCircle2, Clock, Phone, MessageSquare, Search, Calendar, X, ChevronRight } from 'lucide-react';
 import { useNotifications } from '@/context/notifications/NotificationContext';
 import { useCommunication } from '@/context/communications/CommunicationContext';
 import { useChat } from '@/context/chat/ChatContextSupabase';
@@ -278,8 +278,10 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
       );
     }
     
-    // Call-related notifications
-    if (notification.relatedEntityType === 'call' || notification.title?.toLowerCase().includes('call')) {
+    // Call-related notifications (Call Ended, Missed Call, etc.)
+    if (notification.relatedEntityType === 'call' || 
+        notification.title?.toLowerCase().includes('call') ||
+        notification.message?.toLowerCase().includes('call')) {
       return (
         <Button 
           variant="outline" 
@@ -294,6 +296,26 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
         >
           <Phone className="h-3 w-3 mr-1" />
           View Calls
+        </Button>
+      );
+    }
+    
+    // Fallback: Show View Details button if notification has a link
+    if (notification.link) {
+      return (
+        <Button 
+          variant="outline" 
+          size="sm"
+          className="h-7"
+          onClick={(e) => { 
+            e.stopPropagation();
+            navigate(notification.link!);
+            onClose();
+          }}
+          data-testid="button-view-details"
+        >
+          <ChevronRight className="h-3 w-3 mr-1" />
+          View Details
         </Button>
       );
     }
