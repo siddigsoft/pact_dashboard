@@ -51,11 +51,27 @@ const ResetPassword = () => {
   });
 
   useEffect(() => {
+    // Check for Supabase's built-in magic link (access_token in hash)
+    // Redirect to forgot-password page if detected
+    const hash = window.location.hash;
+    if (hash && hash.includes('access_token')) {
+      toast({
+        title: "Invalid reset link",
+        description: "Please use the 6-digit code sent to your email. Redirecting to password reset...",
+        variant: "destructive",
+      });
+      // Redirect to forgot-password after a short delay
+      setTimeout(() => {
+        navigate('/forgot-password');
+      }, 2000);
+      return;
+    }
+
     const emailParam = searchParams.get('email');
     if (emailParam) {
       setEmail(emailParam);
     }
-  }, [searchParams]);
+  }, [searchParams, navigate, toast]);
 
   const onVerifyOTP = async (values: z.infer<typeof otpFormSchema>) => {
     setIsVerifying(true);
