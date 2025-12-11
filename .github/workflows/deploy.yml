@@ -1,73 +1,69 @@
-name: Deploy to VPS (master_backup)
+name: Deploy to VPS (Hardcoded Key Test)
 
 on:
   push:
-    branches: [master_backup]
+    branches:
+      - master_backup
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout
+      # Step 1: Checkout code
+      - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Install deps and build
-        run: |
-          npm ci
-          npm run build
-
-      - name: Sync files to VPS
-        uses: appleboy/scp-action@v0.1.7
+      # Step 2: Set up Node.js
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_KEY }}
-          port: ${{ secrets.SSH_PORT }}
-          source: "."
-          target: "${{ secrets.APP_DIR }}"
-          overwrite: true
-          rm: false
-          strip_components: 0
-          exclude: |
-            .git
-            node_modules
-            dist
-            .next
+          node-version: '18'
 
-      - name: Write env file on VPS
-        uses: appleboy/ssh-action@v1.1.0
+      # Step 3: Install dependencies locally (optional)
+      - name: Install dependencies
+        run: npm ci
+
+      # Step 4: Build project locally (optional)
+      - name: Build project
+        run: npx vite build
+
+      # Step 5: Deploy via SSH to VPS using hardcoded key
+      - name: Deploy to VPS via SSH
+        uses: appleboy/ssh-action@v1.2.0
         with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_KEY }}
-          port: ${{ secrets.SSH_PORT }}
+          host: 209.38.78.38
+          username: root
+          key: |
+            -----BEGIN OPENSSH PRIVATE KEY-----
+            b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
+            QyNTUxOQAAACCiuuDa9zYl5zmknsJpbAIPHByKUfpWuma+XFm/aj54OQAAAJDn+7H85/ux
+            /AAAAAtzc2gtZWQyNTUxOQAAACCiuuDa9zYl5zmknsJpbAIPHByKUfpWuma+XFm/aj54OQ
+            AAAECPMfc/1PwFqCYgv4VGK6QR4IFItzQXtzjMi6fvmgHWDKK64Nr3NiXnOaSewmlsAg8c
+            HIpR+la6Zr5cWb9qPng5AAAACnZwcy1hY2Nlc3MBAgM=
+            -----END OPENSSH PRIVATE KEY-----
           script: |
-            cd ${{ secrets.APP_DIR }}
-            cat > .env <<'EOF'
-            VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}
-            VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}
-            SUPABASE_SERVICE_ROLE_KEY=${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-            VITE_FIREBASE_API_KEY=${{ secrets.VITE_FIREBASE_API_KEY }}
-            VITE_FIREBASE_AUTH_DOMAIN=${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
-            VITE_FIREBASE_PROJECT_ID=${{ secrets.VITE_FIREBASE_PROJECT_ID }}
-            VITE_FIREBASE_STORAGE_BUCKET=${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
-            VITE_FIREBASE_MESSAGING_SENDER_ID=${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
-            VITE_FIREBASE_APP_ID=${{ secrets.VITE_FIREBASE_APP_ID }}
-            VITE_FIREBASE_VAPID_PUBLIC_KEY=${{ secrets.VITE_FIREBASE_VAPID_PUBLIC_KEY }}
-            EOF
+            # Navigate to project folder
+            cd /home/deploy/pact_dashboard
 
-      - name: Build and restart app
-        uses: appleboy/ssh-action@v1.1.0
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_KEY }}
-          port: ${{ secrets.SSH_PORT }}
-          script: |
-            cd ${{ secrets.APP_DIR }}
-            docker compose -p pact_dashboard down
-            docker compose -p pact_dashboard build --pull
-            docker compose -p pact_dashboard up -d
+            # Clean local changes
+            git reset --hard
+            git clean -fd
 
+            # Pull latest code
+            git pull origin master_backup
+
+            # Install dependencies (dev + prod)
+            npm install
+
+            # Build project using Vite
+            npx vite build
+
+            # Ensure PM2 is installed
+            npm install -g pm2
+
+            # Reload app if running, otherwise start
+            pm2 reload pact_dashboard --update-env || pm2 start dist/index.js --name pact_dashboard
+
+            # Optional: check PM2 status
+            pm2 list
