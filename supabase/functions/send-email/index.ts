@@ -5,6 +5,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Base URL for links in emails
+const APP_URL = 'https://app.pactorg.com'
+
 interface EmailRequest {
   to: string
   subject: string
@@ -13,11 +16,21 @@ interface EmailRequest {
   type?: 'otp' | 'password-reset' | 'notification' | 'general'
   otp?: string
   recipientName?: string
+  actionUrl?: string
+  actionLabel?: string
 }
 
-function generateEmailHtml(type: string | undefined, otp: string | undefined, recipientName: string | undefined): { html: string; text: string } | null {
+function generateEmailHtml(
+  type: string | undefined, 
+  otp: string | undefined, 
+  recipientName: string | undefined,
+  actionUrl?: string,
+  actionLabel?: string
+): { html: string; text: string } | null {
+  const name = recipientName || 'User'
+  
   if (type === 'otp' && otp) {
-    const name = recipientName || 'User'
+    const resetLink = actionUrl || `${APP_URL}/reset-password`
     return {
       html: `
         <!DOCTYPE html>
@@ -25,25 +38,35 @@ function generateEmailHtml(type: string | undefined, otp: string | undefined, re
         <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>PACT Verification Code</title></head>
         <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
           <div style="background-color: white; border-radius: 8px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-            <div style="text-align: center; margin-bottom: 30px;"><h1 style="color: #1a1a2e; margin: 0; font-size: 24px;">PACT Workflow Platform</h1></div>
+            <div style="text-align: center; margin-bottom: 30px;">
+              <h1 style="color: #1a1a2e; margin: 0; font-size: 24px;">PACT Workflow Platform</h1>
+            </div>
             <p style="color: #333; font-size: 16px; line-height: 1.5;">Hello ${name},</p>
             <p style="color: #333; font-size: 16px; line-height: 1.5;">Your verification code is:</p>
             <div style="background-color: #f0f4f8; border-radius: 8px; padding: 20px; text-align: center; margin: 20px 0;">
               <span style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #1a1a2e;">${otp}</span>
             </div>
             <p style="color: #666; font-size: 14px; line-height: 1.5;">This code expires in 10 minutes. Do not share this code with anyone.</p>
+            <div style="text-align: center; margin: 25px 0;">
+              <a href="${resetLink}" style="display: inline-block; padding: 14px 30px; background-color: #9b87f5; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
+                ${actionLabel || 'Go to PACT Platform'}
+              </a>
+            </div>
             <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
-            <p style="color: #999; font-size: 12px; text-align: center;">This is an automated message from PACT Workflow Platform.</p>
+            <p style="color: #999; font-size: 12px; text-align: center;">
+              This is an automated message from PACT Workflow Platform.<br>
+              <a href="${APP_URL}" style="color: #9b87f5; text-decoration: none;">${APP_URL}</a>
+            </p>
           </div>
         </body>
         </html>
       `,
-      text: `Hello ${name},\n\nYour PACT verification code is: ${otp}\n\nThis code expires in 10 minutes.\n\n- PACT Workflow Platform`
+      text: `Hello ${name},\n\nYour PACT verification code is: ${otp}\n\nThis code expires in 10 minutes.\n\nGo to PACT Platform: ${resetLink}\n\n- PACT Workflow Platform`
     }
   }
 
   if (type === 'password-reset' && otp) {
-    const name = recipientName || 'User'
+    const resetLink = actionUrl || `${APP_URL}/reset-password`
     return {
       html: `
         <!DOCTYPE html>
@@ -51,20 +74,33 @@ function generateEmailHtml(type: string | undefined, otp: string | undefined, re
         <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>PACT Password Reset</title></head>
         <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
           <div style="background-color: white; border-radius: 8px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-            <div style="text-align: center; margin-bottom: 30px;"><h1 style="color: #1a1a2e; margin: 0; font-size: 24px;">PACT Workflow Platform</h1></div>
+            <div style="text-align: center; margin-bottom: 30px;">
+              <h1 style="color: #1a1a2e; margin: 0; font-size: 24px;">PACT Workflow Platform</h1>
+            </div>
             <p style="color: #333; font-size: 16px; line-height: 1.5;">Hello ${name},</p>
-            <p style="color: #333; font-size: 16px; line-height: 1.5;">We received a request to reset your password. Use the code below:</p>
+            <p style="color: #333; font-size: 16px; line-height: 1.5;">We received a request to reset your password. Use the code below to complete your password reset:</p>
             <div style="background-color: #f0f4f8; border-radius: 8px; padding: 20px; text-align: center; margin: 20px 0;">
               <span style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #1a1a2e;">${otp}</span>
             </div>
-            <p style="color: #666; font-size: 14px; line-height: 1.5;">This code expires in 15 minutes. If you didn't request this, please ignore this email.</p>
+            <p style="color: #666; font-size: 14px; line-height: 1.5;">This code expires in 15 minutes. If you didn't request this reset, please ignore this email.</p>
+            <div style="text-align: center; margin: 25px 0;">
+              <a href="${resetLink}" style="display: inline-block; padding: 14px 30px; background-color: #9b87f5; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
+                ${actionLabel || 'Reset Password'}
+              </a>
+            </div>
+            <p style="color: #999; font-size: 12px; text-align: center; margin-top: 15px;">
+              Or copy this link: <a href="${resetLink}" style="color: #9b87f5;">${resetLink}</a>
+            </p>
             <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
-            <p style="color: #999; font-size: 12px; text-align: center;">This is an automated message from PACT Workflow Platform.</p>
+            <p style="color: #999; font-size: 12px; text-align: center;">
+              This is an automated message from PACT Workflow Platform.<br>
+              ICT Team - PACT Command Center Platform
+            </p>
           </div>
         </body>
         </html>
       `,
-      text: `Hello ${name},\n\nYour password reset code is: ${otp}\n\nThis code expires in 15 minutes.\n\n- PACT Workflow Platform`
+      text: `Hello ${name},\n\nWe received a request to reset your password.\n\nYour password reset code is: ${otp}\n\nThis code expires in 15 minutes.\n\nClick here to reset your password: ${resetLink}\n\nIf you didn't request this reset, please ignore this email.\n\n- PACT Workflow Platform`
     }
   }
 
@@ -94,7 +130,7 @@ serve(async (req) => {
       )
     }
 
-    const { to, subject, html, text, type, otp, recipientName }: EmailRequest = await req.json()
+    const { to, subject, html, text, type, otp, recipientName, actionUrl, actionLabel }: EmailRequest = await req.json()
 
     if (!to || !subject) {
       return new Response(
@@ -106,7 +142,7 @@ serve(async (req) => {
     let emailHtml = html
     let emailText = text
 
-    const generatedContent = generateEmailHtml(type, otp, recipientName)
+    const generatedContent = generateEmailHtml(type, otp, recipientName, actionUrl, actionLabel)
     if (generatedContent) {
       emailHtml = generatedContent.html
       emailText = generatedContent.text
@@ -122,11 +158,8 @@ serve(async (req) => {
     const portNum = Number(smtpPort)
     console.log(`SMTP Config: ${smtpHost}:${portNum}, user: ${smtpUser.substring(0, 5)}...`)
 
-    // Import denomailer
     const { SMTPClient } = await import('https://deno.land/x/denomailer@1.6.0/mod.ts')
     
-    // For IONOS: port 465 = implicit TLS, port 587 = STARTTLS
-    // denomailer: tls: true = implicit TLS, tls: false = negotiate STARTTLS
     const connectionConfig: any = {
       hostname: smtpHost,
       port: portNum,
@@ -139,7 +172,6 @@ serve(async (req) => {
     if (portNum === 465) {
       connectionConfig.tls = true
     } else {
-      // Port 587 - use STARTTLS (tls: false initially, upgrade later)
       connectionConfig.tls = false
     }
 
