@@ -92,27 +92,26 @@ serve(async (req) => {
 
       if (smtpHost && smtpUser && smtpPassword) {
         try {
-          // Use nodemailer via npm - compatible with Supabase Edge Functions
-          const nodemailer = await import('npm:nodemailer@6.9.8')
+          // Use denomailer - the original library that was working
+          const { SMTPClient } = await import('https://deno.land/x/denomailer@1.6.0/mod.ts')
           
           const portNum = Number(smtpPort)
           console.log(`Attempting SMTP connection to ${smtpHost}:${portNum}`)
           
-          // Create transporter with IONOS SMTP settings
-          const transporter = nodemailer.default.createTransport({
-            host: smtpHost,
-            port: portNum,
-            secure: portNum === 465, // true for 465, false for 587
-            auth: {
-              user: smtpUser,
-              pass: smtpPassword,
+          // Create SMTP client with IONOS settings
+          const client = new SMTPClient({
+            connection: {
+              hostname: smtpHost,
+              port: portNum,
+              tls: portNum === 465,
+              auth: {
+                username: smtpUser,
+                password: smtpPassword,
+              },
             },
-            tls: {
-              rejectUnauthorized: false // Allow self-signed certs
-            }
           })
 
-          console.log('Nodemailer transporter created')
+          console.log('SMTP client created')
 
           const recipientName = userData.full_name || 'User'
           const resetLink = `https://app.pactorg.com/reset-password?email=${encodeURIComponent(email)}`
@@ -153,16 +152,16 @@ serve(async (req) => {
             </html>
           `
 
-          const mailOptions = {
-            from: `"PACT Workflow" <${smtpUser}>`,
+          await client.send({
+            from: smtpUser,
             to: email,
             subject: 'PACT Password Reset Code',
-            text: `Hello ${recipientName},\n\nYour password reset code is: ${generatedOtp}\n\nThis code expires in 15 minutes.\n\nClick here to reset your password: ${resetLink}\n\n- PACT Workflow Platform`,
+            content: `Hello ${recipientName},\n\nYour password reset code is: ${generatedOtp}\n\nThis code expires in 15 minutes.\n\nClick here to reset your password: ${resetLink}\n\n- PACT Workflow Platform`,
             html: emailHtml,
-          }
+          })
 
-          const info = await transporter.sendMail(mailOptions)
-          console.log(`Password reset email sent successfully to ${email}, messageId: ${info.messageId}`)
+          await client.close()
+          console.log(`Password reset email sent successfully to ${email}`)
           
           // Log successful email to audit_logs
           try {
