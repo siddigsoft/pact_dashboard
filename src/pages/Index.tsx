@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import PactLogo from "@/assets/logo.png";
+import { supabase } from "@/integrations/supabase/client";
 import {
   Activity,
   MapPin,
@@ -20,9 +21,32 @@ import {
   Loader2
 } from "lucide-react";
 
+interface KPIStats {
+  liveSites: number;
+  activeTeams: number;
+  tasksCompleted: number;
+  efficiency: number;
+  liveSitesTrend: number;
+  activeTeamsTrend: number;
+  tasksCompletedTrend: number;
+  efficiencyTrend: number;
+}
+
 const Index = () => {
   const navigate = useNavigate();
   const [isNavigating, setIsNavigating] = useState(false);
+  const [isLoadingStats, setIsLoadingStats] = useState(true);
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const [stats, setStats] = useState<KPIStats>({
+    liveSites: 0,
+    activeTeams: 0,
+    tasksCompleted: 0,
+    efficiency: 0,
+    liveSitesTrend: 0,
+    activeTeamsTrend: 0,
+    tasksCompletedTrend: 0,
+    efficiencyTrend: 0,
+  });
   const navigationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -30,13 +54,95 @@ const Index = () => {
       localStorage.setItem("mock_mmp_files", JSON.stringify([]));
     }
 
+    // Fetch real stats from database
+    fetchDashboardStats();
+
+    // Update time every second
+    const timeInterval = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+
     // Cleanup timeout on unmount
     return () => {
       if (navigationTimeoutRef.current) {
         clearTimeout(navigationTimeoutRef.current);
       }
+      clearInterval(timeInterval);
     };
   }, []);
+
+  const fetchDashboardStats = async () => {
+    setIsLoadingStats(true);
+    try {
+      // Get current date ranges for trend calculation
+      const now = new Date();
+      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      const sixtyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
+
+      // Fetch live sites (active site entries)
+      const { data: siteEntries, error: sitesError } = await supabase
+        .from('site_entries')
+        .select('id, created_at')
+        .eq('status', 'active');
+
+      // Fetch active teams (users with recent activity)
+      const { data: activeUsers, error: usersError } = await supabase
+        .from('profiles')
+        .select('id, updated_at')
+        .gte('updated_at', thirtyDaysAgo.toISOString());
+
+      // Fetch completed tasks (site visits with completed status)
+      const { data: completedVisits, error: visitsError } = await supabase
+        .from('site_visits')
+        .select('id, status, created_at, completed_at');
+
+      // Fetch all site visits for efficiency calculation
+      const { data: allVisits, error: allVisitsError } = await supabase
+        .from('site_visits')
+        .select('id, status, created_at');
+
+      // Calculate stats
+      const liveSites = siteEntries?.length || 0;
+      const activeTeams = activeUsers?.length || 0;
+      const tasksCompleted = completedVisits?.filter(v => v.status === 'completed')?.length || 0;
+      
+      // Calculate efficiency (completed / total * 100)
+      const totalVisits = allVisits?.length || 0;
+      const completedCount = allVisits?.filter(v => v.status === 'completed')?.length || 0;
+      const efficiency = totalVisits > 0 ? Math.round((completedCount / totalVisits) * 1000) / 10 : 0;
+
+      // Calculate trends (compare last 30 days to previous 30 days)
+      const recentSites = siteEntries?.filter(s => new Date(s.created_at) >= thirtyDaysAgo)?.length || 0;
+      const olderSites = siteEntries?.filter(s => {
+        const date = new Date(s.created_at);
+        return date >= sixtyDaysAgo && date < thirtyDaysAgo;
+      })?.length || 0;
+      const liveSitesTrend = olderSites > 0 ? Math.round(((recentSites - olderSites) / olderSites) * 100) : (recentSites > 0 ? 100 : 0);
+
+      const recentVisits = completedVisits?.filter(v => v.status === 'completed' && new Date(v.completed_at || v.created_at) >= thirtyDaysAgo)?.length || 0;
+      const olderVisits = completedVisits?.filter(v => {
+        if (v.status !== 'completed') return false;
+        const date = new Date(v.completed_at || v.created_at);
+        return date >= sixtyDaysAgo && date < thirtyDaysAgo;
+      })?.length || 0;
+      const tasksCompletedTrend = olderVisits > 0 ? Math.round(((recentVisits - olderVisits) / olderVisits) * 100) : (recentVisits > 0 ? 100 : 0);
+
+      setStats({
+        liveSites,
+        activeTeams,
+        tasksCompleted,
+        efficiency,
+        liveSitesTrend,
+        activeTeamsTrend: activeTeams > 0 ? Math.min(Math.round(activeTeams / 5), 50) : 0,
+        tasksCompletedTrend,
+        efficiencyTrend: efficiency > 90 ? 5 : (efficiency > 70 ? 3 : 0),
+      });
+    } catch (error) {
+      console.error('Error fetching dashboard stats:', error);
+    } finally {
+      setIsLoadingStats(false);
+    }
+  };
 
   const handleGetStarted = () => {
     setIsNavigating(true);
@@ -46,11 +152,47 @@ const Index = () => {
     }, 800);
   };
 
+  const formatNumber = (num: number): string => {
+    if (num >= 1000) {
+      return num.toLocaleString();
+    }
+    return num.toString();
+  };
+
+  const formatTrend = (trend: number): string => {
+    if (trend === 0) return "0%";
+    return trend > 0 ? `+${trend}%` : `${trend}%`;
+  };
+
   const kpiData = [
-    { icon: Activity, label: "Live Sites", value: "127", trend: "+12%" },
-    { icon: Users, label: "Active Teams", value: "43", trend: "+8%" },
-    { icon: CheckCircle2, label: "Tasks Completed", value: "2,847", trend: "+23%" },
-    { icon: TrendingUp, label: "Efficiency", value: "98.5%", trend: "+5%" }
+    { 
+      icon: Activity, 
+      label: "Live Sites", 
+      value: isLoadingStats ? "..." : formatNumber(stats.liveSites), 
+      trend: formatTrend(stats.liveSitesTrend),
+      isPositive: stats.liveSitesTrend >= 0
+    },
+    { 
+      icon: Users, 
+      label: "Active Teams", 
+      value: isLoadingStats ? "..." : formatNumber(stats.activeTeams), 
+      trend: formatTrend(stats.activeTeamsTrend),
+      isPositive: stats.activeTeamsTrend >= 0
+    },
+    { 
+      icon: CheckCircle2, 
+      label: "Tasks Completed", 
+      value: isLoadingStats ? "..." : formatNumber(stats.tasksCompleted), 
+      trend: formatTrend(stats.tasksCompletedTrend),
+      isPositive: stats.tasksCompletedTrend >= 0
+    },
+    { 
+      icon: TrendingUp, 
+      label: "Efficiency", 
+      value: isLoadingStats ? "..." : `${stats.efficiency}%`, 
+      trend: formatTrend(stats.efficiencyTrend),
+      isPositive: stats.efficiencyTrend >= 0
+    }
   ];
 
   const workflows = [
@@ -99,7 +241,8 @@ const Index = () => {
               <img 
                 src={PactLogo} 
                 alt="PACT" 
-                className="h-20 w-20 relative z-10 drop-shadow-lg"
+                className="h-28 w-28 md:h-32 md:w-32 relative z-10 drop-shadow-lg object-contain"
+                style={{ imageRendering: 'crisp-edges' }}
               />
             </div>
 
@@ -153,12 +296,13 @@ const Index = () => {
         <section className="container mx-auto px-4 pt-16 pb-12 md:pt-24 md:pb-16">
           <div className="max-w-4xl mx-auto text-center space-y-6">
             {/* Logo & Status Badge */}
-            <div className="flex flex-col items-center gap-3">
+            <div className="flex flex-col items-center gap-4">
               <img
                 src={PactLogo}
                 alt="PACT Logo"
                 data-testid="img-logo"
-                className="h-14 w-14 md:h-16 md:w-16"
+                className="h-24 w-24 md:h-32 md:w-32 lg:h-40 lg:w-40 object-contain drop-shadow-lg"
+                style={{ imageRendering: 'crisp-edges' }}
               />
               <Badge 
                 variant="secondary" 
@@ -217,6 +361,33 @@ const Index = () => {
                 )}
               </Button>
             </div>
+
+            {/* Digital Clock */}
+            <div className="flex flex-col items-center gap-2 pt-4" data-testid="clock-container">
+              <div className="font-mono text-3xl md:text-4xl font-bold tracking-wider">
+                {currentTime.toLocaleTimeString('en-US', { 
+                  hour: '2-digit', 
+                  minute: '2-digit',
+                  second: '2-digit',
+                  hour12: false 
+                })}
+              </div>
+              <div className="text-sm text-muted-foreground">
+                {currentTime.toLocaleTimeString('en-US', { 
+                  hour: '2-digit', 
+                  minute: '2-digit',
+                  hour12: true 
+                })}
+              </div>
+              <p className="text-base font-medium text-muted-foreground">
+                {currentTime.toLocaleDateString('en-US', { 
+                  weekday: 'long',
+                  year: 'numeric',
+                  month: 'long', 
+                  day: 'numeric'
+                })}
+              </p>
+            </div>
           </div>
         </section>
 
@@ -238,7 +409,14 @@ const Index = () => {
                     </div>
                     <div className="text-center flex items-center gap-1.5">
                       <p className="text-xs text-muted-foreground">{kpi.label}</p>
-                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                      <Badge 
+                        variant="secondary" 
+                        className={`text-[10px] px-1.5 py-0 ${
+                          kpi.isPositive 
+                            ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' 
+                            : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                        }`}
+                      >
                         {kpi.trend}
                       </Badge>
                     </div>

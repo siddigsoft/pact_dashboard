@@ -1,10 +1,11 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { AlertTriangle, Phone, X, MapPin, Loader2, Send, Shield, Users, User, ChevronDown, Check } from 'lucide-react';
+import { AlertTriangle, Phone, X, MapPin, Loader2, Send, Shield, Users, User, ChevronDown, Check, Radio } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '@/context/user/UserContext';
+import { useGlobalPresence } from '@/context/presence/GlobalPresenceContext';
 import { triggerHaptic } from '@/lib/haptics';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
@@ -20,12 +21,13 @@ interface EmergencyContact {
   role: string;
 }
 
-type RecipientMode = 'supervisors' | 'specific';
+type RecipientMode = 'supervisors' | 'online' | 'specific';
 
 const HOLD_DURATION = 3000; // 3 seconds to activate
 
 export function EmergencySOS({ isVisible, onClose }: EmergencySOSProps) {
   const { currentUser } = useUser();
+  const { onlineUserIds } = useGlobalPresence();
   const [isHolding, setIsHolding] = useState(false);
   const [holdProgress, setHoldProgress] = useState(0);
   const [isActivated, setIsActivated] = useState(false);
@@ -34,6 +36,7 @@ export function EmergencySOS({ isVisible, onClose }: EmergencySOSProps) {
   const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number; accuracy?: number } | null>(null);
   const [emergencyContacts, setEmergencyContacts] = useState<EmergencyContact[]>([]);
   const [allContacts, setAllContacts] = useState<EmergencyContact[]>([]);
+  const [onlineContacts, setOnlineContacts] = useState<EmergencyContact[]>([]);
   const [recipientMode, setRecipientMode] = useState<RecipientMode>('supervisors');
   const [selectedPerson, setSelectedPerson] = useState<EmergencyContact | null>(null);
   const [showPersonPicker, setShowPersonPicker] = useState(false);
@@ -118,6 +121,44 @@ export function EmergencySOS({ isVisible, onClose }: EmergencySOSProps) {
     }
   };
 
+  // Load online users when they change
+  useEffect(() => {
+    if (!isVisible || onlineUserIds.length === 0) {
+      setOnlineContacts([]);
+      return;
+    }
+
+    const loadOnlineContacts = async () => {
+      try {
+        const otherUserIds = onlineUserIds.filter(id => id !== currentUser?.id);
+        if (otherUserIds.length === 0) {
+          setOnlineContacts([]);
+          return;
+        }
+
+        const { data } = await supabase
+          .from('profiles')
+          .select('id, full_name, phone, role')
+          .in('id', otherUserIds);
+
+        if (data) {
+          setOnlineContacts(
+            data.map(c => ({
+              id: c.id,
+              name: c.full_name || 'Unknown',
+              phone: c.phone || '',
+              role: c.role || '',
+            }))
+          );
+        }
+      } catch (error) {
+        console.error('[SOS] Failed to load online contacts:', error);
+      }
+    };
+
+    loadOnlineContacts();
+  }, [isVisible, onlineUserIds, currentUser?.id]);
+
   const handleHoldStart = useCallback(() => {
     setIsHolding(true);
     setHoldProgress(0);
@@ -156,33 +197,48 @@ export function EmergencySOS({ isVisible, onClose }: EmergencySOSProps) {
     triggerHaptic('heavy');
 
     try {
-      const targetRecipients = recipientMode === 'supervisors' 
-        ? emergencyContacts 
-        : selectedPerson 
-          ? [selectedPerson] 
-          : [];
+      let targetRecipients: EmergencyContact[];
+      
+      if (recipientMode === 'supervisors') {
+        targetRecipients = emergencyContacts;
+      } else if (recipientMode === 'online') {
+        targetRecipients = onlineContacts;
+      } else {
+        targetRecipients = selectedPerson ? [selectedPerson] : [];
+      }
 
       // Error handling: ensure we have recipients
       if (targetRecipients.length === 0) {
         console.error('[SOS] No recipients available to send alert');
         triggerHaptic('error');
         // Show alert to user - can't send without recipients
-        alert(recipientMode === 'supervisors' 
-          ? 'No supervisors available. Please try again or select a specific person.' 
-          : 'Please select a person to send the alert to.');
+        let message = 'Please select a person to send the alert to.';
+        if (recipientMode === 'supervisors') {
+          message = 'No supervisors available. Please try again or select a specific person.';
+        } else if (recipientMode === 'online') {
+          message = 'No users are online right now. Please try supervisors or select a specific person.';
+        }
+        alert(message);
         setIsSending(false);
         return;
       }
 
       // Create emergency alert notifications for each recipient
+      // Include link for navigation and additional data for action buttons
+      const locationStr = currentLocation 
+        ? `${currentLocation.lat.toFixed(6)},${currentLocation.lng.toFixed(6)}` 
+        : '';
       const notifications = targetRecipients.map(recipient => ({
         user_id: recipient.id,
         type: 'warning' as const,
         title: 'EMERGENCY SOS ALERT',
         message: `Emergency alert from ${currentUser?.fullName || 'Field Worker'}. Location: ${currentLocation ? `${currentLocation.lat.toFixed(6)}, ${currentLocation.lng.toFixed(6)}` : 'Unknown'}`,
-        related_entity_type: 'user',
+        related_entity_type: 'sos',
         related_entity_id: currentUser?.id,
+        link: `/field-team?user=${currentUser?.id}${locationStr ? `&location=${encodeURIComponent(locationStr)}` : ''}`,
         is_read: false,
+        category: 'team',
+        priority: 'urgent',
       }));
 
       const { error } = await supabase.from('notifications').insert(notifications);
@@ -245,13 +301,23 @@ export function EmergencySOS({ isVisible, onClose }: EmergencySOSProps) {
       }
       return `This will notify ${count} supervisor${count !== 1 ? 's' : ''} with your location`;
     }
+    if (recipientMode === 'online') {
+      const count = onlineContacts.length;
+      if (count === 0) {
+        return 'No users are online right now';
+      }
+      return `This will notify ${count} online user${count !== 1 ? 's' : ''} with your location`;
+    }
     if (selectedPerson) {
       return `This will notify ${selectedPerson.name} with your location`;
     }
     return 'Select a person to notify';
   };
 
-  const canSend = (recipientMode === 'supervisors' && emergencyContacts.length > 0) || selectedPerson !== null;
+  const canSend = 
+    (recipientMode === 'supervisors' && emergencyContacts.length > 0) || 
+    (recipientMode === 'online' && onlineContacts.length > 0) ||
+    selectedPerson !== null;
 
   return (
     <AnimatePresence>
@@ -294,11 +360,11 @@ export function EmergencySOS({ isVisible, onClose }: EmergencySOSProps) {
                     <p className="text-xs font-medium text-black/50 dark:text-white/50 uppercase tracking-wide">
                       Send alert to
                     </p>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       <Button
                         variant={recipientMode === 'supervisors' ? 'default' : 'outline'}
                         className={cn(
-                          "flex-1 h-11 rounded-full gap-2",
+                          "flex-1 min-w-[120px] h-11 rounded-full gap-2",
                           recipientMode === 'supervisors' 
                             ? "bg-black dark:bg-white text-white dark:text-black" 
                             : "border-black/20 dark:border-white/20"
@@ -311,12 +377,30 @@ export function EmergencySOS({ isVisible, onClose }: EmergencySOSProps) {
                         data-testid="button-recipient-supervisors"
                       >
                         <Users className="h-4 w-4" />
-                        All Supervisors
+                        Supervisors
+                      </Button>
+                      <Button
+                        variant={recipientMode === 'online' ? 'default' : 'outline'}
+                        className={cn(
+                          "flex-1 min-w-[120px] h-11 rounded-full gap-2",
+                          recipientMode === 'online' 
+                            ? "bg-green-600 dark:bg-green-500 text-white" 
+                            : "border-black/20 dark:border-white/20"
+                        )}
+                        onClick={() => {
+                          setRecipientMode('online');
+                          setSelectedPerson(null);
+                          triggerHaptic('light');
+                        }}
+                        data-testid="button-recipient-online"
+                      >
+                        <Radio className="h-4 w-4" />
+                        Online ({onlineContacts.length})
                       </Button>
                       <Button
                         variant={recipientMode === 'specific' ? 'default' : 'outline'}
                         className={cn(
-                          "flex-1 h-11 rounded-full gap-2",
+                          "flex-1 min-w-[120px] h-11 rounded-full gap-2",
                           recipientMode === 'specific' 
                             ? "bg-black dark:bg-white text-white dark:text-black" 
                             : "border-black/20 dark:border-white/20"
@@ -328,7 +412,7 @@ export function EmergencySOS({ isVisible, onClose }: EmergencySOSProps) {
                         data-testid="button-recipient-specific"
                       >
                         <User className="h-4 w-4" />
-                        Specific Person
+                        Specific
                       </Button>
                     </div>
 
@@ -497,6 +581,8 @@ export function EmergencySOS({ isVisible, onClose }: EmergencySOSProps) {
                   <p className="text-sm text-black/60 dark:text-white/60">
                     {recipientMode === 'supervisors' 
                       ? 'Your emergency alert has been sent to supervisors with your current location.'
+                      : recipientMode === 'online'
+                      ? `Your emergency alert has been sent to ${onlineContacts.length} online user${onlineContacts.length !== 1 ? 's' : ''} with your current location.`
                       : `Your emergency alert has been sent to ${selectedPerson?.name} with your current location.`
                     }
                   </p>

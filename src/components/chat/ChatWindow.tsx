@@ -14,7 +14,6 @@ import { User } from '@/types/user';
 import { 
   Send, 
   ArrowLeft, 
-  MoreVertical, 
   Paperclip, 
   Users, 
   X, 
@@ -26,24 +25,27 @@ import {
   Check,
   CheckCheck,
   MessageSquare,
-  RotateCcw
+  RotateCcw,
+  Clapperboard
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { uploadChatAttachment, getContentTypeFromFile, formatFileSize, ChatAttachment } from '@/utils/chatUpload';
+import { JitsiCallModal } from '@/components/calls/JitsiCallModal';
 
 const ChatWindow: React.FC = () => {
   const navigate = useNavigate();
-  const { activeChat, getChatMessages, sendMessage, setActiveChat, isSendingMessage } = useChat();
+  const { activeChat, getChatMessages, sendMessage, setActiveChat, isSendingMessage, typingUsers, sendTypingIndicator } = useChat();
   const { initiateCall } = useCommunication();
   const [messageText, setMessageText] = useState('');
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploadingFiles, setUploadingFiles] = useState<Record<string, boolean>>({});
-  const [isTyping, setIsTyping] = useState(false);
+  const [showJitsiCall, setShowJitsiCall] = useState(false);
   const { currentUser, users } = useUser();
   const { toast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const lastTypingSent = useRef<number>(0);
   
   const chatMessages = activeChat ? getChatMessages(activeChat.id) || [] : [];
 
@@ -97,14 +99,19 @@ const ChatWindow: React.FC = () => {
     navigate('/calls');
   };
 
-  // Simulate typing indicator
+  // Send typing indicator when user types (throttled to once per second)
   useEffect(() => {
-    if (messageText.length > 0) {
-      setIsTyping(true);
-      const timer = setTimeout(() => setIsTyping(false), 1000);
-      return () => clearTimeout(timer);
+    if (messageText.length > 0 && activeChat) {
+      const now = Date.now();
+      if (now - lastTypingSent.current > 1000) {
+        sendTypingIndicator(activeChat.id);
+        lastTypingSent.current = now;
+      }
     }
-  }, [messageText]);
+  }, [messageText, activeChat, sendTypingIndicator]);
+  
+  // Get typing users for current chat
+  const currentChatTypingUsers = activeChat ? typingUsers[activeChat.id] || [] : [];
   
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -344,19 +351,22 @@ const ChatWindow: React.FC = () => {
           <Button 
             variant="ghost"
             size="icon"
-            className="rounded-full bg-white/10 hover:bg-white/20 text-white"
-            onClick={() => window.location.reload()}
-            data-testid="button-refresh"
+            className="rounded-full bg-blue-500/80 hover:bg-blue-500 text-white"
+            onClick={() => setShowJitsiCall(true)}
+            disabled={!targetUser}
+            data-testid="button-jitsi"
+            title="Jitsi Video Call (Backup)"
           >
-            <RotateCcw className="h-4 w-4" />
+            <Clapperboard className="h-4 w-4" />
           </Button>
           <Button 
             variant="ghost"
             size="icon"
             className="rounded-full bg-white/10 hover:bg-white/20 text-white"
-            data-testid="button-more"
+            onClick={() => window.location.reload()}
+            data-testid="button-refresh"
           >
-            <MoreVertical className="h-4 w-4" />
+            <RotateCcw className="h-4 w-4" />
           </Button>
         </div>
       </div>
@@ -476,6 +486,21 @@ const ChatWindow: React.FC = () => {
         </div>
       </ScrollArea>
       
+      {currentChatTypingUsers.length > 0 && (
+        <div className="px-4 py-2 flex items-center gap-2 text-sm text-muted-foreground animate-in fade-in-0 slide-in-from-bottom-2">
+          <div className="flex space-x-1">
+            <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+            <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+            <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+          </div>
+          <span>
+            {currentChatTypingUsers.length === 1 
+              ? `${currentChatTypingUsers[0].name} is typing...`
+              : `${currentChatTypingUsers.map(u => u.name).join(', ')} are typing...`}
+          </span>
+        </div>
+      )}
+
       {selectedFiles.length > 0 && (
         <div className="px-3 py-2 bg-gray-50 dark:bg-gray-900 border-t border-gray-100 dark:border-gray-800">
           <div className="flex flex-wrap gap-2">
@@ -584,6 +609,25 @@ const ChatWindow: React.FC = () => {
           </Button>
         </div>
       </div>
+
+      {currentUser && targetUser && (
+        <JitsiCallModal
+          isOpen={showJitsiCall}
+          onClose={() => setShowJitsiCall(false)}
+          targetUser={{
+            id: targetUser.id,
+            name: targetUser.fullName || targetUser.name || 'User',
+            avatar: targetUser.avatar,
+            email: targetUser.email
+          }}
+          currentUser={{
+            id: currentUser.id,
+            name: currentUser.fullName || currentUser.name || 'You',
+            avatar: currentUser.avatar,
+            email: currentUser.email
+          }}
+        />
+      )}
     </div>
   );
 };

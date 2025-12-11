@@ -456,6 +456,17 @@ const AuthForm = ({ mode }: AuthFormProps) => {
           </div>
         </div>
 
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => navigate('/forgot-password')}
+            className="text-xs text-primary hover:text-primary/80 hover:underline transition-colors"
+            data-testid="link-forgot-password"
+          >
+            Forgot Password?
+          </button>
+        </div>
+
         <Button
           type="submit"
           className="w-full h-9 text-sm bg-primary hover:bg-primary/90 transition-colors"

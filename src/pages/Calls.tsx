@@ -29,13 +29,18 @@ import {
   MapPin,
   Wifi,
   WifiOff,
-  RotateCcw
+  RotateCcw,
+  Clapperboard
 } from 'lucide-react';
 import { useUser } from '@/context/user/UserContext';
 import { useAppContext } from '@/context/AppContext';
 import { useCommunication } from '@/context/communications/CommunicationContext';
+import { useCall } from '@/context/communications/CallContext';
 import { useCallSounds } from '@/hooks/useCallSounds';
 import { useRealtimeTeamLocations } from '@/hooks/use-realtime-team-locations';
+import { JitsiCallModal } from '@/components/calls/JitsiCallModal';
+import { CallMethodDialog, CallMethod, CallType } from '@/components/calls/CallMethodDialog';
+import { IncomingJitsiCall } from '@/components/calls/IncomingJitsiCall';
 
 const MESSAGE_TEMPLATES = [
   { id: 1, label: "I'll call back", text: "Sorry I missed your call. I'll call you back shortly." },
@@ -57,6 +62,7 @@ const Calls = () => {
   const navigate = useNavigate();
   const { users } = useUser();
   const { callState, initiateCall, endCall, acceptCall, rejectCall, toggleVideo, isVideoEnabled, toggleMute, isMuted } = useCommunication();
+  const { incomingJitsiCall, acceptJitsiCall, rejectJitsiCall } = useCall();
   const [searchQuery, setSearchQuery] = useState('');
   const [isSpeakerOn, setIsSpeakerOn] = useState(true);
   const [callDuration, setCallDuration] = useState(0);
@@ -67,6 +73,13 @@ const Calls = () => {
   const [customMessage, setCustomMessage] = useState('');
   const [activeFollowupTab, setActiveFollowupTab] = useState<'message' | 'notification'>('message');
   const [activeTab, setActiveTab] = useState<'contacts' | 'history'>('contacts');
+  const [showJitsiCall, setShowJitsiCall] = useState(false);
+  const [jitsiIsAudioOnly, setJitsiIsAudioOnly] = useState(false);
+  const [jitsiCallUser, setJitsiCallUser] = useState<{ id: string; name: string } | null>(null);
+  const [showCallMethodDialog, setShowCallMethodDialog] = useState(false);
+  const [pendingCallUser, setPendingCallUser] = useState<{ id: string; name: string } | null>(null);
+  const [pendingVideoCall, setPendingVideoCall] = useState(false);
+  const [acceptedJitsiCall, setAcceptedJitsiCall] = useState<{ roomName: string; callerName: string; isAudioOnly: boolean } | null>(null);
   
   const { stopSounds } = useCallSounds(callState.status);
   
@@ -135,12 +148,71 @@ const Calls = () => {
   const isIncoming = callState.status === 'incoming';
   const isOutgoing = callState.status === 'outgoing';
   
+  // Opens the call method selection dialog
+  const handleInitiateCall = (userId: string) => {
+    const user = users.find(u => u.id === userId);
+    if (user) {
+      setPendingCallUser({ id: user.id, name: user.name });
+      setShowCallMethodDialog(true);
+    }
+  };
+
+  // Direct WebRTC call (legacy, still available)
   const handleStartCall = (userId: string) => {
     const user = users.find(u => u.id === userId);
     if (user) {
       initiateCall(user);
     }
   };
+
+  const handleVideoCall = (userId: string) => {
+    const user = users.find(u => u.id === userId);
+    if (user) {
+      initiateCall(user);
+      // Video will be enabled via toggle after call connects
+    }
+  };
+
+  const handleJitsiCall = (userId: string, audioOnly: boolean = false) => {
+    const user = users.find(u => u.id === userId);
+    if (user) {
+      setJitsiCallUser({ id: user.id, name: user.name });
+      setJitsiIsAudioOnly(audioOnly);
+      setShowJitsiCall(true);
+    }
+  };
+
+  // Handler when user selects call method from dialog
+  const handleCallMethodSelect = (method: CallMethod, callType: CallType) => {
+    if (!pendingCallUser) return;
+
+    if (method === 'webrtc') {
+      const user = users.find(u => u.id === pendingCallUser.id);
+      if (user) {
+        // Store if this should be a video call
+        setPendingVideoCall(callType === 'video');
+        initiateCall(user);
+      }
+    } else if (method === 'jitsi') {
+      setJitsiCallUser({ id: pendingCallUser.id, name: pendingCallUser.name });
+      setJitsiIsAudioOnly(callType === 'audio');
+      setShowJitsiCall(true);
+    }
+
+    setPendingCallUser(null);
+  };
+
+  // Auto-enable video when a video call connects
+  useEffect(() => {
+    if (pendingVideoCall && callState.status === 'connected' && !isVideoEnabled) {
+      // Enable video after connection is established
+      toggleVideo().then(() => {
+        setPendingVideoCall(false);
+      }).catch(() => {
+        setPendingVideoCall(false);
+      });
+    }
+  }, [pendingVideoCall, callState.status, isVideoEnabled, toggleVideo]);
 
   const handleMissedCallAction = (userId: string, userName: string, avatar?: string) => {
     setMissedCallUser({ id: userId, name: userName, avatar });
@@ -280,7 +352,7 @@ const Calls = () => {
                   return (
                     <button
                       key={user.id}
-                      onClick={() => handleStartCall(user.id)}
+                      onClick={() => handleInitiateCall(user.id)}
                       className="flex flex-col items-center gap-1 min-w-[56px] group"
                       data-testid={`online-user-${user.id}`}
                     >
@@ -492,6 +564,7 @@ const Calls = () => {
                               onClick={() => toggleFavorite(user.id)}
                               className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                               data-testid={`favorite-${user.id}`}
+                              title="Toggle favorite"
                             >
                               <Star className={`h-4 w-4 ${isFavorite ? 'fill-amber-400 text-amber-400' : 'text-gray-400'}`} />
                             </button>
@@ -499,15 +572,18 @@ const Calls = () => {
                               onClick={() => navigate(`/chat?userId=${user.id}`)}
                               className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                               data-testid={`message-${user.id}`}
+                              title="Send message"
                             >
                               <MessageSquare className="h-4 w-4 text-gray-600 dark:text-gray-400" />
                             </button>
                             <button
-                              onClick={() => handleStartCall(user.id)}
-                              className="h-8 px-3 rounded-full bg-black dark:bg-white text-white dark:text-black text-xs font-semibold flex items-center gap-1"
+                              onClick={() => handleInitiateCall(user.id)}
+                              className="h-8 px-3 rounded-full bg-black dark:bg-white text-white dark:text-black text-xs font-semibold flex items-center gap-1.5 hover:opacity-90 transition-opacity"
                               data-testid={`call-${user.id}`}
+                              title="Start a call"
                             >
                               <Phone className="h-3.5 w-3.5" />
+                              Call
                             </button>
                           </div>
                         </div>
@@ -741,7 +817,7 @@ const Calls = () => {
             onClick={() => {
               const firstOnlineUser = onlineUsers[0];
               if (firstOnlineUser) {
-                handleStartCall(firstOnlineUser.id);
+                handleInitiateCall(firstOnlineUser.id);
               }
             }}
             data-testid="fab-new-call"
@@ -749,6 +825,55 @@ const Calls = () => {
           >
             <Phone className="h-5 w-5" />
           </button>
+        )}
+
+        {/* Call Method Selection Dialog */}
+        <CallMethodDialog
+          isOpen={showCallMethodDialog}
+          onClose={() => {
+            setShowCallMethodDialog(false);
+            setPendingCallUser(null);
+          }}
+          onSelect={handleCallMethodSelect}
+          recipientName={pendingCallUser?.name || ''}
+        />
+
+        {/* Jitsi Call Modal */}
+        {currentUser && (
+          <JitsiCallModal
+            isOpen={showJitsiCall || !!acceptedJitsiCall}
+            onClose={() => {
+              setShowJitsiCall(false);
+              setJitsiCallUser(null);
+              setAcceptedJitsiCall(null);
+            }}
+            targetUser={jitsiCallUser ? { id: jitsiCallUser.id, name: jitsiCallUser.name } : undefined}
+            currentUser={{
+              id: currentUser.id,
+              name: currentUser.fullName || currentUser.name || 'User',
+              email: currentUser.email,
+            }}
+            isAudioOnly={jitsiIsAudioOnly || acceptedJitsiCall?.isAudioOnly || false}
+            groupCall={acceptedJitsiCall ? { roomName: acceptedJitsiCall.roomName, subject: `Call with ${acceptedJitsiCall.callerName}` } : undefined}
+          />
+        )}
+
+        {/* Incoming Jitsi Call Notification */}
+        {incomingJitsiCall && (
+          <IncomingJitsiCall
+            call={incomingJitsiCall}
+            onAccept={() => {
+              acceptJitsiCall();
+              setAcceptedJitsiCall({
+                roomName: incomingJitsiCall.roomName,
+                callerName: incomingJitsiCall.callerName,
+                isAudioOnly: incomingJitsiCall.isAudioOnly
+              });
+            }}
+            onReject={() => {
+              rejectJitsiCall();
+            }}
+          />
         )}
       </div>
     </div>
