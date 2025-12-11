@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { SiteVisit, User } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '../user/UserContext';
@@ -19,7 +19,7 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const { currentUser, users, updateUser } = useUser();
   const { addSiteVisitFeeToWallet } = useWallet();
   
-  const refreshSiteVisits = async () => {
+  const refreshSiteVisits = useCallback(async () => {
     try {
       setLoading(true);
       const visits = await fetchSiteVisits();
@@ -34,11 +34,11 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
 
   useEffect(() => {
     refreshSiteVisits();
-  }, [toast]);
+  }, [refreshSiteVisits]);
 
   useEffect(() => {
     const channel = supabase
@@ -58,7 +58,7 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [refreshSiteVisits]);
 
   const createSiteVisit = async (siteVisitData: Partial<SiteVisit>): Promise<string | undefined> => {
     try {

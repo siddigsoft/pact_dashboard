@@ -10,6 +10,7 @@ import autoTable from 'jspdf-autotable';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '@/context/user/UserContext';
+import { useMMP } from '@/context/mmp/MMPContext';
 import { cn } from '@/lib/utils';
 import {
   FileText,
@@ -45,10 +46,36 @@ const FieldOperationManagerPage = () => {
   const { currentUser } = useUser();
   const { hasAnyRole } = useAuthorization();
   const navigate = useNavigate();
+  const { mmpFiles: contextMmpFiles, loading: contextLoading, refreshMMPFiles } = useMMP();
   const [mmpFiles, setMmpFiles] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [forwardedLoading, setForwardedLoading] = useState(false);
   const [forwardedMmpFiles, setForwardedMmpFiles] = useState<any[]>([]);
+  
+  // Sync context data to local state for transformation
+  useEffect(() => {
+    if (contextMmpFiles && contextMmpFiles.length > 0) {
+      const mapped = contextMmpFiles.map((mmp: any) => ({
+        ...mmp,
+        sites: Array.isArray(mmp.siteEntries) ? mmp.siteEntries : [],
+        uploadedAt: mmp.uploadedAt || mmp.uploaded_at,
+        uploadedBy: mmp.uploadedBy || mmp.uploaded_by || 'Unknown',
+        hub: mmp.hub,
+        month: mmp.month,
+        projectId: mmp.projectId || mmp.project_id,
+        projectName: mmp.projectName || mmp.project?.name || mmp.project_name,
+        mmpId: mmp.mmpId || mmp.mmp_id || mmp.id,
+        status: mmp.status,
+        siteCount: typeof mmp.entries === 'number' ? mmp.entries : (Array.isArray(mmp.siteEntries) ? mmp.siteEntries.length : 0),
+        logs: mmp.workflow?.logs || [],
+      }));
+      setMmpFiles(mapped);
+      setLoading(contextLoading);
+    } else if (!contextLoading) {
+      setMmpFiles([]);
+      setLoading(false);
+    }
+  }, [contextMmpFiles, contextLoading]);
   const [selectedCategory, setSelectedCategory] = useState<'all' | 'approved' | 'pending' | 'archived'>('all');
   const [search, setSearch] = useState('');
   const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
@@ -609,105 +636,30 @@ const FieldOperationManagerPage = () => {
     URL.revokeObjectURL(url);
   };
 
+  // Initial load - context handles this, but we can trigger a refresh if needed
   useEffect(() => {
-    setLoading(true);
-    supabase
-      .from('mmp_files')
-      .select(`*, project:projects(id, name, project_code)`)
-      .order('created_at', { ascending: false })
-      .then(({ data, error }) => {
-        if (error) {
-          supabase.from('mmp_files').select('*').order('created_at', { ascending: false })
-            .then(({ data: fbData, error: fbError }) => {
-              if (fbError) { setLoading(false); return; }
-              const mappedFb = (fbData || []).map((mmp: any) => ({
-                ...mmp,
-                sites: Array.isArray(mmp.site_entries) ? mmp.site_entries : [],
-                uploadedAt: mmp.uploaded_at,
-                uploadedBy: mmp.uploaded_by || 'Unknown',
-                hub: mmp.hub,
-                month: mmp.month,
-                projectId: mmp.project_id,
-                projectName: mmp.project_name || undefined,
-                mmpId: mmp.mmp_id || mmp.id,
-                status: mmp.status,
-                siteCount: typeof mmp.entries === 'number' ? mmp.entries : (Array.isArray(mmp.site_entries) ? mmp.site_entries.length : 0),
-                logs: mmp.workflow?.logs || [],
-              }));
-              setMmpFiles(mappedFb);
-              setLoading(false);
-            });
-          return;
-        }
-        const mapped = (data || []).map((mmp: any) => ({
-          ...mmp,
-          sites: Array.isArray(mmp.site_entries) ? mmp.site_entries : [],
-          uploadedAt: mmp.uploaded_at,
-          uploadedBy: mmp.uploaded_by || 'Unknown',
-          hub: mmp.hub,
-          month: mmp.month,
-          projectId: mmp.project_id,
-          projectName: mmp.project?.name || mmp.project_name,
-          mmpId: mmp.mmp_id || mmp.id,
-          status: mmp.status,
-          siteCount: typeof mmp.entries === 'number' ? mmp.entries : (Array.isArray(mmp.site_entries) ? mmp.site_entries.length : 0),
-          logs: mmp.workflow?.logs || [],
-        }));
-        setMmpFiles(mapped);
-        setLoading(false);
-      });
-  }, []);
+    if (contextMmpFiles.length === 0 && !contextLoading) {
+      refreshMMPFiles();
+    }
+  }, [contextMmpFiles.length, contextLoading, refreshMMPFiles]);
 
+  // Filter forwarded files from context data
   useEffect(() => {
-    const loadForwarded = async () => {
-      if (!currentUser?.id) { setForwardedMmpFiles([]); return; }
-      setForwardedLoading(true);
-      try {
-        const { data, error } = await supabase
-          .from('mmp_files')
-          .select(`*, project:projects(id, name, project_code)`)
-          .contains('workflow', { forwardedToFomIds: [currentUser.id] })
-          .order('created_at', { ascending: false });
-        if (error) {
-          const { data: fbData } = await supabase.from('mmp_files').select('*').contains('workflow', { forwardedToFomIds: [currentUser.id] }).order('created_at', { ascending: false });
-          const mappedFb = (fbData || []).map((mmp: any) => ({
-            ...mmp,
-            sites: Array.isArray(mmp.site_entries) ? mmp.site_entries : [],
-            uploadedAt: mmp.uploaded_at,
-            uploadedBy: mmp.uploaded_by || 'Unknown',
-            hub: mmp.hub,
-            month: mmp.month,
-            projectId: mmp.project_id,
-            projectName: mmp.project_name || undefined,
-            mmpId: mmp.mmp_id || mmp.id,
-            status: mmp.status,
-            siteCount: typeof mmp.entries === 'number' ? mmp.entries : (Array.isArray(mmp.site_entries) ? mmp.site_entries.length : 0),
-            logs: mmp.workflow?.logs || [],
-          }));
-          setForwardedMmpFiles(mappedFb);
-        } else {
-          const mapped = (data || []).map((mmp: any) => ({
-            ...mmp,
-            sites: Array.isArray(mmp.site_entries) ? mmp.site_entries : [],
-            uploadedAt: mmp.uploaded_at,
-            uploadedBy: mmp.uploaded_by || 'Unknown',
-            hub: mmp.hub,
-            month: mmp.month,
-            projectId: mmp.project_id,
-            projectName: mmp.project?.name || mmp.project_name,
-            mmpId: mmp.mmp_id || mmp.id,
-            status: mmp.status,
-            siteCount: typeof mmp.entries === 'number' ? mmp.entries : (Array.isArray(mmp.site_entries) ? mmp.site_entries.length : 0),
-            logs: mmp.workflow?.logs || [],
-          }));
-          setForwardedMmpFiles(mapped);
-        }
-      } finally {
-        setForwardedLoading(false);
-      }
-    };
-    loadForwarded();
-  }, [currentUser?.id]);
+    if (!currentUser?.id) {
+      setForwardedMmpFiles([]);
+      return;
+    }
+    
+    setForwardedLoading(true);
+    const forwarded = mmpFiles.filter((mmp: any) => {
+      const workflow = mmp.workflow || {};
+      const forwardedIds = workflow.forwardedToFomIds || [];
+      return Array.isArray(forwardedIds) && forwardedIds.includes(currentUser.id);
+    });
+    
+    setForwardedMmpFiles(forwarded);
+    setForwardedLoading(false);
+  }, [mmpFiles, currentUser?.id]);
 
   const StatCard = ({ icon: Icon, label, value, subtext }: { icon: any; label: string; value: number | string; subtext?: string }) => (
     <motion.div
