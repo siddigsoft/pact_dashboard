@@ -4,7 +4,7 @@ name: pact_dashboard
 
 services:
   web:
-    build: .
+    image: docker.io/${DOCKERHUB_USERNAME}/pact_dashboard:latest
     restart: unless-stopped
     env_file:
       - .env

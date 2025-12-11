@@ -4,6 +4,10 @@ on:
   push:
     branches: [master_backup]
 
+permissions:
+  contents: read
+  packages: write
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -14,10 +18,40 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Install deps and build
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Compute lowercase Docker Hub username
         run: |
-          npm ci
-          npm run build
+          echo "DH_USER_LC=${DH_USER,,}" >> $GITHUB_ENV
+        env:
+          DH_USER: mukisavaniah
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          registry: docker.io
+          username: mukisavaniah
+          password: dckr_pat_6XoWRCqi6aqhQ1CTVzdmSmm6k9g
+
+      - name: Extract Docker metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: docker.io/${{ env.DH_USER_LC }}/pact_dashboard
+          tags: |
+            type=raw,value=latest
+            type=sha
+
+      - name: Build and push image to Docker Hub
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Sync files to VPS
         uses: appleboy/scp-action@v0.1.7
@@ -61,7 +95,9 @@ jobs:
           script_stop: true
           script: |
             cd ${{ secrets.APP_DIR }}
-            cat > .env <<'EOF'
+            DH_USER_LC=$(echo "mukisavaniah" | tr '[:upper:]' '[:lower:]')
+            cat > .env <<EOF
+            DOCKERHUB_USERNAME=$DH_USER_LC
             VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}
             VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}
             SUPABASE_SERVICE_ROLE_KEY=${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -85,7 +121,9 @@ jobs:
           script_stop: true
           script: |
             cd ${{ secrets.APP_DIR }}
-            docker compose -p pact_dashboard down
-            docker compose -p pact_dashboard build --pull
+            # If your Docker Hub repo is private, login before pulling
+            echo "dckr_pat_6XoWRCqi6aqhQ1CTVzdmSmm6k9g" | docker login docker.io -u "mukisavaniah" --password-stdin || true
+            docker compose -p pact_dashboard pull
             docker compose -p pact_dashboard up -d
+            docker image prune -f
 
