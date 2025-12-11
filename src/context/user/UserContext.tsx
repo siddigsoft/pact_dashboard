@@ -1151,23 +1151,27 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const sendPasswordRecoveryEmail = async (email: string): Promise<boolean> => {
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/reset-password`,
+      // Use custom OTP flow instead of Supabase's built-in resetPasswordForEmail
+      const { data, error } = await supabase.functions.invoke('verify-reset-otp', {
+        body: { 
+          email: email.toLowerCase(),
+          action: 'generate'
+        },
       });
 
-      if (error) {
-        console.error('Password recovery error:', error);
+      if (error || !data?.success) {
+        console.error('Password recovery error:', error || data?.error);
         toast({
           title: 'Failed to send recovery email',
-          description: error.message || 'An error occurred while sending the password recovery email.',
+          description: error?.message || data?.error || 'An error occurred while sending the password recovery email.',
           variant: 'destructive',
         });
         return false;
       }
 
       toast({
-        title: 'Recovery email sent',
-        description: `A password reset link has been sent to ${email}. The user should check their inbox.`,
+        title: 'Recovery code sent',
+        description: `A 6-digit verification code has been sent to ${email}. The user should check their inbox.`,
       });
       return true;
     } catch (error: any) {
