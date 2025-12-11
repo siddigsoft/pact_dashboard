@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '../user/UserContext';
 import { useToast } from '@/hooks/use-toast';
+import { useRealtimeTable } from '@/hooks/useRealtimeResource';
 import {
   SuperAdmin,
   CreateSuperAdmin,
@@ -236,6 +237,14 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
       refreshDeletionLogs();
     }
   }, [currentUser, checkSuperAdminStatus, refreshSuperAdmins, refreshDeletionLogs]);
+
+  useRealtimeTable('super_admins', refreshSuperAdmins, {
+    enabled: !!currentUser,
+  });
+
+  useRealtimeTable('deletion_audit_log', refreshDeletionLogs, {
+    enabled: !!currentUser,
+  });
 
   const createSuperAdmin = async (data: CreateSuperAdmin): Promise<boolean> => {
     try {
