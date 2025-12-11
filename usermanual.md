@@ -1,6 +1,6 @@
-# PACT Command Center - Complete User Manual
+# PACT Command Center - Complete Operations Manual
 
-**Version 3.0 | Last Updated: December 2025**
+**Version 4.0 | Last Updated: December 2025**
 
 ---
 
@@ -9,12 +9,16 @@
 1. [Introduction](#1-introduction)
 2. [System Architecture](#2-system-architecture)
 3. [User Roles & Permissions](#3-user-roles--permissions)
-4. [Complete Page Reference](#4-complete-page-reference)
-5. [Database Tables & Relationships](#5-database-tables--relationships)
-6. [Workflows & Processes](#6-workflows--processes)
-7. [Communication Features](#7-communication-features)
-8. [Mobile App Features](#8-mobile-app-features)
-9. [Troubleshooting](#9-troubleshooting)
+4. [Complete System Inventory](#4-complete-system-inventory)
+5. [Site Visit Claiming & Confirmation Process](#5-site-visit-claiming--confirmation-process)
+6. [MMP Lifecycle](#6-mmp-lifecycle)
+7. [Financial Management System](#7-financial-management-system)
+8. [Communication System](#8-communication-system)
+9. [Complete Page Reference](#9-complete-page-reference)
+10. [Database Architecture](#10-database-architecture)
+11. [Mobile App Features](#11-mobile-app-features)
+12. [Audit & Compliance](#12-audit--compliance)
+13. [Troubleshooting](#13-troubleshooting)
 
 ---
 
@@ -24,25 +28,58 @@
 
 **PACT Command Center** is the centralized Field Operations Command Center designed for comprehensive management of humanitarian and development field operations. The platform serves as a unified command hub that enables organizations to plan, coordinate, execute, and monitor all field activities from a single integrated interface.
 
-**What PACT Command Center Delivers:**
+```
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                         PACT COMMAND CENTER                                   ║
+║                  Centralized Field Operations Command Center                  ║
+╠═══════════════════════════════════════════════════════════════════════════════╣
+║                                                                               ║
+║   ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐   ║
+║   │   PLAN      │───►│  APPROVE    │───►│  COORDINATE │───►│   TRACK     │   ║
+║   │   (MMPs)    │    │  (Workflow) │    │  (Teams)    │    │  (Monitor)  │   ║
+║   └─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘   ║
+║         │                  │                  │                  │            ║
+║         └──────────────────┴──────────────────┴──────────────────┘            ║
+║                              ▼                                                ║
+║                    ┌─────────────────────┐                                    ║
+║                    │  UNIFIED DASHBOARD  │                                    ║
+║                    │  Real-Time Control  │                                    ║
+║                    └─────────────────────┘                                    ║
+║                                                                               ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+```
 
-- **Unified Operations Management** - Single platform for all field operations coordination
-- **Real-Time Command & Control** - Live monitoring of team locations, activities, and status
-- **Enterprise-Grade Security** - Role-based access control with 12 specialized user roles
-- **Financial Oversight** - Complete budget tracking, wallet management, and approval workflows
-- **Mobile-First Design** - Full offline capability for field teams in remote areas
-- **Comprehensive Reporting** - Analytics, audit trails, and exportable reports
+### 1.2 Core Capabilities
 
-**Core Modules:**
+```
+┌────────────────────────────────────────────────────────────────────────────┐
+│                        PACT COMMAND CENTER CAPABILITIES                    │
+├────────────────────────────────────────────────────────────────────────────┤
+│                                                                            │
+│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐         │
+│  │ MMP MANAGEMENT   │  │ SITE VISITS      │  │ TEAM MANAGEMENT  │         │
+│  ├──────────────────┤  ├──────────────────┤  ├──────────────────┤         │
+│  │ • CSV Upload     │  │ • Dispatch       │  │ • User Profiles  │         │
+│  │ • Multi-stage    │  │ • First-Claim    │  │ • Role Assignment│         │
+│  │ • Verification   │  │ • GPS Tracking   │  │ • Location Share │         │
+│  │ • Approval Flow  │  │ • Photo Capture  │  │ • Performance    │         │
+│  │ • Site Entries   │  │ • Cost Submit    │  │ • Hub Structure  │         │
+│  └──────────────────┘  └──────────────────┘  └──────────────────┘         │
+│                                                                            │
+│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐         │
+│  │ FINANCIAL        │  │ COMMUNICATIONS   │  │ REPORTING        │         │
+│  ├──────────────────┤  ├──────────────────┤  ├──────────────────┤         │
+│  │ • Digital Wallets│  │ • Real-time Chat │  │ • Analytics      │         │
+│  │ • Down-payments  │  │ • Voice Calls    │  │ • PDF/Excel      │         │
+│  │ • Cost Approval  │  │ • Video (Jitsi)  │  │ • Audit Logs     │         │
+│  │ • Bank Transfer  │  │ • Push Notify    │  │ • KPI Dashboard  │         │
+│  │ • Budget Track   │  │ • Email (IONOS)  │  │ • Custom Reports │         │
+│  └──────────────────┘  └──────────────────┘  └──────────────────┘         │
+│                                                                            │
+└────────────────────────────────────────────────────────────────────────────┘
+```
 
-- **Monthly Monitoring Plans (MMPs)** - Strategic planning and site targeting for field activities
-- **Site Visit Management** - End-to-end coordination of field visits with GPS tracking and photo documentation
-- **Team Coordination Center** - Real-time location sharing, voice/video calling, and instant messaging
-- **Financial Control System** - Budgets, digital wallets, cost submissions, multi-tier approvals, and Bank of Khartoum integration
-- **Reporting & Analytics** - Comprehensive dashboards, custom reports, and data export capabilities
-- **Document Management** - Centralized document storage with digital signature verification
-
-### 1.2 Platform Environments
+### 1.3 Platform Environments
 
 | Environment | URL | Purpose |
 |-------------|-----|---------|
@@ -53,983 +90,1512 @@
 
 ## 2. System Architecture
 
-### 2.1 Technology Stack
+### 2.1 High-Level Architecture Diagram
 
-| Component | Technology |
-|-----------|------------|
-| Frontend | React 18, TypeScript, Tailwind CSS, Shadcn UI |
-| Backend | Supabase (PostgreSQL), Edge Functions |
-| Real-time | Supabase Realtime, WebRTC |
-| Authentication | Supabase Auth, Google OAuth, 2FA |
-| Mobile | Capacitor (Android/iOS) |
-| Email | IONOS SMTP (noreply@pactorg.com) |
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           PACT COMMAND CENTER ARCHITECTURE                  │
+└─────────────────────────────────────────────────────────────────────────────┘
 
-### 2.2 Core Features
+                              ┌─────────────────┐
+                              │   WEB BROWSER   │
+                              │  (React App)    │
+                              └────────┬────────┘
+                                       │
+                              ┌────────┴────────┐
+                              │  MOBILE APPS    │
+                              │ Android / iOS   │
+                              │  (Capacitor)    │
+                              └────────┬────────┘
+                                       │
+         ┌─────────────────────────────┼─────────────────────────────┐
+         │                             │                             │
+         ▼                             ▼                             ▼
+┌─────────────────┐         ┌─────────────────┐         ┌─────────────────┐
+│   SUPABASE      │         │   JITSI MEET    │         │   IONOS SMTP    │
+│   BACKEND       │         │   (Video Call)  │         │   (Email)       │
+├─────────────────┤         └─────────────────┘         └─────────────────┘
+│ • PostgreSQL DB │
+│ • Auth Service  │                  ▲
+│ • Realtime WS   │                  │
+│ • Edge Functions│         ┌────────┴────────┐
+│ • File Storage  │         │    WebRTC       │
+│ • Row Security  │         │  (P2P Calls)    │
+└─────────────────┘         └─────────────────┘
 
-- Real-time Dashboard with live statistics
-- Role-based access control (RBAC)
-- Offline-first mobile support
-- Digital signatures with OTP verification
-- Video/Voice calling (WebRTC & Jitsi)
-- Push notifications
-- Comprehensive audit logging
+                    ┌─────────────────────────────┐
+                    │     FIREBASE CLOUD          │
+                    │  • Push Notifications       │
+                    │  • Crashlytics              │
+                    └─────────────────────────────┘
+```
+
+### 2.2 Technology Stack
+
+| Layer | Technology | Purpose |
+|-------|------------|---------|
+| **Frontend** | React 18, TypeScript | UI Framework |
+| **Styling** | Tailwind CSS, Shadcn UI | Component Library |
+| **State** | TanStack Query, Context API | Data Management |
+| **Routing** | React Router DOM v6 | Navigation |
+| **Backend** | Supabase (PostgreSQL) | Database & Auth |
+| **Real-time** | Supabase Realtime, WebRTC | Live Updates |
+| **Mobile** | Capacitor | Native Apps |
+| **Email** | IONOS SMTP | Notifications |
+| **Video** | Jitsi Meet, WebRTC | Video/Voice Calls |
+| **Maps** | Leaflet | GPS & Location |
+
+### 2.3 Data Flow Diagram
+
+```
+┌────────────────────────────────────────────────────────────────────────────┐
+│                              DATA FLOW                                     │
+└────────────────────────────────────────────────────────────────────────────┘
+
+USER ACTION                    SYSTEM PROCESS                    DATA STORE
+───────────                    ──────────────                    ──────────
+
+  ┌─────────┐                 ┌─────────────────┐               ┌──────────┐
+  │ Login   │────────────────►│ Supabase Auth   │──────────────►│ profiles │
+  └─────────┘                 │ • Validate      │               │ sessions │
+                              │ • Create JWT    │               └──────────┘
+                              │ • Set Cookie    │
+                              └─────────────────┘
+
+  ┌─────────┐                 ┌─────────────────┐               ┌──────────┐
+  │ Upload  │────────────────►│ Parse CSV       │──────────────►│ mmp_files│
+  │ MMP     │                 │ Validate Zod    │               │ mmp_site │
+  └─────────┘                 │ Insert Records  │               │ _entries │
+                              └─────────────────┘               └──────────┘
+
+  ┌─────────┐                 ┌─────────────────┐               ┌──────────┐
+  │ Claim   │────────────────►│ RPC Function    │──────────────►│ site_    │
+  │ Site    │                 │ • Check Status  │               │ visits   │
+  └─────────┘                 │ • Atomic Update │               │ audit_   │
+                              │ • Log Event     │               │ logs     │
+                              │ • Notify        │               └──────────┘
+                              └─────────────────┘
+
+  ┌─────────┐                 ┌─────────────────┐               ┌──────────┐
+  │ Submit  │────────────────►│ Validate Costs  │──────────────►│ cost_    │
+  │ Costs   │                 │ Create Request  │               │ submiss  │
+  └─────────┘                 │ Queue Approval  │               │ wallets  │
+                              └─────────────────┘               └──────────┘
+```
 
 ---
 
 ## 3. User Roles & Permissions
 
-### 3.1 System Roles
+### 3.1 Role Hierarchy Diagram
 
-| Role | Category | Description | Key Permissions |
-|------|----------|-------------|-----------------|
-| **SuperAdmin** | Administrative | Full system control | All permissions, system configuration |
-| **Admin** | Administrative | User and system management | Users, roles, settings management |
-| **Project Manager** | Administrative | Project oversight | Projects CRUD, MMP approve, finances approve |
-| **Field Operation Manager (FOM)** | Field | Field operations management | Site visits, team coordination, approvals |
-| **Senior Operations Lead** | Administrative | Senior leadership with override | Budget override, final approvals |
-| **Supervisor** | Field | Team supervision | Site visits assign/update, submissions review |
-| **Coordinator** | Field | State Coordination | Site visits create/assign, MMP updates |
-| **Finance Officer** | Financial | Financial operations | Finances CRUD, approvals, reports |
-| **Data Collector** | Field | Field data collection | Site visits claim/complete, costs submit |
-| **ICT** | Technical | Technical support | System maintenance, audit logs |
-| **Reviewer** | Administrative | Quality assurance | Submissions review, data validation |
-| **Data Analyst** | Technical | Data analysis | Reports read/create, data export |
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           ROLE HIERARCHY                                    │
+└─────────────────────────────────────────────────────────────────────────────┘
 
-### 3.2 Permission Matrix
+                              ┌─────────────────┐
+                              │   SUPERADMIN    │
+                              │  (Full Control) │
+                              └────────┬────────┘
+                                       │
+              ┌────────────────────────┼────────────────────────┐
+              │                        │                        │
+              ▼                        ▼                        ▼
+    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+    │     ADMIN       │    │ SENIOR OPS LEAD │    │   ICT/TECH      │
+    │ (User Mgmt)     │    │ (Budget Override)│    │ (System Maint)  │
+    └────────┬────────┘    └────────┬────────┘    └─────────────────┘
+             │                      │
+    ┌────────┴────────┐    ┌────────┴────────────────────┐
+    │                 │    │                              │
+    ▼                 ▼    ▼                              ▼
+┌──────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+│ PROJECT  │  │  FINANCIAL   │  │    FIELD     │  │    DATA      │
+│ MANAGER  │  │    ADMIN     │  │   OPERATION  │  │   ANALYST    │
+│          │  │              │  │   MANAGER    │  │              │
+└────┬─────┘  └──────┬───────┘  └──────┬───────┘  └──────────────┘
+     │               │                 │
+     │               │    ┌────────────┴────────────┐
+     │               │    │                         │
+     ▼               ▼    ▼                         ▼
+┌──────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+│ REVIEWER │  │   FINANCE    │  │  SUPERVISOR  │  │    STATE     │
+│          │  │   OFFICER    │  │              │  │ COORDINATOR  │
+└──────────┘  └──────────────┘  └──────┬───────┘  └──────┬───────┘
+                                       │                 │
+                                       └────────┬────────┘
+                                                │
+                                                ▼
+                                       ┌──────────────┐
+                                       │    DATA      │
+                                       │  COLLECTOR   │
+                                       │ (Field Team) │
+                                       └──────────────┘
+```
 
-| Resource | Actions Available |
-|----------|-------------------|
-| `users` | create, read, update, delete, assign |
-| `roles` | create, read, update, delete, assign |
-| `projects` | create, read, update, delete, approve, assign, archive |
-| `mmp` | create, read, update, delete, approve, assign |
-| `site_visits` | create, read, update, delete, approve, assign |
-| `finances` | create, read, update, approve, override |
-| `reports` | create, read |
-| `wallets` | read, approve, override |
-| `audit_logs` | read |
-| `settings` | read, update |
+### 3.2 Complete Role Definitions
+
+| Role | ID | Category | Description | Key Permissions |
+|------|-----|----------|-------------|-----------------|
+| **SuperAdmin** | `superadmin` | Administrative | Complete system control with all permissions | All resources, all actions, system config |
+| **Admin** | `admin` | Administrative | User and role management | Users CRUD, roles assign, settings |
+| **Project Manager** | `project_manager` | Administrative | Full project oversight with budget approval and team coordination | Projects CRUD/approve, MMP approve, finances approve, wallets approve |
+| **Field Operation Manager** | `fom` | Field | Field operations leadership managing site visits and team coordination | Site visits CRUD/approve, MMP update, team management |
+| **Senior Operations Lead** | `senior_operations_lead` | Administrative | Senior leadership with budget override authority for restricted transactions | Budget override, final approvals, wallet override |
+| **Supervisor** | `field_supervisor` | Field | Team supervision managing data collectors and reviewing submissions | Site visits assign/update, MMP update, submissions review |
+| **State Coordinator** | `state_coordinator` | Field | State-level activity coordination managing site visits and work assignments | Site visits CRUD/assign, MMP update, state-level monitoring |
+| **Finance Officer** | `finance_officer` | Financial | Financial operations handling payments and expense approvals | Finances CRUD/approve, reports, down-payments |
+| **Data Collector** | `data_collector` | Field | Field data collection executing site visits and submitting costs | Site visits claim/complete, costs submit, photos upload |
+| **ICT/Technical** | `ict` | Technical | Technical support maintaining system and resolving issues | Users update, settings, audit logs, system config |
+| **Reviewer** | `reviewer` | Administrative | Quality assurance reviewing data and submissions | Read-only access, data validation, compliance review |
+| **Data Analyst** | `data_analyst` | Technical | Data analysis generating reports and insights | Reports read/create, data export, analytics |
+
+### 3.3 Permission Matrix
+
+```
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                              PERMISSION MATRIX                                         │
+├─────────────────┬───────┬───────┬───────┬───────┬─────────┬────────┬─────────┬────────┤
+│ Resource        │Create │ Read  │Update │Delete │ Approve │ Assign │Override │Archive │
+├─────────────────┼───────┼───────┼───────┼───────┼─────────┼────────┼─────────┼────────┤
+│ users           │   C   │   R   │   U   │   D   │    -    │   A    │    -    │   -    │
+│ roles           │   C   │   R   │   U   │   D   │    -    │   A    │    -    │   -    │
+│ projects        │   C   │   R   │   U   │   D   │   AP    │   A    │    -    │  AR    │
+│ mmp             │   C   │   R   │   U   │   D   │   AP    │   A    │    -    │   -    │
+│ site_visits     │   C   │   R   │   U   │   D   │   AP    │   A    │    -    │   -    │
+│ finances        │   C   │   R   │   U   │   -   │   AP    │   -    │   OV    │   -    │
+│ wallets         │   -   │   R   │   -   │   -   │   AP    │   -    │   OV    │   -    │
+│ reports         │   C   │   R   │   -   │   -   │    -    │   -    │    -    │   -    │
+│ audit_logs      │   -   │   R   │   -   │   -   │    -    │   -    │    -    │   -    │
+│ settings        │   -   │   R   │   U   │   -   │    -    │   -    │    -    │   -    │
+└─────────────────┴───────┴───────┴───────┴───────┴─────────┴────────┴─────────┴────────┘
+```
 
 ---
 
-## 4. Complete Page Reference
+## 4. Complete System Inventory
 
-### 4.1 Public Pages (No Authentication Required)
+### 4.1 All System Pages
+
+```
+┌────────────────────────────────────────────────────────────────────────────┐
+│                        COMPLETE PAGE INVENTORY                             │
+├────────────────────────────────────────────────────────────────────────────┤
+│                                                                            │
+│  PUBLIC PAGES (6)                                                          │
+│  ├── /                          Landing Page                               │
+│  ├── /auth                      Login/Authentication                       │
+│  ├── /register                  User Registration                          │
+│  ├── /forgot-password           Password Recovery                          │
+│  ├── /reset-password            Password Reset                             │
+│  └── /public-docs               Public Documentation                       │
+│                                                                            │
+│  DASHBOARD & OVERVIEW (3)                                                  │
+│  ├── /dashboard                 Main Command Center                        │
+│  ├── /approval-dashboard        Approval Queue Dashboard                   │
+│  └── /calendar                  Calendar View                              │
+│                                                                            │
+│  MMP MANAGEMENT (8)                                                        │
+│  ├── /mmp                       MMP List                                   │
+│  ├── /mmp/upload                MMP Upload                                 │
+│  ├── /mmp/:id                   MMP Detail                                 │
+│  ├── /mmp/:id/edit              Edit MMP                                   │
+│  ├── /mmp/:id/verify            MMP Verification                           │
+│  ├── /mmp/:id/detailed-verify   Detailed MMP Verification                  │
+│  ├── /mmp-management            MMP Management Console                     │
+│  └── /monitoring-plan           Monitoring Plan View                       │
+│                                                                            │
+│  SITE VISITS (8)                                                           │
+│  ├── /site-visits               Site Visits List                           │
+│  ├── /site-visits/:id           Site Visit Detail                          │
+│  ├── /site-visits/:id/edit      Edit Site Visit                            │
+│  ├── /site-visits/create        Create Site Visit                          │
+│  ├── /site-visits/create-mmp    Create from MMP                            │
+│  ├── /site-visits/urgent        Create Urgent Visit                        │
+│  ├── /coordinator/sites         Coordinator Sites View                     │
+│  └── /tracker-preparation       Tracker Preparation Plan                   │
+│                                                                            │
+│  PROJECTS (5)                                                              │
+│  ├── /projects                  Projects List                              │
+│  ├── /projects/:id              Project Detail                             │
+│  ├── /projects/:id/edit         Edit Project                               │
+│  ├── /projects/create           Create Project                             │
+│  └── /projects/:id/team         Team Management                            │
+│                                                                            │
+│  FINANCIAL (9)                                                             │
+│  ├── /finance                   Finance Dashboard                          │
+│  ├── /finance-approval          Finance Approval Queue                     │
+│  ├── /financial-operations      Financial Operations                       │
+│  ├── /budget                    Budget Management                          │
+│  ├── /cost-submission           Cost Submission                            │
+│  ├── /down-payment-approval     Down Payment Approval                      │
+│  ├── /withdrawal-approval       Withdrawal Approval                        │
+│  ├── /wallet                    Wallet Management                          │
+│  └── /wallet-reports            Wallet Reports                             │
+│                                                                            │
+│  USER & TEAM MANAGEMENT (6)                                                │
+│  ├── /users                     Users List                                 │
+│  ├── /users/:id                 User Detail                                │
+│  ├── /role-management           Role Management                            │
+│  ├── /field-team                Field Team Management                      │
+│  ├── /review-assign             Review & Assign Coordinators               │
+│  └── /hub-operations            Hub Operations                             │
+│                                                                            │
+│  COMMUNICATION (4)                                                         │
+│  ├── /chat                      Real-time Chat                             │
+│  ├── /calls                     Voice/Video Calls                          │
+│  ├── /notifications             Notification Center                        │
+│  └── /email-tracking            Email Tracking                             │
+│                                                                            │
+│  REPORTS & ANALYTICS (4)                                                   │
+│  ├── /reports                   Reports Dashboard                          │
+│  ├── /audit-logs                Audit Logs                                 │
+│  ├── /audit-compliance          Compliance Dashboard                       │
+│  └── /login-analytics           Login Analytics                            │
+│                                                                            │
+│  ADMINISTRATION (8)                                                        │
+│  ├── /settings                  System Settings                            │
+│  ├── /documents                 Document Management                        │
+│  ├── /signatures                Digital Signatures                         │
+│  ├── /classifications           Classification Management                  │
+│  ├── /classification-fees       Classification Fee Management              │
+│  ├── /data-visibility           Data Visibility Settings                   │
+│  ├── /advanced-map              Advanced Map View                          │
+│  └── /archive                   Archive Management                         │
+│                                                                            │
+│  ADMIN-ONLY PAGES (3)                                                      │
+│  ├── /admin-wallets             Admin Wallet Management                    │
+│  ├── /admin-wallets/:id         Admin Wallet Detail                        │
+│  └── /supervisor-approvals      Supervisor Approvals                       │
+│                                                                            │
+│  MOBILE-SPECIFIC (1)                                                       │
+│  └── /demo-data-collector       Demo Data Collector View                   │
+│                                                                            │
+│  TOTAL ROUTES: ~65 (based on App.tsx router configuration)                 │
+│  SOURCE: src/pages/ directory contains 89 page component files             │
+└────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 4.2 All System Components
+
+```
+┌────────────────────────────────────────────────────────────────────────────┐
+│        COMPONENT INVENTORY (Verified via: find src/components -name *.tsx) │
+├────────────────────────────────────────────────────────────────────────────┤
+│                                                                            │
+│  SITE VISIT COMPONENTS (src/components/site-visit/ - 32 files)             │
+│  ├── ClaimSiteButton.tsx        First-claim via RPC: claim_site_visit      │
+│  ├── AcceptSiteButton.tsx       Accept via RPC: claim_site_visit           │
+│  ├── ConfirmationAcknowledgment Uses: src/utils/confirmationDeadlines.ts   │
+│  ├── SmartCollectorSelector.tsx Sorting: online > hub > state > locality   │
+│  ├── SiteVisitStats.tsx         Visit statistics with status counts        │
+│  ├── SiteVisitCard.tsx          Visit card with action buttons             │
+│  ├── SiteVisitCosts.tsx         Cost breakdown display                     │
+│  ├── StartVisitDialog.tsx       GPS capture on visit start                 │
+│  ├── VisitReportDialog.tsx      Report submission form                     │
+│  ├── SiteVisitAuditTrail.tsx    Audit log viewer                           │
+│  ├── AssignmentMap.tsx          Leaflet map for assignments                │
+│  ├── NearestEnumeratorsCard.tsx GPS proximity matching                     │
+│  ├── BatchConfirmation.tsx      Bulk confirmation actions                  │
+│  ├── EditSiteEntryForm.tsx      Site entry editing                         │
+│  ├── RequestDownPaymentButton   Down-payment request trigger               │
+│  └── (17 more files - run ls src/components/site-visit for full list)     │
+│                                                                            │
+│  MMP COMPONENTS (src/components/mmp/ + root level MMP*.tsx)                │
+│  ├── MMPStageIndicator.tsx      Stage: draft/submitted/approved/active     │
+│  ├── MMPApprovalWorkflow.tsx    Multi-tier approval UI                     │
+│  ├── MMPVersionHistory.tsx      Version diff tracking                      │
+│  ├── MMPComprehensiveVerif.tsx  Full verification checklist                │
+│  ├── MMPPermitVerification.tsx  Permit document verification               │
+│  └── (Related files in src/pages/mmp/ directory)                          │
+│                                                                            │
+│  FINANCIAL COMPONENTS                                                      │
+│  ├── src/components/wallet/     Wallet cards, transactions, history        │
+│  ├── src/components/finance/    Finance dashboards, approval lists         │
+│  ├── src/components/cost-submission/  Cost forms, receipt upload           │
+│  └── src/components/downPayment/ Down-payment request workflows            │
+│                                                                            │
+│  COMMUNICATION COMPONENTS                                                  │
+│  ├── src/components/chat/       ChatWindow, MessageList, ChatInput         │
+│  ├── src/components/calls/      JitsiCallModal, IncomingJitsiCall          │
+│  ├── src/components/notification-center/  NotificationList, filters        │
+│  └── src/components/notifications/  Toast, popup, badge components         │
+│                                                                            │
+│  UI COMPONENTS (src/components/ui/ - Shadcn primitives)                    │
+│  └── 50+ Shadcn UI base components (button, card, dialog, etc.)           │
+│                                                                            │
+│  TOTAL: 465 component files (verified via find command)                    │
+└────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 4.3 All System Services
+
+```
+┌────────────────────────────────────────────────────────────────────────────┐
+│      SERVICE INVENTORY (21 files in src/services/ - verified via find)    │
+├────────────────────────────────────────────────────────────────────────────┤
+│                                                                            │
+│  CORE SERVICES (Location: src/services/)                                   │
+│  ├── ChatService.ts             Real-time messaging via Supabase Realtime  │
+│  ├── NotificationService.ts     Push & popup notifications                 │
+│  ├── NotificationTriggerService.ts  Automated notification triggers        │
+│  ├── NotificationSoundService.ts    Audio notification handling            │
+│  ├── FCMService.ts              Firebase Cloud Messaging setup             │
+│  ├── FCMMessagingService.ts     FCM token management                       │
+│  │                                                                         │
+│  COMMUNICATION SERVICES                                                    │
+│  ├── WebRTCService.ts           P2P voice/video via RTCPeerConnection      │
+│  ├── JitsiMeetService.ts        Jitsi video conferencing integration       │
+│  ├── email-notification.service.ts  Email via IONOS SMTP                   │
+│  ├── otp-delivery.service.ts    OTP code delivery (email/SMS)              │
+│  │                                                                         │
+│  FINANCIAL SERVICES                                                        │
+│  ├── budget-notification.service.ts  80% utilization alerts               │
+│  ├── budget-restriction.service.ts   Spending limit enforcement           │
+│  ├── task-budget.service.ts     Task-level budget tracking (CPI/SPI)       │
+│  ├── auto-release.service.ts    Auto-release unconfirmed claims            │
+│  │                                                                         │
+│  REPORTING SERVICES                                                        │
+│  ├── reporting.service.ts       PDF/Excel report generation                │
+│  ├── scheduled-reports.service.ts  Automated report scheduling             │
+│  │                                                                         │
+│  SECURITY SERVICES                                                         │
+│  ├── signature.service.ts       Digital signatures (SHA-256 hashing)       │
+│  ├── verification-enforcement.service.ts  Verification rule engine        │
+│  │                                                                         │
+│  UTILITY SERVICES                                                          │
+│  ├── document-index.service.ts  Document search indexing                   │
+│  ├── kpi-definitions.ts         KPI calculation definitions                │
+│  └── offline-queue.ts           IndexedDB offline sync queue               │
+│                                                                            │
+│  RELATED UTILITY FILES:                                                    │
+│  └── src/utils/confirmationDeadlines.ts  Deadline calculation logic        │
+│                                                                            │
+└────────────────────────────────────────────────────────────────────────────┘
+```
 
 ---
+
+## 5. Site Visit Claiming & Confirmation Process
+
+### 5.1 Complete Site Visit Lifecycle Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    COMPLETE SITE VISIT LIFECYCLE                            │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+ PHASE 1: PLANNING                PHASE 2: DISPATCH              PHASE 3: EXECUTION
+ ─────────────────                ─────────────────              ─────────────────
+
+┌──────────────┐               ┌──────────────┐               ┌──────────────┐
+│  MMP CREATED │               │  DISPATCHED  │               │   CLAIMED    │
+│   (Draft)    │───────────────│  (Available) │───────────────│  (Assigned)  │
+└──────────────┘               └──────────────┘               └──────────────┘
+       │                              │                              │
+       ▼                              ▼                              ▼
+┌──────────────┐               ┌──────────────┐               ┌──────────────┐
+│ MMP APPROVED │               │ FIRST-CLAIM  │               │ CONFIRMATION │
+│   (Active)   │               │   WINDOW     │               │  REQUIRED    │
+└──────────────┘               │  OPENS       │               │ (2 days pre) │
+       │                       └──────────────┘               └──────────────┘
+       ▼                              │                              │
+┌──────────────┐               ┌──────────────┐               ┌──────────────┐
+│ SITES        │               │ COLLECTOR    │               │  CONFIRMED   │
+│ GENERATED    │───────────────│ CLAIMS SITE  │               │  (Locked)    │
+└──────────────┘               └──────────────┘               └──────────────┘
+                                                                     │
+                                                                     ▼
+ PHASE 4: COMPLETION              PHASE 5: REVIEW              PHASE 6: PAYMENT
+ ───────────────────              ───────────────              ────────────────
+
+┌──────────────┐               ┌──────────────┐               ┌──────────────┐
+│ VISIT START  │               │  SUBMITTED   │               │   PAYMENT    │
+│ (GPS Check)  │───────────────│ (For Review) │───────────────│  APPROVED    │
+└──────────────┘               └──────────────┘               └──────────────┘
+       │                              │                              │
+       ▼                              ▼                              ▼
+┌──────────────┐               ┌──────────────┐               ┌──────────────┐
+│ DATA CAPTURE │               │   REVIEWED   │               │   PAYMENT    │
+│ GPS + Photos │               │ (Validated)  │               │  PROCESSED   │
+└──────────────┘               └──────────────┘               └──────────────┘
+       │                              │                              │
+       ▼                              ▼                              ▼
+┌──────────────┐               ┌──────────────┐               ┌──────────────┐
+│ VISIT END    │               │   APPROVED   │               │  COMPLETED   │
+│ (Complete)   │               │   (Final)    │               │  (Archived)  │
+└──────────────┘               └──────────────┘               └──────────────┘
+```
+
+### 5.2 First-Claim Dispatch System
+
+**Implementation References:**
+- Claim Button: `src/components/site-visit/ClaimSiteButton.tsx`
+- Accept Button: `src/components/site-visit/AcceptSiteButton.tsx`
+- Database RPC: `claim_site_visit` (Supabase stored procedure)
+- Deadline Logic: `src/utils/confirmationDeadlines.ts`
+- Confirmation UI: `src/components/site-visit/ConfirmationAcknowledgment.tsx`
+
+The first-claim dispatch system ensures fair and efficient distribution of site visits to data collectors.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      FIRST-CLAIM DISPATCH SYSTEM                            │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+                          ┌─────────────────────┐
+                          │   SITE DISPATCHED   │
+                          │  Status: Available  │
+                          └──────────┬──────────┘
+                                     │
+                          ┌──────────▼──────────┐
+                          │  VISIBLE TO ALL     │
+                          │  ELIGIBLE COLLECTORS │
+                          │  (Based on Location) │
+                          └──────────┬──────────┘
+                                     │
+              ┌──────────────────────┼──────────────────────┐
+              │                      │                      │
+              ▼                      ▼                      ▼
+    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+    │  COLLECTOR A    │    │  COLLECTOR B    │    │  COLLECTOR C    │
+    │  Sees Site      │    │  Sees Site      │    │  Sees Site      │
+    │  Can Claim      │    │  Can Claim      │    │  Can Claim      │
+    └────────┬────────┘    └────────┬────────┘    └────────┬────────┘
+             │                      │                      │
+             │    ╔═══════════════════════════════════╗    │
+             │    ║     FIRST CLICK WINS!             ║    │
+             └───►║  Atomic Database Transaction      ║◄───┘
+                  ║  Only ONE collector succeeds      ║
+                  ╚═══════════════╤═══════════════════╝
+                                  │
+                                  ▼
+                      ┌─────────────────────┐
+                      │   CLAIM SUCCESSFUL  │
+                      │  Status: Assigned   │
+                      │  AssignedTo: User A │
+                      └─────────────────────┘
+                                  │
+                      ┌───────────┴───────────┐
+                      │                       │
+                      ▼                       ▼
+            ┌─────────────────┐     ┌─────────────────┐
+            │ COLLECTOR A     │     │ COLLECTORS B,C  │
+            │ • Site Assigned │     │ • Site Hidden   │
+            │ • Fee Calculated│     │ • Cannot Claim  │
+            │ • Deadline Set  │     │ • Find Other    │
+            └─────────────────┘     └─────────────────┘
+```
+
+### 5.3 Claim Eligibility Rules
+
+**Implementation:** See `ClaimSiteButton.tsx` lines 64-121 for the complete eligibility logic.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        CLAIM ELIGIBILITY CHECKS                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+ CHECK 1: GEOGRAPHIC MATCH                    CHECK 2: CLASSIFICATION
+ ────────────────────────                     ───────────────────────
+
+ ┌─────────────────────────┐                  ┌─────────────────────────┐
+ │   User Profile          │                  │   Classification Level  │
+ │   ├── Hub: Khartoum     │                  │   ├── User: Level 3     │
+ │   ├── State: Kassala    │                  │   │                     │
+ │   └── Locality: Aroma   │                  │   Site Requirement:     │
+ └────────────┬────────────┘                  │   └── Min Level: 2      │
+              │                               └────────────┬────────────┘
+              ▼                                            │
+ ┌─────────────────────────┐                               ▼
+ │   Site Location         │                  ┌─────────────────────────┐
+ │   ├── State: Kassala    │ ──► MATCH? ◄──  │   Level 3 >= Level 2    │
+ │   └── Locality: Aroma   │                  │   ✓ CLASSIFICATION OK   │
+ └─────────────────────────┘                  └─────────────────────────┘
+              │
+              ▼
+ ┌─────────────────────────┐
+ │   State: Kassala = ✓    │
+ │   Locality: Aroma = ✓   │
+ │   ✓ LOCATION MATCH      │
+ └─────────────────────────┘
+
+ CHECK 3: SITE STATUS                         CHECK 4: NO PRIOR CLAIM
+ ────────────────────                         ─────────────────────────
+
+ ┌─────────────────────────┐                  ┌─────────────────────────┐
+ │   Site Status           │                  │   assigned_to Field     │
+ │   Must be: "dispatched" │                  │   Must be: NULL or      │
+ │                         │                  │   empty                 │
+ │   ✗ assigned            │                  │                         │
+ │   ✗ accepted            │                  │   If assigned_to has    │
+ │   ✗ ongoing             │                  │   value → CANNOT CLAIM  │
+ │   ✗ completed           │                  │                         │
+ └─────────────────────────┘                  └─────────────────────────┘
+
+                    ALL 4 CHECKS MUST PASS
+                    ═══════════════════════
+                              │
+                              ▼
+                    ┌─────────────────┐
+                    │  CLAIM ALLOWED  │
+                    └─────────────────┘
+```
+
+### 5.4 Smart Collector Matching Priority
+
+**Implementation:** See `src/components/site-visit/SmartCollectorSelector.tsx` lines 142-150 for the sorting algorithm.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    SMART COLLECTOR MATCHING ALGORITHM                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+When a Coordinator/Supervisor assigns a site, collectors are ranked by:
+
+PRIORITY 1: ONLINE STATUS (Highest)
+══════════════════════════════════════════════════════════════════════════════
+│ RANK │ CRITERIA          │ WEIGHT │ DESCRIPTION                            │
+├──────┼───────────────────┼────────┼────────────────────────────────────────│
+│  1   │ Online Now        │  100%  │ Currently active in the app            │
+│  2   │ Recently Active   │   80%  │ Active within last 30 minutes          │
+│  3   │ Away              │   50%  │ Last active within 4 hours             │
+│  4   │ Offline           │   20%  │ No recent activity                     │
+══════════════════════════════════════════════════════════════════════════════
+
+PRIORITY 2: GEOGRAPHIC PROXIMITY
+══════════════════════════════════════════════════════════════════════════════
+│ RANK │ CRITERIA          │ WEIGHT │ DESCRIPTION                            │
+├──────┼───────────────────┼────────┼────────────────────────────────────────│
+│  1   │ Same Hub          │  +50   │ Collector assigned to same hub         │
+│  2   │ Same State        │  +30   │ Collector in same state                │
+│  3   │ Same Locality     │  +20   │ Collector in same locality             │
+│  4   │ GPS Distance      │ -1/km  │ Penalize by distance from site         │
+══════════════════════════════════════════════════════════════════════════════
+
+PRIORITY 3: WORKLOAD BALANCE
+══════════════════════════════════════════════════════════════════════════════
+│ RANK │ CRITERIA          │ WEIGHT │ DESCRIPTION                            │
+├──────┼───────────────────┼────────┼────────────────────────────────────────│
+│  1   │ Current Sites < 3 │  +20   │ Has capacity for more work             │
+│  2   │ Current Sites 3-5 │    0   │ Normal workload                        │
+│  3   │ Current Sites > 5 │  -20   │ Already heavily loaded                 │
+══════════════════════════════════════════════════════════════════════════════
+
+                    FINAL SCORE CALCULATION
+                    ═══════════════════════
+    
+    Score = (Online Weight) + (Geo Proximity) + (Workload Balance)
+    
+    Collectors sorted by Score (highest first)
+    Coordinator sees ranked list with visual indicators
+```
+
+### 5.5 Confirmation Timeline & Deadlines
+
+**Implementation:** See `src/utils/confirmationDeadlines.ts` for the deadline calculation functions:
+- `calculateConfirmationDeadlines()` - Sets confirmation_deadline (2 days pre) and autorelease_at (1 day pre)
+- `getReminderTimes()` - Returns reminder timestamps
+- `shouldAutoRelease()` - Checks if auto-release should trigger
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    CONFIRMATION TIMELINE & DEADLINES                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+SCHEDULED VISIT DATE: January 15, 2025
+═══════════════════════════════════════════════════════════════════════════════
+
+     CLAIM         REMINDER 1      REMINDER 2      CONFIRMATION    AUTO-RELEASE    VISIT
+     DATE          (4 days pre)    (3 days pre)    DEADLINE        TRIGGER         DATE
+       │               │               │           (2 days pre)    (1 day pre)       │
+       ▼               ▼               ▼               ▼               ▼              ▼
+ ──────┼───────────────┼───────────────┼───────────────┼───────────────┼──────────────┼──────
+       │               │               │               │               │              │
+   Jan 10          Jan 11          Jan 12          Jan 13          Jan 14        Jan 15
+                                                       │               │
+                                                       │               │
+                                              ┌────────┴────────┐     │
+                                              │ CONFIRMATION    │     │
+                                              │ REQUIRED HERE   │     │
+                                              │                 │     │
+                                              │ If NOT confirmed│     │
+                                              │ by Jan 13:      │────►│
+                                              └─────────────────┘     │
+                                                                      ▼
+                                                            ┌─────────────────┐
+                                                            │  AUTO-RELEASE   │
+                                                            │  Site returned  │
+                                                            │  to pool for    │
+                                                            │  re-claiming    │
+                                                            └─────────────────┘
+
+TIMELINE BREAKDOWN:
+═══════════════════════════════════════════════════════════════════════════════
+
+│ STAGE              │ TIMING              │ ACTION REQUIRED                    │
+├────────────────────┼─────────────────────┼────────────────────────────────────│
+│ Site Claimed       │ Any time before     │ Collector clicks "Claim"           │
+│                    │ confirmation window │                                    │
+├────────────────────┼─────────────────────┼────────────────────────────────────│
+│ Confirmation       │ 2 days before visit │ Collector must click "Confirm"     │
+│ Deadline           │                     │ to acknowledge assignment          │
+├────────────────────┼─────────────────────┼────────────────────────────────────│
+│ Auto-Release       │ 1 day before visit  │ If not confirmed, site is          │
+│ Trigger            │                     │ automatically released             │
+├────────────────────┼─────────────────────┼────────────────────────────────────│
+│ Visit Execution    │ Scheduled date      │ Collector performs field visit     │
+│                    │                     │                                    │
+═══════════════════════════════════════════════════════════════════════════════
+
+CONFIRMATION STATUS VALUES:
+───────────────────────────
+• pending     - Awaiting confirmation from collector
+• confirmed   - Collector confirmed, site locked
+• expired     - Deadline passed without confirmation
+• released    - Site auto-released back to pool
+```
+
+### 5.6 Site Visit Execution Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                       SITE VISIT EXECUTION FLOW                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+STEP 1: START VISIT
+════════════════════════════════════════════════════════════════════════════
+
+   ┌─────────────────┐      ┌─────────────────┐      ┌─────────────────┐
+   │  COLLECTOR      │      │   GPS CHECK     │      │   STATUS        │
+   │  Clicks "Start" │─────►│  Capture        │─────►│  → "ongoing"    │
+   │                 │      │  Location       │      │                 │
+   └─────────────────┘      └─────────────────┘      └─────────────────┘
+                                    │
+                                    ▼
+                            ┌───────────────────────────────────────────┐
+                            │  RECORDED DATA:                           │
+                            │  • started_at: timestamp                  │
+                            │  • start_latitude: GPS coordinates        │
+                            │  • start_longitude: GPS coordinates       │
+                            │  • start_accuracy: meters                 │
+                            └───────────────────────────────────────────┘
+
+STEP 2: DATA COLLECTION
+════════════════════════════════════════════════════════════════════════════
+
+   ┌─────────────────┐      ┌─────────────────┐      ┌─────────────────┐
+   │  TAKE PHOTOS    │      │  FILL FORMS     │      │  CAPTURE OTP    │
+   │  • Site Photos  │      │  • Survey Data  │      │  • Verification │
+   │  • Before/After │      │  • Observations │      │  • Signature    │
+   └────────┬────────┘      └────────┬────────┘      └────────┬────────┘
+            │                        │                        │
+            └────────────────────────┼────────────────────────┘
+                                     │
+                                     ▼
+                            ┌───────────────────────────────────────────┐
+                            │  STORED IN visit_data JSON:               │
+                            │  • photos: [array of image URLs]          │
+                            │  • formResponses: {key: value}            │
+                            │  • otp_verified: boolean                  │
+                            │  • otp_code: string (hashed)              │
+                            └───────────────────────────────────────────┘
+
+STEP 3: COMPLETE VISIT
+════════════════════════════════════════════════════════════════════════════
+
+   ┌─────────────────┐      ┌─────────────────┐      ┌─────────────────┐
+   │  COLLECTOR      │      │   GPS CHECK     │      │   STATUS        │
+   │  Clicks "End"   │─────►│  End Location   │─────►│  → "completed"  │
+   │                 │      │  Capture        │      │                 │
+   └─────────────────┘      └─────────────────┘      └─────────────────┘
+                                    │
+                                    ▼
+                            ┌───────────────────────────────────────────┐
+                            │  RECORDED DATA:                           │
+                            │  • completed_at: timestamp                │
+                            │  • end_latitude: GPS coordinates          │
+                            │  • end_longitude: GPS coordinates         │
+                            │  • end_accuracy: meters                   │
+                            │  • duration_minutes: calculated           │
+                            └───────────────────────────────────────────┘
+
+STEP 4: COST SUBMISSION
+════════════════════════════════════════════════════════════════════════════
+
+   ┌─────────────────┐      ┌─────────────────┐      ┌─────────────────┐
+   │  ENTER COSTS    │      │  ATTACH         │      │   SUBMIT FOR    │
+   │  • Transport    │─────►│  RECEIPTS       │─────►│   APPROVAL      │
+   │  • Meals        │      │  (Photos)       │      │                 │
+   └─────────────────┘      └─────────────────┘      └─────────────────┘
+                                                             │
+                                                             ▼
+                            ┌───────────────────────────────────────────┐
+                            │  APPROVAL FLOW:                           │
+                            │  1. Supervisor Review (2hr SLA)           │
+                            │  2. Finance Review (12hr SLA)             │
+                            │  3. FOM Final Approval (24hr SLA)         │
+                            │  4. Payment Processed                     │
+                            └───────────────────────────────────────────┘
+```
+
+### 5.7 Site Status Transitions
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                       SITE STATUS STATE MACHINE                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+                                ┌──────────────┐
+                                │    DRAFT     │
+                                │  (Created)   │
+                                └──────┬───────┘
+                                       │ MMP Approved
+                                       ▼
+                                ┌──────────────┐
+                        ┌───────│  DISPATCHED  │───────┐
+                        │       │ (Available)  │       │
+                        │       └──────┬───────┘       │
+                        │              │               │
+                        │         Claimed              │ Assigned by
+                        │              │               │ Coordinator
+                        │              ▼               │
+                        │       ┌──────────────┐       │
+                        │       │   ASSIGNED   │◄──────┘
+                        │       │  (Claimed)   │
+                        │       └──────┬───────┘
+                        │              │
+                        │         Accepted
+                        │              │
+                        │              ▼
+                        │       ┌──────────────┐
+                        │       │   ACCEPTED   │
+                        │       │ (Confirmed)  │
+                        │       └──────┬───────┘
+                        │              │
+                 Auto-  │         Visit Started
+                Release │              │
+                        │              ▼
+                        │       ┌──────────────┐
+                        │       │   ONGOING    │
+                        │       │ (In Progress)│
+                        │       └──────┬───────┘
+                        │              │
+                        │         Visit Ended
+                        │              │
+                        │              ▼
+                        │       ┌──────────────┐
+                        └──────►│  COMPLETED   │
+                                │  (Finished)  │
+                                └──────┬───────┘
+                                       │
+                                  Archived
+                                       │
+                                       ▼
+                                ┌──────────────┐
+                                │   ARCHIVED   │
+                                │  (Closed)    │
+                                └──────────────┘
+
+SPECIAL TRANSITIONS:
+───────────────────────────────────────────────────────────────────────────────
+• dispatched → dispatched : Auto-release if not confirmed (returns to pool)
+• assigned → dispatched   : Manual release by supervisor
+• ongoing → assigned      : Visit cancelled (rare, requires approval)
+• completed → rejected    : Failed quality review (requires re-visit)
+───────────────────────────────────────────────────────────────────────────────
+```
+
+---
+
+## 6. MMP Lifecycle
+
+### 6.1 MMP Workflow Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           MMP COMPLETE LIFECYCLE                            │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+PHASE 1: CREATION                 PHASE 2: REVIEW                PHASE 3: APPROVAL
+──────────────────                ───────────────                ──────────────────
+
+┌──────────────┐              ┌──────────────┐              ┌──────────────┐
+│  UPLOAD CSV  │              │   DRAFT      │              │  SUBMITTED   │
+│  (Admin/PM)  │──────────────│  (Editable)  │──────────────│  (Pending)   │
+└──────────────┘              └──────────────┘              └──────────────┘
+       │                             │                             │
+       ▼                             ▼                             ▼
+┌──────────────┐              ┌──────────────┐              ┌──────────────┐
+│  PARSE &     │              │  EDIT SITES  │              │  SUPERVISOR  │
+│  VALIDATE    │              │  Add/Remove  │              │  REVIEW      │
+└──────────────┘              │  Modify Info │              └──────────────┘
+       │                      └──────────────┘                     │
+       ▼                                                           ▼
+┌──────────────┐                                            ┌──────────────┐
+│  CREATE SITE │                                            │    FOM       │
+│  ENTRIES     │                                            │  APPROVAL    │
+└──────────────┘                                            └──────────────┘
+                                                                   │
+                                                                   ▼
+PHASE 4: EXECUTION                                          ┌──────────────┐
+──────────────────                                          │   APPROVED   │
+                                                            │   (Active)   │
+┌──────────────┐                                            └──────┬───────┘
+│  DISPATCH    │◄──────────────────────────────────────────────────┘
+│  SITES       │
+└──────────────┘
+       │
+       ▼
+┌──────────────┐
+│  CLAIM &     │
+│  EXECUTE     │
+└──────────────┘
+       │
+       ▼
+┌──────────────┐
+│  COMPLETE    │
+│  ALL VISITS  │
+└──────────────┘
+       │
+       ▼
+┌──────────────┐
+│   CLOSED     │
+│  (Archived)  │
+└──────────────┘
+```
+
+### 6.2 MMP Stage Definitions
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           MMP STAGES EXPLAINED                              │
+├─────────────────┬───────────────────────────────────────────────────────────┤
+│ Stage           │ Description & Actions                                     │
+├─────────────────┼───────────────────────────────────────────────────────────┤
+│ DRAFT           │ • Initial stage after CSV upload                          │
+│                 │ • Sites can be added, edited, or removed                  │
+│                 │ • Owner can modify all fields                             │
+│                 │ • Not visible to field team                               │
+├─────────────────┼───────────────────────────────────────────────────────────┤
+│ SUBMITTED       │ • Submitted for approval                                  │
+│                 │ • Read-only for creator                                   │
+│                 │ • Supervisor can review and comment                       │
+│                 │ • Can be returned to DRAFT with notes                     │
+├─────────────────┼───────────────────────────────────────────────────────────┤
+│ APPROVED        │ • Approved by FOM/Admin                                   │
+│                 │ • Sites can be dispatched                                 │
+│                 │ • Visible to field team                                   │
+│                 │ • Budget locked                                           │
+├─────────────────┼───────────────────────────────────────────────────────────┤
+│ ACTIVE          │ • Sites being executed                                    │
+│                 │ • Real-time progress tracking                             │
+│                 │ • Costs being recorded                                    │
+├─────────────────┼───────────────────────────────────────────────────────────┤
+│ COMPLETED       │ • All sites visited                                       │
+│                 │ • Final report generated                                  │
+│                 │ • Financial reconciliation pending                        │
+├─────────────────┼───────────────────────────────────────────────────────────┤
+│ CLOSED          │ • Fully complete and archived                             │
+│                 │ • Read-only historical record                             │
+│                 │ • Available for reporting                                 │
+└─────────────────┴───────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 7. Financial Management System
+
+### 7.1 Financial Flow Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        FINANCIAL FLOW DIAGRAM                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+                              PROJECT BUDGET
+                                   │
+                    ┌──────────────┴──────────────┐
+                    │                             │
+                    ▼                             ▼
+           ┌───────────────┐             ┌───────────────┐
+           │ ADMIN WALLET  │             │ TASK BUDGETS  │
+           │ (Master Fund) │             │ (Allocated)   │
+           └───────┬───────┘             └───────────────┘
+                   │
+        ┌──────────┴──────────┐
+        │                     │
+        ▼                     ▼
+┌───────────────┐     ┌───────────────┐
+│ DOWN-PAYMENT  │     │ COST          │
+│ REQUESTS      │     │ SUBMISSIONS   │
+└───────┬───────┘     └───────┬───────┘
+        │                     │
+        ▼                     ▼
+┌───────────────┐     ┌───────────────┐
+│ APPROVAL      │     │ APPROVAL      │
+│ WORKFLOW      │     │ WORKFLOW      │
+│               │     │               │
+│ 1. Supervisor │     │ 1. Supervisor │
+│ 2. Finance    │     │ 2. Finance    │
+│ 3. FOM        │     │ 3. FOM        │
+└───────┬───────┘     └───────┬───────┘
+        │                     │
+        ▼                     ▼
+┌───────────────┐     ┌───────────────┐
+│ USER WALLET   │     │ USER WALLET   │
+│ (Credited)    │     │ (Credited)    │
+└───────────────┘     └───────────────┘
+        │                     │
+        ▼                     ▼
+┌───────────────────────────────────────┐
+│           BANK OF KHARTOUM            │
+│         (Manual Bank Transfer)        │
+│                                       │
+│  • Receipt entry (manual)             │
+│  • Transaction verification           │
+│  • Audit logging                      │
+└───────────────────────────────────────┘
+```
+
+### 7.2 Approval Tiers
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        MULTI-TIER APPROVAL SYSTEM                           │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+TIER 1: SUPERVISOR REVIEW (SLA: 2 hours)
+════════════════════════════════════════════════════════════════════════════
+│ Approver    │ Threshold   │ Actions                                       │
+├─────────────┼─────────────┼───────────────────────────────────────────────│
+│ Supervisor  │ Up to       │ • Verify visit completion                     │
+│             │ 50,000 SDG  │ • Check receipts attached                     │
+│             │             │ • Validate amounts                            │
+│             │             │ • Approve / Reject / Request Changes          │
+════════════════════════════════════════════════════════════════════════════
+
+TIER 2: FINANCE REVIEW (SLA: 12 hours)
+════════════════════════════════════════════════════════════════════════════
+│ Approver    │ Threshold   │ Actions                                       │
+├─────────────┼─────────────┼───────────────────────────────────────────────│
+│ Finance     │ 50,001 -    │ • Budget availability check                   │
+│ Officer     │ 200,000 SDG │ • Receipt verification                        │
+│             │             │ • Policy compliance                           │
+│             │             │ • Approve / Reject / Escalate                 │
+════════════════════════════════════════════════════════════════════════════
+
+TIER 3: FOM APPROVAL (SLA: 24 hours)
+════════════════════════════════════════════════════════════════════════════
+│ Approver    │ Threshold   │ Actions                                       │
+├─────────────┼─────────────┼───────────────────────────────────────────────│
+│ Field Ops   │ 200,001+    │ • Final approval authority                    │
+│ Manager     │ SDG         │ • Override capability                         │
+│             │             │ • Escalation handling                         │
+│             │             │ • Approve / Reject                            │
+════════════════════════════════════════════════════════════════════════════
+
+TIER 4: SENIOR OPS LEAD (Budget Override)
+════════════════════════════════════════════════════════════════════════════
+│ Approver    │ Threshold   │ Actions                                       │
+├─────────────┼─────────────┼───────────────────────────────────────────────│
+│ Senior Ops  │ Over-budget │ • Override budget restrictions                │
+│ Lead        │ requests    │ • Approve exceptional expenses                │
+│             │             │ • Audit trail required                        │
+════════════════════════════════════════════════════════════════════════════
+```
+
+### 7.3 Enumerator Fee Calculation
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      ENUMERATOR FEE CALCULATION                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+COMPONENTS:
+═══════════════════════════════════════════════════════════════════════════════
+
+┌─────────────────────┐     ┌─────────────────────┐     ┌─────────────────────┐
+│  ENUMERATOR FEE     │  +  │  TRANSPORT BUDGET   │  =  │   TOTAL PAYOUT      │
+│  (Based on Level)   │     │  (Site-specific)    │     │                     │
+└─────────────────────┘     └─────────────────────┘     └─────────────────────┘
+
+CLASSIFICATION LEVELS:
+═══════════════════════════════════════════════════════════════════════════════
+│ Level │ Name          │ Base Fee (SDG) │ Description                        │
+├───────┼───────────────┼────────────────┼────────────────────────────────────│
+│   1   │ Basic         │     15,000     │ Standard data collection           │
+│   2   │ Intermediate  │     20,000     │ Complex surveys                    │
+│   3   │ Advanced      │     25,000     │ Technical assessments              │
+│   4   │ Expert        │     30,000     │ Specialized evaluations            │
+│   5   │ Senior        │     40,000     │ High-complexity missions           │
+═══════════════════════════════════════════════════════════════════════════════
+
+FEE SOURCES (Priority Order):
+═══════════════════════════════════════════════════════════════════════════════
+1. Classification Fee → Uses classification_fees table
+2. Site-Specific Fee  → Uses mmp_site_entries.enumerator_fee
+3. MMP Default Fee    → Uses mmp_files.default_fee
+4. System Default     → Fallback (15,000 SDG)
+═══════════════════════════════════════════════════════════════════════════════
+```
+
+---
+
+## 8. Communication System
+
+### 8.1 Communication Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      COMMUNICATION SYSTEM ARCHITECTURE                      │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+                         ┌───────────────────┐
+                         │   USER DEVICE     │
+                         │  (Web / Mobile)   │
+                         └─────────┬─────────┘
+                                   │
+         ┌─────────────────────────┼─────────────────────────┐
+         │                         │                         │
+         ▼                         ▼                         ▼
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│   REAL-TIME     │     │   VOICE/VIDEO   │     │    EMAIL        │
+│   CHAT          │     │   CALLS         │     │   NOTIFICATIONS │
+├─────────────────┤     ├─────────────────┤     ├─────────────────┤
+│ Supabase        │     │ WebRTC (P2P)    │     │ IONOS SMTP      │
+│ Realtime        │     │ Jitsi Meet      │     │ noreply@        │
+│                 │     │ (Server)        │     │ pactorg.com     │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+         │                         │                         │
+         ▼                         ▼                         ▼
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│   FEATURES:     │     │   FEATURES:     │     │   FEATURES:     │
+│ • 1:1 Chat      │     │ • Voice Call    │     │ • OTP Delivery  │
+│ • Group Chat    │     │ • Video Call    │     │ • Notifications │
+│ • Typing Ind.   │     │ • Screen Share  │     │ • Alerts        │
+│ • Read Receipts │     │ • Call History  │     │ • Reports       │
+│ • File Sharing  │     │ • Missed Calls  │     │ • Reminders     │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+
+                    ┌───────────────────────────┐
+                    │    PUSH NOTIFICATIONS     │
+                    ├───────────────────────────┤
+                    │ Firebase Cloud Messaging  │
+                    │ (FCM)                     │
+                    │                           │
+                    │ • Incoming Calls          │
+                    │ • New Messages            │
+                    │ • Site Updates            │
+                    │ • Approval Requests       │
+                    │ • Deadline Reminders      │
+                    └───────────────────────────┘
+```
+
+### 8.2 Notification Types
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         NOTIFICATION TYPES                                  │
+├────────────────────┬────────────────────────────────────────────────────────┤
+│ Type               │ Description & Actions                                  │
+├────────────────────┼────────────────────────────────────────────────────────┤
+│ INCOMING_CALL      │ Voice/Video call incoming                              │
+│                    │ Actions: [Accept] [Reject]                             │
+├────────────────────┼────────────────────────────────────────────────────────┤
+│ NEW_MESSAGE        │ New chat message received                              │
+│                    │ Actions: [Open Chat] [OK]                              │
+├────────────────────┼────────────────────────────────────────────────────────┤
+│ SITE_DISPATCHED    │ New site available for claiming                        │
+│                    │ Actions: [View Sites] [OK]                             │
+├────────────────────┼────────────────────────────────────────────────────────┤
+│ SITE_ASSIGNED      │ Site assigned to you                                   │
+│                    │ Actions: [View Details] [OK]                           │
+├────────────────────┼────────────────────────────────────────────────────────┤
+│ APPROVAL_REQUIRED  │ Pending approval needs your action                     │
+│                    │ Actions: [Review] [OK]                                 │
+├────────────────────┼────────────────────────────────────────────────────────┤
+│ PAYMENT_APPROVED   │ Your payment has been approved                         │
+│                    │ Actions: [View Wallet] [OK]                            │
+├────────────────────┼────────────────────────────────────────────────────────┤
+│ DEADLINE_REMINDER  │ Confirmation deadline approaching                      │
+│                    │ Actions: [Confirm Now] [OK]                            │
+├────────────────────┼────────────────────────────────────────────────────────┤
+│ MMP_APPROVED       │ MMP has been approved                                  │
+│                    │ Actions: [View MMP] [OK]                               │
+└────────────────────┴────────────────────────────────────────────────────────┘
+```
+
+### 8.3 Call Flow Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          VOICE/VIDEO CALL FLOW                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+CALLER (User A)                                             RECEIVER (User B)
+───────────────                                             ─────────────────
+
+┌─────────────────┐                                     ┌─────────────────┐
+│  Click "Call"   │                                     │                 │
+│  Button         │                                     │                 │
+└────────┬────────┘                                     │                 │
+         │                                              │                 │
+         ▼                                              │                 │
+┌─────────────────┐                                     │                 │
+│  Select Call    │                                     │                 │
+│  Type:          │                                     │                 │
+│  • WebRTC (P2P) │                                     │                 │
+│  • Jitsi (Room) │                                     │                 │
+└────────┬────────┘                                     │                 │
+         │                                              │                 │
+         ▼                                              │                 │
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│  Create Signal  │────►│  Supabase       │────►│  INCOMING CALL  │
+│  in Database    │     │  Realtime       │     │  Notification   │
+└─────────────────┘     │  Broadcast      │     │  [Accept][Reject]│
+                        └─────────────────┘     └────────┬────────┘
+                                                         │
+                                                         │ Accept
+                                                         ▼
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│  Connection     │◄────│  WebRTC ICE     │◄────│  Join Call      │
+│  Established    │     │  Negotiation    │     │                 │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+         │                                              │
+         ▼                                              ▼
+┌───────────────────────────────────────────────────────────────────┐
+│                         ACTIVE CALL                               │
+│   • Audio/Video Stream                                            │
+│   • Mute/Unmute Controls                                          │
+│   • Screen Share (Jitsi)                                          │
+│   • End Call Button                                               │
+└───────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 9. Complete Page Reference
+
+### 9.1 Public Pages
 
 #### Landing Page (`/`)
 
 | Attribute | Details |
 |-----------|---------|
-| **Purpose** | Welcome page introducing PACT platform to visitors |
-| **How It Works** | Displays platform branding, live clock, system status, and key statistics. Users can click "Get Started" to proceed to login |
+| **Purpose** | Welcome page introducing PACT Command Center |
+| **How It Works** | Displays platform branding, live clock, system status, and statistics |
 | **Who Can Access** | Everyone (public) |
-| **Connected Pages** | Auth (`/auth`), Register (`/register`) |
-| **Database Tables** | None (static content) |
-| **Key Features** | System operational status indicator, platform statistics display, animated background |
+| **Key Features** | System status indicator, animated background, "Get Started" CTA |
 
----
-
-#### Authentication Page (`/auth`)
+#### Authentication (`/auth`)
 
 | Attribute | Details |
 |-----------|---------|
 | **Purpose** | User login and authentication |
-| **How It Works** | Users enter email/password or use Google OAuth. Supports 2FA verification. Shows security features and platform stats |
+| **How It Works** | Email/password or Google OAuth with optional 2FA |
 | **Who Can Access** | Everyone (public) |
-| **Connected Pages** | Dashboard (`/dashboard`), Register (`/register`), Forgot Password (`/forgot-password`) |
-| **Database Tables** | `profiles`, `user_roles` |
-| **Key Features** | Email/password login, Google OAuth, "Forgot Password?" link, 2FA support, mobile-optimized view |
+| **Key Features** | Multiple auth methods, 2FA support, mobile-optimized |
 
----
+### 9.2 Core Dashboard Pages
 
-#### Registration Page (`/register`)
+#### Main Dashboard (`/dashboard`)
 
 | Attribute | Details |
 |-----------|---------|
-| **Purpose** | New user account creation |
-| **How It Works** | Multi-step form: 1) Select role category (Field Team/Management), 2) Choose specific role, 3) Enter personal details, 4) Upload avatar, 5) Select hub/state/locality for field roles |
-| **Who Can Access** | Everyone (public) |
-| **Connected Pages** | Registration Success (`/registration-success`), Auth (`/auth`) |
-| **Database Tables** | `profiles`, `user_roles` |
-| **Key Features** | Role selection, avatar upload, hub/state/locality selection, form validation |
-
----
-
-#### Forgot Password (`/forgot-password`)
-
-| Attribute | Details |
-|-----------|---------|
-| **Purpose** | Initiate password reset process |
-| **How It Works** | User enters email, system sends OTP verification code via IONOS SMTP |
-| **Who Can Access** | Everyone (public) |
-| **Connected Pages** | Reset Password (`/reset-password`), Auth (`/auth`) |
-| **Database Tables** | `profiles` |
-| **Key Features** | Email validation, OTP generation, "Back to Login" navigation |
-
----
-
-#### Reset Password (`/reset-password`)
-
-| Attribute | Details |
-|-----------|---------|
-| **Purpose** | Complete password reset with OTP verification |
-| **How It Works** | User enters OTP code received via email, then sets new password |
-| **Who Can Access** | Users with valid OTP |
-| **Connected Pages** | Auth (`/auth`) |
-| **Database Tables** | `profiles` |
-| **Key Features** | OTP verification, password strength validation, secure password update |
-
----
-
-### 4.2 Protected Pages (Authentication Required)
-
----
-
-#### Dashboard (`/dashboard`)
-
-| Attribute | Details |
-|-----------|---------|
-| **Purpose** | Central command center showing real-time operational overview |
-| **How It Works** | Displays role-specific zones with live statistics, charts, team locations, and quick actions. Data refreshes automatically via Supabase Realtime |
+| **Purpose** | Central command center with real-time operational overview |
+| **How It Works** | Role-specific zones with live statistics and quick actions |
 | **Who Can Access** | All authenticated users |
-| **Connected Pages** | All major sections (MMP, Site Visits, Projects, Field Team, etc.) |
 | **Database Tables** | `profiles`, `mmp_files`, `projects`, `site_visits`, `notifications` |
-| **Key Features** | Overview Zone, Operations Zone, Financial Zone, Team Zone, Performance Zone, ICT Zone |
+| **Key Features** | Overview Zone, Operations Zone, Financial Zone, Team Zone |
 
-**Dashboard Zones by Role:**
-- **SuperAdmin/Admin**: All zones visible
-- **Project Manager**: Projects, MMPs, Team, Performance
-- **FOM**: Operations, Team, Site Visits
-- **Data Collector**: My Visits, Tasks, Location
-
----
+### 9.3 MMP Pages
 
 #### MMP Management (`/mmp`)
 
 | Attribute | Details |
 |-----------|---------|
 | **Purpose** | View and manage Monthly Monitoring Plans |
-| **How It Works** | Lists all MMPs with filtering by status, month, year. Users can search, sort, and access individual MMP details |
-| **Who Can Access** | All authenticated users (view varies by role) |
-| **Connected Pages** | MMP Upload (`/mmp/upload`), MMP Detail (`/mmp/:id`), Edit MMP (`/mmp/:id/edit`) |
-| **Database Tables** | `mmp_files`, `profiles` |
-| **Key Features** | Status filtering, search, pagination, bulk actions, export |
-
----
+| **Key Features** | Status filtering, search, pagination, bulk actions |
 
 #### MMP Upload (`/mmp/upload`)
 
 | Attribute | Details |
 |-----------|---------|
-| **Purpose** | Upload new MMP files via CSV |
-| **How It Works** | 1) Download CSV template, 2) Fill in site data, 3) Upload file, 4) System validates and parses data, 5) Review parsed entries, 6) Confirm upload |
-| **Who Can Access** | Admin, Project Manager, Coordinator |
-| **Connected Pages** | MMP List (`/mmp`), MMP Detail (`/mmp/:id`) |
-| **Database Tables** | `mmp_files`, `site_entries` |
-| **Key Features** | CSV template download, Zod validation, duplicate detection, rollback support |
+| **Purpose** | Upload and parse CSV files for new MMPs |
+| **Key Features** | CSV validation, preview, site entry creation |
 
----
+### 9.4 Site Visit Pages
 
-#### MMP Detail View (`/mmp/:id`)
+#### Site Visits List (`/site-visits`)
 
 | Attribute | Details |
 |-----------|---------|
-| **Purpose** | View complete MMP information and site entries |
-| **How It Works** | Displays MMP metadata, site list with GPS coordinates, status, assigned team, and action buttons based on current stage |
-| **Who Can Access** | All authenticated users |
-| **Connected Pages** | Edit MMP, Verification, Review Assign Coordinators |
-| **Database Tables** | `mmp_files`, `site_entries`, `profiles` |
-| **Key Features** | Site table with GPS, status workflow, export options, map view |
-
----
-
-#### MMP Verification (`/mmp/verify/:id`, `/mmp/:id/verification`)
-
-| Attribute | Details |
-|-----------|---------|
-| **Purpose** | Verify MMP data quality before approval |
-| **How It Works** | System runs validation checks on GPS coordinates, duplicates, completeness. Reviewer can approve or reject with comments |
-| **Who Can Access** | Admin, Project Manager, Reviewer |
-| **Connected Pages** | MMP Detail, Approval Dashboard |
-| **Database Tables** | `mmp_files`, `site_entries` |
-| **Key Features** | GPS validation, duplicate check, data completeness, approval workflow |
-
----
-
-#### Edit MMP (`/mmp/:id/edit`)
-
-| Attribute | Details |
-|-----------|---------|
-| **Purpose** | Modify existing MMP details and site entries |
-| **How It Works** | Form-based editing of MMP metadata and site list. Changes tracked in modification history |
-| **Who Can Access** | Admin, Project Manager, Coordinator |
-| **Connected Pages** | MMP Detail, MMP List |
-| **Database Tables** | `mmp_files`, `site_entries` |
-| **Key Features** | Inline editing, GPS coordinate updates, status management |
-
----
-
-#### Review Assign Coordinators (`/mmp/:id/review-assign-coordinators`)
-
-| Attribute | Details |
-|-----------|---------|
-| **Purpose** | Assign coordinators to MMP sites |
-| **How It Works** | Displays unassigned sites grouped by state/locality. Admin selects coordinators and assigns them to sites |
-| **Who Can Access** | Admin, Project Manager, FOM |
-| **Connected Pages** | MMP Detail, Users |
-| **Database Tables** | `mmp_files`, `profiles`, `user_roles` |
-| **Key Features** | Bulk assignment, coordinator filtering, geographic grouping |
-
----
-
-#### Site Visits (`/site-visits`)
-
-| Attribute | Details |
-|-----------|---------|
-| **Purpose** | Manage all site visit operations |
-| **How It Works** | Lists site visits with status filters. Data collectors see available visits to claim. Supervisors see visits to review |
-| **Who Can Access** | All authenticated users |
-| **Connected Pages** | Create Site Visit, Site Visit Detail |
-| **Database Tables** | `site_visits`, `profiles`, `mmp_files` |
-| **Key Features** | Status filtering, claim system, GPS tracking, cost submissions |
-
----
+| **Purpose** | View all site visits with filtering and claiming |
+| **Key Features** | Status filtering, claim button, geographic filters |
 
 #### Site Visit Detail (`/site-visits/:id`)
 
 | Attribute | Details |
 |-----------|---------|
-| **Purpose** | View and manage individual site visit |
-| **How It Works** | Shows visit details, GPS location, photos, costs, status history. Data collectors can start/complete visits, submit costs |
-| **Who Can Access** | Assigned user, Supervisor, Admin |
-| **Connected Pages** | Site Visits list, Cost Submission, Edit Site Visit |
-| **Database Tables** | `site_visits`, `profiles`, `cost_submissions` |
-| **Key Features** | Visit timeline, GPS capture, photo upload, cost tracking, status workflow |
+| **Purpose** | Detailed view of a single site visit |
+| **Key Features** | GPS display, photos, costs, audit trail |
 
----
+### 9.5 Financial Pages
 
-#### Create Site Visit (`/site-visits/create`)
+#### Finance Dashboard (`/finance`)
 
 | Attribute | Details |
 |-----------|---------|
-| **Purpose** | Create new site visit manually |
-| **How It Works** | Form to enter site details, select from MMP or enter manually, assign data collector |
-| **Who Can Access** | Coordinator, Supervisor, Admin |
-| **Connected Pages** | Site Visits, MMP selection |
-| **Database Tables** | `site_visits`, `mmp_files`, `profiles` |
-| **Key Features** | MMP linking, GPS entry, collector assignment |
+| **Purpose** | Overview of all financial operations |
+| **Key Features** | Wallet balances, pending approvals, transaction history |
 
----
-
-#### Create Site Visit from MMP (`/site-visits/create/mmp`, `/site-visits/create/mmp/:id`)
+#### Wallet Management (`/wallet`)
 
 | Attribute | Details |
 |-----------|---------|
-| **Purpose** | Create site visits directly from MMP entries |
-| **How It Works** | Select MMP, view available sites, batch create visits for selected sites |
-| **Who Can Access** | Coordinator, Supervisor, Admin |
-| **Connected Pages** | MMP List, Site Visits |
-| **Database Tables** | `site_visits`, `mmp_files`, `site_entries` |
-| **Key Features** | MMP site selection, batch creation, auto-populate GPS |
+| **Purpose** | Manage user digital wallets |
+| **Key Features** | Balance display, transaction history, withdrawal requests |
 
 ---
 
-#### Calls (`/calls`)
+## 10. Database Architecture
 
-| Attribute | Details |
-|-----------|---------|
-| **Purpose** | Voice and video calling between team members |
-| **How It Works** | Users select contact, choose call method (Direct WebRTC or Jitsi Meet), initiate call. Recipient receives notification and can accept/reject |
-| **Who Can Access** | All authenticated users |
-| **Connected Pages** | Chat, Field Team |
-| **Database Tables** | `profiles` (for contacts), real-time signaling via Supabase |
-| **Key Features** | WebRTC peer-to-peer calls, Jitsi Meet video rooms, incoming call notifications, call history |
-
-**Call Flow:**
-1. Caller selects contact from list
-2. Caller chooses call method: Direct (WebRTC) or Jitsi Meet
-3. Signal sent to recipient via Supabase Realtime
-4. Recipient sees incoming call popup with ringtone
-5. Recipient accepts (joins call) or rejects
-6. Both parties connected in audio/video call
-7. Call controls: mute, video toggle, end call
-
----
-
-#### Chat (`/chat`)
-
-| Attribute | Details |
-|-----------|---------|
-| **Purpose** | Real-time messaging between team members |
-| **How It Works** | Users can start conversations, send text/files, see typing indicators and read receipts |
-| **Who Can Access** | All authenticated users |
-| **Connected Pages** | Calls, Field Team |
-| **Database Tables** | `messages`, `conversations`, `profiles` |
-| **Key Features** | Real-time messaging, typing indicators, file attachments, read receipts, message search |
-
----
-
-#### Field Team (`/field-team`)
-
-| Attribute | Details |
-|-----------|---------|
-| **Purpose** | View team members and their real-time locations |
-| **How It Works** | Displays team list with online/offline status. Interactive map shows GPS locations with accuracy indicators |
-| **Who Can Access** | All authenticated users |
-| **Connected Pages** | Calls, Chat, User Detail |
-| **Database Tables** | `profiles`, `team_locations` |
-| **Key Features** | Live location map, GPS accuracy (green/yellow/red), online status, team filtering |
-
----
-
-#### Projects (`/projects`)
-
-| Attribute | Details |
-|-----------|---------|
-| **Purpose** | Manage all projects |
-| **How It Works** | Lists projects with status, dates, team. Users can create, edit, and manage project activities |
-| **Who Can Access** | All authenticated users (actions vary by role) |
-| **Connected Pages** | Create Project, Project Detail, MMP |
-| **Database Tables** | `projects`, `project_activities`, `profiles` |
-| **Key Features** | Project CRUD, activity management, team assignment, budget tracking |
-
----
-
-#### Project Detail (`/projects/:id`)
-
-| Attribute | Details |
-|-----------|---------|
-| **Purpose** | View and manage individual project |
-| **How It Works** | Shows project overview, activities, team, budget, and linked MMPs |
-| **Who Can Access** | Project team members, Admin |
-| **Connected Pages** | Edit Project, Team Management, Activities |
-| **Database Tables** | `projects`, `project_activities`, `project_settings` |
-| **Key Features** | Activity timeline, team management, budget overview, status workflow |
-
----
-
-#### Create Project (`/projects/create`)
-
-| Attribute | Details |
-|-----------|---------|
-| **Purpose** | Create new project |
-| **How It Works** | Form with project details: name, description, dates, location, type, team, budget |
-| **Who Can Access** | Admin, Project Manager |
-| **Connected Pages** | Projects list |
-| **Database Tables** | `projects` |
-| **Key Features** | Multi-step form, location picker, team selection, budget setup |
-
----
-
-#### Project Team Management (`/projects/:id/team`)
-
-| Attribute | Details |
-|-----------|---------|
-| **Purpose** | Manage project team members |
-| **How It Works** | Add/remove team members, assign roles within project |
-| **Who Can Access** | Project Manager, Admin |
-| **Connected Pages** | Project Detail, Users |
-| **Database Tables** | `projects`, `profiles` |
-| **Key Features** | Team composition, role assignment, workload view |
-
----
-
-#### Users (`/users`)
-
-| Attribute | Details |
-|-----------|---------|
-| **Purpose** | User management and administration |
-| **How It Works** | Lists all users with search/filter. Admins can edit profiles, assign roles, manage status |
-| **Who Can Access** | Admin, SuperAdmin |
-| **Connected Pages** | User Detail, Role Management |
-| **Database Tables** | `profiles`, `user_roles` |
-| **Key Features** | User search, role filtering, status management, bulk actions |
-
----
-
-#### User Detail (`/users/:id`)
-
-| Attribute | Details |
-|-----------|---------|
-| **Purpose** | View and edit individual user profile |
-| **How It Works** | Displays user info, roles, activity history. Admins can edit profile, manage roles |
-| **Who Can Access** | Admin, SuperAdmin, User themselves |
-| **Connected Pages** | Users list, Role Management |
-| **Database Tables** | `profiles`, `user_roles`, `notifications` |
-| **Key Features** | Profile editing, role management, activity log, status toggle |
-
----
-
-#### Role Management (`/role-management`)
-
-| Attribute | Details |
-|-----------|---------|
-| **Purpose** | Create and manage custom roles with permissions |
-| **How It Works** | View existing roles, create custom roles with specific permissions, assign roles to users |
-| **Who Can Access** | Admin, SuperAdmin |
-| **Connected Pages** | Users, User Detail |
-| **Database Tables** | `roles`, `permissions`, `user_roles` |
-| **Key Features** | Role templates, permission matrix, user assignment, permission testing |
-
----
-
-#### Wallet (`/wallet`)
-
-| Attribute | Details |
-|-----------|---------|
-| **Purpose** | View personal wallet and transaction history |
-| **How It Works** | Shows current balance, transaction list, withdrawal requests |
-| **Who Can Access** | All authenticated users (own wallet) |
-| **Connected Pages** | Withdrawal Approval, Finance Approval |
-| **Database Tables** | `wallets`, `wallet_transactions` |
-| **Key Features** | Balance display, transaction history, withdrawal request |
-
----
-
-#### Admin Wallets (`/admin/wallets`)
-
-| Attribute | Details |
-|-----------|---------|
-| **Purpose** | Manage all user wallets |
-| **How It Works** | Lists all wallets with balances. Admins can view details, adjust balances, process transactions |
-| **Who Can Access** | Finance Officer, Admin |
-| **Connected Pages** | Admin Wallet Detail |
-| **Database Tables** | `wallets`, `profiles` |
-| **Key Features** | Wallet overview, balance adjustments, bulk operations |
-
----
-
-#### Finance Approval (`/finance-approval`)
-
-| Attribute | Details |
-|-----------|---------|
-| **Purpose** | Approve cost submissions and financial requests |
-| **How It Works** | Lists pending approvals with details. Finance officers review, approve/reject with comments |
-| **Who Can Access** | Finance Officer, Admin |
-| **Connected Pages** | Cost Submission, Wallet |
-| **Database Tables** | `cost_submissions`, `wallets`, `approval_logs` |
-| **Key Features** | Approval queue, receipt viewing, batch processing, shortfall warnings |
-
----
-
-#### Down Payment Approval (`/down-payment-approval`)
-
-| Attribute | Details |
-|-----------|---------|
-| **Purpose** | Approve down payment requests before field activities |
-| **How It Works** | Lists pending down payment requests. Two-tier approval: Supervisor then Finance |
-| **Who Can Access** | Supervisor, Finance Officer, Admin |
-| **Connected Pages** | Budget, Wallet |
-| **Database Tables** | `down_payments`, `approvals`, `wallets` |
-| **Key Features** | Two-tier approval, budget check, justification review |
-
----
-
-#### Withdrawal Approval (`/withdrawal-approval`)
-
-| Attribute | Details |
-|-----------|---------|
-| **Purpose** | Approve wallet withdrawal requests |
-| **How It Works** | Lists pending withdrawals. Finance officers verify and process |
-| **Who Can Access** | Finance Officer, Admin |
-| **Connected Pages** | Wallet, Admin Wallets |
-| **Database Tables** | `wallets`, `withdrawal_requests` |
-| **Key Features** | Withdrawal queue, bank details verification, batch processing |
-
----
-
-#### Supervisor Approvals (`/supervisor-approvals`)
-
-| Attribute | Details |
-|-----------|---------|
-| **Purpose** | Review and approve site visit submissions |
-| **How It Works** | Lists completed site visits pending supervisor review. Can approve, reject, or request revision |
-| **Who Can Access** | Supervisor, FOM |
-| **Connected Pages** | Site Visits, Site Visit Detail |
-| **Database Tables** | `site_visits`, `approvals` |
-| **Key Features** | Submission review, GPS verification, photo review, approval workflow |
-
----
-
-#### Budget (`/budget`)
-
-| Attribute | Details |
-|-----------|---------|
-| **Purpose** | Manage project and task-level budgets |
-| **How It Works** | Displays budget allocation, utilization, variance analysis. Alerts at 80% utilization |
-| **Who Can Access** | Project Manager, Finance Officer, Admin |
-| **Connected Pages** | Projects, Cost Submission |
-| **Database Tables** | `budgets`, `projects`, `cost_submissions` |
-| **Key Features** | Budget tracking, variance analysis (CPI, SPI), spending restrictions, override capability |
-
----
-
-#### Cost Submission (`/cost-submission`)
-
-| Attribute | Details |
-|-----------|---------|
-| **Purpose** | Submit costs incurred during field activities |
-| **How It Works** | Data collectors submit costs with type, amount, description, and receipt photo |
-| **Who Can Access** | Data Collector, Coordinator |
-| **Connected Pages** | Site Visits, Finance Approval |
-| **Database Tables** | `cost_submissions`, `site_visits` |
-| **Key Features** | Cost categories, receipt upload, auto-calculation, submission history |
-
----
-
-#### Reports (`/reports`)
-
-| Attribute | Details |
-|-----------|---------|
-| **Purpose** | Generate and view operational reports |
-| **How It Works** | Select report type, set date range and filters, generate report. Export to PDF/Excel |
-| **Who Can Access** | All authenticated users (content varies by role) |
-| **Connected Pages** | All data pages |
-| **Database Tables** | All tables (read-only) |
-| **Key Features** | Multiple report types, date filtering, PDF/Excel export |
-
-**Report Types:**
-- Site Visit Summary
-- Financial Report
-- Team Performance
-- MMP Progress
-- Wallet Transactions
-- Audit Logs
-
----
-
-#### Documents (`/documents`)
-
-| Attribute | Details |
-|-----------|---------|
-| **Purpose** | Document management and storage |
-| **How It Works** | Upload, organize, and share documents. Supports multiple file types |
-| **Who Can Access** | All authenticated users |
-| **Connected Pages** | Signatures |
-| **Database Tables** | `documents`, `document_signatures` |
-| **Key Features** | Upload, categorization, search, sharing, version history |
-
----
-
-#### Signatures (`/signatures`)
-
-| Attribute | Details |
-|-----------|---------|
-| **Purpose** | Digital signature management |
-| **How It Works** | Sign documents using handwritten signature, OTP verification, or biometric (mobile) |
-| **Who Can Access** | All authenticated users |
-| **Connected Pages** | Documents, Wallet |
-| **Database Tables** | `signatures`, `signature_audit_logs` |
-| **Key Features** | Multiple verification methods, SHA-256 hashing, audit trail |
-
----
-
-#### Notifications (`/notifications`)
-
-| Attribute | Details |
-|-----------|---------|
-| **Purpose** | View all system notifications |
-| **How It Works** | Lists notifications with read/unread status. Click to navigate to related item |
-| **Who Can Access** | All authenticated users |
-| **Connected Pages** | All pages (via notification links) |
-| **Database Tables** | `notifications` |
-| **Key Features** | Mark as read, filtering, actionable links, bulk actions |
-
----
-
-#### Settings (`/settings`)
-
-| Attribute | Details |
-|-----------|---------|
-| **Purpose** | User preferences and account settings |
-| **How It Works** | Configure profile, notifications, security, and display preferences |
-| **Who Can Access** | All authenticated users |
-| **Connected Pages** | Profile, Security |
-| **Database Tables** | `profiles`, `user_settings` |
-| **Key Features** | Profile editing, 2FA setup, notification preferences, theme selection |
-
----
-
-#### Audit Logs (`/audit-logs`)
-
-| Attribute | Details |
-|-----------|---------|
-| **Purpose** | View system activity history |
-| **How It Works** | Comprehensive log of all system actions with filters |
-| **Who Can Access** | Admin, ICT, SuperAdmin |
-| **Connected Pages** | All pages (audit references) |
-| **Database Tables** | `audit_logs` |
-| **Key Features** | Action filtering, user filtering, date range, export |
-
----
-
-#### Email Tracking (`/email-tracking`)
-
-| Attribute | Details |
-|-----------|---------|
-| **Purpose** | Track sent email notifications |
-| **How It Works** | Lists all emails sent via IONOS SMTP with delivery status |
-| **Who Can Access** | Admin, ICT |
-| **Connected Pages** | Settings |
-| **Database Tables** | `email_logs` |
-| **Key Features** | Delivery status, recipient filtering, date filtering |
-
----
-
-#### Hub Operations (`/hub-operations`)
-
-| Attribute | Details |
-|-----------|---------|
-| **Purpose** | Manage hub-based field operations |
-| **How It Works** | View and manage hubs, states, localities. Assign teams to geographic areas |
-| **Who Can Access** | Admin, FOM |
-| **Connected Pages** | Field Team, Users |
-| **Database Tables** | `profiles`, `hubs`, `states`, `localities` |
-| **Key Features** | Geographic hierarchy, team assignment, workload distribution |
-
----
-
-#### Tracker Preparation Plan (`/tracker-preparation-plan`)
-
-| Attribute | Details |
-|-----------|---------|
-| **Purpose** | Analyze planned vs actual site coverage |
-| **How It Works** | Compares MMP targets with completed visits, identifies gaps, prepares invoice data |
-| **Who Can Access** | Project Manager, Finance Officer, Admin |
-| **Connected Pages** | MMP, Site Visits, Reports |
-| **Database Tables** | `mmp_files`, `site_visits` |
-| **Key Features** | Coverage analysis, gap identification, invoice preparation |
-
----
-
-#### Classifications (`/classifications`)
-
-| Attribute | Details |
-|-----------|---------|
-| **Purpose** | Manage user classifications and categories |
-| **How It Works** | Define classification types, assign to users, configure fee structures |
-| **Who Can Access** | Admin |
-| **Connected Pages** | Classification Fees, Users |
-| **Database Tables** | `classifications` |
-| **Key Features** | Classification CRUD, user assignment |
-
----
-
-#### Classification Fee Management (`/classification-fees`)
-
-| Attribute | Details |
-|-----------|---------|
-| **Purpose** | Configure fees per classification |
-| **How It Works** | Set transport costs, daily allowances, and other fees based on classification |
-| **Who Can Access** | Admin, Finance Officer |
-| **Connected Pages** | Classifications, Cost Submission |
-| **Database Tables** | `classification_fees` |
-| **Key Features** | Fee structure, rate configuration |
-
----
-
-#### Advanced Map (`/map`)
-
-| Attribute | Details |
-|-----------|---------|
-| **Purpose** | Interactive map with all operational data |
-| **How It Works** | Leaflet-based map showing sites, team locations, visit status with layers and filters |
-| **Who Can Access** | All authenticated users |
-| **Connected Pages** | Field Team, Site Visits, MMP |
-| **Database Tables** | `mmp_files`, `site_visits`, `profiles` |
-| **Key Features** | Multiple layers, clustering, GPS accuracy, real-time updates |
-
----
-
-#### Calendar (`/calendar`)
-
-| Attribute | Details |
-|-----------|---------|
-| **Purpose** | View scheduled activities and deadlines |
-| **How It Works** | Calendar view of site visits, MMP deadlines, project milestones |
-| **Who Can Access** | All authenticated users |
-| **Connected Pages** | Site Visits, Projects |
-| **Database Tables** | `site_visits`, `projects`, `project_activities` |
-| **Key Features** | Month/week/day views, event filtering, quick create |
-
----
-
-#### Archive (`/archive`)
-
-| Attribute | Details |
-|-----------|---------|
-| **Purpose** | Access archived items |
-| **How It Works** | Lists archived MMPs, projects, and visits. Admins can restore items |
-| **Who Can Access** | Admin, Supervisor, FOM |
-| **Connected Pages** | MMP, Projects, Site Visits |
-| **Database Tables** | All tables with archive flag |
-| **Key Features** | Archive browsing, restore capability, permanent delete |
-
----
-
-#### Approval Dashboard (`/approval-dashboard`)
-
-| Attribute | Details |
-|-----------|---------|
-| **Purpose** | Central hub for all pending approvals |
-| **How It Works** | Aggregates pending approvals across MMP, site visits, finances, down payments |
-| **Who Can Access** | Supervisor, Finance Officer, Admin |
-| **Connected Pages** | All approval pages |
-| **Database Tables** | All approval-related tables |
-| **Key Features** | Unified view, quick actions, priority sorting |
-
----
-
-#### Coordinator Dashboard (`/coordinator-dashboard`)
-
-| Attribute | Details |
-|-----------|---------|
-| **Purpose** | Coordinator-specific operational view |
-| **How It Works** | Shows sites in coordinator's area, pending verifications, team status |
-| **Who Can Access** | Coordinator |
-| **Connected Pages** | Sites for Verification, Coordinator Sites |
-| **Database Tables** | `mmp_files`, `site_visits`, `profiles` |
-| **Key Features** | Area-specific data, verification queue, team overview |
-
----
-
-#### Sites for Verification (`/coordinator/sites-for-verification`)
-
-| Attribute | Details |
-|-----------|---------|
-| **Purpose** | Verify sites assigned to coordinator |
-| **How It Works** | Lists sites needing verification. Coordinator confirms GPS, status, readiness |
-| **Who Can Access** | Coordinator |
-| **Connected Pages** | Coordinator Dashboard, MMP |
-| **Database Tables** | `mmp_files`, `site_entries` |
-| **Key Features** | Verification checklist, GPS confirmation, bulk actions |
-
----
-
-#### Coordinator Sites (`/coordinator/sites`)
-
-| Attribute | Details |
-|-----------|---------|
-| **Purpose** | Manage sites in coordinator's area |
-| **How It Works** | Full site management for assigned geographic area |
-| **Who Can Access** | Coordinator |
-| **Connected Pages** | Site Visits, MMP |
-| **Database Tables** | `mmp_files`, `site_entries`, `site_visits` |
-| **Key Features** | Site listing, status management, visit creation |
-
----
-
-#### Super Admin Management (`/super-admin-management`)
-
-| Attribute | Details |
-|-----------|---------|
-| **Purpose** | Super admin system controls |
-| **How It Works** | Full system configuration, user management, role assignment |
-| **Who Can Access** | SuperAdmin only |
-| **Connected Pages** | All pages |
-| **Database Tables** | All tables |
-| **Key Features** | System configuration, user promotion, data management |
-
----
-
-#### Audit Compliance (`/audit-compliance`)
-
-| Attribute | Details |
-|-----------|---------|
-| **Purpose** | Monitor system compliance and security |
-| **How It Works** | Compliance reports, security audits, anomaly detection |
-| **Who Can Access** | Admin, ICT |
-| **Connected Pages** | Audit Logs |
-| **Database Tables** | `audit_logs`, all tables |
-| **Key Features** | Compliance scoring, security alerts, recommendations |
-
----
-
-#### Monitoring Plan (`/monitoring-plan`)
-
-| Attribute | Details |
-|-----------|---------|
-| **Purpose** | Plan and schedule monitoring activities |
-| **How It Works** | Create monitoring schedules, assign resources, track progress |
-| **Who Can Access** | Project Manager, FOM |
-| **Connected Pages** | MMP, Site Visits, Calendar |
-| **Database Tables** | `mmp_files`, `projects` |
-| **Key Features** | Schedule creation, resource allocation, progress tracking |
-
----
-
-#### Field Operation Manager (`/field-operation-manager`)
-
-| Attribute | Details |
-|-----------|---------|
-| **Purpose** | FOM-specific operational dashboard |
-| **How It Works** | Overview of all field operations, team performance, pending actions |
-| **Who Can Access** | FOM |
-| **Connected Pages** | Site Visits, Field Team, Approvals |
-| **Database Tables** | `site_visits`, `profiles`, `mmp_files` |
-| **Key Features** | Operations overview, team management, approval queue |
-
----
-
-#### Global Search (`/search`)
-
-| Attribute | Details |
-|-----------|---------|
-| **Purpose** | Search across all system data |
-| **How It Works** | Full-text search across users, MMPs, projects, site visits |
-| **Who Can Access** | All authenticated users |
-| **Connected Pages** | All pages (via search results) |
-| **Database Tables** | All searchable tables |
-| **Key Features** | Full-text search, result categorization, quick navigation |
-
----
-
-## 5. Database Tables & Relationships
-
-### 5.1 Core Tables
-
-| Table | Purpose | Key Relationships |
-|-------|---------|-------------------|
-| `profiles` | User accounts | Links to `user_roles`, `notifications`, `wallets` |
-| `user_roles` | Role assignments | Links to `profiles`, `roles` |
-| `roles` | Role definitions | Links to `permissions` |
-| `permissions` | Permission definitions | Links to `roles` |
-| `projects` | Project management | Links to `project_activities`, `project_settings` |
-| `project_activities` | Project tasks | Links to `projects` |
-| `mmp_files` | Monthly Monitoring Plans | Links to `site_entries`, `profiles` |
-| `site_visits` | Field visits | Links to `profiles`, `cost_submissions` |
-| `wallets` | Financial accounts | Links to `profiles`, `wallet_transactions` |
-| `notifications` | System notifications | Links to `profiles` |
-| `audit_logs` | Activity history | Links to `profiles` |
-
-### 5.2 Entity Relationship Diagram
+### 10.1 Core Tables
 
 ```
-profiles (users)
-    |
-    +-- user_roles -- roles -- permissions
-    |
-    +-- notifications
-    |
-    +-- wallets -- wallet_transactions
-    |
-    +-- dashboard_settings
-    |
-    +-- user_settings
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        DATABASE TABLE INVENTORY                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  IDENTITY & ACCESS (5 tables)                                               │
+│  ├── profiles              User profiles and settings                       │
+│  ├── user_roles            Role assignments                                 │
+│  ├── roles                 Role definitions                                 │
+│  ├── permissions           Permission definitions                           │
+│  └── sessions              Active sessions                                  │
+│                                                                             │
+│  OPERATIONS (8 tables)                                                      │
+│  ├── projects              Project records                                  │
+│  ├── project_activities    Project activities                               │
+│  ├── mmp_files             MMP header records                               │
+│  ├── mmp_site_entries      Individual site entries                          │
+│  ├── site_visits           Dispatched site visits                           │
+│  ├── site_visit_photos     Visit photo attachments                          │
+│  ├── sites_master          Master site registry                             │
+│  └── localities            Geographic localities                            │
+│                                                                             │
+│  FINANCIAL (7 tables)                                                       │
+│  ├── wallets               User wallet balances                             │
+│  ├── wallet_transactions   Transaction history                              │
+│  ├── cost_submissions      Submitted expenses                               │
+│  ├── down_payment_requests Down payment requests                            │
+│  ├── budgets               Budget allocations                               │
+│  ├── classification_fees   Fee schedules                                    │
+│  └── bank_receipts         Manual bank receipt records                      │
+│                                                                             │
+│  COMMUNICATION (5 tables)                                                   │
+│  ├── messages              Chat messages                                    │
+│  ├── conversations         Chat threads                                     │
+│  ├── notifications         System notifications                             │
+│  ├── call_logs             Voice/video call history                         │
+│  └── email_logs            Email send history                               │
+│                                                                             │
+│  AUDIT & LOGGING (3 tables)                                                 │
+│  ├── audit_logs            Complete audit trail                             │
+│  ├── deletion_logs         Deletion records                                 │
+│  └── login_attempts        Authentication attempts                          │
+│                                                                             │
+│  DOCUMENTS (3 tables)                                                       │
+│  ├── documents             Document metadata                                │
+│  ├── signatures            Digital signatures                               │
+│  └── otp_verifications     OTP records                                      │
+│                                                                             │
+│  TOTAL: 31 TABLES                                                           │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
 
-projects
-    |
-    +-- project_activities
-    |
-    +-- project_settings
-    |
-    +-- mmp_files
-            |
-            +-- site_entries
-                    |
-                    +-- site_visits
-                            |
-                            +-- cost_submissions
+### 10.2 Key Relationships
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                       DATABASE RELATIONSHIPS                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+profiles ─────┬────► user_roles ────► roles
+              │
+              ├────► wallets
+              │
+              ├────► messages (sender)
+              │
+              └────► site_visits (assigned_to)
+
+projects ─────┬────► project_activities
+              │
+              ├────► mmp_files
+              │
+              └────► budgets
+
+mmp_files ────┬────► mmp_site_entries ────► site_visits
+              │
+              └────► sites_master (reference)
+
+site_visits ──┬────► site_visit_photos
+              │
+              ├────► cost_submissions
+              │
+              └────► audit_logs
+
+wallets ──────┬────► wallet_transactions
+              │
+              └────► down_payment_requests
 ```
 
 ---
 
-## 6. Workflows & Processes
+## 11. Mobile App Features
 
-### 6.1 MMP Workflow
-
-```
-Draft -> Under Review -> Verified -> Approved -> In Progress -> Completed -> Archived
-```
-
-### 6.2 Site Visit Workflow
+### 11.1 Mobile Architecture
 
 ```
-Planned -> Assigned -> Claimed -> In Progress -> Submitted -> Reviewed -> Approved
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        MOBILE APP ARCHITECTURE                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+                         ┌───────────────────┐
+                         │    REACT APP      │
+                         │   (Same Codebase) │
+                         └─────────┬─────────┘
+                                   │
+                         ┌─────────▼─────────┐
+                         │    CAPACITOR      │
+                         │   (Bridge Layer)  │
+                         └─────────┬─────────┘
+                                   │
+              ┌────────────────────┼────────────────────┐
+              │                    │                    │
+              ▼                    ▼                    ▼
+    ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
+    │   ANDROID APK   │  │   iOS APP       │  │   WEB APP       │
+    │                 │  │   (Future)      │  │                 │
+    └─────────────────┘  └─────────────────┘  └─────────────────┘
+
+NATIVE PLUGINS:
+═══════════════════════════════════════════════════════════════════════════════
+│ Plugin              │ Purpose                                               │
+├─────────────────────┼───────────────────────────────────────────────────────│
+│ @capacitor/camera   │ Photo capture for site visits                         │
+│ @capacitor/geoloc   │ GPS location tracking                                 │
+│ @capacitor/push     │ Push notification handling                            │
+│ @capacitor/network  │ Offline detection                                     │
+│ @capacitor/filesys  │ Local file storage                                    │
+│ native-biometric    │ Fingerprint/Face authentication                       │
+═══════════════════════════════════════════════════════════════════════════════
 ```
 
-### 6.3 Financial Approval Workflow
+### 11.2 Offline Capabilities
 
 ```
-Submitted -> Supervisor Review -> Finance Review -> Approved/Rejected -> Processed
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        OFFLINE CAPABILITIES                                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+OFFLINE-CAPABLE FEATURES:
+═══════════════════════════════════════════════════════════════════════════════
+│ Feature              │ Offline Behavior                                     │
+├──────────────────────┼──────────────────────────────────────────────────────│
+│ Site Visit Workflow  │ Full offline execution with local queue             │
+│ GPS Capture          │ Native GPS, stored locally                          │
+│ Photo Capture        │ Stored in IndexedDB, synced later                   │
+│ Cost Submission      │ Saved to queue, submitted when online               │
+│ MMP List View        │ Cached for offline browsing                         │
+│ Form Completion      │ Full offline form submission                        │
+═══════════════════════════════════════════════════════════════════════════════
+
+ONLINE-ONLY FEATURES:
+═══════════════════════════════════════════════════════════════════════════════
+│ Feature              │ Reason                                               │
+├──────────────────────┼──────────────────────────────────────────────────────│
+│ Real-time Dashboard  │ Requires live data                                   │
+│ Chat/Messaging       │ Real-time communication                              │
+│ Video Calls          │ Streaming requirement                                │
+│ Live Location Map    │ Real-time tracking                                   │
+│ Wallet Operations    │ Financial security                                   │
+│ Push Notifications   │ Server-dependent                                     │
+═══════════════════════════════════════════════════════════════════════════════
+
+SYNC MECHANISM:
+───────────────────────────────────────────────────────────────────────────────
+1. Actions saved to IndexedDB queue when offline
+2. Network status monitored via Capacitor
+3. When online detected:
+   - Sync Manager processes queue
+   - Conflict resolution (last-write-wins default)
+   - Failed items retry with exponential backoff
+4. User sees SyncStatusBar with manual "Sync Now" button
+───────────────────────────────────────────────────────────────────────────────
 ```
 
 ---
 
-## 7. Communication Features
+## 12. Audit & Compliance
 
-### 7.1 Video/Voice Calling
+### 12.1 Audit Log Structure
 
-**Two Methods Available:**
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         AUDIT LOG STRUCTURE                                 │
+└─────────────────────────────────────────────────────────────────────────────┘
 
-| Method | Technology | Best For |
-|--------|------------|----------|
-| Direct Call | WebRTC (peer-to-peer) | Fast 1-on-1 calls, good internet |
-| Jitsi Meet | Server-mediated | Reliable calls, poor connectivity |
+LOGGED EVENTS:
+═══════════════════════════════════════════════════════════════════════════════
+│ Category        │ Events Logged                                            │
+├─────────────────┼────────────────────────────────────────────────────────────│
+│ Authentication  │ login, logout, failed_login, password_reset               │
+│ User Management │ user_created, user_updated, role_assigned                 │
+│ MMP Operations  │ mmp_created, mmp_approved, mmp_dispatched                 │
+│ Site Visits     │ claim, start, complete, reject, release                   │
+│ Financial       │ payment_approved, payment_rejected, wallet_credited       │
+│ Documents       │ document_uploaded, signature_added, otp_verified          │
+│ System          │ settings_changed, bulk_operation, data_export             │
+═══════════════════════════════════════════════════════════════════════════════
 
-**Call Flow:**
-1. Select contact from team list
-2. Click phone (audio) or video icon
-3. Choose call method in dialog
-4. Recipient receives incoming call popup
-5. Accept to join, Reject to decline
-6. Call connected with controls (mute, video, end)
-
-### 7.2 Chat Messaging
-
-- Real-time text messaging
-- Typing indicators
-- Read receipts
-- File attachments
-- Conversation history
-
----
-
-## 8. Mobile App Features
-
-### 8.1 Offline Capabilities
-
-**Works Offline:**
-- View cached MMPs
-- Complete site visits
-- Capture GPS locations
-- Take photos
-- Submit costs (queued)
-
-**Requires Connection:**
-- Real-time dashboard
-- Chat and calls
-- Live location map
-- Push notifications
-
-### 8.2 Sync Process
-
-1. Changes saved locally
-2. Automatic sync when online
-3. Conflict resolution (last-write-wins)
-4. Manual "Sync Now" button available
+LOG ENTRY FIELDS:
+───────────────────────────────────────────────────────────────────────────────
+{
+  id: UUID,
+  event_type: string,
+  actor_id: UUID (user who performed action),
+  target_type: string (resource type),
+  target_id: UUID (resource ID),
+  action: string (create/read/update/delete),
+  details: JSONB (event-specific data),
+  ip_address: string,
+  user_agent: string,
+  created_at: timestamp
+}
+───────────────────────────────────────────────────────────────────────────────
+```
 
 ---
 
-## 9. Troubleshooting
+## 13. Troubleshooting
 
-### 9.1 Common Issues
+### 13.1 Common Issues
 
-| Issue | Solution |
-|-------|----------|
-| Cannot login | Check email/password, try forgot password |
-| Page not loading | Clear cache, check internet |
-| Call not connecting | Try Jitsi method, check permissions |
-| Data not syncing | Tap Sync Now, check connection |
-| Location not working | Enable GPS, grant permissions |
+| Issue | Cause | Solution |
+|-------|-------|----------|
+| Cannot claim site | Geographic mismatch | Check your state/locality assignment |
+| Site not visible | Status filter | Clear filters, check "Dispatched" tab |
+| Confirmation expired | Deadline passed | Contact supervisor for re-assignment |
+| Payment pending | Approval queue | Wait for approval workflow completion |
+| Offline data not syncing | Network issue | Use manual "Sync Now" button |
+| Call not connecting | WebRTC blocked | Try Jitsi Meet option instead |
 
-### 9.2 Contact Support
+### 13.2 Support Contact
 
-- Email: noreply@pactorg.com
-- In-app help section
-- System documentation
+For technical support, contact the ICT team via the in-app chat or email.
 
 ---
 
