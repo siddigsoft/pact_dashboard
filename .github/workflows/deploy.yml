@@ -1,139 +1,39 @@
-name: Deploy to VPS (master_backup)
+name: Deploy to VPS
 
 on:
   push:
-    branches: [master_backup]
-
-permissions:
-  contents: read
-  packages: write
+    branches:
+      
+      - master_backup
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+
     steps:
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          fetch-depth: 0
+          node-version: '18'
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Install dependencies
+        run: npm ci
 
-      - name: Compute lowercase Docker Hub username
-        run: |
-          echo "DH_USER_LC=${DH_USER,,}" >> $GITHUB_ENV
-        env:
-          DH_USER: mukisavaniah
+      - name: Build project
+        run: npm run build
 
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
+      - name: Deploy to VPS via SSH
+        uses: appleboy/ssh-action@v1.2.0
         with:
-          registry: docker.io
-          username: mukisavaniah
-          password: dckr_pat_6XoWRCqi6aqhQ1CTVzdmSmm6k9g
-
-      - name: Extract Docker metadata (tags, labels)
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: docker.io/${{ env.DH_USER_LC }}/pact_dashboard
-          tags: |
-            type=raw,value=latest
-            type=sha
-
-      - name: Build and push image to Docker Hub
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          build-args: |
-            VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}
-            VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}
-            VITE_FIREBASE_API_KEY=${{ secrets.VITE_FIREBASE_API_KEY }}
-            VITE_FIREBASE_AUTH_DOMAIN=${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
-            VITE_FIREBASE_PROJECT_ID=${{ secrets.VITE_FIREBASE_PROJECT_ID }}
-            VITE_FIREBASE_STORAGE_BUCKET=${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
-            VITE_FIREBASE_MESSAGING_SENDER_ID=${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
-            VITE_FIREBASE_APP_ID=${{ secrets.VITE_FIREBASE_APP_ID }}
-            VITE_FIREBASE_VAPID_PUBLIC_KEY=${{ secrets.VITE_FIREBASE_VAPID_PUBLIC_KEY }}
-
-      - name: Sync files to VPS
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_KEY }}
-          port: ${{ secrets.SSH_PORT }}
-          source: "."
-          target: "${{ secrets.APP_DIR }}"
-          overwrite: true
-          rm: false
-          strip_components: 0
-          exclude: |
-            .git
-            node_modules
-            dist
-            .next
-            android
-            ios
-            coverage
-            cypress
-            **/__tests__
-            **/__mocks__
-            logs
-            *.log
-            tmp
-            temp
-            storybook-static
-            supabase/.temp
-            supabase/.cache
-
-      - name: Write env file on VPS
-        uses: appleboy/ssh-action@v1.1.0
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_KEY }}
-          port: ${{ secrets.SSH_PORT }}
-          command_timeout: 45m
-          script_stop: true
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
           script: |
-            cd ${{ secrets.APP_DIR }}
-            DH_USER_LC=$(echo "mukisavaniah" | tr '[:upper:]' '[:lower:]')
-            cat > .env <<-EOF
-            DOCKERHUB_USERNAME=$DH_USER_LC
-            VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}
-            VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}
-            SUPABASE_SERVICE_ROLE_KEY=${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-            VITE_FIREBASE_API_KEY=${{ secrets.VITE_FIREBASE_API_KEY }}
-            VITE_FIREBASE_AUTH_DOMAIN=${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
-            VITE_FIREBASE_PROJECT_ID=${{ secrets.VITE_FIREBASE_PROJECT_ID }}
-            VITE_FIREBASE_STORAGE_BUCKET=${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
-            VITE_FIREBASE_MESSAGING_SENDER_ID=${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
-            VITE_FIREBASE_APP_ID=${{ secrets.VITE_FIREBASE_APP_ID }}
-            VITE_FIREBASE_VAPID_PUBLIC_KEY=${{ secrets.VITE_FIREBASE_VAPID_PUBLIC_KEY }}
-            EOF
-
-      - name: Build and restart app
-        uses: appleboy/ssh-action@v1.1.0
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_KEY }}
-          port: ${{ secrets.SSH_PORT }}
-          command_timeout: 45m
-          script_stop: true
-          script: |
-            cd ${{ secrets.APP_DIR }}
-            # If your Docker Hub repo is private, login before pulling
-            echo "dckr_pat_6XoWRCqi6aqhQ1CTVzdmSmm6k9g" | docker login docker.io -u "mukisavaniah" --password-stdin || true
-            docker compose -p pact_dashboard pull
-            docker compose -p pact_dashboard up -d
-            docker image prune -f
-
+            cd /home/deploy/pact_dashboard
+            git pull origin master_backup
+            npm install --production
+            npm run build
+            pm2 reload pact_dashboard --update-env
