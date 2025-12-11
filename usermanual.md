@@ -88,7 +88,7 @@
 | **Field Operation Manager (FOM)** | Field | Field operations management | Site visits, team coordination, approvals |
 | **Senior Operations Lead** | Administrative | Senior leadership with override | Budget override, final approvals |
 | **Supervisor** | Field | Team supervision | Site visits assign/update, submissions review |
-| **Coordinator** | Field | Regional coordination | Site visits create/assign, MMP updates |
+| **Coordinator** | Field | State Coordination | Site visits create/assign, MMP updates |
 | **Finance Officer** | Financial | Financial operations | Finances CRUD, approvals, reports |
 | **Data Collector** | Field | Field data collection | Site visits claim/complete, costs submit |
 | **ICT** | Technical | Technical support | System maintenance, audit logs |
