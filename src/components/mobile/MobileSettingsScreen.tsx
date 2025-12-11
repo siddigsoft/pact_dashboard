@@ -84,7 +84,7 @@ export function MobileSettingsScreen({
   const appearanceSettings = settings?.appearanceSettings;
   const updateAppearanceSettings = settings?.updateAppearanceSettings ?? (async () => {});
   const { status: biometricStatus, storeCredentials, clearCredentials, refreshStatus } = useBiometric();
-  const { permissions, checkAllPermissions, resetSetup, isChecking } = useMobilePermissions();
+  const { permissions, checkAllPermissions, resetSetup, isChecking, requestPermission, openAppSettings } = useMobilePermissions();
   const { isNative } = useDevice();
   const { 
     settings: extendedSettings, 
@@ -314,15 +314,35 @@ export function MobileSettingsScreen({
             label="Biometric Login"
             description={biometricStatus?.isAvailable 
               ? "Use fingerprint or face to login" 
-              : "Not available on this device"}
+              : (biometricStatus?.errorMessage || "Set up fingerprint/face in device settings")}
             action={
-              <Switch
-                checked={biometricEnabled}
-                onCheckedChange={handleBiometricToggle}
-                disabled={!biometricStatus?.isAvailable}
-                data-testid="switch-biometric"
-                aria-label="Toggle biometric login"
-              />
+              biometricStatus?.isAvailable ? (
+                <Switch
+                  checked={biometricEnabled}
+                  onCheckedChange={handleBiometricToggle}
+                  data-testid="switch-biometric"
+                  aria-label="Toggle biometric login"
+                />
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="rounded-full text-xs"
+                  onClick={async () => {
+                    hapticPresets.buttonPress();
+                    const opened = await openAppSettings();
+                    if (!opened) {
+                      toast({
+                        title: "Open Device Settings",
+                        description: "Go to Settings > Security > Fingerprint to set up biometric authentication.",
+                      });
+                    }
+                  }}
+                  data-testid="button-setup-biometric"
+                >
+                  Setup
+                </Button>
+              )
             }
           />
           <SettingsRow
@@ -388,9 +408,25 @@ export function MobileSettingsScreen({
                 {permissions.camera === 'granted' ? 'Granted' : permissions.camera === 'denied' ? 'Denied' : 'Not Set'}
               </Badge>
             }
-            onClick={() => {
+            onClick={async () => {
               hapticPresets.buttonPress();
-              setShowPermissions(true);
+              if (permissions.camera === 'granted') {
+                toast({ title: "Camera Access", description: "Camera permission is already granted." });
+                return;
+              }
+              if (permissions.camera === 'denied') {
+                const opened = await openAppSettings();
+                if (!opened) {
+                  toast({ title: "Permission Denied", description: "Please enable camera access in your device Settings > Apps > PACT.", variant: "destructive" });
+                }
+                return;
+              }
+              const result = await requestPermission('camera');
+              if (result.status === 'granted') {
+                toast({ title: "Camera Access Granted", description: "You can now take photos for site visits." });
+              } else if (result.status === 'denied') {
+                toast({ title: "Camera Access Denied", description: "Please enable camera in your device settings.", variant: "destructive" });
+              }
             }}
           />
           <SettingsRow
@@ -413,9 +449,25 @@ export function MobileSettingsScreen({
                 {permissions.microphone === 'granted' ? 'Granted' : permissions.microphone === 'denied' ? 'Denied' : 'Not Set'}
               </Badge>
             }
-            onClick={() => {
+            onClick={async () => {
               hapticPresets.buttonPress();
-              setShowPermissions(true);
+              if (permissions.microphone === 'granted') {
+                toast({ title: "Microphone Access", description: "Microphone permission is already granted." });
+                return;
+              }
+              if (permissions.microphone === 'denied') {
+                const opened = await openAppSettings();
+                if (!opened) {
+                  toast({ title: "Permission Denied", description: "Please enable microphone access in your device Settings > Apps > PACT.", variant: "destructive" });
+                }
+                return;
+              }
+              const result = await requestPermission('microphone');
+              if (result.status === 'granted') {
+                toast({ title: "Microphone Access Granted", description: "You can now record voice notes." });
+              } else if (result.status === 'denied') {
+                toast({ title: "Microphone Access Denied", description: "Please enable microphone in your device settings.", variant: "destructive" });
+              }
             }}
           />
           <SettingsRow
@@ -438,9 +490,25 @@ export function MobileSettingsScreen({
                 {permissions.notifications === 'granted' ? 'Granted' : permissions.notifications === 'denied' ? 'Denied' : 'Not Set'}
               </Badge>
             }
-            onClick={() => {
+            onClick={async () => {
               hapticPresets.buttonPress();
-              setShowPermissions(true);
+              if (permissions.notifications === 'granted') {
+                toast({ title: "Notifications", description: "Push notifications are already enabled." });
+                return;
+              }
+              if (permissions.notifications === 'denied') {
+                const opened = await openAppSettings();
+                if (!opened) {
+                  toast({ title: "Permission Denied", description: "Please enable notifications in your device Settings > Apps > PACT.", variant: "destructive" });
+                }
+                return;
+              }
+              const result = await requestPermission('notifications');
+              if (result.status === 'granted') {
+                toast({ title: "Notifications Enabled", description: "You will receive push notifications for important updates." });
+              } else if (result.status === 'denied') {
+                toast({ title: "Notifications Disabled", description: "Please enable notifications in your device settings.", variant: "destructive" });
+              }
             }}
           />
         </SettingsSection>
@@ -1176,23 +1244,66 @@ export function MobileSettingsScreen({
         title="Security Settings"
       >
         <div className="p-4 space-y-4">
-          <div className="flex items-center gap-3 p-3 bg-black/5 dark:bg-white/5 rounded-xl">
+          <button
+            className="flex items-center gap-3 p-3 bg-black/5 dark:bg-white/5 rounded-xl w-full text-left hover-elevate"
+            onClick={() => {
+              hapticPresets.buttonPress();
+              setShowSecurityInfo(false);
+              navigate('/settings?tab=security');
+            }}
+            data-testid="button-2fa-settings"
+          >
             <Shield className="w-6 h-6 text-black dark:text-white" />
-            <div>
+            <div className="flex-1">
               <p className="font-medium text-black dark:text-white">Two-Factor Authentication</p>
-              <p className="text-xs text-black/60 dark:text-white/60">Manage 2FA settings in the web portal</p>
+              <p className="text-xs text-black/60 dark:text-white/60">Set up TOTP-based 2FA for extra security</p>
             </div>
-          </div>
-          <div className="flex items-center gap-3 p-3 bg-black/5 dark:bg-white/5 rounded-xl">
+            <ChevronRight className="w-5 h-5 text-black/30 dark:text-white/30" />
+          </button>
+          <button
+            className="flex items-center gap-3 p-3 bg-black/5 dark:bg-white/5 rounded-xl w-full text-left hover-elevate"
+            onClick={() => {
+              hapticPresets.buttonPress();
+              setShowSecurityInfo(false);
+              navigate('/forgot-password');
+            }}
+            data-testid="button-change-password"
+          >
             <Lock className="w-6 h-6 text-black dark:text-white" />
-            <div>
-              <p className="font-medium text-black dark:text-white">Password Settings</p>
-              <p className="text-xs text-black/60 dark:text-white/60">Change password from your profile</p>
+            <div className="flex-1">
+              <p className="font-medium text-black dark:text-white">Change Password</p>
+              <p className="text-xs text-black/60 dark:text-white/60">Update your account password</p>
             </div>
-          </div>
-          <p className="text-xs text-black/50 dark:text-white/50 text-center">
-            Advanced security options are available in the web dashboard
-          </p>
+            <ChevronRight className="w-5 h-5 text-black/30 dark:text-white/30" />
+          </button>
+          <button
+            className="flex items-center gap-3 p-3 bg-black/5 dark:bg-white/5 rounded-xl w-full text-left hover-elevate"
+            onClick={async () => {
+              hapticPresets.buttonPress();
+              if (!biometricStatus?.isAvailable) {
+                toast({
+                  title: "Biometric Not Available",
+                  description: biometricStatus?.errorMessage || "Please set up fingerprint or face recognition in your device settings first.",
+                  variant: "destructive",
+                });
+                return;
+              }
+              setShowSecurityInfo(false);
+              navigate('/settings?tab=security');
+            }}
+            data-testid="button-biometric-setup"
+          >
+            <Fingerprint className="w-6 h-6 text-black dark:text-white" />
+            <div className="flex-1">
+              <p className="font-medium text-black dark:text-white">Biometric Login</p>
+              <p className="text-xs text-black/60 dark:text-white/60">
+                {biometricStatus?.isAvailable 
+                  ? (biometricStatus?.hasStoredCredentials ? "Enabled" : "Set up fingerprint/face login")
+                  : "Not available on this device"}
+              </p>
+            </div>
+            <ChevronRight className="w-5 h-5 text-black/30 dark:text-white/30" />
+          </button>
         </div>
       </MobileBottomSheet>
 

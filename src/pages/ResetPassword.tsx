@@ -107,9 +107,9 @@ const ResetPassword = () => {
     setIsLoading(true);
     
     try {
-      const { data, error } = await supabase.functions.invoke('admin-change-password', {
+      const { data, error } = await supabase.functions.invoke('reset-password-with-otp', {
         body: { 
-          email, 
+          email: email.toLowerCase(), 
           newPassword: values.password,
           otp: otpForm.getValues('otp')
         },
