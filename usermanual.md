@@ -1847,18 +1847,82 @@ STAGE 2: APPROVAL WORKFLOW
 STAGE 3: DISPATCH & CLAIMING
 ═══════════════════════════════════════════════════════════════════════════════
 
-[COORDINATOR]                              [DATA COLLECTOR]
+**WHO CAN DISPATCH:**
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  DISPATCH PERMISSIONS                                                       │
+│                                                                             │
+│  ✓ Admin - Full dispatch access                                            │
+│  ✓ ICT - Full dispatch access                                              │
+│  ✗ FOM - Cannot dispatch (reviews only)                                    │
+│  ✗ Coordinator - Cannot dispatch (can assign within their area)            │
+│  ✗ Supervisor - Cannot dispatch                                            │
+│  ✗ Data Collector - Cannot dispatch                                        │
+│                                                                             │
+│  Implementation: src/pages/MMP.tsx → {(isAdmin || isICT) && ...}           │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+**DISPATCH TYPES:**
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  Type          │ Description                    │ Result Status             │
+├────────────────┼────────────────────────────────┼───────────────────────────│
+│  state         │ Bulk dispatch to state         │ Status: "Dispatched"      │
+│                │ All collectors in state can    │ (Available for claiming)  │
+│                │ see and claim sites            │                           │
+├────────────────┼────────────────────────────────┼───────────────────────────│
+│  locality      │ Bulk dispatch to locality      │ Status: "Dispatched"      │
+│                │ All collectors in locality     │ (Available for claiming)  │
+│                │ can see and claim sites        │                           │
+├────────────────┼────────────────────────────────┼───────────────────────────│
+│  individual    │ Direct assignment to specific  │ Status: "Assigned"        │
+│                │ data collector                 │ (Directly assigned)       │
+├────────────────┼────────────────────────────────┼───────────────────────────│
+│  open          │ Open dispatch - any collector  │ Status: "Dispatched"      │
+│                │ in matching area can claim     │ (First-come first-served) │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+**WHO GETS NOTIFIED:**
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  NOTIFICATION RECIPIENTS (per dispatch)                                     │
+│                                                                             │
+│  1. Target Data Collectors (if individual dispatch)                         │
+│     → "Site Visit Assigned to You"                                          │
+│     → Site name, transport budget, link to MMP                              │
+│                                                                             │
+│  2. ALL Team Members in Same State/Locality:                                │
+│     → Coordinators in the state/locality                                    │
+│     → Supervisors in the state/locality                                     │
+│     → Admins (all)                                                          │
+│     → Enumerators in the state/locality                                     │
+│     → Data Collectors in the state/locality                                 │
+│     → "New Site Dispatched in Your Area"                                    │
+│                                                                             │
+│  Implementation: src/components/mmp/DispatchSitesDialog.tsx                 │
+│  Lines 483-579: Notification creation logic                                 │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+[ADMIN/ICT]                                [TEAM MEMBERS IN AREA]
      │                                          │
      ▼                                          │
 ┌─────────────────┐                             │
 │ 12. Dispatch    │                             │
 │     Sites       │                             │
 │                 │                             │
-│     Status:     │                             │
-│     DISPATCHED  │                             │
+│  Choose type:   │                             │
+│  • By State     │                             │
+│  • By Locality  │                             │
+│  • Individual   │                             │
+│  • Open         │                             │
+│                 │                             │
+│  Set transport  │                             │
+│  budget         │                             │
 └────────┬────────┘                             │
          │                                      │
-         │    Push Notification                 │
+         │    Notifications sent to:            │
+         │    • Data Collectors                 │
+         │    • Coordinators                    │
+         │    • Supervisors                     │
+         │    • Enumerators                     │
+         │    (all in same state/locality)      │
          └─────────────────────────────────────►│
                                                 ▼
                                        ┌─────────────────┐
@@ -1892,6 +1956,20 @@ STAGE 3: DISPATCH & CLAIMING
                                        │     Status:     │
                                        │     ACCEPTED    │
                                        └─────────────────┘
+
+NOTIFICATION MESSAGE TEMPLATES:
+───────────────────────────────────────────────────────────────────────────────
+│ Dispatch Type    │ Message Title                  │ Message Content         │
+├──────────────────┼────────────────────────────────┼─────────────────────────│
+│ Individual       │ "Site Visit Assigned to You"   │ Site "{name}" has been  │
+│ (direct assign)  │                                │ assigned to you.        │
+│                  │                                │ Transport Budget: X SDG │
+├──────────────────┼────────────────────────────────┼─────────────────────────│
+│ State/Locality/  │ "New Site Dispatched in Your   │ Site "{name}" in        │
+│ Open (bulk)      │  Area"                         │ {locality}, {state} has │
+│                  │                                │ been dispatched.        │
+│                  │                                │ Transport Budget: X SDG │
+───────────────────────────────────────────────────────────────────────────────
 
 ═══════════════════════════════════════════════════════════════════════════════
 STAGE 4: FIELD EXECUTION
