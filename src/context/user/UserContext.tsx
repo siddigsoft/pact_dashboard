@@ -5,6 +5,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useRoles } from '@/hooks/use-roles';
 import { AppRole } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
+import { EmailNotificationService } from '@/services/email-notification.service';
 
 interface UserContextType {
   currentUser: User | null;
@@ -29,6 +30,8 @@ interface UserContextType {
   verificationEmail?: string;
   resendVerificationEmail: (email?: string) => Promise<boolean>;
   clearEmailVerificationNotice: () => void;
+  sendPasswordRecoveryEmail: (email: string) => Promise<boolean>;
+  adminSetUserPassword: (email: string, newPassword: string) => Promise<boolean>;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -257,6 +260,58 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const pollingInterval = setInterval(refreshUsers, 300000);
     
     return () => clearInterval(pollingInterval);
+  }, []);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('profiles-updates')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'profiles' },
+        (payload) => {
+          const updated: any = (payload as any).new;
+          if (!updated || !updated.id) return;
+
+          let locationData: any | undefined = undefined;
+          if (updated.location !== undefined) {
+            try {
+              locationData = typeof updated.location === 'string'
+                ? JSON.parse(updated.location)
+                : updated.location;
+            } catch (e) {
+              console.warn('Failed to parse profile.location from realtime payload');
+            }
+          }
+
+          setAppUsers(prev => prev.map(u => {
+            if (u.id !== updated.id) return u;
+            return {
+              ...u,
+              availability: updated.availability ?? u.availability,
+              location: locationData !== undefined ? { ...(u.location || {}), ...locationData } : u.location,
+            };
+          }));
+
+          setCurrentUser(prev => {
+            if (!prev || prev.id !== updated.id) return prev;
+            const next = {
+              ...prev,
+              availability: updated.availability ?? prev.availability,
+              location: locationData !== undefined ? { ...(prev.location || {}), ...locationData } : prev.location,
+            } as User;
+            try {
+              localStorage.setItem('PACTCurrentUser', JSON.stringify(next));
+              localStorage.setItem(`user-${next.id}`, JSON.stringify(next));
+            } catch {}
+            return next;
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      try { supabase.removeChannel(channel); } catch {}
+    };
   }, []);
 
   useEffect(() => {
@@ -797,6 +852,26 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         title: "User approved",
         description: "The user can now log in to the system.",
       });
+
+      // Send welcome email to the newly approved user
+      try {
+        const { data: userProfile } = await supabase
+          .from('profiles')
+          .select('email, full_name, role')
+          .eq('id', userId)
+          .single();
+
+        if (userProfile?.email) {
+          EmailNotificationService.sendWelcomeEmail(
+            userProfile.email,
+            userProfile.full_name || 'User',
+            userProfile.role || 'Data Collector'
+          );
+        }
+      } catch (emailError) {
+        console.error('Failed to send welcome email:', emailError);
+      }
+
       return true;
     } catch (error) {
       console.error("User approval error:", error);
@@ -1074,6 +1149,72 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const sendPasswordRecoveryEmail = async (email: string): Promise<boolean> => {
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+
+      if (error) {
+        console.error('Password recovery error:', error);
+        toast({
+          title: 'Failed to send recovery email',
+          description: error.message || 'An error occurred while sending the password recovery email.',
+          variant: 'destructive',
+        });
+        return false;
+      }
+
+      toast({
+        title: 'Recovery email sent',
+        description: `A password reset link has been sent to ${email}. The user should check their inbox.`,
+      });
+      return true;
+    } catch (error: any) {
+      console.error('Password recovery error:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to send password recovery email.',
+        variant: 'destructive',
+      });
+      return false;
+    }
+  };
+
+  const adminSetUserPassword = async (email: string, newPassword: string): Promise<boolean> => {
+    try {
+      const { data: userData, error: lookupError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', email)
+        .maybeSingle();
+
+      if (lookupError || !userData) {
+        toast({
+          title: 'User not found',
+          description: `No user found with email ${email}.`,
+          variant: 'destructive',
+        });
+        return false;
+      }
+
+      toast({
+        title: 'Password update requires Supabase Admin',
+        description: 'Direct password setting requires Supabase service role. Please use "Send Recovery Email" instead, or update via Supabase Dashboard.',
+        variant: 'destructive',
+      });
+      return false;
+    } catch (error: any) {
+      console.error('Admin set password error:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to set user password.',
+        variant: 'destructive',
+      });
+      return false;
+    }
+  };
+
   const contextValue: UserContextType = {
     currentUser,
     authReady,
@@ -1097,6 +1238,8 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     verificationEmail: emailVerification.email,
     resendVerificationEmail,
     clearEmailVerificationNotice,
+    sendPasswordRecoveryEmail,
+    adminSetUserPassword,
   };
 
   return (
@@ -1124,6 +1267,8 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         verificationEmail: emailVerification.email,
         resendVerificationEmail,
         clearEmailVerificationNotice,
+        sendPasswordRecoveryEmail,
+        adminSetUserPassword,
       }}
     >
       {children}

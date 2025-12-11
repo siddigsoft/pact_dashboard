@@ -18,6 +18,7 @@ class _FCMService {
   private messaging: Messaging | null = null;
   private initialized = false;
   private nativeListeners = false;
+  private firebaseSWRegistration: ServiceWorkerRegistration | null = null;
 
   get platform(): Platform {
     if (Capacitor.getPlatform() === 'android') return 'android';
@@ -42,7 +43,10 @@ class _FCMService {
         }
         this.messaging = getMessaging(this.app);
 
-        // Inform SW of VAPID key for resubscribe events
+        // Initialize Firebase messaging service worker with config
+        await this.initFirebaseServiceWorker(config, vapidKey);
+
+        // Inform main SW of VAPID key for resubscribe events
         if (swRegistration && vapidKey && 'active' in swRegistration) {
           swRegistration.active?.postMessage({ type: 'SET_VAPID_KEY', key: vapidKey });
         }
@@ -51,6 +55,48 @@ class _FCMService {
       }
 
       this.initialized = true;
+    }
+  }
+
+  private async initFirebaseServiceWorker(config: FirebaseConfig, vapidKey?: string) {
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
+
+    try {
+      const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
+        scope: '/firebase-cloud-messaging-push-scope',
+      });
+
+      await navigator.serviceWorker.ready;
+
+      const sendConfig = () => {
+        const sw = registration.active || registration.installing || registration.waiting;
+        if (sw) {
+          sw.postMessage({ type: 'INIT_FIREBASE', config });
+          if (vapidKey) {
+            sw.postMessage({ type: 'SET_VAPID_KEY', key: vapidKey });
+          }
+          console.log('[FCM] Firebase config sent to service worker');
+        }
+      };
+
+      if (registration.active) {
+        sendConfig();
+      } else {
+        registration.addEventListener('updatefound', () => {
+          const newWorker = registration.installing;
+          if (newWorker) {
+            newWorker.addEventListener('statechange', () => {
+              if (newWorker.state === 'activated') {
+                sendConfig();
+              }
+            });
+          }
+        });
+      }
+
+      this.firebaseSWRegistration = registration;
+    } catch (err) {
+      console.warn('[FCM] Failed to register Firebase messaging service worker:', err);
     }
   }
 
@@ -91,9 +137,12 @@ class _FCMService {
     if (this.platform === 'web') {
       if (!this.messaging) return null;
       try {
+        // Use Firebase messaging SW registration for FCM token binding
+        // This ensures background notifications are handled by the correct SW
+        const swReg = this.firebaseSWRegistration || options.swRegistration;
         const token = await getToken(this.messaging, {
           vapidKey: options.vapidKey,
-          serviceWorkerRegistration: options.swRegistration ?? undefined,
+          serviceWorkerRegistration: swReg ?? undefined,
         });
         return token || null;
       } catch (err) {

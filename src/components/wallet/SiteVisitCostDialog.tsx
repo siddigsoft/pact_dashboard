@@ -103,7 +103,7 @@ export function SiteVisitCostDialog({ open, onOpenChange, siteVisitId, siteName 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-xl flex items-center gap-2">
             <DollarSign className="w-5 h-5 text-primary" />
@@ -115,7 +115,7 @@ export function SiteVisitCostDialog({ open, onOpenChange, siteVisitId, siteName 
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto pr-4">
+        <div className="space-y-4 py-4 pr-4">
           <Card className="bg-muted/50">
             <CardContent className="p-4">
               <div className="flex items-start gap-2 text-sm text-muted-foreground">

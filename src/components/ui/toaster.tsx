@@ -55,15 +55,15 @@ export function Toaster() {
                     {isValidationResult ? (
                       <div className="space-y-2">
                         {description?.toString().split('\n').map((line, i) => {
-                          // Add visual indicators for different types of content
+                          // Add visual indicators for different types of content (monochrome)
                           if (line.includes('Critical issues:')) {
-                            return <div key={i} className="font-semibold text-red-400 flex items-center gap-1"><AlertTriangle size={14} />{line}</div>;
+                            return <div key={i} className="font-semibold text-white flex items-center gap-1"><AlertTriangle size={14} />{line}</div>;
                           } else if (line.includes('Warnings:')) {
-                            return <div key={i} className="font-semibold text-amber-400 flex items-center gap-1"><AlertTriangle size={14} />{line}</div>;
+                            return <div key={i} className="font-semibold text-white/80 flex items-center gap-1"><AlertTriangle size={14} />{line}</div>;
                           } else if (line.startsWith('•')) {
-                            return <div key={i} className="ml-1">{line}</div>;
+                            return <div key={i} className="ml-1 text-white/70">{line}</div>;
                           } else if (line.includes('Validation completed successfully')) {
-                            return <div key={i} className="flex items-center gap-1"><CheckCircle2 size={14} className="text-green-400" />{line}</div>;
+                            return <div key={i} className="flex items-center gap-1"><CheckCircle2 size={14} className="text-white" />{line}</div>;
                           } else {
                             return <div key={i}>{line}</div>;
                           }

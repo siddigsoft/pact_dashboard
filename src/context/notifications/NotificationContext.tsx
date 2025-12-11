@@ -1,6 +1,6 @@
 
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import { Notification } from '@/types';
+import { Notification, NotificationCategory } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 
 
@@ -80,6 +80,51 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     return () => { try { unsub?.unsubscribe(); } catch {} };
   }, []);
 
+  // Get current user's role from profile
+  const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
+  const [currentUserProjects, setCurrentUserProjects] = useState<string[]>([]);
+
+  // Fetch user role and project assignments
+  useEffect(() => {
+    const fetchUserRoleAndProjects = async () => {
+      if (!currentUserId) {
+        setCurrentUserRole(null);
+        setCurrentUserProjects([]);
+        return;
+      }
+      
+      try {
+        // Fetch user role
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', currentUserId)
+          .single();
+        
+        if (profile?.role) {
+          setCurrentUserRole(profile.role);
+        }
+        
+        // Fetch user's project memberships
+        const { data: teamMemberships } = await supabase
+          .from('team_members')
+          .select('project_id')
+          .eq('user_id', currentUserId);
+        
+        if (teamMemberships) {
+          const projectIds = teamMemberships
+            .map(m => m.project_id)
+            .filter((id): id is string => id !== null);
+          setCurrentUserProjects(projectIds);
+        }
+      } catch (error) {
+        console.error('Error fetching user role/projects:', error);
+      }
+    };
+    
+    fetchUserRoleAndProjects();
+  }, [currentUserId]);
+
   // Helper to map DB row to UI Notification
   const mapDbToNotification = useCallback((row: any): Notification => ({
     id: row.id,
@@ -92,7 +137,30 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     link: row.link || undefined,
     relatedEntityId: row.related_entity_id || undefined,
     relatedEntityType: row.related_entity_type || undefined,
+    category: row.category || undefined,
+    priority: row.priority || undefined,
+    targetRoles: row.target_roles || undefined,
+    projectId: row.project_id || undefined,
   }), []);
+
+  // Filter notifications by user role and project
+  const filterByRoleAndProject = useCallback((notification: Notification): boolean => {
+    // If notification has target roles, check if user has one of them
+    if (notification.targetRoles && notification.targetRoles.length > 0) {
+      if (!currentUserRole || !notification.targetRoles.includes(currentUserRole)) {
+        return false;
+      }
+    }
+    
+    // If notification has a project ID, check if user is a member
+    if (notification.projectId) {
+      if (currentUserProjects.length === 0 || !currentUserProjects.includes(notification.projectId)) {
+        return false;
+      }
+    }
+    
+    return true;
+  }, [currentUserRole, currentUserProjects]);
 
   // Load notifications for current user from Supabase and subscribe for realtime inserts
   useEffect(() => {
@@ -115,10 +183,11 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           if (error) {
             console.warn('Failed to fetch notifications:', error);
           } else if (data) {
-            // Additional client-side filter as backup
+            // Additional client-side filter as backup + role/project filtering
             const filtered = data
               .map(mapDbToNotification)
-              .filter(n => n.title !== 'Chat System Active');
+              .filter(n => n.title !== 'Chat System Active')
+              .filter(filterByRoleAndProject);
             setAppNotifications(filtered);
           }
         }
@@ -139,8 +208,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
             filter: `user_id=eq.${currentUserId}`,
           }, (payload) => {
             const n = mapDbToNotification((payload as any).new);
-            // Filter out Chat System Active notifications
-            if (n.title !== 'Chat System Active') {
+            // Filter out Chat System Active notifications and apply role/project filter
+            if (n.title !== 'Chat System Active' && filterByRoleAndProject(n)) {
               setAppNotifications(prev => [n, ...prev].slice(0, 50));
             }
           })
@@ -179,7 +248,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       try { if (channel) supabase.removeChannel(channel); } catch {}
       clearInterval(interval);
     };
-  }, [currentUserId, mapDbToNotification]);
+  }, [currentUserId, mapDbToNotification, filterByRoleAndProject]);
 
   // Enhanced duplicate detection that checks content and creation time
   const isDuplicateNotification = useCallback((newNotification: Omit<Notification, 'id' | 'isRead' | 'createdAt'>) => {
@@ -226,6 +295,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           link: notification.link,
           related_entity_id: notification.relatedEntityId,
           related_entity_type: notification.relatedEntityType,
+          target_roles: notification.targetRoles,
+          project_id: notification.projectId,
         });
       } catch (err) {
         console.warn('Failed to persist notification:', err);

@@ -12,7 +12,9 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
 import { useMMP } from '@/context/mmp/MMPContext';
-import { CheckCircle, Clock, FileCheck, XCircle, ArrowLeft, Eye, Edit, Search, ChevronLeft, ChevronRight, Calendar, CheckSquare, MapPin, AlertTriangle, ChevronUp, ChevronDown } from 'lucide-react';
+import { useUserProjects } from '@/hooks/useUserProjects';
+import { CheckCircle, Clock, FileCheck, XCircle, ArrowLeft, Eye, Edit, Search, ChevronLeft, ChevronRight, Calendar, CheckSquare, MapPin, AlertTriangle, ChevronUp, ChevronDown, Play } from 'lucide-react';
+import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
 import { format } from 'date-fns';
 import { DatePicker } from '@/components/ui/date-picker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -103,9 +105,67 @@ const SiteEditForm: React.FC<SiteEditFormProps> = ({ site, onSave, onCancel, hub
                      (site.activity_at_site ? [site.activity_at_site] : [])
   });
   const [visitDate, setVisitDate] = React.useState<Date | undefined>(undefined);
+  const [expectedStartDate, setExpectedStartDate] = React.useState<Date | undefined>(undefined);
+  const [expectedEndDate, setExpectedEndDate] = React.useState<Date | undefined>(undefined);
   const [customValues, setCustomValues] = React.useState({
     survey_tool: ''
   });
+
+  React.useEffect(() => {
+    try {
+      if (site?.visit_date) {
+        const vd = new Date(site.visit_date);
+        if (!isNaN(vd.getTime())) setVisitDate(vd);
+      }
+      const ev = (site as any)?.additional_data?.expected_visit;
+      if (ev) {
+        if (ev.start_date) {
+          const sd = new Date(ev.start_date);
+          if (!isNaN(sd.getTime())) setExpectedStartDate(sd);
+        }
+        if (ev.end_date) {
+          const ed = new Date(ev.end_date);
+          if (!isNaN(ed.getTime())) setExpectedEndDate(ed);
+        }
+      }
+    } catch {}
+  }, [site]);
+
+  const isDMActivity = React.useMemo(() => {
+    const a = `${formData?.main_activity || ''} ${formData?.activity || ''}`.toUpperCase();
+    return a.includes('GFA') || a.includes('CBT') || a.includes('EBSFP');
+  }, [formData?.main_activity, formData?.activity]);
+
+  const validateExpectedForVerify = () => {
+    if (isDMActivity) {
+      if (!expectedStartDate || !expectedEndDate) {
+        toast({
+          title: 'Expected period required',
+          description: 'Please select the expected period (start and end dates) for distribution (DM activities).',
+          variant: 'destructive'
+        });
+        return false;
+      }
+      if (!visitDate) {
+        toast({ title: 'Expected visit date required', description: 'Please select the expected visit date.', variant: 'destructive' });
+        return false;
+      }
+      const d0 = new Date(expectedStartDate);
+      const d1 = new Date(expectedEndDate);
+      const dv = new Date(visitDate);
+      d0.setHours(0,0,0,0); d1.setHours(23,59,59,999); dv.setHours(12,0,0,0);
+      if (dv < d0 || dv > d1) {
+        toast({ title: 'Date out of range', description: 'Expected visit date must fall within the selected expected period.', variant: 'destructive' });
+        return false;
+      }
+      return true;
+    }
+    if (!visitDate) {
+      toast({ title: 'Expected visit date required', description: 'Please select the expected visit date.', variant: 'destructive' });
+      return false;
+    }
+    return true;
+  };
 
   // Get filtered states for selected hub
   const selectedHub = hubs.find(h => h.name === formData.hub_office);
@@ -140,194 +200,46 @@ const SiteEditForm: React.FC<SiteEditFormProps> = ({ site, onSave, onCancel, hub
         </div>
       )}
 
+      {/* Site Details Summary */}
+      <div className="border rounded-md p-3 bg-muted/30 mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+          <div><span className="text-muted-foreground">Locality:</span> <span className="font-medium">{formData.locality}</span></div>
+          <div><span className="text-muted-foreground">Site Name:</span> <span className="font-medium">{formData.site_name}</span></div>
+          <div><span className="text-muted-foreground">Site ID:</span> <span className="font-medium">{formData.site_code}</span></div>
+          <div><span className="text-muted-foreground">CP name:</span> <span className="font-medium">{formData.cp_name || (formData as any)?.additional_data?.cp_name || '-'}</span></div>
+          <div className="md:col-span-3"><span className="text-muted-foreground">Activity at the site:</span> <span className="font-medium">{Array.isArray(formData.activity_at_site) && formData.activity_at_site.length > 0 ? formData.activity_at_site.join(', ') : (formData.main_activity || formData.activity || '-')}</span></div>
+          <div className="md:col-span-3"><span className="text-muted-foreground">Activity Details:</span> <span className="font-medium">{formData.activity || formData.main_activity || '-'}</span></div>
+          <div><span className="text-muted-foreground">Visit by:</span> <span className="font-medium">{formData.monitoring_by || (formData as any)?.additional_data?.monitoring_by || '-'}</span></div>
+          <div><span className="text-muted-foreground">Tool to be used:</span> <span className="font-medium">{formData.survey_tool || (formData as any)?.additional_data?.survey_tool || '-'}</span></div>
+          <div><span className="text-muted-foreground">Use Market Diversion Monitoring:</span> <span className="font-medium">{formData.use_market_diversion ? 'Yes' : 'No'}</span></div>
+          <div><span className="text-muted-foreground">Use Warehouse Monitoring:</span> <span className="font-medium">{formData.use_warehouse_monitoring ? 'Yes' : 'No'}</span></div>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <Label htmlFor="site_name">Site Name</Label>
-          <Input
-            id="site_name"
-            value={formData.site_name}
-            onChange={(e) => setFormData({ ...formData, site_name: e.target.value })}
-            required
-          />
-        </div>
-        <div>
-          <Label htmlFor="site_code">Site Code</Label>
-          <Input
-            id="site_code"
-            value={formData.site_code}
-            onChange={(e) => setFormData({ ...formData, site_code: e.target.value })}
-            required
-          />
-        </div>
-        <div className="md:col-span-2">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Expected Visit Dates */}
+        {isDMActivity ? (
+          <>
             <div>
-              <Label htmlFor="hub_office">Hub Office</Label>
-              <div className="space-y-2">
-                <Select
-                  value={formData.hub_office}
-                  onValueChange={(value) => {
-                    // Clear state and locality when hub changes
-                    setFormData({ ...formData, hub_office: value, state: '', locality: '' });
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select hub office" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {hubs.map((hub) => (
-                      <SelectItem key={hub.id} value={hub.name}>
-                        {hub.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              <Label>Expected Distribution Start <span className="text-red-500">*</span></Label>
+              <DatePicker date={expectedStartDate} onSelect={setExpectedStartDate} className="w-full" />
             </div>
-            {formData.hub_office && (
-              <div>
-                <Label htmlFor="state">State</Label>
-                <Select
-                  value={formData.state}
-                  onValueChange={(value) => setFormData({ ...formData, state: value, locality: '' })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select state" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {hubStateOptions.map((state) => (
-                      <SelectItem key={state.state_id} value={state.state_name}>
-                        {state.state_name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            {formData.state && (
-              <div>
-                <Label htmlFor="locality">Locality</Label>
-                <Select
-                  value={formData.locality}
-                  onValueChange={(value) => setFormData({ ...formData, locality: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select locality" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {localityOptions.map((locality) => (
-                      <SelectItem key={locality.id} value={locality.name}>
-                        {locality.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+            <div>
+              <Label>Expected Distribution End <span className="text-red-500">*</span></Label>
+              <DatePicker date={expectedEndDate} onSelect={setExpectedEndDate} className="w-full" />
+            </div>
+            <div className="md:col-span-2">
+              <Label>Expected Visit Date <span className="text-red-500">*</span></Label>
+              <DatePicker date={visitDate} onSelect={setVisitDate} className="w-full" />
+              <p className="text-xs text-muted-foreground mt-1">Must be within the expected period above.</p>
+            </div>
+          </>
+        ) : (
+          <div>
+            <Label>Expected Visit Date <span className="text-red-500">*</span></Label>
+            <DatePicker date={visitDate} onSelect={setVisitDate} className="w-full" />
           </div>
-        </div>
-        <div>
-          <Label htmlFor="cp_name">CP Name</Label>
-          <Input
-            id="cp_name"
-            value={formData.cp_name || ''}
-            onChange={(e) => setFormData({ ...formData, cp_name: e.target.value })}
-          />
-        </div>
-        <div>
-          <Label htmlFor="activity_at_site">Activity at Site</Label>
-          <div className="space-y-2">
-            {ACTIVITY_OPTIONS.map((activity) => (
-              <div key={activity} className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  id={`activity-${activity}`}
-                  checked={formData.activity_at_site?.includes(activity) || false}
-                  onChange={(e) => {
-                    const isChecked = e.target.checked;
-                    setFormData(prev => ({
-                      ...prev,
-                      activity_at_site: isChecked
-                        ? [...(prev.activity_at_site || []), activity]
-                        : (prev.activity_at_site || []).filter(a => a !== activity)
-                    }));
-                  }}
-                />
-                <Label htmlFor={`activity-${activity}`} className="text-sm font-normal">
-                  {activity}
-                </Label>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div>
-          <Label htmlFor="monitoring_by">Monitoring By</Label>
-          <Select
-            value={formData.monitoring_by || ''}
-            onValueChange={(value) => setFormData({ ...formData, monitoring_by: value })}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select monitoring organization" />
-            </SelectTrigger>
-            <SelectContent>
-              {MONITORING_BY_OPTIONS.map((org) => (
-                <SelectItem key={org} value={org}>
-                  {org}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div>
-          <Label htmlFor="survey_tool">Survey Tool</Label>
-          <div className="space-y-2">
-            <Select
-              value={isCustomValue('survey_tool', formData.survey_tool || '') ? 'Other' : (formData.survey_tool || '')}
-              onValueChange={(value) => {
-                if (value === 'Other') {
-                  setCustomValues(prev => ({ ...prev, survey_tool: formData.survey_tool || '' }));
-                }
-                setFormData({ ...formData, survey_tool: value });
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select survey tool" />
-              </SelectTrigger>
-              <SelectContent>
-                {SURVEY_TOOL_OPTIONS.map((tool) => (
-                  <SelectItem key={tool} value={tool}>
-                    {tool}
-                  </SelectItem>
-                ))}
-                <SelectItem value="Other">Other (Custom)</SelectItem>
-              </SelectContent>
-            </Select>
-            {formData.survey_tool === 'Other' && (
-              <Input
-                placeholder="Enter custom survey tool"
-                value={customValues.survey_tool}
-                onChange={(e) => setCustomValues(prev => ({ ...prev, survey_tool: e.target.value }))}
-              />
-            )}
-          </div>
-        </div>
-        <div>
-          <Label>Visit Date <span className="text-red-500">*</span></Label>
-          <DatePicker
-            date={visitDate}
-            onSelect={setVisitDate}
-            className="w-full"
-          />
-        </div>
-        <div className="md:col-span-2">
-          <Label htmlFor="comments">Comments</Label>
-          <Textarea
-            id="comments"
-            value={formData.comments}
-            onChange={(e) => setFormData({ ...formData, comments: e.target.value })}
-            rows={3}
-          />
-        </div>
+        )}
       </div>
 
       <DialogFooter>
@@ -336,26 +248,26 @@ const SiteEditForm: React.FC<SiteEditFormProps> = ({ site, onSave, onCancel, hub
           <Button 
             type="button"
             onClick={() => {
-              // Validate that visit date is required
-              if (!visitDate) {
-                toast({
-                  title: 'Validation Error',
-                  description: 'Visit date is required. Please select a visit date before verifying.',
-                  variant: 'destructive'
-                });
-                return;
-              }
+              if (!validateExpectedForVerify()) return;
+              const expected_visit = isDMActivity ? {
+                type: 'range',
+                start_date: expectedStartDate ? expectedStartDate.toISOString().split('T')[0] : null,
+                end_date: expectedEndDate ? expectedEndDate.toISOString().split('T')[0] : null,
+                expected_date: visitDate ? visitDate.toISOString().split('T')[0] : null,
+              } : {
+                type: 'single',
+                expected_date: visitDate ? visitDate.toISOString().split('T')[0] : null,
+              };
               const updatedSite = {
                 ...formData,
                 visit_date: visitDate ? visitDate.toISOString().split('T')[0] : null,
-                // Use custom values if "Other" was selected
+                additional_data: { ...(formData as any)?.additional_data, expected_visit },
                 hub_office: formData.hub_office,
                 monitoring_by: formData.monitoring_by,
                 survey_tool: formData.survey_tool === 'Other' ? customValues.survey_tool : formData.survey_tool,
               };
               onSave(updatedSite, true);
             }}
-            disabled={!visitDate}
             className="bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <CheckCircle className="h-4 w-4 mr-2" />
@@ -397,26 +309,26 @@ const SiteEditForm: React.FC<SiteEditFormProps> = ({ site, onSave, onCancel, hub
               type="button" 
               variant="outline"
               onClick={() => {
-                // Validate that visit date is required
-                if (!visitDate) {
-                  toast({
-                    title: 'Validation Error',
-                    description: 'Visit date is required. Please select a visit date before re-verifying.',
-                    variant: 'destructive'
-                  });
-                  return;
-                }
+                if (!validateExpectedForVerify()) return;
+                const expected_visit = isDMActivity ? {
+                  type: 'range',
+                  start_date: expectedStartDate ? expectedStartDate.toISOString().split('T')[0] : null,
+                  end_date: expectedEndDate ? expectedEndDate.toISOString().split('T')[0] : null,
+                  expected_date: visitDate ? visitDate.toISOString().split('T')[0] : null,
+                } : {
+                  type: 'single',
+                  expected_date: visitDate ? visitDate.toISOString().split('T')[0] : null,
+                };
                 const updatedSite = {
                   ...formData,
                   visit_date: visitDate ? visitDate.toISOString().split('T')[0] : null,
-                  // Use custom values if "Other" was selected
+                  additional_data: { ...(formData as any)?.additional_data, expected_visit },
                   hub_office: formData.hub_office,
                   monitoring_by: formData.monitoring_by,
                   survey_tool: formData.survey_tool === 'Other' ? customValues.survey_tool : formData.survey_tool,
                 };
                 onSave(updatedSite, true);
               }}
-              disabled={!visitDate}
               className="bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <CheckCircle className="h-4 w-4 mr-2" />
@@ -459,26 +371,26 @@ const SiteEditForm: React.FC<SiteEditFormProps> = ({ site, onSave, onCancel, hub
               type="button" 
               variant="outline"
               onClick={() => {
-                // Validate that visit date is required
-                if (!visitDate) {
-                  toast({
-                    title: 'Validation Error',
-                    description: 'Visit date is required. Please select a visit date before verifying.',
-                    variant: 'destructive'
-                  });
-                  return;
-                }
+                if (!validateExpectedForVerify()) return;
+                const expected_visit = isDMActivity ? {
+                  type: 'range',
+                  start_date: expectedStartDate ? expectedStartDate.toISOString().split('T')[0] : null,
+                  end_date: expectedEndDate ? expectedEndDate.toISOString().split('T')[0] : null,
+                  expected_date: visitDate ? visitDate.toISOString().split('T')[0] : null,
+                } : {
+                  type: 'single',
+                  expected_date: visitDate ? visitDate.toISOString().split('T')[0] : null,
+                };
                 const updatedSite = {
                   ...formData,
                   visit_date: visitDate ? visitDate.toISOString().split('T')[0] : null,
-                  // Use custom values if "Other" was selected
+                  additional_data: { ...(formData as any)?.additional_data, expected_visit },
                   hub_office: formData.hub_office,
                   monitoring_by: formData.monitoring_by,
                   survey_tool: formData.survey_tool === 'Other' ? customValues.survey_tool : formData.survey_tool,
                 };
                 onSave(updatedSite, true);
               }}
-              disabled={!visitDate}
               className="bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <CheckCircle className="h-4 w-4 mr-2" />
@@ -516,6 +428,9 @@ const CoordinatorSites: React.FC = () => {
   const { toast } = useToast();
   const { currentUser } = useAppContext();
   const { updateMMP } = useMMP();
+  const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
+  const siteVisitContext = useSiteVisitContext();
+  const [isStartingVisit, setIsStartingVisit] = useState(false);
   const { permits, loading: permitsLoading, uploadPermit, fetchPermits } = useCoordinatorLocalityPermits();
   const [loading, setLoading] = useState(true);
   const [sites, setSites] = useState<SiteVisit[]>([]);
@@ -547,6 +462,16 @@ const CoordinatorSites: React.FC = () => {
   const [selectedLocalityForBulkVerify, setSelectedLocalityForBulkVerify] = useState<{localityKey: string, sites: SiteVisit[]} | null>(null);
   const [bulkLocalityVisitDate, setBulkLocalityVisitDate] = useState<string>('');
   const [bulkLocalityVisitDateObj, setBulkLocalityVisitDateObj] = useState<Date | undefined>(undefined);
+  const [bulkExpectedStartDate, setBulkExpectedStartDate] = useState<Date | undefined>(undefined);
+  const [bulkExpectedEndDate, setBulkExpectedEndDate] = useState<Date | undefined>(undefined);
+
+  const hasBulkDMActivities = useMemo(() => {
+    const sitesArr = selectedLocalityForBulkVerify?.sites || [];
+    return sitesArr.some((s: any) => {
+      const a = `${s?.main_activity || ''} ${s?.activity || ''}`.toUpperCase();
+      return a.includes('GFA') || a.includes('CBT') || a.includes('EBSFP');
+    });
+  }, [selectedLocalityForBulkVerify]);
   
   // Filter states
   const [hubFilter, setHubFilter] = useState<string>('all');
@@ -563,6 +488,8 @@ const CoordinatorSites: React.FC = () => {
   const [approvedSitesCount, setApprovedSitesCount] = useState(0);
   const [completedSitesCount, setCompletedSitesCount] = useState(0);
   const [rejectedSitesCount, setRejectedSitesCount] = useState(0);
+  // Loading guard to prevent concurrent loads
+  const [isLoadingRef] = useState({ current: false });
   
   // Subcategory counts for new sites tabs
   const [statePermitRequiredCount, setStatePermitRequiredCount] = useState(0);
@@ -745,18 +672,27 @@ const CoordinatorSites: React.FC = () => {
     fetchLocationData();
   }, [toast]);
 
-  // Load badge counts for all tabs (always loaded)
+  // Load badge counts for all tabs (always loaded) - filtered by project membership
   useEffect(() => {
     if (!currentUser?.id) return;
     
     const loadBadgeCounts = async () => {
+      // Non-admin users with no project assignments should see nothing
+      if (!isAdminOrSuperUser && userProjectIds.length === 0) {
+        updateBadgeCounts([]);
+        return;
+      }
+      
       try {
         const userId = currentUser.id;
         
-        // Fetch only forwarded entries with minimal columns for better performance
+        // Fetch entries with mmp_file join to get project_id for filtering
         const { data: userEntries, error: entriesError } = await supabase
           .from('mmp_site_entries')
-          .select('id, status')
+          .select(`
+            id, status,
+            mmp_file:mmp_files!mmp_file_id(project_id)
+          `)
           .eq('forwarded_to_user_id', userId)
           .limit(5000);
         
@@ -765,18 +701,38 @@ const CoordinatorSites: React.FC = () => {
           // Fallback: fetch all and filter client-side
           const { data: allEntries } = await supabase
             .from('mmp_site_entries')
-            .select('id, status, forwarded_to_user_id')
+            .select(`
+              id, status, forwarded_to_user_id,
+              mmp_file:mmp_files!mmp_file_id(project_id)
+            `)
             .limit(5000);
           
-          const filtered = (allEntries || []).filter((entry: any) => {
+          let filtered = (allEntries || []).filter((entry: any) => {
             return entry.forwarded_to_user_id === userId;
           });
+          
+          // Apply project filter for non-admin users (userProjectIds.length > 0 is guaranteed here)
+          if (!isAdminOrSuperUser) {
+            filtered = filtered.filter((entry: any) => {
+              const projectId = entry.mmp_file?.project_id;
+              return projectId && userProjectIds.includes(projectId);
+            });
+          }
           
           updateBadgeCounts(filtered);
           return;
         }
         
-        updateBadgeCounts(userEntries || []);
+        // Apply project filter for non-admin users (userProjectIds.length > 0 is guaranteed here)
+        let filtered = userEntries || [];
+        if (!isAdminOrSuperUser) {
+          filtered = filtered.filter((entry: any) => {
+            const projectId = entry.mmp_file?.project_id;
+            return projectId && userProjectIds.includes(projectId);
+          });
+        }
+        
+        updateBadgeCounts(filtered);
       } catch (error) {
         console.error('Error loading badge counts:', error);
       }
@@ -811,9 +767,9 @@ const CoordinatorSites: React.FC = () => {
     };
 
     loadBadgeCounts();
-  }, [currentUser?.id]);
+  }, [currentUser?.id, userProjectIds, isAdminOrSuperUser]);
 
-  // Load sites for active tab only
+  // Load sites for active tab only - filtered by project membership
   useEffect(() => {
     loadSites();
     // Reset search and pagination when tab changes
@@ -832,32 +788,55 @@ const CoordinatorSites: React.FC = () => {
 
   const loadSites = async () => {
     if (!currentUser?.id) return;
-    
+
+    // Prevent concurrent loads
+    if (isLoadingRef.current) {
+      console.log('Load already in progress, skipping...');
+      return;
+    }
+
+    // Non-admin users with no project assignments should see nothing
+    if (!isAdminOrSuperUser && userProjectIds.length === 0) {
+      setSites([]);
+      setLocalitiesData([]);
+      setLoading(false);
+      return;
+    }
+
+    isLoadingRef.current = true;
     setLoading(true);
     try {
-      // Load only forwarded entries with optimized query
+      // Load forwarded entries with mmp_file join to get project_id for filtering
       const { data: allEntries, error } = await supabase
         .from('mmp_site_entries')
-        .select('id, site_name, site_code, status, state, locality, activity_at_site, main_activity, visit_date, comments, mmp_file_id, hub_office, verified_at, verified_by, verification_notes, additional_data, created_at, forwarded_to_user_id')
+        .select(`
+          id, site_name, site_code, status, state, locality, activity_at_site, main_activity, visit_date, comments, mmp_file_id, hub_office, cp_name, monitoring_by, survey_tool, use_market_diversion, use_warehouse_monitoring, verified_at, verified_by, verification_notes, additional_data, created_at, forwarded_to_user_id,
+          mmp_file:mmp_files!mmp_file_id(project_id)
+        `)
         .eq('forwarded_to_user_id', currentUser.id)
-        .limit(5000); // Increased limit but filtered by user
+        .limit(5000);
 
       if (error) {
         console.warn('Filter error, falling back to full fetch:', error);
         // Fallback: fetch all and filter client-side
         const { data: fallbackEntries, error: fallbackError } = await supabase
           .from('mmp_site_entries')
-          .select('id, site_name, site_code, status, state, locality, activity_at_site, main_activity, visit_date, comments, mmp_file_id, hub_office, verified_at, verified_by, verification_notes, additional_data, created_at, forwarded_to_user_id')
+          .select(`
+            id, site_name, site_code, status, state, locality, activity_at_site, main_activity, visit_date, comments, mmp_file_id, hub_office, cp_name, monitoring_by, survey_tool, use_market_diversion, use_warehouse_monitoring, verified_at, verified_by, verification_notes, additional_data, created_at, forwarded_to_user_id,
+            mmp_file:mmp_files!mmp_file_id(project_id)
+          `)
           .limit(5000);
         
         if (fallbackError) throw fallbackError;
         
         // Continue with fallback data
-        processEntries(fallbackEntries || [], currentUser.id);
+        const { allSites } = await processEntries(fallbackEntries || [], currentUser.id);
+        await rebuildLocalityDataInternal(allSites);
         return;
       }
       
-      processEntries(allEntries || [], currentUser.id);
+      const { allSites } = await processEntries(allEntries || [], currentUser.id);
+      await rebuildLocalityDataInternal(allSites);
     } catch (error) {
       console.error('Error loading sites:', error);
       toast({
@@ -867,15 +846,25 @@ const CoordinatorSites: React.FC = () => {
       });
     } finally {
       setLoading(false);
+      isLoadingRef.current = false;
     }
   };
 
   const processEntries = async (allEntries: any[], userId: string) => {
     try {
       
-      // Filter entries forwarded to current user and transform to SiteVisit format
+      // Filter entries forwarded to current user and by project membership for non-admins
+      // Note: userProjectIds.length > 0 is guaranteed here because loadSites returns early if empty
       let filtered = (allEntries || []).filter((entry: any) => {
-        return entry.forwarded_to_user_id === userId;
+        const isForwardedToUser = entry.forwarded_to_user_id === userId;
+        
+        // For non-admins, also check project membership
+        if (!isAdminOrSuperUser) {
+          const projectId = entry.mmp_file?.project_id;
+          return isForwardedToUser && projectId && userProjectIds.includes(projectId);
+        }
+        
+        return isForwardedToUser;
       }).map((entry: any) => {
         // Clear visit_date for unverified sites in the "new" tab
         const isUnverified = entry.status === 'Pending' || entry.status === 'Dispatched' || entry.status === 'assigned' || entry.status === 'inProgress' || entry.status === 'in_progress';
@@ -898,6 +887,11 @@ const CoordinatorSites: React.FC = () => {
           comments: entry.comments,
           mmp_file_id: entry.mmp_file_id,
           hub_office: entry.hub_office,
+          cp_name: entry.cp_name ?? entry.additional_data?.cp_name ?? null,
+          monitoring_by: entry.monitoring_by ?? entry.additional_data?.monitoring_by ?? null,
+          survey_tool: entry.survey_tool ?? entry.additional_data?.survey_tool ?? null,
+          use_market_diversion: (entry.use_market_diversion ?? entry.additional_data?.use_market_diversion) ?? false,
+          use_warehouse_monitoring: (entry.use_warehouse_monitoring ?? entry.additional_data?.use_warehouse_monitoring) ?? false,
           verified_at: entry.verified_at,
           verified_by: entry.verified_by,
           verification_notes: entry.verification_notes,
@@ -1055,6 +1049,7 @@ const CoordinatorSites: React.FC = () => {
         }
       });
       setSiteVisitDates(visitDates);
+      return { allSites, statesArray };
     } catch (error) {
       console.error('Error loading sites:', error);
       toast({
@@ -1062,16 +1057,14 @@ const CoordinatorSites: React.FC = () => {
         description: 'Failed to load sites. Please try again.',
         variant: 'destructive'
       });
-    } finally {
-      setLoading(false);
+      throw error;
     }
   };
 
-  // Rebuild locality/permit aggregates without refetching sites to avoid
-  // re-triggering the main loading spinner. Runs when metadata changes.
-  const rebuildLocalityData = async () => {
+  // Rebuild locality/permit aggregates based on provided sites
+  const rebuildLocalityDataInternal = async (sitesData: SiteVisit[]) => {
     try {
-      if (!sites || sites.length === 0) {
+      if (!sitesData || sitesData.length === 0) {
         setLocalitiesData([]);
         setStatePermitRequiredCount(0);
         setLocalPermitRequiredCount(0);
@@ -1079,7 +1072,7 @@ const CoordinatorSites: React.FC = () => {
       }
 
       const statesMap = new Map<string, any>();
-      sites.forEach((site: any) => {
+      sitesData.forEach((site: any) => {
         const stateKey = site.state;
         if (!statesMap.has(stateKey)) {
           statesMap.set(stateKey, {
@@ -1110,7 +1103,7 @@ const CoordinatorSites: React.FC = () => {
       });
 
       const uniqueMmpIds = Array.from(new Set(
-        sites.map((s: any) => s.mmp_file_id).filter(Boolean)
+        sitesData.map((s: any) => s.mmp_file_id).filter(Boolean)
       ));
 
       let mmpFilesMap = new Map<string, any>();
@@ -1207,19 +1200,27 @@ const CoordinatorSites: React.FC = () => {
     } catch {}
   };
 
-  useEffect(() => {
-    // Only recompute aggregates when metadata changes; do not refetch sites
-    rebuildLocalityData();
-  }, [sites, permits, hubStates, localities]);
 
   useEffect(() => {
     let debounceId: number | null = null;
+    let lastReloadTime = 0;
+    const MIN_RELOAD_INTERVAL = 3000; // 3 seconds
+
     const scheduleReload = () => {
-      if (debounceId) window.clearTimeout(debounceId);
-      debounceId = window.setTimeout(() => {
+      const now = Date.now();
+      const timeSinceLast = now - lastReloadTime;
+      if (timeSinceLast < MIN_RELOAD_INTERVAL) {
+        if (debounceId) window.clearTimeout(debounceId);
+        debounceId = window.setTimeout(() => {
+          lastReloadTime = Date.now();
+          loadSites();
+          debounceId = null;
+        }, MIN_RELOAD_INTERVAL - timeSinceLast);
+      } else {
+        if (debounceId) window.clearTimeout(debounceId);
+        lastReloadTime = now;
         loadSites();
-        debounceId = null;
-      }, 1000); // Increased debounce to 1s to reduce rapid reloads
+      }
     };
 
     const channel = supabase
@@ -1228,9 +1229,8 @@ const CoordinatorSites: React.FC = () => {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'mmp_site_entries' },
         (payload) => {
-          // Only reload if change is relevant to current user
-          if (payload.new?.forwarded_to_user_id === currentUser?.id ||
-              payload.old?.forwarded_to_user_id === currentUser?.id) {
+          if ((payload.new as any)?.forwarded_to_user_id === currentUser?.id ||
+              (payload.old as any)?.forwarded_to_user_id === currentUser?.id) {
             scheduleReload();
           }
         }
@@ -1242,6 +1242,25 @@ const CoordinatorSites: React.FC = () => {
       if (debounceId) window.clearTimeout(debounceId);
     };
   }, [currentUser?.id]);
+
+  // Loading timeout safeguard
+  useEffect(() => {
+    if (loading) {
+      const timeout = setTimeout(() => {
+        if (loading) {
+          console.warn('Loading timeout reached, forcing completion');
+          setLoading(false);
+          isLoadingRef.current = false;
+          toast({
+            title: 'Loading Timeout',
+            description: 'Data loading took too long. Please refresh the page.',
+            variant: 'destructive'
+          });
+        }
+      }, 30000);
+      return () => clearTimeout(timeout);
+    }
+  }, [loading]);
 
   const handleVerifySite = async (siteId: string, notes?: string) => {
     try {
@@ -1755,60 +1774,69 @@ const CoordinatorSites: React.FC = () => {
   };
 
   const handleBulkLocalityVerify = async () => {
-    if (!selectedLocalityForBulkVerify || !bulkLocalityVisitDateObj) {
-      toast({
-        title: 'Validation Error',
-        description: 'Please select a visit date.',
-        variant: 'destructive'
-      });
+    if (!selectedLocalityForBulkVerify) {
+      toast({ title: 'Validation Error', description: 'No locality selected.', variant: 'destructive' });
       return;
+    }
+
+    // Validate inputs based on DM presence
+    if (hasBulkDMActivities) {
+      if (!bulkExpectedStartDate || !bulkExpectedEndDate) {
+        toast({ title: 'Expected period required', description: 'Please select the expected period (start and end dates) for DM sites.', variant: 'destructive' });
+        return;
+      }
+      if (!bulkLocalityVisitDateObj) {
+        toast({ title: 'Expected visit date required', description: 'Please select the expected visit date.', variant: 'destructive' });
+        return;
+      }
+      const d0 = new Date(bulkExpectedStartDate);
+      const d1 = new Date(bulkExpectedEndDate);
+      const dv = new Date(bulkLocalityVisitDateObj);
+      d0.setHours(0,0,0,0); d1.setHours(23,59,59,999); dv.setHours(12,0,0,0);
+      if (dv < d0 || dv > d1) {
+        toast({ title: 'Date out of range', description: 'Expected visit date must fall within the selected expected period.', variant: 'destructive' });
+        return;
+      }
+    } else {
+      if (!bulkLocalityVisitDateObj) {
+        toast({ title: 'Expected visit date required', description: 'Please select the expected visit date.', variant: 'destructive' });
+        return;
+      }
     }
 
     try {
       const { sites: localitySites } = selectedLocalityForBulkVerify;
-      const visitDateString = bulkLocalityVisitDateObj.toISOString().split('T')[0];
-      
-      // First, update visit dates for all sites in the locality
-      const siteIds = localitySites.map(site => site.id);
-      const { error: dateError } = await supabase
-        .from('mmp_site_entries')
-        .update({ visit_date: visitDateString })
-        .in('id', siteIds);
+      const visitDateString = bulkLocalityVisitDateObj ? bulkLocalityVisitDateObj.toISOString().split('T')[0] : null;
+      const startStr = bulkExpectedStartDate ? bulkExpectedStartDate.toISOString().split('T')[0] : null;
+      const endStr = bulkExpectedEndDate ? bulkExpectedEndDate.toISOString().split('T')[0] : null;
 
-      if (dateError) throw dateError;
+      // Update each site individually to persist expected_visit in additional_data
+      for (const site of localitySites) {
+        const a = `${(site as any)?.main_activity || ''} ${(site as any)?.activity || ''}`.toUpperCase();
+        const isDM = a.includes('GFA') || a.includes('CBT') || a.includes('EBSFP');
+        const expected_visit = isDM
+          ? { type: 'range', start_date: startStr, end_date: endStr, expected_date: visitDateString }
+          : { type: 'single', expected_date: visitDateString };
 
-      // Then verify all sites
-      const updateData: any = {
-        status: 'verified',
-        verified_at: new Date().toISOString(),
-        verified_by: currentUser?.username || currentUser?.fullName || currentUser?.email || 'System',
-      };
+        const updateData: any = {
+          status: 'verified',
+          verified_at: new Date().toISOString(),
+          verified_by: currentUser?.username || currentUser?.fullName || currentUser?.email || 'System',
+          visit_date: visitDateString,
+          additional_data: { ...((site as any)?.additional_data || {}), expected_visit }
+        };
 
-      const { error: verifyError } = await supabase
-        .from('mmp_site_entries')
-        .update(updateData)
-        .in('id', siteIds);
+        const { error } = await supabase
+          .from('mmp_site_entries')
+          .update(updateData)
+          .eq('id', site.id);
+        if (error) throw error;
+      }
 
-      if (verifyError) throw verifyError;
-
-      // Also update MMP files for verified sites
+      // Update MMP workflow for verified sites
       try {
         for (const site of localitySites) {
           if (site?.mmp_file_id && site?.site_code) {
-            const mmpUpdateData: any = { 
-              status: 'Verified',
-              visit_date: visitDateString,
-              verified_at: new Date().toISOString(),
-              verified_by: currentUser?.username || currentUser?.fullName || currentUser?.email || 'System'
-            };
-            
-            await supabase
-              .from('mmp_site_entries')
-              .update(mmpUpdateData)
-              .eq('mmp_file_id', site.mmp_file_id)
-              .eq('site_code', site.site_code);
-
-            // Mark MMP as coordinator-verified when first site is verified
             const { data: mmpData, error: mmpError } = await supabase
               .from('mmp_files')
               .select('workflow, status')
@@ -1818,7 +1846,6 @@ const CoordinatorSites: React.FC = () => {
             if (!mmpError && mmpData) {
               const workflow = (mmpData.workflow as any) || {};
               const isAlreadyVerified = workflow.coordinatorVerified === true;
-              
               if (!isAlreadyVerified) {
                 const updatedWorkflow = {
                   ...workflow,
@@ -1828,25 +1855,21 @@ const CoordinatorSites: React.FC = () => {
                   currentStage: workflow.currentStage === 'awaitingCoordinatorVerification' ? 'verified' : (workflow.currentStage || 'verified'),
                   lastUpdated: new Date().toISOString()
                 };
-
                 await supabase
                   .from('mmp_files')
-                  .update({
-                    workflow: updatedWorkflow,
-                    status: mmpData.status === 'pending' ? 'pending' : 'pending'
-                  })
+                  .update({ workflow: updatedWorkflow, status: mmpData.status === 'pending' ? 'pending' : 'pending' })
                   .eq('id', site.mmp_file_id);
               }
             }
           }
         }
       } catch (syncErr) {
-        console.warn('Failed to sync mmp_site_entries on bulk verify:', syncErr);
+        console.warn('Failed to sync workflow on bulk verify:', syncErr);
       }
 
       toast({
         title: 'Bulk Verification Complete',
-        description: `Visit date set and ${localitySites.length} site(s) in this locality have been verified successfully.`,
+        description: `${localitySites.length} site(s) in this locality have been verified successfully.`,
       });
 
       // Clear state and reload sites
@@ -1854,6 +1877,8 @@ const CoordinatorSites: React.FC = () => {
       setSelectedLocalityForBulkVerify(null);
       setBulkLocalityVisitDate('');
       setBulkLocalityVisitDateObj(undefined);
+      setBulkExpectedStartDate(undefined);
+      setBulkExpectedEndDate(undefined);
       loadSites();
       
       // Reload badge counts
@@ -1868,12 +1893,8 @@ const CoordinatorSites: React.FC = () => {
           return ad.assigned_to === userId;
         });
         
-        const permitsAttachedCount = { count: userEntries.filter((e: any) => 
-          e.status?.toLowerCase() === 'permits_attached'
-        ).length };
-        const verifiedCount = { count: userEntries.filter((e: any) => 
-          e.status?.toLowerCase() === 'verified'
-        ).length };
+        const permitsAttachedCount = { count: userEntries.filter((e: any) => e.status?.toLowerCase() === 'permits_attached').length };
+        const verifiedCount = { count: userEntries.filter((e: any) => e.status?.toLowerCase() === 'verified').length };
         
         setPermitsAttachedCount(permitsAttachedCount.count || 0);
         setVerifiedSitesCount(verifiedCount.count || 0);
@@ -1882,11 +1903,7 @@ const CoordinatorSites: React.FC = () => {
       setActiveTab('verified');
     } catch (error) {
       console.error('Error bulk verifying locality sites:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to verify sites. Please try again.',
-        variant: 'destructive'
-      });
+      toast({ title: 'Error', description: 'Failed to verify sites. Please try again.', variant: 'destructive' });
     }
   };
 
@@ -2023,12 +2040,41 @@ const CoordinatorSites: React.FC = () => {
       // Show locality permit upload dialog
       setLocalityPermitUploadDialogOpen(true);
     } else {
-      // No permit - just go back, no access
-      setSelectedLocalityForWorkflow(null);
+      // Ask if work can proceed without the local permit
+      setWorkWithoutPermitDialogOpen(true);
     }
   };
 
 
+
+  const handleLocalityProceedWithoutPermit = async () => {
+    setWorkWithoutPermitDialogOpen(false);
+    if (!selectedLocalityForWorkflow) return;
+    try {
+      const { error } = await supabase
+        .from('mmp_site_entries')
+        .update({ status: 'permits_attached' })
+        .eq('state', selectedLocalityForWorkflow.state)
+        .eq('locality', selectedLocalityForWorkflow.locality);
+
+      if (error) {
+        console.warn('Failed to update site statuses to permits_attached (no local permit):', error);
+      }
+
+      toast({
+        title: 'Proceeding Without Local Permit',
+        description: `Sites in ${selectedLocalityForWorkflow.locality} are now ready for verification.`,
+      });
+
+      // Refresh data and move to Permits Attached tab
+      loadSites();
+      setActiveTab('permits_attached');
+    } catch (e) {
+      console.warn('Error proceeding without local permit:', e);
+    } finally {
+      setSelectedLocalityForWorkflow(null);
+    }
+  };
 
   const handlePermitUploaded = async () => {
     await fetchPermits();
@@ -2206,35 +2252,78 @@ const CoordinatorSites: React.FC = () => {
             
             {/* Mobile-friendly action buttons - larger touch targets */}
             {showActions && (
-              <div className="flex gap-2 mt-4 sm:hidden">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelectedSiteForEdit(site);
-                    setEditDialogOpen(true);
-                  }}
-                  className="flex-1 text-xs py-3 h-auto min-h-[44px] active:scale-95"
-                >
-                  <Eye className="h-4 w-4 mr-2" />
-                  View Details
-                </Button>
-                {site.status?.toLowerCase() === 'permits_attached' && (
+              <div className="flex flex-col gap-2 mt-4 sm:hidden">
+                {/* Start Visit button - Uber style black pill for startable statuses */}
+                {['dispatched', 'verified', 'approved', 'assigned'].includes(site.status?.toLowerCase()) && (
+                  <Button
+                    size="sm"
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      setIsStartingVisit(true);
+                      try {
+                        const success = await siteVisitContext.startSiteVisit(site.id);
+                        if (success) {
+                          toast({
+                            title: 'Visit Started',
+                            description: `Site visit for ${site.site_name} has begun.`,
+                          });
+                          navigate(`/site-visits/${site.id}`);
+                        }
+                      } catch (error) {
+                        console.error('Error starting visit:', error);
+                        toast({
+                          title: 'Error',
+                          description: 'Failed to start site visit. Please try again.',
+                          variant: 'destructive',
+                        });
+                      } finally {
+                        setIsStartingVisit(false);
+                      }
+                    }}
+                    disabled={isStartingVisit}
+                    className="w-full py-4 h-auto min-h-[52px] rounded-full bg-black dark:bg-white text-white dark:text-black font-bold text-base active:scale-95 hover:bg-black/90 dark:hover:bg-white/90"
+                    data-testid={`button-start-visit-${site.id}`}
+                    aria-label={`Start visit for ${site.site_name}`}
+                  >
+                    <Play className="h-5 w-5 mr-2" />
+                    {isStartingVisit ? 'Starting...' : 'Start Visit'}
+                  </Button>
+                )}
+                
+                <div className="flex gap-2">
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={(e) => {
                       e.stopPropagation();
-                      setSelectedSiteId(site.id);
-                      setVerifyDialogOpen(true);
+                      setSelectedSiteForEdit(site);
+                      setEditDialogOpen(true);
                     }}
-                    className="flex-1 text-xs py-3 h-auto min-h-[44px] bg-green-50 border-green-200 text-green-700 hover:bg-green-100 active:scale-95"
+                    className="flex-1 text-xs py-3 h-auto min-h-[44px] active:scale-95"
+                    data-testid={`button-view-site-${site.id}`}
+                    aria-label={`View details for ${site.site_name}`}
                   >
-                    <CheckCircle className="h-4 w-4 mr-2" />
-                    Verify
+                    <Eye className="h-4 w-4 mr-2" />
+                    View
                   </Button>
-                )}
+                  {site.status?.toLowerCase() === 'permits_attached' && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedSiteForEdit(site);
+                        setEditDialogOpen(true);
+                      }}
+                      className="flex-1 text-xs py-3 h-auto min-h-[44px] bg-black/5 dark:bg-white/5 border-black/20 dark:border-white/20 active:scale-95"
+                      data-testid={`button-verify-site-${site.id}`}
+                      aria-label={`Verify site ${site.site_name}`}
+                    >
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                      Verify
+                    </Button>
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -2438,8 +2527,8 @@ const CoordinatorSites: React.FC = () => {
                             size="sm"
                             onClick={(e) => {
                               e.stopPropagation();
-                              setSelectedSiteId(site.id);
-                              setVerifyDialogOpen(true);
+                              setSelectedSiteForEdit(site);
+                              setEditDialogOpen(true);
                             }}
                             className="text-xs h-7 px-2"
                           >
@@ -2908,7 +2997,7 @@ const CoordinatorSites: React.FC = () => {
               ) : (
                 <>
                   <div className="space-y-4">
-                    {paginatedSites.map(site => renderSiteCard(site, false, true))}
+                    {paginatedSites.map(site => renderSiteCard(site, true))}
                   </div>
                   {totalPages > 1 && (
                     <div className="flex items-center justify-between mt-4 pt-4 border-t">
@@ -2973,7 +3062,7 @@ const CoordinatorSites: React.FC = () => {
               ) : (
                 <>
                   <div className="space-y-4">
-                    {paginatedSites.map(site => renderSiteCard(site, false, true))}
+                    {paginatedSites.map(site => renderSiteCard(site, true))}
                   </div>
                   {totalPages > 1 && (
                     <div className="flex items-center justify-between mt-4 pt-4 border-t">
@@ -3234,14 +3323,12 @@ const CoordinatorSites: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Edit Site Dialog */}
+      {/* Verification Dialog */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Edit Site Details</DialogTitle>
-            <p className="text-sm text-muted-foreground">
-              Review and edit site information. Changes will be saved automatically.
-            </p>
+            <DialogTitle>Site Verification</DialogTitle>
+            <p className="text-sm text-muted-foreground">Review site details and set the expected dates required for verification.</p>
           </DialogHeader>
           {selectedSiteForEdit && (
             <SiteEditForm
@@ -3264,6 +3351,10 @@ const CoordinatorSites: React.FC = () => {
                     use_warehouse_monitoring: updatedSite.use_warehouse_monitoring,
                     visit_date: updatedSite.visit_date,
                     comments: updatedSite.comments,
+                    additional_data: {
+                      ...((selectedSiteForEdit as any)?.additional_data || {}),
+                      ...((updatedSite as any)?.additional_data || {})
+                    },
                   };
 
                   // Only set verification fields if shouldVerify is true
@@ -3483,26 +3574,67 @@ const CoordinatorSites: React.FC = () => {
           <DialogHeader>
             <DialogTitle>Verify All Sites in Locality</DialogTitle>
             <p className="text-sm text-muted-foreground">
-              Set visit date and verify all {selectedLocalityForBulkVerify?.sites.length} site{selectedLocalityForBulkVerify?.sites.length !== 1 ? 's' : ''} in this locality.
+              Set expected date(s) and verify all {selectedLocalityForBulkVerify?.sites.length} site{selectedLocalityForBulkVerify?.sites.length !== 1 ? 's' : ''} in this locality.
             </p>
           </DialogHeader>
           <div className="py-4">
             <div className="space-y-4">
-              <div>
-                <Label className="text-sm font-medium">
-                  Visit Date <span className="text-red-500">*</span>
-                </Label>
-                <div className="mt-1">
-                  <DatePicker
-                    date={bulkLocalityVisitDateObj}
-                    onSelect={setBulkLocalityVisitDateObj}
-                    className="w-full"
-                  />
+              {hasBulkDMActivities ? (
+                <>
+                  <div>
+                    <Label className="text-sm font-medium">
+                      Expected Distribution Start <span className="text-red-500">*</span>
+                    </Label>
+                    <div className="mt-1">
+                      <DatePicker
+                        date={bulkExpectedStartDate}
+                        onSelect={setBulkExpectedStartDate}
+                        className="w-full"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium">
+                      Expected Distribution End <span className="text-red-500">*</span>
+                    </Label>
+                    <div className="mt-1">
+                      <DatePicker
+                        date={bulkExpectedEndDate}
+                        onSelect={setBulkExpectedEndDate}
+                        className="w-full"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium">
+                      Expected Visit Date <span className="text-red-500">*</span>
+                    </Label>
+                    <div className="mt-1">
+                      <DatePicker
+                        date={bulkLocalityVisitDateObj}
+                        onSelect={setBulkLocalityVisitDateObj}
+                        className="w-full"
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Must be within the expected period above. Applied to all DM sites.
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <div>
+                  <Label className="text-sm font-medium">
+                    Expected Visit Date <span className="text-red-500">*</span>
+                  </Label>
+                  <div className="mt-1">
+                    <DatePicker
+                      date={bulkLocalityVisitDateObj}
+                      onSelect={setBulkLocalityVisitDateObj}
+                      className="w-full"
+                    />
+                  </div>
                 </div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  This visit date will be applied to all sites in the locality before verification.
-                </p>
-              </div>
+              )}
             </div>
           </div>
           <DialogFooter>
@@ -3511,12 +3643,14 @@ const CoordinatorSites: React.FC = () => {
               setSelectedLocalityForBulkVerify(null);
               setBulkLocalityVisitDate('');
               setBulkLocalityVisitDateObj(undefined);
+              setBulkExpectedStartDate(undefined);
+              setBulkExpectedEndDate(undefined);
             }}>
               Cancel
             </Button>
             <Button
               onClick={handleBulkLocalityVerify}
-              disabled={!bulkLocalityVisitDateObj}
+              disabled={hasBulkDMActivities ? !(bulkExpectedStartDate && bulkExpectedEndDate && bulkLocalityVisitDateObj) : !bulkLocalityVisitDateObj}
               className="bg-green-600 hover:bg-green-700"
             >
               <CheckCircle className="h-4 w-4 mr-2" />
@@ -3570,19 +3704,18 @@ const CoordinatorSites: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Permit Question Dialog */}
+      {/* Permit Requirement Dialog */}
       <Dialog open={permitQuestionDialogOpen} onOpenChange={setPermitQuestionDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Local Permit Required</DialogTitle>
+            <DialogTitle>Locality Permit Requirement</DialogTitle>
             <DialogDescription>
-              Do you have the local permit for <strong>{selectedLocalityForWorkflow?.locality}, {selectedLocalityForWorkflow?.state}</strong>?
+              Do you require a local permit in <strong>{selectedLocalityForWorkflow?.state}</strong>?
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
             <p className="text-sm text-muted-foreground">
-              Local permits are required to work on sites in this locality. If you have the permit, you can upload it now and access the sites.
-              If not, you cannot access sites in this locality.
+              If you require a local permit, you can upload it now to access the sites. If not, we'll ask if you can proceed without the permit.
             </p>
           </div>
           <DialogFooter>
@@ -3590,13 +3723,47 @@ const CoordinatorSites: React.FC = () => {
               variant="outline" 
               onClick={() => handlePermitQuestionResponse(false)}
             >
-              No, I don't have the permit
+              No
             </Button>
             <Button 
               onClick={() => handlePermitQuestionResponse(true)}
               className="bg-blue-600 hover:bg-blue-700"
             >
-              Yes, I have the permit
+              Yes, upload permit
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Work Without Local Permit Dialog */}
+      <Dialog open={workWithoutPermitDialogOpen} onOpenChange={setWorkWithoutPermitDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Work Without Local Permit</DialogTitle>
+            <DialogDescription>
+              Are you able to do the work without the required local permit for <strong>{selectedLocalityForWorkflow?.locality}, {selectedLocalityForWorkflow?.state}</strong>?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm text-muted-foreground">
+              If you can proceed without the local permit, sites in this locality will be unlocked for verification.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setWorkWithoutPermitDialogOpen(false);
+                setSelectedLocalityForWorkflow(null);
+              }}
+            >
+              No, wait for permit
+            </Button>
+            <Button 
+              onClick={handleLocalityProceedWithoutPermit}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              Yes, proceed without permit
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -3942,7 +4109,8 @@ const CoordinatorSites: React.FC = () => {
             </Button>
           </DialogFooter>
         </DialogContent>
-      </Dialog>    </div>
+      </Dialog>
+    </div>
   );
 };
 

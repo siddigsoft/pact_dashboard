@@ -1,13 +1,13 @@
-# PACT Workflow Platform - Complete System Workflow
+# PACT Command Center - Complete System Workflow
 
-**Date:** November 21, 2025  
-**System:** Comprehensive MMP Management System for Field Operations
+**Date:** December 2025  
+**System:** Centralized Field Operations Command Center
 
 ---
 
 ## 📊 **SYSTEM OVERVIEW**
 
-The PACT (Planning, Approval, Coordination, and Tracking) Workflow Platform is a comprehensive field operations management system for managing Monthly Monitoring Plans (MMPs), site visits, and field team coordination.
+**PACT Command Center** is the centralized Field Operations Command Center designed for comprehensive management of humanitarian and development field operations. The platform serves as a unified command hub for managing Monthly Monitoring Plans (MMPs), site visits, field team coordination, financial operations, and real-time communication. It features 12 specialized user roles, voice/video calling (WebRTC & Jitsi), IONOS SMTP email notifications, and full offline mobile capability.
 
 **Core Components:**
 - ✅ User Management & Role-Based Access Control

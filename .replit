@@ -1,10 +1,11 @@
 modules = ["nodejs-20", "web", "postgresql-16"]
 [agent]
 expertMode = true
-integrations = ["github:1.0.0"]
+integrations = ["github:1.0.0", "javascript_gemini_ai_integrations:1.0.0"]
 
 [nix]
 channel = "stable-25_05"
+packages = ["imagemagick"]
 
 [deployment]
 deploymentTarget = "autoscale"
@@ -47,54 +48,10 @@ externalPort = 3001
 localPort = 8080
 externalPort = 8080
 
-[[ports]]
-localPort = 34115
-externalPort = 9000
+[objectStorage]
+defaultBucketID = "replit-objstore-005adaa9-1cce-4c34-9d82-43b2125a4ea5"
 
-[[ports]]
-localPort = 34367
-externalPort = 5000
+[userenv]
 
-[[ports]]
-localPort = 34549
-externalPort = 8008
-
-[[ports]]
-localPort = 35795
-externalPort = 3002
-
-[[ports]]
-localPort = 35895
-externalPort = 3003
-
-[[ports]]
-localPort = 37329
-externalPort = 6000
-
-[[ports]]
-localPort = 40509
-externalPort = 8081
-
-[[ports]]
-localPort = 41047
-externalPort = 5173
-
-[[ports]]
-localPort = 42353
-externalPort = 3000
-
-[[ports]]
-localPort = 42571
-externalPort = 6800
-
-[[ports]]
-localPort = 43363
-externalPort = 8099
-
-[[ports]]
-localPort = 44403
-externalPort = 8000
-
-[[ports]]
-localPort = 46619
-externalPort = 4200
+[userenv.shared]
+VITE_FIREBASE_PROJECT_ID = "tpm-workflow"

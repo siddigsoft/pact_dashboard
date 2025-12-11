@@ -1,4 +1,4 @@
-import { isToday, parseISO } from 'date-fns';
+import { isToday, parseISO, differenceInMinutes } from 'date-fns';
 import { User } from '@/types/user';
 
 export type UserStatusType = 'online' | 'same-day' | 'offline';
@@ -10,11 +10,29 @@ export interface UserStatusInfo {
   label: string;
 }
 
+const ONLINE_THRESHOLD_MINUTES = 5;
+
 export const getUserStatus = (user: User): UserStatusInfo => {
-  const isOnlineNow = user.availability === 'online' || 
-    (user.location?.isSharing && user.location?.latitude && user.location?.longitude);
-  
-  if (isOnlineNow) {
+  const avail = (user.availability || '').toLowerCase();
+  if (avail === 'offline') {
+    return {
+      type: 'offline',
+      color: 'bg-gray-400 dark:bg-gray-600',
+      badgeVariant: 'outline',
+      label: 'Offline'
+    };
+  }
+
+  if (avail === 'busy') {
+    return {
+      type: 'same-day',
+      color: 'bg-orange-500',
+      badgeVariant: 'secondary',
+      label: 'Busy'
+    };
+  }
+
+  if (avail === 'online') {
     return {
       type: 'online',
       color: 'bg-green-500',
@@ -28,6 +46,20 @@ export const getUserStatus = (user: User): UserStatusInfo => {
   if (lastSeenTime) {
     try {
       const lastSeenDate = parseISO(lastSeenTime);
+      const minutesAgo = differenceInMinutes(new Date(), lastSeenDate);
+      
+      const hasValidLocation = user.location?.latitude && user.location?.longitude;
+      const isRecentlyActive = minutesAgo <= ONLINE_THRESHOLD_MINUTES;
+      
+      if (hasValidLocation && isRecentlyActive) {
+        return {
+          type: 'online',
+          color: 'bg-green-500',
+          badgeVariant: 'default',
+          label: 'Online'
+        };
+      }
+      
       if (isToday(lastSeenDate)) {
         return {
           type: 'same-day',

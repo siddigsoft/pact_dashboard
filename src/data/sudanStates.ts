@@ -339,13 +339,13 @@ export const sudanStates: SudanState[] = [
     name: 'River Nile', 
     code: 'RN', 
     localities: [
-      { id: 'rn-ad-damar', name: 'Ad Damar', nameAr: 'الدامر' },
+      { id: 'rn-ad-damar', name: 'Al Damar', nameAr: 'الدامر' },
       { id: 'rn-atbara', name: 'Atbara', nameAr: 'عطبرة' },
       { id: 'rn-abu-hamad', name: 'Abu Hamad', nameAr: 'أبو حمد' },
       { id: 'rn-al-buhaira', name: 'Al Buhaira', nameAr: 'البحيرة' },
       { id: 'rn-al-matama', name: 'Al Matama', nameAr: 'المتمة' },
       { id: 'rn-barbar', name: 'Barbar', nameAr: 'بربر' },
-      { id: 'rn-shendi', name: 'Shendi', nameAr: 'شندي' },
+      { id: 'rn-shandi', name: 'Shandi', nameAr: 'شندي' },
     ]
   },
 

@@ -1,20 +1,67 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { useAuditLog } from "@/hooks/use-audit-log";
 import { SupportingDocument } from "@/types/cost-submission";
+import { TransferReceiptDetails } from "@/types/receipt-details";
 import { supabase } from "@/integrations/supabase/client";
-import { Upload, File, X, Loader2, FileText, Image as ImageIcon } from "lucide-react";
+import { useUser } from "@/context/user/UserContext";
+import { ReceiptDetailsDialog } from "./ReceiptDetailsDialog";
+import { 
+  Upload, 
+  File, 
+  X, 
+  Loader2, 
+  FileText, 
+  Image as ImageIcon, 
+  Receipt,
+  CheckCircle,
+  Edit2 
+} from "lucide-react";
+
+interface ExtendedSupportingDocument extends SupportingDocument {
+  receiptDetails?: TransferReceiptDetails;
+}
 
 interface CostDocumentUploadProps {
   documents: SupportingDocument[];
   onChange: (documents: SupportingDocument[]) => void;
+  onReceiptDetailsChange?: (details: TransferReceiptDetails[]) => void;
+  existingReceiptDetails?: TransferReceiptDetails[];
 }
 
-const CostDocumentUpload = ({ documents, onChange }: CostDocumentUploadProps) => {
+const CostDocumentUpload = ({ documents, onChange, onReceiptDetailsChange, existingReceiptDetails }: CostDocumentUploadProps) => {
   const { toast } = useToast();
+  const { currentUser } = useUser();
+  const { logEvent } = useAuditLog();
   const [isUploading, setIsUploading] = useState(false);
+  const [showReceiptDialog, setShowReceiptDialog] = useState(false);
+  const [pendingReceiptDoc, setPendingReceiptDoc] = useState<{
+    url: string;
+    filename: string;
+    index: number;
+  } | null>(null);
+  const [localReceiptDetails, setLocalReceiptDetails] = useState<Map<string, TransferReceiptDetails>>(new Map());
+  const [editingReceiptDetails, setEditingReceiptDetails] = useState<TransferReceiptDetails | undefined>(undefined);
+
+  useEffect(() => {
+    if (existingReceiptDetails !== undefined) {
+      const detailsMap = new Map<string, TransferReceiptDetails>();
+      existingReceiptDetails.forEach(rd => {
+        if (rd.receiptImageUrl) {
+          detailsMap.set(rd.receiptImageUrl, rd);
+        }
+      });
+      setLocalReceiptDetails(detailsMap);
+    }
+  }, [existingReceiptDetails]);
+
+  const extendedDocs: ExtendedSupportingDocument[] = documents.map(doc => ({
+    ...doc,
+    receiptDetails: localReceiptDetails.get(doc.url)
+  }));
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -23,17 +70,15 @@ const CostDocumentUpload = ({ documents, onChange }: CostDocumentUploadProps) =>
     setIsUploading(true);
 
     try {
-      const uploadedDocs: SupportingDocument[] = [];
+      const uploadedDocs: ExtendedSupportingDocument[] = [];
 
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         
-        // Generate unique filename
         const fileExt = file.name.split('.').pop();
         const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
         const filePath = `cost-receipts/${fileName}`;
 
-        // Upload to Supabase Storage
         const { data, error } = await supabase.storage
           .from('uploads')
           .upload(filePath, file);
@@ -43,35 +88,46 @@ const CostDocumentUpload = ({ documents, onChange }: CostDocumentUploadProps) =>
           throw new Error(`Failed to upload ${file.name}`);
         }
 
-        // Get public URL
         const { data: publicUrlData } = supabase.storage
           .from('uploads')
           .getPublicUrl(filePath);
 
-        // Determine file type
         const isImage = file.type.startsWith('image/');
         const isPDF = file.type === 'application/pdf';
         const documentType = isImage ? 'receipt_photo' : isPDF ? 'receipt_pdf' : 'other';
 
-        uploadedDocs.push({
+        const newDoc: ExtendedSupportingDocument = {
           url: publicUrlData.publicUrl,
           type: documentType,
           filename: file.name,
           uploadedAt: new Date().toISOString(),
           size: file.size,
           description: ''
+        };
+
+        uploadedDocs.push(newDoc);
+      }
+
+      const baseDocs = uploadedDocs.map(({ receiptDetails, ...doc }) => doc);
+      const newDocs = [...documents, ...baseDocs];
+      onChange(newDocs);
+
+      if (uploadedDocs.length === 1 && 
+          (uploadedDocs[0].type === 'receipt_photo' || uploadedDocs[0].type === 'receipt_pdf')) {
+        const newIndex = newDocs.length - 1;
+        setPendingReceiptDoc({
+          url: uploadedDocs[0].url,
+          filename: uploadedDocs[0].filename,
+          index: newIndex
+        });
+        setShowReceiptDialog(true);
+      } else {
+        toast({
+          title: "Success",
+          description: `${uploadedDocs.length} document(s) uploaded successfully`
         });
       }
 
-      // Add new documents to existing ones
-      onChange([...documents, ...uploadedDocs]);
-
-      toast({
-        title: "Success",
-        description: `${uploadedDocs.length} document(s) uploaded successfully`
-      });
-
-      // Reset file input
       event.target.value = '';
     } catch (error: any) {
       toast({
@@ -84,9 +140,99 @@ const CostDocumentUpload = ({ documents, onChange }: CostDocumentUploadProps) =>
     }
   };
 
+  const handleReceiptConfirm = (details: TransferReceiptDetails) => {
+    if (pendingReceiptDoc === null) return;
+
+    const newReceiptDetailsMap = new Map(localReceiptDetails);
+    newReceiptDetailsMap.set(pendingReceiptDoc.url, details);
+    setLocalReceiptDetails(newReceiptDetailsMap);
+
+    const docToUpdate = documents[pendingReceiptDoc.index];
+    if (docToUpdate) {
+      const updatedDoc = {
+        ...docToUpdate,
+        description: `Transfer: ${details.transactionNumber} - ${details.recipientAccountName} - ${details.transferAmount} ${details.currency}`
+      };
+      const newDocs = [...documents];
+      newDocs[pendingReceiptDoc.index] = updatedDoc;
+      onChange(newDocs);
+    }
+
+    if (onReceiptDetailsChange) {
+      const allDetails = Array.from(newReceiptDetailsMap.values());
+      onReceiptDetailsChange(allDetails);
+    }
+
+    toast({
+      title: "Receipt Details Saved",
+      description: `Transfer details for ${details.transactionNumber} have been recorded.`
+    });
+
+    logEvent({
+      module: 'financial',
+      action: 'verify',
+      entityType: 'receipt',
+      entityId: details.transactionNumber,
+      entityName: pendingReceiptDoc.filename,
+      description: `Receipt validated: ${details.transactionNumber} - ${details.recipientAccountName} - ${details.transferAmount} ${details.currency}`,
+      metadata: {
+        transactionNumber: details.transactionNumber,
+        recipientAccountName: details.recipientAccountName,
+        bankName: details.bankName,
+        transferAmount: details.transferAmount,
+        currency: details.currency,
+        transferDate: details.transferDate,
+        receiptImageUrl: details.receiptImageUrl,
+      },
+      tags: ['receipt', 'validation', 'transfer'],
+    });
+
+    setPendingReceiptDoc(null);
+    setEditingReceiptDetails(undefined);
+    setShowReceiptDialog(false);
+  };
+
+  const handleReceiptCancel = () => {
+    setPendingReceiptDoc(null);
+    setEditingReceiptDetails(undefined);
+    setShowReceiptDialog(false);
+    toast({
+      title: "Document Uploaded",
+      description: "Receipt uploaded without transfer details. You can add details later."
+    });
+  };
+
+  const handleEditReceipt = (index: number) => {
+    const doc = extendedDocs[index];
+    if (doc) {
+      setPendingReceiptDoc({
+        url: doc.url,
+        filename: doc.filename,
+        index
+      });
+      setEditingReceiptDetails(doc.receiptDetails);
+      setShowReceiptDialog(true);
+    }
+  };
+
   const handleRemoveDocument = (index: number) => {
+    const docToRemove = documents[index];
+    const newReceiptDetailsMap = new Map(localReceiptDetails);
+    
+    if (docToRemove) {
+      newReceiptDetailsMap.delete(docToRemove.url);
+      setLocalReceiptDetails(newReceiptDetailsMap);
+    }
+    
     const newDocs = documents.filter((_, i) => i !== index);
     onChange(newDocs);
+
+    if (onReceiptDetailsChange) {
+      const allDetails = newDocs
+        .map(doc => newReceiptDetailsMap.get(doc.url))
+        .filter((d): d is TransferReceiptDetails => d !== undefined);
+      onReceiptDetailsChange(allDetails);
+    }
   };
 
   const formatFileSize = (bytes: number) => {
@@ -95,7 +241,8 @@ const CostDocumentUpload = ({ documents, onChange }: CostDocumentUploadProps) =>
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   };
 
-  const getFileIcon = (doc: SupportingDocument) => {
+  const getFileIcon = (doc: ExtendedSupportingDocument) => {
+    if (doc.receiptDetails) return <Receipt className="h-5 w-5 text-green-600" />;
     if (doc.type === 'receipt_photo') return <ImageIcon className="h-5 w-5 text-blue-600" />;
     if (doc.type === 'receipt_pdf') return <FileText className="h-5 w-5 text-red-600" />;
     return <File className="h-5 w-5 text-gray-600" />;
@@ -103,7 +250,6 @@ const CostDocumentUpload = ({ documents, onChange }: CostDocumentUploadProps) =>
 
   return (
     <div className="space-y-4">
-      {/* Upload Button */}
       <div>
         <input
           id="document-upload"
@@ -133,23 +279,22 @@ const CostDocumentUpload = ({ documents, onChange }: CostDocumentUploadProps) =>
               ) : (
                 <>
                   <Upload className="mr-2 h-4 w-4" />
-                  Upload Documents
+                  Upload Transfer Receipt
                 </>
               )}
             </span>
           </Button>
         </label>
         <p className="text-xs text-muted-foreground mt-2">
-          Supported formats: Images (JPG, PNG) and PDF. Max 5MB per file.
+          Upload your bank transfer receipt. The system will prompt you to enter the transfer details for validation.
         </p>
       </div>
 
-      {/* Uploaded Documents List */}
-      {documents.length > 0 && (
+      {extendedDocs.length > 0 && (
         <div className="space-y-2">
-          <p className="text-sm font-medium">Uploaded Documents ({documents.length})</p>
+          <p className="text-sm font-medium">Uploaded Documents ({extendedDocs.length})</p>
           <div className="space-y-2">
-            {documents.map((doc, index) => (
+            {extendedDocs.map((doc, index) => (
               <Card key={index} data-testid={`document-${index}`}>
                 <CardContent className="p-3">
                   <div className="flex items-center justify-between gap-3">
@@ -157,7 +302,7 @@ const CostDocumentUpload = ({ documents, onChange }: CostDocumentUploadProps) =>
                       {getFileIcon(doc)}
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">{doc.filename}</p>
-                        <div className="flex items-center gap-2 mt-1">
+                        <div className="flex items-center flex-wrap gap-2 mt-1">
                           <Badge variant="outline" className="text-xs">
                             {doc.type.replace('_', ' ')}
                           </Badge>
@@ -166,10 +311,35 @@ const CostDocumentUpload = ({ documents, onChange }: CostDocumentUploadProps) =>
                               {formatFileSize(doc.size)}
                             </span>
                           )}
+                          {doc.receiptDetails && (
+                            <Badge variant="secondary" className="text-xs">
+                              <CheckCircle className="h-3 w-3 mr-1" />
+                              Validated
+                            </Badge>
+                          )}
                         </div>
+                        {doc.receiptDetails && (
+                          <div className="mt-2 text-xs text-muted-foreground space-y-1">
+                            <p>TXN: {doc.receiptDetails.transactionNumber}</p>
+                            <p>To: {doc.receiptDetails.recipientAccountName}</p>
+                            <p>Amount: {doc.receiptDetails.transferAmount} {doc.receiptDetails.currency}</p>
+                          </div>
+                        )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1">
+                      {(doc.type === 'receipt_photo' || doc.type === 'receipt_pdf') && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleEditReceipt(index)}
+                          title={doc.receiptDetails ? "Edit details" : "Add details"}
+                          data-testid={`button-edit-${index}`}
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </Button>
+                      )}
                       <Button
                         type="button"
                         variant="ghost"
@@ -195,6 +365,19 @@ const CostDocumentUpload = ({ documents, onChange }: CostDocumentUploadProps) =>
             ))}
           </div>
         </div>
+      )}
+
+      {pendingReceiptDoc && (
+        <ReceiptDetailsDialog
+          open={showReceiptDialog}
+          onOpenChange={setShowReceiptDialog}
+          receiptImageUrl={pendingReceiptDoc.url}
+          filename={pendingReceiptDoc.filename}
+          onConfirm={handleReceiptConfirm}
+          onCancel={handleReceiptCancel}
+          userId={currentUser?.id || 'unknown'}
+          initialData={editingReceiptDetails}
+        />
       )}
     </div>
   );

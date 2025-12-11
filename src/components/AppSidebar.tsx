@@ -31,7 +31,15 @@
     BarChart3,
     Banknote,
     ClipboardCheck,
-    BookOpen
+    BookOpen,
+    FileSignature,
+    Phone,
+    MessageSquare,
+    Bell,
+    FileText,
+    Map,
+    ScrollText,
+    Mail
   } from "lucide-react";
   import { useSiteVisitReminders } from "@/hooks/use-site-visit-reminders";
   import Logo from "../assets/logo.png";
@@ -49,7 +57,8 @@
     SidebarMenuItem, 
     SidebarMenuButton, 
     SidebarTrigger,
-    SidebarRail
+    SidebarRail,
+    SidebarResizeHandle
   } from "@/components/ui/sidebar";
   import { AppRole } from "@/types";
   import { useAuthorization } from "@/hooks/use-authorization";
@@ -94,8 +103,19 @@
     Pin,
     Eye,
     EyeOff,
-    BookOpen
+    BookOpen,
+    FileSignature,
+    Phone,
+    MessageSquare,
+    Bell,
+    FileText,
+    Map,
+    ScrollText,
+    Mail
   };
+
+
+  
 
   interface MenuGroup {
     id: string;
@@ -132,60 +152,87 @@
     const groups: MenuGroup[] = [];
 
     const overviewItems: MenuGroup['items'] = [];
-    if (!isHidden('/dashboard') && (isAdmin || isICT || perms.dashboard)) {
+    if (!isHidden('/dashboard') && (isSuperAdmin || isAdmin || isICT || perms.dashboard)) {
       overviewItems.push({ id: 'dashboard', title: "Dashboard", url: "/dashboard", icon: LayoutDashboard, priority: 1, isPinned: isPinned('/dashboard') });
     }
-    if (!isHidden('/wallet') && isDataCollector) {
+    if (!isHidden('/wallet') && (isSuperAdmin || isDataCollector)) {
       overviewItems.push({ id: 'my-wallet', title: "My Wallet", url: "/wallet", icon: CreditCard, priority: 2, isPinned: isPinned('/wallet') });
     }
-    if (!isHidden('/cost-submission') && (isDataCollector || isAdmin || isCoordinator)) {
+    if (!isHidden('/cost-submission') && (isSuperAdmin || isDataCollector || isAdmin || isCoordinator)) {
       overviewItems.push({ id: 'cost-submission', title: "Cost Submission", url: "/cost-submission", icon: Receipt, priority: 3, isPinned: isPinned('/cost-submission') });
+    }
+    if (!isHidden('/signatures')) {
+      overviewItems.push({ id: 'signatures', title: "Signatures", url: "/signatures", icon: FileSignature, priority: 4, isPinned: isPinned('/signatures') });
     }
     if (overviewItems.length) groups.push({ id: 'overview', label: "Overview", order: 1, items: overviewItems });
 
+    const communicationItems: MenuGroup['items'] = [];
+    if (!isHidden('/chat')) {
+      communicationItems.push({ id: 'chat', title: "Chat", url: "/chat", icon: MessageSquare, priority: 1, isPinned: isPinned('/chat') });
+    }
+    if (!isHidden('/calls')) {
+      communicationItems.push({ id: 'calls', title: "Calls", url: "/calls", icon: Phone, priority: 2, isPinned: isPinned('/calls') });
+    }
+    if (!isHidden('/notifications')) {
+      communicationItems.push({ id: 'notifications', title: "Notifications", url: "/notifications", icon: Bell, priority: 3, isPinned: isPinned('/notifications') });
+    }
+    if (communicationItems.length) groups.push({ id: 'communication', label: "Communication", order: 1.5, items: communicationItems });
+
     const planningItems: MenuGroup['items'] = [];
-    if (!isHidden('/projects') && (isAdmin || isICT || perms.projects)) {
+    if (!isHidden('/projects') && (isSuperAdmin || isAdmin || isICT || perms.projects)) {
       planningItems.push({ id: 'projects', title: "Projects", url: "/projects", icon: FolderKanban, priority: 1, isPinned: isPinned('/projects') });
     }
-    if (!isHidden('/mmp') && (isAdmin || isICT || perms.mmp || isCoordinator)) {
-      const mmpTitle = (isDataCollector || isCoordinator) ? "My Sites Management" : "MMP Management";
+    if (!isHidden('/mmp') && (isSuperAdmin || isAdmin || isICT || perms.mmp || isCoordinator)) {
+      const mmpTitle = (!isSuperAdmin && (isDataCollector || isCoordinator)) ? "My Sites Management" : "MMP Management";
       planningItems.push({ id: 'mmp-management', title: mmpTitle, url: "/mmp", icon: Database, priority: 2, isPinned: isPinned('/mmp') });
     }
-    if (!isHidden('/hub-operations') && (isAdmin || isSuperAdmin)) {
+    if (!isHidden('/hub-operations') && (isSuperAdmin || isAdmin)) {
       planningItems.push({ id: 'hub-operations', title: "Hub Operations", url: "/hub-operations", icon: Building2, priority: 3, isPinned: isPinned('/hub-operations') });
     }
     if (planningItems.length) groups.push({ id: 'planning', label: "Planning & Setup", order: 2, items: planningItems });
 
     const fieldOpsItems: MenuGroup['items'] = [];
-    if (!isHidden('/site-visits') && (isAdmin || isICT || perms.siteVisits)) {
+    if (!isHidden('/site-visits') && (isSuperAdmin || isAdmin || isICT || perms.siteVisits)) {
       fieldOpsItems.push({ id: 'site-visits', title: "Site Visits", url: "/site-visits", icon: ClipboardList, priority: 1, isPinned: isPinned('/site-visits') });
     }
-    if (!isHidden('/field-team') && ((isAdmin || perms.fieldTeam) && !isICT)) {
+    if (!isHidden('/field-team') && (isSuperAdmin || ((isAdmin || perms.fieldTeam) && !isICT))) {
       fieldOpsItems.push({ id: 'field-team', title: "Field Team", url: "/field-team", icon: Activity, priority: 2, isPinned: isPinned('/field-team') });
     }
-    if (!isHidden('/field-operation-manager') && (isAdmin || isFOM || perms.fieldOpManager) && !isCoordinator) {
+    if (!isHidden('/field-operation-manager') && (isSuperAdmin || ((isAdmin || isFOM || perms.fieldOpManager) && !isCoordinator))) {
       fieldOpsItems.push({ id: 'field-op-manager', title: "Field Operation Manager", url: "/field-operation-manager", icon: MapPin, priority: 3, isPinned: isPinned('/field-operation-manager') });
     }
     if (fieldOpsItems.length) groups.push({ id: 'field-ops', label: "Field Operations", order: 3, items: fieldOpsItems });
 
     const verificationItems: MenuGroup['items'] = [];
-    if (!isHidden('/coordinator/sites') && isCoordinator) {
+    if (!isHidden('/coordinator/sites') && (isSuperAdmin || isCoordinator)) {
       verificationItems.push({ id: 'site-verification', title: "Site Verification", url: "/coordinator/sites", icon: CheckCircle, priority: 1, isPinned: isPinned('/coordinator/sites') });
     }
-    if (!isHidden('/archive') && (isAdmin || perms.archive)) {
+    if (!isHidden('/archive') && (isSuperAdmin || isAdmin || perms.archive)) {
       verificationItems.push({ id: 'archive', title: "Archive", url: "/archive", icon: Archive, priority: 2, isPinned: isPinned('/archive') });
     }
     if (verificationItems.length) groups.push({ id: 'verification', label: "Verification & Review", order: 4, items: verificationItems });
 
     const dataItems: MenuGroup['items'] = [];
-    if (!isHidden('/data-visibility') && ((isAdmin || perms.dataVisibility) && !isICT)) {
+    if (!isHidden('/data-visibility') && (isSuperAdmin || ((isAdmin || perms.dataVisibility) && !isICT))) {
       dataItems.push({ id: 'data-visibility', title: "Data Visibility", url: "/data-visibility", icon: Link2, priority: 1, isPinned: isPinned('/data-visibility') });
     }
-    if (!isHidden('/reports') && ((isAdmin || perms.reports) && !isICT)) {
-      dataItems.push({ id: 'reports', title: "Reports", url: "/reports", icon: Calendar, priority: 2, isPinned: isPinned('/reports') });
+    if (!isHidden('/reports') && (isSuperAdmin || ((isAdmin || perms.reports) && !isICT))) {
+      dataItems.push({ id: 'reports', title: "Reports", url: "/reports", icon: BarChart3, priority: 2, isPinned: isPinned('/reports') });
     }
-    if (!isHidden('/tracker-preparation-plan') && (isAdmin || isICT)) {
-      dataItems.push({ id: 'tracker-plan', title: "Tracker Preparation", url: "/tracker-preparation-plan", icon: BarChart3, priority: 3, isPinned: isPinned('/tracker-preparation-plan') });
+    if (!isHidden('/calendar')) {
+      dataItems.push({ id: 'calendar', title: "Calendar", url: "/calendar", icon: Calendar, priority: 3, isPinned: isPinned('/calendar') });
+    }
+    if (!isHidden('/tracker-preparation-plan') && (isSuperAdmin || isAdmin || isICT)) {
+      dataItems.push({ id: 'tracker-plan', title: "Tracker Preparation", url: "/tracker-preparation-plan", icon: BarChart3, priority: 4, isPinned: isPinned('/tracker-preparation-plan') });
+    }
+    if (!isHidden('/documents') && (isSuperAdmin || isAdmin || isICT || isFinancialAdmin)) {
+      dataItems.push({ id: 'documents', title: "Documents", url: "/documents", icon: FileText, priority: 5, isPinned: isPinned('/documents') });
+    }
+    if (!isHidden('/map') && (isSuperAdmin || isAdmin || isFOM)) {
+      dataItems.push({ id: 'advanced-map', title: "Advanced Map", url: "/map", icon: Map, priority: 6, isPinned: isPinned('/map') });
+    }
+    if (!isHidden('/wallet-reports') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
+      dataItems.push({ id: 'wallet-reports', title: "Wallet Reports", url: "/wallet-reports", icon: BarChart3, priority: 7, isPinned: isPinned('/wallet-reports') });
     }
     if (dataItems.length) groups.push({ id: 'reports', label: "Data & Reports", order: 5, items: dataItems });
 
@@ -196,41 +243,53 @@
     if (helpItems.length) groups.push({ id: 'help', label: "Help & Support", order: 7, items: helpItems });
 
     const adminItems: MenuGroup['items'] = [];
-    if (!isHidden('/users') && (isAdmin || isICT || perms.users)) {
+    if (!isHidden('/users') && (isSuperAdmin || isAdmin || isICT || perms.users)) {
       adminItems.push({ id: 'user-management', title: "User Management", url: "/users", icon: Users, priority: 1, isPinned: isPinned('/users') });
     }
-    if (!isHidden('/role-management') && (isAdmin || perms.roleManagement)) {
+    if (!isHidden('/role-management') && (isSuperAdmin || isAdmin || perms.roleManagement)) {
       adminItems.push({ id: 'role-management', title: "Role Management", url: "/role-management", icon: Shield, priority: 2, isPinned: isPinned('/role-management') });
     }
     if (!isHidden('/super-admin-management') && isSuperAdmin) {
       adminItems.push({ id: 'super-admin', title: "Super Admin", url: "/super-admin-management", icon: ShieldCheck, priority: 3, isPinned: isPinned('/super-admin-management') });
     }
-    if (!isHidden('/classifications') && (isAdmin || isFinancialAdmin)) {
+    if (!isHidden('/approval-dashboard') && isSuperAdmin) {
+      adminItems.push({ id: 'approval-dashboard', title: "Approval Dashboard", url: "/approval-dashboard", icon: ClipboardCheck, priority: 3.5, isPinned: isPinned('/approval-dashboard') });
+    }
+    if (!isHidden('/classifications') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
       adminItems.push({ id: 'classifications', title: "Classifications", url: "/classifications", icon: Award, priority: 4, isPinned: isPinned('/classifications') });
     }
-    if (!isHidden('/classification-fees') && isAdmin) {
+    if (!isHidden('/classification-fees') && (isSuperAdmin || isAdmin)) {
       adminItems.push({ id: 'classification-fees', title: "Classification Fees", url: "/classification-fees", icon: DollarSign, priority: 5, isPinned: isPinned('/classification-fees') });
     }
-    if (!isHidden('/financial-operations') && perms.financialOperations) {
+    if (!isHidden('/financial-operations') && (isSuperAdmin || perms.financialOperations)) {
       adminItems.push({ id: 'financial-ops', title: "Financial Operations", url: "/financial-operations", icon: TrendingUp, priority: 5, isPinned: isPinned('/financial-operations') });
     }
-    if (!isHidden('/budget') && (isAdmin || isFinancialAdmin)) {
+    if (!isHidden('/budget') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
       adminItems.push({ id: 'budget', title: "Budget", url: "/budget", icon: DollarSign, priority: 6, isPinned: isPinned('/budget') });
     }
-    if (!isHidden('/admin/wallets') && (isAdmin || isFinancialAdmin)) {
+    if (!isHidden('/admin/wallets') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
       adminItems.push({ id: 'wallets', title: "Wallets", url: "/admin/wallets", icon: CreditCard, priority: 7, isPinned: isPinned('/admin/wallets') });
     }
-    if (!isHidden('/withdrawal-approval') && (isAdmin || isFinancialAdmin || isSupervisor || isFOM)) {
-      adminItems.push({ id: 'withdrawal-approval', title: "Withdrawal Approval", url: "/withdrawal-approval", icon: ClipboardCheck, priority: 8, isPinned: isPinned('/withdrawal-approval') });
+    if (!isHidden('/supervisor-approvals') && (isSuperAdmin || isAdmin || isFinancialAdmin || isSupervisor || isFOM)) {
+      adminItems.push({ id: 'supervisor-approvals', title: "Supervisor Approvals (Tier 1)", url: "/supervisor-approvals", icon: ClipboardCheck, priority: 7.5, isPinned: isPinned('/supervisor-approvals') });
     }
-    if (!isHidden('/down-payment-approval') && (isAdmin || isFinancialAdmin || isSupervisor)) {
+    if (!isHidden('/withdrawal-approval') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
+      adminItems.push({ id: 'withdrawal-approval', title: "Admin Approvals (Tier 2)", url: "/withdrawal-approval", icon: ClipboardCheck, priority: 8, isPinned: isPinned('/withdrawal-approval') });
+    }
+    if (!isHidden('/down-payment-approval') && (isSuperAdmin || isAdmin || isFinancialAdmin || isSupervisor)) {
       adminItems.push({ id: 'down-payment-approval', title: "Down-Payment Approval", url: "/down-payment-approval", icon: DollarSign, priority: 8.5, isPinned: isPinned('/down-payment-approval') });
     }
-    if (!isHidden('/finance-approval') && (isAdmin || isFinancialAdmin)) {
+    if (!isHidden('/finance-approval') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
       adminItems.push({ id: 'finance-approval', title: "Finance Approval", url: "/finance-approval", icon: Banknote, priority: 9, isPinned: isPinned('/finance-approval') });
     }
-    if (!isHidden('/settings') && ((isAdmin || perms.settings) && !isDataCollector)) {
+    if (!isHidden('/settings') && (isSuperAdmin || ((isAdmin || perms.settings) && !isDataCollector))) {
       adminItems.push({ id: 'settings', title: "Settings", url: "/settings", icon: Settings, priority: 10, isPinned: isPinned('/settings') });
+    }
+    if (!isHidden('/audit-logs') && isSuperAdmin) {
+      adminItems.push({ id: 'audit-logs', title: "Audit Logs", url: "/audit-logs", icon: ScrollText, priority: 11, isPinned: isPinned('/audit-logs') });
+    }
+    if (!isHidden('/email-tracking') && isSuperAdmin) {
+      adminItems.push({ id: 'email-tracking', title: "Email Tracking", url: "/email-tracking", icon: Mail, priority: 12, isPinned: isPinned('/email-tracking') });
     }
     if (adminItems.length) groups.push({ id: 'admin', label: "Administration", order: 6, items: adminItems });
 
@@ -330,23 +389,24 @@
 
     return (
       <Sidebar collapsible="icon" className="border-r bg-white dark:bg-gray-900">
-        <SidebarHeader className="border-b">
-          <div className="flex h-16 items-center gap-3 px-4">
-            <img src={Logo} alt="PACT Logo" className="h-14 w-14 shrink-0 object-contain" />
-            <SidebarTrigger className="ml-auto" data-testid="button-sidebar-trigger" />
+
+        <SidebarHeader className="border-b py-0">
+          <div className="flex h-15 items-center gap-0.5 px-0.5">
+            <img src={Logo} alt="PACT Logo" className="h-8 w-8 shrink-0 object-contain" />
+            <SidebarTrigger className="ml-auto h-4 w-4" data-testid="button-sidebar-trigger" />
           </div>
         </SidebarHeader>
 
-        <SidebarContent className="px-3 py-4">
+        <SidebarContent className="px-0 py-0">
           {menuGroups.map((group, index) => {
             const isCollapsed = collapsedGroups.has(group.id);
             
             return (
-              <Collapsible key={group.id} open={!isCollapsed} className={index > 0 ? "mt-1" : ""}>
-                <SidebarGroup>
+              <Collapsible key={group.id} open={!isCollapsed} className="">
+                <SidebarGroup className="py-0 px-0">
                   <CollapsibleTrigger asChild>
                     <SidebarGroupLabel 
-                      className="px-2 text-[11px] uppercase tracking-wide font-semibold text-blue-600 dark:text-blue-300 cursor-pointer flex items-center justify-between hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-md transition-colors"
+                      className="px-1 py-0.5 h-6 text-[13px] uppercase tracking-wide font-semibold text-blue-600 dark:text-blue-300 cursor-pointer flex items-center justify-between hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded transition-colors"
                       onClick={() => toggleGroupCollapse(group.id)}
                       data-testid={`group-label-${group.id}`}
                     >
@@ -356,23 +416,23 @@
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <SidebarGroupContent>
-                      <SidebarMenu className="space-y-1 mt-1">
-                        {group.items.map((item) => (
-                          <SidebarMenuItem key={item.id}>
+                      <SidebarMenu className="space-y-0">
+                        {group.items.map((item, itemIndex) => (
+                          <SidebarMenuItem key={item.id} index={itemIndex} className="py-0">
                             <SidebarMenuButton
                               asChild
                               isActive={pathname === item.url}
                               tooltip={item.title}
-                              className={`h-7 px-3 rounded-lg text-sm font-medium transition-all duration-200 
+                              className={`h-7 px-1 rounded text-[13px] font-medium transition-all duration-200 
                                 ${
                                   pathname === item.url
                                     ? "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 font-semibold"
                                     : "hover:bg-blue-50 dark:hover:bg-blue-800"
                                 }`}
                             >
-                              <Link to={item.url} className="flex items-center gap-3" data-testid={`nav-link-${item.id}`}>
+                              <Link to={item.url} className="flex items-center gap-1" data-testid={`nav-link-${item.id}`}>
                                 <item.icon
-                                  className={`h-5 w-5 ${
+                                  className={`h-4 w-4 ${
                                     pathname === item.url
                                       ? "text-blue-700 dark:text-blue-300"
                                       : "text-blue-600 dark:text-blue-400"
@@ -380,7 +440,7 @@
                                 />
                                 <span className="truncate flex-1">{item.title}</span>
                                 {item.isPinned && (
-                                  <Pin className="h-3 w-3 text-amber-500" />
+                                  <Pin className="h-2 w-2 text-amber-500" />
                                 )}
                               </Link>
                             </SidebarMenuButton>
@@ -395,26 +455,26 @@
           })}
         </SidebarContent>
 
-        <SidebarFooter className="border-t p-3">
+        <SidebarFooter className="border-t p-0">
           {currentUser && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
-                  className="w-full justify-start gap-3 px-2 py-2 hover:bg-blue-50 dark:hover:bg-gray-800"
+                  className="w-full justify-start gap-1 px-0.5 py-0 h-6 hover:bg-blue-50 dark:hover:bg-gray-800"
                   data-testid="button-user-menu"
                 >
-                  <Avatar className="h-9 w-9">
+                  <Avatar className="h-4 w-4">
                     <AvatarImage src={currentUser.avatar} alt={currentUser.name} />
-                    <AvatarFallback className="bg-blue-600 text-white text-xs">
+                    <AvatarFallback className="bg-blue-600 text-white text-[7px]">
                       {getInitials(currentUser.name)}
                     </AvatarFallback>
                   </Avatar>
-                  <div className="flex flex-col items-start text-left text-sm leading-tight group-data-[collapsible=icon]:hidden">
+                  <div className="flex flex-col items-start text-left text-[11px] leading-tight group-data-[collapsible=icon]:hidden">
                     <span className="font-semibold text-gray-900 dark:text-gray-100">{currentUser.name}</span>
-                    <span className="text-xs text-gray-500 dark:text-gray-400">{getPrimaryRole()}</span>
+                    <span className="text-[10px] text-gray-500 dark:text-gray-400">{getPrimaryRole()}</span>
                   </div>
-                  <ChevronUp className="ml-auto h-4 w-4 text-muted-foreground group-data-[collapsible=icon]:hidden" />
+                  <ChevronUp className="ml-auto h-2 w-2 text-muted-foreground group-data-[collapsible=icon]:hidden" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent side="top" align="end" className="w-56">
@@ -448,6 +508,7 @@
         </SidebarFooter>
 
         <SidebarRail />
+        <SidebarResizeHandle />
       </Sidebar>
     );
   };

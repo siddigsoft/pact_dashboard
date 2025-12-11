@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { calculateDistance } from '@/utils/collectorUtils';
 import { User, SiteVisit } from '@/types';
+import { getUserStatus } from '@/utils/userStatusUtils';
 import 'leaflet/dist/leaflet.css';
 
 interface FieldTeamMapProps {
@@ -99,12 +100,21 @@ const FieldTeamMap: React.FC<FieldTeamMapProps> = ({
     
     if (!users) return;
     
-    const usersWithLocation = users.filter(user => 
-      user?.location?.latitude && 
-      user?.location?.longitude &&
-      (selectedFilter === 'all' || user.availability === selectedFilter) &&
-      (selectedRegion === 'all' || user.location.region === selectedRegion || user?.stateId === selectedRegion)
-    );
+    const usersWithLocation = users.filter(user => {
+      if (!user?.location?.latitude || !user?.location?.longitude) return false;
+      
+      const userStatus = getUserStatus(user);
+      const matchesFilter = selectedFilter === 'all' || 
+        (selectedFilter === 'online' && userStatus.type === 'online') ||
+        (selectedFilter === 'offline' && userStatus.type === 'offline') ||
+        (selectedFilter === 'busy' && userStatus.type === 'same-day');
+      
+      const matchesRegion = selectedRegion === 'all' || 
+        user.location.region === selectedRegion || 
+        user?.stateId === selectedRegion;
+      
+      return matchesFilter && matchesRegion;
+    });
     setActiveUsers(usersWithLocation);
   }, [users, selectedFilter, selectedRegion, eligibleCollectors]);
 
