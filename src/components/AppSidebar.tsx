@@ -41,6 +41,7 @@
     ScrollText,
     Mail
   } from "lucide-react";
+  import { RealtimeStatusDot } from '@/components/realtime';
   import { useSiteVisitReminders } from "@/hooks/use-site-visit-reminders";
   import Logo from "../assets/logo.png";
   import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
@@ -464,12 +465,15 @@
                   className="w-full justify-start gap-1 px-0.5 py-0 h-6 hover:bg-blue-50 dark:hover:bg-gray-800"
                   data-testid="button-user-menu"
                 >
-                  <Avatar className="h-4 w-4">
-                    <AvatarImage src={currentUser.avatar} alt={currentUser.name} />
-                    <AvatarFallback className="bg-blue-600 text-white text-[7px]">
-                      {getInitials(currentUser.name)}
-                    </AvatarFallback>
-                  </Avatar>
+                  <div className="relative">
+                    <Avatar className="h-4 w-4">
+                      <AvatarImage src={currentUser.avatar} alt={currentUser.name} />
+                      <AvatarFallback className="bg-blue-600 text-white text-[7px]">
+                        {getInitials(currentUser.name)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <RealtimeStatusDot className="absolute -bottom-0.5 -right-0.5" />
+                  </div>
                   <div className="flex flex-col items-start text-left text-[11px] leading-tight group-data-[collapsible=icon]:hidden">
                     <span className="font-semibold text-gray-900 dark:text-gray-100">{currentUser.name}</span>
                     <span className="text-[10px] text-gray-500 dark:text-gray-400">{getPrimaryRole()}</span>
