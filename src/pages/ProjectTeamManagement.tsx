@@ -12,10 +12,11 @@ import { useToast } from '@/hooks/toast';
 const ProjectTeamManagement = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { getProjectById, updateProject, fetchProjects, loading, projects } = useProjectContext();
+  const { getProjectById, updateProjectTeam, fetchProjects, loading, projects } = useProjectContext();
   const { toast } = useToast();
   const [project, setProject] = useState<Project | undefined>(undefined);
   const [isLoadingProject, setIsLoadingProject] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
   
   // Fetch on mount if needed
   useEffect(() => {
@@ -69,23 +70,33 @@ const ProjectTeamManagement = () => {
   }
 
   const handleTeamChange = async (teamMembers: ProjectTeamMember[]) => {
-    if (!project) return;
+    if (!project || !id) return;
     
-    // Update the project with the new team composition
-    const updatedProject = {
-      ...project,
-      team: {
+    try {
+      setIsSaving(true);
+      const newTeam = {
         ...project.team,
         teamComposition: teamMembers
-      }
-    };
-    
-    await updateProject(updatedProject);
-    toast({
-      title: "Team Updated",
-      description: "The project team has been updated successfully.",
-      variant: "success",
-    });
+      };
+      
+      await updateProjectTeam(id, newTeam);
+      
+      setProject(prev => prev ? { ...prev, team: newTeam } : prev);
+      
+      toast({
+        title: "Team Updated",
+        description: "The project team has been updated successfully.",
+        variant: "success",
+      });
+    } catch {
+      toast({
+        title: "Error",
+        description: "Failed to update team. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (

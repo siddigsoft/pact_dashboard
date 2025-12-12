@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate, useLocation, Outlet } from "react-router-dom";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import AppSidebar from "@/components/AppSidebar";
@@ -14,6 +14,8 @@ import { GlobalRefreshBar } from "@/components/GlobalRefreshBar";
 import { NotificationInitializer } from "@/components/NotificationInitializer";
 import { MobileBottomNav } from "@/components/mobile/MobileBottomNav";
 import { useLiveDashboard } from "@/hooks/useLiveDashboard";
+import { RealtimeBanner } from "@/components/realtime";
+import { queryClient } from "@/lib/queryClient";
 
 interface MainLayoutContentProps {
   children?: React.ReactNode;
@@ -61,6 +63,10 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
 
   const isHomeRoute = location.pathname === '/dashboard';
 
+  const handleGlobalRefresh = useCallback(async () => {
+    await queryClient.invalidateQueries();
+  }, []);
+
   return (
     <TooltipProvider>
       <UpdateDialog />
@@ -69,6 +75,12 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
         <div className={`min-h-screen flex w-full ${isTransitioning ? 'transition-all duration-300 ease-in-out' : ''}`}>
           {!isMobile && !isTablet && <AppSidebar />}
           <SidebarInset className={`${isMobile ? 'bg-gray-50 dark:bg-gray-900' : ''} relative z-0 flex flex-col min-w-0 overflow-x-hidden min-h-0`}>
+            {/* Realtime Connection Banner - Shows when offline/reconnecting */}
+            <RealtimeBanner 
+              onRefresh={handleGlobalRefresh}
+              dismissible={true}
+              showOnlyWhenDisconnected={true}
+            />
             {isMobile ? (
               <MobileAppHeader
                 toggleSidebar={toggleSidebar}
