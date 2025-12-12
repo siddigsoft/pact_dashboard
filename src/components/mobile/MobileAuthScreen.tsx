@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useTranslation } from 'react-i18next';
 import { hapticPresets } from '@/lib/haptics';
 import { cn } from '@/lib/utils';
 import { useBiometric, saveCredentials } from '@/hooks/use-biometric';
@@ -42,6 +43,7 @@ interface FormErrors {
 export function MobileAuthScreen({ onAuthSuccess }: MobileAuthScreenProps) {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { t } = useTranslation();
   const biometric = useBiometric();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -188,8 +190,8 @@ export function MobileAuthScreen({ onAuthSuccess }: MobileAuthScreenProps) {
 
       hapticPresets.success();
       toast({
-        title: 'Welcome back!',
-        description: 'Successfully signed in',
+        title: t('notifications.auth.loginSuccess'),
+        description: t('notifications.auth.loginSuccessDesc'),
       });
 
       if (data.session?.refresh_token) {
@@ -227,8 +229,8 @@ export function MobileAuthScreen({ onAuthSuccess }: MobileAuthScreenProps) {
   const handleMFASuccess = async () => {
     hapticPresets.success();
     toast({
-      title: 'Welcome back!',
-      description: 'Two-factor authentication successful',
+      title: t('notifications.auth.loginSuccess'),
+      description: t('notifications.auth.loginSuccessDesc'),
     });
 
     const { data: sessionData } = await supabase.auth.getSession();
@@ -309,8 +311,8 @@ export function MobileAuthScreen({ onAuthSuccess }: MobileAuthScreenProps) {
 
           hapticPresets.success();
           toast({
-            title: 'Welcome back!',
-            description: 'Signed in with biometrics',
+            title: t('notifications.auth.loginSuccess'),
+            description: t('notifications.auth.loginSuccessDesc'),
           });
           onAuthSuccess?.();
           navigate('/dashboard');
@@ -342,8 +344,8 @@ export function MobileAuthScreen({ onAuthSuccess }: MobileAuthScreenProps) {
 
       hapticPresets.success();
       toast({
-        title: 'Welcome back!',
-        description: 'Signed in with biometrics',
+        title: t('notifications.auth.loginSuccess'),
+        description: t('notifications.auth.loginSuccessDesc'),
       });
       onAuthSuccess?.();
       navigate('/dashboard');
