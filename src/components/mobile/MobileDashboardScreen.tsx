@@ -17,10 +17,15 @@ import {
   Target,
   Navigation,
   Zap,
+  MessageSquare,
+  Phone,
+  AlertTriangle,
+  Search,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 import { hapticPresets } from '@/lib/haptics';
 import { MobileHeader, SearchHeader } from './MobileHeader';
@@ -31,6 +36,9 @@ import { SyncStatusBar } from './SyncStatusBar';
 import { GeofenceStatusBadge } from './MobileGeofenceMonitor';
 import { BatteryIndicator } from './MobileBatteryStatus';
 import { FPSMonitor } from './MobilePerformancePanel';
+import { useRealtimeTeamLocations } from '@/hooks/use-realtime-team-locations';
+import { useUser } from '@/context/user/UserContext';
+import { useAppContext } from '@/context/AppContext';
 
 interface DashboardStats {
   totalVisits: number;
@@ -69,6 +77,14 @@ export function MobileDashboardScreen({
   const navigate = useNavigate();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [greeting, setGreeting] = useState('');
+  const { users } = useUser();
+  const { currentUser } = useAppContext();
+  const { onlineUserIds } = useRealtimeTeamLocations({ enabled: true });
+  
+  const onlineUsers = users.filter(user => {
+    if (user.id === currentUser?.id) return false;
+    return onlineUserIds.includes(user.id);
+  });
 
   useEffect(() => {
     const hour = new Date().getHours();
@@ -142,6 +158,18 @@ export function MobileDashboardScreen({
               hapticPresets.buttonPress();
               navigate('/calendar');
             }}
+            onSOS={() => {
+              hapticPresets.impact();
+              navigate('/sos');
+            }}
+            onChat={() => {
+              hapticPresets.buttonPress();
+              navigate('/chat');
+            }}
+            onCall={() => {
+              hapticPresets.buttonPress();
+              navigate('/calls');
+            }}
           />
 
           <div className="grid grid-cols-2 gap-3">
@@ -172,6 +200,18 @@ export function MobileDashboardScreen({
               onClick={() => navigate('/wallet')}
             />
           </div>
+
+          <OnlineNowSection 
+            onlineUsers={onlineUsers}
+            onChatUser={(userId) => {
+              hapticPresets.buttonPress();
+              navigate(`/chat?userId=${userId}`);
+            }}
+            onCallUser={(userId) => {
+              hapticPresets.buttonPress();
+              navigate(`/calls?userId=${userId}`);
+            }}
+          />
 
           <section>
             <div className="flex items-center justify-between mb-3">
@@ -264,44 +304,84 @@ interface QuickActionsProps {
   onNewVisit: () => void;
   onViewWallet: () => void;
   onViewCalendar: () => void;
+  onSOS: () => void;
+  onChat: () => void;
+  onCall: () => void;
 }
 
-function QuickActions({ onNewVisit, onViewWallet, onViewCalendar }: QuickActionsProps) {
+function QuickActions({ onNewVisit, onViewWallet, onViewCalendar, onSOS, onChat, onCall }: QuickActionsProps) {
   return (
-    <div className="flex gap-3">
-      <motion.button
-        whileTap={{ scale: 0.97 }}
-        transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-        onClick={onNewVisit}
-        className="flex-1 flex flex-col items-center gap-2 p-4 min-h-[72px] bg-black dark:bg-white rounded-2xl active:bg-black/90 dark:active:bg-white/90"
-        data-testid="quick-action-new-visit"
-        aria-label="Start a new site visit"
-      >
-        <Plus className="w-6 h-6 text-white dark:text-black" />
-        <span className="text-xs font-semibold text-white dark:text-black">New Visit</span>
-      </motion.button>
-      <motion.button
-        whileTap={{ scale: 0.97 }}
-        transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-        onClick={onViewWallet}
-        className="flex-1 flex flex-col items-center gap-2 p-4 min-h-[72px] bg-black/5 dark:bg-white/5 rounded-2xl active:bg-black/10 dark:active:bg-white/10"
-        data-testid="quick-action-wallet"
-        aria-label="View wallet balance"
-      >
-        <Wallet className="w-6 h-6 text-black dark:text-white" />
-        <span className="text-xs font-semibold text-black dark:text-white">Wallet</span>
-      </motion.button>
-      <motion.button
-        whileTap={{ scale: 0.97 }}
-        transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-        onClick={onViewCalendar}
-        className="flex-1 flex flex-col items-center gap-2 p-4 min-h-[72px] bg-black/5 dark:bg-white/5 rounded-2xl active:bg-black/10 dark:active:bg-white/10"
-        data-testid="quick-action-calendar"
-        aria-label="Open calendar"
-      >
-        <Calendar className="w-6 h-6 text-black dark:text-white" />
-        <span className="text-xs font-semibold text-black dark:text-white">Calendar</span>
-      </motion.button>
+    <div className="space-y-3">
+      <div className="flex gap-3">
+        <motion.button
+          whileTap={{ scale: 0.97 }}
+          transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+          onClick={onNewVisit}
+          className="flex-1 flex flex-col items-center gap-2 p-4 min-h-[72px] bg-black dark:bg-white rounded-2xl active:bg-black/90 dark:active:bg-white/90"
+          data-testid="quick-action-new-visit"
+          aria-label="Start a new site visit"
+        >
+          <Plus className="w-6 h-6 text-white dark:text-black" />
+          <span className="text-xs font-semibold text-white dark:text-black">New Visit</span>
+        </motion.button>
+        <motion.button
+          whileTap={{ scale: 0.97 }}
+          transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+          onClick={onViewWallet}
+          className="flex-1 flex flex-col items-center gap-2 p-4 min-h-[72px] bg-black/5 dark:bg-white/5 rounded-2xl active:bg-black/10 dark:active:bg-white/10"
+          data-testid="quick-action-wallet"
+          aria-label="View wallet balance"
+        >
+          <Wallet className="w-6 h-6 text-black dark:text-white" />
+          <span className="text-xs font-semibold text-black dark:text-white">Wallet</span>
+        </motion.button>
+        <motion.button
+          whileTap={{ scale: 0.97 }}
+          transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+          onClick={onViewCalendar}
+          className="flex-1 flex flex-col items-center gap-2 p-4 min-h-[72px] bg-black/5 dark:bg-white/5 rounded-2xl active:bg-black/10 dark:active:bg-white/10"
+          data-testid="quick-action-calendar"
+          aria-label="Open calendar"
+        >
+          <Calendar className="w-6 h-6 text-black dark:text-white" />
+          <span className="text-xs font-semibold text-black dark:text-white">Calendar</span>
+        </motion.button>
+      </div>
+      <div className="flex gap-3">
+        <motion.button
+          whileTap={{ scale: 0.97 }}
+          transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+          onClick={onSOS}
+          className="flex-1 flex flex-col items-center gap-2 p-4 min-h-[72px] bg-destructive rounded-2xl active:bg-destructive/90"
+          data-testid="quick-action-sos"
+          aria-label="Emergency SOS"
+        >
+          <AlertTriangle className="w-6 h-6 text-destructive-foreground" />
+          <span className="text-xs font-semibold text-destructive-foreground">SOS</span>
+        </motion.button>
+        <motion.button
+          whileTap={{ scale: 0.97 }}
+          transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+          onClick={onChat}
+          className="flex-1 flex flex-col items-center gap-2 p-4 min-h-[72px] bg-black/5 dark:bg-white/5 rounded-2xl active:bg-black/10 dark:active:bg-white/10"
+          data-testid="quick-action-chat"
+          aria-label="Open chat"
+        >
+          <MessageSquare className="w-6 h-6 text-black dark:text-white" />
+          <span className="text-xs font-semibold text-black dark:text-white">Chat</span>
+        </motion.button>
+        <motion.button
+          whileTap={{ scale: 0.97 }}
+          transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+          onClick={onCall}
+          className="flex-1 flex flex-col items-center gap-2 p-4 min-h-[72px] bg-black/5 dark:bg-white/5 rounded-2xl active:bg-black/10 dark:active:bg-white/10"
+          data-testid="quick-action-call"
+          aria-label="Make a call"
+        >
+          <Phone className="w-6 h-6 text-black dark:text-white" />
+          <span className="text-xs font-semibold text-black dark:text-white">Call</span>
+        </motion.button>
+      </div>
     </div>
   );
 }
@@ -410,5 +490,135 @@ function VisitCard({ visit, onClick }: VisitCardProps) {
         </div>
       </Card>
     </motion.button>
+  );
+}
+
+interface OnlineNowSectionProps {
+  onlineUsers: Array<{
+    id: string;
+    name?: string;
+    fullName?: string;
+    username?: string;
+    avatar?: string;
+    role?: string;
+    roles?: string[];
+  }>;
+  onChatUser: (userId: string) => void;
+  onCallUser: (userId: string) => void;
+}
+
+function OnlineNowSection({ onlineUsers, onChatUser, onCallUser }: OnlineNowSectionProps) {
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  const getInitials = (name: string) => 
+    name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  
+  const filteredUsers = onlineUsers.filter(user => {
+    const userName = user.fullName || user.name || user.username || '';
+    return userName.toLowerCase().includes(searchQuery.toLowerCase());
+  });
+
+  if (onlineUsers.length === 0) {
+    return null;
+  }
+
+  return (
+    <section data-testid="online-now-section">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-semibold text-black dark:text-white">
+            Online Now
+          </h2>
+          <Badge className="bg-green-500 text-white text-xs px-2 py-0.5">
+            {onlineUsers.length}
+          </Badge>
+        </div>
+      </div>
+      
+      {onlineUsers.length > 3 && (
+        <div className="relative mb-3">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-black/40 dark:text-white/40" />
+          <input
+            type="text"
+            placeholder="Search online users..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full h-9 pl-9 pr-3 rounded-xl bg-black/5 dark:bg-white/5 text-black dark:text-white placeholder:text-black/40 dark:placeholder:text-white/40 text-sm focus:outline-none"
+            data-testid="input-search-online-users"
+          />
+        </div>
+      )}
+      
+      <Card className="divide-y divide-black/5 dark:divide-white/5">
+        {filteredUsers.slice(0, 5).map((user) => {
+          const userName = user.fullName || user.name || user.username || 'User';
+          const userRole = user.roles?.[0] || user.role || 'Team Member';
+          
+          return (
+            <div 
+              key={user.id} 
+              className="flex items-center gap-3 p-3"
+              data-testid={`online-user-${user.id}`}
+            >
+              <div className="relative">
+                <Avatar className="h-10 w-10">
+                  <AvatarImage src={user.avatar} alt={userName} />
+                  <AvatarFallback className="bg-black dark:bg-white text-white dark:text-black text-sm font-bold">
+                    {getInitials(userName)}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 rounded-full border-2 border-white dark:border-black" />
+              </div>
+              
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-black dark:text-white truncate">
+                  {userName}
+                </p>
+                <p className="text-xs text-black/60 dark:text-white/60 truncate">
+                  {userRole}
+                </p>
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <motion.button
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => onChatUser(user.id)}
+                  className="w-9 h-9 rounded-full bg-black/5 dark:bg-white/5 flex items-center justify-center"
+                  data-testid={`button-chat-${user.id}`}
+                  aria-label={`Chat with ${userName}`}
+                >
+                  <MessageSquare className="w-4 h-4 text-black dark:text-white" />
+                </motion.button>
+                <motion.button
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => onCallUser(user.id)}
+                  className="w-9 h-9 rounded-full bg-black dark:bg-white flex items-center justify-center"
+                  data-testid={`button-call-${user.id}`}
+                  aria-label={`Call ${userName}`}
+                >
+                  <Phone className="w-4 h-4 text-white dark:text-black" />
+                </motion.button>
+              </div>
+            </div>
+          );
+        })}
+        
+        {filteredUsers.length > 5 && (
+          <div className="p-3 text-center">
+            <span className="text-xs text-black/60 dark:text-white/60">
+              +{filteredUsers.length - 5} more online
+            </span>
+          </div>
+        )}
+        
+        {filteredUsers.length === 0 && searchQuery && (
+          <div className="p-4 text-center">
+            <p className="text-sm text-black/60 dark:text-white/60">
+              No users found matching "{searchQuery}"
+            </p>
+          </div>
+        )}
+      </Card>
+    </section>
   );
 }
