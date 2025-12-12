@@ -87,7 +87,7 @@ export const OTPDeliveryService = {
       const { data, error } = await supabase.functions.invoke('send-email', {
         body: {
           to: email,
-          subject: `Your PACT Verification Code`,
+          subject: `PACT Verification Code | رمز التحقق من باكت`,
           type: 'otp',
           otp: otp,
           recipientName: recipientName || 'User',
@@ -161,7 +161,7 @@ export const OTPDeliveryService = {
       const { data, error } = await supabase.functions.invoke('send-email', {
         body: {
           to: email,
-          subject: `PACT Password Reset Code`,
+          subject: `PACT Password Reset Code | رمز إعادة تعيين كلمة المرور`,
           type: 'password-reset',
           otp: otp,
           recipientName: recipientName || 'User',
