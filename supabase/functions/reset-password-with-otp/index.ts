@@ -94,28 +94,35 @@ serve(async (req) => {
       )
     }
 
-    // Find the user by email
-    const { data: users, error: userLookupError } = await supabase.auth.admin.listUsers()
+    // Find the user by email using profiles table (more reliable than listUsers pagination)
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('email', email.toLowerCase())
+      .maybeSingle()
     
-    if (userLookupError) {
-      console.error('User lookup error:', userLookupError)
+    console.log('Profile lookup result:', { profile, profileError })
+
+    if (profileError) {
+      console.error('Profile lookup error:', profileError)
       return new Response(
         JSON.stringify({ success: false, error: 'Could not find user account.' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
       )
     }
 
-    const targetUser = users.users.find(u => u.email?.toLowerCase() === email.toLowerCase())
-    
-    if (!targetUser) {
+    if (!profile) {
+      console.error('No profile found for email:', email.toLowerCase())
       return new Response(
         JSON.stringify({ success: false, error: 'No account found with this email.' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
       )
     }
 
-    // Update the password
-    const { error: updateError } = await supabase.auth.admin.updateUserById(targetUser.id, {
+    console.log('Found user ID:', profile.id, 'Updating password...')
+
+    // Update the password using the user ID from profiles
+    const { error: updateError } = await supabase.auth.admin.updateUserById(profile.id, {
       password: newPassword
     })
 
@@ -141,7 +148,7 @@ serve(async (req) => {
         entity_name: email,
         description: `Password reset completed for ${email}`,
         success: true,
-        actor_id: targetUser.id,
+        actor_id: profile.id,
         actor_name: email,
         metadata: {
           method: 'otp_verification',

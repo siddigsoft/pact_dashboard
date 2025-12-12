@@ -1,0 +1,98 @@
+
+  {
+    "deployment_id": "abznugnirnlrqnnfkein_25ca6a81-ccf9-4cd8-92e7-0aa830abeef5_9",
+    "execution_id": "3f80fc26-b566-43a4-963f-43057a1f6d75",
+    "execution_time_ms": 794,
+    "function_id": "25ca6a81-ccf9-4cd8-92e7-0aa830abeef5",
+    "project_ref": "abznugnirnlrqnnfkein",
+    "request": [
+      {
+        "headers": [
+          {
+            "accept": "*/*",
+            "accept_encoding": "gzip, br",
+            "connection": "Keep-Alive",
+            "content_length": "78",
+            "cookie": null,
+            "host": "abznugnirnlrqnnfkein.supabase.co",
+            "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
+            "x_client_info": "supabase-js-web/2.81.1"
+          }
+        ],
+        "host": "abznugnirnlrqnnfkein.supabase.co",
+        "method": "POST",
+        "pathname": "/functions/v1/reset-password-with-otp",
+        "port": null,
+        "protocol": "https:",
+        "sb": [
+          {
+            "apikey": [],
+            "auth_user": null,
+            "jwt": [
+              {
+                "apikey": [
+                  {
+                    "invalid": null,
+                    "payload": [
+                      {
+                        "algorithm": "HS256",
+                        "expires_at": 2074711691,
+                        "issuer": "supabase",
+                        "key_id": null,
+                        "role": "anon",
+                        "session_id": null,
+                        "signature_prefix": "eAX9yr",
+                        "subject": null
+                      }
+                    ]
+                  }
+                ],
+                "authorization": [
+                  {
+                    "invalid": null,
+                    "payload": [
+                      {
+                        "algorithm": "HS256",
+                        "expires_at": 2074711691,
+                        "issuer": "supabase",
+                        "key_id": null,
+                        "role": "anon",
+                        "session_id": null,
+                        "signature_prefix": "eAX9yr",
+                        "subject": null
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "search": null,
+        "url": "https://abznugnirnlrqnnfkein.supabase.co/functions/v1/reset-password-with-otp"
+      }
+    ],
+    "response": [
+      {
+        "headers": [
+          {
+            "content_length": "81",
+            "content_type": "application/json",
+            "date": "Fri, 12 Dec 2025 20:12:11 GMT",
+            "sb_request_id": "019b1431-41f8-7849-92c7-52d2256eeed5",
+            "server": "cloudflare",
+            "vary": "Accept-Encoding",
+            "x_envoy_upstream_service_time": null,
+            "x_sb_compute_multiplier": null,
+            "x_sb_edge_region": "eu-west-3",
+            "x_sb_resource_multiplier": null,
+            "x_served_by": "supabase-edge-runtime"
+          }
+        ],
+        "status_code": 400
+      }
+    ],
+    "version": "9"
+  }
+]
+
