@@ -235,9 +235,33 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       .filter(r => r.status === 'pending')
       .reduce((sum, r) => sum + r.amount, 0);
 
-    const completedSiteVisits = transactions.filter(
+    const earningTransactions = transactions.filter(
       t => t.type === 'earning' || t.type === 'site_visit_fee'
-    ).length;
+    );
+    const completedSiteVisits = earningTransactions.length;
+
+    // Calculate weekly earnings using UTC to ensure consistency across all clients
+    // Week starts on Sunday (day 0) at 00:00:00 UTC
+    const now = new Date();
+    const utcNow = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+    const dayOfWeek = new Date(utcNow).getUTCDay(); // 0 = Sunday
+    const weekStartMs = utcNow - (dayOfWeek * 24 * 60 * 60 * 1000);
+    const weekStartDate = new Date(weekStartMs);
+    
+    const weeklyEarnings = earningTransactions
+      .filter(t => new Date(t.createdAt).getTime() >= weekStartMs)
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    // Calculate monthly earnings using UTC (first day of current month at 00:00:00 UTC)
+    const monthStartMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
+    const monthlyEarnings = earningTransactions
+      .filter(t => new Date(t.createdAt).getTime() >= monthStartMs)
+      .reduce((sum, t) => sum + t.amount, 0);
+
+    // Calculate weekly site visits count
+    const weeklySiteVisits = earningTransactions
+      .filter(t => new Date(t.createdAt).getTime() >= weekStartMs)
+      .length;
 
     setStats({
       totalEarned: wallet.totalEarned,
@@ -246,6 +270,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       currentBalance: wallet.balances.SDG || 0,
       totalTransactions: transactions.length,
       completedSiteVisits,
+      weeklyEarnings,
+      monthlyEarnings,
+      weeklySiteVisits,
     });
   };
 
@@ -990,13 +1017,66 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         created_by: currentUser?.id,
       });
 
-      if (transactionError) throw transactionError;
+      if (transactionError) {
+        // Handle duplicate constraint violation gracefully (error code 23505)
+        if (transactionError.code === '23505' && transactionError.message?.includes('site_visit')) {
+          console.warn(`[Wallet] Database constraint blocked duplicate fee for site visit ${siteVisitId}`);
+          // Log the blocked attempt for audit
+          try {
+            await supabase.from('audit_logs').insert({
+              action: 'duplicate_fee_blocked',
+              entity_type: 'wallet_transaction',
+              entity_id: siteVisitId,
+              user_id: currentUser?.id,
+              details: {
+                attempted_user_id: userId,
+                attempted_amount: amount,
+                reason: 'Database unique constraint prevented duplicate site visit fee',
+                timestamp: new Date().toISOString()
+              }
+            });
+          } catch (auditErr) {
+            console.warn('[Wallet] Failed to log audit entry:', auditErr);
+          }
+          toast({
+            title: 'Fee Already Recorded',
+            description: 'This site visit fee was already credited to the wallet.',
+          });
+          return; // Exit gracefully without throwing
+        }
+        throw transactionError;
+      }
 
       if (userId === currentUser?.id) {
         await refreshWallet();
         await refreshTransactions();
       }
     } catch (error: any) {
+      // Handle duplicate constraint violation in catch block as well
+      if (error?.code === '23505' && error?.message?.includes('site_visit')) {
+        console.warn(`[Wallet] Database constraint blocked duplicate fee for site visit ${siteVisitId}`);
+        // Log the blocked attempt for audit (same as immediate insert-error branch)
+        try {
+          await supabase.from('audit_logs').insert({
+            action: 'duplicate_fee_blocked',
+            entity_type: 'wallet_transaction',
+            entity_id: siteVisitId,
+            user_id: currentUser?.id,
+            details: {
+              attempted_user_id: userId,
+              reason: 'Database unique constraint prevented duplicate site visit fee (catch block)',
+              timestamp: new Date().toISOString()
+            }
+          });
+        } catch (auditErr) {
+          console.warn('[Wallet] Failed to log audit entry:', auditErr);
+        }
+        toast({
+          title: 'Fee Already Recorded',
+          description: 'This site visit fee was already credited to the wallet.',
+        });
+        return; // Exit gracefully
+      }
       console.error('Failed to add site visit fee:', error);
       throw error;
     } finally {
