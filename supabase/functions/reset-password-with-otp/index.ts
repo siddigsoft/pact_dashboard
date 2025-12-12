@@ -42,17 +42,35 @@ serve(async (req) => {
       auth: { autoRefreshToken: false, persistSession: false }
     })
 
-    // Verify the OTP first
+    console.log(`Password reset attempt for email: ${email.toLowerCase()}, OTP provided: ${otp}`)
+
+    // Verify the OTP first - try to find any token for this email
     const { data: storedToken, error: tokenError } = await supabase
       .from('password_reset_tokens')
       .select('*')
       .eq('email', email.toLowerCase())
-      .eq('used', false)
       .maybeSingle()
 
-    if (tokenError || !storedToken) {
+    console.log('Token lookup result:', { storedToken, tokenError })
+
+    if (tokenError) {
+      console.error('Token lookup error:', tokenError)
       return new Response(
-        JSON.stringify({ success: false, error: 'No valid reset code found. Please request a new one.' }),
+        JSON.stringify({ success: false, error: 'Database error. Please try again.' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      )
+    }
+
+    if (!storedToken) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'No reset code found for this email. Please request a new one.' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      )
+    }
+
+    if (storedToken.used) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'This reset code has already been used. Please request a new one.' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
       )
     }
