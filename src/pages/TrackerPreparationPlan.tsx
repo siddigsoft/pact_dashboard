@@ -13,6 +13,10 @@ import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/toast';
 import { useAppContext } from '@/context/AppContext';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { useMMP } from '@/context/mmp/MMPContext';
+import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
+import { useProjectContext } from '@/context/project/ProjectContext';
+import { fetchHubs } from '@/services/mmpActions';
 import { supabase } from '@/integrations/supabase/client';
 import { sudanStates } from '@/data/sudanStates';
 import { format, parseISO } from 'date-fns';
@@ -79,13 +83,15 @@ export default function TrackerPreparationPlan() {
   const { currentUser } = useAppContext();
   const { toast } = useToast();
   const { hasAnyRole } = useAuthorization();
+  const { mmpFiles, loading: mmpLoading } = useMMP();
+  const { siteVisits, loading: siteVisitsLoading } = useSiteVisitContext();
+  const { projects, loading: projectsLoading } = useProjectContext();
   
   const hasAccess = hasAnyRole(['admin', 'Admin', 'ict', 'ICT']);
   
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
   const [lineItems, setLineItems] = useState<TrackerLineItem[]>([]);
-  const [projects, setProjects] = useState<any[]>([]);
   const [hubs, setHubs] = useState<any[]>([]);
   const [savedConfigs, setSavedConfigs] = useState<TrackerPlanConfig[]>([]);
   
@@ -98,12 +104,11 @@ export default function TrackerPreparationPlan() {
   });
   
   const filtersRef = useRef(filters);
-  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   
   useEffect(() => {
     filtersRef.current = filters;
   }, [filters]);
-  
+
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [configName, setConfigName] = useState('');
   const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
@@ -117,51 +122,10 @@ export default function TrackerPreparationPlan() {
   }, [hasAccess]);
 
   useEffect(() => {
-    if (hasAccess && filters.month && filters.year) {
+    if (hasAccess && filters.month && filters.year && !mmpLoading && !siteVisitsLoading) {
       loadTrackerData();
     }
-  }, [filters, hasAccess]);
-
-  useEffect(() => {
-    if (!hasAccess) return;
-    
-    if (channelRef.current) {
-      supabase.removeChannel(channelRef.current);
-    }
-    
-    const channel = supabase
-      .channel('tracker-realtime')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'mmp_site_entries' },
-        (payload) => {
-          console.log('[Tracker] MMP entry changed:', payload.eventType);
-          if (filtersRef.current.month && filtersRef.current.year) {
-            loadTrackerData();
-          }
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'site_visits' },
-        (payload) => {
-          console.log('[Tracker] Site visit changed:', payload.eventType);
-          if (filtersRef.current.month && filtersRef.current.year) {
-            loadTrackerData();
-          }
-        }
-      )
-      .subscribe();
-    
-    channelRef.current = channel;
-
-    return () => {
-      if (channelRef.current) {
-        supabase.removeChannel(channelRef.current);
-        channelRef.current = null;
-      }
-    };
-  }, [hasAccess]);
+  }, [filters, hasAccess, mmpFiles, siteVisits, mmpLoading, siteVisitsLoading]);
   
   if (!hasAccess) {
     return (
@@ -182,14 +146,12 @@ export default function TrackerPreparationPlan() {
 
   const loadInitialData = async () => {
     try {
-      const [projectsRes, hubsRes, configsRes] = await Promise.all([
-        supabase.from('projects').select('*').order('name'),
-        supabase.from('hubs').select('*').order('name'),
+      const [hubsData, configsRes] = await Promise.all([
+        fetchHubs(),
         supabase.from('tracker_plan_configs').select('*').order('created_at', { ascending: false })
       ]);
 
-      if (projectsRes.data) setProjects(projectsRes.data);
-      if (hubsRes.data) setHubs(hubsRes.data);
+      setHubs(hubsData);
       if (configsRes.data) setSavedConfigs(configsRes.data as TrackerPlanConfig[]);
     } catch (err) {
       console.error('Error loading initial data:', err);
@@ -200,21 +162,15 @@ export default function TrackerPreparationPlan() {
     const currentFilters = filtersRef.current;
     setLoading(true);
     try {
-      let filesQuery = supabase
-        .from('mmp_files')
-        .select('id')
-        .eq('month', currentFilters.month)
-        .eq('year', currentFilters.year);
+      // Filter MMP files from context by month, year, and project
+      const filteredMmpFiles = (mmpFiles || []).filter((f: any) => {
+        const matchesMonth = f.month === currentFilters.month;
+        const matchesYear = f.year === currentFilters.year;
+        const matchesProject = !currentFilters.projectId || f.project_id === currentFilters.projectId;
+        return matchesMonth && matchesYear && matchesProject;
+      });
       
-      if (currentFilters.projectId) {
-        filesQuery = filesQuery.eq('project_id', currentFilters.projectId);
-      }
-      
-      const { data: mmpFiles, error: filesError } = await filesQuery;
-      
-      if (filesError) throw filesError;
-      
-      const fileIds = (mmpFiles || []).map((f: any) => f.id);
+      const fileIds = filteredMmpFiles.map((f: any) => f.id);
       
       if (fileIds.length === 0) {
         setLineItems([]);
@@ -222,58 +178,48 @@ export default function TrackerPreparationPlan() {
         return;
       }
       
-      let mmpQuery = supabase
-        .from('mmp_site_entries')
-        .select('*')
-        .in('mmp_file_id', fileIds)
-        .not('verified_at', 'is', null);
-
+      // Get site entries from MMP context (they're already loaded with MMP files)
+      let mmpEntries: any[] = [];
+      filteredMmpFiles.forEach((mmp: any) => {
+        if (Array.isArray(mmp.siteEntries)) {
+          mmpEntries.push(...mmp.siteEntries);
+        }
+      });
+      
+      // Filter by verified_at (must not be null)
+      mmpEntries = mmpEntries.filter((e: any) => e.verified_at != null);
+      
+      // Apply additional filters
       if (currentFilters.hubId) {
-        mmpQuery = mmpQuery.eq('hub_office', currentFilters.hubId);
+        mmpEntries = mmpEntries.filter((e: any) => e.hub_office === currentFilters.hubId || e.hubOffice === currentFilters.hubId);
       }
       if (currentFilters.states.length > 0) {
-        mmpQuery = mmpQuery.in('state', currentFilters.states);
+        mmpEntries = mmpEntries.filter((e: any) => 
+          currentFilters.states.includes(e.state)
+        );
       }
 
-      const { data: mmpEntries, error: mmpError } = await mmpQuery;
-      if (mmpError) throw mmpError;
+      const mmpIds = mmpEntries.map((e: any) => e.id).filter(Boolean);
+      const registryIds = mmpEntries.map((e: any) => e.registry_site_id).filter(Boolean);
 
-      const mmpIds = (mmpEntries || []).map((e: any) => e.id).filter(Boolean);
-      const registryIds = (mmpEntries || []).map((e: any) => e.registry_site_id).filter(Boolean);
-
-      let siteVisits: any[] = [];
+      // Filter site visits from context
+      let filteredSiteVisits: any[] = (siteVisits || []).filter((sv: any) => {
+        return (mmpIds.length > 0 && sv.mmp_site_entry_id && mmpIds.includes(sv.mmp_site_entry_id)) ||
+               (registryIds.length > 0 && sv.registry_site_id && registryIds.includes(sv.registry_site_id));
+      });
       
-      if (mmpIds.length > 0) {
-        const { data: svByMmpId, error: svMmpError } = await supabase
-          .from('site_visits')
-          .select('*')
-          .in('mmp_site_entry_id', mmpIds);
-        
-        if (svMmpError) throw svMmpError;
-        if (svByMmpId) siteVisits.push(...svByMmpId);
-      }
-      
-      if (registryIds.length > 0) {
-        const { data: svByRegistry, error: svRegError } = await supabase
-          .from('site_visits')
-          .select('*')
-          .in('registry_site_id', registryIds);
-        
-        if (svRegError) throw svRegError;
-        if (svByRegistry) {
-          const existingIds = new Set(siteVisits.map(sv => sv.id));
-          svByRegistry.forEach(sv => {
-            if (!existingIds.has(sv.id)) {
-              siteVisits.push(sv);
-            }
-          });
-        }
-      }
+      // Remove duplicates
+      const seenIds = new Set<string>();
+      filteredSiteVisits = filteredSiteVisits.filter(sv => {
+        if (seenIds.has(sv.id)) return false;
+        seenIds.add(sv.id);
+        return true;
+      });
 
       const siteVisitsByMmpEntry = new Map<string, any[]>();
       const siteVisitsByRegistry = new Map<string, any[]>();
       
-      siteVisits.forEach(sv => {
+      filteredSiteVisits.forEach(sv => {
         if (sv.mmp_site_entry_id) {
           const existing = siteVisitsByMmpEntry.get(sv.mmp_site_entry_id) || [];
           existing.push(sv);
