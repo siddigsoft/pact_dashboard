@@ -1,9 +1,9 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
+import { useMMP } from '@/context/mmp/MMPContext';
 
 interface ForwardedItem {
   id: string;
@@ -17,52 +17,34 @@ interface ForwardedItem {
 
 const ForwardedMMPsCard: React.FC = () => {
   const { currentUser } = useAppContext();
-  const [items, setItems] = React.useState<ForwardedItem[]>([]);
-  const [loading, setLoading] = React.useState(false);
+  const { mmpFiles, loading } = useMMP();
 
-  React.useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      if (!currentUser?.id) return;
-      setLoading(true);
-      try {
-        // Try with join first
-        const { data, error } = await supabase
-          .from('mmp_files')
-          .select(`
-            id, name, mmp_id, status, workflow, uploaded_at,
-            project:projects(name)
-          `)
-          .contains('workflow', { forwardedToFomIds: [currentUser.id] })
-          .order('created_at', { ascending: false })
-          .limit(10);
-        if (!cancelled) {
-          if (error) {
-            // Fallback query without join - don't log RLS errors
-            const { data: fbData, error: fbError } = await supabase
-              .from('mmp_files')
-              .select('*')
-              .contains('workflow', { forwardedToFomIds: [currentUser.id] })
-              .order('created_at', { ascending: false })
-              .limit(10);
-            if (fbError) {
-              // Silently fail - user may not have access to this data
-              setItems([]);
-            } else {
-              setItems((fbData || []) as any);
-            }
-          } else {
-            setItems((data || []) as any);
-          }
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-    load();
-    const refetch = setInterval(load, 60000);
-    return () => { cancelled = true; clearInterval(refetch); };
-  }, [currentUser?.id]);
+  // Filter forwarded MMPs from context data
+  const items = useMemo(() => {
+    if (!currentUser?.id || !mmpFiles) return [];
+    
+    return mmpFiles
+      .filter((mmp: any) => {
+        const workflow = mmp.workflow || {};
+        const forwardedIds = workflow.forwardedToFomIds || [];
+        return Array.isArray(forwardedIds) && forwardedIds.includes(currentUser.id);
+      })
+      .map((mmp: any) => ({
+        id: mmp.id,
+        name: mmp.name,
+        mmp_id: mmp.mmpId || mmp.mmp_id,
+        status: mmp.status,
+        workflow: mmp.workflow,
+        uploaded_at: mmp.uploadedAt || mmp.uploaded_at,
+        project: mmp.projectName ? { name: mmp.projectName } : (mmp.project || null),
+      }))
+      .sort((a: any, b: any) => {
+        const aDate = a.uploaded_at || a.workflow?.forwardedAt || '';
+        const bDate = b.uploaded_at || b.workflow?.forwardedAt || '';
+        return bDate.localeCompare(aDate);
+      })
+      .slice(0, 10);
+  }, [mmpFiles, currentUser?.id]);
 
   return (
     <Card className="p-0 overflow-hidden">
