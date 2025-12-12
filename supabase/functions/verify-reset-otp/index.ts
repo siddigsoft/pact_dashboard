@@ -53,7 +53,8 @@ serve(async (req) => {
       }
 
       const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString()
-      const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString()
+      // Extended to 1 hour to give users enough time to complete the reset
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString()
 
       // First delete any existing tokens for this email to avoid duplicates
       const { error: deleteError } = await supabase
@@ -141,7 +142,7 @@ serve(async (req) => {
                 <div style="background-color: #f0f4f8; border-radius: 8px; padding: 20px; text-align: center; margin: 20px 0;">
                   <span style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #1a1a2e;">${generatedOtp}</span>
                 </div>
-                <p style="color: #666; font-size: 14px; line-height: 1.5;">This code expires in 15 minutes. If you didn't request this reset, please ignore this email.</p>
+                <p style="color: #666; font-size: 14px; line-height: 1.5;">This code expires in 1 hour. If you didn't request this reset, please ignore this email.</p>
                 <div style="text-align: center; margin: 25px 0;">
                   <a href="${resetLink}" style="display: inline-block; padding: 14px 30px; background-color: #9b87f5; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
                     Reset Password
@@ -164,7 +165,7 @@ serve(async (req) => {
             from: `"PACT Workflow" <${smtpUser}>`,
             to: email,
             subject: 'PACT Password Reset Code',
-            text: `Hello ${recipientName},\n\nYour password reset code is: ${generatedOtp}\n\nThis code expires in 15 minutes.\n\nClick here to reset your password: ${resetLink}\n\n- PACT Workflow Platform`,
+            text: `Hello ${recipientName},\n\nYour password reset code is: ${generatedOtp}\n\nThis code expires in 1 hour.\n\nClick here to reset your password: ${resetLink}\n\n- PACT Workflow Platform`,
             html: emailHtml,
           }
 
