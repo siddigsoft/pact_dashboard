@@ -4,8 +4,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Card } from '@/components/ui/card';
-import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useMMP } from '@/context/mmp/MMPContext';
+import { useAppContext } from '@/context/AppContext';
+import { fetchCoordinatorUsers, insertNotifications, forwardSitesToCoordinator } from '@/services/mmpActions';
 
 interface ForwardToCoordinatorsDialogProps {
   open: boolean;
@@ -53,6 +55,8 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
   const [search, setSearch] = React.useState('');
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
   const { toast } = useToast();
+  const { currentUser } = useAppContext();
+  const { refreshMMPFiles } = useMMP();
 
   // For grouped sites, track selections per group
   const [groupSelections, setGroupSelections] = React.useState<Record<string, Set<string>>>({});
@@ -63,19 +67,8 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
     const load = async () => {
       setLoading(true);
       try {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('id, full_name, username, email, hub_id, state_id, locality_id')
-          .eq('role', 'coordinator')
-          .order('full_name', { ascending: true });
-        if (!cancelled) {
-          if (error) {
-            console.error('Failed to load Coordinators', error);
-            setCoordinators([]);
-          } else {
-            setCoordinators(data as any[] as CoordinatorUser[]);
-          }
-        }
+        const data = await fetchCoordinatorUsers();
+        if (!cancelled) setCoordinators(data as CoordinatorUser[]);
       } finally {
         if (!cancelled) setLoading(false);
       }
