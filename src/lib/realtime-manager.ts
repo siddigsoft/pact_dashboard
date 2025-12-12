@@ -1,5 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import { RealtimeChannel, RealtimePostgresChangesPayload } from '@supabase/supabase-js';
+import { realtimeHealth } from './realtime-health';
 
 export type ChangeEventType = 'INSERT' | 'UPDATE' | 'DELETE' | '*';
 
@@ -29,8 +30,17 @@ interface ManagedSubscription {
   handlers: Map<string, Set<HandlerEntry>>;
 }
 
-const RECONNECT_DELAY_MS = 2000;
-const MAX_RECONNECT_ATTEMPTS = 5;
+const RECONNECT_DELAY_MS = 1000;
+const MAX_RECONNECT_DELAY_MS = 60000;
+const MAX_RECONNECT_ATTEMPTS = 10;
+const JITTER_FACTOR = 0.3;
+
+function getBackoffDelay(attempt: number): number {
+  const baseDelay = RECONNECT_DELAY_MS * Math.pow(2, attempt);
+  const cappedDelay = Math.min(baseDelay, MAX_RECONNECT_DELAY_MS);
+  const jitter = cappedDelay * JITTER_FACTOR * (Math.random() * 2 - 1);
+  return Math.max(RECONNECT_DELAY_MS, cappedDelay + jitter);
+}
 
 function getConfigKey(config: SubscriptionConfig): string {
   return `${config.schema || 'public'}.${config.table}.${config.event || '*'}.${config.filter || ''}`;
@@ -83,20 +93,28 @@ class RealtimeSubscriptionManager {
     const attempts = this.reconnectAttempts.get(key) || 0;
     if (attempts >= MAX_RECONNECT_ATTEMPTS) {
       console.error(`[RealtimeManager] Max reconnect attempts reached for ${key}`);
+      realtimeHealth.setMaxRetriesReached(true);
+      realtimeHealth.updateChannelStatus(key, 'error', 'Max reconnection attempts exhausted');
       return;
     }
 
-    const delay = RECONNECT_DELAY_MS * Math.pow(2, attempts);
+    const delay = getBackoffDelay(attempts);
     this.reconnectAttempts.set(key, attempts + 1);
+    
+    realtimeHealth.updateChannelStatus(key, 'reconnecting');
+    console.log(`[RealtimeManager] Scheduling reconnect for ${key} in ${Math.round(delay)}ms (attempt ${attempts + 1}/${MAX_RECONNECT_ATTEMPTS})`);
 
     setTimeout(async () => {
       if (!this.isOnline) return;
       try {
         await sub.channel.subscribe();
         this.reconnectAttempts.set(key, 0);
+        realtimeHealth.updateChannelStatus(key, 'connected');
         console.log(`[RealtimeManager] Reconnected ${key}`);
       } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : 'Unknown error';
         console.error(`[RealtimeManager] Reconnect failed for ${key}:`, error);
+        realtimeHealth.updateChannelStatus(key, 'error', errorMsg);
         this.scheduleReconnect(key, sub);
       }
     }, delay);
@@ -153,15 +171,21 @@ class RealtimeSubscriptionManager {
         handlers: new Map(),
       };
 
+      realtimeHealth.registerChannel(channelKey);
+      
       channel.subscribe((status) => {
         if (status === 'SUBSCRIBED') {
           console.log(`[RealtimeManager] Subscribed to ${channelKey}`);
           this.reconnectAttempts.set(channelKey, 0);
+          realtimeHealth.updateChannelStatus(channelKey, 'connected');
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
           console.error(`[RealtimeManager] Channel error for ${channelKey}: ${status}`);
+          realtimeHealth.updateChannelStatus(channelKey, 'error', status);
           if (this.isOnline) {
             this.scheduleReconnect(channelKey, managedSub!);
           }
+        } else if (status === 'CLOSED') {
+          realtimeHealth.updateChannelStatus(channelKey, 'disconnected');
         }
       });
 
@@ -214,6 +238,8 @@ class RealtimeSubscriptionManager {
     const managedSub = this.subscriptions.get(channelKey);
     if (!managedSub) return;
 
+    realtimeHealth.recordEvent(channelKey);
+    
     const entries = managedSub.handlers.get(table);
     if (entries) {
       entries.forEach((entry) => entry.handler(payload));
@@ -240,6 +266,7 @@ class RealtimeSubscriptionManager {
       supabase.removeChannel(managedSub.channel);
       this.subscriptions.delete(channelKey);
       this.reconnectAttempts.delete(channelKey);
+      realtimeHealth.unregisterChannel(channelKey);
     }
   }
 
