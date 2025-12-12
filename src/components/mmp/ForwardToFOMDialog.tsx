@@ -3,8 +3,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
-import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useMMP } from '@/context/mmp/MMPContext';
+import { useAppContext } from '@/context/AppContext';
+import { appendForwardedToFom, fetchFomUsers, insertNotifications } from '@/services/mmpActions';
 
 interface ForwardToFOMDialogProps {
   open: boolean;
@@ -30,6 +32,8 @@ export const ForwardToFOMDialog: React.FC<ForwardToFOMDialogProps> = ({ open, on
   const [search, setSearch] = React.useState('');
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
   const { toast } = useToast();
+  const { refreshMMPFiles } = useMMP();
+  const { currentUser } = useAppContext();
 
   React.useEffect(() => {
     if (!open) return;
@@ -37,19 +41,8 @@ export const ForwardToFOMDialog: React.FC<ForwardToFOMDialogProps> = ({ open, on
     const load = async () => {
       setLoading(true);
       try {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('id, full_name, username, email, hub_id, state_id, locality_id')
-          .eq('role', 'fom')
-          .order('full_name', { ascending: true });
-        if (!cancelled) {
-          if (error) {
-            console.error('Failed to load FOMs', error);
-            setFoms([]);
-          } else {
-            setFoms(data as any[] as FOMUser[]);
-          }
-        }
+        const data = await fetchFomUsers();
+        if (!cancelled) setFoms(data as FOMUser[]);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -91,38 +84,24 @@ export const ForwardToFOMDialog: React.FC<ForwardToFOMDialogProps> = ({ open, on
         related_entity_id: mmpId,
         related_entity_type: 'mmpFile'
       }));
-      const { error: nErr } = await supabase.from('notifications').insert(rows);
-      if (nErr) throw nErr;
+      await insertNotifications(rows);
 
       // Notify the forwarder themself
-      try {
-        const { data: auth } = await supabase.auth.getUser();
-        const forwarderId = auth?.user?.id;
-        if (forwarderId) {
-          await supabase.from('notifications').insert({
-            user_id: forwarderId,
-            title: 'MMP forwarded',
-            message: `You forwarded ${mmpName || 'MMP'} to ${ids.length} FOM(s)`,
-            type: 'success',
-            link: `/mmp/${mmpId}`,
-            related_entity_id: mmpId,
-            related_entity_type: 'mmpFile'
-          });
-        }
-      } catch {}
+      if (currentUser?.id) {
+        await insertNotifications([{
+          user_id: currentUser.id,
+          title: 'MMP forwarded',
+          message: `You forwarded ${mmpName || 'MMP'} to ${ids.length} FOM(s)`,
+          type: 'success',
+          link: `/mmp/${mmpId}`,
+          related_entity_id: mmpId,
+          related_entity_type: 'mmpFile'
+        }]);
+      }
 
       // Update workflow field
-      const { data: row } = await supabase
-        .from('mmp_files')
-        .select('workflow')
-        .eq('id', mmpId)
-        .single();
-      const now = new Date().toISOString();
-      const wf = (row?.workflow as any) || {};
-      const list: string[] = Array.isArray(wf.forwardedToFomIds) ? wf.forwardedToFomIds : [];
-      const unique = Array.from(new Set([...list, ...ids]));
-      const next = { ...wf, currentStage: 'awaitingPermits', forwardedToFomIds: unique, forwardedAt: now, lastUpdated: now };
-      await supabase.from('mmp_files').update({ workflow: next }).eq('id', mmpId);
+      await appendForwardedToFom(mmpId, ids);
+      await refreshMMPFiles();
 
       toast({ title: 'MMP forwarded', description: `Forwarded to ${ids.length} FOM(s)` });
       try { onForwarded?.(ids); } catch {}

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { MMPFile } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 import { MMPContextType } from './types';
@@ -348,7 +348,7 @@ export const useMMPProvider = () => {
     }).eq('id', id);
   };
 
-  const refreshMMPFiles = async () => {
+  const refreshMMPFiles = useCallback(async () => {
     try {
       setLoading(true);
       
@@ -386,7 +386,7 @@ export const useMMPProvider = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     refreshMMPFiles();

@@ -10,6 +10,7 @@ import autoTable from 'jspdf-autotable';
 import { useAuthorization } from '@/hooks/use-authorization';
 import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '@/context/user/UserContext';
+import { useMMP } from '@/context/mmp/MMPContext';
 import { cn } from '@/lib/utils';
 import {
   FileText,
@@ -45,10 +46,36 @@ const FieldOperationManagerPage = () => {
   const { currentUser } = useUser();
   const { hasAnyRole } = useAuthorization();
   const navigate = useNavigate();
+  const { mmpFiles: contextMmpFiles, loading: contextLoading, refreshMMPFiles } = useMMP();
   const [mmpFiles, setMmpFiles] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [forwardedLoading, setForwardedLoading] = useState(false);
   const [forwardedMmpFiles, setForwardedMmpFiles] = useState<any[]>([]);
+  
+  // Sync context data to local state for transformation
+  useEffect(() => {
+    if (contextMmpFiles && contextMmpFiles.length > 0) {
+      const mapped = contextMmpFiles.map((mmp: any) => ({
+        ...mmp,
+        sites: Array.isArray(mmp.siteEntries) ? mmp.siteEntries : [],
+        uploadedAt: mmp.uploadedAt || mmp.uploaded_at,
+        uploadedBy: mmp.uploadedBy || mmp.uploaded_by || 'Unknown',
+        hub: mmp.hub,
+        month: mmp.month,
+        projectId: mmp.projectId || mmp.project_id,
+        projectName: mmp.projectName || mmp.project?.name || mmp.project_name,
+        mmpId: mmp.mmpId || mmp.mmp_id || mmp.id,
+        status: mmp.status,
+        siteCount: typeof mmp.entries === 'number' ? mmp.entries : (Array.isArray(mmp.siteEntries) ? mmp.siteEntries.length : 0),
+        logs: mmp.workflow?.logs || [],
+      }));
+      setMmpFiles(mapped);
+      setLoading(contextLoading);
+    } else if (!contextLoading) {
+      setMmpFiles([]);
+      setLoading(false);
+    }
+  }, [contextMmpFiles, contextLoading]);
   const [selectedCategory, setSelectedCategory] = useState<'all' | 'approved' | 'pending' | 'archived'>('all');
   const [search, setSearch] = useState('');
   const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
@@ -609,264 +636,30 @@ const FieldOperationManagerPage = () => {
     URL.revokeObjectURL(url);
   };
 
-  // Add a reusable MultiSelectDropdown component for checkboxes in dropdowns
-  const MultiSelectDropdown = ({
-    label,
-    options,
-    selected,
-    setSelected,
-    allLabel = 'All',
-  }: {
-    label: string;
-    options: string[];
-    selected: string[];
-    setSelected: (v: string[]) => void;
-    allLabel?: string;
-  }) => {
-    const [open, setOpen] = useState(false);
-    const allChecked = options.length > 0 && selected.length === options.length;
-    const toggleAll = () => {
-      setSelected(allChecked ? [] : options);
-    };
-    const toggleOption = (opt: string) => {
-      setSelected(selected.includes(opt) ? selected.filter(o => o !== opt) : [...selected, opt]);
-    };
-    return (
-      <div className="relative w-full">
-        <button
-          type="button"
-          className="w-full px-3 py-2 rounded border border-blue-200 dark:border-blue-800 bg-white dark:bg-blue-950 text-blue-900 dark:text-blue-100 flex items-center justify-between"
-          onClick={() => setOpen(v => !v)}
-        >
-          <span>
-            {selected.length === 0
-              ? `Select ${label}`
-              : allChecked
-                ? `${allLabel} (${options.length})`
-                : selected.join(', ')}
-          </span>
-          <span className="ml-2">{open ? '▲' : '▼'}</span>
-        </button>
-        {open && (
-          <div className="absolute z-10 mt-1 w-full max-h-60 overflow-auto bg-white dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg shadow-lg">
-            <label className="flex items-center px-4 py-2 hover:bg-blue-50 dark:hover:bg-blue-900 cursor-pointer font-semibold">
-              <input
-                type="checkbox"
-                checked={allChecked}
-                onChange={toggleAll}
-                className="mr-2"
-              />
-              <span>{allLabel}</span>
-            </label>
-            {options.map(opt => (
-              <label
-                key={opt}
-                className="flex items-center px-4 py-2 hover:bg-blue-50 dark:hover:bg-blue-900 cursor-pointer"
-              >
-                <input
-                  type="checkbox"
-                  checked={selected.includes(opt)}
-                  onChange={() => toggleOption(opt)}
-                  className="mr-2"
-                />
-                <span>{opt}</span>
-              </label>
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  const fetchMmpFiles = useCallback(() => {
-    setLoading(true);
-    supabase
-      .from('mmp_files')
-      .select(`*, project:projects(id, name, project_code)`)
-      .order('created_at', { ascending: false })
-      .then(({ data, error }) => {
-        if (error) {
-          supabase.from('mmp_files').select('*').order('created_at', { ascending: false })
-            .then(({ data: fbData, error: fbError }) => {
-              if (fbError) { setLoading(false); return; }
-              const mappedFb = (fbData || []).map((mmp: any) => ({
-                ...mmp,
-                sites: Array.isArray(mmp.site_entries) ? mmp.site_entries : [],
-                uploadedAt: mmp.uploaded_at,
-                uploadedBy: mmp.uploaded_by || 'Unknown',
-                hub: mmp.hub,
-                month: mmp.month,
-                projectId: mmp.project_id,
-                projectName: mmp.project_name || undefined,
-                mmpId: mmp.mmp_id || mmp.id,
-                status: mmp.status,
-                siteCount: typeof mmp.entries === 'number' ? mmp.entries : (Array.isArray(mmp.site_entries) ? mmp.site_entries.length : 0),
-                logs: mmp.workflow?.logs || [],
-              }));
-              setMmpFiles(mappedFb);
-              setLoading(false);
-            });
-          return;
-        }
-        const mapped = (data || []).map((mmp: any) => ({
-          ...mmp,
-          sites: Array.isArray(mmp.site_entries) ? mmp.site_entries : [],
-          uploadedAt: mmp.uploaded_at,
-          uploadedBy: mmp.uploaded_by || 'Unknown',
-          hub: mmp.hub,
-          month: mmp.month,
-          projectId: mmp.project_id,
-          projectName: mmp.project?.name || mmp.project_name,
-          mmpId: mmp.mmp_id || mmp.id,
-          status: mmp.status,
-          siteCount: typeof mmp.entries === 'number' ? mmp.entries : (Array.isArray(mmp.site_entries) ? mmp.site_entries.length : 0),
-          logs: mmp.workflow?.logs || [],
-        }));
-        setMmpFiles(mapped);
-        setLoading(false);
-      });
-  }, []);
+  // Initial load - context handles this, but we can trigger a refresh if needed
   useEffect(() => {
-    fetchMmpFiles();
+    if (contextMmpFiles.length === 0 && !contextLoading) {
+      refreshMMPFiles();
+    }
+  }, [contextMmpFiles.length, contextLoading, refreshMMPFiles]);
 
-    // Set up real-time subscription for mmp_files
-    const mmpFilesChannel = supabase
-      .channel('mmp-files-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'mmp_files'
-        },
-        (payload) => {
-          console.log('MMP files change detected:', payload);
-          fetchMmpFiles();
-        }
-      )
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          console.log('✅ MMP files real-time subscription active');
-        } else if (status === 'CHANNEL_ERROR') {
-          console.error('❌ MMP files real-time subscription error - Check if replication is enabled in Supabase');
-        } else if (status === 'TIMED_OUT') {
-          console.warn('⏱️ MMP files real-time subscription timed out');
-        } else {
-          console.log('MMP files subscription status:', status);
-        }
-      });
-
-    // Cleanup subscription on unmount
-    return () => {
-      supabase.removeChannel(mmpFilesChannel);
-    };
-  }, [fetchMmpFiles]);
-
-  // Load MMPs explicitly forwarded to the current FOM
-  const loadForwarded = useCallback(async () => {
+  // Filter forwarded files from context data
+  useEffect(() => {
     if (!currentUser?.id) {
       setForwardedMmpFiles([]);
       return;
     }
+    
     setForwardedLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('mmp_files')
-        .select(`
-          *,
-          project:projects(
-            id,
-            name,
-            project_code
-          )
-        `)
-        .contains('workflow', { forwardedToFomIds: [currentUser.id] })
-        .order('created_at', { ascending: false });
-      if (error) {
-        // Fallback query without join - don't log RLS errors
-        const { data: fbData, error: fbErr } = await supabase
-          .from('mmp_files')
-          .select('*')
-          .contains('workflow', { forwardedToFomIds: [currentUser.id] })
-          .order('created_at', { ascending: false });
-        if (fbErr) {
-          // Silently fail - user may not have access to this data
-          setForwardedMmpFiles([]);
-        } else {
-          const mappedFb = (fbData || []).map((mmp: any) => ({
-            ...mmp,
-            sites: Array.isArray(mmp.site_entries) ? mmp.site_entries : [],
-            uploadedAt: mmp.uploaded_at,
-            uploadedBy: mmp.uploaded_by || 'Unknown',
-            hub: mmp.hub,
-            month: mmp.month,
-            projectId: mmp.project_id,
-            projectName: mmp.project_name || undefined,
-            mmpId: mmp.mmp_id || mmp.id,
-            status: mmp.status,
-            siteCount: typeof mmp.entries === 'number' ? mmp.entries : (Array.isArray(mmp.site_entries) ? mmp.site_entries.length : 0),
-            logs: mmp.workflow?.logs || [],
-          }));
-          setForwardedMmpFiles(mappedFb);
-        }
-      } else {
-        const mapped = (data || []).map((mmp: any) => ({
-          ...mmp,
-          sites: Array.isArray(mmp.site_entries) ? mmp.site_entries : [],
-          uploadedAt: mmp.uploaded_at,
-          uploadedBy: mmp.uploaded_by || 'Unknown',
-          hub: mmp.hub,
-          month: mmp.month,
-          projectId: mmp.project_id,
-          projectName: mmp.project?.name || mmp.project_name,
-          mmpId: mmp.mmp_id || mmp.id,
-          status: mmp.status,
-          siteCount: typeof mmp.entries === 'number' ? mmp.entries : (Array.isArray(mmp.site_entries) ? mmp.site_entries.length : 0),
-          logs: mmp.workflow?.logs || [],
-        }));
-        setForwardedMmpFiles(mapped);
-      }
-    } finally {
-      setForwardedLoading(false);
-    }
-  }, [currentUser?.id]);
-
-  useEffect(() => {
-    loadForwarded();
-
-    // Set up real-time subscription for forwarded MMP files
-    // Note: This will trigger on any mmp_files change, and loadForwarded will filter appropriately
-    const forwardedChannel = supabase
-      .channel('forwarded-mmp-files-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'mmp_files'
-        },
-        (payload) => {
-          console.log('Forwarded MMP files change detected:', payload);
-          loadForwarded();
-        }
-      )
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          console.log('✅ Forwarded MMP files real-time subscription active');
-        } else if (status === 'CHANNEL_ERROR') {
-          console.error('❌ Forwarded MMP files real-time subscription error - Check if replication is enabled in Supabase');
-        } else if (status === 'TIMED_OUT') {
-          console.warn('⏱️ Forwarded MMP files real-time subscription timed out');
-        } else {
-          console.log('Forwarded MMP files subscription status:', status);
-        }
-      });
-
-    // Cleanup subscription on unmount
-    return () => {
-      supabase.removeChannel(forwardedChannel);
-    };
-  }, [loadForwarded]);
+    const forwarded = mmpFiles.filter((mmp: any) => {
+      const workflow = mmp.workflow || {};
+      const forwardedIds = workflow.forwardedToFomIds || [];
+      return Array.isArray(forwardedIds) && forwardedIds.includes(currentUser.id);
+    });
+    
+    setForwardedMmpFiles(forwarded);
+    setForwardedLoading(false);
+  }, [mmpFiles, currentUser?.id]);
 
   const StatCard = ({ icon: Icon, label, value, subtext }: { icon: any; label: string; value: number | string; subtext?: string }) => (
     <motion.div

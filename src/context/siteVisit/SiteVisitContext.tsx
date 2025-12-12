@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { SiteVisit, User } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '../user/UserContext';
@@ -12,6 +12,9 @@ import { supabase } from '@/integrations/supabase/client';
 
 const SiteVisitContext = createContext<SiteVisitContextType | undefined>(undefined);
 
+// Module-level Set to track in-flight site visit completions and prevent duplicate wallet credits
+const pendingCompletions = new Set<string>();
+
 export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [appSiteVisits, setAppSiteVisits] = useState<SiteVisit[]>([]);
   const [loading, setLoading] = useState(true);
@@ -19,7 +22,7 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const { currentUser, users, updateUser } = useUser();
   const { addSiteVisitFeeToWallet } = useWallet();
   
-  const refreshSiteVisits = async () => {
+  const refreshSiteVisits = useCallback(async () => {
     try {
       setLoading(true);
       const visits = await fetchSiteVisits();
@@ -34,11 +37,11 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
 
   useEffect(() => {
     refreshSiteVisits();
-  }, [toast]);
+  }, [refreshSiteVisits]);
 
   useEffect(() => {
     const channel = supabase
@@ -68,7 +71,7 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [refreshSiteVisits]);
 
   const createSiteVisit = async (siteVisitData: Partial<SiteVisit>): Promise<string | undefined> => {
     try {
@@ -503,8 +506,22 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     siteVisitId: string, 
     data: { notes?: string; attachments?: string[] }
   ): Promise<boolean> => {
+    // RACE CONDITION GUARD: Prevent concurrent completion calls for same visit
+    if (pendingCompletions.has(siteVisitId)) {
+      console.warn(`[SiteVisit] Completion already in progress for ${siteVisitId}, skipping duplicate call`);
+      toast({
+        title: "Processing",
+        description: "Site visit completion is already in progress.",
+      });
+      return false;
+    }
+    pendingCompletions.add(siteVisitId);
+    
     try {
-      if (!currentUser) return false;
+      if (!currentUser) {
+        pendingCompletions.delete(siteVisitId);
+        return false;
+      }
       
       const siteVisit = appSiteVisits.find(v => v.id === siteVisitId);
       
@@ -658,6 +675,9 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         variant: "destructive",
       });
       return false;
+    } finally {
+      // Release the completion lock
+      pendingCompletions.delete(siteVisitId);
     }
   };
 
