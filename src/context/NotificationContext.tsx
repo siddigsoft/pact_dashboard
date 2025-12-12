@@ -1,6 +1,31 @@
-import React, { createContext, useContext, ReactNode } from 'react';
+import React, { createContext, useContext, ReactNode, useState, useEffect } from 'react';
 import { useWhatsAppNotifications, WhatsAppNotification } from '@/hooks/useWhatsAppNotifications';
 import { usePersistentNotifications, PersistentNotification } from '@/hooks/usePersistentNotifications';
+
+class NotificationErrorBoundary extends React.Component<
+  { children: ReactNode; fallback: ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: { children: ReactNode; fallback: ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error) {
+    console.error('NotificationProvider error:', error);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback;
+    }
+    return this.props.children;
+  }
+}
 
 interface NotificationContextType {
   notifications: WhatsAppNotification[];
@@ -24,7 +49,7 @@ interface NotificationContextType {
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
 
-export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+const NotificationProviderInner: React.FC<{ children: ReactNode }> = ({ children }) => {
   const notificationHook = useWhatsAppNotifications();
   const persistentHook = usePersistentNotifications();
 
@@ -52,6 +77,41 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
     <NotificationContext.Provider value={value}>
       {children}
     </NotificationContext.Provider>
+  );
+};
+
+// Default fallback values when notification system fails
+const defaultValue: NotificationContextType = {
+  notifications: [],
+  success: () => '',
+  error: () => '',
+  warning: () => '',
+  info: () => '',
+  task: () => '',
+  remove: () => {},
+  persistentNotifications: [],
+  unreadCount: 0,
+  urgentCount: 0,
+  isPersistentLoading: false,
+  markAsRead: async () => {},
+  markAllAsRead: async () => {},
+  deleteNotification: async () => {},
+  refreshNotifications: async () => {},
+  getNotificationsByPriority: () => [],
+  getUnreadNotifications: () => [],
+};
+
+export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  return (
+    <NotificationErrorBoundary
+      fallback={
+        <NotificationContext.Provider value={defaultValue}>
+          {children}
+        </NotificationContext.Provider>
+      }
+    >
+      <NotificationProviderInner>{children}</NotificationProviderInner>
+    </NotificationErrorBoundary>
   );
 };
 
