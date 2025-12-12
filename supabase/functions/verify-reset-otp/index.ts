@@ -265,22 +265,13 @@ serve(async (req) => {
     if (storedToken && !tokenError) {
       const isExpired = new Date(storedToken.expires_at) < new Date()
       isValid = storedToken.otp === otp && !isExpired
-      
-      if (isValid) {
-        await supabase
-          .from('password_reset_tokens')
-          .update({ used: true })
-          .eq('email', email.toLowerCase())
-      }
+      // Don't mark as used here - the reset-password-with-otp function will mark it used after password change
     } else {
       const memoryToken = resetOTPs.get(email.toLowerCase())
       if (memoryToken) {
         const isExpired = new Date(memoryToken.expires_at) < new Date()
         isValid = memoryToken.otp === otp && !isExpired
-        
-        if (isValid) {
-          resetOTPs.delete(email.toLowerCase())
-        }
+        // Don't delete from memory here - wait for password reset
       }
     }
 
