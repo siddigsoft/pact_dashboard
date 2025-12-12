@@ -1,6 +1,7 @@
 /**
  * Signatures Page
  * Main page for signature management and document signing
+ * Features real-time updates for signature changes
  */
 
 import { useAppContext } from '@/context/AppContext';
@@ -8,6 +9,7 @@ import { SignatureManager } from '@/components/signature/SignatureManager';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Shield } from 'lucide-react';
+import { DataFreshnessBadge } from '@/components/realtime';
 
 export default function SignaturesPage() {
   const { currentUser } = useAppContext();
@@ -44,14 +46,17 @@ export default function SignaturesPage() {
 
   return (
     <div className="p-4 sm:p-6 max-w-7xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-2xl sm:text-3xl font-bold flex items-center gap-2">
-          <Shield className="h-7 w-7 text-primary" />
-          Digital Signatures
-        </h1>
-        <p className="text-muted-foreground mt-1">
-          Manage your signatures and view signing history
-        </p>
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold flex items-center gap-2">
+            <Shield className="h-7 w-7 text-primary" />
+            Digital Signatures
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Manage your signatures and view signing history
+          </p>
+        </div>
+        <DataFreshnessBadge variant="badge" />
       </div>
 
       <SignatureManager

@@ -1,19 +1,24 @@
-
 import React, { useEffect, useState, useRef } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
-import { 
-  Settings as SettingsIcon, 
-  Bell, 
-  Palette, 
-  User, 
-  Database, 
+import {
+  Settings as SettingsIcon,
+  Bell,
+  Palette,
+  User,
+  Database,
   MapPin,
   Sparkles,
   Eye,
@@ -32,17 +37,31 @@ import {
   LayoutDashboard,
   Camera,
   Upload,
-  AlertCircle
+  AlertCircle,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useSettings } from "@/context/settings/SettingsContext";
 import { Input } from "@/components/ui/input";
 import { useUser } from "@/context/user/UserContext";
-import { Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogClose, DialogDescription } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogFooter,
+  DialogTitle,
+  DialogClose,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import LocationCapture from "@/components/LocationCapture";
 import RoleBadge from "@/components/user/RoleBadge";
 import UserClassificationBadge from "@/components/user/UserClassificationBadge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { TwoFactorSetup } from "@/components/auth/TwoFactorSetup";
 import { useMFA } from "@/hooks/use-mfa";
 import { Badge } from "@/components/ui/badge";
@@ -56,13 +75,13 @@ import { MobileSettingsScreen } from "@/components/mobile/MobileSettingsScreen";
 function BiometricSettingsSection() {
   const { isNative } = useDevice();
   const { currentUser } = useUser();
-  const { 
-    status, 
-    isLoading, 
-    storeCredentials, 
-    clearCredentials, 
+  const {
+    status,
+    isLoading,
+    storeCredentials,
+    clearCredentials,
     refreshStatus,
-    authenticate
+    authenticate,
   } = useBiometric();
   const { toast } = useToast();
   const [isEnabling, setIsEnabling] = useState(false);
@@ -100,11 +119,13 @@ function BiometricSettingsSection() {
 
   const handleStartEnableBiometric = async () => {
     await refreshStatus();
-    
+
     if (!status.isAvailable) {
       toast({
         title: "Biometric Not Available",
-        description: status.errorMessage || "Your device doesn't support biometric authentication.",
+        description:
+          status.errorMessage ||
+          "Your device doesn't support biometric authentication.",
         variant: "destructive",
       });
       return;
@@ -113,7 +134,8 @@ function BiometricSettingsSection() {
     if (!status.isEnrolled) {
       toast({
         title: "No Biometrics Enrolled",
-        description: "Please set up fingerprint or face recognition in your device settings first.",
+        description:
+          "Please set up fingerprint or face recognition in your device settings first.",
         variant: "destructive",
       });
       return;
@@ -137,7 +159,7 @@ function BiometricSettingsSection() {
 
     setIsEnabling(true);
     setPasswordError("");
-    
+
     try {
       const { error: signInError } = await supabase.auth.signInWithPassword({
         email: currentUser.email,
@@ -151,14 +173,16 @@ function BiometricSettingsSection() {
       }
 
       const authResult = await authenticate({
-        reason: 'Verify your identity to enable biometric login',
-        title: 'Enable Biometric Login',
+        reason: "Verify your identity to enable biometric login",
+        title: "Enable Biometric Login",
       });
 
       if (!authResult.success) {
         toast({
           title: "Authentication Failed",
-          description: authResult.error || "Biometric verification failed. Please try again.",
+          description:
+            authResult.error ||
+            "Biometric verification failed. Please try again.",
           variant: "destructive",
         });
         setIsEnabling(false);
@@ -173,7 +197,8 @@ function BiometricSettingsSection() {
       if (!storeResult.success) {
         toast({
           title: "Error",
-          description: storeResult.error || "Failed to save credentials securely.",
+          description:
+            storeResult.error || "Failed to save credentials securely.",
           variant: "destructive",
         });
         setIsEnabling(false);
@@ -182,18 +207,20 @@ function BiometricSettingsSection() {
 
       setShowPasswordDialog(false);
       setPassword("");
-      
+
       toast({
         title: "Biometric Enabled",
-        description: "You can now use fingerprint or face recognition to log in.",
+        description:
+          "You can now use fingerprint or face recognition to log in.",
         variant: "default",
       });
-      
+
       await refreshStatus();
     } catch (error: any) {
       toast({
         title: "Error",
-        description: error?.message || "Failed to enable biometric authentication.",
+        description:
+          error?.message || "Failed to enable biometric authentication.",
         variant: "destructive",
       });
     } finally {
@@ -214,7 +241,8 @@ function BiometricSettingsSection() {
     } catch (error: any) {
       toast({
         title: "Error",
-        description: error?.message || "Failed to disable biometric authentication.",
+        description:
+          error?.message || "Failed to disable biometric authentication.",
         variant: "destructive",
       });
     } finally {
@@ -231,11 +259,11 @@ function BiometricSettingsSection() {
             <div className="space-y-1">
               <Label className="text-base font-medium">Biometric Login</Label>
               <p className="text-sm text-muted-foreground">
-                {status.biometricType === 'face' 
-                  ? 'Use Face ID for quick login' 
-                  : status.biometricType === 'iris'
-                  ? 'Use Iris scan for quick login'
-                  : 'Use fingerprint for quick login'}
+                {status.biometricType === "face"
+                  ? "Use Face ID for quick login"
+                  : status.biometricType === "iris"
+                    ? "Use Iris scan for quick login"
+                    : "Use fingerprint for quick login"}
               </p>
             </div>
           </div>
@@ -243,7 +271,10 @@ function BiometricSettingsSection() {
             {isLoading ? (
               <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
             ) : status.hasStoredCredentials ? (
-              <Badge variant="default" className="bg-green-500 hover:bg-green-600 min-h-[28px] px-3">
+              <Badge
+                variant="default"
+                className="bg-green-500 hover:bg-green-600 min-h-[28px] px-3"
+              >
                 <CheckCircle className="h-3 w-3 mr-1" />
                 Enabled
               </Badge>
@@ -253,7 +284,10 @@ function BiometricSettingsSection() {
                 Disabled
               </Badge>
             ) : (
-              <Badge variant="outline" className="min-h-[28px] px-3 text-amber-600 border-amber-300">
+              <Badge
+                variant="outline"
+                className="min-h-[28px] px-3 text-amber-600 border-amber-300"
+              >
                 <AlertCircle className="h-3 w-3 mr-1" />
                 Not Available
               </Badge>
@@ -267,7 +301,8 @@ function BiometricSettingsSection() {
           <div className="flex items-start gap-2">
             <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5" />
             <p className="text-sm text-amber-800 dark:text-amber-200">
-              No biometrics enrolled on this device. Please set up fingerprint or face recognition in your device settings.
+              No biometrics enrolled on this device. Please set up fingerprint
+              or face recognition in your device settings.
             </p>
           </div>
         </div>
@@ -284,7 +319,13 @@ function BiometricSettingsSection() {
                     Biometric login is active
                   </p>
                   <p className="text-sm text-green-700 dark:text-green-300">
-                    You can use {status.biometricType === 'face' ? 'Face ID' : status.biometricType === 'iris' ? 'Iris scan' : 'your fingerprint'} to quickly log in to the app.
+                    You can use{" "}
+                    {status.biometricType === "face"
+                      ? "Face ID"
+                      : status.biometricType === "iris"
+                        ? "Iris scan"
+                        : "your fingerprint"}{" "}
+                    to quickly log in to the app.
                   </p>
                   <Button
                     variant="outline"
@@ -316,7 +357,8 @@ function BiometricSettingsSection() {
                 <div className="space-y-2">
                   <p className="font-medium">Enable quick login</p>
                   <p className="text-sm text-muted-foreground">
-                    Set up biometric authentication for faster, more secure access to the app without entering your password.
+                    Set up biometric authentication for faster, more secure
+                    access to the app without entering your password.
                   </p>
                   <Button
                     onClick={handleStartEnableBiometric}
@@ -357,7 +399,8 @@ function BiometricSettingsSection() {
               Enable Biometric Login
             </DialogTitle>
             <DialogDescription>
-              Enter your password to securely save your login credentials for biometric authentication.
+              Enter your password to securely save your login credentials for
+              biometric authentication.
             </DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-4">
@@ -380,7 +423,8 @@ function BiometricSettingsSection() {
               )}
             </div>
             <p className="text-xs text-muted-foreground">
-              Your password will be encrypted and stored securely on your device. It will only be accessible via biometric authentication.
+              Your password will be encrypted and stored securely on your
+              device. It will only be accessible via biometric authentication.
             </p>
           </div>
           <DialogFooter className="gap-2 sm:gap-0">
@@ -421,7 +465,7 @@ function BiometricSettingsSection() {
 
 const Settings = () => {
   const { viewMode } = useViewMode();
-  const isMobile = viewMode === 'mobile';
+  const isMobile = viewMode === "mobile";
   const { toast } = useToast();
   const { currentUser, updateUser, logout } = useUser();
   const {
@@ -437,17 +481,17 @@ const Settings = () => {
     updateDataVisibilitySettings,
     updateMenuPreferences,
     updateDashboardPreferences,
-    loading
+    loading,
   } = useSettings();
 
   if (isMobile) {
     return (
       <MobileSettingsScreen
         user={{
-          name: currentUser?.name || 'User',
-          email: currentUser?.email || '',
+          name: currentUser?.name || "User",
+          email: currentUser?.email || "",
           avatarUrl: currentUser?.avatar,
-          role: currentUser?.role || 'User',
+          role: currentUser?.role || "User",
         }}
         onLogout={async () => {
           await logout();
@@ -456,7 +500,12 @@ const Settings = () => {
     );
   }
 
-  const { mfaEnabled, loading: mfaLoading, checkMFAStatus, unenrollMFA } = useMFA();
+  const {
+    mfaEnabled,
+    loading: mfaLoading,
+    checkMFAStatus,
+    unenrollMFA,
+  } = useMFA();
 
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [oldPassword, setOldPassword] = useState("");
@@ -466,7 +515,7 @@ const Settings = () => {
   const [activeTab, setActiveTab] = useState("general");
   const [showMFASetup, setShowMFASetup] = useState(false);
   const [disablingMFA, setDisablingMFA] = useState(false);
-  
+
   const [name, setName] = useState(currentUser?.name || "");
   const [email, setEmail] = useState(currentUser?.email || "");
   const [avatar, setAvatar] = useState(currentUser?.avatar || "");
@@ -483,22 +532,24 @@ const Settings = () => {
 
   const getInitials = (name: string) => {
     return name
-      .split(' ')
-      .map(part => part[0])
-      .join('')
+      .split(" ")
+      .map((part) => part[0])
+      .join("")
       .toUpperCase()
       .substring(0, 2);
   };
 
-  const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
     const file = event.target.files?.[0];
     if (!file || !currentUser) return;
 
-    if (!file.type.startsWith('image/')) {
+    if (!file.type.startsWith("image/")) {
       toast({
         title: "Invalid File",
         description: "Please upload an image file (JPG, PNG, etc.)",
-        variant: "destructive"
+        variant: "destructive",
       });
       return;
     }
@@ -507,7 +558,7 @@ const Settings = () => {
       toast({
         title: "File Too Large",
         description: "Image must be less than 5MB",
-        variant: "destructive"
+        variant: "destructive",
       });
       return;
     }
@@ -515,12 +566,12 @@ const Settings = () => {
     setIsUploadingAvatar(true);
 
     try {
-      const fileExt = file.name.split('.').pop();
+      const fileExt = file.name.split(".").pop();
       const fileName = `${currentUser.id}-${Date.now()}.${fileExt}`;
       const filePath = `avatars/${fileName}`;
 
       const { error: uploadError } = await supabase.storage
-        .from('avatars')
+        .from("avatars")
         .upload(filePath, file, { upsert: true });
 
       if (uploadError) {
@@ -528,36 +579,37 @@ const Settings = () => {
       }
 
       const { data: urlData } = supabase.storage
-        .from('avatars')
+        .from("avatars")
         .getPublicUrl(filePath);
 
       const avatarUrl = urlData.publicUrl;
 
       const { error: updateError } = await supabase
-        .from('profiles')
+        .from("profiles")
         .update({ avatar_url: avatarUrl })
-        .eq('id', currentUser.id);
+        .eq("id", currentUser.id);
 
       if (updateError) {
         throw updateError;
       }
 
       setAvatar(avatarUrl);
-      
+
       if (updateUser) {
         updateUser({ ...currentUser, avatar: avatarUrl });
       }
 
       toast({
         title: "Avatar Updated",
-        description: "Your profile picture has been updated successfully"
+        description: "Your profile picture has been updated successfully",
       });
     } catch (error: any) {
-      console.error('Avatar upload error:', error);
+      console.error("Avatar upload error:", error);
       toast({
         title: "Upload Failed",
-        description: error.message || "Failed to upload avatar. Please try again.",
-        variant: "destructive"
+        description:
+          error.message || "Failed to upload avatar. Please try again.",
+        variant: "destructive",
       });
     } finally {
       setIsUploadingAvatar(false);
@@ -571,31 +623,32 @@ const Settings = () => {
   const handleNotificationsToggle = (enabled: boolean) => {
     updateNotificationSettings({
       ...notificationSettings,
-      enabled
+      enabled,
     });
   };
 
   const handleEmailNotificationsToggle = (checked: boolean) => {
     updateNotificationSettings({
       ...notificationSettings,
-      email: checked
+      email: checked,
     });
   };
 
   const handleSoundAlertsToggle = (checked: boolean) => {
     updateNotificationSettings({
       ...notificationSettings,
-      sound: checked
+      sound: checked,
     });
   };
 
   const handleBrowserPushToggle = async (checked: boolean) => {
-    if (checked && 'Notification' in window) {
+    if (checked && "Notification" in window) {
       const permission = await Notification.requestPermission();
-      if (permission !== 'granted') {
+      if (permission !== "granted") {
         toast({
           title: "Permission denied",
-          description: "Browser notifications were not enabled. Please allow notifications in your browser settings.",
+          description:
+            "Browser notifications were not enabled. Please allow notifications in your browser settings.",
           variant: "destructive",
         });
         return;
@@ -603,17 +656,20 @@ const Settings = () => {
     }
     updateNotificationSettings({
       ...notificationSettings,
-      browserPush: checked
+      browserPush: checked,
     });
   };
 
-  const handleCategoryToggle = (category: keyof typeof notificationSettings.categories, checked: boolean) => {
+  const handleCategoryToggle = (
+    category: keyof typeof notificationSettings.categories,
+    checked: boolean,
+  ) => {
     updateNotificationSettings({
       ...notificationSettings,
       categories: {
         ...notificationSettings.categories,
-        [category]: checked
-      }
+        [category]: checked,
+      },
     });
   };
 
@@ -622,76 +678,80 @@ const Settings = () => {
       ...notificationSettings,
       quietHours: {
         ...notificationSettings.quietHours,
-        enabled
-      }
+        enabled,
+      },
     });
   };
 
-  const handleQuietHoursChange = (field: 'startHour' | 'endHour', value: number) => {
+  const handleQuietHoursChange = (
+    field: "startHour" | "endHour",
+    value: number,
+  ) => {
     updateNotificationSettings({
       ...notificationSettings,
       quietHours: {
         ...notificationSettings.quietHours,
-        [field]: value
-      }
+        [field]: value,
+      },
     });
   };
 
-  const handleFrequencyChange = (frequency: 'instant' | 'hourly' | 'daily') => {
+  const handleFrequencyChange = (frequency: "instant" | "hourly" | "daily") => {
     updateNotificationSettings({
       ...notificationSettings,
-      frequency
+      frequency,
     });
   };
 
   const handleAutoDeleteChange = (days: number) => {
     updateNotificationSettings({
       ...notificationSettings,
-      autoDeleteDays: days
+      autoDeleteDays: days,
     });
   };
 
   const handleDarkModeToggle = (checked: boolean) => {
     updateAppearanceSettings({
       ...appearanceSettings,
-      darkMode: checked
+      darkMode: checked,
     });
   };
 
   const handleThemeChange = (value: string) => {
     updateAppearanceSettings({
       ...appearanceSettings,
-      theme: value
+      theme: value,
     });
   };
 
   const handleDefaultPageChange = (value: string) => {
     updateUserSettings({
-      defaultPage: value
+      defaultPage: value,
     });
   };
 
   const handleSaveProfile = async () => {
     if (!currentUser) return;
-    
+
     // Validate required avatar
     if (!avatar && !currentUser.avatar) {
       toast({
         title: "Profile picture required",
-        description: "Please upload a profile picture before saving. This is required for site claiming.",
+        description:
+          "Please upload a profile picture before saving. This is required for site claiming.",
         variant: "destructive",
       });
       return;
     }
-    
+
     try {
       const success = await updateUser({
         ...currentUser,
         name,
         email,
-        avatar: avatar || currentUser.avatar
+        avatar: avatar || currentUser.avatar,
       });
-      
+
       if (success) {
         toast({
           title: "Profile updated",
@@ -719,8 +779,8 @@ const Settings = () => {
     updateDataVisibilitySettings({
       options: {
         ...dataVisibilitySettings?.options,
-        shareLocationWithTeam: checked
-      }
+        shareLocationWithTeam: checked,
+      },
     });
   };
 
@@ -728,8 +788,8 @@ const Settings = () => {
     updateDataVisibilitySettings({
       options: {
         ...dataVisibilitySettings?.options,
-        displayPersonalMetrics: checked
-      }
+        displayPersonalMetrics: checked,
+      },
     });
   };
 
@@ -740,14 +800,16 @@ const Settings = () => {
       if (success) {
         toast({
           title: "2FA Disabled",
-          description: "Two-factor authentication has been disabled for your account.",
+          description:
+            "Two-factor authentication has been disabled for your account.",
           variant: "default",
         });
         await checkMFAStatus();
       } else {
         toast({
           title: "Error",
-          description: "Failed to disable two-factor authentication. Please try again.",
+          description:
+            "Failed to disable two-factor authentication. Please try again.",
           variant: "destructive",
         });
       }
@@ -780,31 +842,33 @@ const Settings = () => {
       });
       return;
     }
+    if (newPassword.length < 8) {
+      toast({
+        title: "Password too short",
+        description: "New password must be at least 8 characters.",
+        variant: "destructive",
+      });
+      return;
+    }
     setChanging(true);
     try {
-      const { error: signInError } = await import("@/integrations/supabase/client").then(({ supabase }) =>
-        supabase.auth.signInWithPassword({ email: currentUser?.email as string, password: oldPassword })
+      const { supabase } = await import("@/integrations/supabase/client");
+
+      const { data, error } = await supabase.functions.invoke(
+        "self-change-password",
+        {
+          body: {
+            currentPassword: oldPassword,
+            newPassword: newPassword,
+          },
+        },
       );
-      
-      if (signInError) {
-        setChanging(false);
-        toast({
-          title: "Wrong current password",
-          description: "The current password you entered is incorrect.",
-          variant: "destructive",
-        });
-        return;
-      }
-      
-      const { error: updateError } = await import("@/integrations/supabase/client").then(({ supabase }) =>
-        supabase.auth.updateUser({ password: newPassword })
-      );
-      
-      if (updateError) {
-        setChanging(false);
+
+      if (error || !data?.success) {
         toast({
           title: "Password change failed",
-          description: updateError.message || "Could not change password.",
+          description:
+            data?.error || error?.message || "Could not change password.",
           variant: "destructive",
         });
       } else {
@@ -858,9 +922,9 @@ const Settings = () => {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <Card 
+        <Card
           className="hover-elevate active:scale-95 cursor-pointer overflow-hidden relative bg-gradient-to-br from-blue-500 to-blue-700 text-white border-0 min-h-[120px]"
-          onClick={() => setActiveTab('general')}
+          onClick={() => setActiveTab("general")}
           data-testid="card-general-settings"
         >
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2 p-4">
@@ -870,7 +934,9 @@ const Settings = () => {
             <Globe className="h-5 w-5 text-white/80" />
           </CardHeader>
           <CardContent className="p-4 pt-0">
-            <div className="text-xl sm:text-2xl font-bold text-white">Preferences</div>
+            <div className="text-xl sm:text-2xl font-bold text-white">
+              Preferences
+            </div>
             <p className="text-xs text-white/80 mt-1">
               Landing page & defaults
             </p>
@@ -878,9 +944,9 @@ const Settings = () => {
           <Sparkles className="absolute -right-4 -bottom-4 h-20 w-20 sm:h-24 sm:w-24 text-white/10" />
         </Card>
 
-        <Card 
+        <Card
           className="hover-elevate active:scale-95 cursor-pointer overflow-hidden relative bg-gradient-to-br from-green-500 to-emerald-700 text-white border-0 min-h-[120px]"
-          onClick={() => setActiveTab('notifications')}
+          onClick={() => setActiveTab("notifications")}
           data-testid="card-notification-settings"
         >
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2 p-4">
@@ -900,9 +966,9 @@ const Settings = () => {
           <Sparkles className="absolute -right-4 -bottom-4 h-20 w-20 sm:h-24 sm:w-24 text-white/10" />
         </Card>
 
-        <Card 
+        <Card
           className="hover-elevate active:scale-95 cursor-pointer overflow-hidden relative bg-gradient-to-br from-purple-500 to-purple-700 text-white border-0 min-h-[120px]"
-          onClick={() => setActiveTab('appearance')}
+          onClick={() => setActiveTab("appearance")}
           data-testid="card-appearance-settings"
         >
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2 p-4">
@@ -922,9 +988,9 @@ const Settings = () => {
           <Sparkles className="absolute -right-4 -bottom-4 h-20 w-20 sm:h-24 sm:w-24 text-white/10" />
         </Card>
 
-        <Card 
+        <Card
           className="hover-elevate active:scale-95 cursor-pointer overflow-hidden relative bg-gradient-to-br from-orange-500 to-red-600 text-white border-0 min-h-[120px]"
-          onClick={() => setActiveTab('profile')}
+          onClick={() => setActiveTab("profile")}
           data-testid="card-profile-settings"
         >
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2 p-4">
@@ -937,50 +1003,84 @@ const Settings = () => {
             <div className="text-xl sm:text-2xl font-bold text-white truncate">
               {currentUser?.name || "Your Profile"}
             </div>
-            <p className="text-xs text-white/80 mt-1">
-              Personal information
-            </p>
+            <p className="text-xs text-white/80 mt-1">Personal information</p>
           </CardContent>
           <Sparkles className="absolute -right-4 -bottom-4 h-20 w-20 sm:h-24 sm:w-24 text-white/10" />
         </Card>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+      <Tabs
+        value={activeTab}
+        onValueChange={setActiveTab}
+        className="space-y-4"
+      >
         <TabsList className="grid w-full grid-cols-4 gap-1 h-auto p-1">
-          <TabsTrigger value="general" className="flex flex-col sm:flex-row items-center gap-1 sm:gap-1 p-2 sm:p-3 min-h-[44px] text-xs sm:text-sm" data-testid="tab-general">
+          <TabsTrigger
+            value="general"
+            className="flex flex-col sm:flex-row items-center gap-1 sm:gap-1 p-2 sm:p-3 min-h-[44px] text-xs sm:text-sm"
+            data-testid="tab-general"
+          >
             <SettingsIcon className="h-4 w-4" />
             <span className="hidden xs:inline sm:inline">General</span>
           </TabsTrigger>
-          <TabsTrigger value="navigation" className="flex flex-col sm:flex-row items-center gap-1 sm:gap-1 p-2 sm:p-3 min-h-[44px] text-xs sm:text-sm" data-testid="tab-navigation">
+          <TabsTrigger
+            value="navigation"
+            className="flex flex-col sm:flex-row items-center gap-1 sm:gap-1 p-2 sm:p-3 min-h-[44px] text-xs sm:text-sm"
+            data-testid="tab-navigation"
+          >
             <Menu className="h-4 w-4" />
             <span className="hidden xs:inline sm:inline">Navigation</span>
           </TabsTrigger>
-          <TabsTrigger value="location" className="flex flex-col sm:flex-row items-center gap-1 sm:gap-1 p-2 sm:p-3 min-h-[44px] text-xs sm:text-sm" data-testid="tab-location">
+          <TabsTrigger
+            value="location"
+            className="flex flex-col sm:flex-row items-center gap-1 sm:gap-1 p-2 sm:p-3 min-h-[44px] text-xs sm:text-sm"
+            data-testid="tab-location"
+          >
             <MapPin className="h-4 w-4" />
             <span className="hidden xs:inline sm:inline">Location</span>
           </TabsTrigger>
-          <TabsTrigger value="notifications" className="flex flex-col sm:flex-row items-center gap-1 sm:gap-1 p-2 sm:p-3 min-h-[44px] text-xs sm:text-sm" data-testid="tab-notifications">
+          <TabsTrigger
+            value="notifications"
+            className="flex flex-col sm:flex-row items-center gap-1 sm:gap-1 p-2 sm:p-3 min-h-[44px] text-xs sm:text-sm"
+            data-testid="tab-notifications"
+          >
             <Bell className="h-4 w-4" />
             <span className="hidden xs:inline sm:inline">Notifications</span>
           </TabsTrigger>
-          <TabsTrigger value="appearance" className="flex flex-col sm:flex-row items-center gap-1 sm:gap-1 p-2 sm:p-3 min-h-[44px] text-xs sm:text-sm" data-testid="tab-appearance">
+          <TabsTrigger
+            value="appearance"
+            className="flex flex-col sm:flex-row items-center gap-1 sm:gap-1 p-2 sm:p-3 min-h-[44px] text-xs sm:text-sm"
+            data-testid="tab-appearance"
+          >
             <Palette className="h-4 w-4" />
             <span className="hidden xs:inline sm:inline">Appearance</span>
           </TabsTrigger>
-          <TabsTrigger value="security" className="flex flex-col sm:flex-row items-center gap-1 sm:gap-1 p-2 sm:p-3 min-h-[44px] text-xs sm:text-sm" data-testid="tab-security">
+          <TabsTrigger
+            value="security"
+            className="flex flex-col sm:flex-row items-center gap-1 sm:gap-1 p-2 sm:p-3 min-h-[44px] text-xs sm:text-sm"
+            data-testid="tab-security"
+          >
             <Shield className="h-4 w-4" />
             <span className="hidden xs:inline sm:inline">Security</span>
           </TabsTrigger>
-          <TabsTrigger value="profile" className="flex flex-col sm:flex-row items-center gap-1 sm:gap-1 p-2 sm:p-3 min-h-[44px] text-xs sm:text-sm" data-testid="tab-profile">
+          <TabsTrigger
+            value="profile"
+            className="flex flex-col sm:flex-row items-center gap-1 sm:gap-1 p-2 sm:p-3 min-h-[44px] text-xs sm:text-sm"
+            data-testid="tab-profile"
+          >
             <User className="h-4 w-4" />
             <span className="hidden xs:inline sm:inline">Profile</span>
           </TabsTrigger>
-          <TabsTrigger value="dataVisibility" className="flex flex-col sm:flex-row items-center gap-1 sm:gap-1 p-2 sm:p-3 min-h-[44px] text-xs sm:text-sm" data-testid="tab-data-visibility">
+          <TabsTrigger
+            value="dataVisibility"
+            className="flex flex-col sm:flex-row items-center gap-1 sm:gap-1 p-2 sm:p-3 min-h-[44px] text-xs sm:text-sm"
+            data-testid="tab-data-visibility"
+          >
             <Eye className="h-4 w-4" />
             <span className="hidden xs:inline sm:inline">Privacy</span>
           </TabsTrigger>
         </TabsList>
-        
+
         <TabsContent value="general" className="space-y-4">
           <Card className="border shadow-sm">
             <CardHeader className="bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 border-b p-4 sm:p-6">
@@ -999,16 +1099,24 @@ const Settings = () => {
             <CardContent className="space-y-6 p-4 sm:p-6 pt-4 sm:pt-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-muted/50 rounded-lg">
                 <div className="space-y-1">
-                  <Label htmlFor="default-page" className="text-base font-medium">Default Landing Page</Label>
+                  <Label
+                    htmlFor="default-page"
+                    className="text-base font-medium"
+                  >
+                    Default Landing Page
+                  </Label>
                   <p className="text-sm text-muted-foreground">
                     Choose which page to show after login
                   </p>
                 </div>
-                <Select 
+                <Select
                   value={userSettings?.settings?.defaultPage || "dashboard"}
                   onValueChange={handleDefaultPageChange}
                 >
-                  <SelectTrigger className="w-full sm:w-[200px] min-h-[44px]" data-testid="select-default-page">
+                  <SelectTrigger
+                    className="w-full sm:w-[200px] min-h-[44px]"
+                    data-testid="select-default-page"
+                  >
                     <SelectValue placeholder="Select page" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1019,11 +1127,14 @@ const Settings = () => {
                   </SelectContent>
                 </Select>
               </div>
-              
+
               <div className="flex justify-end pt-4 border-t">
-                <Button 
+                <Button
                   onClick={() => {
-                    updateUserSettings({ defaultPage: userSettings?.settings?.defaultPage || "dashboard" });
+                    updateUserSettings({
+                      defaultPage:
+                        userSettings?.settings?.defaultPage || "dashboard",
+                    });
                     toast({
                       title: "Settings saved",
                       description: "Your general settings have been updated.",
@@ -1040,7 +1151,7 @@ const Settings = () => {
             </CardContent>
           </Card>
         </TabsContent>
-        
+
         <TabsContent value="navigation" className="space-y-4">
           <Card className="border shadow-sm">
             <CardHeader className="bg-gradient-to-r from-indigo-50 to-indigo-100 dark:from-indigo-900/20 dark:to-indigo-800/20 border-b p-4 sm:p-6">
@@ -1049,7 +1160,9 @@ const Settings = () => {
                   <Menu className="h-5 w-5 text-white" />
                 </div>
                 <div>
-                  <CardTitle className="text-lg">Navigation Preferences</CardTitle>
+                  <CardTitle className="text-lg">
+                    Navigation Preferences
+                  </CardTitle>
                   <CardDescription>
                     Customize your sidebar menu and dashboard layout
                   </CardDescription>
@@ -1065,22 +1178,37 @@ const Settings = () => {
                 <p className="text-sm text-muted-foreground">
                   Choose which dashboard view to show when you log in
                 </p>
-                <Select 
+                <Select
                   value={dashboardPreferences?.defaultZone || "operations"}
-                  onValueChange={(value) => updateDashboardPreferences({ defaultZone: value as any })}
+                  onValueChange={(value) =>
+                    updateDashboardPreferences({ defaultZone: value as any })
+                  }
                 >
-                  <SelectTrigger className="w-full min-h-[44px] p-3" data-testid="select-default-zone">
+                  <SelectTrigger
+                    className="w-full min-h-[44px] p-3"
+                    data-testid="select-default-zone"
+                  >
                     <SelectValue placeholder="Select default zone" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="operations">Operations (Admin Overview)</SelectItem>
-                    <SelectItem value="fom">Field Operations Manager</SelectItem>
+                    <SelectItem value="operations">
+                      Operations (Admin Overview)
+                    </SelectItem>
+                    <SelectItem value="fom">
+                      Field Operations Manager
+                    </SelectItem>
                     <SelectItem value="team">Team Management</SelectItem>
                     <SelectItem value="planning">Planning</SelectItem>
                     <SelectItem value="compliance">Compliance</SelectItem>
-                    <SelectItem value="performance">Performance & Analytics</SelectItem>
-                    <SelectItem value="financial">Financial Operations</SelectItem>
-                    <SelectItem value="data-collector">Data Collector</SelectItem>
+                    <SelectItem value="performance">
+                      Performance & Analytics
+                    </SelectItem>
+                    <SelectItem value="financial">
+                      Financial Operations
+                    </SelectItem>
+                    <SelectItem value="data-collector">
+                      Data Collector
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1091,30 +1219,39 @@ const Settings = () => {
                   <h3 className="font-semibold">Pinned Menu Items</h3>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  Pinned items appear at the top of their menu groups for quick access
+                  Pinned items appear at the top of their menu groups for quick
+                  access
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {menuPreferences?.pinnedItems?.length > 0 ? (
                     menuPreferences.pinnedItems.map((url) => (
-                      <Badge key={url} variant="secondary" className="gap-1 min-h-[32px] px-3 py-1">
+                      <Badge
+                        key={url}
+                        variant="secondary"
+                        className="gap-1 min-h-[32px] px-3 py-1"
+                      >
                         <Pin className="h-3 w-3" />
-                        {url.replace('/', '')}
-                        <Button 
-                          size="icon" 
-                          variant="ghost" 
+                        {url.replace("/", "")}
+                        <Button
+                          size="icon"
+                          variant="ghost"
                           className="h-6 w-6 ml-1 min-h-[24px]"
                           onClick={() => {
-                            const updated = menuPreferences.pinnedItems.filter(i => i !== url);
+                            const updated = menuPreferences.pinnedItems.filter(
+                              (i) => i !== url,
+                            );
                             updateMenuPreferences({ pinnedItems: updated });
                           }}
-                          data-testid={`button-unpin-${url.replace('/', '')}`}
+                          data-testid={`button-unpin-${url.replace("/", "")}`}
                         >
                           <XCircle className="h-3 w-3" />
                         </Button>
                       </Badge>
                     ))
                   ) : (
-                    <p className="text-sm text-muted-foreground italic">No pinned items. Right-click menu items to pin them.</p>
+                    <p className="text-sm text-muted-foreground italic">
+                      No pinned items. Right-click menu items to pin them.
+                    </p>
                   )}
                 </div>
               </div>
@@ -1130,31 +1267,39 @@ const Settings = () => {
                 <div className="flex flex-wrap gap-2">
                   {menuPreferences?.hiddenItems?.length > 0 ? (
                     menuPreferences.hiddenItems.map((url) => (
-                      <Badge key={url} variant="outline" className="gap-1 min-h-[32px] px-3 py-1">
+                      <Badge
+                        key={url}
+                        variant="outline"
+                        className="gap-1 min-h-[32px] px-3 py-1"
+                      >
                         <EyeOff className="h-3 w-3" />
-                        {url.replace('/', '')}
-                        <Button 
-                          size="icon" 
-                          variant="ghost" 
+                        {url.replace("/", "")}
+                        <Button
+                          size="icon"
+                          variant="ghost"
                           className="h-6 w-6 ml-1 min-h-[24px]"
                           onClick={() => {
-                            const updated = menuPreferences.hiddenItems.filter(i => i !== url);
+                            const updated = menuPreferences.hiddenItems.filter(
+                              (i) => i !== url,
+                            );
                             updateMenuPreferences({ hiddenItems: updated });
                           }}
-                          data-testid={`button-show-${url.replace('/', '')}`}
+                          data-testid={`button-show-${url.replace("/", "")}`}
                         >
                           <Eye className="h-3 w-3" />
                         </Button>
                       </Badge>
                     ))
                   ) : (
-                    <p className="text-sm text-muted-foreground italic">No hidden items. Right-click menu items to hide them.</p>
+                    <p className="text-sm text-muted-foreground italic">
+                      No hidden items. Right-click menu items to hide them.
+                    </p>
                   )}
                 </div>
               </div>
 
               <div className="flex flex-col sm:flex-row justify-between gap-3 pt-4 border-t">
-                <Button 
+                <Button
                   variant="outline"
                   className="min-h-[44px] px-6"
                   onClick={() => {
@@ -1162,18 +1307,19 @@ const Settings = () => {
                       hiddenItems: [],
                       pinnedItems: [],
                       collapsedGroups: [],
-                      favoritePages: []
+                      favoritePages: [],
                     });
                     updateDashboardPreferences({
-                      defaultZone: 'operations',
+                      defaultZone: "operations",
                       hiddenWidgets: [],
                       widgetOrder: [],
                       quickStats: [],
-                      defaultTimeRange: 'week'
+                      defaultTimeRange: "week",
                     });
                     toast({
                       title: "Preferences reset",
-                      description: "Navigation preferences have been reset to defaults.",
+                      description:
+                        "Navigation preferences have been reset to defaults.",
                       variant: "success",
                     });
                   }}
@@ -1186,7 +1332,7 @@ const Settings = () => {
             </CardContent>
           </Card>
         </TabsContent>
-        
+
         <TabsContent value="location" className="space-y-4">
           <Card className="border shadow-sm">
             <CardHeader className="bg-gradient-to-r from-cyan-50 to-cyan-100 dark:from-cyan-900/20 dark:to-cyan-800/20 border-b p-4 sm:p-6">
@@ -1207,11 +1353,11 @@ const Settings = () => {
             </CardContent>
           </Card>
         </TabsContent>
-        
+
         <TabsContent value="notifications" className="space-y-4">
           <NotificationSettingsComponent />
         </TabsContent>
-        
+
         <TabsContent value="appearance" className="space-y-4">
           <Card className="border shadow-sm">
             <CardHeader className="bg-gradient-to-r from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20 border-b p-4 sm:p-6">
@@ -1232,33 +1378,43 @@ const Settings = () => {
                 <div className="flex items-center gap-3">
                   <Moon className="h-5 w-5 text-muted-foreground" />
                   <div className="space-y-1">
-                    <Label htmlFor="dark-mode" className="text-base font-medium">Dark Mode</Label>
+                    <Label
+                      htmlFor="dark-mode"
+                      className="text-base font-medium"
+                    >
+                      Dark Mode
+                    </Label>
                     <p className="text-sm text-muted-foreground">
                       Switch to dark theme
                     </p>
                   </div>
                 </div>
-                <Switch 
-                  id="dark-mode" 
+                <Switch
+                  id="dark-mode"
                   checked={appearanceSettings.darkMode}
                   onCheckedChange={handleDarkModeToggle}
                   className="scale-110"
                   data-testid="switch-dark-mode"
                 />
               </div>
-              
+
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-muted/50 rounded-lg min-h-[60px]">
                 <div className="space-y-1">
-                  <Label htmlFor="theme" className="text-base font-medium">Theme Style</Label>
+                  <Label htmlFor="theme" className="text-base font-medium">
+                    Theme Style
+                  </Label>
                   <p className="text-sm text-muted-foreground">
                     Choose your preferred theme
                   </p>
                 </div>
-                <Select 
+                <Select
                   value={appearanceSettings.theme}
                   onValueChange={handleThemeChange}
                 >
-                  <SelectTrigger className="w-full sm:w-[200px] min-h-[44px]" data-testid="select-theme">
+                  <SelectTrigger
+                    className="w-full sm:w-[200px] min-h-[44px]"
+                    data-testid="select-theme"
+                  >
                     <SelectValue placeholder="Select theme" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1273,7 +1429,9 @@ const Settings = () => {
                 <div className="flex items-center gap-3">
                   <Globe className="h-5 w-5 text-muted-foreground" />
                   <div className="space-y-1">
-                    <Label htmlFor="language" className="text-base font-medium">Language / اللغة</Label>
+                    <Label htmlFor="language" className="text-base font-medium">
+                      Language / اللغة
+                    </Label>
                     <p className="text-sm text-muted-foreground">
                       Choose your preferred language
                     </p>
@@ -1281,14 +1439,15 @@ const Settings = () => {
                 </div>
                 <LanguageSwitcher variant="full" />
               </div>
-              
+
               <div className="flex justify-end pt-4 border-t">
-                <Button 
+                <Button
                   onClick={() => {
                     updateAppearanceSettings(appearanceSettings);
                     toast({
                       title: "Settings saved",
-                      description: "Your appearance settings have been updated.",
+                      description:
+                        "Your appearance settings have been updated.",
                       variant: "success",
                     });
                   }}
@@ -1324,9 +1483,12 @@ const Settings = () => {
                   <div className="flex items-center gap-3">
                     <Smartphone className="h-5 w-5 text-muted-foreground" />
                     <div className="space-y-1">
-                      <Label className="text-base font-medium">Two-Factor Authentication (2FA)</Label>
+                      <Label className="text-base font-medium">
+                        Two-Factor Authentication (2FA)
+                      </Label>
                       <p className="text-sm text-muted-foreground">
-                        Add an extra layer of security to your account using an authenticator app
+                        Add an extra layer of security to your account using an
+                        authenticator app
                       </p>
                     </div>
                   </div>
@@ -1334,7 +1496,10 @@ const Settings = () => {
                     {mfaLoading ? (
                       <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
                     ) : mfaEnabled ? (
-                      <Badge variant="default" className="bg-green-500 hover:bg-green-600 min-h-[28px] px-3">
+                      <Badge
+                        variant="default"
+                        className="bg-green-500 hover:bg-green-600 min-h-[28px] px-3"
+                      >
                         <CheckCircle className="h-3 w-3 mr-1" />
                         Enabled
                       </Badge>
@@ -1357,7 +1522,9 @@ const Settings = () => {
                         Two-factor authentication is active
                       </p>
                       <p className="text-sm text-green-700 dark:text-green-300">
-                        Your account is protected with an authenticator app. You'll need to enter a code from your app when signing in.
+                        Your account is protected with an authenticator app.
+                        You'll need to enter a code from your app when signing
+                        in.
                       </p>
                       <Button
                         variant="outline"
@@ -1387,9 +1554,14 @@ const Settings = () => {
                   <div className="flex items-start gap-3">
                     <Shield className="h-5 w-5 text-muted-foreground mt-0.5" />
                     <div className="space-y-2">
-                      <p className="font-medium">Enhance your account security</p>
+                      <p className="font-medium">
+                        Enhance your account security
+                      </p>
                       <p className="text-sm text-muted-foreground">
-                        Two-factor authentication adds an extra layer of protection. When enabled, you'll need to enter a code from your authenticator app in addition to your password when signing in.
+                        Two-factor authentication adds an extra layer of
+                        protection. When enabled, you'll need to enter a code
+                        from your authenticator app in addition to your password
+                        when signing in.
                       </p>
                       <Button
                         onClick={() => setShowMFASetup(true)}
@@ -1407,10 +1579,20 @@ const Settings = () => {
               <BiometricSettingsSection />
 
               <div className="pt-4 border-t">
-                <h4 className="text-sm font-medium mb-3">Supported Authenticator Apps</h4>
+                <h4 className="text-sm font-medium mb-3">
+                  Supported Authenticator Apps
+                </h4>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  {["Google Authenticator", "Authy", "1Password", "Microsoft Authenticator"].map((app) => (
-                    <div key={app} className="flex items-center gap-2 p-3 bg-muted/50 rounded min-h-[44px] text-sm">
+                  {[
+                    "Google Authenticator",
+                    "Authy",
+                    "1Password",
+                    "Microsoft Authenticator",
+                  ].map((app) => (
+                    <div
+                      key={app}
+                      className="flex items-center gap-2 p-3 bg-muted/50 rounded min-h-[44px] text-sm"
+                    >
                       <Smartphone className="h-4 w-4 text-muted-foreground" />
                       <span className="text-xs sm:text-sm">{app}</span>
                     </div>
@@ -1420,7 +1602,7 @@ const Settings = () => {
             </CardContent>
           </Card>
         </TabsContent>
-        
+
         <TabsContent value="profile" className="space-y-4">
           <Card className="border shadow-sm">
             <CardHeader className="bg-gradient-to-r from-orange-50 to-red-100 dark:from-orange-900/20 dark:to-red-800/20 border-b p-4 sm:p-6">
@@ -1439,17 +1621,23 @@ const Settings = () => {
             <CardContent className="space-y-6 p-4 sm:p-6 pt-4 sm:pt-6">
               {/* Profile Picture Section */}
               <div className="flex flex-col items-center gap-4 pb-6 border-b">
-                <Label className="text-base font-medium">Profile Picture <span className="text-destructive">*</span></Label>
+                <Label className="text-base font-medium">
+                  Profile Picture <span className="text-destructive">*</span>
+                </Label>
                 <div className="relative group">
                   <Avatar className="h-24 w-24 border-2 border-border">
                     {avatar ? (
-                      <AvatarImage src={avatar} alt={name} className="object-cover" />
+                      <AvatarImage
+                        src={avatar}
+                        alt={name}
+                        className="object-cover"
+                      />
                     ) : null}
                     <AvatarFallback className="text-2xl font-semibold bg-primary/10">
                       {getInitials(name || currentUser?.name || "U")}
                     </AvatarFallback>
                   </Avatar>
-                  <div 
+                  <div
                     className="absolute inset-0 bg-black/60 rounded-full opacity-0 group-hover:opacity-100 flex items-center justify-center cursor-pointer min-h-[96px] min-w-[96px]"
                     onClick={() => avatarInputRef.current?.click()}
                   >
@@ -1498,8 +1686,10 @@ const Settings = () => {
 
               <div className="grid gap-6 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="name" className="text-base font-medium">Full Name</Label>
-                  <Input 
+                  <Label htmlFor="name" className="text-base font-medium">
+                    Full Name
+                  </Label>
+                  <Input
                     id="name"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
@@ -1507,10 +1697,12 @@ const Settings = () => {
                     data-testid="input-name"
                   />
                 </div>
-                
+
                 <div className="space-y-2">
-                  <Label htmlFor="email" className="text-base font-medium">Email Address</Label>
-                  <Input 
+                  <Label htmlFor="email" className="text-base font-medium">
+                    Email Address
+                  </Label>
+                  <Input
                     id="email"
                     type="email"
                     value={email}
@@ -1520,7 +1712,7 @@ const Settings = () => {
                   />
                 </div>
               </div>
-              
+
               <div className="grid gap-6 sm:grid-cols-2">
                 <div className="p-4 bg-muted/50 rounded-lg space-y-2 min-h-[80px]">
                   <Label className="text-base font-medium">Current Role</Label>
@@ -1528,24 +1720,26 @@ const Settings = () => {
                     <RoleBadge role={currentUser?.role || "User"} size="md" />
                   </div>
                 </div>
-                
+
                 <div className="p-4 bg-muted/50 rounded-lg space-y-2 min-h-[80px]">
-                  <Label className="text-base font-medium">Classification</Label>
+                  <Label className="text-base font-medium">
+                    Classification
+                  </Label>
                   <div className="flex items-center gap-2 pt-1">
                     {currentUser && (
-                      <UserClassificationBadge 
-                        userId={currentUser.id} 
-                        size="md" 
+                      <UserClassificationBadge
+                        userId={currentUser.id}
+                        size="md"
                         showUnassigned={true}
                       />
                     )}
                   </div>
                 </div>
               </div>
-              
+
               <div className="flex flex-col sm:flex-row justify-between gap-4 pt-4 border-t">
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   onClick={() => setShowChangePassword(true)}
                   className="min-h-[44px] px-6"
                   data-testid="button-change-password"
@@ -1553,7 +1747,7 @@ const Settings = () => {
                   <Lock className="mr-2 h-4 w-4" />
                   Change Password
                 </Button>
-                <Button 
+                <Button
                   onClick={handleSaveProfile}
                   className="min-h-[44px] px-6"
                   data-testid="button-save-profile"
@@ -1574,7 +1768,9 @@ const Settings = () => {
                   <Eye className="h-5 w-5 text-white" />
                 </div>
                 <div>
-                  <CardTitle className="text-lg">Data Visibility & Privacy</CardTitle>
+                  <CardTitle className="text-lg">
+                    Data Visibility & Privacy
+                  </CardTitle>
                   <CardDescription>
                     Control how your data is shared and displayed
                   </CardDescription>
@@ -1586,46 +1782,61 @@ const Settings = () => {
                 <div className="flex items-center gap-3">
                   <MapPin className="h-5 w-5 text-muted-foreground" />
                   <div className="space-y-1">
-                    <Label htmlFor="location-sharing" className="text-base font-medium">Share Location with Team</Label>
+                    <Label
+                      htmlFor="location-sharing"
+                      className="text-base font-medium"
+                    >
+                      Share Location with Team
+                    </Label>
                     <p className="text-sm text-muted-foreground">
                       Allow team members to see your location
                     </p>
                   </div>
                 </div>
-                <Switch 
-                  id="location-sharing" 
-                  checked={!!dataVisibilitySettings?.options?.shareLocationWithTeam}
+                <Switch
+                  id="location-sharing"
+                  checked={
+                    !!dataVisibilitySettings?.options?.shareLocationWithTeam
+                  }
                   onCheckedChange={handleDataSharingToggle}
                   className="scale-110"
                   data-testid="switch-location-sharing"
                 />
               </div>
-              
+
               <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg min-h-[60px]">
                 <div className="flex items-center gap-3">
                   <Database className="h-5 w-5 text-muted-foreground" />
                   <div className="space-y-1">
-                    <Label htmlFor="display-metrics" className="text-base font-medium">Display Personal Metrics</Label>
+                    <Label
+                      htmlFor="display-metrics"
+                      className="text-base font-medium"
+                    >
+                      Display Personal Metrics
+                    </Label>
                     <p className="text-sm text-muted-foreground">
                       Show your metrics on team dashboard
                     </p>
                   </div>
                 </div>
-                <Switch 
-                  id="display-metrics" 
-                  checked={!!dataVisibilitySettings?.options?.displayPersonalMetrics}
+                <Switch
+                  id="display-metrics"
+                  checked={
+                    !!dataVisibilitySettings?.options?.displayPersonalMetrics
+                  }
                   onCheckedChange={handleDisplayMetricsToggle}
                   className="scale-110"
                   data-testid="switch-display-metrics"
                 />
               </div>
-              
+
               <div className="flex justify-end pt-4 border-t">
-                <Button 
+                <Button
                   onClick={() => {
                     toast({
                       title: "Settings saved",
-                      description: "Your data visibility settings have been updated.",
+                      description:
+                        "Your data visibility settings have been updated.",
                     });
                   }}
                   className="min-h-[44px] px-6"
@@ -1638,7 +1849,6 @@ const Settings = () => {
             </CardContent>
           </Card>
         </TabsContent>
-        
       </Tabs>
 
       <Dialog open={showMFASetup} onOpenChange={setShowMFASetup}>
@@ -1658,7 +1868,8 @@ const Settings = () => {
               checkMFAStatus();
               toast({
                 title: "2FA Enabled",
-                description: "Two-factor authentication has been enabled for your account.",
+                description:
+                  "Two-factor authentication has been enabled for your account.",
                 variant: "default",
               });
             }}
@@ -1721,9 +1932,20 @@ const Settings = () => {
           </div>
           <DialogFooter className="gap-2 flex-row flex justify-end">
             <DialogClose asChild>
-              <Button variant="ghost" className="min-h-[44px] px-6" data-testid="button-cancel-password">Cancel</Button>
+              <Button
+                variant="ghost"
+                className="min-h-[44px] px-6"
+                data-testid="button-cancel-password"
+              >
+                Cancel
+              </Button>
             </DialogClose>
-            <Button onClick={handleChangePassword} disabled={changing} className="min-h-[44px] px-6" data-testid="button-confirm-password">
+            <Button
+              onClick={handleChangePassword}
+              disabled={changing}
+              className="min-h-[44px] px-6"
+              data-testid="button-confirm-password"
+            >
               {changing ? (
                 <>
                   <RefreshCw className="mr-2 h-4 w-4 animate-spin" />

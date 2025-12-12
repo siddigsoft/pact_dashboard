@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,8 +8,10 @@ import { useAppContext } from "@/context/AppContext";
 import { useAuthorization } from "@/hooks/use-authorization";
 import { SiteVisit } from "@/types";
 import { Link } from "react-router-dom";
-import { Plus, ChevronLeft, Search, MapPin, Clock, AlertTriangle, Building2, FileText, Wallet, History, ExternalLink, User } from "lucide-react";
+import { Plus, ChevronLeft, Search, MapPin, Clock, AlertTriangle, Building2, FileText, Wallet, History, ExternalLink, User, RefreshCw } from "lucide-react";
 import { formatDistanceToNow } from 'date-fns';
+import { DataFreshnessBadge } from "@/components/realtime";
+import { queryClient } from "@/lib/queryClient";
 import { useSiteVisitContext } from "@/context/siteVisit/SiteVisitContext";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { format, isValid } from "date-fns";
@@ -901,10 +903,18 @@ const SiteVisits = () => {
       {/* Header - Matching Hub Operations Style */}
       <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-2" data-testid="text-page-title-site-visits">
-            <MapPin className="h-8 w-8 text-primary" />
-            Site Visits
-          </h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-2" data-testid="text-page-title-site-visits">
+              <MapPin className="h-8 w-8 text-primary" />
+              Site Visits
+            </h1>
+            <DataFreshnessBadge 
+              lastUpdated={siteVisits.length > 0 ? new Date() : null}
+              onRefresh={async () => { await queryClient.invalidateQueries({ queryKey: ['site-visits'] }); }}
+              staleThresholdMinutes={5}
+              variant="badge"
+            />
+          </div>
           <p className="text-muted-foreground mt-1">
             {isFieldWorker 
               ? "View and manage your assigned site visits" 
