@@ -6,6 +6,8 @@ import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
+import { useMMP } from '@/context/mmp/MMPContext';
+import { clearForwardedWorkflow } from '@/services/mmpActions';
 
 interface BulkClearForwardedDialogProps {
   open: boolean;
@@ -20,6 +22,7 @@ interface MMPRow {
 
 export const BulkClearForwardedDialog: React.FC<BulkClearForwardedDialogProps> = ({ open, onOpenChange }) => {
   const { toast } = useToast();
+  const { refreshMMPFiles } = useMMP();
   const [loading, setLoading] = useState(false);
   const [mmpRows, setMmpRows] = useState<MMPRow[]>([]);
   const [siteVisitCounts, setSiteVisitCounts] = useState<Record<string, number>>({});
