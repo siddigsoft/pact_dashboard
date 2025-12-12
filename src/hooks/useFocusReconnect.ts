@@ -2,6 +2,10 @@
  * useFocusReconnect Hook
  * Automatically triggers realtime reconnection when window regains focus
  * or becomes visible again (e.g., user switches back to tab)
+ * 
+ * Note: This hook uses throttling to prevent excessive API calls:
+ * - Minimum 60 second interval between refreshes
+ * - Only refreshes if the tab was hidden for at least 30 seconds
  */
 
 import { useEffect, useCallback, useRef } from 'react';
@@ -12,7 +16,9 @@ interface FocusReconnectOptions {
   onVisible?: () => void;
   onOnline?: () => void;
   invalidateQueries?: boolean;
+  queryKeys?: string[];
   reconnectDelay?: number;
+  minRefreshInterval?: number;
 }
 
 export function useFocusReconnect(options: FocusReconnectOptions = {}) {
@@ -20,27 +26,38 @@ export function useFocusReconnect(options: FocusReconnectOptions = {}) {
     onFocus,
     onVisible,
     onOnline,
-    invalidateQueries = true,
-    reconnectDelay = 500,
+    invalidateQueries = false,
+    queryKeys,
+    reconnectDelay = 1000,
+    minRefreshInterval = 60000,
   } = options;
 
-  const lastFocusTime = useRef<number>(0);
-  const minRefreshInterval = 30000; // Don't refresh more than once every 30 seconds
+  const lastFocusTime = useRef<number>(Date.now());
+  const lastHiddenTime = useRef<number>(0);
 
   const handleRefresh = useCallback(() => {
     const now = Date.now();
+    
     if (now - lastFocusTime.current < minRefreshInterval) {
-      return; // Skip if we recently refreshed
+      return;
     }
+    
+    if (lastHiddenTime.current > 0 && now - lastHiddenTime.current < 30000) {
+      return;
+    }
+    
     lastFocusTime.current = now;
 
     if (invalidateQueries) {
-      // Delay to allow connection to be re-established
       setTimeout(() => {
-        queryClient.invalidateQueries();
+        if (queryKeys && queryKeys.length > 0) {
+          queryKeys.forEach(key => {
+            queryClient.invalidateQueries({ queryKey: [key] });
+          });
+        }
       }, reconnectDelay);
     }
-  }, [invalidateQueries, reconnectDelay]);
+  }, [invalidateQueries, queryKeys, reconnectDelay, minRefreshInterval]);
 
   const handleFocus = useCallback(() => {
     onFocus?.();
@@ -48,7 +65,9 @@ export function useFocusReconnect(options: FocusReconnectOptions = {}) {
   }, [onFocus, handleRefresh]);
 
   const handleVisibilityChange = useCallback(() => {
-    if (document.visibilityState === 'visible') {
+    if (document.visibilityState === 'hidden') {
+      lastHiddenTime.current = Date.now();
+    } else if (document.visibilityState === 'visible') {
       onVisible?.();
       handleRefresh();
     }
