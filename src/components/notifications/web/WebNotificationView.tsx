@@ -3,7 +3,7 @@
  * Integrated notification center for web platform with Uber theme
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import {
@@ -44,19 +44,40 @@ export function WebNotificationView({
 }: WebNotificationViewProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [latestPopupNotification, setLatestPopupNotification] = useState<NotificationData | null>(null);
+  const previousNotificationIdsRef = useRef<Set<string> | null>(null);
+  const isInitializedRef = useRef(false);
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
+
+  // Detect new notifications and trigger popup (skip initial render)
+  useEffect(() => {
+    const currentIds = new Set(notifications.map(n => n.id));
+    
+    // On first render, just initialize the ref without triggering popups
+    if (!isInitializedRef.current) {
+      previousNotificationIdsRef.current = currentIds;
+      isInitializedRef.current = true;
+      return;
+    }
+    
+    const previousIds = previousNotificationIdsRef.current || new Set();
+    
+    // Find new notifications (IDs in current but not in previous)
+    const newNotifications = notifications.filter(n => !previousIds.has(n.id) && !n.isRead);
+    
+    if (newNotifications.length > 0 && !isOpen) {
+      // Show popup for the most recent new notification
+      const mostRecent = newNotifications[0];
+      setLatestPopupNotification(mostRecent);
+    }
+    
+    previousNotificationIdsRef.current = currentIds;
+  }, [notifications, isOpen]);
 
   const handleNotificationClick = useCallback((notification: NotificationData) => {
     setIsOpen(false);
     onNotificationClick?.(notification);
   }, [onNotificationClick]);
-
-  const showPopupNotification = useCallback((notification: NotificationData) => {
-    if (!isOpen) {
-      setLatestPopupNotification(notification);
-    }
-  }, [isOpen]);
 
   return (
     <>

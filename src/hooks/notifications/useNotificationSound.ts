@@ -3,7 +3,7 @@
  * Handles notification sound playback with throttling
  */
 
-import { useCallback, useRef, useEffect } from 'react';
+import { useCallback, useRef, useEffect, useState } from 'react';
 
 interface NotificationSoundOptions {
   soundUrl?: string;
@@ -12,12 +12,18 @@ interface NotificationSoundOptions {
   enabled?: boolean;
 }
 
-const DEFAULT_SOUND_URL = '/sounds/notification.mp3';
 const DEFAULT_THROTTLE_MS = 1000;
+
+// Try multiple fallback sound sources
+const SOUND_SOURCES = [
+  '/sounds/notification.mp3',
+  '/notification.mp3',
+  'data:audio/wav;base64,UklGRl4AAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YToAAAD//wIA/f8DAP7/AgD//wEA//8AAAEAAQAAAP//AQD//wEA//8BAAAA//8BAAAA//8BAAAA'
+];
 
 export function useNotificationSound(options: NotificationSoundOptions = {}) {
   const {
-    soundUrl = DEFAULT_SOUND_URL,
+    soundUrl,
     volume = 0.5,
     throttleMs = DEFAULT_THROTTLE_MS,
     enabled = true,
@@ -26,14 +32,39 @@ export function useNotificationSound(options: NotificationSoundOptions = {}) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const lastPlayedRef = useRef<number>(0);
   const playedIdsRef = useRef<Set<string>>(new Set());
+  const [soundLoaded, setSoundLoaded] = useState(false);
 
-  // Initialize audio element
+  // Initialize audio element with fallback support
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      audioRef.current = new Audio(soundUrl);
-      audioRef.current.volume = volume;
-      audioRef.current.preload = 'auto';
-    }
+    if (typeof window === 'undefined') return;
+
+    const sources = soundUrl ? [soundUrl, ...SOUND_SOURCES] : SOUND_SOURCES;
+    let currentSourceIndex = 0;
+
+    const tryLoadSound = () => {
+      if (currentSourceIndex >= sources.length) {
+        console.warn('No notification sound available');
+        return;
+      }
+
+      const audio = new Audio();
+      audio.volume = volume;
+      audio.preload = 'auto';
+
+      audio.oncanplaythrough = () => {
+        audioRef.current = audio;
+        setSoundLoaded(true);
+      };
+
+      audio.onerror = () => {
+        currentSourceIndex++;
+        tryLoadSound();
+      };
+
+      audio.src = sources[currentSourceIndex];
+    };
+
+    tryLoadSound();
 
     return () => {
       if (audioRef.current) {
