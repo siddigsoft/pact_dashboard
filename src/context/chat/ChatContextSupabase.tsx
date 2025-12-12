@@ -409,9 +409,26 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
             };
           });
           
-          // Play notification sound if message is from someone else
+          // Play notification sound and create notification if message is from someone else
           if (newMessage.sender_id !== currentUser?.id) {
             notificationSoundService.play('message');
+            
+            // Create in-app notification for Messages tab
+            const senderUser = users.find(u => u.id === newMessage.sender_id);
+            const senderName = senderUser?.fullName || senderUser?.name || senderUser?.username || 'Someone';
+            const messagePreview = newMessage.content || 
+              (newMessage.content_type === 'image' ? 'Sent an image' : 
+               newMessage.content_type === 'file' ? 'Sent a file' : 
+               newMessage.content_type === 'audio' ? 'Sent an audio message' : 
+               newMessage.content_type === 'location' ? 'Sent a location' : 'Sent a message');
+            
+            // Send notification to the notifications panel (Messages tab)
+            NotificationTriggerService.newMessage(
+              currentUser.id,
+              senderName,
+              messagePreview,
+              chatId
+            ).catch(err => console.error('Failed to create message notification:', err));
           }
           
           // Update chat's last message and re-sort chats
