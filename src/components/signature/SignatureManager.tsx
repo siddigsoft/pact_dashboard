@@ -1,9 +1,10 @@
 /**
  * SignatureManager Component
  * Comprehensive signature management for users
+ * Features real-time updates via Supabase subscriptions
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -31,7 +32,9 @@ import {
   History,
   CheckCircle2,
   AlertCircle,
-  Loader2
+  Loader2,
+  RefreshCw,
+  Radio
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SignaturePad } from './SignaturePad';
@@ -40,6 +43,7 @@ import { SignatureService } from '@/services/signature.service';
 import type { HandwritingSignature, SignatureStats } from '@/types/signature';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 
 interface SignatureManagerProps {
   userId: string;
@@ -65,7 +69,10 @@ export function SignatureManager({
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
-  const loadData = async () => {
+  const [isLive, setIsLive] = useState(false);
+  const subscriptionRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+
+  const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -82,11 +89,61 @@ export function SignatureManager({
     } finally {
       setLoading(false);
     }
-  };
+  }, [userId]);
 
   useEffect(() => {
     loadData();
-  }, [userId]);
+
+    const channel = supabase
+      .channel(`signatures-${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'handwriting_signatures',
+          filter: `user_id=eq.${userId}`,
+        },
+        (payload) => {
+          loadData();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'transaction_signatures',
+          filter: `signer_id=eq.${userId}`,
+        },
+        () => {
+          loadData();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'document_signatures',
+          filter: `signer_id=eq.${userId}`,
+        },
+        () => {
+          loadData();
+        }
+      )
+      .subscribe((status) => {
+        setIsLive(status === 'SUBSCRIBED');
+      });
+
+    subscriptionRef.current = channel;
+
+    return () => {
+      if (subscriptionRef.current) {
+        supabase.removeChannel(subscriptionRef.current);
+      }
+    };
+  }, [userId, loadData]);
 
   const handleCreateSignature = async (signatureData: string, type: 'drawn' | 'uploaded' | 'saved') => {
     setSaving(true);
@@ -185,6 +242,14 @@ export function SignatureManager({
 
   return (
     <div className={cn('space-y-6', className)} data-testid="signature-manager">
+      {/* Live Status Indicator */}
+      {isLive && (
+        <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400 mb-4">
+          <Radio className="h-4 w-4 animate-pulse" />
+          <span>Real-time updates active</span>
+        </div>
+      )}
+
       {/* Header Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card>

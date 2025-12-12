@@ -1,9 +1,10 @@
 /**
  * SignatureAuditLog Component
  * Displays signature history and audit trail for compliance
+ * Features real-time updates via Supabase subscriptions
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -39,11 +40,13 @@ import {
   Phone,
   Mail,
   Pen,
-  RefreshCw
+  RefreshCw,
+  Radio
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { SignatureService } from '@/services/signature.service';
+import { supabase } from '@/integrations/supabase/client';
 import type { 
   TransactionSignature, 
   DocumentSignature, 
@@ -64,8 +67,10 @@ export function SignatureAuditLog({ userId, className }: SignatureAuditLogProps)
   const [stats, setStats] = useState<SignatureStats | null>(null);
   const [selectedSignature, setSelectedSignature] = useState<TransactionSignature | DocumentSignature | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [isLive, setIsLive] = useState(false);
+  const subscriptionRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
-  const loadSignatures = async () => {
+  const loadSignatures = useCallback(async () => {
     setLoading(true);
     try {
       const [txSigs, docSigs, signatureStats] = await Promise.all([
@@ -82,11 +87,49 @@ export function SignatureAuditLog({ userId, className }: SignatureAuditLogProps)
     } finally {
       setLoading(false);
     }
-  };
+  }, [userId]);
 
   useEffect(() => {
     loadSignatures();
-  }, [userId]);
+
+    const channel = supabase
+      .channel(`audit-signatures-${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'transaction_signatures',
+          filter: `signer_id=eq.${userId}`,
+        },
+        () => {
+          loadSignatures();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'document_signatures',
+          filter: `signer_id=eq.${userId}`,
+        },
+        () => {
+          loadSignatures();
+        }
+      )
+      .subscribe((status) => {
+        setIsLive(status === 'SUBSCRIBED');
+      });
+
+    subscriptionRef.current = channel;
+
+    return () => {
+      if (subscriptionRef.current) {
+        supabase.removeChannel(subscriptionRef.current);
+      }
+    };
+  }, [userId, loadSignatures]);
 
   const getMethodIcon = (method: SignatureMethod) => {
     switch (method) {
@@ -147,12 +190,18 @@ export function SignatureAuditLog({ userId, className }: SignatureAuditLogProps)
             <CardTitle className="flex items-center gap-2">
               <History className="h-5 w-5 text-primary" />
               Signature History
+              {isLive && (
+                <Badge variant="outline" className="ml-2 text-green-600 border-green-600 text-xs">
+                  <Radio className="h-3 w-3 mr-1 animate-pulse" />
+                  Live
+                </Badge>
+              )}
             </CardTitle>
             <CardDescription>
               Your digital signatures and verification records
             </CardDescription>
           </div>
-          <Button variant="outline" size="sm" onClick={loadSignatures} data-testid="button-refresh-signatures">
+          <Button variant="outline" size="sm" onClick={() => loadSignatures()} data-testid="button-refresh-signatures">
             <RefreshCw className="h-4 w-4 mr-1" />
             Refresh
           </Button>
