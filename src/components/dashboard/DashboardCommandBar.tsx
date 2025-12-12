@@ -1,10 +1,15 @@
+/**
+ * Dashboard Command Bar
+ * Quick actions and realtime status indicator
+ */
+
 import { useState } from 'react';
 import { ConnectionStatus } from './ConnectionStatus';
 import { useLiveDashboard } from '@/hooks/useLiveDashboard';
 import { useGlobalPresence } from '@/context/presence/GlobalPresenceContext';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Users, MessageCircle, Phone, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Users, MessageCircle, Phone, AlertTriangle } from 'lucide-react';
 import { OnlineUsersPanel } from './OnlineUsersPanel';
 import { EmergencySOS } from '@/components/mobile/EmergencySOS';
 
@@ -13,19 +18,12 @@ interface DashboardCommandBarProps {
 }
 
 export const DashboardCommandBar: React.FC<DashboardCommandBarProps> = ({ onQuickAction }) => {
-  const { isConnected } = useLiveDashboard();
+  const { isConnected, channels, totalEvents, lastUpdate, forceRefresh } = useLiveDashboard();
   const { onlineUserIds } = useGlobalPresence();
   const [showOnlinePanel, setShowOnlinePanel] = useState(false);
   const [showSOS, setShowSOS] = useState(false);
-  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const onlineCount = onlineUserIds.length;
-
-  const handleRefresh = () => {
-    setIsRefreshing(true);
-    // Trigger page refresh/reload
-    window.location.reload();
-  };
 
   return (
     <>
@@ -61,7 +59,7 @@ export const DashboardCommandBar: React.FC<DashboardCommandBarProps> = ({ onQuic
                 variant="ghost"
                 size="icon"
                 onClick={() => setShowSOS(true)}
-                className="text-destructive hover:bg-destructive/10"
+                className="text-destructive"
                 data-testid="button-quick-sos"
                 title="Emergency SOS"
               >
@@ -90,19 +88,14 @@ export const DashboardCommandBar: React.FC<DashboardCommandBarProps> = ({ onQuic
                 <Phone className="h-4 w-4" />
               </Button>
 
-              {/* Refresh Button */}
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={handleRefresh}
-                disabled={isRefreshing}
-                data-testid="button-refresh-dashboard"
-                title="Refresh Dashboard"
-              >
-                <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-              </Button>
-
-              <ConnectionStatus isConnected={isConnected} />
+              {/* Connection Status with integrated refresh */}
+              <ConnectionStatus 
+                isConnected={isConnected}
+                channelCount={channels}
+                lastUpdate={lastUpdate}
+                totalEvents={totalEvents}
+                onRefresh={forceRefresh}
+              />
             </div>
           </div>
         </div>

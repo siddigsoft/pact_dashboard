@@ -659,14 +659,19 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({
   // Open fullscreen map
   const handleOpenFullscreen = useCallback(() => {
     setIsFullscreen(true);
-    // Initialize map after dialog opens
-    setTimeout(() => {
-      initializeFullscreenMap();
-      // Invalidate size after a short delay to ensure proper rendering
+    // Initialize map after dialog opens with proper timing
+    requestAnimationFrame(() => {
       setTimeout(() => {
-        fullscreenMapRef.current?.invalidateSize();
-      }, 300);
-    }, 100);
+        initializeFullscreenMap();
+        // Invalidate size multiple times to ensure proper rendering
+        setTimeout(() => {
+          fullscreenMapRef.current?.invalidateSize();
+        }, 100);
+        setTimeout(() => {
+          fullscreenMapRef.current?.invalidateSize();
+        }, 500);
+      }, 150);
+    });
   }, [initializeFullscreenMap]);
 
   const handleRefresh = async () => {
@@ -930,8 +935,8 @@ const TeamLocationMap: React.FC<TeamLocationMapProps> = ({
           </DialogHeader>
           <div 
             ref={fullscreenMapContainerRef}
-            className="w-full h-full pt-16"
-            style={{ minHeight: 'calc(90vh - 4rem)' }}
+            className="w-full absolute top-16 left-0 right-0 bottom-0"
+            style={{ height: 'calc(90vh - 4rem)' }}
             data-testid="fullscreen-map-container"
           />
         </DialogContent>
