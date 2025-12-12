@@ -1,15 +1,16 @@
 /**
  * Connection Status Component
- * Shows realtime connection status with visual feedback and refresh capability
+ * Shows realtime connection status with visual feedback, error states, and refresh capability
  */
 
 import { useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { Activity, WifiOff, RefreshCw } from 'lucide-react';
+import { Activity, WifiOff, RefreshCw, AlertTriangle, Loader2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { useRealtimeHealth } from '@/hooks/useRealtimeHealth';
 
 interface ConnectionStatusProps {
   isConnected: boolean;
@@ -18,7 +19,10 @@ interface ConnectionStatusProps {
   totalEvents?: number;
   onRefresh?: () => void | Promise<void>;
   variant?: 'badge' | 'compact' | 'minimal';
+  showHealthDetails?: boolean;
 }
+
+type ConnectionState = 'connected' | 'disconnected' | 'reconnecting' | 'error' | 'offline';
 
 export const ConnectionStatus = ({ 
   isConnected, 
@@ -27,11 +31,24 @@ export const ConnectionStatus = ({
   totalEvents = 0,
   onRefresh,
   variant = 'badge',
+  showHealthDetails = false,
 }: ConnectionStatusProps) => {
   const [internalLastUpdate, setInternalLastUpdate] = useState<Date>(new Date());
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const health = useRealtimeHealth();
   
   const lastUpdate = externalLastUpdate || internalLastUpdate;
+
+  const getConnectionState = (): ConnectionState => {
+    if (!health.isOnline) return 'offline';
+    if (health.maxRetriesReached) return 'error';
+    if (health.errorChannels > 0 && health.connectedChannels === 0) return 'error';
+    if (health.channelCount > 0 && health.connectedChannels < health.channelCount) return 'reconnecting';
+    if (isConnected) return 'connected';
+    return 'disconnected';
+  };
+
+  const connectionState = getConnectionState();
 
   useEffect(() => {
     if (isConnected && !externalLastUpdate) {
@@ -62,6 +79,59 @@ export const ConnectionStatus = ({
     }
   };
 
+  const getStatusConfig = () => {
+    switch (connectionState) {
+      case 'connected':
+        return {
+          color: 'bg-green-500',
+          textColor: 'text-green-600 dark:text-green-400',
+          icon: Activity,
+          label: 'Live',
+          badgeVariant: 'default' as const,
+          animate: true,
+        };
+      case 'reconnecting':
+        return {
+          color: 'bg-yellow-500',
+          textColor: 'text-yellow-600 dark:text-yellow-400',
+          icon: Loader2,
+          label: 'Reconnecting',
+          badgeVariant: 'secondary' as const,
+          animate: true,
+        };
+      case 'error':
+        return {
+          color: 'bg-red-500',
+          textColor: 'text-red-600 dark:text-red-400',
+          icon: AlertTriangle,
+          label: health.maxRetriesReached ? 'Connection Failed' : 'Error',
+          badgeVariant: 'destructive' as const,
+          animate: false,
+        };
+      case 'offline':
+        return {
+          color: 'bg-gray-500',
+          textColor: 'text-gray-600 dark:text-gray-400',
+          icon: WifiOff,
+          label: 'Offline',
+          badgeVariant: 'secondary' as const,
+          animate: false,
+        };
+      default:
+        return {
+          color: 'bg-red-500',
+          textColor: 'text-red-600 dark:text-red-400',
+          icon: WifiOff,
+          label: 'Disconnected',
+          badgeVariant: 'destructive' as const,
+          animate: false,
+        };
+    }
+  };
+
+  const config = getStatusConfig();
+  const StatusIcon = config.icon;
+
   if (variant === 'minimal') {
     return (
       <Tooltip>
@@ -69,14 +139,23 @@ export const ConnectionStatus = ({
           <span
             className={cn(
               'h-2 w-2 rounded-full inline-block',
-              isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'
+              config.color,
+              config.animate && 'animate-pulse'
             )}
             data-testid="status-connection-dot"
           />
         </TooltipTrigger>
         <TooltipContent>
-          <p>{isConnected ? 'Live updates active' : 'Disconnected'}</p>
-          {totalEvents > 0 && <p className="text-xs">{totalEvents} events received</p>}
+          <div className="text-xs space-y-1">
+            <p>{config.label}</p>
+            {totalEvents > 0 && <p>{totalEvents} events received</p>}
+            {health.lastError && connectionState === 'error' && (
+              <p className="text-red-400">Error: {health.lastError}</p>
+            )}
+            {health.totalRetries > 0 && connectionState === 'reconnecting' && (
+              <p>Retry attempt {health.totalRetries}</p>
+            )}
+          </div>
         </TooltipContent>
       </Tooltip>
     );
@@ -88,15 +167,18 @@ export const ConnectionStatus = ({
         <span
           className={cn(
             'h-2 w-2 rounded-full',
-            isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'
+            config.color,
+            config.animate && 'animate-pulse'
           )}
         />
-        <span className={cn(
-          'text-xs font-medium',
-          isConnected ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
-        )}>
-          {isConnected ? 'Live' : 'Offline'}
+        <span className={cn('text-xs font-medium', config.textColor)}>
+          {config.label}
         </span>
+        {connectionState === 'reconnecting' && health.totalRetries > 0 && (
+          <span className="text-xs text-muted-foreground">
+            ({health.totalRetries})
+          </span>
+        )}
         {onRefresh && (
           <Button
             size="icon"
@@ -118,35 +200,49 @@ export const ConnectionStatus = ({
       <Tooltip>
         <TooltipTrigger asChild>
           <Badge 
-            variant={isConnected ? 'default' : 'destructive'}
+            variant={config.badgeVariant}
             className="flex items-center gap-2 px-3 py-1 cursor-default"
             data-testid="badge-connection-status"
           >
-            {isConnected ? (
-              <>
-                <Activity className="h-3 w-3 animate-pulse" />
-                <span>Live</span>
-              </>
-            ) : (
-              <>
-                <WifiOff className="h-3 w-3" />
-                <span>Disconnected</span>
-              </>
-            )}
+            <StatusIcon className={cn(
+              'h-3 w-3',
+              config.animate && connectionState === 'connected' && 'animate-pulse',
+              connectionState === 'reconnecting' && 'animate-spin'
+            )} />
+            <span>{config.label}</span>
           </Badge>
         </TooltipTrigger>
         <TooltipContent side="bottom">
           <div className="text-xs space-y-1">
-            {isConnected && channelCount > 0 && (
-              <p>{channelCount} active channels</p>
+            {health.connectedChannels > 0 && (
+              <p>{health.connectedChannels}/{health.channelCount} channels connected</p>
             )}
             {totalEvents > 0 && <p>{totalEvents} events received</p>}
-            {!isConnected && <p>Attempting to reconnect...</p>}
+            {connectionState === 'reconnecting' && (
+              <p>Retry attempt {health.totalRetries}</p>
+            )}
+            {connectionState === 'error' && health.lastError && (
+              <p className="text-red-400">{health.lastError}</p>
+            )}
+            {connectionState === 'error' && health.maxRetriesReached && (
+              <p className="text-red-400">Max retries reached. Click refresh to retry.</p>
+            )}
+            {connectionState === 'offline' && (
+              <p>No network connection</p>
+            )}
+            {showHealthDetails && (
+              <>
+                <hr className="border-border/50 my-1" />
+                <p>Uptime: {Math.round(health.uptime / 1000)}s</p>
+                <p>Total retries: {health.totalRetries}</p>
+                <p>Error channels: {health.errorChannels}</p>
+              </>
+            )}
           </div>
         </TooltipContent>
       </Tooltip>
       
-      {isConnected && lastUpdate && (
+      {connectionState === 'connected' && lastUpdate && (
         <span className="text-xs text-muted-foreground hidden sm:inline" data-testid="text-last-update">
           Updated {formatDistanceToNow(lastUpdate, { addSuffix: true })}
         </span>
@@ -166,7 +262,9 @@ export const ConnectionStatus = ({
               <RefreshCw className={cn('h-3.5 w-3.5', isRefreshing && 'animate-spin')} />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Force refresh all data</TooltipContent>
+          <TooltipContent>
+            {connectionState === 'error' ? 'Retry connection' : 'Force refresh all data'}
+          </TooltipContent>
         </Tooltip>
       )}
     </div>
