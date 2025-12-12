@@ -13,6 +13,7 @@ interface ProjectContextProps {
   setCurrentProject: (project: Project | null) => void;
   addProject: (project: Project) => Promise<Project | null>;
   updateProject: (project: Project) => Promise<void>;
+  updateProjectTeam: (projectId: string, team: Project['team']) => Promise<void>;
   deleteProject: (id: string) => Promise<void>;
   getProjectById: (id: string) => Project | undefined;
   fetchProjects: () => Promise<void>;
@@ -26,6 +27,7 @@ const ProjectContext = createContext<ProjectContextProps>({
   setCurrentProject: () => {},
   addProject: async () => null,
   updateProject: async () => {},
+  updateProjectTeam: async () => {},
   deleteProject: async () => {},
   getProjectById: () => undefined,
   fetchProjects: async () => {},
@@ -351,6 +353,38 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
+  const updateProjectTeam = async (projectId: string, team: Project['team']) => {
+    try {
+      const { error } = await supabase
+        .from('projects')
+        .update({ 
+          team,
+          updated_at: new Date().toISOString() 
+        })
+        .eq('id', projectId);
+        
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      setProjects(prev => prev.map(p => 
+        p.id === projectId ? { ...p, team } : p
+      ));
+      
+      if (currentProject?.id === projectId) {
+        setCurrentProject({ ...currentProject, team });
+      }
+    } catch (err) {
+      console.error("Error updating project team:", err);
+      toast({
+        title: "Error",
+        description: err instanceof Error ? err.message : "Failed to update team",
+        variant: "destructive",
+      });
+      throw err;
+    }
+  };
+
   const deleteProject = async (id: string) => {
     try {
       setLoading(true);
@@ -407,6 +441,7 @@ export const ProjectProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setCurrentProject,
         addProject,
         updateProject,
+        updateProjectTeam,
         deleteProject,
         getProjectById,
         fetchProjects,

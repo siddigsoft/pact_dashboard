@@ -1,9 +1,11 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Upload, ChevronLeft, Trash2, Hand } from 'lucide-react';
+import { DataFreshnessBadge } from '@/components/realtime';
+import { queryClient } from '@/lib/queryClient';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { MMPList } from '@/components/mmp/MMPList';
 import { useToast } from '@/hooks/use-toast';
@@ -2918,9 +2920,17 @@ const MMP = () => {
               <ChevronLeft className="h-4 w-4 sm:h-5 sm:w-5 text-white dark:text-blue-200" />
             </Button>
             <div className="min-w-0 flex-1">
-              <h1 className="text-xl sm:text-2xl md:text-3xl font-extrabold text-white tracking-tight truncate">
-                {canClaimSites ? 'My Sites Management' : 'MMP Management'}
-              </h1>
+              <div className="flex items-center gap-3">
+                <h1 className="text-xl sm:text-2xl md:text-3xl font-extrabold text-white tracking-tight truncate">
+                  {canClaimSites ? 'My Sites Management' : 'MMP Management'}
+                </h1>
+                <DataFreshnessBadge 
+                  lastUpdated={mmpFiles.length > 0 ? new Date() : null}
+                  onRefresh={async () => { await queryClient.invalidateQueries({ queryKey: ['mmp'] }); }}
+                  staleThresholdMinutes={5}
+                  variant="compact"
+                />
+              </div>
               <p className="text-blue-100 dark:text-blue-200/80 font-medium text-xs sm:text-sm md:text-base mt-1 leading-tight">
                 {isAdmin || isICT
                   ? 'Upload, validate, and forward MMPs to Field Operations Managers'
