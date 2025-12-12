@@ -7,6 +7,37 @@ import { queryClient } from './queryClient';
 
 type DebouncedFunction = (...args: any[]) => void;
 
+interface RealtimeMetricsData {
+  refreshesQueued: number;
+  refreshesProcessed: number;
+  toastsQueued: number;
+  toastsShown: number;
+  lastRefreshTime: Date | null;
+  lastToastTime: Date | null;
+}
+
+const metricsData: RealtimeMetricsData = {
+  refreshesQueued: 0,
+  refreshesProcessed: 0,
+  toastsQueued: 0,
+  toastsShown: 0,
+  lastRefreshTime: null,
+  lastToastTime: null,
+};
+
+export function getRealtimeMetrics(): RealtimeMetricsData {
+  return { ...metricsData };
+}
+
+export function resetRealtimeMetrics(): void {
+  metricsData.refreshesQueued = 0;
+  metricsData.refreshesProcessed = 0;
+  metricsData.toastsQueued = 0;
+  metricsData.toastsShown = 0;
+  metricsData.lastRefreshTime = null;
+  metricsData.lastToastTime = null;
+}
+
 interface DebouncedRefreshState {
   timeoutId: ReturnType<typeof setTimeout> | null;
   pendingTables: Set<string>;
@@ -41,6 +72,7 @@ export function createDebouncedRefresh(
 
 export function queueTableRefresh(table: string, eventType: string): void {
   refreshState.pendingTables.add(table);
+  metricsData.refreshesQueued++;
   
   const events = refreshState.pendingEvents.get(table) || new Set();
   events.add(eventType);
@@ -65,6 +97,9 @@ function processPendingRefreshes(): void {
 
   if (tables.length === 0) return;
 
+  metricsData.refreshesProcessed++;
+  metricsData.lastRefreshTime = new Date();
+  
   console.log(`[RealtimeUtils] Processing batched refresh for tables:`, tables);
 
   for (const table of tables) {
@@ -124,6 +159,8 @@ export function queueRealtimeToast(
   
   if (!mergedConfig.enabled) return;
 
+  metricsData.toastsQueued++;
+  
   const key = `${table}:${eventType}`;
   const existing = pendingToasts.get(key);
   
@@ -157,6 +194,9 @@ function processToastBatch(
   toastTimeoutId = null;
 
   if (toasts.length === 0) return;
+  
+  metricsData.toastsShown++;
+  metricsData.lastToastTime = new Date();
 
   const sortedToasts = toasts.sort((a, b) => b.count - a.count);
   const toastsToShow = sortedToasts.slice(0, config.maxToastsPerBatch);
