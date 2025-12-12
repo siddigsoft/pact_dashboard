@@ -161,7 +161,9 @@ export function OnlineOfflineToggle({
     const maxY = window.innerHeight - h - margin;
     newX = Math.max(margin, Math.min(maxX, newX));
     newY = Math.max(margin, Math.min(maxY, newY));
-    setPosition({ x: newX, y: newY });
+    requestAnimationFrame(() => {
+      setPosition({ x: newX, y: newY });
+    });
   };
 
   const onPointerUp = () => {
@@ -183,7 +185,7 @@ export function OnlineOfflineToggle({
         className={cn(
           "relative flex flex-col items-center justify-center",
           "w-24 h-24 md:w-28 md:h-28",
-          "rounded-full transition-all duration-300",
+          "rounded-full transition-all duration-150",
           "touch-manipulation select-none",
           "active:scale-95",
           isOnline 
@@ -224,7 +226,7 @@ export function OnlineOfflineToggle({
         disabled={isLoading}
         className={cn(
           "flex items-center gap-3 px-6 py-3",
-          "rounded-full transition-all duration-300",
+          "rounded-full transition-all duration-150",
           "touch-manipulation select-none",
           "active:scale-95",
           "min-h-[52px]",
@@ -302,11 +304,17 @@ export function OnlineOfflineToggle({
       <div 
         ref={containerRef}
         className={cn(
-          "fixed z-50",
+          "fixed z-50 touch-none",
           !position ? (mobileBottomOffset ? "right-4 bottom-24 md:bottom-6" : "right-4 bottom-6") : "",
           className
         )}
-        style={position ? { left: `${position.x}px`, top: `${position.y}px` } : undefined}
+        style={position ? { 
+          left: 0,
+          top: 0,
+          transform: `translate3d(${position.x}px, ${position.y}px, 0)`,
+          willChange: 'transform',
+          transition: draggingRef.current ? 'none' : 'transform 0.1s ease-out'
+        } : undefined}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
@@ -325,7 +333,7 @@ export function OnlineOfflineToggle({
           className={cn(
             "relative flex flex-col items-center justify-center",
             "w-16 h-16 md:w-20 md:h-20",
-            "rounded-full transition-all duration-300",
+            "rounded-full transition-all duration-150",
             "shadow-xl",
             "touch-manipulation select-none",
             "active:scale-95",

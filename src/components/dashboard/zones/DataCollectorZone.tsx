@@ -48,7 +48,6 @@ import {
 } from 'lucide-react';
 import { format, isToday, isPast, addDays, differenceInDays, parseISO, isValid } from 'date-fns';
 import { Button } from '@/components/ui/button';
-import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
 import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
 import { useWallet } from '@/context/wallet/WalletContext';
@@ -91,25 +90,17 @@ export const DataCollectorZone: React.FC = () => {
 
   const hasLocation = currentLocation?.latitude && currentLocation?.longitude;
 
-  // Get location last updated time
+  // Get location last updated time from currentUser context
   useEffect(() => {
     if (currentUser?.location) {
-      // Try to get last updated from profile
-      const fetchLastUpdated = async () => {
-        try {
-          const { data } = await supabase
-            .from('profiles')
-            .select('location_updated_at')
-            .eq('id', currentUser.id)
-            .single();
-          if (data?.location_updated_at) {
-            setLocationLastUpdated(data.location_updated_at);
-          }
-        } catch (error) {
-          console.error('Error fetching location update time:', error);
-        }
-      };
-      fetchLastUpdated();
+      // Try to get last updated from currentUser context
+      // If location_updated_at is not in context, use location.lastUpdated if available
+      const lastUpdated = (currentUser as any).location_updated_at || 
+                         (currentUser.location as any)?.lastUpdated ||
+                         (currentUser.location as any)?.updatedAt;
+      if (lastUpdated) {
+        setLocationLastUpdated(typeof lastUpdated === 'string' ? lastUpdated : lastUpdated.toISOString());
+      }
     }
   }, [currentUser?.id, currentUser?.location]);
 
@@ -362,7 +353,10 @@ export const DataCollectorZone: React.FC = () => {
   const activeFilterCount = Object.values(filters).filter(v => v !== '').length;
 
   return (
-    <div className="p-4 md:p-8 space-y-6">
+    <div className="space-y-6 px-4 md:px-8">
+      {/* Spacer for app bar */}
+      <div className="h-4"></div>
+      
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-3">
@@ -436,6 +430,7 @@ export const DataCollectorZone: React.FC = () => {
       </div>
 
       {/* Location Update Card */}
+      <div className="px-4 md:px-8">
       <Card className="border-blue-200 bg-blue-50 dark:bg-blue-950/20">
         <CardContent className="p-3 sm:p-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -500,8 +495,10 @@ export const DataCollectorZone: React.FC = () => {
           </div>
         </CardContent>
       </Card>
+      </div>
 
       {/* Streak & Performance Banner */}
+      <div className="px-4 md:px-8">
       {(streak > 0 || completionRate > 0) && (
         <Card className="bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-950/20 dark:to-amber-950/20 border-orange-200 dark:border-orange-800">
           <CardContent className="p-3 sm:p-4">
@@ -546,6 +543,7 @@ export const DataCollectorZone: React.FC = () => {
           </CardContent>
         </Card>
       )}
+      </div>
 
       {/* Main Content Tabs */}
       <Card className="border-border/50 bg-gradient-to-r from-muted/30 via-background to-muted/30">
@@ -990,3 +988,4 @@ export const DataCollectorZone: React.FC = () => {
   );
 };
 
+export default DataCollectorZone;

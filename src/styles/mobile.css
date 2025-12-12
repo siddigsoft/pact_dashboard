@@ -2,6 +2,18 @@
 
 /* ==================== LAYOUT SYSTEM ==================== */
 
+/* Prevent horizontal scrolling on mobile */
+@media (max-width: 768px) {
+  body, html {
+    overflow-x: hidden;
+    max-width: 100vw;
+  }
+  
+  * {
+    max-width: 100%;
+  }
+}
+
 /* iOS-specific styles */
 .ios-app {
   /* Add safe area insets for iOS notch */
@@ -14,11 +26,12 @@
 
 /* Prevent overscroll/bounce effect on iOS */
 .native-app {
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   position: fixed;
   width: 100%;
   height: 100%;
-  overscroll-behavior: none;
+  overscroll-behavior-x: none;
 }
 
 /* ==================== RESPONSIVE TYPOGRAPHY ==================== */

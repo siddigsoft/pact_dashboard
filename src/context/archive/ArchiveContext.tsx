@@ -44,7 +44,8 @@ export const ArchiveProvider: React.FC<ArchiveProviderProps> = ({ children, curr
     monthlyTrends: [],
   });
 
-  const loadArchive = useCallback(async () => {
+  // Load function extracted for reuse
+  const load = useCallback(async () => {
     try {
       setLoading(true);
 
@@ -284,10 +285,10 @@ export const ArchiveProvider: React.FC<ArchiveProviderProps> = ({ children, curr
   }, [toast]);
 
   useEffect(() => {
-    loadArchive();
-  }, [loadArchive]);
+    load();
+  }, [load]);
 
-  useRealtimeTables(['mmp_files', 'mmp_site_entries', 'report_photos'], loadArchive);
+  useRealtimeTables(['mmp_files', 'mmp_site_entries', 'report_photos'], load);
 
   // Select a specific month's archive
   const selectMonth = (year: number, month: number) => {

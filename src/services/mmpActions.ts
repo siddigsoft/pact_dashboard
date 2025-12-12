@@ -161,3 +161,84 @@ export async function forwardSitesToCoordinator(opts: {
   }
 }
 
+// Location data service helpers
+export async function fetchHubs() {
+  const { data, error } = await supabase
+    .from('hubs')
+    .select('id, name, description, is_active')
+    .eq('is_active', true)
+    .order('name');
+  if (error) throw error;
+  return data || [];
+}
+
+export async function fetchHubStates() {
+  const { data, error } = await supabase
+    .from('hub_states')
+    .select('hub_id, state_id, state_name, state_code')
+    .order('state_name');
+  if (error) throw error;
+  return data || [];
+}
+
+export async function fetchStates() {
+  const { data, error } = await supabase
+    .from('hub_states')
+    .select('state_id, state_name, state_code')
+    .order('state_name');
+  if (error) throw error;
+  
+  // Convert to State interface format and remove duplicates
+  const uniqueStates: any[] = [];
+  const seenStates = new Set<string>();
+  
+  (data || []).forEach(state => {
+    if (!seenStates.has(state.state_id)) {
+      seenStates.add(state.state_id);
+      uniqueStates.push({
+        id: state.state_id,
+        name: state.state_name,
+        code: state.state_code
+      });
+    }
+  });
+  
+  return uniqueStates;
+}
+
+export async function fetchLocalities() {
+  const { data, error } = await supabase
+    .from('sites_registry')
+    .select('locality_id, locality_name, state_id')
+    .order('locality_name');
+  if (error) throw error;
+  
+  // Convert to format and remove duplicates
+  const uniqueLocalities: any[] = [];
+  const seen = new Set<string>();
+  
+  (data || []).forEach(loc => {
+    const key = `${loc.locality_id}-${loc.state_id}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      uniqueLocalities.push({
+        id: loc.locality_id,
+        name: loc.locality_name,
+        state_id: loc.state_id
+      });
+    }
+  });
+  
+  return uniqueLocalities;
+}
+
+// Fetch forwarded site entries for an MMP
+export async function fetchForwardedSiteEntries(mmpFileId: string) {
+  const { data, error } = await supabase
+    .from('mmp_site_entries')
+    .select('id, forwarded_at, forwarded_by_user_id, forwarded_to_user_id, dispatched_at, additional_data')
+    .eq('mmp_file_id', mmpFileId);
+  if (error) throw error;
+  return data || [];
+}
+
