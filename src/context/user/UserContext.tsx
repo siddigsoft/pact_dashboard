@@ -256,10 +256,50 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     refreshUsers();
-    
-    const pollingInterval = setInterval(refreshUsers, 300000);
-    
-    return () => clearInterval(pollingInterval);
+
+    // Set up real-time subscriptions for users and roles
+    const usersChannel = supabase
+      .channel('users-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'profiles'
+        },
+        (payload) => {
+          console.log('Profiles change detected:', payload);
+          refreshUsers();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'user_roles'
+        },
+        (payload) => {
+          console.log('User roles change detected:', payload);
+          refreshUsers();
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ Users real-time subscription active');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('❌ Users real-time subscription error - Check if replication is enabled in Supabase');
+        } else if (status === 'TIMED_OUT') {
+          console.warn('⏱️ Users real-time subscription timed out');
+        } else {
+          console.log('Users subscription status:', status);
+        }
+      });
+
+    // Cleanup subscription on unmount
+    return () => {
+      supabase.removeChannel(usersChannel);
+    };
   }, []);
 
   useEffect(() => {
