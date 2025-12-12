@@ -45,7 +45,9 @@
       "mfaEnabled": "Two-Factor Authentication Enabled",
       "mfaEnabledDesc": "Your account is now more secure with 2FA.",
       "mfaDisabled": "Two-Factor Authentication Disabled",
-      "mfaDisabledDesc": "Two-factor authentication has been disabled."
+      "mfaDisabledDesc": "Two-factor authentication has been disabled.",
+      "pendingApproval": "Pending approval",
+      "pendingApprovalDesc": "Your account is pending approval by an administrator."
     },
     "siteVisit": {
       "started": "Site Visit Started",

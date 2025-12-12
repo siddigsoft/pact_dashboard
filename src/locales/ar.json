@@ -45,7 +45,9 @@
       "mfaEnabled": "تم تفعيل المصادقة الثنائية",
       "mfaEnabledDesc": "حسابك الآن أكثر أماناً مع المصادقة الثنائية.",
       "mfaDisabled": "تم تعطيل المصادقة الثنائية",
-      "mfaDisabledDesc": "تم تعطيل المصادقة الثنائية."
+      "mfaDisabledDesc": "تم تعطيل المصادقة الثنائية.",
+      "pendingApproval": "في انتظار الموافقة",
+      "pendingApprovalDesc": "حسابك في انتظار موافقة المسؤول."
     },
     "siteVisit": {
       "started": "بدأت زيارة الموقع",

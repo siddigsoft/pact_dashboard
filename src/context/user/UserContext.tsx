@@ -6,6 +6,7 @@ import { useRoles } from '@/hooks/use-roles';
 import { AppRole } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 import { EmailNotificationService } from '@/services/email-notification.service';
+import i18n from '@/i18n';
 
 interface UserContextType {
   currentUser: User | null;
@@ -431,8 +432,8 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const isApproved = (profileData?.status === 'approved');
       if (!isApproved) {
         toast({
-          title: 'Pending approval',
-          description: 'Your account is pending approval by an administrator.',
+          title: i18n.t('notifications.auth.pendingApproval'),
+          description: i18n.t('notifications.auth.pendingApprovalDesc'),
         });
         await supabase.auth.signOut();
         return false;
@@ -692,8 +693,8 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const isApproved = (profileData?.status === 'approved');
         if (!isApproved) {
           toast({
-            title: 'Pending approval',
-            description: 'Your account is pending approval by an administrator.',
+            title: i18n.t('notifications.auth.pendingApproval'),
+            description: i18n.t('notifications.auth.pendingApprovalDesc'),
           });
           await supabase.auth.signOut();
           return false;
