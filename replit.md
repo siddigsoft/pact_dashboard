@@ -68,6 +68,26 @@ The frontend, built with React 18, TypeScript, Tailwind CSS v3, and Shadcn UI, f
 *   **GPS Accuracy Display:** Location accuracy displayed across all team location views with color-coded indicators.
 *   **Signature & Transaction Module:** Comprehensive digital signature system for wallet transactions and document signing, supporting SHA-256 hashing, cryptographically secure OTP, handwriting signatures, and audit logging. Includes mobile support, security features using Web Crypto API, and pre-verification enforcement for phone/email methods.
 *   **Task-Level Budget Tracking:** Granular budget management at individual task/activity level with variance analysis (CPI, SPI, EAC), status classification, trend detection, spending restrictions, and 80% utilization alerts.
+*   **Password Management System:**
+    - Custom password reset with 6-digit OTP via email (IONOS SMTP)
+    - Password change with MFA support via `self-change-password` edge function
+    - Admin password reset capabilities via `admin-change-password` edge function
+    - OTP verification via `verify-reset-otp` edge function
+    - Bilingual support (English/Arabic) for all password-related emails
+*   **Email Notification System:**
+    - IONOS SMTP integration (noreply@pactorg.com)
+    - `send-email` edge function for transactional emails
+    - `dispatch-notification` edge function for system notifications
+    - Bilingual email templates (English/Arabic)
+    - Password reset, OTP, and system notification emails
+*   **Realtime Status Indicators:**
+    - `RealtimeBanner` component shows connection status across all pages
+    - `DataFreshnessBadge` shows when data was last updated
+    - `RealtimeActivityIndicator` shows live activity status
+    - `RealtimeStatusDot` for compact connection indicators
+    - `useRealtimeHealth` hook for connection health monitoring
+    - `useFocusReconnect` hook for automatic reconnection on tab focus
+    - Realtime subscriptions on signatures, site visits, MMP, and chat tables
 
 ### System Design Choices
 The project utilizes a unified Supabase client for all Supabase interactions, ensuring consistent authentication and session management. The system integrates the complete Sudan administrative structure.
