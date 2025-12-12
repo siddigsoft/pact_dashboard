@@ -30,7 +30,7 @@ import { DashboardCalendar } from '../DashboardCalendar';
 import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
 import { useUser } from '@/context/user/UserContext';
 import { useAuthorization } from '@/hooks/use-authorization';
-import { supabase } from '@/integrations/supabase/client';
+import { fetchHubs } from '@/services/mmpActions';
 import { isAfter, addDays } from 'date-fns';
 import { getStateName } from '@/data/sudanStates';
 
@@ -80,14 +80,15 @@ export const OperationsZone: React.FC = () => {
       return;
     }
     const fetchHubName = async () => {
-      const { data } = await supabase
-        .from('hubs')
-        .select('name')
-        .eq('id', currentUser.hubId)
-        .maybeSingle();
-      if (data) {
-        setSupervisorHubName(data.name);
-        console.log(`📊 OperationsZone: Supervisor hub loaded: ${data.name}`);
+      try {
+        const hubs = await fetchHubs();
+        const hub = hubs.find(h => h.id === currentUser.hubId);
+        if (hub) {
+          setSupervisorHubName(hub.name);
+          console.log(`📊 OperationsZone: Supervisor hub loaded: ${hub.name}`);
+        }
+      } catch (error) {
+        console.error('Error fetching hub name:', error);
       }
     };
     fetchHubName();

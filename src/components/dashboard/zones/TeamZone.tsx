@@ -13,7 +13,7 @@ import { TeamMemberCard } from '../TeamMemberCard';
 import { TeamMemberTable } from '../TeamMemberTable';
 import { User } from '@/types/user';
 import { useAppContext } from '@/context/AppContext';
-import { supabase } from '@/integrations/supabase/client';
+import { fetchHubs } from '@/services/mmpActions';
 import { useCall } from '@/context/communications/CallContext';
 import { useCommunication } from '@/context/communications/CommunicationContext';
 
@@ -48,12 +48,13 @@ export const TeamZone: React.FC = () => {
       return;
     }
     const fetchHubName = async () => {
-      const { data } = await supabase
-        .from('hubs')
-        .select('name')
-        .eq('id', supervisorHubId)
-        .maybeSingle();
-      if (data) setHubName(data.name);
+      try {
+        const hubs = await fetchHubs();
+        const hub = hubs.find(h => h.id === supervisorHubId);
+        if (hub) setHubName(hub.name);
+      } catch (error) {
+        console.error('Error fetching hub name:', error);
+      }
     };
     fetchHubName();
   }, [isSupervisor, supervisorHubId]);

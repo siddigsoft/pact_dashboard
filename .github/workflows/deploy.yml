@@ -1,4 +1,4 @@
-name: Deploy to VPS (Hardcoded Key Test)
+name: Deploy to VPS Production
 
 on:
   push:
