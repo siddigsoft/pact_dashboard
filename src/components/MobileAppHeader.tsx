@@ -35,6 +35,7 @@ import { syncManager } from '@/lib/sync-manager';
 import { getOfflineStats } from '@/lib/offline-db';
 import { hapticPresets } from '@/lib/haptics';
 import { PresenceIndicator } from '@/components/shared/PresenceIndicator';
+import { RealtimeStatusDot } from '@/components/realtime/RealtimeBanner';
 
 interface MobileAppHeaderProps {
   toggleSidebar?: () => void;
@@ -305,7 +306,10 @@ const MobileAppHeader = ({
           <Menu className="h-4 w-4 text-white" />
         </button>
         <div>
-          <h1 className="text-xl font-bold text-white">{title}</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold text-white">{title}</h1>
+            <RealtimeStatusDot className="h-2.5 w-2.5" />
+          </div>
           <p className="text-white/60 text-xs">Stay connected</p>
         </div>
       </div>
