@@ -255,11 +255,16 @@ serve(async (req) => {
         .single()
 
       if (insertError) {
-        console.error('Failed to insert notification:', insertError)
-        continue
+        // Check if table/column doesn't exist - skip DB insert but continue with email
+        if (insertError.code === '42P01' || insertError.code === '42703' || 
+            insertError.message?.includes('does not exist')) {
+          console.log('Notifications table not configured, skipping DB insert but sending email')
+        } else {
+          console.error('Failed to insert notification:', insertError)
+        }
+      } else {
+        notifications.push(inserted)
       }
-
-      notifications.push(inserted)
 
       // Send email if configured
       if (nodemailerTransporter && recipient.email && send_email) {
@@ -284,14 +289,17 @@ serve(async (req) => {
 
           const info = await nodemailerTransporter.sendMail(mailOptions)
           
-          await supabase
-            .from('notifications')
-            .update({ 
-              email_sent: true, 
-              email_sent_at: new Date().toISOString(),
-              status: 'sent'
-            })
-            .eq('id', inserted.id)
+          // Only update DB record if it was successfully inserted
+          if (inserted?.id) {
+            await supabase
+              .from('notifications')
+              .update({ 
+                email_sent: true, 
+                email_sent_at: new Date().toISOString(),
+                status: 'sent'
+              })
+              .eq('id', inserted.id)
+          }
 
           emailResults.push({ recipient: recipient.email, success: true, messageId: info.messageId })
           console.log(`Email sent to ${recipient.email}`)
@@ -300,10 +308,13 @@ serve(async (req) => {
           const errMsg = (emailError as Error)?.message || 'Unknown email error'
           console.error(`Failed to send email to ${recipient.email}:`, errMsg)
           
-          await supabase
-            .from('notifications')
-            .update({ email_error: errMsg })
-            .eq('id', inserted.id)
+          // Only update DB record if it was successfully inserted
+          if (inserted?.id) {
+            await supabase
+              .from('notifications')
+              .update({ email_error: errMsg })
+              .eq('id', inserted.id)
+          }
 
           emailResults.push({ recipient: recipient.email, success: false, error: errMsg })
         }
