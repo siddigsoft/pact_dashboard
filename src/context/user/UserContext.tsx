@@ -6,7 +6,7 @@ import { useRoles } from '@/hooks/use-roles';
 import { AppRole } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 import { EmailNotificationService } from '@/services/email-notification.service';
-import i18n from '@/i18n';
+import i18n from '@/lib/i18n';
 
 interface UserContextType {
   currentUser: User | null;
