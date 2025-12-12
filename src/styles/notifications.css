@@ -3,23 +3,23 @@
  * WhatsApp/Telegram-style notification UI
  */
 
-/* CSS Variables for Notification Theme */
+/* CSS Variables for Notification Theme - Using Uber/PACT theme colors */
 :root {
-  /* Bubble colors */
+  /* Bubble colors - Using theme tokens */
   --notification-bubble-bg: hsl(var(--card));
-  --notification-bubble-own-bg: 142 70% 95%;
+  --notification-bubble-own-bg: var(--primary);
   --notification-bubble-text: hsl(var(--foreground));
-  --notification-bubble-own-text: hsl(var(--foreground));
+  --notification-bubble-own-text: hsl(var(--primary-foreground));
   --notification-bubble-border: hsl(var(--border));
   
-  /* Status colors */
-  --notification-unread: 142 76% 36%;
+  /* Status colors - Using theme accent/primary */
+  --notification-unread: var(--primary);
   --notification-read: hsl(var(--muted-foreground));
   --notification-timestamp: hsl(var(--muted-foreground));
   
   /* Priority colors */
   --notification-priority-high: hsl(var(--destructive));
-  --notification-priority-medium: 38 92% 50%;
+  --notification-priority-medium: var(--accent);
   --notification-priority-low: hsl(var(--muted-foreground));
   
   /* Overlay & Popup */
@@ -37,10 +37,10 @@
 }
 
 .dark {
-  /* Dark mode overrides (Telegram-inspired) */
-  --notification-bubble-own-bg: 210 80% 25%;
-  --notification-bubble-own-text: hsl(0 0% 98%);
-  --notification-unread: 210 100% 56%;
+  /* Dark mode overrides - Using theme tokens */
+  --notification-bubble-own-bg: var(--primary);
+  --notification-bubble-own-text: hsl(var(--primary-foreground));
+  --notification-unread: var(--primary);
   --notification-overlay-bg: hsla(0, 0%, 0%, 0.6);
   --notification-bubble-shadow: 0 1px 3px hsla(0, 0%, 0%, 0.2);
   --notification-popup-shadow: 0 4px 24px hsla(0, 0%, 0%, 0.3);
