@@ -1,92 +1,37 @@
 /**
- * useRealtimeHealth Hook
- * Provides realtime connection health status for the application
+ * React hook for accessing realtime health state
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { realtimeHealth, RealtimeHealthState, RealtimeMetrics } from '@/lib/realtime-health';
 import { supabase } from '@/integrations/supabase/client';
 
-interface RealtimeHealthState {
-  isOnline: boolean;
-  isConnecting: boolean;
-  connectedChannels: number;
-  lastConnected: Date | null;
-  reconnectAttempts: number;
-}
-
 export function useRealtimeHealth() {
-  const [health, setHealth] = useState<RealtimeHealthState>({
-    isOnline: navigator.onLine,
-    isConnecting: false,
-    connectedChannels: 0,
-    lastConnected: null,
-    reconnectAttempts: 0,
-  });
+  const [state, setState] = useState<RealtimeHealthState>(realtimeHealth.getState());
+  const [metrics, setMetrics] = useState<RealtimeMetrics>(realtimeHealth.getMetrics());
 
   useEffect(() => {
-    const handleOnline = () => {
-      setHealth(prev => ({
-        ...prev,
-        isOnline: true,
-        lastConnected: new Date(),
-        reconnectAttempts: 0,
-      }));
-    };
+    const unsubscribe = realtimeHealth.subscribe((newState) => {
+      setState(newState);
+      setMetrics(realtimeHealth.getMetrics());
+    });
 
-    const handleOffline = () => {
-      setHealth(prev => ({
-        ...prev,
-        isOnline: false,
-      }));
-    };
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    const channels = supabase.getChannels();
-    setHealth(prev => ({
-      ...prev,
-      connectedChannels: channels.length,
-      isOnline: navigator.onLine,
-    }));
-
-    const interval = setInterval(() => {
-      const currentChannels = supabase.getChannels();
-      setHealth(prev => ({
-        ...prev,
-        connectedChannels: currentChannels.length,
-        isOnline: navigator.onLine,
-      }));
-    }, 5000);
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-      clearInterval(interval);
-    };
+    return unsubscribe;
   }, []);
 
   const forceReconnect = useCallback(async () => {
-    setHealth(prev => ({ ...prev, isConnecting: true }));
     try {
       await supabase.removeAllChannels();
-      setHealth(prev => ({
-        ...prev,
-        isConnecting: false,
-        lastConnected: new Date(),
-        reconnectAttempts: 0,
-      }));
     } catch (error) {
-      setHealth(prev => ({
-        ...prev,
-        isConnecting: false,
-        reconnectAttempts: prev.reconnectAttempts + 1,
-      }));
+      console.error('Error forcing reconnect:', error);
     }
   }, []);
 
   return {
-    ...health,
+    ...state,
+    ...metrics,
+    enableDebug: () => realtimeHealth.enableDebugMode(),
+    disableDebug: () => realtimeHealth.disableDebugMode(),
     forceReconnect,
   };
 }

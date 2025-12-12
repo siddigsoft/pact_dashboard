@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate, useLocation, Outlet } from "react-router-dom";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
@@ -126,3 +127,5 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children }) => (
 );
 
 export default MainLayout;
+=======
+>>>>>>> 44cf692f2257851dc332c748d91c6b0c52be11e9
