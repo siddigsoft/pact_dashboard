@@ -139,6 +139,9 @@ function transformSiteVisitCostFromDB(data: any): SiteVisitCost {
   };
 }
 
+// Module-level Set to track in-flight fee additions and prevent race conditions
+const pendingFeeAdditions = new Set<string>();
+
 export function WalletProvider({ children }: { children: ReactNode }) {
   const { currentUser, authReady } = useUser();
   const { toast } = useToast();
@@ -762,14 +765,33 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   };
 
   const addSiteVisitFeeToWallet = async (userId: string, siteVisitId: string, complexityMultiplier: number = 1.0) => {
+    // RACE CONDITION GUARD: Prevent concurrent calls for same site visit
+    const lockKey = `${userId}-${siteVisitId}`;
+    if (pendingFeeAdditions.has(lockKey)) {
+      console.warn(`[Wallet] Fee addition already in progress for ${siteVisitId}, skipping duplicate call`);
+      return;
+    }
+    pendingFeeAdditions.add(lockKey);
+    
     try {
       // VALIDATION 1: Check if fee was already added for this site visit (prevent duplicate fees)
       // Check both site_visit_id (from online completion) and reference_id (from offline sync)
-      const { data: existingFees, error: feeCheckError } = await supabase
+      // Using separate queries for more reliable matching
+      const { data: existingBySiteVisitId, error: check1Error } = await supabase
         .from('wallet_transactions')
         .select('id, amount')
-        .or(`site_visit_id.eq.${siteVisitId},reference_id.eq.${siteVisitId}`)
+        .eq('site_visit_id', siteVisitId)
         .in('type', ['earning', 'site_visit_fee']);
+      
+      const { data: existingByRefId, error: check2Error } = await supabase
+        .from('wallet_transactions')
+        .select('id, amount')
+        .eq('reference_id', siteVisitId)
+        .in('type', ['earning', 'site_visit_fee']);
+      
+      // Combine results
+      const existingFees = [...(existingBySiteVisitId || []), ...(existingByRefId || [])];
+      const feeCheckError = check1Error || check2Error;
 
       // CRITICAL: Abort if we cannot verify whether fee exists (fail-safe)
       if (feeCheckError) {
@@ -977,6 +999,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     } catch (error: any) {
       console.error('Failed to add site visit fee:', error);
       throw error;
+    } finally {
+      // Release the lock so future attempts can proceed (after previous one completes)
+      const lockKey = `${userId}-${siteVisitId}`;
+      pendingFeeAdditions.delete(lockKey);
     }
   };
 
