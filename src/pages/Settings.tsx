@@ -780,31 +780,29 @@ const Settings = () => {
       });
       return;
     }
+    if (newPassword.length < 8) {
+      toast({
+        title: "Password too short",
+        description: "New password must be at least 8 characters.",
+        variant: "destructive",
+      });
+      return;
+    }
     setChanging(true);
     try {
-      const { error: signInError } = await import("@/integrations/supabase/client").then(({ supabase }) =>
-        supabase.auth.signInWithPassword({ email: currentUser?.email as string, password: oldPassword })
-      );
+      const { supabase } = await import("@/integrations/supabase/client");
       
-      if (signInError) {
-        setChanging(false);
-        toast({
-          title: "Wrong current password",
-          description: "The current password you entered is incorrect.",
-          variant: "destructive",
-        });
-        return;
-      }
+      const { data, error } = await supabase.functions.invoke('self-change-password', {
+        body: { 
+          currentPassword: oldPassword, 
+          newPassword: newPassword 
+        }
+      });
       
-      const { error: updateError } = await import("@/integrations/supabase/client").then(({ supabase }) =>
-        supabase.auth.updateUser({ password: newPassword })
-      );
-      
-      if (updateError) {
-        setChanging(false);
+      if (error || !data?.success) {
         toast({
           title: "Password change failed",
-          description: updateError.message || "Could not change password.",
+          description: data?.error || error?.message || "Could not change password.",
           variant: "destructive",
         });
       } else {
