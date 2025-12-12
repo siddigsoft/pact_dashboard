@@ -102,6 +102,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import { debugDatabase } from './utils/debug-db';
 import { useFCM } from './hooks/useFCM';
 import { MobilePermissionGuard } from './components/mobile/MobilePermissionGuard';
+import { LiveDashboardProvider } from './context/realtime/LiveDashboardContext';
 
 // Loading component for Suspense fallback
 const PageLoader = () => (
@@ -348,15 +349,17 @@ function App() {
             <Router>
               <AppProviders>
                 <NotificationProvider>
-                  <FCMInitializer />
-                  <Suspense fallback={<PageLoader />}>
-                    <AuthGuard>
-                      <MobilePermissionGuard>
-                        <AppRoutes />
-                      </MobilePermissionGuard>
-                    </AuthGuard>
-                  </Suspense>
-                  <AppNotifications />
+                  <LiveDashboardProvider>
+                    <FCMInitializer />
+                    <Suspense fallback={<PageLoader />}>
+                      <AuthGuard>
+                        <MobilePermissionGuard>
+                          <AppRoutes />
+                        </MobilePermissionGuard>
+                      </AuthGuard>
+                    </Suspense>
+                    <AppNotifications />
+                  </LiveDashboardProvider>
                   <Toaster />
                   <SonnerToaster />
                   <HotToaster
