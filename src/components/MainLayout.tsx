@@ -23,11 +23,10 @@ interface MainLayoutContentProps {
 
 const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
   // Get app context - now this will be available since we've fixed the provider order
-  const { currentUser } = useAppContext();
+  const { currentUser, authReady } = useAppContext();
   useLiveDashboard();
   const navigate = useNavigate();
   const location = useLocation();
-  const [isAuthorized, setIsAuthorized] = useState<boolean>(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { viewMode, isTransitioning } = useViewMode();
   const isMobile = viewMode === 'mobile';
@@ -46,14 +45,26 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
   };
 
   useEffect(() => {
-    if (!currentUser) {
+    // Only redirect after auth is ready AND user is confirmed not logged in
+    if (authReady && !currentUser) {
       navigate("/auth");
-    } else {
-      setIsAuthorized(true);
     }
-  }, [currentUser, navigate]);
+  }, [currentUser, authReady, navigate]);
 
-  if (!isAuthorized) {
+  // Show loading while auth is hydrating
+  if (!authReady) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-gray-900">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-10 w-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Don't render layout if not authenticated
+  if (!currentUser) {
     return null;
   }
 
