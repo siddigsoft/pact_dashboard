@@ -14,8 +14,13 @@ import LocationSelection from '@/components/registration/LocationSelection';
 import { hubs, getLocalitiesByState } from "@/data/sudanStates";
 import { useToast } from "@/hooks/use-toast";
 import { useNotificationManager } from "@/hooks/use-notification-manager";
+import { useDevice } from "@/hooks/use-device";
+import { MobileRegisterScreen } from "@/components/mobile/MobileRegisterScreen";
 
 const Register = () => {
+  const { isNative, isMobile: isDeviceMobile, isLoading: isDeviceLoading } = useDevice();
+  const isMobileView = isNative || isDeviceMobile;
+
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -40,6 +45,10 @@ const Register = () => {
 
   const { sendNotification } = useNotificationManager();
   const managementRoles = ['admin', 'ict', 'supervisor', 'fom', 'financialAdmin'];
+
+  if (isMobileView && !isDeviceLoading) {
+    return <MobileRegisterScreen />;
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
