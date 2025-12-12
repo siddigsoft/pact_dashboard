@@ -66,7 +66,9 @@ serve(async (req) => {
       }
 
       // Now insert a fresh token
-      const { error: storeError } = await supabase
+      console.log(`[DEBUG v2] Inserting OTP for ${email.toLowerCase()}: otp=${generatedOtp}, expires=${expiresAt}`)
+      
+      const { data: insertData, error: storeError } = await supabase
         .from('password_reset_tokens')
         .insert({
           email: email.toLowerCase(),
@@ -74,16 +76,19 @@ serve(async (req) => {
           expires_at: expiresAt,
           used: false
         })
+        .select()
+
+      console.log(`[DEBUG v2] Insert result: data=${JSON.stringify(insertData)}, error=${storeError ? storeError.message : 'none'}`)
 
       if (storeError) {
-        console.error('CRITICAL: Could not store OTP in database:', storeError.message)
+        console.error('CRITICAL: Could not store OTP in database:', storeError.message, storeError)
         return new Response(
           JSON.stringify({ success: false, error: 'Failed to generate reset code. Please try again.' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
         )
       }
       
-      console.log(`OTP stored successfully in database for ${email.toLowerCase()}`)
+      console.log(`[DEBUG v2] OTP stored successfully in database for ${email.toLowerCase()}`)
 
       const smtpHost = Deno.env.get('SMTP_HOST')
       const smtpPort = Deno.env.get('SMTP_PORT') || '465'
