@@ -511,6 +511,7 @@ const Settings = () => {
   const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [changing, setChanging] = useState(false);
   const [activeTab, setActiveTab] = useState("general");
   const [showMFASetup, setShowMFASetup] = useState(false);
@@ -834,6 +835,25 @@ const Settings = () => {
       });
       return;
     }
+
+    if (newPassword.length < 8) {
+      toast({
+        title: "Weak password",
+        description: "Use at least 8 characters for your new password.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (newPassword === oldPassword) {
+      toast({
+        title: "No change detected",
+        description: "Choose a password different from your current one.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (newPassword !== confirmPassword) {
       toast({
         title: "Passwords do not match",
@@ -842,14 +862,7 @@ const Settings = () => {
       });
       return;
     }
-    if (newPassword.length < 8) {
-      toast({
-        title: "Password too short",
-        description: "New password must be at least 8 characters.",
-        variant: "destructive",
-      });
-      return;
-    }
+
     setChanging(true);
     try {
       const { supabase } = await import("@/integrations/supabase/client");
@@ -871,17 +884,19 @@ const Settings = () => {
             data?.error || error?.message || "Could not change password.",
           variant: "destructive",
         });
-      } else {
-        toast({
-          title: "Password changed",
-          description: "Your password was successfully updated.",
-          variant: "success",
-        });
-        setShowChangePassword(false);
-        setOldPassword("");
-        setNewPassword("");
-        setConfirmPassword("");
+        setChanging(false);
+        return;
       }
+
+      toast({
+        title: "Password changed",
+        description: "Your password was successfully updated.",
+        variant: "success",
+      });
+      setShowChangePassword(false);
+      setOldPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
     } catch (error: any) {
       console.error("Password change error:", error);
       toast({
@@ -1895,15 +1910,28 @@ const Settings = () => {
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label htmlFor="old-password">Current Password</Label>
-              <Input
-                id="old-password"
-                type="password"
-                value={oldPassword}
-                onChange={(e) => setOldPassword(e.target.value)}
-                autoComplete="current-password"
-                className="h-11"
-                data-testid="input-old-password"
-              />
+              <div className="relative">
+                <Input
+                  id="old-password"
+                  type={showCurrentPassword ? "text" : "password"}
+                  value={oldPassword}
+                  onChange={(e) => setOldPassword(e.target.value)}
+                  autoComplete="current-password"
+                  className="h-11 pr-12"
+                  data-testid="input-old-password"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute inset-y-0 right-1 my-auto h-9 w-9"
+                  onClick={() => setShowCurrentPassword((prev) => !prev)}
+                  aria-label={showCurrentPassword ? "Hide password" : "Show password"}
+                  data-testid="button-toggle-current-password"
+                >
+                  {showCurrentPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+              </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="new-password">New Password</Label>

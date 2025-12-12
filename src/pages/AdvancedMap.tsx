@@ -158,7 +158,6 @@ const AdvancedMap = () => {
 
       if (user) {
         const userStatus = getUserStatus(user);
-        const assignedUser = user.assignedTo ? users.find(u => u.id === user.assignedTo) : null;
         setSelectedLocation({
           id: user.id,
           type: 'user',
@@ -166,12 +165,12 @@ const AdvancedMap = () => {
           status: userStatus.type,
           latitude: user.location?.latitude || 0,
           longitude: user.location?.longitude || 0,
-          lastUpdated: user.location?.timestamp || user.lastSeen,
+          lastUpdated: user.location?.lastUpdated || user.lastActive,
           role: user.role,
           email: user.email,
           phone: user.phone,
-          state: user.state,
-          locality: user.locality
+          state: user.stateId,
+          locality: user.localityId
         });
       } else if (siteVisit) {
         const assignedUser = siteVisit.assignedTo ? users.find(u => u.id === siteVisit.assignedTo) : null;
@@ -182,13 +181,13 @@ const AdvancedMap = () => {
           status: siteVisit.status,
           latitude: siteVisit.coordinates?.latitude || 0,
           longitude: siteVisit.coordinates?.longitude || 0,
-          lastUpdated: siteVisit.updatedAt || siteVisit.createdAt,
+          lastUpdated: siteVisit.createdAt,
           state: siteVisit.state,
           locality: siteVisit.locality,
           siteCode: siteVisit.siteCode,
           dueDate: siteVisit.dueDate,
-          mmpId: siteVisit.mmpId,
-          mmpName: siteVisit.mmpDetails?.filename,
+          mmpId: siteVisit.mmpDetails?.mmpId,
+          mmpName: siteVisit.mmpDetails?.projectName,
           projectId: siteVisit.mmpDetails?.projectId,
           projectName: siteVisit.mmpDetails?.projectName,
           assignedTo: siteVisit.assignedTo,
