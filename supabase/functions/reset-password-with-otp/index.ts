@@ -44,12 +44,16 @@ serve(async (req) => {
 
     console.log(`Password reset attempt for email: ${email.toLowerCase()}, OTP provided: ${otp}`)
 
-    // Verify the OTP first - try to find any token for this email
-    const { data: storedToken, error: tokenError } = await supabase
+    // Verify the OTP first - get the latest unused token for this email
+    const { data: storedTokens, error: tokenError } = await supabase
       .from('password_reset_tokens')
       .select('*')
       .eq('email', email.toLowerCase())
-      .maybeSingle()
+      .eq('used', false)
+      .order('created_at', { ascending: false })
+      .limit(1)
+    
+    const storedToken = storedTokens?.[0] || null
 
     console.log('Token lookup result:', { storedToken, tokenError })
 
