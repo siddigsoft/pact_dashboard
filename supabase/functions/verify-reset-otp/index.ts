@@ -6,15 +6,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-interface ResetOTP {
-  email: string
-  otp: string
-  expires_at: string
-  created_at: string
-}
-
-const resetOTPs = new Map<string, ResetOTP>()
-
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -64,24 +55,35 @@ serve(async (req) => {
       const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString()
       const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString()
 
+      // First delete any existing tokens for this email to avoid duplicates
+      const { error: deleteError } = await supabase
+        .from('password_reset_tokens')
+        .delete()
+        .eq('email', email.toLowerCase())
+
+      if (deleteError) {
+        console.log('Warning: Could not delete old tokens:', deleteError.message)
+      }
+
+      // Now insert a fresh token
       const { error: storeError } = await supabase
         .from('password_reset_tokens')
-        .upsert({
+        .insert({
           email: email.toLowerCase(),
           otp: generatedOtp,
           expires_at: expiresAt,
           used: false
-        }, { onConflict: 'email' })
+        })
 
       if (storeError) {
-        console.log('Could not store in DB, using in-memory fallback:', storeError.message)
-        resetOTPs.set(email.toLowerCase(), {
-          email: email.toLowerCase(),
-          otp: generatedOtp,
-          expires_at: expiresAt,
-          created_at: new Date().toISOString()
-        })
+        console.error('CRITICAL: Could not store OTP in database:', storeError.message)
+        return new Response(
+          JSON.stringify({ success: false, error: 'Failed to generate reset code. Please try again.' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+        )
       }
+      
+      console.log(`OTP stored successfully in database for ${email.toLowerCase()}`)
 
       const smtpHost = Deno.env.get('SMTP_HOST')
       const smtpPort = Deno.env.get('SMTP_PORT') || '465'
@@ -253,26 +255,33 @@ serve(async (req) => {
       )
     }
 
-    const { data: storedToken, error: tokenError } = await supabase
+    // Get the latest unused token for this email
+    const { data: storedTokens, error: tokenError } = await supabase
       .from('password_reset_tokens')
       .select('*')
       .eq('email', email.toLowerCase())
       .eq('used', false)
-      .maybeSingle()
+      .order('created_at', { ascending: false })
+      .limit(1)
+
+    const storedToken = storedTokens?.[0] || null
+
+    if (tokenError) {
+      console.error('Token lookup error:', tokenError)
+      return new Response(
+        JSON.stringify({ success: false, error: 'Database error. Please try again.' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      )
+    }
 
     let isValid = false
     
-    if (storedToken && !tokenError) {
+    if (storedToken) {
       const isExpired = new Date(storedToken.expires_at) < new Date()
       isValid = storedToken.otp === otp && !isExpired
-      // Don't mark as used here - the reset-password-with-otp function will mark it used after password change
+      console.log(`OTP verification for ${email.toLowerCase()}: stored=${storedToken.otp}, provided=${otp}, expired=${isExpired}, valid=${isValid}`)
     } else {
-      const memoryToken = resetOTPs.get(email.toLowerCase())
-      if (memoryToken) {
-        const isExpired = new Date(memoryToken.expires_at) < new Date()
-        isValid = memoryToken.otp === otp && !isExpired
-        // Don't delete from memory here - wait for password reset
-      }
+      console.log(`No token found in database for ${email.toLowerCase()}`)
     }
 
     if (!isValid) {
