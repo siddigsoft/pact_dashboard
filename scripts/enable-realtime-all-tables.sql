@@ -87,8 +87,8 @@ DECLARE
         'tasks',
         'task_assignments'
     ];
-    table_name TEXT;
-    table_exists BOOLEAN;
+    tbl_name TEXT;
+    tbl_exists BOOLEAN;
     already_in_pub BOOLEAN;
     added_count INT := 0;
     skipped_count INT := 0;
@@ -99,34 +99,34 @@ BEGIN
     RAISE NOTICE '========================================';
     RAISE NOTICE '';
     
-    FOREACH table_name IN ARRAY tables_to_add
+    FOREACH tbl_name IN ARRAY tables_to_add
     LOOP
-        -- Check if table exists
+        -- Check if table exists (use fully qualified column reference)
         SELECT EXISTS (
-            SELECT 1 FROM information_schema.tables 
-            WHERE table_schema = 'public' AND table_name = enable_realtime_all_tables.table_name
-        ) INTO table_exists;
+            SELECT 1 FROM information_schema.tables t
+            WHERE t.table_schema = 'public' AND t.table_name = tbl_name
+        ) INTO tbl_exists;
         
-        IF NOT table_exists THEN
-            RAISE NOTICE 'SKIP: Table "%" does not exist', table_name;
+        IF NOT tbl_exists THEN
+            RAISE NOTICE 'SKIP: Table "%" does not exist', tbl_name;
             not_found_count := not_found_count + 1;
             CONTINUE;
         END IF;
         
         -- Check if already in publication
         SELECT EXISTS (
-            SELECT 1 FROM pg_publication_tables 
-            WHERE pubname = 'supabase_realtime' 
-            AND schemaname = 'public' 
-            AND tablename = enable_realtime_all_tables.table_name
+            SELECT 1 FROM pg_publication_tables pt
+            WHERE pt.pubname = 'supabase_realtime' 
+            AND pt.schemaname = 'public' 
+            AND pt.tablename = tbl_name
         ) INTO already_in_pub;
         
         IF already_in_pub THEN
-            RAISE NOTICE 'SKIP: Table "%" already has realtime enabled', table_name;
+            RAISE NOTICE 'SKIP: Table "%" already has realtime enabled', tbl_name;
             skipped_count := skipped_count + 1;
         ELSE
-            EXECUTE format('ALTER PUBLICATION supabase_realtime ADD TABLE %I', table_name);
-            RAISE NOTICE 'ADDED: Table "%" now has realtime enabled', table_name;
+            EXECUTE format('ALTER PUBLICATION supabase_realtime ADD TABLE %I', tbl_name);
+            RAISE NOTICE 'ADDED: Table "%" now has realtime enabled', tbl_name;
             added_count := added_count + 1;
         END IF;
     END LOOP;
