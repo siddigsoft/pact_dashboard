@@ -1,5 +1,6 @@
 import React, { createContext, useContext, ReactNode } from 'react';
 import { useWhatsAppNotifications, WhatsAppNotification } from '@/hooks/useWhatsAppNotifications';
+import { usePersistentNotifications, PersistentNotification } from '@/hooks/usePersistentNotifications';
 
 interface NotificationContextType {
   notifications: WhatsAppNotification[];
@@ -9,12 +10,23 @@ interface NotificationContextType {
   info: (title: string, description?: string, duration?: number) => string;
   task: (title: string, description?: string, action?: { label: string; onClick: () => void }) => string;
   remove: (id: string) => void;
+  persistentNotifications: PersistentNotification[];
+  unreadCount: number;
+  urgentCount: number;
+  isPersistentLoading: boolean;
+  markAsRead: (id: string) => Promise<void>;
+  markAllAsRead: () => Promise<void>;
+  deleteNotification: (id: string) => Promise<void>;
+  refreshNotifications: () => Promise<void>;
+  getNotificationsByPriority: (priority: 'urgent' | 'high' | 'normal') => PersistentNotification[];
+  getUnreadNotifications: () => PersistentNotification[];
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
 
 export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const notificationHook = useWhatsAppNotifications();
+  const persistentHook = usePersistentNotifications();
 
   const value: NotificationContextType = {
     notifications: notificationHook.notifications,
@@ -24,6 +36,16 @@ export const NotificationProvider: React.FC<{ children: ReactNode }> = ({ childr
     info: notificationHook.info,
     task: notificationHook.task,
     remove: notificationHook.remove,
+    persistentNotifications: persistentHook.notifications,
+    unreadCount: persistentHook.unreadCount,
+    urgentCount: persistentHook.urgentCount,
+    isPersistentLoading: persistentHook.isLoading,
+    markAsRead: persistentHook.markAsRead,
+    markAllAsRead: persistentHook.markAllAsRead,
+    deleteNotification: persistentHook.deleteNotification,
+    refreshNotifications: persistentHook.fetchNotifications,
+    getNotificationsByPriority: persistentHook.getNotificationsByPriority,
+    getUnreadNotifications: persistentHook.getUnreadNotifications,
   };
 
   return (
