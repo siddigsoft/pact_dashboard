@@ -10,9 +10,9 @@ import { useGlobalPresence } from '@/context/presence/GlobalPresenceContext';
 import { useUser } from '@/context/user/UserContext';
 import { useCall } from '@/context/communications/CallContext';
 import { useChat } from '@/context/chat/ChatContextSupabase';
-import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
+import { useMemo } from 'react';
 
 interface OnlineUsersPanelProps {
   isOpen: boolean;
@@ -28,57 +28,38 @@ interface OnlineUserInfo {
 
 export function OnlineUsersPanel({ isOpen, onClose }: OnlineUsersPanelProps) {
   const { onlineUserIds } = useGlobalPresence();
-  const { currentUser } = useUser();
+  const { currentUser, users } = useUser();
   const { initiateCall } = useCall();
   const { createChat, setActiveChat } = useChat();
   const navigate = useNavigate();
   
-  const [onlineUsers, setOnlineUsers] = useState<OnlineUserInfo[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Load user details for online users
-  useEffect(() => {
-    if (!isOpen || onlineUserIds.length === 0) {
-      setOnlineUsers([]);
-      return;
-    }
-
-    const loadOnlineUsers = async () => {
-      setIsLoading(true);
-      try {
-        // Filter out current user from the list
-        const otherUserIds = onlineUserIds.filter(id => id !== currentUser?.id);
-        
-        if (otherUserIds.length === 0) {
-          setOnlineUsers([]);
-          return;
-        }
-
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('id, full_name, avatar_url, role')
-          .in('id', otherUserIds);
-
-        if (error) throw error;
-
-        setOnlineUsers(
-          (data || []).map(u => ({
-            id: u.id,
-            name: u.full_name || 'Unknown User',
-            avatar: u.avatar_url || undefined,
-            role: u.role || 'user',
-          }))
-        );
-      } catch (error) {
-        console.error('[OnlineUsers] Failed to load users:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadOnlineUsers();
-  }, [isOpen, onlineUserIds, currentUser?.id]);
+  // Get online users from context
+  const onlineUsers = useMemo(() => {
+    if (!isOpen || onlineUserIds.length === 0 || !users) return [];
+    
+    // Filter out current user from the list
+    const otherUserIds = onlineUserIds.filter(id => id !== currentUser?.id);
+    
+    if (otherUserIds.length === 0) return [];
+    
+    // Map online user IDs to user info from context
+    return otherUserIds
+      .map(id => {
+        const user = users.find(u => u.id === id);
+        if (!user) return null;
+        return {
+          id: user.id,
+          name: user.fullName || user.name || user.email || 'Unknown User',
+          avatar: user.avatar || user.avatarUrl || undefined,
+          role: user.role || 'user',
+        };
+      })
+      .filter((u): u is OnlineUserInfo => u !== null);
+  }, [isOpen, onlineUserIds, currentUser?.id, users]);
+  
+  const isLoading = false; // No loading needed when using context
 
   const filteredUsers = onlineUsers.filter(user =>
     user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||

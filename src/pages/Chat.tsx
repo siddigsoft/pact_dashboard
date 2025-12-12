@@ -52,6 +52,19 @@ const Chat: React.FC = () => {
   const lastProcessedParamRef = useRef<string | null>(null);
   
   const { onlineUserIds } = useRealtimeTeamLocations({ enabled: true });
+  const headerRef = useRef<HTMLDivElement | null>(null);
+  const [headerHeight, setHeaderHeight] = useState<number>(140);
+
+  useEffect(() => {
+    if (!isMobile) return;
+    const updateHeaderHeight = () => {
+      const h = headerRef.current?.offsetHeight || 140;
+      setHeaderHeight(h);
+    };
+    updateHeaderHeight();
+    window.addEventListener('resize', updateHeaderHeight);
+    return () => window.removeEventListener('resize', updateHeaderHeight);
+  }, [isMobile]);
 
   useEffect(() => {
     if (!currentUser) {
@@ -288,7 +301,8 @@ const Chat: React.FC = () => {
           <div className="flex flex-col h-full">
             {/* Compact Header with safe area for notch */}
             <header 
-              className="shrink-0 bg-black px-3 pb-3"
+              ref={headerRef}
+              className="fixed top-0 left-0 right-0 shrink-0 bg-black px-3 pb-3 z-50"
               style={{ paddingTop: 'calc(env(safe-area-inset-top) + 12px)' }}
             >
               <div className="flex items-center justify-between mb-2">
@@ -357,8 +371,10 @@ const Chat: React.FC = () => {
               )}
             </header>
             
-            {/* Search */}
-            <div className="px-3 py-2 bg-white dark:bg-black border-b border-gray-100 dark:border-gray-900">
+            {/* Content positioned exactly below fixed header */}
+            <div style={{ paddingTop: `${headerHeight}px` }}>
+              {/* Search */}
+              <div className="px-3 py-2 bg-white dark:bg-black border-b border-gray-100 dark:border-gray-900">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                 <input
@@ -526,6 +542,7 @@ const Chat: React.FC = () => {
                 )
               )}
             </ScrollArea>
+            </div>
           </div>
         ) : (
           <div className="flex flex-col h-full bg-white dark:bg-black">
@@ -592,7 +609,7 @@ const Chat: React.FC = () => {
               </div>
             </header>
             <div className="flex-1 overflow-hidden">
-              <ChatWindow />
+              <ChatWindow hideHeader={true} />
             </div>
           </div>
         )}

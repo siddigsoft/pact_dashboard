@@ -29,7 +29,7 @@ def getVersionName = { ->
 android {
     namespace "com.pact.commandcenter"
     compileSdk rootProject.ext.compileSdkVersion
-    
+
     defaultConfig {
         applicationId "com.pact.commandcenter"
         minSdkVersion rootProject.ext.minSdkVersion
@@ -40,7 +40,7 @@ android {
         
         // Enable multidex for larger apps
         multiDexEnabled true
-        
+
         aaptOptions {
             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
             ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
@@ -64,6 +64,15 @@ android {
     // Map for ABI version codes (AGP 8+ compatible)
     ext.abiCodes = ['armeabi-v7a': 1, 'arm64-v8a': 2, 'x86': 3, 'x86_64': 4]
     
+    signingConfigs {
+        release {
+            storeFile file("${System.getProperty('user.home')}/.android/debug.keystore")
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+    }
+
     buildTypes {
         debug {
             debuggable true
@@ -71,13 +80,10 @@ android {
             shrinkResources false
         }
         release {
-            debuggable false
-            minifyEnabled true
-            shrinkResources true
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            
-            // Sign with release key if available
-            // signingConfig signingConfigs.release
+            debuggable true
+            minifyEnabled false
+            shrinkResources false
+            signingConfig signingConfigs.release
         }
     }
     
@@ -149,4 +155,11 @@ try {
     }
 } catch(Exception e) {
     logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}
+
+// Disable Crashlytics mapping file upload to avoid 400 errors
+tasks.whenTaskAdded { task ->
+    if (task.name == 'uploadCrashlyticsMappingFileRelease') {
+        task.enabled = false
+    }
 }
