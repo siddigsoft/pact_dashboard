@@ -52,6 +52,15 @@ export function usePersistentNotifications() {
         .limit(100);
 
       if (error) {
+        // Silently handle missing table or column errors - table may not exist yet
+        if (error.code === '42P01' || error.code === '42703' || error.message?.includes('does not exist')) {
+          console.log('Notifications table not yet configured');
+          setNotifications([]);
+          setUnreadCount(0);
+          setUrgentCount(0);
+          setIsLoading(false);
+          return;
+        }
         console.error('Error fetching notifications:', error);
         return;
       }
