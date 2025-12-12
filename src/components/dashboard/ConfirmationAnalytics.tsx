@@ -12,7 +12,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { supabase } from '@/integrations/supabase/client';
+import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
 import { differenceInHours } from 'date-fns';
 
 interface ConfirmationStats {
@@ -33,89 +33,95 @@ interface SiteVisitData {
 }
 
 export function ConfirmationAnalytics() {
-  const [stats, setStats] = useState<ConfirmationStats | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const { siteVisits, loading: siteVisitsLoading } = useSiteVisitContext();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const fetchAnalytics = async (showRefresh = false) => {
-    if (showRefresh) setIsRefreshing(true);
-    
-    try {
-      const { data: siteVisits, error } = await supabase
-        .from('site_visits')
-        .select('visit_data, created_at')
-        .not('visit_data', 'is', null)
-        .limit(1000);
+  // Calculate analytics from context data
+  const stats = useMemo(() => {
+    if (!siteVisits || siteVisits.length === 0) {
+      return {
+        totalConfirmations: 0,
+        totalAutoReleased: 0,
+        totalPending: 0,
+        avgConfirmationTimeHours: 0,
+        onTimeConfirmationRate: 100,
+        autoReleaseRate: 0,
+      };
+    }
 
-      if (error) throw error;
+    let totalConfirmations = 0;
+    let totalAutoReleased = 0;
+    let totalPending = 0;
+    let totalConfirmationTimeHours = 0;
+    let confirmationsWithTime = 0;
+    let onTimeConfirmations = 0;
 
-      let totalConfirmations = 0;
-      let totalAutoReleased = 0;
-      let totalPending = 0;
-      let totalConfirmationTimeHours = 0;
-      let confirmationsWithTime = 0;
-      let onTimeConfirmations = 0;
+    // Process site visits from context
+    // Note: visit_data might be in additionalData or visitData field depending on structure
+    for (const visit of siteVisits) {
+      // Try different possible locations for visit_data
+      const visitData = (visit as any).visit_data || 
+                       (visit as any).visitData || 
+                       (visit as any).additionalData?.visit_data ||
+                       (visit as any).additionalData?.visitData as SiteVisitData | null;
+      
+      if (!visitData?.confirmation_status) continue;
 
-      for (const visit of siteVisits || []) {
-        const visitData = visit.visit_data as SiteVisitData | null;
-        if (!visitData?.confirmation_status) continue;
-
-        const status = visitData.confirmation_status;
+      const status = visitData.confirmation_status;
+      const createdAt = visit.createdAt || visit.created_at || new Date();
+      
+      if (status === 'confirmed') {
+        totalConfirmations++;
         
-        if (status === 'confirmed') {
-          totalConfirmations++;
+        if (visitData.acknowledged_at && visitData.confirmation_deadline) {
+          const acknowledgedAt = new Date(visitData.acknowledged_at);
+          const deadline = new Date(visitData.confirmation_deadline);
+          const createdDate = typeof createdAt === 'string' ? new Date(createdAt) : createdAt;
           
-          if (visitData.acknowledged_at && visitData.confirmation_deadline) {
-            const acknowledgedAt = new Date(visitData.acknowledged_at);
-            const deadline = new Date(visitData.confirmation_deadline);
-            const createdAt = visit.created_at ? new Date(visit.created_at) : acknowledgedAt;
-            
-            const hoursToConfirm = differenceInHours(acknowledgedAt, createdAt);
-            if (hoursToConfirm >= 0) {
-              totalConfirmationTimeHours += hoursToConfirm;
-              confirmationsWithTime++;
-            }
-            
-            if (acknowledgedAt <= deadline) {
-              onTimeConfirmations++;
-            }
-          } else {
+          const hoursToConfirm = differenceInHours(acknowledgedAt, createdDate);
+          if (hoursToConfirm >= 0) {
+            totalConfirmationTimeHours += hoursToConfirm;
+            confirmationsWithTime++;
+          }
+          
+          if (acknowledgedAt <= deadline) {
             onTimeConfirmations++;
           }
-        } else if (status === 'auto_released') {
-          totalAutoReleased++;
-        } else if (status === 'pending') {
-          totalPending++;
+        } else {
+          onTimeConfirmations++;
         }
+      } else if (status === 'auto_released') {
+        totalAutoReleased++;
+      } else if (status === 'pending') {
+        totalPending++;
       }
-
-      const totalProcessed = totalConfirmations + totalAutoReleased;
-      
-      setStats({
-        totalConfirmations,
-        totalAutoReleased,
-        totalPending,
-        avgConfirmationTimeHours: confirmationsWithTime > 0 
-          ? Math.round(totalConfirmationTimeHours / confirmationsWithTime) 
-          : 0,
-        onTimeConfirmationRate: totalConfirmations > 0 
-          ? Math.round((onTimeConfirmations / totalConfirmations) * 100) 
-          : 100,
-        autoReleaseRate: totalProcessed > 0 
-          ? Math.round((totalAutoReleased / totalProcessed) * 100) 
-          : 0,
-      });
-    } catch (error) {
-      console.error('Error fetching confirmation analytics:', error);
-    } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
     }
-  };
 
-  useEffect(() => {
-    fetchAnalytics();
-  }, []);
+    const totalProcessed = totalConfirmations + totalAutoReleased;
+    
+    return {
+      totalConfirmations,
+      totalAutoReleased,
+      totalPending,
+      avgConfirmationTimeHours: confirmationsWithTime > 0 
+        ? Math.round(totalConfirmationTimeHours / confirmationsWithTime) 
+        : 0,
+      onTimeConfirmationRate: totalConfirmations > 0 
+        ? Math.round((onTimeConfirmations / totalConfirmations) * 100) 
+        : 100,
+      autoReleaseRate: totalProcessed > 0 
+        ? Math.round((totalAutoReleased / totalProcessed) * 100) 
+        : 0,
+    };
+  }, [siteVisits]);
+
+  const isLoading = siteVisitsLoading;
+  
+  const handleRefresh = () => {
+    setIsRefreshing(true);
+    // Context will automatically refresh via real-time subscriptions
+    setTimeout(() => setIsRefreshing(false), 500);
+  };
 
   if (isLoading) {
     return (
@@ -162,7 +168,7 @@ export function ConfirmationAnalytics() {
           <Button
             size="icon"
             variant="ghost"
-            onClick={() => fetchAnalytics(true)}
+            onClick={handleRefresh}
             disabled={isRefreshing}
             data-testid="button-refresh-analytics"
           >

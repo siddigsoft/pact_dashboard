@@ -46,3 +46,4 @@ storybook-static
 # Supabase or local data caches (adjust as needed)
 supabase/.temp
 supabase/.cache
+

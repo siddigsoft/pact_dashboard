@@ -103,6 +103,10 @@ export interface WalletStats {
   currentBalance: number;
   totalTransactions: number;
   completedSiteVisits: number;
+  // Enhanced stats for earnings summaries
+  weeklyEarnings?: number;
+  monthlyEarnings?: number;
+  weeklySiteVisits?: number;
 }
 
 export const SUPPORTED_CURRENCIES = ['SDG', 'USD', 'EUR', 'GBP', 'SAR', 'AED'] as const;

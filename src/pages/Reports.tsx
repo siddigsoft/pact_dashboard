@@ -62,6 +62,10 @@ import { AuditingReports } from "@/components/reports/AuditingReports";
 import { DocumentsReport } from "@/components/reports/DocumentsReport";
 import { ReceiptsReport } from "@/components/reports/ReceiptsReport";
 import { SignaturesReport } from "@/components/reports/SignaturesReport";
+import { useMMP } from "@/context/mmp/MMPContext";
+import { useSiteVisitContext } from "@/context/siteVisit/SiteVisitContext";
+import { useProjectContext } from "@/context/project/ProjectContext";
+import { useUser } from "@/context/user/UserContext";
 
 const Reports: React.FC = () => {
   const [activeTab, setActiveTab] = useState("executive");
@@ -93,193 +97,101 @@ const Reports: React.FC = () => {
     );
   }
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [siteVisits, setSiteVisits] = useState<any[]>([]);
-  const [mmpFiles, setMmpFiles] = useState<any[]>([]);
-  const [projects, setProjects] = useState<any[]>([]);
-  const [profiles, setProfiles] = useState<any[]>([]);
   const [chartCanvas, setChartCanvas] = useState<HTMLCanvasElement | null>(null);
   const [showChart, setShowChart] = useState(false);
   const [exporting, setExporting] = useState(false);
+
+  // Use context hooks for real-time data
+  const { mmpFiles: contextMmpFiles, loading: mmpLoading } = useMMP();
+  const { siteVisits: contextSiteVisits, loading: siteVisitsLoading } = useSiteVisitContext();
+  const { projects: contextProjects, loading: projectsLoading } = useProjectContext();
+  const { users } = useUser();
+
+  const loading = mmpLoading || siteVisitsLoading || projectsLoading;
+
+  // Filter data by date range
+  const siteVisits = useMemo(() => {
+    if (!dateRange) return contextSiteVisits || [];
+    const from = dateRange.from ? startOfDay(dateRange.from).toISOString() : null;
+    const to = dateRange.to ? endOfDay(dateRange.to).toISOString() : null;
+    
+    return (contextSiteVisits || []).filter((visit: any) => {
+      const visitDate = visit.visitDate || visit.visit_date;
+      if (!visitDate) return false;
+      if (from && visitDate < from) return false;
+      if (to && visitDate > to) return false;
+      return true;
+    });
+  }, [contextSiteVisits, dateRange]);
+
+  const mmpFiles = useMemo(() => {
+    if (!dateRange) return contextMmpFiles || [];
+    const from = dateRange.from ? startOfDay(dateRange.from).toISOString() : null;
+    const to = dateRange.to ? endOfDay(dateRange.to).toISOString() : null;
+    
+    return (contextMmpFiles || []).filter((mmp: any) => {
+      const createdAt = mmp.uploadedAt || mmp.uploaded_at || mmp.createdAt || mmp.created_at;
+      if (!createdAt) return false;
+      if (from && createdAt < from) return false;
+      if (to && createdAt > to) return false;
+      return true;
+    });
+  }, [contextMmpFiles, dateRange]);
+
+  const projects = useMemo(() => {
+    if (!dateRange) return contextProjects || [];
+    const from = dateRange.from ? startOfDay(dateRange.from).toISOString() : null;
+    const to = dateRange.to ? endOfDay(dateRange.to).toISOString() : null;
+    
+    return (contextProjects || []).filter((project: any) => {
+      const createdAt = project.createdAt || project.created_at;
+      if (!createdAt) return false;
+      if (from && createdAt < from) return false;
+      if (to && createdAt > to) return false;
+      return true;
+    });
+  }, [contextProjects, dateRange]);
+
+  const profiles = useMemo(() => {
+    return (users || []).map((user: any) => ({
+      id: user.id,
+      full_name: user.name || user.fullName,
+      role: user.role,
+      email: user.email,
+    }));
+  }, [users]);
 
   const handleBackToDashboard = () => {
     navigate("/dashboard");
   };
 
-  const load = React.useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      let svQuery = supabase.from("mmp_site_entries").select("*");
-      let mmpQuery = supabase.from("mmp_files").select("*");
-      let projQuery = supabase.from("projects").select("*");
-      let profQuery = supabase.from("profiles").select("id, full_name, role, email");
-
-      if (dateRange?.from) {
-        const from = startOfDay(dateRange.from).toISOString();
-        svQuery = svQuery.gte("visit_date", from);
-        mmpQuery = mmpQuery.gte("created_at", from);
-        projQuery = projQuery.gte("created_at", from);
-      }
-      if (dateRange?.to) {
-        const to = endOfDay(dateRange.to).toISOString();
-        svQuery = svQuery.lte("visit_date", to);
-        mmpQuery = mmpQuery.lte("created_at", to);
-        projQuery = projQuery.lte("created_at", to);
-      }
-
-      // Sensible ordering for display/export
-      svQuery = svQuery.order("visit_date", { ascending: false });
-      mmpQuery = mmpQuery.order("created_at", { ascending: false });
-      projQuery = projQuery.order("created_at", { ascending: false });
-
-      const [svRes, mmpRes, projRes, profRes] = await Promise.all([
-        svQuery,
-        mmpQuery,
-        projQuery,
-        profQuery,
-      ]);
-
-      if (svRes.error) throw svRes.error;
-      if (mmpRes.error) throw mmpRes.error;
-      if (projRes.error) throw projRes.error;
-      if (profRes.error) throw profRes.error;
-
-      setSiteVisits(svRes.data || []);
-      setMmpFiles(mmpRes.data || []);
-      setProjects(projRes.data || []);
-      setProfiles(profRes.data || []);
-    } catch (e: any) {
-      setError(e?.message || "Failed to load reports data");
-    } finally {
-      setLoading(false);
-    }
-  }, [dateRange]);
-
-  useEffect(() => {
-    load();
-
-    // Set up real-time subscriptions for reports data
-    const reportsChannel = supabase
-      .channel('reports-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'mmp_site_entries'
-        },
-        (payload) => {
-          console.log('Reports: Site entries change detected:', payload);
-          load();
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'mmp_files'
-        },
-        (payload) => {
-          console.log('Reports: MMP files change detected:', payload);
-          load();
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'projects'
-        },
-        (payload) => {
-          console.log('Reports: Projects change detected:', payload);
-          load();
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'profiles'
-        },
-        (payload) => {
-          console.log('Reports: Profiles change detected:', payload);
-          load();
-        }
-      )
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          console.log('✅ Reports real-time subscription active');
-        } else if (status === 'CHANNEL_ERROR') {
-          console.error('❌ Reports real-time subscription error - Check if replication is enabled in Supabase');
-        } else if (status === 'TIMED_OUT') {
-          console.warn('⏱️ Reports real-time subscription timed out');
-        } else {
-          console.log('Reports subscription status:', status);
-        }
-      });
-
-    // Cleanup subscription on unmount
-    return () => {
-      supabase.removeChannel(reportsChannel);
-    };
-  }, [load]);
+  // Use context refresh methods
+  const { refreshMMPFiles } = useMMP();
+  const { refreshSiteVisits } = useSiteVisitContext();
+  const { fetchProjects } = useProjectContext();
 
   const fetchLatestForReports = async () => {
     try {
-      setLoading(true);
       setError(null);
-
-      let svQuery = supabase.from("mmp_site_entries").select("*");
-      let mmpQuery = supabase.from("mmp_files").select("*");
-      let projQuery = supabase.from("projects").select("*");
-      let profQuery = supabase.from("profiles").select("id, full_name, role, email");
-
-      if (dateRange?.from) {
-        const from = startOfDay(dateRange.from).toISOString();
-        svQuery = svQuery.gte("due_date", from);
-        mmpQuery = mmpQuery.gte("created_at", from);
-        projQuery = projQuery.gte("created_at", from);
-      }
-      if (dateRange?.to) {
-        const to = endOfDay(dateRange.to).toISOString();
-        svQuery = svQuery.lte("due_date", to);
-        mmpQuery = mmpQuery.lte("created_at", to);
-        projQuery = projQuery.lte("created_at", to);
-      }
-
-      svQuery = svQuery.order("due_date", { ascending: false });
-      mmpQuery = mmpQuery.order("created_at", { ascending: false });
-      projQuery = projQuery.order("created_at", { ascending: false });
-
-      const [svRes, mmpRes, projRes, profRes] = await Promise.all([
-        svQuery,
-        mmpQuery,
-        projQuery,
-        profQuery,
+      // Refresh all context data - real-time subscriptions will handle updates
+      await Promise.all([
+        refreshMMPFiles(),
+        refreshSiteVisits(),
+        fetchProjects(),
       ]);
 
-      if (svRes.error) throw svRes.error;
-      if (mmpRes.error) throw mmpRes.error;
-      if (projRes.error) throw projRes.error;
-      if (profRes.error) throw profRes.error;
-
+      // Data will be automatically updated via context real-time subscriptions
+      // Return current filtered data
       return {
-        siteVisits: svRes.data || [],
-        mmpFiles: mmpRes.data || [],
-        projects: projRes.data || [],
-        profiles: profRes.data || [],
+        siteVisits,
+        mmpFiles,
+        projects,
+        profiles,
       };
     } catch (e: any) {
-      setError(e?.message || "Failed to load reports data");
+      setError(e?.message || "Failed to refresh reports data");
       throw e;
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -469,11 +381,6 @@ const Reports: React.FC = () => {
       const projs = latest.projects;
       const profs = latest.profiles;
 
-      setSiteVisits(sv);
-      setMmpFiles(mmps);
-      setProjects(projs);
-      setProfiles(profs);
-
       switch (report.id) {
         case "financial_site_visits_fees":
           exportXLSX(buildSiteVisitsRows(sv), "site_visits_fees_summary");
@@ -515,11 +422,6 @@ const Reports: React.FC = () => {
       const mmps = latest.mmpFiles;
       const projs = latest.projects;
       const profs = latest.profiles;
-
-      setSiteVisits(sv);
-      setMmpFiles(mmps);
-      setProjects(projs);
-      setProfiles(profs);
 
       switch (report.id) {
         case "financial_site_visits_fees":
@@ -563,11 +465,6 @@ const Reports: React.FC = () => {
       const projs = latest.projects;
       const profs = latest.profiles;
 
-      setSiteVisits(sv);
-      setMmpFiles(mmps);
-      setProjects(projs);
-      setProfiles(profs);
-
       if (reportType === "Financial Summary") {
         exportXLSX(buildSiteVisitsRows(sv), "financial_summary");
       } else if (reportType === "Site Visit Report") {
@@ -603,11 +500,6 @@ const Reports: React.FC = () => {
       const mmps = latest.mmpFiles;
       const projs = latest.projects;
       const profs = latest.profiles;
-
-      setSiteVisits(sv);
-      setMmpFiles(mmps);
-      setProjects(projs);
-      setProfiles(profs);
 
       if (reportType === "Financial Summary") {
         await exportPDF(buildSiteVisitsRows(sv), "site_visits", "financial_summary");

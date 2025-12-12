@@ -10,14 +10,22 @@ import { ChevronDown, ChevronRight, ArrowLeft, Eye, Pencil } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { useAppContext } from '@/context/AppContext';
-import { supabase } from '@/integrations/supabase/client';
 import { StatePermitUpload } from '@/components/StatePermitUpload';
+import {
+  fetchHubs,
+  fetchHubStates,
+  fetchStates,
+  fetchLocalities,
+  fetchForwardedSiteEntries,
+  forwardSitesToCoordinator,
+  insertNotifications
+} from '@/services/mmpActions';
 
 const ReviewAssignCoordinators: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { getMmpById } = useMMP();
+  const { getMmpById, refreshMMPFiles } = useMMP();
   const { users, currentUser } = useAppContext();
 
   const [mmpFile, setMmpFile] = useState<any>(null);
@@ -76,44 +84,30 @@ const ReviewAssignCoordinators: React.FC = () => {
         // This prevents errors and ensures correct state from the start
         setLoadingForwardedStates(true);
         try {
-          const { data: siteEntries, error } = await supabase
-            .from('mmp_site_entries')
-            .select('id, forwarded_at, forwarded_by_user_id, forwarded_to_user_id, dispatched_at, additional_data')
-            .eq('mmp_file_id', id);
+          const siteEntries = await fetchForwardedSiteEntries(id);
           
-          if (error) {
-            console.error('Error loading forwarded sites:', error);
-            toast({
-              title: "Warning",
-              description: "Could not load forwarded site states. Some sites may appear incorrectly.",
-              variant: "destructive"
-            });
-            // Continue with empty set rather than blocking
-            setForwardedSiteIds(new Set());
-          } else {
-            // Find sites that have been forwarded
-            // Check both new forwarded_at column and legacy dispatched_at/additional_data
-            const forwarded = new Set<string>();
-            const statePermitIds = new Set<string>();
-            (siteEntries || []).forEach((entry: any) => {
-              const hasForwardedAt = !!entry.forwarded_at;
-              const hasDispatchedAt = !!entry.dispatched_at;
-              const hasAssignedTo = !!(entry.additional_data?.assigned_to);
-              const hasStatePermit = !!(entry.additional_data?.state_permit_attached);
-              
-              // Site is forwarded if any of these conditions are true
-              if (hasForwardedAt || hasDispatchedAt || hasAssignedTo) {
-                forwarded.add(entry.id);
-              }
-              if (hasStatePermit) {
-                statePermitIds.add(entry.id);
-              }
-            });
+          // Find sites that have been forwarded
+          // Check both new forwarded_at column and legacy dispatched_at/additional_data
+          const forwarded = new Set<string>();
+          const statePermitIds = new Set<string>();
+          siteEntries.forEach((entry: any) => {
+            const hasForwardedAt = !!entry.forwarded_at;
+            const hasDispatchedAt = !!entry.dispatched_at;
+            const hasAssignedTo = !!(entry.additional_data?.assigned_to);
+            const hasStatePermit = !!(entry.additional_data?.state_permit_attached);
             
-            setForwardedSiteIds(forwarded);
-            setStatePermitSiteIds(statePermitIds);
-            console.log(`Loaded ${forwarded.size} forwarded site(s) out of ${siteEntries?.length || 0} total`);
-          }
+            // Site is forwarded if any of these conditions are true
+            if (hasForwardedAt || hasDispatchedAt || hasAssignedTo) {
+              forwarded.add(entry.id);
+            }
+            if (hasStatePermit) {
+              statePermitIds.add(entry.id);
+            }
+          });
+          
+          setForwardedSiteIds(forwarded);
+          setStatePermitSiteIds(statePermitIds);
+          console.log(`Loaded ${forwarded.size} forwarded site(s) out of ${siteEntries?.length || 0} total`);
         } catch (err) {
           console.error('Failed to load forwarded sites:', err);
           toast({
@@ -129,93 +123,19 @@ const ReviewAssignCoordinators: React.FC = () => {
         // Step 3: Load hubs, states and localities from database
         setLoadingLocations(true);
         try {
-          // Fetch hubs
-          const { data: hubsData, error: hubsError } = await supabase
-            .from('hubs')
-            .select('id, name, description, is_active')
-            .eq('is_active', true)
-            .order('name');
+          const [hubsData, hubStatesData, statesData, localitiesData] = await Promise.all([
+            fetchHubs(),
+            fetchHubStates(),
+            fetchStates(),
+            fetchLocalities()
+          ]);
           
-          if (hubsError) {
-            console.error('Error loading hubs:', hubsError);
-            setHubs([]);
-          } else {
-            setHubs(hubsData || []);
-            console.log(`Loaded ${hubsData?.length || 0} hubs`);
-          }
-
-          // Fetch hub_states for hub-state relationships
-          const { data: hubStatesData, error: hubStatesError } = await supabase
-            .from('hub_states')
-            .select('hub_id, state_id, state_name, state_code')
-            .order('state_name');
+          setHubs(hubsData);
+          setHubStates(hubStatesData);
+          setStates(statesData);
+          setLocalities(localitiesData);
           
-          if (hubStatesError) {
-            console.error('Error loading hub_states:', hubStatesError);
-            setHubStates([]);
-          } else {
-            setHubStates(hubStatesData || []);
-            console.log(`Loaded ${hubStatesData?.length || 0} hub-state relationships`);
-          }
-
-          // Fetch states from hub_states table
-          const { data: statesData, error: statesError } = await supabase
-            .from('hub_states')
-            .select('state_id, state_name, state_code')
-            .order('state_name');
-          
-          if (statesError) {
-            console.error('Error loading states:', statesError);
-            setStates([]);
-          } else {
-            // Convert to State interface format and remove duplicates
-            const uniqueStates: any[] = [];
-            const seenStates = new Set<string>();
-            
-            (statesData || []).forEach(state => {
-              if (!seenStates.has(state.state_id)) {
-                seenStates.add(state.state_id);
-                uniqueStates.push({
-                  id: state.state_id,
-                  name: state.state_name,
-                  code: state.state_code
-                });
-              }
-            });
-            
-            setStates(uniqueStates);
-            console.log(`Loaded ${uniqueStates.length} unique states`);
-          }
-
-          // Fetch localities from sites_registry table
-          const { data: localitiesData, error: localitiesError } = await supabase
-            .from('sites_registry')
-            .select('locality_id, locality_name, state_id')
-            .order('locality_name');
-          
-          if (localitiesError) {
-            console.error('Error loading localities:', localitiesError);
-            setLocalities([]);
-          } else {
-            // Convert to format and remove duplicates
-            const uniqueLocalities: any[] = [];
-            const seen = new Set<string>();
-            
-            (localitiesData || []).forEach(loc => {
-              const key = `${loc.locality_id}-${loc.state_id}`;
-              if (!seen.has(key)) {
-                seen.add(key);
-                uniqueLocalities.push({
-                  id: loc.locality_id,
-                  name: loc.locality_name,
-                  state_id: loc.state_id
-                });
-              }
-            });
-            
-            setLocalities(uniqueLocalities);
-            console.log(`Loaded ${uniqueLocalities.length} unique localities`);
-          }
+          console.log(`Loaded ${hubsData.length} hubs, ${hubStatesData.length} hub-state relationships, ${statesData.length} states, ${localitiesData.length} localities`);
         } catch (err) {
           console.error('Failed to load location data:', err);
           toast({
@@ -392,56 +312,19 @@ const ReviewAssignCoordinators: React.FC = () => {
         return;
       }
 
-      // Get the site entries for the selected sites
-      const selectedSiteEntries = groupMap[groupKey]?.filter((site: any) => siteIds.includes(site.id)) || [];
-
-      // Update mmp_site_entries to assign to coordinator (keep status as Pending)
-      const updatePromises = selectedSiteEntries.map(async (siteEntry: any) => {
-        const existingAdditionalData = siteEntry.additional_data || {};
-        const forwardedAt = new Date().toISOString();
-        
-        // Update the mmp_site_entry in the database (assign to coordinator, keep status as Pending)
-        const { data, error } = await supabase
-          .from('mmp_site_entries')
-          .update({
-            status: 'Pending',
-            // New proper foreign key columns
-            forwarded_by_user_id: currentUser?.id || null,
-            forwarded_to_user_id: coordinatorId,
-            forwarded_at: forwardedAt,
-            // Keep legacy fields for backward compatibility
-            dispatched_by: currentUser?.id || null,
-            dispatched_at: forwardedAt,
-            additional_data: {
-              ...existingAdditionalData,
-              assigned_to: coordinatorId,
-              assigned_by: currentUser?.id || null,
-              assigned_at: forwardedAt,
-              supervisor_id: supervisorId || null,
-              notes: `Forwarded from MMP ${mmpFile?.name || mmpFile?.mmpId} for CP verification`,
-              ...(attachStatePermitMap[groupKey] ? {
-                state_permit_attached: true,
-                state_permit_state_id: stateId,
-                state_permit_attached_at: forwardedAt,
-              } : {})
-            }
-          })
-          .eq('id', siteEntry.id)
-          .select()
-          .single();
-
-        if (error) {
-          console.error('Error updating site entry:', error);
-          throw error;
-        }
-
-        return data;
+      // Use service helper to forward sites
+      await forwardSitesToCoordinator({
+        siteEntryIds: siteIds,
+        coordinatorId,
+        supervisorId,
+        currentUserId: currentUser?.id,
+        stateId,
+        attachStatePermit: attachStatePermitMap[groupKey],
+        mmpName: mmpFile?.name,
+        mmpId
       });
 
-      // Wait for all site entries to be updated
-      await Promise.all(updatePromises);
-
-      // Send notification to coordinator
+      // Send notifications
       const notifications = [
         {
           user_id: coordinatorId,
@@ -467,7 +350,10 @@ const ReviewAssignCoordinators: React.FC = () => {
         });
       }
 
-      await supabase.from('notifications').insert(notifications);
+      await insertNotifications(notifications);
+      
+      // Refresh MMP context to reflect changes
+      await refreshMMPFiles();
 
       toast({ title: 'Batch Forwarded', description: `Sites were forwarded to ${allCoordinators.find(c => c.id === coordinatorId)?.fullName || 'Coordinator'}${attachStatePermitMap[groupKey] ? ' with state permit attached' : ''}${supervisorId ? ` and notified ${allSupervisors.find(s => s.id === supervisorId)?.fullName || 'Supervisor'}` : ''}.`, variant: 'default' });
       

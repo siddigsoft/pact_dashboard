@@ -14,6 +14,7 @@ export { PageTransition, FadeIn, StaggerChildren, StaggerItem, SlideIn, ScaleIn,
 
 // Authentication Components
 export { MobileAuthScreen } from './MobileAuthScreen';
+export { MobileRegisterScreen } from './MobileRegisterScreen';
 export { PasswordStrengthIndicator } from './PasswordStrengthIndicator';
 export { MobileAvatarEditor, AvatarWithBadge, AvatarGroup } from './MobileAvatarEditor';
 export { BiometricPrompt, BiometricButton, BiometricSetup } from './BiometricPrompt';

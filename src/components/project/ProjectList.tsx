@@ -226,39 +226,39 @@ const ProjectList: React.FC<ProjectListProps> = ({
       </div>
       
       {filteredProjects.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {filteredProjects.map((project) => (
             <Card 
               key={project.id} 
-              className="overflow-hidden hover-elevate flex flex-col"
+              className="overflow-hidden hover-elevate flex flex-col border border-border/60 shadow-sm hover:shadow-md transition-shadow"
               data-testid={`card-project-${project.id}`}
             >
               {/* Zone 1: Header - Status badge + project code */}
-              <CardHeader className="p-3 pb-2 space-y-0">
-                <div className="flex items-start justify-between gap-2">
+              <CardHeader className="p-4 pb-3 space-y-0">
+                <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
-                    <h3 className="font-semibold text-base leading-tight truncate" title={project.name}>
+                    <h3 className="font-semibold text-base leading-tight line-clamp-2" title={project.name}>
                       {project.name}
                     </h3>
-                    <div className="flex items-center gap-1.5 mt-1">
-                      <Badge variant="outline" className="text-xs px-1.5 py-0 h-5 font-mono">
+                    <div className="flex items-center flex-wrap gap-2 mt-2">
+                      <Badge variant="outline" className="text-xs px-2 py-0 h-6 font-mono whitespace-nowrap">
                         <Tag className="h-2.5 w-2.5 mr-1" />
                         {project.projectCode}
                       </Badge>
                       {getTypeBadge(project.projectType)}
                     </div>
                   </div>
-                  <div className="flex-shrink-0">
+                  <div className="flex-shrink-0 translate-y-0.5">
                     {getStatusBadge(project.status)}
                   </div>
                 </div>
               </CardHeader>
 
               {/* Zone 2: Body - Key meta rows with icons */}
-              <CardContent className="p-3 pt-1 flex-grow space-y-2">
+              <CardContent className="p-4 pt-2 flex-grow space-y-3">
                 {/* Dates */}
                 <div className="flex items-center gap-2 text-sm">
-                  <Calendar className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                  <Calendar className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                   <span className="text-muted-foreground truncate">
                     {formatDate(project.startDate)} - {formatDate(project.endDate)}
                   </span>
@@ -267,10 +267,10 @@ const ProjectList: React.FC<ProjectListProps> = ({
                 {/* Project Manager */}
                 {project.team?.projectManager && (
                   <div className="flex items-center gap-2 text-sm">
-                    <UserCircle className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                    <UserCircle className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                     <span className="truncate">
                       <span className="text-muted-foreground">PM:</span>{' '}
-                      <span className="font-medium">{project.team.projectManager}</span>
+                      <span className="font-medium text-foreground">{project.team.projectManager}</span>
                     </span>
                   </div>
                 )}
@@ -278,7 +278,7 @@ const ProjectList: React.FC<ProjectListProps> = ({
                 {/* Location */}
                 {project.location?.region && (
                   <div className="flex items-center gap-2 text-sm">
-                    <MapPin className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                    <MapPin className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                     <span className="text-muted-foreground truncate">
                       {project.location.region}
                       {project.location.state && `, ${project.location.state}`}
@@ -291,7 +291,7 @@ const ProjectList: React.FC<ProjectListProps> = ({
                   const budgetSummary = getBudgetSummary(project.budget);
                   return budgetSummary ? (
                     <div className="flex items-center gap-2 text-sm">
-                      <DollarSign className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                      <DollarSign className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                       <span className="text-muted-foreground truncate">
                         {budgetSummary.currency} {budgetSummary.total.toLocaleString('en-US', {
                           minimumFractionDigits: 2,
@@ -304,14 +304,14 @@ const ProjectList: React.FC<ProjectListProps> = ({
 
                 {/* Description preview */}
                 {project.description && (
-                  <p className="text-xs text-muted-foreground line-clamp-2 pt-1">
+                  <p className="text-xs text-muted-foreground/90 line-clamp-3 leading-relaxed bg-muted/50 rounded-md px-2 py-1.5 border border-border/50">
                     {project.description}
                   </p>
                 )}
               </CardContent>
 
               {/* Zone 3: Footer - Quick actions */}
-              <CardFooter className="p-3 pt-0 mt-auto">
+              <CardFooter className="p-4 pt-0 mt-auto">
                 <Button 
                   className="w-full"
                   variant="default"

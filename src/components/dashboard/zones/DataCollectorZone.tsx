@@ -48,7 +48,6 @@ import {
 } from 'lucide-react';
 import { format, isToday, isPast, addDays, differenceInDays, parseISO, isValid } from 'date-fns';
 import { Button } from '@/components/ui/button';
-import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
 import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
 import { useWallet } from '@/context/wallet/WalletContext';
@@ -91,25 +90,17 @@ export const DataCollectorZone: React.FC = () => {
 
   const hasLocation = currentLocation?.latitude && currentLocation?.longitude;
 
-  // Get location last updated time
+  // Get location last updated time from currentUser context
   useEffect(() => {
     if (currentUser?.location) {
-      // Try to get last updated from profile
-      const fetchLastUpdated = async () => {
-        try {
-          const { data } = await supabase
-            .from('profiles')
-            .select('location_updated_at')
-            .eq('id', currentUser.id)
-            .single();
-          if (data?.location_updated_at) {
-            setLocationLastUpdated(data.location_updated_at);
-          }
-        } catch (error) {
-          console.error('Error fetching location update time:', error);
-        }
-      };
-      fetchLastUpdated();
+      // Try to get last updated from currentUser context
+      // If location_updated_at is not in context, use location.lastUpdated if available
+      const lastUpdated = (currentUser as any).location_updated_at || 
+                         (currentUser.location as any)?.lastUpdated ||
+                         (currentUser.location as any)?.updatedAt;
+      if (lastUpdated) {
+        setLocationLastUpdated(typeof lastUpdated === 'string' ? lastUpdated : lastUpdated.toISOString());
+      }
     }
   }, [currentUser?.id, currentUser?.location]);
 
