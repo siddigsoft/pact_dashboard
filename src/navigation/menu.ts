@@ -69,14 +69,8 @@ export const getWorkflowMenuGroups = (
   if (!isHidden('/dashboard') && (isAdmin || isICT || isProjectManager || perms.dashboard)) {
     overviewItems.push({ id: 'dashboard', title: 'Dashboard', url: '/dashboard', icon: LayoutDashboard, priority: 1, isPinned: isPinned('/dashboard') });
   }
-  if (!isHidden('/wallet') && isDataCollector) {
-    overviewItems.push({ id: 'my-wallet', title: 'My Wallet', url: '/wallet', icon: CreditCard, priority: 2, isPinned: isPinned('/wallet') });
-  }
   if (!isHidden('/cost-submission') && (isDataCollector || isAdmin || isCoordinator)) {
     overviewItems.push({ id: 'cost-submission', title: 'Cost Submission', url: '/cost-submission', icon: Receipt, priority: 3, isPinned: isPinned('/cost-submission') });
-  }
-  if (!isHidden('/signatures')) {
-    overviewItems.push({ id: 'signatures', title: 'Signatures', url: '/signatures', icon: FileSignature, priority: 4, isPinned: isPinned('/signatures') });
   }
   if (overviewItems.length) groups.push({ id: 'overview', label: 'Overview', order: 1, items: overviewItems });
 

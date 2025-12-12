@@ -179,12 +179,12 @@ const Notifications: React.FC = () => {
   return (
     <div 
       className="min-h-screen w-full max-w-full flex flex-col bg-white dark:bg-black overflow-hidden" 
-      style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+      style={{ paddingBottom: 'env(safe-area-inset-bottom)', paddingTop: 'env(safe-area-inset-top)' }}
       data-testid="notifications-page"
     >
-      {/* Compact Header with safe area for notch */}
+      {/* Fixed Header at very top with safe area for notch */}
       <div 
-        className="shrink-0 bg-black px-4 pb-3"
+        className="fixed top-0 left-0 right-0 z-50 bg-black px-4 pb-3"
         style={{ paddingTop: 'calc(env(safe-area-inset-top) + 12px)' }}
       >
         <div className="flex items-center justify-between">
@@ -208,12 +208,20 @@ const Notifications: React.FC = () => {
               </div>
             </div>
           </div>
-          <Dialog open={showSendDialog} onOpenChange={setShowSendDialog}>
-            <DialogTrigger asChild>
-              <button className="w-8 h-8 rounded-full bg-white flex items-center justify-center hover:bg-gray-100 transition-colors" data-testid="button-send-notification">
-                <Plus className="h-4 w-4 text-black" />
-              </button>
-            </DialogTrigger>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => window.location.reload()}
+              className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
+              data-testid="button-refresh"
+            >
+              <RefreshCw className="h-4 w-4 text-white" />
+            </button>
+            <Dialog open={showSendDialog} onOpenChange={setShowSendDialog}>
+              <DialogTrigger asChild>
+                <button className="w-8 h-8 rounded-full bg-white flex items-center justify-center hover:bg-gray-100 transition-colors" data-testid="button-send-notification">
+                  <Plus className="h-4 w-4 text-black" />
+                </button>
+              </DialogTrigger>
             <DialogContent className="max-w-sm">
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2 text-base font-bold">
@@ -290,8 +298,10 @@ const Notifications: React.FC = () => {
           </Dialog>
         </div>
       </div>
+      </div>
 
-      <div className="flex-1 overflow-auto overflow-x-hidden p-3 space-y-2">
+      {/* Content with padding for fixed header */}
+      <div className="flex-1 overflow-auto overflow-x-hidden p-3 space-y-2" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 100px)' }}>
         {/* Category Pills - Compact */}
         <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
           {NOTIFICATION_CATEGORIES.map((category) => (
