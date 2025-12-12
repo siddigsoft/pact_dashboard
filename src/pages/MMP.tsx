@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import type { SiteVisitRow } from '@/components/mmp/MMPCategorySitesTable';
 import MMPSiteEntriesTable from '@/components/mmp/MMPSiteEntriesTable';
+import { insertNotifications } from '@/services/mmpActions';
 import { supabase } from '@/integrations/supabase/client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
@@ -38,72 +39,54 @@ const SitesDisplayTable: React.FC<{
   editable?: boolean;
   title?: string;
 }> = ({ siteRows, mmpId, editable = true, title }) => {
-  const [siteEntries, setSiteEntries] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const loadSiteEntries = async () => {
-      if (siteRows.length === 0) {
-        setSiteEntries([]);
-        setLoading(false);
-        return;
+  const { mmpFiles, loading: mmpLoading, refreshMMPFiles } = useMMP();
+  
+  // Get site entries from MMP context
+  const siteEntries = useMemo(() => {
+    if (mmpLoading) return [];
+    
+    // Get unique mmp_ids from site rows
+    const mmpIds = mmpId ? [mmpId] : [...new Set(siteRows.map(s => s.mmpId).filter(Boolean))];
+    
+    if (mmpIds.length === 0) return [];
+    
+    // Collect site entries from all relevant MMP files
+    const entries: any[] = [];
+    mmpFiles.forEach((mmp: any) => {
+      if (mmpIds.includes(mmp.id) && Array.isArray(mmp.siteEntries)) {
+        // Filter out completed sites and format for MMPSiteEntriesTable
+        mmp.siteEntries
+          .filter((entry: any) => entry.status?.toLowerCase() !== 'completed')
+          .forEach((entry: any) => {
+            entries.push({
+              ...entry,
+              verified_by: entry.verified_by || undefined,
+              verified_at: entry.verified_at || undefined,
+              verification_notes: entry.verification_notes || undefined,
+              status: entry.status || 'Pending',
+              // Map to camelCase for MMPSiteEntriesTable
+              siteName: entry.site_name || entry.siteName,
+              siteCode: entry.site_code || entry.siteCode,
+              hubOffice: entry.hub_office || entry.hubOffice,
+              cpName: entry.cp_name || entry.cpName,
+              siteActivity: entry.activity_at_site || entry.siteActivity,
+              monitoringBy: entry.monitoring_by || entry.monitoringBy,
+              surveyTool: entry.survey_tool || entry.surveyTool,
+              useMarketDiversion: entry.use_market_diversion ?? entry.useMarketDiversion,
+              useWarehouseMonitoring: entry.use_warehouse_monitoring ?? entry.useWarehouseMonitoring,
+              visitDate: entry.visit_date || entry.visitDate,
+              comments: entry.comments,
+              cost: entry.cost,
+              additionalData: entry.additional_data || entry.additionalData || {}
+            });
+          });
       }
-
-      try {
-        // Get unique mmp_ids from site rows
-        const mmpIds = mmpId ? [mmpId] : [...new Set(siteRows.map(s => s.mmpId).filter(Boolean))];
-
-        if (mmpIds.length === 0) {
-          setSiteEntries([]);
-          setLoading(false);
-          return;
-        }
-
-        // Load from mmp_site_entries
-        const { data: mmpEntries, error: mmpError } = await supabase
-          .from('mmp_site_entries')
-          .select('*')
-          .in('mmp_file_id', mmpIds)
-          .not('status', 'ilike', 'completed'); // Exclude completed sites
-
-        if (mmpError) throw mmpError;
-
-        // Format mmp_site_entries for MMPSiteEntriesTable
-        const mergedEntries = (mmpEntries || []).map(entry => {
-          return {
-            ...entry,
-            verified_by: entry.verified_by || undefined,
-            verified_at: entry.verified_at || undefined,
-            verification_notes: entry.verification_notes || undefined,
-            status: entry.status || 'Pending',
-            // Map to camelCase for MMPSiteEntriesTable
-            siteName: entry.site_name,
-            siteCode: entry.site_code,
-            hubOffice: entry.hub_office,
-            cpName: entry.cp_name,
-            siteActivity: entry.activity_at_site,
-            monitoringBy: entry.monitoring_by,
-            surveyTool: entry.survey_tool,
-            useMarketDiversion: entry.use_market_diversion,
-            useWarehouseMonitoring: entry.use_warehouse_monitoring,
-            visitDate: entry.visit_date,
-            comments: entry.comments,
-            cost: entry.cost,
-            additionalData: entry.additional_data || {}
-          };
-        });
-
-        setSiteEntries(mergedEntries);
-      } catch (error) {
-        console.error('Failed to load site entries:', error);
-        setSiteEntries([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadSiteEntries();
-  }, [siteRows, mmpId]);
+    });
+    
+    return entries;
+  }, [mmpFiles, mmpLoading, siteRows, mmpId]);
+  
+  const loading = mmpLoading;
 
   if (loading) {
     return (
@@ -193,7 +176,9 @@ const SitesDisplayTable: React.FC<{
 
               // Verification data is now stored directly in mmp_site_entries, no need to update site_visits
             }
-            setSiteEntries(sites as any[]);
+            
+            // Refresh context to ensure real-time updates propagate
+            await refreshMMPFiles();
             return true;
           } catch (error) {
             console.error('Failed to update sites:', error);
@@ -784,7 +769,7 @@ const MMP = () => {
           const siteName = site.site_name || site.siteName || site.siteCode || 'Site';
           const mmpName = site.mmp_name || site.mmpName || 'MMP';
           
-          await supabase.from('notifications').insert({
+          await insertNotifications([{
             user_id: coordinatorId,
             title: 'Site Sent Back for Editing',
             message: `Site "${siteName}" from ${mmpName} has been sent back with comments: ${comments.trim().substring(0, 100)}${comments.length > 100 ? '...' : ''}`,
@@ -792,7 +777,7 @@ const MMP = () => {
             link: `/coordinator/sites`,
             related_entity_id: site.id,
             related_entity_type: 'mmpFile'
-          });
+          }]);
         } catch (notifError) {
           // Log but don't fail the operation if notification fails
           console.warn('Failed to create notification for coordinator:', notifError);
