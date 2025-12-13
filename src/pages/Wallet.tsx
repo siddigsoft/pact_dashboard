@@ -2,6 +2,8 @@ import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWallet } from '@/context/wallet/WalletContext';
 import { useAppContext } from '@/context/AppContext';
+import { useRealtimeWallet } from '@/hooks/use-realtime-wallet';
+import { DataFreshnessBadge } from '@/components/realtime';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -67,6 +69,9 @@ const WalletPage = () => {
     refreshTransactions,
     refreshWithdrawalRequests
   } = useWallet();
+
+  // Real-time wallet updates
+  const { lastRefresh } = useRealtimeWallet();
 
   const [withdrawalDialogOpen, setWithdrawalDialogOpen] = useState(false);
   const [withdrawalAmount, setWithdrawalAmount] = useState('');
@@ -337,6 +342,7 @@ const WalletPage = () => {
                   <p className="text-blue-300/80 mt-1 text-lg">
                     Cyber-Financial Command Center
                   </p>
+                  <DataFreshnessBadge lastUpdated={lastRefresh} className="mt-2" />
                 </div>
               </div>
               <div className="flex items-center gap-2 flex-wrap justify-center sm:justify-start">

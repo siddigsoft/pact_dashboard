@@ -12,6 +12,7 @@ import { Plus, ChevronLeft, Search, MapPin, Clock, AlertTriangle, Building2, Fil
 import { formatDistanceToNow } from 'date-fns';
 import { DataFreshnessBadge } from "@/components/realtime";
 import { queryClient } from "@/lib/queryClient";
+import { useRealtimeSiteVisits } from "@/hooks/use-realtime-site-visits";
 import { useSiteVisitContext } from "@/context/siteVisit/SiteVisitContext";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { format, isValid } from "date-fns";
@@ -43,6 +44,9 @@ const SiteVisits = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { toast } = useToast();
+  
+  // Real-time subscription for site visits
+  const { lastRefresh, forceRefresh } = useRealtimeSiteVisits();
   
   const [filteredVisits, setFilteredVisits] = useState<SiteVisit[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
@@ -833,10 +837,18 @@ const SiteVisits = () => {
       <div className="container mx-auto p-6 space-y-6">
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-2" data-testid="text-page-title-fom">
-              <MapPin className="h-8 w-8 text-primary" />
-              Site Visits Dashboard
-            </h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-2" data-testid="text-page-title-fom">
+                <MapPin className="h-8 w-8 text-primary" />
+                Site Visits Dashboard
+              </h1>
+              <DataFreshnessBadge 
+                lastUpdated={lastRefresh}
+                onRefresh={forceRefresh}
+                staleThresholdMinutes={5}
+                variant="badge"
+              />
+            </div>
             <p className="text-muted-foreground mt-1">
               Browse sites by state and filter by status
             </p>
@@ -909,8 +921,8 @@ const SiteVisits = () => {
               Site Visits
             </h1>
             <DataFreshnessBadge 
-              lastUpdated={siteVisits.length > 0 ? new Date() : null}
-              onRefresh={async () => { await queryClient.invalidateQueries({ queryKey: ['site-visits'] }); }}
+              lastUpdated={lastRefresh}
+              onRefresh={forceRefresh}
               staleThresholdMinutes={5}
               variant="badge"
             />
