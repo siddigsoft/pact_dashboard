@@ -138,8 +138,27 @@ export default function HubOperations() {
 
   const loadData = async () => {
     setLoading(true);
-    await Promise.all([loadHubs(), loadSites(), loadProjectScopes()]);
-    setLoading(false);
+    try {
+      // Use Promise.allSettled to prevent one failure from blocking others
+      // Add a 15-second timeout to prevent infinite loading
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Data load timeout')), 15000)
+      );
+      
+      await Promise.race([
+        Promise.allSettled([loadHubs(), loadSites(), loadProjectScopes()]),
+        timeoutPromise
+      ]);
+    } catch (err) {
+      console.error('Error loading Hub Operations data:', err);
+      toast({ 
+        title: 'Warning', 
+        description: 'Some data may not have loaded. Please refresh the page.', 
+        variant: 'destructive' 
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const loadHubs = async () => {
