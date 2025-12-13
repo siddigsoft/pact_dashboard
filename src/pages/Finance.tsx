@@ -2,6 +2,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppContext } from "@/context/AppContext";
+import { DataFreshnessBadge } from "@/components/realtime";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FinancialDashboard } from "@/components/FinancialDashboard";
 import { SiteVisitFinancialTracker } from "@/components/SiteVisitFinancialTracker";
@@ -141,12 +142,17 @@ const Finance: React.FC = () => {
       </div>
 
       <div className="bg-blue-50 p-6 rounded-lg shadow-sm border animate-fade-in">
-        <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-blue-700">
-          Financial Management
-        </h1>
-        <p className="text-muted-foreground mt-2">
-          Track site visit finances, manage budgets, and view financial reports
-        </p>
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-blue-700">
+              Financial Management
+            </h1>
+            <p className="text-muted-foreground mt-2">
+              Track site visit finances, manage budgets, and view financial reports
+            </p>
+          </div>
+          <DataFreshnessBadge />
+        </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">

@@ -3,6 +3,7 @@ import { useSiteVisitRemindersUI } from '@/hooks/use-site-visit-reminders-ui';
 import { useAppContext } from '@/context/AppContext';
 import { useSettings } from '@/context/settings/SettingsContext';
 import LocationPermissionPrompt from '@/components/location/LocationPermissionPrompt';
+import { DataFreshnessBadge } from '@/components/realtime';
 import { DashboardZoneLayout, DashboardZone } from '@/components/dashboard/DashboardZoneLayout';
 import { OperationsZone } from '@/components/dashboard/zones/OperationsZone';
 import { TeamZone } from '@/components/dashboard/zones/TeamZone';
@@ -118,6 +119,11 @@ const Dashboard = () => {
       {/* Floating components */}
       {SiteVisitRemindersDialog}
       <LocationPermissionPrompt />
+      
+      {/* Data freshness indicator */}
+      <div className="fixed bottom-4 right-4 z-40">
+        <DataFreshnessBadge variant="compact" />
+      </div>
     </div>
   );
 };
