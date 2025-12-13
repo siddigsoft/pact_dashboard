@@ -641,7 +641,7 @@ export default function HubManagement() {
         <TabsContent value="localities" className="space-y-4">
           <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
             <Select value={selectedStateForLocalities} onValueChange={setSelectedStateForLocalities}>
-              <SelectTrigger className="w-full md:w-[250px]" data-testid="select-state-for-localities">
+              <SelectTrigger className="w-full md:w-[280px]" data-testid="select-state-for-localities">
                 <SelectValue placeholder="Select a state" />
               </SelectTrigger>
               <SelectContent>
@@ -653,18 +653,17 @@ export default function HubManagement() {
               </SelectContent>
             </Select>
             
-            {selectedStateForLocalities && (
-              <div className="relative flex-1 max-w-md">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search localities..."
-                  value={localitySearchTerm}
-                  onChange={(e) => setLocalitySearchTerm(e.target.value)}
-                  className="pl-10"
-                  data-testid="input-search-localities"
-                />
-              </div>
-            )}
+            <div className="relative flex-1 w-full md:max-w-sm">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search localities..."
+                value={localitySearchTerm}
+                onChange={(e) => setLocalitySearchTerm(e.target.value)}
+                className="pl-10 w-full"
+                disabled={!selectedStateForLocalities}
+                data-testid="input-search-localities"
+              />
+            </div>
           </div>
 
           {!selectedStateForLocalities ? (
