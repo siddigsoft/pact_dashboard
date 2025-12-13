@@ -25,6 +25,8 @@ import VisitFilters from '@/components/site-visit/VisitFilters';
 import ViewToggle from '@/components/site-visit/ViewToggle';
 import AssignmentMap from '@/components/site-visit/AssignmentMap';
 import { Skeleton } from "@/components/ui/skeleton";
+import { SiteVisitGridSkeleton } from "@/components/ui/skeletons";
+import { useDebounce } from "@/hooks/useDebounce";
 import { getStatusColor, getStatusLabel, getStatusDescription, isOverdue } from "@/utils/siteVisitUtils";
 import { useToast } from "@/hooks/use-toast";
 import FloatingMessenger from "@/components/communication/FloatingMessenger";
@@ -50,6 +52,7 @@ const SiteVisits = () => {
   
   const [filteredVisits, setFilteredVisits] = useState<SiteVisit[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
   const [statusFilter, setStatusFilter] = useState(searchParams.get("status") || "all");
   const [sortBy, setSortBy] = useState("dueDate");
   const [activeFilters, setActiveFilters] = useState({
@@ -294,8 +297,8 @@ const SiteVisits = () => {
       }
       
       // Apply search filter
-      if (searchTerm.trim()) {
-        const search = searchTerm.toLowerCase();
+      if (debouncedSearchTerm.trim()) {
+        const search = debouncedSearchTerm.toLowerCase();
         filtered = filtered.filter(visit =>
           (visit.siteName && visit.siteName.toLowerCase().includes(search)) ||
           (visit.siteCode && visit.siteCode.toLowerCase().includes(search)) ||
@@ -436,8 +439,8 @@ const SiteVisits = () => {
       filtered = filtered.filter(v => (v.dueDate || "").startsWith(monthParam));
     }
 
-    if (searchTerm) {
-      const search = searchTerm.toLowerCase();
+    if (debouncedSearchTerm) {
+      const search = debouncedSearchTerm.toLowerCase();
       filtered = filtered.filter(
         visit => 
           visit.siteName.toLowerCase().includes(search) ||
@@ -499,7 +502,7 @@ const SiteVisits = () => {
       }
       setSelectedVisit(selected || null);
     }
-  }, [currentUser, siteVisits, statusFilter, searchTerm, sortBy, view, hubParam, regionParam, monthParam, isFieldWorker, canViewAllSiteVisits, isSupervisor, supervisorHubName, canViewAllProjects, userProjectIds, isSuperAdmin]);
+  }, [currentUser, siteVisits, statusFilter, debouncedSearchTerm, sortBy, view, hubParam, regionParam, monthParam, isFieldWorker, canViewAllSiteVisits, isSupervisor, supervisorHubName, canViewAllProjects, userProjectIds, isSuperAdmin]);
 
   const handleRemoveFilter = (filterType: string) => {
     setActiveFilters(prev => ({
