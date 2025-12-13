@@ -639,82 +639,83 @@ export default function HubManagement() {
         </TabsContent>
 
         <TabsContent value="localities" className="space-y-4">
-          <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
-            <Select value={selectedStateForLocalities} onValueChange={setSelectedStateForLocalities}>
-              <SelectTrigger className="w-full md:w-[280px]" data-testid="select-state-for-localities">
-                <SelectValue placeholder="Select a state" />
-              </SelectTrigger>
-              <SelectContent>
-                {sudanStates.map(state => (
-                  <SelectItem key={state.id} value={state.id}>
-                    {state.name} ({state.localities.length})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            
-            <div className="relative flex-1 w-full md:max-w-sm">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search localities..."
-                value={localitySearchTerm}
-                onChange={(e) => setLocalitySearchTerm(e.target.value)}
-                className="pl-10 w-full"
-                disabled={!selectedStateForLocalities}
-                data-testid="input-search-localities"
-              />
-            </div>
-          </div>
+          <Card>
+            <CardHeader className="space-y-4">
+              <CardTitle className="text-lg">Browse Localities</CardTitle>
+              <div className="flex flex-col gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="state-selector" className="text-sm font-medium">Select State</Label>
+                  <Select value={selectedStateForLocalities} onValueChange={setSelectedStateForLocalities}>
+                    <SelectTrigger id="state-selector" className="w-full md:w-[320px]" data-testid="select-state-for-localities">
+                      <SelectValue placeholder="Choose a state to view localities" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {sudanStates.map(state => (
+                        <SelectItem key={state.id} value={state.id}>
+                          {state.name} ({state.localities.length} localities)
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                {selectedStateForLocalities && (
+                  <div className="space-y-2">
+                    <Label htmlFor="locality-search" className="text-sm font-medium">Search Localities</Label>
+                    <div className="relative w-full md:w-[400px]">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="locality-search"
+                        placeholder="Type to search localities..."
+                        value={localitySearchTerm}
+                        onChange={(e) => setLocalitySearchTerm(e.target.value)}
+                        className="pl-10 w-full text-base"
+                        data-testid="input-search-localities"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </CardHeader>
 
           {!selectedStateForLocalities ? (
-            <Card>
-              <CardContent className="py-12 text-center text-muted-foreground">
-                <MapPin className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>Select a state to view its localities</p>
-              </CardContent>
-            </Card>
+            <CardContent className="py-12 text-center text-muted-foreground">
+              <MapPin className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>Select a state above to view its localities</p>
+            </CardContent>
           ) : (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">
-                  {sudanStates.find(s => s.id === selectedStateForLocalities)?.name} Localities
-                </CardTitle>
-                <CardDescription>
-                  {filteredLocalities.length} localities found
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Locality Name</TableHead>
+                    <TableHead>Arabic Name</TableHead>
+                    <TableHead>ID</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredLocalities.length === 0 ? (
                     <TableRow>
-                      <TableHead>Locality Name</TableHead>
-                      <TableHead>Arabic Name</TableHead>
-                      <TableHead>ID</TableHead>
+                      <TableCell colSpan={3} className="text-center py-8 text-muted-foreground">
+                        No localities found
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredLocalities.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={3} className="text-center py-8 text-muted-foreground">
-                          No localities found
+                  ) : (
+                    filteredLocalities.map((locality) => (
+                      <TableRow key={locality.id} data-testid={`row-locality-${locality.id}`}>
+                        <TableCell className="font-medium">{locality.name}</TableCell>
+                        <TableCell className="text-muted-foreground">{locality.nameAr || '-'}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="font-mono text-xs">{locality.id}</Badge>
                         </TableCell>
                       </TableRow>
-                    ) : (
-                      filteredLocalities.map((locality) => (
-                        <TableRow key={locality.id} data-testid={`row-locality-${locality.id}`}>
-                          <TableCell className="font-medium">{locality.name}</TableCell>
-                          <TableCell className="text-muted-foreground">{locality.nameAr || '-'}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className="font-mono text-xs">{locality.id}</Badge>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
           )}
+          </Card>
         </TabsContent>
       </Tabs>
 
