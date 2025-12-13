@@ -38,14 +38,8 @@ import { useToast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { DatePickerWithRange } from "@/components/ui/date-range-picker";
 import { DateRange } from "react-day-picker";
-import * as XLSX from "xlsx";
-import { saveAs } from "file-saver";
-import {
-  generateSiteVisitsPDF,
-  generateProjectBudgetPDF,
-  generateMMPProgressPDF,
-  generateTeamPerformancePDF,
-} from "@/utils/pdfReportGenerator";
+// Dynamic imports for heavy export libraries (loaded on-demand to improve initial page load)
+// XLSX, file-saver, and PDF generators are dynamically imported when needed
 import ReportChart, {
   generateSiteVisitsChartData,
   generateProjectBudgetChartData,
@@ -271,7 +265,12 @@ const Reports: React.FC = () => {
     return true;
   };
 
-  const exportXLSX = (rows: any[], baseName: string) => {
+  const exportXLSX = async (rows: any[], baseName: string) => {
+    // Dynamic import for XLSX and file-saver (reduces initial bundle size)
+    const [XLSX, { saveAs }] = await Promise.all([
+      import("xlsx"),
+      import("file-saver")
+    ]);
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Report");
@@ -284,18 +283,21 @@ const Reports: React.FC = () => {
   const exportPDF = async (rows: any[], reportType: string, baseName: string) => {
     const dateRangeObj = dateRange ? { from: dateRange.from, to: dateRange.to } : undefined;
     
+    // Dynamic import for PDF generators (reduces initial bundle size)
+    const pdfGenerators = await import("@/utils/pdfReportGenerator");
+    
     switch (reportType) {
       case "site_visits":
-        await generateSiteVisitsPDF(rows, dateRangeObj, chartCanvas || undefined);
+        await pdfGenerators.generateSiteVisitsPDF(rows, dateRangeObj, chartCanvas || undefined);
         break;
       case "project_budget":
-        await generateProjectBudgetPDF(rows, dateRangeObj, chartCanvas || undefined);
+        await pdfGenerators.generateProjectBudgetPDF(rows, dateRangeObj, chartCanvas || undefined);
         break;
       case "mmp_progress":
-        await generateMMPProgressPDF(rows, dateRangeObj, chartCanvas || undefined);
+        await pdfGenerators.generateMMPProgressPDF(rows, dateRangeObj, chartCanvas || undefined);
         break;
       case "team_performance":
-        await generateTeamPerformancePDF(rows, dateRangeObj, chartCanvas || undefined);
+        await pdfGenerators.generateTeamPerformancePDF(rows, dateRangeObj, chartCanvas || undefined);
         break;
       default:
         console.warn("Unknown report type for PDF export:", reportType);
@@ -383,19 +385,19 @@ const Reports: React.FC = () => {
 
       switch (report.id) {
         case "financial_site_visits_fees":
-          exportXLSX(buildSiteVisitsRows(sv), "site_visits_fees_summary");
+          await exportXLSX(buildSiteVisitsRows(sv), "site_visits_fees_summary");
           break;
         case "financial_project_budget":
-          exportXLSX(buildProjectBudgetRows(projs), "project_budget_summary");
+          await exportXLSX(buildProjectBudgetRows(projs), "project_budget_summary");
           break;
         case "operational_site_visits":
-          exportXLSX(buildSiteVisitsRows(sv), "site_visits_performance");
+          await exportXLSX(buildSiteVisitsRows(sv), "site_visits_performance");
           break;
         case "operational_mmp_progress":
-          exportXLSX(buildMMPProgressRows(mmps), "mmp_implementation_progress");
+          await exportXLSX(buildMMPProgressRows(mmps), "mmp_implementation_progress");
           break;
         default:
-          exportXLSX([], "report");
+          await exportXLSX([], "report");
       }
       const fileName = `${report.name.toLowerCase().replace(/\s+/g, '_')}_${format(new Date(report.date), 'yyyy-MM-dd')}.xlsx`;
       toast({
@@ -466,15 +468,15 @@ const Reports: React.FC = () => {
       const profs = latest.profiles;
 
       if (reportType === "Financial Summary") {
-        exportXLSX(buildSiteVisitsRows(sv), "financial_summary");
+        await exportXLSX(buildSiteVisitsRows(sv), "financial_summary");
       } else if (reportType === "Site Visit Report") {
-        exportXLSX(buildSiteVisitsRows(sv), "site_visit_report");
+        await exportXLSX(buildSiteVisitsRows(sv), "site_visit_report");
       } else if (reportType === "Team Performance Report") {
-        exportXLSX(buildTeamPerformanceRows(sv, profs), "team_performance_report");
+        await exportXLSX(buildTeamPerformanceRows(sv, profs), "team_performance_report");
       } else if (reportType === "MMP Implementation Report") {
-        exportXLSX(buildMMPProgressRows(mmps), "mmp_implementation_report");
+        await exportXLSX(buildMMPProgressRows(mmps), "mmp_implementation_report");
       } else {
-        exportXLSX([], reportType.toLowerCase().replace(/\s+/g, '_'));
+        await exportXLSX([], reportType.toLowerCase().replace(/\s+/g, '_'));
       }
       const timestamp = format(new Date(), 'yyyy-MM-dd');
       const fileName = `${reportType.toLowerCase().replace(/\s+/g, '_')}_${timestamp}.xlsx`;
