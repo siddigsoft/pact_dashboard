@@ -3,6 +3,8 @@ import { useUser } from '@/context/user/UserContext';
 import { User } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useDebounce } from '@/hooks/useDebounce';
+import { TableSkeleton } from '@/components/ui/skeletons';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Table,
@@ -72,10 +74,12 @@ const Users = () => {
   const { roles } = useAppContext();
   
   const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [isLoadingApproval, setIsLoadingApproval] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [activeTab, setActiveTab] = useState('all');
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
   
@@ -164,9 +168,9 @@ const Users = () => {
       );
     }
     
-    // Search filter
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
+    // Search filter (using debounced value for performance)
+    if (debouncedSearchQuery.trim()) {
+      const query = debouncedSearchQuery.toLowerCase();
       result = result.filter(u => 
         (u.name && u.name.toLowerCase().includes(query)) ||
         (u.email && u.email.toLowerCase().includes(query)) ||
@@ -194,7 +198,18 @@ const Users = () => {
     }
     
     return result;
-  }, [users, activeTab, searchQuery, roleFilter, statusFilter, currentUser]);
+  }, [users, activeTab, debouncedSearchQuery, roleFilter, statusFilter, currentUser]);
+
+  // Track initial load state - set to false after a short delay to handle empty datasets
+  useEffect(() => {
+    if (users.length > 0) {
+      setIsInitialLoad(false);
+    } else {
+      // Even if users array is empty, stop showing skeleton after 2 seconds
+      const timer = setTimeout(() => setIsInitialLoad(false), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [users]);
 
   // Get unique roles for filter
   const availableRoles = useMemo(() => {
@@ -607,7 +622,9 @@ const Users = () => {
 
           {/* Users Table */}
           <TabsContent value={activeTab} className="mt-0">
-            {users.length === 0 ? (
+            {isInitialLoad && users.length === 0 ? (
+              <TableSkeleton rows={8} columns={5} />
+            ) : users.length === 0 ? (
               <Card className="p-8">
                 <div className="flex flex-col items-center justify-center text-center">
                   <AlertCircle className="h-10 w-10 text-muted-foreground mb-3" />
