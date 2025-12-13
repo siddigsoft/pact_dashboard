@@ -58,7 +58,8 @@ export default function HubManagement() {
   const { isSuperAdmin } = useSuperAdmin();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState('hubs');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
   
   const [hubs, setHubs] = useState<ManagedHub[]>([]);
   const [hubStates, setHubStates] = useState<HubState[]>([]);
@@ -93,11 +94,24 @@ export default function HubManagement() {
   const loadData = async () => {
     setLoading(true);
     try {
-      await Promise.all([loadHubs(), loadHubStates()]);
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Data load timeout')), 10000)
+      );
+      
+      await Promise.race([
+        Promise.allSettled([loadHubs(), loadHubStates()]),
+        timeoutPromise
+      ]);
     } catch (err) {
       console.error('Error loading data:', err);
+      toast({ 
+        title: 'Warning', 
+        description: 'Some data may not have loaded. Try refreshing.', 
+        variant: 'destructive' 
+      });
     } finally {
       setLoading(false);
+      setInitialLoadComplete(true);
     }
   };
 
