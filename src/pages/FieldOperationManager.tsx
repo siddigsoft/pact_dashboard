@@ -178,6 +178,7 @@ const FieldOperationManagerPage = () => {
   const mmpSummaries = useMemo(() => {
     if (selectedCategory === 'all') return [];
     const summaries: Array<{
+      id: string;
       mmpName: string;
       mmpId: string;
       covered: number;
@@ -211,6 +212,7 @@ const FieldOperationManagerPage = () => {
         else notCovered += 1;
       });
       summaries.push({
+        id: mmp.id,
         mmpName,
         mmpId,
         covered,
@@ -223,6 +225,7 @@ const FieldOperationManagerPage = () => {
 
   const allMmpSummaries = useMemo(() => {
     const summaries: Array<{
+      id: string;
       mmpName: string;
       mmpId: string;
       status: string;
@@ -256,6 +259,7 @@ const FieldOperationManagerPage = () => {
         else notCovered += 1;
       });
       summaries.push({
+        id: mmp.id,
         mmpName,
         mmpId,
         status,
@@ -743,23 +747,28 @@ const FieldOperationManagerPage = () => {
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
-      className="bg-black/5 dark:bg-white/5 rounded-2xl p-4"
+      className="bg-black/5 dark:bg-white/5 rounded-2xl p-4 hover-elevate active-elevate-2 cursor-pointer touch-manipulation"
+      onClick={() => summary.id && navigate(`/mmp/${summary.id}`)}
+      data-testid={`card-site-summary-${summary.id || summary.mmpId}`}
     >
-      <div className="mb-3">
-        <h3 className="font-semibold text-black dark:text-white text-sm truncate">{summary.mmpName}</h3>
-        <p className="text-xs text-black/40 dark:text-white/40">{summary.mmpId}</p>
-        {summary.status && (
-          <Badge
-            variant="outline"
-            className={cn(
-              "mt-2 text-xs",
-              summary.status === 'approved' && "border-black/20 dark:border-white/20 text-black dark:text-white",
-              summary.status === 'pending' && "border-black/20 dark:border-white/20 text-black/70 dark:text-white/70"
-            )}
-          >
-            {summary.status.charAt(0).toUpperCase() + summary.status.slice(1)}
-          </Badge>
-        )}
+      <div className="flex items-start justify-between gap-2 mb-3">
+        <div className="flex-1 min-w-0">
+          <h3 className="font-semibold text-black dark:text-white text-sm truncate">{summary.mmpName}</h3>
+          <p className="text-xs text-black/40 dark:text-white/40">{summary.mmpId}</p>
+          {summary.status && (
+            <Badge
+              variant="outline"
+              className={cn(
+                "mt-2 text-xs",
+                summary.status === 'approved' && "border-black/20 dark:border-white/20 text-black dark:text-white",
+                summary.status === 'pending' && "border-black/20 dark:border-white/20 text-black/70 dark:text-white/70"
+              )}
+            >
+              {summary.status.charAt(0).toUpperCase() + summary.status.slice(1)}
+            </Badge>
+          )}
+        </div>
+        <ChevronRight className="h-4 w-4 text-black/40 dark:text-white/40 flex-shrink-0 mt-1" />
       </div>
       
       <div className="space-y-2">

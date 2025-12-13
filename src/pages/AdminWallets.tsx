@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useWallet } from '@/context/wallet/WalletContext';
 import { useNavigate } from 'react-router-dom';
+import { DataFreshnessBadge } from '@/components/realtime';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { GradientStatCard } from '@/components/ui/gradient-stat-card';
 import { Input } from '@/components/ui/input';
@@ -224,6 +225,7 @@ const AdminWallets: React.FC = () => {
             </p>
           </div>
         </div>
+        <DataFreshnessBadge />
       </div>
 
       {/* Stats Cards */}

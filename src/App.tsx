@@ -79,6 +79,7 @@ const FinancialOperations = lazy(() => import('./pages/FinancialOperations'));
 const SuperAdminManagement = lazy(() => import('./components/superAdmin/SuperAdminManagementPage').then(module => ({ default: module.SuperAdminManagementPage })));
 const SuperAdminDataManagement = lazy(() => import('./components/superAdmin/SuperAdminDataManagement').then(module => ({ default: module.SuperAdminDataManagement })));
 const HubOperations = lazy(() => import('./pages/HubOperations'));
+const HubManagement = lazy(() => import('./pages/HubManagement'));
 const TrackerPreparationPlan = lazy(() => import('./pages/TrackerPreparationPlan'));
 const NotificationsPage = lazy(() => import('./pages/Notifications'));
 const Documentation = lazy(() => import('./pages/Documentation'));
@@ -249,6 +250,7 @@ const AppRoutes = () => {
   <Route path="/coordinator/sites" element={<CoordinatorSites />} />
   <Route path="/coordinator-dashboard" element={<CoordinatorDashboard />} />
   <Route path="/hub-operations" element={<HubOperations />} />
+  <Route path="/hub-management" element={<HubManagement />} />
         <Route path="/tracker-preparation-plan" element={<TrackerPreparationPlan />} />
         <Route path="/signatures" element={<SignaturesPage />} />
         <Route path="/approval-dashboard" element={<ApprovalDashboard />} />

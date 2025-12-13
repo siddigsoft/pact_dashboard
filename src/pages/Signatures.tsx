@@ -4,12 +4,57 @@
  * Features real-time updates for signature changes
  */
 
+import { Suspense, lazy } from 'react';
 import { useAppContext } from '@/context/AppContext';
-import { SignatureManager } from '@/components/signature/SignatureManager';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Shield } from 'lucide-react';
 import { DataFreshnessBadge } from '@/components/realtime';
+
+const SignatureManager = lazy(() => 
+  import('@/components/signature/SignatureManager').then(module => ({ 
+    default: module.SignatureManager 
+  }))
+);
+
+function SignaturesSkeleton() {
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-3">
+            <Skeleton className="h-10 w-10 rounded-full" />
+            <div className="space-y-2">
+              <Skeleton className="h-5 w-32" />
+              <Skeleton className="h-3 w-48" />
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex gap-2">
+            <Skeleton className="h-9 w-24" />
+            <Skeleton className="h-9 w-24" />
+            <Skeleton className="h-9 w-24" />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Card key={i}>
+                <CardContent className="pt-6 space-y-3">
+                  <Skeleton className="h-24 w-full" />
+                  <Skeleton className="h-4 w-2/3" />
+                  <div className="flex gap-2">
+                    <Skeleton className="h-8 flex-1" />
+                    <Skeleton className="h-8 w-8" />
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
 
 export default function SignaturesPage() {
   const { currentUser } = useAppContext();
@@ -17,16 +62,12 @@ export default function SignaturesPage() {
 
   if (loading) {
     return (
-      <div className="p-6 space-y-6">
-        <Card>
-          <CardHeader>
-            <Skeleton className="h-8 w-64" />
-            <Skeleton className="h-4 w-96" />
-          </CardHeader>
-          <CardContent>
-            <Skeleton className="h-64 w-full" />
-          </CardContent>
-        </Card>
+      <div className="p-4 sm:p-6 max-w-7xl mx-auto">
+        <div className="mb-6">
+          <Skeleton className="h-8 w-48 mb-2" />
+          <Skeleton className="h-4 w-64" />
+        </div>
+        <SignaturesSkeleton />
       </div>
     );
   }
@@ -59,12 +100,14 @@ export default function SignaturesPage() {
         <DataFreshnessBadge variant="badge" />
       </div>
 
-      <SignatureManager
-        userId={currentUser.id}
-        userName={currentUser.name || currentUser.email || 'User'}
-        userEmail={currentUser.email}
-        userPhone={(currentUser as any).phone}
-      />
+      <Suspense fallback={<SignaturesSkeleton />}>
+        <SignatureManager
+          userId={currentUser.id}
+          userName={currentUser.name || currentUser.email || 'User'}
+          userEmail={currentUser.email}
+          userPhone={(currentUser as any).phone}
+        />
+      </Suspense>
     </div>
   );
 }

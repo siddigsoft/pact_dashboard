@@ -21,6 +21,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { MMPTabsSkeleton } from '@/components/ui/skeletons';
 
 // Using relative import fallback in case path alias resolution misses new file
 import BulkClearForwardedDialog from '../components/mmp/BulkClearForwardedDialog';
@@ -2955,7 +2956,7 @@ const MMP = () => {
       {/* Body */}
       <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-lg p-2 sm:p-4 md:p-6 overflow-y-auto max-h-[calc(100vh-200px)]">
         {loading ? (
-          <div className="text-center text-muted-foreground py-8">Loading MMP files...</div>
+          <MMPTabsSkeleton />
         ) : (
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <div className="overflow-x-auto mb-6">

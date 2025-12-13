@@ -191,24 +191,16 @@ const DocumentsPage = () => {
   // Cache status
   const [fromCache, setFromCache] = useState(false);
 
-  // Fetch filter options (projects, hubs, etc.)
+  // Fetch filter options (projects, hubs, etc.) - parallelized for speed
   const fetchFilterOptions = async () => {
     try {
-      // Fetch projects
-      const { data: projectsData } = await supabase
-        .from('projects')
-        .select('id, name')
-        .order('name');
+      const [projectsRes, hubsRes] = await Promise.all([
+        supabase.from('projects').select('id, name').order('name'),
+        supabase.from('hubs').select('id, name').order('name')
+      ]);
       
-      setProjects(projectsData || []);
-      
-      // Fetch hubs
-      const { data: hubsData } = await supabase
-        .from('hubs')
-        .select('id, name')
-        .order('name');
-      
-      setHubs(hubsData || []);
+      setProjects(projectsRes.data || []);
+      setHubs(hubsRes.data || []);
     } catch (error) {
       console.error('Error fetching filter options:', error);
     }
@@ -237,13 +229,33 @@ const DocumentsPage = () => {
       const monthsSet = new Set<string>();
       const statesSet = new Set<string>();
 
-      // 1. Fetch MMP Files (the CSV uploads themselves)
-      try {
-        const { data: mmpFiles, error: mmpError } = await supabase
+      // Parallel fetch all document sources for improved speed
+      const [mmpResult, costResult, photoResult] = await Promise.all([
+        supabase
           .from('mmp_files')
           .select('id, filename, file_url, created_at, updated_at, permits, project_id, status, uploaded_by, projects(name)')
-          .order('created_at', { ascending: false });
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('cost_submissions')
+          .select('id, receipt_url, receipt_filename, amount, created_at, status, site_visit_id, documents, project_id, projects(name)')
+          .order('created_at', { ascending: false }),
+        supabase
+          .from('report_photos')
+          .select('id, photo_url, caption, created_at, site_visit_id')
+          .order('created_at', { ascending: false })
+          .then(res => res)
+          .catch(() => ({ data: null, error: { message: 'Table may not exist' } }))
+      ]);
 
+      const mmpFiles = mmpResult.data;
+      const mmpError = mmpResult.error;
+      const costSubmissions = costResult.data;
+      const costError = costResult.error;
+      const reportPhotos = photoResult.data;
+      const photoError = photoResult.error;
+
+      // 1. Process MMP Files (the CSV uploads themselves)
+      try {
         if (mmpError) {
           console.warn('MMP files fetch error:', mmpError);
         }
@@ -400,12 +412,7 @@ const DocumentsPage = () => {
         console.warn('Error processing MMP files:', mmpErr);
       }
 
-      // 2. Fetch Cost Submission Receipts
-      const { data: costSubmissions, error: costError } = await supabase
-        .from('cost_submissions')
-        .select('id, receipt_url, receipt_filename, amount, created_at, status, site_visit_id, documents, project_id, projects(name)')
-        .order('created_at', { ascending: false });
-
+      // 2. Process Cost Submission Receipts (already fetched in parallel above)
       if (!costError && costSubmissions) {
         (costSubmissions || []).forEach((cost: any) => {
           if (!cost) return;
@@ -460,38 +467,29 @@ const DocumentsPage = () => {
         });
       }
 
-      // 3. Fetch Report Photos (site visit attachments)
-      try {
-        const { data: reportPhotos, error: photoError } = await supabase
-          .from('report_photos')
-          .select('id, photo_url, caption, created_at, site_visit_id')
-          .order('created_at', { ascending: false });
-
-        if (!photoError && reportPhotos) {
-          (reportPhotos || []).forEach((photo: any) => {
-            if (!photo) return;
-            if (photo.photo_url) {
-              const photoMonth = safeFormatDate(photo.created_at, 'yyyy-MM');
-              if (photoMonth) monthsSet.add(photoMonth);
-              
-              docs.push({
-                id: `photo-${photo.id}`,
-                indexNo: indexCounter++,
-                fileName: photo.caption || `Site Visit Photo`,
-                fileUrl: photo.photo_url,
-                category: 'site_visit_photo',
-                uploadedAt: photo.created_at || new Date().toISOString(),
-                siteVisitId: photo.site_visit_id,
-                monthBucket: photoMonth,
-                status: 'verified',
-                verified: true,
-                sourceType: 'site_visit'
-              });
-            }
-          });
-        }
-      } catch (photoErr) {
-        console.log('Report photos table may not exist:', photoErr);
+      // 3. Process Report Photos (already fetched in parallel above)
+      if (!photoError && reportPhotos) {
+        (reportPhotos || []).forEach((photo: any) => {
+          if (!photo) return;
+          if (photo.photo_url) {
+            const photoMonth = safeFormatDate(photo.created_at, 'yyyy-MM');
+            if (photoMonth) monthsSet.add(photoMonth);
+            
+            docs.push({
+              id: `photo-${photo.id}`,
+              indexNo: indexCounter++,
+              fileName: photo.caption || `Site Visit Photo`,
+              fileUrl: photo.photo_url,
+              category: 'site_visit_photo',
+              uploadedAt: photo.created_at || new Date().toISOString(),
+              siteVisitId: photo.site_visit_id,
+              monthBucket: photoMonth,
+              status: 'verified',
+              verified: true,
+              sourceType: 'site_visit'
+            });
+          }
+        });
       }
 
       // Sort by upload date (newest first) and reassign index numbers
@@ -540,12 +538,8 @@ const DocumentsPage = () => {
   }, [loadingMore, pageSize]);
   
   useEffect(() => {
-    // Fetch filter options first, then documents
-    const loadData = async () => {
-      await fetchFilterOptions();
-      await fetchDocuments();
-    };
-    loadData();
+    // Fetch filter options and documents in parallel for speed
+    Promise.all([fetchFilterOptions(), fetchDocuments()]);
   }, []);
 
   // Reset all filters

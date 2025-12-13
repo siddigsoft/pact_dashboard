@@ -190,6 +190,9 @@
     if (!isHidden('/hub-operations') && (isSuperAdmin || isAdmin)) {
       planningItems.push({ id: 'hub-operations', title: "Hub Operations", url: "/hub-operations", icon: Building2, priority: 3, isPinned: isPinned('/hub-operations') });
     }
+    if (!isHidden('/hub-management') && (isSuperAdmin || isAdmin)) {
+      planningItems.push({ id: 'hub-management', title: "Hub Management", url: "/hub-management", icon: Building2, priority: 4, isPinned: isPinned('/hub-management') });
+    }
     if (planningItems.length) groups.push({ id: 'planning', label: "Planning & Setup", order: 2, items: planningItems });
 
     const fieldOpsItems: MenuGroup['items'] = [];
