@@ -46,6 +46,16 @@ import {
   Shield,
   AlertTriangle,
   Search,
+  UserPlus,
+  Lock,
+  MapPin,
+  Wallet,
+  FolderOpen,
+  Bell,
+  MessageSquare,
+  Wrench,
+  Tag,
+  ChevronRight,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
@@ -542,11 +552,134 @@ const defaultTemplates: EmailTemplate[] = [
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
+
+  // === COMPLIANCE ===
+  {
+    id: 'audit-notification',
+    name: 'Audit Notification / إشعار التدقيق',
+    subject: 'Audit Scheduled - {{auditType}} / تدقيق مجدول',
+    category: 'compliance',
+    isActive: true,
+    variables: ['recipientName', 'auditType', 'auditDate', 'auditor', 'department', 'preparationNotes'],
+    htmlContent: `<div dir="ltr"><h1>Audit Notification</h1><p>Hello {{recipientName}},</p><p>An audit has been scheduled for your department:</p><ul><li>Type: {{auditType}}</li><li>Date: {{auditDate}}</li><li>Auditor: {{auditor}}</li><li>Department: {{department}}</li></ul><p>Preparation Notes: {{preparationNotes}}</p><p>Please ensure all documentation is ready for review.</p></div><hr style="margin: 25px 0; border: 0; border-top: 1px solid #eee;"><div dir="rtl" style="text-align: right;"><h1>إشعار التدقيق</h1><p>مرحباً {{recipientName}}،</p><p>تم جدولة تدقيق لقسمك:</p><ul><li>النوع: {{auditType}}</li><li>التاريخ: {{auditDate}}</li><li>المدقق: {{auditor}}</li><li>القسم: {{department}}</li></ul><p>ملاحظات التحضير: {{preparationNotes}}</p><p>يرجى التأكد من جاهزية جميع الوثائق للمراجعة.</p></div>`,
+    textContent: 'Audit Notification\n\nHello {{recipientName}},\n\nAn audit has been scheduled:\n\nType: {{auditType}}\nDate: {{auditDate}}\nAuditor: {{auditor}}\n\n---\n\nإشعار التدقيق\n\nمرحباً {{recipientName}}،\n\nتم جدولة تدقيق:\n\nالنوع: {{auditType}}\nالتاريخ: {{auditDate}}\nالمدقق: {{auditor}}',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    id: 'policy-update',
+    name: 'Policy Update / تحديث السياسة',
+    subject: 'Policy Update: {{policyName}} / تحديث السياسة',
+    category: 'compliance',
+    isActive: true,
+    variables: ['recipientName', 'policyName', 'effectiveDate', 'summary', 'policyUrl', 'contactPerson'],
+    htmlContent: `<div dir="ltr"><h1>Policy Update</h1><p>Hello {{recipientName}},</p><p>An important policy has been updated:</p><ul><li>Policy: {{policyName}}</li><li>Effective Date: {{effectiveDate}}</li></ul><p>Summary of Changes: {{summary}}</p><p><a href="{{policyUrl}}">View Full Policy</a></p><p>For questions, contact: {{contactPerson}}</p></div><hr style="margin: 25px 0; border: 0; border-top: 1px solid #eee;"><div dir="rtl" style="text-align: right;"><h1>تحديث السياسة</h1><p>مرحباً {{recipientName}}،</p><p>تم تحديث سياسة مهمة:</p><ul><li>السياسة: {{policyName}}</li><li>تاريخ السريان: {{effectiveDate}}</li></ul><p>ملخص التغييرات: {{summary}}</p><p><a href="{{policyUrl}}">عرض السياسة الكاملة</a></p><p>للاستفسارات، تواصل مع: {{contactPerson}}</p></div>`,
+    textContent: 'Policy Update\n\nHello {{recipientName}},\n\nPolicy {{policyName}} has been updated.\n\nEffective Date: {{effectiveDate}}\n\nSummary: {{summary}}\n\n---\n\nتحديث السياسة\n\nمرحباً {{recipientName}}،\n\nتم تحديث السياسة {{policyName}}.\n\nتاريخ السريان: {{effectiveDate}}\n\nالملخص: {{summary}}',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    id: 'compliance-reminder',
+    name: 'Compliance Reminder / تذكير الامتثال',
+    subject: 'Compliance Deadline Reminder - {{requirement}} / تذكير بموعد الامتثال',
+    category: 'compliance',
+    isActive: true,
+    variables: ['recipientName', 'requirement', 'deadline', 'daysRemaining', 'actionUrl', 'consequences'],
+    htmlContent: `<div dir="ltr"><h1>Compliance Reminder</h1><p>Hello {{recipientName}},</p><p>This is a reminder about an upcoming compliance deadline:</p><ul><li>Requirement: {{requirement}}</li><li>Deadline: {{deadline}}</li><li>Days Remaining: {{daysRemaining}}</li></ul><p>Failure to comply may result in: {{consequences}}</p><p><a href="{{actionUrl}}">Complete Now</a></p></div><hr style="margin: 25px 0; border: 0; border-top: 1px solid #eee;"><div dir="rtl" style="text-align: right;"><h1>تذكير الامتثال</h1><p>مرحباً {{recipientName}}،</p><p>هذا تذكير بموعد امتثال قادم:</p><ul><li>المتطلب: {{requirement}}</li><li>الموعد النهائي: {{deadline}}</li><li>الأيام المتبقية: {{daysRemaining}}</li></ul><p>عدم الامتثال قد يؤدي إلى: {{consequences}}</p><p><a href="{{actionUrl}}">إكمال الآن</a></p></div>`,
+    textContent: 'Compliance Reminder\n\nHello {{recipientName}},\n\nReminder: {{requirement}}\n\nDeadline: {{deadline}}\nDays Remaining: {{daysRemaining}}\n\n---\n\nتذكير الامتثال\n\nمرحباً {{recipientName}}،\n\nتذكير: {{requirement}}\n\nالموعد النهائي: {{deadline}}\nالأيام المتبقية: {{daysRemaining}}',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    id: 'data-privacy-update',
+    name: 'Data Privacy Update / تحديث خصوصية البيانات',
+    subject: 'Important: Data Privacy Policy Update / مهم: تحديث سياسة خصوصية البيانات',
+    category: 'compliance',
+    isActive: true,
+    variables: ['recipientName', 'effectiveDate', 'changes', 'privacyUrl', 'contactEmail'],
+    htmlContent: `<div dir="ltr"><h1>Data Privacy Update</h1><p>Hello {{recipientName}},</p><p>Our data privacy policy has been updated effective {{effectiveDate}}.</p><p>Key Changes:</p><p>{{changes}}</p><p><a href="{{privacyUrl}}">Read Full Privacy Policy</a></p><p>Questions? Contact: {{contactEmail}}</p></div><hr style="margin: 25px 0; border: 0; border-top: 1px solid #eee;"><div dir="rtl" style="text-align: right;"><h1>تحديث خصوصية البيانات</h1><p>مرحباً {{recipientName}}،</p><p>تم تحديث سياسة خصوصية البيانات اعتباراً من {{effectiveDate}}.</p><p>التغييرات الرئيسية:</p><p>{{changes}}</p><p><a href="{{privacyUrl}}">قراءة سياسة الخصوصية الكاملة</a></p><p>أسئلة؟ تواصل: {{contactEmail}}</p></div>`,
+    textContent: 'Data Privacy Update\n\nHello {{recipientName}},\n\nOur data privacy policy has been updated effective {{effectiveDate}}.\n\nKey Changes:\n{{changes}}\n\n---\n\nتحديث خصوصية البيانات\n\nمرحباً {{recipientName}}،\n\nتم تحديث سياسة خصوصية البيانات اعتباراً من {{effectiveDate}}.\n\nالتغييرات الرئيسية:\n{{changes}}',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+
+  // === EMERGENCY ===
+  {
+    id: 'emergency-alert',
+    name: 'Emergency Alert / تنبيه طوارئ',
+    subject: 'EMERGENCY: {{alertTitle}} / طوارئ: {{alertTitle}}',
+    category: 'emergency',
+    isActive: true,
+    variables: ['recipientName', 'alertTitle', 'alertMessage', 'immediateAction', 'emergencyContact', 'location'],
+    htmlContent: `<div dir="ltr"><h1 style="color: #dc2626; background: #fef2f2; padding: 10px;">EMERGENCY ALERT</h1><p>Hello {{recipientName}},</p><p style="font-weight: bold; font-size: 18px;">{{alertTitle}}</p><p>{{alertMessage}}</p><p style="color: #dc2626; font-weight: bold;">IMMEDIATE ACTION REQUIRED: {{immediateAction}}</p><p>Location: {{location}}</p><p>Emergency Contact: {{emergencyContact}}</p></div><hr style="margin: 25px 0; border: 0; border-top: 1px solid #eee;"><div dir="rtl" style="text-align: right;"><h1 style="color: #dc2626; background: #fef2f2; padding: 10px;">تنبيه طوارئ</h1><p>مرحباً {{recipientName}}،</p><p style="font-weight: bold; font-size: 18px;">{{alertTitle}}</p><p>{{alertMessage}}</p><p style="color: #dc2626; font-weight: bold;">إجراء فوري مطلوب: {{immediateAction}}</p><p>الموقع: {{location}}</p><p>جهة اتصال الطوارئ: {{emergencyContact}}</p></div>`,
+    textContent: 'EMERGENCY ALERT\n\nHello {{recipientName}},\n\n{{alertTitle}}\n\n{{alertMessage}}\n\nIMMEDIATE ACTION: {{immediateAction}}\n\nLocation: {{location}}\nEmergency Contact: {{emergencyContact}}\n\n---\n\nتنبيه طوارئ\n\nمرحباً {{recipientName}}،\n\n{{alertTitle}}\n\n{{alertMessage}}\n\nإجراء فوري: {{immediateAction}}\n\nالموقع: {{location}}\nجهة اتصال الطوارئ: {{emergencyContact}}',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    id: 'security-breach',
+    name: 'Security Breach Alert / تنبيه اختراق أمني',
+    subject: 'SECURITY ALERT: Potential Breach Detected / تنبيه أمني: اكتشاف اختراق محتمل',
+    category: 'emergency',
+    isActive: true,
+    variables: ['recipientName', 'incidentType', 'detectedTime', 'affectedSystems', 'immediateSteps', 'securityTeamContact'],
+    htmlContent: `<div dir="ltr"><h1 style="color: #dc2626;">SECURITY BREACH ALERT</h1><p>Hello {{recipientName}},</p><p>A potential security incident has been detected:</p><ul><li>Incident Type: {{incidentType}}</li><li>Detected: {{detectedTime}}</li><li>Affected Systems: {{affectedSystems}}</li></ul><p style="font-weight: bold;">Immediate Steps Required:</p><p>{{immediateSteps}}</p><p>Security Team Contact: {{securityTeamContact}}</p></div><hr style="margin: 25px 0; border: 0; border-top: 1px solid #eee;"><div dir="rtl" style="text-align: right;"><h1 style="color: #dc2626;">تنبيه اختراق أمني</h1><p>مرحباً {{recipientName}}،</p><p>تم اكتشاف حادث أمني محتمل:</p><ul><li>نوع الحادث: {{incidentType}}</li><li>وقت الاكتشاف: {{detectedTime}}</li><li>الأنظمة المتأثرة: {{affectedSystems}}</li></ul><p style="font-weight: bold;">الخطوات الفورية المطلوبة:</p><p>{{immediateSteps}}</p><p>اتصال فريق الأمن: {{securityTeamContact}}</p></div>`,
+    textContent: 'SECURITY BREACH ALERT\n\nHello {{recipientName}},\n\nA security incident has been detected.\n\nIncident: {{incidentType}}\nDetected: {{detectedTime}}\nAffected: {{affectedSystems}}\n\nImmediate Steps: {{immediateSteps}}\n\n---\n\nتنبيه اختراق أمني\n\nمرحباً {{recipientName}}،\n\nتم اكتشاف حادث أمني.\n\nالحادث: {{incidentType}}\nوقت الاكتشاف: {{detectedTime}}\nالمتأثر: {{affectedSystems}}\n\nالخطوات الفورية: {{immediateSteps}}',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    id: 'evacuation-notice',
+    name: 'Evacuation Notice / إشعار إخلاء',
+    subject: 'URGENT: Evacuation Required - {{location}} / عاجل: إخلاء مطلوب',
+    category: 'emergency',
+    isActive: true,
+    variables: ['recipientName', 'location', 'reason', 'evacuationRoute', 'assemblyPoint', 'emergencyContact'],
+    htmlContent: `<div dir="ltr"><h1 style="color: #dc2626; background: #fef2f2; padding: 10px;">EVACUATION NOTICE</h1><p>Hello {{recipientName}},</p><p style="font-weight: bold;">Immediate evacuation is required at: {{location}}</p><p>Reason: {{reason}}</p><p><strong>Evacuation Route:</strong> {{evacuationRoute}}</p><p><strong>Assembly Point:</strong> {{assemblyPoint}}</p><p>Emergency Contact: {{emergencyContact}}</p><p style="color: #dc2626;">Do not use elevators. Remain calm and proceed immediately.</p></div><hr style="margin: 25px 0; border: 0; border-top: 1px solid #eee;"><div dir="rtl" style="text-align: right;"><h1 style="color: #dc2626; background: #fef2f2; padding: 10px;">إشعار إخلاء</h1><p>مرحباً {{recipientName}}،</p><p style="font-weight: bold;">مطلوب إخلاء فوري في: {{location}}</p><p>السبب: {{reason}}</p><p><strong>مسار الإخلاء:</strong> {{evacuationRoute}}</p><p><strong>نقطة التجمع:</strong> {{assemblyPoint}}</p><p>جهة اتصال الطوارئ: {{emergencyContact}}</p><p style="color: #dc2626;">لا تستخدم المصاعد. ابق هادئاً وتوجه فوراً.</p></div>`,
+    textContent: 'EVACUATION NOTICE\n\nHello {{recipientName}},\n\nImmediate evacuation required at: {{location}}\n\nReason: {{reason}}\nEvacuation Route: {{evacuationRoute}}\nAssembly Point: {{assemblyPoint}}\n\nEmergency Contact: {{emergencyContact}}\n\n---\n\nإشعار إخلاء\n\nمرحباً {{recipientName}}،\n\nمطلوب إخلاء فوري في: {{location}}\n\nالسبب: {{reason}}\nمسار الإخلاء: {{evacuationRoute}}\nنقطة التجمع: {{assemblyPoint}}\n\nجهة اتصال الطوارئ: {{emergencyContact}}',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+  {
+    id: 'service-outage',
+    name: 'Service Outage Alert / تنبيه انقطاع الخدمة',
+    subject: 'SERVICE OUTAGE: {{serviceName}} / انقطاع الخدمة: {{serviceName}}',
+    category: 'emergency',
+    isActive: true,
+    variables: ['recipientName', 'serviceName', 'outageTime', 'affectedUsers', 'estimatedRestoration', 'workaround', 'statusUrl'],
+    htmlContent: `<div dir="ltr"><h1 style="color: #f59e0b;">Service Outage Alert</h1><p>Hello {{recipientName}},</p><p>A critical service is currently experiencing an outage:</p><ul><li>Service: {{serviceName}}</li><li>Outage Started: {{outageTime}}</li><li>Affected Users: {{affectedUsers}}</li><li>Estimated Restoration: {{estimatedRestoration}}</li></ul><p><strong>Workaround:</strong> {{workaround}}</p><p><a href="{{statusUrl}}">Check Status Page</a></p></div><hr style="margin: 25px 0; border: 0; border-top: 1px solid #eee;"><div dir="rtl" style="text-align: right;"><h1 style="color: #f59e0b;">تنبيه انقطاع الخدمة</h1><p>مرحباً {{recipientName}}،</p><p>خدمة حيوية تعاني حالياً من انقطاع:</p><ul><li>الخدمة: {{serviceName}}</li><li>بدء الانقطاع: {{outageTime}}</li><li>المستخدمون المتأثرون: {{affectedUsers}}</li><li>الاستعادة المتوقعة: {{estimatedRestoration}}</li></ul><p><strong>الحل البديل:</strong> {{workaround}}</p><p><a href="{{statusUrl}}">التحقق من صفحة الحالة</a></p></div>`,
+    textContent: 'Service Outage Alert\n\nHello {{recipientName}},\n\nService: {{serviceName}}\nOutage Started: {{outageTime}}\nAffected: {{affectedUsers}}\nEstimated Restoration: {{estimatedRestoration}}\n\nWorkaround: {{workaround}}\n\n---\n\nتنبيه انقطاع الخدمة\n\nمرحباً {{recipientName}}،\n\nالخدمة: {{serviceName}}\nبدء الانقطاع: {{outageTime}}\nالمتأثرون: {{affectedUsers}}\nالاستعادة المتوقعة: {{estimatedRestoration}}\n\nالحل البديل: {{workaround}}',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
 ];
 
 const TEMPLATES_STORAGE_KEY = 'pact_email_templates';
 const TEMPLATES_VERSION_KEY = 'pact_email_templates_version';
-const CURRENT_TEMPLATES_VERSION = '2.0-bilingual';
+const CURRENT_TEMPLATES_VERSION = '2.1-bilingual-compliance-emergency';
+
+interface TemplateCategory {
+  id: string;
+  name: string;
+  nameAr: string;
+  icon: typeof Mail;
+  description: string;
+}
+
+const TEMPLATE_CATEGORIES: TemplateCategory[] = [
+  { id: 'all', name: 'All Templates', nameAr: 'جميع القوالب', icon: FolderOpen, description: 'View all email templates' },
+  { id: 'onboarding', name: 'Onboarding', nameAr: 'التأهيل', icon: UserPlus, description: 'Welcome, account activation, role changes' },
+  { id: 'authentication', name: 'Authentication', nameAr: 'المصادقة', icon: Lock, description: 'Password reset, 2FA, login alerts' },
+  { id: 'operations', name: 'Operations', nameAr: 'العمليات', icon: MapPin, description: 'Site visits, GPS requests, field work' },
+  { id: 'financial', name: 'Financial', nameAr: 'المالية', icon: Wallet, description: 'Payments, approvals, wallet transactions' },
+  { id: 'workflow', name: 'Workflow', nameAr: 'سير العمل', icon: FolderOpen, description: 'MMP, projects, task assignments' },
+  { id: 'system', name: 'System', nameAr: 'النظام', icon: Wrench, description: 'Maintenance, alerts, system updates' },
+  { id: 'notification', name: 'Notifications', nameAr: 'الإشعارات', icon: Bell, description: 'General notifications and alerts' },
+  { id: 'communication', name: 'Communication', nameAr: 'التواصل', icon: MessageSquare, description: 'Custom messages, announcements' },
+  { id: 'compliance', name: 'Compliance', nameAr: 'الامتثال', icon: Shield, description: 'Audits, policies, regulatory requirements' },
+  { id: 'emergency', name: 'Emergency', nameAr: 'الطوارئ', icon: AlertTriangle, description: 'Critical alerts, security, evacuations' },
+  { id: 'custom', name: 'Custom', nameAr: 'مخصص', icon: Tag, description: 'User-created templates' },
+];
 
 export default function EmailManagement() {
   const navigate = useNavigate();
@@ -562,6 +695,7 @@ export default function EmailManagement() {
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<EmailTemplate | null>(null);
   const [templateSearch, setTemplateSearch] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('all');
 
   // Compose state
   const [users, setUsers] = useState<UserForEmail[]>([]);
@@ -812,10 +946,17 @@ export default function EmailManagement() {
     saveTemplates(newTemplates);
   };
 
-  const filteredTemplates = templates.filter(t => 
-    t.name.toLowerCase().includes(templateSearch.toLowerCase()) ||
-    t.category.toLowerCase().includes(templateSearch.toLowerCase())
-  );
+  const filteredTemplates = templates.filter(t => {
+    const matchesSearch = t.name.toLowerCase().includes(templateSearch.toLowerCase()) ||
+      t.category.toLowerCase().includes(templateSearch.toLowerCase());
+    const matchesCategory = selectedCategory === 'all' || t.category === selectedCategory;
+    return matchesSearch && matchesCategory;
+  });
+
+  const getCategoryCount = (categoryId: string) => {
+    if (categoryId === 'all') return templates.length;
+    return templates.filter(t => t.category === categoryId).length;
+  };
 
   const filteredUsers = users.filter(u =>
     u.full_name?.toLowerCase().includes(userSearch.toLowerCase()) ||
@@ -1126,74 +1267,149 @@ export default function EmailManagement() {
 
         {/* Templates Tab */}
         <TabsContent value="templates" className="space-y-6 mt-6">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between gap-4 flex-wrap">
-                <div>
-                  <CardTitle>Email Templates</CardTitle>
-                  <CardDescription>Manage email templates used throughout the system</CardDescription>
-                </div>
-                <Button onClick={handleCreateTemplate} data-testid="button-create-template">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create Template
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="mb-4">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search templates..."
-                    value={templateSearch}
-                    onChange={(e) => setTemplateSearch(e.target.value)}
-                    className="pl-9"
-                    data-testid="input-search-templates"
-                  />
-                </div>
-              </div>
+          <div className="flex items-center justify-between gap-4 flex-wrap mb-4">
+            <div>
+              <h2 className="text-xl font-semibold">Email Templates</h2>
+              <p className="text-sm text-muted-foreground">Manage email templates used throughout the system</p>
+            </div>
+            <Button onClick={handleCreateTemplate} data-testid="button-create-template">
+              <Plus className="h-4 w-4 mr-2" />
+              Create Template
+            </Button>
+          </div>
 
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Category</TableHead>
-                      <TableHead>Subject</TableHead>
-                      <TableHead>Variables</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredTemplates.map((template) => (
-                      <TableRow key={template.id} data-testid={`row-template-${template.id}`}>
-                        <TableCell className="font-medium">{template.name}</TableCell>
-                        <TableCell>{getCategoryBadge(template.category)}</TableCell>
-                        <TableCell className="max-w-[200px] truncate">{template.subject}</TableCell>
-                        <TableCell>
-                          <div className="flex gap-1 flex-wrap max-w-[150px]">
-                            {template.variables.slice(0, 2).map(v => (
-                              <Badge key={v} variant="secondary" className="text-xs">
-                                {v}
-                              </Badge>
-                            ))}
-                            {template.variables.length > 2 && (
-                              <Badge variant="secondary" className="text-xs">
-                                +{template.variables.length - 2}
-                              </Badge>
-                            )}
+          <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
+            {/* Category Sidebar */}
+            <Card className="lg:h-fit">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Categories</CardTitle>
+                <CardDescription className="text-xs">Filter templates by category</CardDescription>
+              </CardHeader>
+              <CardContent className="p-0">
+                <ScrollArea className="h-[400px] lg:h-auto lg:max-h-[500px]">
+                  <div className="space-y-1 p-3 pt-0">
+                    {TEMPLATE_CATEGORIES.map((category) => {
+                      const IconComponent = category.icon;
+                      const count = getCategoryCount(category.id);
+                      const isSelected = selectedCategory === category.id;
+                      return (
+                        <button
+                          key={category.id}
+                          onClick={() => setSelectedCategory(category.id)}
+                          className={`w-full flex items-center gap-3 p-3 rounded-md text-left transition-colors ${
+                            isSelected 
+                              ? 'bg-primary/10 text-primary border border-primary/20' 
+                              : 'hover-elevate'
+                          }`}
+                          data-testid={`category-${category.id}`}
+                        >
+                          <IconComponent className="h-4 w-4 shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-sm truncate">{category.name}</p>
+                            <p className="text-xs text-muted-foreground truncate">{category.nameAr}</p>
                           </div>
-                        </TableCell>
-                        <TableCell>
-                          <Switch
-                            checked={template.isActive}
-                            onCheckedChange={() => handleToggleTemplate(template.id)}
-                            data-testid={`switch-template-${template.id}`}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1">
+                          <Badge variant="secondary" className="text-xs shrink-0">
+                            {count}
+                          </Badge>
+                          {isSelected && <ChevronRight className="h-4 w-4 shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </ScrollArea>
+              </CardContent>
+            </Card>
+
+            {/* Templates List */}
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between gap-4 flex-wrap">
+                  <div>
+                    <CardTitle className="text-base">
+                      {TEMPLATE_CATEGORIES.find(c => c.id === selectedCategory)?.name || 'All Templates'}
+                    </CardTitle>
+                    <CardDescription className="text-xs">
+                      {filteredTemplates.length} template{filteredTemplates.length !== 1 ? 's' : ''}
+                    </CardDescription>
+                  </div>
+                  {/* Mobile category selector */}
+                  <div className="lg:hidden w-full">
+                    <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                      <SelectTrigger data-testid="select-category-mobile">
+                        <SelectValue placeholder="Select category" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {TEMPLATE_CATEGORIES.map((cat) => (
+                          <SelectItem key={cat.id} value={cat.id}>
+                            {cat.name} ({getCategoryCount(cat.id)})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="mb-4">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search templates..."
+                      value={templateSearch}
+                      onChange={(e) => setTemplateSearch(e.target.value)}
+                      className="pl-9"
+                      data-testid="input-search-templates"
+                    />
+                  </div>
+                </div>
+
+                <ScrollArea className="h-[500px]">
+                  {filteredTemplates.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-12 text-center">
+                      <FileText className="h-12 w-12 text-muted-foreground/50 mb-4" />
+                      <p className="font-medium text-muted-foreground">No templates found</p>
+                      <p className="text-sm text-muted-foreground/70 mt-1">
+                        {templateSearch ? 'Try a different search term' : 'No templates in this category'}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {filteredTemplates.map((template) => (
+                        <div
+                          key={template.id}
+                          className="flex items-start gap-3 p-3 rounded-md border bg-card hover-elevate"
+                          data-testid={`row-template-${template.id}`}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="font-medium truncate">{template.name}</p>
+                              {getCategoryBadge(template.category)}
+                              {!template.isActive && (
+                                <Badge variant="outline" className="text-xs text-muted-foreground">
+                                  Disabled
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-sm text-muted-foreground truncate mt-1">{template.subject}</p>
+                            <div className="flex gap-1 flex-wrap mt-2">
+                              {template.variables.slice(0, 3).map(v => (
+                                <Badge key={v} variant="secondary" className="text-xs">
+                                  {`{{${v}}}`}
+                                </Badge>
+                              ))}
+                              {template.variables.length > 3 && (
+                                <Badge variant="secondary" className="text-xs">
+                                  +{template.variables.length - 3} more
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <Switch
+                              checked={template.isActive}
+                              onCheckedChange={() => handleToggleTemplate(template.id)}
+                              data-testid={`switch-template-${template.id}`}
+                            />
                             <Button
                               variant="ghost"
                               size="icon"
@@ -1221,14 +1437,14 @@ export default function EmailManagement() {
                               </Button>
                             )}
                           </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         {/* Compose Tab */}
