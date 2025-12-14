@@ -38,15 +38,19 @@ export function DownloadForOffline({ className, compact = false }: DownloadForOf
 
   const handleDownload = async () => {
     const result = await downloadForOffline(currentUser?.id);
+    const totalItems = result.cached.profiles + result.cached.sites + result.cached.hubs + result.cached.mmps;
     
-    if (result.success) {
-      const totalItems = result.cached.profiles + result.cached.sites + result.cached.hubs + result.cached.mmps;
+    if (result.success && totalItems > 0) {
       toast.success('Download Complete', {
         description: `Downloaded ${totalItems} items for offline use`,
       });
-    } else if (result.errors.length > 0) {
-      toast.warning('Partial Download', {
-        description: `Some data failed to download: ${result.errors[0]}`,
+    } else if (!result.success && result.errors.length > 0) {
+      toast.error('Download Failed', {
+        description: result.errors[0],
+      });
+    } else if (totalItems === 0) {
+      toast.info('No Data', {
+        description: 'No data available to download',
       });
     }
   };
