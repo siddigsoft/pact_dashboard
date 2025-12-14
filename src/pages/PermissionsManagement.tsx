@@ -50,6 +50,20 @@ import {
   FileText,
   Receipt,
   Sparkles,
+  Phone,
+  Bell,
+  Calendar,
+  Map,
+  Archive,
+  CheckCircle,
+  FileSignature,
+  ScrollText,
+  Mail,
+  BookOpen,
+  Activity,
+  Wallet,
+  TrendingUp,
+  Banknote,
 } from 'lucide-react';
 import { useAppContext } from '@/context/AppContext';
 import { useAuthorization } from '@/hooks/use-authorization';
@@ -80,34 +94,67 @@ interface UserScreenPermissions {
 }
 
 const SYSTEM_SCREENS: Omit<ScreenPermission, 'permissions' | 'isVisible'>[] = [
+  // Overview
   { screenId: 'dashboard', screenName: 'Dashboard', screenNameAr: 'لوحة المعلومات', path: '/dashboard', icon: LayoutDashboard, category: 'Overview' },
+  { screenId: 'my-wallet', screenName: 'My Wallet', screenNameAr: 'محفظتي', path: '/wallet', icon: Wallet, category: 'Overview' },
+  { screenId: 'cost-submission', screenName: 'Cost Submission', screenNameAr: 'تقديم التكاليف', path: '/cost-submission', icon: Receipt, category: 'Overview' },
+  { screenId: 'signatures', screenName: 'Signatures', screenNameAr: 'التوقيعات', path: '/signatures', icon: FileSignature, category: 'Overview' },
+  
+  // Communication
+  { screenId: 'chat', screenName: 'Chat', screenNameAr: 'المحادثات', path: '/chat', icon: MessageSquare, category: 'Communication' },
+  { screenId: 'calls', screenName: 'Calls', screenNameAr: 'المكالمات', path: '/calls', icon: Phone, category: 'Communication' },
+  { screenId: 'notifications', screenName: 'Notifications', screenNameAr: 'الإشعارات', path: '/notifications', icon: Bell, category: 'Communication' },
+  
+  // Planning
   { screenId: 'projects', screenName: 'Projects', screenNameAr: 'المشاريع', path: '/projects', icon: FolderKanban, category: 'Planning' },
   { screenId: 'mmp', screenName: 'MMP Management', screenNameAr: 'إدارة خطط الرصد الشهرية', path: '/mmp', icon: Database, category: 'Planning' },
+  { screenId: 'hub-operations', screenName: 'Hub Operations', screenNameAr: 'عمليات المحور', path: '/hub-operations', icon: Building2, category: 'Planning' },
+  { screenId: 'hub-management', screenName: 'Hub Management', screenNameAr: 'إدارة المحاور', path: '/hub-management', icon: Building2, category: 'Planning' },
+  
+  // Field Operations
   { screenId: 'site-visits', screenName: 'Site Visits', screenNameAr: 'الزيارات الميدانية', path: '/site-visits', icon: ClipboardList, category: 'Field Operations' },
-  { screenId: 'field-team', screenName: 'Field Team', screenNameAr: 'الفريق الميداني', path: '/field-team', icon: Users, category: 'Field Operations' },
+  { screenId: 'field-team', screenName: 'Field Team', screenNameAr: 'الفريق الميداني', path: '/field-team', icon: Activity, category: 'Field Operations' },
   { screenId: 'field-operation-manager', screenName: 'Field Operation Manager', screenNameAr: 'مدير العمليات الميدانية', path: '/field-operation-manager', icon: MapPin, category: 'Field Operations' },
-  { screenId: 'hub-operations', screenName: 'Hub Operations', screenNameAr: 'عمليات المحور', path: '/hub-operations', icon: Building2, category: 'Field Operations' },
-  { screenId: 'hub-management', screenName: 'Hub Management', screenNameAr: 'إدارة المحاور', path: '/hub-management', icon: Building2, category: 'Field Operations' },
+  
+  // Verification & Review
+  { screenId: 'site-verification', screenName: 'Site Verification', screenNameAr: 'التحقق من الموقع', path: '/coordinator/sites', icon: CheckCircle, category: 'Verification' },
+  { screenId: 'archive', screenName: 'Archive', screenNameAr: 'الأرشيف', path: '/archive', icon: Archive, category: 'Verification' },
+  
+  // Data & Reports
+  { screenId: 'data-visibility', screenName: 'Data Visibility', screenNameAr: 'رؤية البيانات', path: '/data-visibility', icon: Eye, category: 'Data & Reports' },
+  { screenId: 'reports', screenName: 'Reports', screenNameAr: 'التقارير', path: '/reports', icon: BarChart3, category: 'Data & Reports' },
+  { screenId: 'calendar', screenName: 'Calendar', screenNameAr: 'التقويم', path: '/calendar', icon: Calendar, category: 'Data & Reports' },
+  { screenId: 'tracker-preparation-plan', screenName: 'Tracker Preparation', screenNameAr: 'إعداد المتتبع', path: '/tracker-preparation-plan', icon: BarChart3, category: 'Data & Reports' },
+  { screenId: 'documents', screenName: 'Documents', screenNameAr: 'المستندات', path: '/documents', icon: FileText, category: 'Data & Reports' },
+  { screenId: 'advanced-map', screenName: 'Advanced Map', screenNameAr: 'الخريطة المتقدمة', path: '/map', icon: Map, category: 'Data & Reports' },
+  { screenId: 'wallet-reports', screenName: 'Wallet Reports', screenNameAr: 'تقارير المحفظة', path: '/wallet-reports', icon: BarChart3, category: 'Data & Reports' },
+  
+  // Finance
   { screenId: 'budget', screenName: 'Budget', screenNameAr: 'الميزانية', path: '/budget', icon: DollarSign, category: 'Finance' },
   { screenId: 'admin-wallets', screenName: 'Wallets', screenNameAr: 'المحافظ', path: '/admin/wallets', icon: CreditCard, category: 'Finance' },
-  { screenId: 'cost-submission', screenName: 'Cost Submission', screenNameAr: 'تقديم التكاليف', path: '/cost-submission', icon: Receipt, category: 'Finance' },
-  { screenId: 'finance-approval', screenName: 'Finance Approval', screenNameAr: 'الموافقة المالية', path: '/finance-approval', icon: DollarSign, category: 'Finance' },
-  { screenId: 'withdrawal-approval', screenName: 'Withdrawal Approval', screenNameAr: 'موافقة السحب', path: '/withdrawal-approval', icon: DollarSign, category: 'Finance' },
-  { screenId: 'financial-operations', screenName: 'Financial Operations', screenNameAr: 'العمليات المالية', path: '/financial-operations', icon: DollarSign, category: 'Finance' },
-  { screenId: 'reports', screenName: 'Reports', screenNameAr: 'التقارير', path: '/reports', icon: BarChart3, category: 'Data & Reports' },
-  { screenId: 'tracker-preparation-plan', screenName: 'Tracker Preparation', screenNameAr: 'إعداد المتتبع', path: '/tracker-preparation-plan', icon: BarChart3, category: 'Data & Reports' },
-  { screenId: 'data-visibility', screenName: 'Data Visibility', screenNameAr: 'رؤية البيانات', path: '/data-visibility', icon: Eye, category: 'Data & Reports' },
+  { screenId: 'financial-operations', screenName: 'Financial Operations', screenNameAr: 'العمليات المالية', path: '/financial-operations', icon: TrendingUp, category: 'Finance' },
+  { screenId: 'supervisor-approvals', screenName: 'Tier 1 Approvals', screenNameAr: 'موافقات المستوى الأول', path: '/supervisor-approvals', icon: ClipboardList, category: 'Finance' },
+  { screenId: 'withdrawal-approval', screenName: 'Tier 2 Approvals', screenNameAr: 'موافقات المستوى الثاني', path: '/withdrawal-approval', icon: ClipboardList, category: 'Finance' },
+  { screenId: 'down-payment-approval', screenName: 'Down-Payment Approval', screenNameAr: 'موافقة الدفعة المقدمة', path: '/down-payment-approval', icon: DollarSign, category: 'Finance' },
+  { screenId: 'finance-approval', screenName: 'Finance Approval', screenNameAr: 'الموافقة المالية', path: '/finance-approval', icon: Banknote, category: 'Finance' },
+  
+  // Administration
   { screenId: 'users', screenName: 'User Management', screenNameAr: 'إدارة المستخدمين', path: '/users', icon: Users, category: 'Administration' },
   { screenId: 'role-management', screenName: 'Role Management', screenNameAr: 'إدارة الأدوار', path: '/role-management', icon: Shield, category: 'Administration' },
   { screenId: 'classifications', screenName: 'Classifications', screenNameAr: 'التصنيفات', path: '/classifications', icon: FileText, category: 'Administration' },
   { screenId: 'classification-fees', screenName: 'Classification Fees', screenNameAr: 'رسوم التصنيف', path: '/classification-fees', icon: DollarSign, category: 'Administration' },
   { screenId: 'settings', screenName: 'Settings', screenNameAr: 'الإعدادات', path: '/settings', icon: Settings, category: 'Administration' },
-  { screenId: 'chat', screenName: 'Chat', screenNameAr: 'المحادثات', path: '/chat', icon: MessageSquare, category: 'Communication' },
-  { screenId: 'notifications', screenName: 'Notifications', screenNameAr: 'الإشعارات', path: '/notifications', icon: MessageSquare, category: 'Communication' },
-  { screenId: 'email-management', screenName: 'Email Management', screenNameAr: 'إدارة البريد الإلكتروني', path: '/email-management', icon: MessageSquare, category: 'Communication' },
-  { screenId: 'audit-logs', screenName: 'Audit Logs', screenNameAr: 'سجلات التدقيق', path: '/audit-logs', icon: FileText, category: 'Security' },
-  { screenId: 'signatures', screenName: 'Signatures', screenNameAr: 'التوقيعات', path: '/signatures', icon: FileText, category: 'Security' },
-  { screenId: 'approval-dashboard', screenName: 'Approval Dashboard', screenNameAr: 'لوحة الموافقات', path: '/approval-dashboard', icon: ClipboardList, category: 'Security' },
+  
+  // Super Admin
+  { screenId: 'super-admin-management', screenName: 'Super Admin Management', screenNameAr: 'إدارة المشرف الأعلى', path: '/super-admin-management', icon: ShieldCheck, category: 'Super Admin' },
+  { screenId: 'approval-dashboard', screenName: 'Approval Dashboard', screenNameAr: 'لوحة الموافقات', path: '/approval-dashboard', icon: ClipboardList, category: 'Super Admin' },
+  { screenId: 'permissions-management', screenName: 'User Permissions', screenNameAr: 'صلاحيات المستخدم', path: '/permissions-management', icon: ShieldCheck, category: 'Super Admin' },
+  { screenId: 'audit-logs', screenName: 'Audit Logs', screenNameAr: 'سجلات التدقيق', path: '/audit-logs', icon: ScrollText, category: 'Super Admin' },
+  { screenId: 'email-tracking', screenName: 'Email Tracking', screenNameAr: 'تتبع البريد الإلكتروني', path: '/email-tracking', icon: Mail, category: 'Super Admin' },
+  { screenId: 'email-management', screenName: 'Email Management', screenNameAr: 'إدارة البريد الإلكتروني', path: '/email-management', icon: Mail, category: 'Super Admin' },
+  
+  // Help & Support
+  { screenId: 'documentation', screenName: 'Documentation', screenNameAr: 'الوثائق', path: '/documentation', icon: BookOpen, category: 'Help & Support' },
 ];
 
 const PERMISSION_LABELS = {
@@ -119,13 +166,15 @@ const PERMISSION_LABELS = {
 
 const CATEGORIES = [
   'Overview',
+  'Communication',
   'Planning',
   'Field Operations',
-  'Finance',
+  'Verification',
   'Data & Reports',
+  'Finance',
   'Administration',
-  'Communication',
-  'Security',
+  'Super Admin',
+  'Help & Support',
 ];
 
 const PermissionsManagement = () => {
