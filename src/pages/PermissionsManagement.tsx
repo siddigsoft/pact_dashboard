@@ -49,6 +49,7 @@ import {
   MapPin,
   FileText,
   Receipt,
+  Sparkles,
 } from 'lucide-react';
 import { useAppContext } from '@/context/AppContext';
 import { useAuthorization } from '@/hooks/use-authorization';
@@ -173,21 +174,34 @@ const PermissionsManagement = () => {
 
       if (error && error.code !== 'PGRST116') {
         console.error('Error loading permissions:', error);
-        toast({
-          title: 'Error',
-          description: 'Failed to load user permissions',
-          variant: 'destructive',
+        // Fallback to default permissions on error
+        setUserPermissions({
+          userId,
+          screens: initializeDefaultPermissions(),
         });
-        return;
-      }
-
-      if (data) {
+        toast({
+          title: 'Using default permissions',
+          description: 'Could not load saved permissions. Showing defaults.',
+        });
+      } else if (data) {
         const screensData = typeof data.screens === 'string' 
           ? JSON.parse(data.screens) 
           : data.screens;
+        // Merge with system screens to handle any new screens added
+        const mergedScreens = SYSTEM_SCREENS.map(systemScreen => {
+          const existingScreen = screensData.find((s: ScreenPermission) => s.screenId === systemScreen.screenId);
+          if (existingScreen) {
+            return { ...systemScreen, ...existingScreen };
+          }
+          return {
+            ...systemScreen,
+            permissions: { read: true, write: false, open: true, create: false },
+            isVisible: true,
+          };
+        });
         setUserPermissions({
           userId,
-          screens: screensData,
+          screens: mergedScreens,
           updatedAt: data.updated_at,
           updatedBy: data.updated_by,
         });
@@ -200,10 +214,14 @@ const PermissionsManagement = () => {
       setHasChanges(false);
     } catch (err) {
       console.error('Error:', err);
+      // Fallback to default permissions on any error
+      setUserPermissions({
+        userId,
+        screens: initializeDefaultPermissions(),
+      });
       toast({
-        title: 'Error',
-        description: 'An unexpected error occurred',
-        variant: 'destructive',
+        title: 'Using default permissions',
+        description: 'Could not load saved permissions. Showing defaults.',
       });
     } finally {
       setIsLoading(false);
@@ -460,6 +478,162 @@ const PermissionsManagement = () => {
 
       {selectedUserId && userPermissions && (
         <>
+          {/* Permission Stats Summary */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <Card>
+              <CardContent className="pt-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-2xl font-bold text-green-600">{userPermissions.screens.filter(s => s.isVisible).length}</p>
+                    <p className="text-xs text-muted-foreground">Visible Screens</p>
+                  </div>
+                  <Eye className="h-8 w-8 text-green-200" />
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-2xl font-bold text-blue-600">{userPermissions.screens.filter(s => s.permissions.read).length}</p>
+                    <p className="text-xs text-muted-foreground">Read Access</p>
+                  </div>
+                  <Shield className="h-8 w-8 text-blue-200" />
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-2xl font-bold text-orange-600">{userPermissions.screens.filter(s => s.permissions.write).length}</p>
+                    <p className="text-xs text-muted-foreground">Write Access</p>
+                  </div>
+                  <Lock className="h-8 w-8 text-orange-200" />
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-2xl font-bold">{userPermissions.screens.length}</p>
+                    <p className="text-xs text-muted-foreground">Total Screens</p>
+                  </div>
+                  <LayoutDashboard className="h-8 w-8 text-gray-200" />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Quick Preset Actions */}
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Sparkles className="h-5 w-5" />
+                  Quick Permission Presets
+                </CardTitle>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setUserPermissions(prev => {
+                        if (!prev) return prev;
+                        return {
+                          ...prev,
+                          screens: prev.screens.map(s => ({
+                            ...s,
+                            isVisible: true,
+                            permissions: { read: true, write: true, open: true, create: true }
+                          }))
+                        };
+                      });
+                      setHasChanges(true);
+                    }}
+                    data-testid="button-preset-full-access"
+                  >
+                    <Unlock className="h-3 w-3 mr-1" />
+                    Full Access
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setUserPermissions(prev => {
+                        if (!prev) return prev;
+                        return {
+                          ...prev,
+                          screens: prev.screens.map(s => ({
+                            ...s,
+                            isVisible: true,
+                            permissions: { read: true, write: false, open: true, create: false }
+                          }))
+                        };
+                      });
+                      setHasChanges(true);
+                    }}
+                    data-testid="button-preset-read-only"
+                  >
+                    <Eye className="h-3 w-3 mr-1" />
+                    Read Only
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setUserPermissions(prev => {
+                        if (!prev) return prev;
+                        return {
+                          ...prev,
+                          screens: prev.screens.map(s => ({
+                            ...s,
+                            isVisible: false,
+                            permissions: { read: false, write: false, open: false, create: false }
+                          }))
+                        };
+                      });
+                      setHasChanges(true);
+                    }}
+                    data-testid="button-preset-no-access"
+                  >
+                    <Lock className="h-3 w-3 mr-1" />
+                    No Access
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const fieldScreens = ['dashboard', 'site-visits', 'cost-submission', 'signatures', 'chat', 'notifications', 'mmp'];
+                      setUserPermissions(prev => {
+                        if (!prev) return prev;
+                        return {
+                          ...prev,
+                          screens: prev.screens.map(s => ({
+                            ...s,
+                            isVisible: fieldScreens.includes(s.screenId),
+                            permissions: {
+                              read: fieldScreens.includes(s.screenId),
+                              write: s.screenId === 'cost-submission' || s.screenId === 'signatures',
+                              open: fieldScreens.includes(s.screenId),
+                              create: s.screenId === 'cost-submission'
+                            }
+                          }))
+                        };
+                      });
+                      setHasChanges(true);
+                    }}
+                    data-testid="button-preset-field-worker"
+                  >
+                    <MapPin className="h-3 w-3 mr-1" />
+                    Field Worker
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">

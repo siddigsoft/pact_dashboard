@@ -298,6 +298,9 @@
     if (!isHidden('/email-management') && isSuperAdmin) {
       adminItems.push({ id: 'email-management', title: "Email Management", url: "/email-management", icon: Mail, priority: 13, isPinned: isPinned('/email-management') });
     }
+    if (!isHidden('/permissions-management') && isSuperAdmin) {
+      adminItems.push({ id: 'permissions-management', title: "User Permissions", url: "/permissions-management", icon: ShieldCheck, priority: 14, isPinned: isPinned('/permissions-management') });
+    }
     if (adminItems.length) groups.push({ id: 'admin', label: "Administration", order: 6, items: adminItems });
 
     groups.forEach(group => {
