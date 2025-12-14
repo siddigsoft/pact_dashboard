@@ -110,6 +110,9 @@ class OfflinePrefetchService {
 
       this.updateProgress({ phase: 'complete', current: null });
 
+      // Persist lastPrefetchAt timestamp reliably
+      await this.saveLastPrefetchTimestamp();
+
       return {
         success: errors.length === 0,
         cached,
@@ -174,35 +177,51 @@ class OfflinePrefetchService {
   async prefetchSites(userId?: string): Promise<{ count: number; errors: string[] }> {
     const errors: string[] = [];
     let count = 0;
+    const PAGE_SIZE = 500;
+    let offset = 0;
+    let hasMore = true;
 
     try {
-      let query = supabase
-        .from('mmp_site_entries')
-        .select(`
-          id, site_name, site_code, state, locality, status, 
-          planned_date, actual_date, notes, assigned_to,
-          visit_started_at, visit_completed_at, gps_coordinates,
-          additional_data
-        `)
-        .in('status', ['Pending', 'In Progress', 'Dispatched']);
+      const db = await getOfflineDB();
+      const now = Date.now();
+      const expiresAt = now + CACHE_TTL.sites * 60 * 1000;
+      const allSites: any[] = [];
 
-      if (userId) {
-        query = query.or(`assigned_to.eq.${userId},claimed_by.eq.${userId}`);
+      // Paginated fetch to handle more than 500 sites
+      while (hasMore) {
+        let query = supabase
+          .from('mmp_site_entries')
+          .select(`
+            id, site_name, site_code, state, locality, status, 
+            planned_date, actual_date, notes, assigned_to,
+            visit_started_at, visit_completed_at, gps_coordinates,
+            additional_data
+          `)
+          .in('status', ['Pending', 'In Progress', 'Dispatched'])
+          .range(offset, offset + PAGE_SIZE - 1);
+
+        if (userId) {
+          query = query.or(`assigned_to.eq.${userId},claimed_by.eq.${userId}`);
+        }
+
+        const { data: sites, error } = await query;
+
+        if (error) throw error;
+
+        if (sites && sites.length > 0) {
+          allSites.push(...sites);
+          offset += sites.length;
+          hasMore = sites.length === PAGE_SIZE;
+        } else {
+          hasMore = false;
+        }
       }
 
-      const { data: sites, error } = await query.limit(500);
-
-      if (error) throw error;
-
-      if (sites && sites.length > 0) {
-        this.updateProgress({ total: sites.length });
-        
-        const db = await getOfflineDB();
-        const now = Date.now();
-        const expiresAt = now + CACHE_TTL.sites * 60 * 1000;
+      if (allSites.length > 0) {
+        this.updateProgress({ total: allSites.length });
 
         const tx = db.transaction('genericCache', 'readwrite');
-        for (const site of sites) {
+        for (const site of allSites) {
           await tx.store.put({
             id: `site:${site.id}`,
             data: site,
@@ -216,7 +235,7 @@ class OfflinePrefetchService {
         }
         await tx.done;
 
-        await cacheSiteData('assigned_sites', sites, CACHE_TTL.sites);
+        await cacheSiteData('assigned_sites', allSites, CACHE_TTL.sites);
       }
     } catch (error) {
       errors.push(`Failed to prefetch sites: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -434,6 +453,18 @@ class OfflinePrefetchService {
         mmps: 0,
         lastPrefetchAt: null,
       };
+    }
+  }
+
+  async saveLastPrefetchTimestamp(): Promise<void> {
+    try {
+      const db = await getOfflineDB();
+      await db.put('appState', {
+        key: 'lastPrefetchAt',
+        value: Date.now(),
+      });
+    } catch (error) {
+      console.error('[OfflinePrefetch] Failed to save lastPrefetchAt:', error);
     }
   }
 

@@ -17,6 +17,7 @@ import { useOfflineData } from '@/hooks/useOfflineData';
 import { useUser } from '@/context/user/UserContext';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
+import { toast } from '@/components/ui/sonner';
 
 interface DownloadForOfflineProps {
   className?: string;
@@ -36,7 +37,18 @@ export function DownloadForOffline({ className, compact = false }: DownloadForOf
   const [showDetails, setShowDetails] = useState(false);
 
   const handleDownload = async () => {
-    await downloadForOffline(currentUser?.id);
+    const result = await downloadForOffline(currentUser?.id);
+    
+    if (result.success) {
+      const totalItems = result.cached.profiles + result.cached.sites + result.cached.hubs + result.cached.mmps;
+      toast.success('Download Complete', {
+        description: `Downloaded ${totalItems} items for offline use`,
+      });
+    } else if (result.errors.length > 0) {
+      toast.warning('Partial Download', {
+        description: `Some data failed to download: ${result.errors[0]}`,
+      });
+    }
   };
 
   const progressPercent = downloadProgress && downloadProgress.total > 0
