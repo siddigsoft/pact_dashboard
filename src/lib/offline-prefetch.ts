@@ -86,37 +86,73 @@ class OfflinePrefetchService {
     };
 
     try {
+      // Phase 1: Profiles
       this.updateProgress({ phase: 'profiles', current: 'Downloading team profiles...', total: 0, completed: 0 });
       const profileResult = await this.prefetchProfiles();
       cached.profiles = profileResult.count;
-      errors.push(...profileResult.errors);
+      if (profileResult.errors.length > 0) {
+        errors.push(...profileResult.errors);
+        return {
+          success: false,
+          cached,
+          errors,
+          duration: Date.now() - startTime,
+        };
+      }
 
+      // Phase 2: Sites - abort if this fails
       this.updateProgress({ phase: 'sites', current: 'Downloading assigned sites...', completed: 0 });
       const siteResult = await this.prefetchSites(userId);
       cached.sites = siteResult.count;
-      errors.push(...siteResult.errors);
+      if (siteResult.errors.length > 0) {
+        errors.push(...siteResult.errors);
+        return {
+          success: false,
+          cached,
+          errors,
+          duration: Date.now() - startTime,
+        };
+      }
 
+      // Phase 3: Geographic data - abort if this fails
       this.updateProgress({ phase: 'geographic', current: 'Downloading geographic data...' });
       const geoResult = await this.prefetchGeographicData();
       cached.hubs = geoResult.hubs;
       cached.states = geoResult.states;
       cached.localities = geoResult.localities;
-      errors.push(...geoResult.errors);
+      if (geoResult.errors.length > 0) {
+        errors.push(...geoResult.errors);
+        return {
+          success: false,
+          cached,
+          errors,
+          duration: Date.now() - startTime,
+        };
+      }
 
+      // Phase 4: MMPs - abort if this fails
       this.updateProgress({ phase: 'mmps', current: 'Downloading MMPs...' });
       const mmpResult = await this.prefetchMMPs();
       cached.mmps = mmpResult.count;
-      errors.push(...mmpResult.errors);
+      if (mmpResult.errors.length > 0) {
+        errors.push(...mmpResult.errors);
+        return {
+          success: false,
+          cached,
+          errors,
+          duration: Date.now() - startTime,
+        };
+      }
 
       this.updateProgress({ phase: 'complete', current: null });
 
-      // Persist lastPrefetchAt timestamp reliably
+      // Persist lastPrefetchAt timestamp only on complete success
       await this.saveLastPrefetchTimestamp();
 
       return {
-        success: errors.length === 0,
+        success: true,
         cached,
-        errors,
+        errors: [],
         duration: Date.now() - startTime,
       };
     } catch (error) {
@@ -168,7 +204,8 @@ class OfflinePrefetchService {
         await cacheSiteData('all_profiles', profiles, CACHE_TTL.profiles);
       }
     } catch (error) {
-      errors.push(`Failed to prefetch profiles: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      const msg = error instanceof Error ? error.message : String(error);
+      errors.push(`Profiles: ${msg}`);
     }
 
     return { count, errors };
@@ -185,9 +222,29 @@ class OfflinePrefetchService {
       const db = await getOfflineDB();
       const now = Date.now();
       const expiresAt = now + CACHE_TTL.sites * 60 * 1000;
-      const allSites: any[] = [];
 
-      // Paginated fetch to handle more than 500 sites
+      // Get accurate total count upfront using Supabase head count query
+      let countQuery = supabase
+        .from('mmp_site_entries')
+        .select('*', { count: 'exact', head: true })
+        .in('status', ['Pending', 'In Progress', 'Dispatched']);
+
+      if (userId) {
+        countQuery = countQuery.or(`assigned_to.eq.${userId},claimed_by.eq.${userId}`);
+      }
+
+      const { count: totalCount, error: countError } = await countQuery;
+      
+      if (countError) throw countError;
+      
+      const total = totalCount || 0;
+      this.updateProgress({ total });
+
+      if (total === 0) {
+        return { count: 0, errors: [] };
+      }
+
+      // Paginated fetch - process each page immediately to avoid memory issues
       while (hasMore) {
         let query = supabase
           .from('mmp_site_entries')
@@ -206,10 +263,26 @@ class OfflinePrefetchService {
 
         const { data: sites, error } = await query;
 
+        // Stop on first error - don't continue with partial data
         if (error) throw error;
 
         if (sites && sites.length > 0) {
-          allSites.push(...sites);
+          // Write each page directly to IndexedDB
+          const tx = db.transaction('genericCache', 'readwrite');
+          for (const site of sites) {
+            await tx.store.put({
+              id: `site:${site.id}`,
+              data: site,
+              _version: 1,
+              _cachedAt: now,
+              _expiresAt: expiresAt,
+              _storeType: 'sites',
+            });
+            count++;
+          }
+          await tx.done;
+
+          this.updateProgress({ completed: count });
           offset += sites.length;
           hasMore = sites.length === PAGE_SIZE;
         } else {
@@ -217,28 +290,13 @@ class OfflinePrefetchService {
         }
       }
 
-      if (allSites.length > 0) {
-        this.updateProgress({ total: allSites.length });
-
-        const tx = db.transaction('genericCache', 'readwrite');
-        for (const site of allSites) {
-          await tx.store.put({
-            id: `site:${site.id}`,
-            data: site,
-            _version: 1,
-            _cachedAt: now,
-            _expiresAt: expiresAt,
-            _storeType: 'sites',
-          });
-          count++;
-          this.updateProgress({ completed: count });
-        }
-        await tx.done;
-
-        await cacheSiteData('assigned_sites', allSites, CACHE_TTL.sites);
+      // Cache summary for quick access
+      if (count > 0) {
+        await cacheSiteData('assigned_sites_count', count, CACHE_TTL.sites);
       }
     } catch (error) {
-      errors.push(`Failed to prefetch sites: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      const msg = error instanceof Error ? error.message : String(error);
+      errors.push(`Sites: ${msg}`);
     }
 
     return { count, errors };
@@ -278,7 +336,8 @@ class OfflinePrefetchService {
         await cacheSiteData('all_hubs', hubData, CACHE_TTL.geographic);
       }
     } catch (error) {
-      errors.push(`Failed to prefetch hubs: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      const msg = error instanceof Error ? error.message : String(error);
+      errors.push(`Hubs: ${msg}`);
     }
 
     try {
@@ -309,7 +368,8 @@ class OfflinePrefetchService {
         await cacheSiteData('all_states', stateData, CACHE_TTL.geographic);
       }
     } catch (error) {
-      errors.push(`Failed to prefetch states: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      const msg = error instanceof Error ? error.message : String(error);
+      errors.push(`States: ${msg}`);
     }
 
     try {
@@ -340,7 +400,8 @@ class OfflinePrefetchService {
         await cacheSiteData('all_localities', localityData, CACHE_TTL.geographic);
       }
     } catch (error) {
-      errors.push(`Failed to prefetch localities: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      const msg = error instanceof Error ? error.message : String(error);
+      errors.push(`Localities: ${msg}`);
     }
 
     return { hubs, states, localities, errors };
@@ -368,7 +429,8 @@ class OfflinePrefetchService {
         await cacheSiteData('active_mmps', mmps, CACHE_TTL.mmps);
       }
     } catch (error) {
-      errors.push(`Failed to prefetch MMPs: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      const msg = error instanceof Error ? error.message : String(error);
+      errors.push(`MMPs: ${msg}`);
     }
 
     return { count, errors };
@@ -460,7 +522,7 @@ class OfflinePrefetchService {
     try {
       const db = await getOfflineDB();
       await db.put('appState', {
-        key: 'lastPrefetchAt',
+        id: 'lastPrefetchAt',
         value: Date.now(),
       });
     } catch (error) {
