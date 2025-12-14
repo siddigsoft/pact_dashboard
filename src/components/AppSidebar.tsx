@@ -295,6 +295,9 @@
     if (!isHidden('/email-tracking') && isSuperAdmin) {
       adminItems.push({ id: 'email-tracking', title: "Email Tracking", url: "/email-tracking", icon: Mail, priority: 12, isPinned: isPinned('/email-tracking') });
     }
+    if (!isHidden('/email-management') && isSuperAdmin) {
+      adminItems.push({ id: 'email-management', title: "Email Management", url: "/email-management", icon: Mail, priority: 13, isPinned: isPinned('/email-management') });
+    }
     if (adminItems.length) groups.push({ id: 'admin', label: "Administration", order: 6, items: adminItems });
 
     groups.forEach(group => {
