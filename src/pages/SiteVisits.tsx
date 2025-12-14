@@ -12,6 +12,7 @@ import { Plus, ChevronLeft, Search, MapPin, Clock, AlertTriangle, Building2, Fil
 import { formatDistanceToNow } from 'date-fns';
 import { DataFreshnessBadge } from "@/components/realtime";
 import { queryClient } from "@/lib/queryClient";
+import { useRealtimeSiteVisits } from "@/hooks/use-realtime-site-visits";
 import { useSiteVisitContext } from "@/context/siteVisit/SiteVisitContext";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { format, isValid } from "date-fns";
@@ -24,6 +25,8 @@ import VisitFilters from '@/components/site-visit/VisitFilters';
 import ViewToggle from '@/components/site-visit/ViewToggle';
 import AssignmentMap from '@/components/site-visit/AssignmentMap';
 import { Skeleton } from "@/components/ui/skeleton";
+import { SiteVisitGridSkeleton } from "@/components/ui/skeletons";
+import { useDebounce } from "@/hooks/useDebounce";
 import { getStatusColor, getStatusLabel, getStatusDescription, isOverdue } from "@/utils/siteVisitUtils";
 import { useToast } from "@/hooks/use-toast";
 import FloatingMessenger from "@/components/communication/FloatingMessenger";
@@ -44,8 +47,12 @@ const SiteVisits = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   
+  // Real-time subscription for site visits
+  const { lastRefresh, forceRefresh } = useRealtimeSiteVisits();
+  
   const [filteredVisits, setFilteredVisits] = useState<SiteVisit[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
   const [statusFilter, setStatusFilter] = useState(searchParams.get("status") || "all");
   const [sortBy, setSortBy] = useState("dueDate");
   const [activeFilters, setActiveFilters] = useState({
@@ -56,6 +63,7 @@ const SiteVisits = () => {
   const [view, setView] = useState<'grid' | 'map' | 'calendar'>('grid');
   const [isLoading, setIsLoading] = useState(true);
   const [selectedVisit, setSelectedVisit] = useState<SiteVisit | null>(null);
+  const [showCompletedMap, setShowCompletedMap] = useState(false);
   const countryParam = (searchParams.get("country") || "").toUpperCase();
   const regionParam = searchParams.get("region") || "";
   const hubParam = searchParams.get("hub") || "";
@@ -290,8 +298,8 @@ const SiteVisits = () => {
       }
       
       // Apply search filter
-      if (searchTerm.trim()) {
-        const search = searchTerm.toLowerCase();
+      if (debouncedSearchTerm.trim()) {
+        const search = debouncedSearchTerm.toLowerCase();
         filtered = filtered.filter(visit =>
           (visit.siteName && visit.siteName.toLowerCase().includes(search)) ||
           (visit.siteCode && visit.siteCode.toLowerCase().includes(search)) ||
@@ -432,8 +440,8 @@ const SiteVisits = () => {
       filtered = filtered.filter(v => (v.dueDate || "").startsWith(monthParam));
     }
 
-    if (searchTerm) {
-      const search = searchTerm.toLowerCase();
+    if (debouncedSearchTerm) {
+      const search = debouncedSearchTerm.toLowerCase();
       filtered = filtered.filter(
         visit => 
           visit.siteName.toLowerCase().includes(search) ||
@@ -495,7 +503,7 @@ const SiteVisits = () => {
       }
       setSelectedVisit(selected || null);
     }
-  }, [currentUser, siteVisits, statusFilter, searchTerm, sortBy, view, hubParam, regionParam, monthParam, isFieldWorker, canViewAllSiteVisits, isSupervisor, supervisorHubName, canViewAllProjects, userProjectIds, isSuperAdmin]);
+  }, [currentUser, siteVisits, statusFilter, debouncedSearchTerm, sortBy, view, hubParam, regionParam, monthParam, isFieldWorker, canViewAllSiteVisits, isSupervisor, supervisorHubName, canViewAllProjects, userProjectIds, isSuperAdmin]);
 
   const handleRemoveFilter = (filterType: string) => {
     setActiveFilters(prev => ({
@@ -699,8 +707,80 @@ const SiteVisits = () => {
       );
     }
     
+    // Build completed visits map locations
+    const completedMapLocations = statusFilter === 'completed' 
+      ? filteredVisits
+          .map(v => {
+            const lat = (v as any)?.coordinates?.latitude ?? (v as any)?.location?.latitude;
+            const lng = (v as any)?.coordinates?.longitude ?? (v as any)?.location?.longitude;
+            if (!lat || !lng || isNaN(lat) || isNaN(lng)) return null;
+            return {
+              id: v.id,
+              name: v.siteName,
+              latitude: lat as number,
+              longitude: lng as number,
+              type: 'site' as const,
+              status: v.status,
+            };
+          })
+          .filter(Boolean) as Array<{id:string;name:string;latitude:number;longitude:number;type:'site';status:string}>
+      : [];
+
     return (
-      <div className="grid gap-4 sm:gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+      <div className="space-y-6">
+        {/* Completed Visits Map Section */}
+        {statusFilter === 'completed' && (
+          <Card className="overflow-hidden" data-testid="completed-visits-map-section">
+            <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+              <div>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <MapPin className="h-5 w-5 text-emerald-600" />
+                  Completed Visits Map
+                </CardTitle>
+                <CardDescription>
+                  {completedMapLocations.length} of {filteredVisits.length} completed visits have GPS coordinates
+                </CardDescription>
+              </div>
+              <Button
+                variant={showCompletedMap ? "default" : "outline"}
+                size="sm"
+                onClick={() => setShowCompletedMap(!showCompletedMap)}
+                data-testid="button-toggle-completed-map"
+              >
+                <MapPin className="h-4 w-4 mr-2" />
+                {showCompletedMap ? 'Hide Map' : 'Show Map'}
+              </Button>
+            </CardHeader>
+            {showCompletedMap && (
+              <CardContent className="p-0">
+                {completedMapLocations.length > 0 ? (
+                  <div className="h-[400px] w-full">
+                    <LeafletMapContainer
+                      locations={completedMapLocations}
+                      height="400px"
+                      defaultCenter={mapDefaultCenter}
+                      defaultZoom={mapDefaultZoom}
+                      onLocationClick={(id) => {
+                        const v = filteredVisits.find(x => x.id === id);
+                        if (v) {
+                          navigate(`/site-visits/${id}`);
+                        }
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <div className="p-8 text-center text-muted-foreground">
+                    <MapPin className="h-12 w-12 mx-auto mb-4 opacity-30" />
+                    <p>No GPS coordinates available for completed visits</p>
+                  </div>
+                )}
+              </CardContent>
+            )}
+          </Card>
+        )}
+
+        {/* Grid View */}
+        <div className="grid gap-4 sm:gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
         {filteredVisits.map((visit) => (
           <Card 
             key={visit.id} 
@@ -765,6 +845,29 @@ const SiteVisits = () => {
                   <div className="text-xs text-muted-foreground truncate">
                     CP: <span className="font-medium">{visit.cpName || 'N/A'}</span>
                   </div>
+                  {/* GPS Coordinates - only show for completed visits */}
+                  {visit.status === 'completed' && (
+                    (() => {
+                      const lat = (visit as any)?.coordinates?.latitude ?? (visit as any)?.location?.latitude;
+                      const lng = (visit as any)?.coordinates?.longitude ?? (visit as any)?.location?.longitude;
+                      if (lat && lng && !isNaN(lat) && !isNaN(lng)) {
+                        return (
+                          <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1 bg-emerald-50 dark:bg-emerald-950/30 px-2 py-1 rounded" data-testid={`gps-coords-${visit.id}`}>
+                            <MapPin className="h-3 w-3 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+                            <span className="font-mono text-emerald-700 dark:text-emerald-300">
+                              {Number(lat).toFixed(5)}, {Number(lng).toFixed(5)}
+                            </span>
+                          </div>
+                        );
+                      }
+                      return (
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1 bg-amber-50 dark:bg-amber-950/30 px-2 py-1 rounded">
+                          <MapPin className="h-3 w-3 text-amber-500 flex-shrink-0" />
+                          <span className="text-amber-600 dark:text-amber-400">No GPS coordinates</span>
+                        </div>
+                      );
+                    })()
+                  )}
                 </div>
               </div>
 
@@ -819,6 +922,7 @@ const SiteVisits = () => {
             </div>
           </div>
         )}
+        </div>
       </div>
     );
   };
@@ -833,10 +937,18 @@ const SiteVisits = () => {
       <div className="container mx-auto p-6 space-y-6">
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-2" data-testid="text-page-title-fom">
-              <MapPin className="h-8 w-8 text-primary" />
-              Site Visits Dashboard
-            </h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-2" data-testid="text-page-title-fom">
+                <MapPin className="h-8 w-8 text-primary" />
+                Site Visits Dashboard
+              </h1>
+              <DataFreshnessBadge 
+                lastUpdated={lastRefresh}
+                onRefresh={forceRefresh}
+                staleThresholdMinutes={5}
+                variant="badge"
+              />
+            </div>
             <p className="text-muted-foreground mt-1">
               Browse sites by state and filter by status
             </p>
@@ -909,8 +1021,8 @@ const SiteVisits = () => {
               Site Visits
             </h1>
             <DataFreshnessBadge 
-              lastUpdated={siteVisits.length > 0 ? new Date() : null}
-              onRefresh={async () => { await queryClient.invalidateQueries({ queryKey: ['site-visits'] }); }}
+              lastUpdated={lastRefresh}
+              onRefresh={forceRefresh}
               staleThresholdMinutes={5}
               variant="badge"
             />
