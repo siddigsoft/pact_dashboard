@@ -193,52 +193,85 @@ export default function EmailTracking() {
 
   // Real-time subscription state
   const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
+  const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
+  const [newLogIds, setNewLogIds] = useState<Set<string>>(new Set());
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
+
+  // Handle new log with animation
+  const handleNewLog = (newLog: EmailLog) => {
+    if (newLog.entity_type === 'email' || newLog.entity_type === 'otp') {
+      setEmailLogs((prev) => {
+        if (prev.some((log) => log.id === newLog.id)) {
+          return prev;
+        }
+        return [newLog, ...prev];
+      });
+      
+      // Mark as new for highlight animation
+      setNewLogIds((prev) => new Set(prev).add(newLog.id));
+      setTimeout(() => {
+        setNewLogIds((prev) => {
+          const next = new Set(prev);
+          next.delete(newLog.id);
+          return next;
+        });
+      }, 5000);
+      
+      // Update stats
+      setStats((prev) => ({
+        total: prev.total + 1,
+        successful: newLog.success ? prev.successful + 1 : prev.successful,
+        failed: !newLog.success ? prev.failed + 1 : prev.failed,
+        emails: newLog.entity_type === 'email' ? prev.emails + 1 : prev.emails,
+        otpSent: newLog.entity_type === 'otp' && !newLog.tags?.includes('verification') 
+          ? prev.otpSent + 1 
+          : prev.otpSent,
+        otpVerified: newLog.entity_type === 'otp' && newLog.tags?.includes('verification') 
+          ? prev.otpVerified + 1 
+          : prev.otpVerified,
+      }));
+      
+      setLastUpdate(new Date());
+      
+      // Show toast for new email
+      toast({
+        title: 'New notification logged',
+        description: newLog.entity_type === 'email' 
+          ? `Email to ${newLog.metadata?.recipient || 'unknown'}` 
+          : `OTP ${newLog.tags?.includes('verification') ? 'verification' : 'sent'}`,
+      });
+    }
+  };
 
   useEffect(() => {
     fetchEmailLogs();
 
     // Set up real-time subscription for new email/OTP logs
     const channel = supabase
-      .channel('email-tracking-realtime')
+      .channel('email-tracking-realtime', {
+        config: {
+          broadcast: { self: true },
+          presence: { key: 'email-tracking' },
+        },
+      })
       .on(
         'postgres_changes',
         {
-          event: 'INSERT',
+          event: '*',
           schema: 'public',
           table: 'audit_logs',
           filter: 'module=eq.notification',
         },
         (payload) => {
-          const newLog = payload.new as EmailLog;
-          // Only add if it's email or OTP type
-          if (newLog.entity_type === 'email' || newLog.entity_type === 'otp') {
-            setEmailLogs((prev) => {
-              // Check if log already exists to avoid duplicates
-              if (prev.some((log) => log.id === newLog.id)) {
-                return prev;
-              }
-              return [newLog, ...prev];
-            });
-            // Update stats
-            setStats((prev) => ({
-              total: prev.total + 1,
-              successful: newLog.success ? prev.successful + 1 : prev.successful,
-              failed: !newLog.success ? prev.failed + 1 : prev.failed,
-              emails: newLog.entity_type === 'email' ? prev.emails + 1 : prev.emails,
-              otpSent: newLog.entity_type === 'otp' && !newLog.tags?.includes('verification') 
-                ? prev.otpSent + 1 
-                : prev.otpSent,
-              otpVerified: newLog.entity_type === 'otp' && newLog.tags?.includes('verification') 
-                ? prev.otpVerified + 1 
-                : prev.otpVerified,
-            }));
-            // Show toast for new email
-            toast({
-              title: 'New notification logged',
-              description: newLog.entity_type === 'email' 
-                ? `Email to ${newLog.metadata?.recipient || 'unknown'}` 
-                : `OTP ${newLog.tags?.includes('verification') ? 'verification' : 'sent'}`,
-            });
+          if (payload.eventType === 'INSERT') {
+            handleNewLog(payload.new as EmailLog);
+          } else if (payload.eventType === 'UPDATE') {
+            // Handle updates to existing logs
+            const updatedLog = payload.new as EmailLog;
+            setEmailLogs((prev) => 
+              prev.map((log) => log.id === updatedLog.id ? updatedLog : log)
+            );
+            setLastUpdate(new Date());
           }
         }
       )
@@ -246,6 +279,7 @@ export default function EmailTracking() {
         setIsRealtimeConnected(status === 'SUBSCRIBED');
         if (status === 'SUBSCRIBED') {
           console.log('[EmailTracking] Real-time subscription active');
+          setLastUpdate(new Date());
         }
       });
 
@@ -253,6 +287,20 @@ export default function EmailTracking() {
       supabase.removeChannel(channel);
     };
   }, [toast]);
+
+  // Auto-refresh polling as backup (every 5 seconds when enabled)
+  useEffect(() => {
+    if (!autoRefreshEnabled) return;
+    
+    const pollInterval = setInterval(() => {
+      // Only poll if realtime is not connected or as a backup
+      if (!isRealtimeConnected) {
+        fetchEmailLogs();
+      }
+    }, 5000);
+
+    return () => clearInterval(pollInterval);
+  }, [autoRefreshEnabled, isRealtimeConnected]);
 
   const filteredLogs = emailLogs.filter(log => {
     const matchesSearch = searchQuery === '' ||
@@ -433,26 +481,31 @@ export default function EmailTracking() {
         </div>
         <div className="flex items-center gap-3">
           {/* Real-time connection indicator */}
-          <Badge
-            variant="outline"
-            className={isRealtimeConnected 
-              ? "bg-green-500/10 text-green-600 border-green-500/30" 
-              : "bg-yellow-500/10 text-yellow-600 border-yellow-500/30"
-            }
-            data-testid="badge-realtime-status"
-          >
-            {isRealtimeConnected ? (
-              <>
-                <Radio className="h-3 w-3 mr-1 animate-pulse" />
-                Live
-              </>
-            ) : (
-              <>
-                <WifiOff className="h-3 w-3 mr-1" />
-                Connecting...
-              </>
-            )}
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Badge
+              variant="outline"
+              className={isRealtimeConnected 
+                ? "bg-green-500/10 text-green-600 border-green-500/30" 
+                : "bg-yellow-500/10 text-yellow-600 border-yellow-500/30"
+              }
+              data-testid="badge-realtime-status"
+            >
+              {isRealtimeConnected ? (
+                <>
+                  <Radio className="h-3 w-3 mr-1 animate-pulse" />
+                  Live
+                </>
+              ) : (
+                <>
+                  <WifiOff className="h-3 w-3 mr-1" />
+                  Connecting...
+                </>
+              )}
+            </Badge>
+            <span className="text-xs text-muted-foreground hidden sm:inline">
+              Updated {format(lastUpdate, 'h:mm:ss a')}
+            </span>
+          </div>
           <Button
             onClick={fetchEmailLogs}
             variant="outline"
@@ -662,7 +715,11 @@ export default function EmailTracking() {
                     <TableRow 
                       key={log.id} 
                       data-testid={`row-email-${log.id}`}
-                      className="cursor-pointer hover-elevate"
+                      className={`cursor-pointer hover-elevate transition-colors duration-500 ${
+                        newLogIds.has(log.id) 
+                          ? 'bg-green-500/10 animate-pulse' 
+                          : ''
+                      }`}
                       onClick={() => setSelectedLog(log)}
                     >
                       <TableCell>{getStatusBadge(log.success)}</TableCell>
