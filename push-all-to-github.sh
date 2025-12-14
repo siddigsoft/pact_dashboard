@@ -1,9 +1,9 @@
 #!/bin/bash
 
-echo "🚀 PACT System - Complete GitHub Push"
-echo "======================================"
+echo "🚀 PACT System - Check, Commit & Push to GitHub"
+echo "================================================"
 echo ""
-echo "This script will push the entire PACT system to GitHub"
+echo "This script will check for changes, show a summary, and push to GitHub"
 echo "Repository: https://github.com/siddigsoft/PACT-Siddig"
 echo ""
 
@@ -13,22 +13,43 @@ rm -f .git/index.lock .git/objects/pack/tmp_pack_* 2>/dev/null
 echo "   ✓ Locks removed"
 echo ""
 
-# Show current status
-echo "2. Current status:"
-UNTRACKED=$(git ls-files --others --exclude-standard | wc -l)
-MODIFIED=$(git diff --name-only | wc -l)
-echo "   - Untracked files: $UNTRACKED"
-echo "   - Modified files: $MODIFIED"
+# Check git status and show changes
+echo "2. Checking for changes..."
+GIT_STATUS=$(git status --porcelain)
+if [ -z "$GIT_STATUS" ]; then
+    echo "   ℹ️  No changes detected in the repository."
+    echo "   Nothing to commit or push."
+    exit 0
+fi
+
+echo "   📝 Changes found:"
+echo "$GIT_STATUS" | while read -r line; do
+    echo "      $line"
+done
 echo ""
 
-# Add all files
-echo "3. Adding all system files..."
-echo "   This includes:"
-echo "   - src/ (React components, pages, hooks)"
-echo "   - public/ (assets)"
-echo "   - Configuration files"
-echo "   - Documentation"
+# Show diff summary (optional, user can skip if too verbose)
+echo "3. Summary of changes (press Enter to continue, or Ctrl+C to cancel):"
+read -p ""
 echo ""
+
+# Count files
+UNTRACKED=$(git ls-files --others --exclude-standard | wc -l)
+MODIFIED=$(git diff --name-only | wc -l)
+STAGED=$(git diff --cached --name-only | wc -l)
+echo "   📊 Summary:"
+echo "      - Modified files: $MODIFIED"
+echo "      - Untracked files: $UNTRACKED"
+echo "      - Staged files: $STAGED"
+echo ""
+
+# Confirm before proceeding
+read -p "   Do you want to proceed with adding, committing, and pushing these changes? (y/N): " -n 1 -r
+echo ""
+if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    echo "   ❌ Operation cancelled by user."
+    exit 1
+fi
 
 # Create .gitignore if it doesn't exist
 if [ ! -f .gitignore ]; then
@@ -68,64 +89,45 @@ EOF
 fi
 
 # Add all files
+echo "4. Staging all changes..."
 git add .
-echo "   ✓ All files staged"
+echo "   ✓ All changes staged"
 echo ""
 
-# Create commit
-echo "4. Creating commit..."
-git commit -m "Complete PACT system push - Full codebase
+# Create commit with dynamic message based on changes
+echo "5. Creating commit..."
+CHANGED_FILES=$(git diff --cached --name-only | head -10)
+if [ $(echo "$CHANGED_FILES" | wc -l) -gt 10 ]; then
+    FILE_LIST="and $(($(echo "$CHANGED_FILES" | wc -l) - 10)) more files"
+else
+    FILE_LIST="$CHANGED_FILES"
+fi
 
-This commit includes:
-- ✅ React frontend (src/)
-  - 50+ pages
-  - 50+ components  
-  - Custom hooks and context
-  - Type definitions
+COMMIT_MSG="Update PACT system codebase
 
-- ✅ Configuration
-  - Vite config (port 5000, allowedHosts)
-  - TypeScript config
-  - Tailwind + PostCSS config
-  - ESLint config
+Modified files:
+$FILE_LIST
 
-- ✅ Documentation
-  - UI Design Analysis (20 KB)
-  - Technical Deep Dive (26 KB)
-  - Documentation Index
-  - Setup guides
+This commit includes changes to the PACT Workflow Platform:
+- Frontend components and pages
+- Backend configurations and scripts
+- Documentation and setup files
 
-- ✅ Database
-  - Supabase integration
-  - Schema definitions
-  - SQL files
+Auto-generated commit from check-commit-push script."
 
-- ✅ Assets & Public files
-  - Images
-  - Icons
-  - Static files
-
-Technology Stack:
-- React 18 + TypeScript
-- Vite + Tailwind CSS
-- Shadcn UI (50+ components)
-- Supabase (PostgreSQL)
-- TanStack Query
-- React Router v6
-
-Platform: PACT Workflow Platform
-Purpose: Comprehensive MMP Management System"
+git commit -m "$COMMIT_MSG"
 
 if [ $? -ne 0 ]; then
   echo "   ⚠️  No changes to commit or commit failed"
   echo "   Checking if there's anything to commit..."
+  exit 1
 else
-  echo "   ✓ Commit created"
+  echo "   ✓ Commit created successfully"
 fi
 echo ""
 
 # Push to GitHub
-echo "5. Pushing to GitHub..."
+echo "6. Pushing to GitHub..."
 echo "   Repository: siddigsoft/PACT-Siddig"
 echo "   Branch: main"
 echo ""
@@ -136,17 +138,14 @@ git push https://github.com/siddigsoft/PACT-Siddig.git HEAD:main --force 2>&1 | 
 # Check if push was successful
 if grep -q "remote rejected" /tmp/push_output.txt || grep -q "fatal" /tmp/push_output.txt; then
   echo ""
-  echo "⚠️  Git push encountered issues (shallow clone corruption)"
+  echo "⚠️  Push encountered issues (shallow clone corruption)"
   echo ""
-  echo "📌 Alternative Solution: Use API Uploader"
-  echo "   We have a backup script that uploads via GitHub API"
-  echo ""
-  echo "   Run this command instead:"
-  echo "   node scripts/upload-complete-system.js"
+  echo "📌 Alternative: Use GitHub API uploader"
+  echo "   Run: node scripts/upload-docs-to-github.js"
   echo ""
 else
   echo ""
-  echo "✅ Success! All files pushed to GitHub"
+  echo "✅ Success! Changes committed and pushed to GitHub"
   echo ""
   echo "🔗 View your repository:"
   echo "   https://github.com/siddigsoft/PACT-Siddig"
