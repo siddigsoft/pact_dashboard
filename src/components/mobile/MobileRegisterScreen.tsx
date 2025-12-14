@@ -28,8 +28,11 @@ import {
   Camera,
   Building2,
   IdCard,
-  CheckCircle2
+  CheckCircle2,
+  Users2,
+  Shield
 } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { hapticPresets } from '@/lib/haptics';
@@ -62,6 +65,7 @@ export function MobileRegisterScreen() {
   const [phone, setPhone] = useState('');
   const [employeeId, setEmployeeId] = useState('');
   const [role, setRole] = useState('dataCollector');
+  const [roleTab, setRoleTab] = useState<'field-team' | 'management'>('field-team');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -605,27 +609,222 @@ export function MobileRegisterScreen() {
                 />
               </div>
 
-              <div className="space-y-1.5">
+              <div className="space-y-3">
                 <Label className="flex items-center gap-2 text-xs font-semibold text-black/60 dark:text-white/60 uppercase tracking-wider">
                   <Building2 className="h-3.5 w-3.5" />
-                  Role
+                  Select Your Role
                 </Label>
-                <Select value={role} onValueChange={setRole}>
-                  <SelectTrigger 
-                    className="h-12 text-sm rounded-xl bg-gray-100 dark:bg-neutral-800 border-0 text-black dark:text-white"
-                    data-testid="select-mobile-role"
-                  >
-                    <SelectValue placeholder="Select your role" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="dataCollector">Data Collector</SelectItem>
-                    <SelectItem value="coordinator">Coordinator</SelectItem>
-                    <SelectItem value="supervisor">Supervisor</SelectItem>
-                    <SelectItem value="admin">Admin</SelectItem>
-                    <SelectItem value="ict">ICT</SelectItem>
-                    <SelectItem value="fom">FOM</SelectItem>
-                  </SelectContent>
-                </Select>
+                
+                <Tabs 
+                  value={roleTab} 
+                  onValueChange={(value) => {
+                    setRoleTab(value as 'field-team' | 'management');
+                    if (value === 'field-team') {
+                      setRole('dataCollector');
+                    } else {
+                      setRole('supervisor');
+                    }
+                  }}
+                  className="w-full"
+                >
+                  <TabsList className="grid grid-cols-2 w-full bg-gray-100 dark:bg-neutral-800 rounded-xl p-1">
+                    <TabsTrigger 
+                      value="field-team" 
+                      className="flex items-center gap-2 rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-neutral-700"
+                      data-testid="tab-field-team"
+                    >
+                      <Users2 className="h-4 w-4" />
+                      Field Team
+                    </TabsTrigger>
+                    <TabsTrigger 
+                      value="management" 
+                      className="flex items-center gap-2 rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-neutral-700"
+                      data-testid="tab-management-roles"
+                    >
+                      <Shield className="h-4 w-4" />
+                      Management
+                    </TabsTrigger>
+                  </TabsList>
+                  
+                  <TabsContent value="field-team" className="mt-3 space-y-2">
+                    <div 
+                      onClick={() => setRole('dataCollector')}
+                      className={cn(
+                        "p-3 rounded-xl border-2 cursor-pointer transition-all",
+                        role === 'dataCollector' 
+                          ? "border-black dark:border-white bg-black/5 dark:bg-white/5" 
+                          : "border-gray-200 dark:border-neutral-700"
+                      )}
+                      data-testid="role-option-datacollector"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={cn(
+                          "w-5 h-5 rounded-full border-2 flex items-center justify-center",
+                          role === 'dataCollector' ? "border-black dark:border-white" : "border-gray-300 dark:border-neutral-600"
+                        )}>
+                          {role === 'dataCollector' && <div className="w-2.5 h-2.5 rounded-full bg-black dark:bg-white" />}
+                        </div>
+                        <div>
+                          <p className="font-semibold text-sm">Data Collector</p>
+                          <p className="text-xs text-muted-foreground">Conduct on-site data collection</p>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div 
+                      onClick={() => setRole('coordinator')}
+                      className={cn(
+                        "p-3 rounded-xl border-2 cursor-pointer transition-all",
+                        role === 'coordinator' 
+                          ? "border-black dark:border-white bg-black/5 dark:bg-white/5" 
+                          : "border-gray-200 dark:border-neutral-700"
+                      )}
+                      data-testid="role-option-coordinator"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={cn(
+                          "w-5 h-5 rounded-full border-2 flex items-center justify-center",
+                          role === 'coordinator' ? "border-black dark:border-white" : "border-gray-300 dark:border-neutral-600"
+                        )}>
+                          {role === 'coordinator' && <div className="w-2.5 h-2.5 rounded-full bg-black dark:bg-white" />}
+                        </div>
+                        <div>
+                          <p className="font-semibold text-sm">Coordinator</p>
+                          <p className="text-xs text-muted-foreground">Coordinate field activities</p>
+                        </div>
+                      </div>
+                    </div>
+                  </TabsContent>
+                  
+                  <TabsContent value="management" className="mt-3 space-y-2">
+                    <div className="p-2 mb-2 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
+                      <p className="text-xs text-amber-700 dark:text-amber-300 flex items-center gap-1">
+                        <AlertCircle className="h-3 w-3" />
+                        Management roles require admin approval
+                      </p>
+                    </div>
+                    
+                    <div 
+                      onClick={() => setRole('supervisor')}
+                      className={cn(
+                        "p-3 rounded-xl border-2 cursor-pointer transition-all",
+                        role === 'supervisor' 
+                          ? "border-black dark:border-white bg-black/5 dark:bg-white/5" 
+                          : "border-gray-200 dark:border-neutral-700"
+                      )}
+                      data-testid="role-option-supervisor"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={cn(
+                          "w-5 h-5 rounded-full border-2 flex items-center justify-center",
+                          role === 'supervisor' ? "border-black dark:border-white" : "border-gray-300 dark:border-neutral-600"
+                        )}>
+                          {role === 'supervisor' && <div className="w-2.5 h-2.5 rounded-full bg-black dark:bg-white" />}
+                        </div>
+                        <div>
+                          <p className="font-semibold text-sm">Supervisor</p>
+                          <p className="text-xs text-muted-foreground">Supervise field teams</p>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div 
+                      onClick={() => setRole('fom')}
+                      className={cn(
+                        "p-3 rounded-xl border-2 cursor-pointer transition-all",
+                        role === 'fom' 
+                          ? "border-black dark:border-white bg-black/5 dark:bg-white/5" 
+                          : "border-gray-200 dark:border-neutral-700"
+                      )}
+                      data-testid="role-option-fom"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={cn(
+                          "w-5 h-5 rounded-full border-2 flex items-center justify-center",
+                          role === 'fom' ? "border-black dark:border-white" : "border-gray-300 dark:border-neutral-600"
+                        )}>
+                          {role === 'fom' && <div className="w-2.5 h-2.5 rounded-full bg-black dark:bg-white" />}
+                        </div>
+                        <div>
+                          <p className="font-semibold text-sm">Field Operations Manager</p>
+                          <p className="text-xs text-muted-foreground">Manage field operations</p>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div 
+                      onClick={() => setRole('admin')}
+                      className={cn(
+                        "p-3 rounded-xl border-2 cursor-pointer transition-all",
+                        role === 'admin' 
+                          ? "border-black dark:border-white bg-black/5 dark:bg-white/5" 
+                          : "border-gray-200 dark:border-neutral-700"
+                      )}
+                      data-testid="role-option-admin"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={cn(
+                          "w-5 h-5 rounded-full border-2 flex items-center justify-center",
+                          role === 'admin' ? "border-black dark:border-white" : "border-gray-300 dark:border-neutral-600"
+                        )}>
+                          {role === 'admin' && <div className="w-2.5 h-2.5 rounded-full bg-black dark:bg-white" />}
+                        </div>
+                        <div>
+                          <p className="font-semibold text-sm">Administrator</p>
+                          <p className="text-xs text-muted-foreground">Full system access</p>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div 
+                      onClick={() => setRole('ict')}
+                      className={cn(
+                        "p-3 rounded-xl border-2 cursor-pointer transition-all",
+                        role === 'ict' 
+                          ? "border-black dark:border-white bg-black/5 dark:bg-white/5" 
+                          : "border-gray-200 dark:border-neutral-700"
+                      )}
+                      data-testid="role-option-ict"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={cn(
+                          "w-5 h-5 rounded-full border-2 flex items-center justify-center",
+                          role === 'ict' ? "border-black dark:border-white" : "border-gray-300 dark:border-neutral-600"
+                        )}>
+                          {role === 'ict' && <div className="w-2.5 h-2.5 rounded-full bg-black dark:bg-white" />}
+                        </div>
+                        <div>
+                          <p className="font-semibold text-sm">ICT Support</p>
+                          <p className="text-xs text-muted-foreground">Technical support</p>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div 
+                      onClick={() => setRole('financialAdmin')}
+                      className={cn(
+                        "p-3 rounded-xl border-2 cursor-pointer transition-all",
+                        role === 'financialAdmin' 
+                          ? "border-black dark:border-white bg-black/5 dark:bg-white/5" 
+                          : "border-gray-200 dark:border-neutral-700"
+                      )}
+                      data-testid="role-option-financialadmin"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={cn(
+                          "w-5 h-5 rounded-full border-2 flex items-center justify-center",
+                          role === 'financialAdmin' ? "border-black dark:border-white" : "border-gray-300 dark:border-neutral-600"
+                        )}>
+                          {role === 'financialAdmin' && <div className="w-2.5 h-2.5 rounded-full bg-black dark:bg-white" />}
+                        </div>
+                        <div>
+                          <p className="font-semibold text-sm">Financial Admin</p>
+                          <p className="text-xs text-muted-foreground">Financial management</p>
+                        </div>
+                      </div>
+                    </div>
+                  </TabsContent>
+                </Tabs>
               </div>
 
               {showHubSelection && (

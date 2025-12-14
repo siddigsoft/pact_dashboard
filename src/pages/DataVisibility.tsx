@@ -507,6 +507,22 @@ const DataVisibility: React.FC = () => {
         </TabsList>
         
         <TabsContent value="integrated-view" className="space-y-6">
+          <Card className="bg-muted/30 border-dashed">
+            <CardContent className="p-4">
+              <div className="flex items-start gap-3">
+                <Eye className="h-5 w-5 text-muted-foreground mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-foreground">Integrated View Overview</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    This dashboard shows real-time site visit progress across all field operations. Track completion rates, 
+                    monitor data collectors on the map, and view the relationship between site visits and MMP projects. 
+                    Use filters to drill down into specific hubs, states, or visit statuses.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
             <Card className="bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-950/30 dark:to-blue-900/20 border-blue-200/50 dark:border-blue-800/50">
               <CardContent className="p-4">
@@ -1000,6 +1016,22 @@ const DataVisibility: React.FC = () => {
         </TabsContent>
         
         <TabsContent value="reporting" className="space-y-6">
+          <Card className="bg-muted/30 border-dashed">
+            <CardContent className="p-4">
+              <div className="flex items-start gap-3">
+                <TrendingUp className="h-5 w-5 text-muted-foreground mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-foreground">Reporting & Trends Overview</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Analyze site visit performance trends across projects and regions. The charts show completion status 
+                    by project and regional coverage metrics. Use the export options to download filtered data in CSV 
+                    or Excel format for offline analysis and stakeholder reporting.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card>
               <CardHeader>
@@ -1080,6 +1112,22 @@ const DataVisibility: React.FC = () => {
         </TabsContent>
 
         <TabsContent value="compliance" className="space-y-6">
+          <Card className="bg-muted/30 border-dashed">
+            <CardContent className="p-4">
+              <div className="flex items-start gap-3">
+                <ShieldCheck className="h-5 w-5 text-muted-foreground mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-foreground">Audit & Compliance Overview</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Monitor organizational compliance across documentation, field procedures, data protection, and access control. 
+                    Review compliance trends over time and download compliance summary templates for audit preparation. 
+                    Scores are calculated based on visit documentation completeness and adherence to field protocols.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <Card>
               <CardContent className="pt-6">
