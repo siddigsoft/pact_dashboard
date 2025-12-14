@@ -76,12 +76,12 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
         const { data, error } = await supabase
           .from('profiles')
           .select('id, full_name, username, email, hub_id, state_id, locality_id')
-          .or('role.eq.dataCollector,role.eq.datacollector')
+          .in('role', ['dataCollector', 'datacollector', 'coordinator'])
           .order('full_name', { ascending: true});
 
         if (!cancelled) {
           if (error) {
-            console.error('Failed to load data collectors', error);
+            console.error('Failed to load data collectors and coordinators', error);
             setCollectors([]);
           } else {
             setCollectors(data as any[] as DataCollector[]);
@@ -89,7 +89,7 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
         }
       } catch (err) {
         if (!cancelled) {
-          console.error('Error loading collectors:', err);
+          console.error('Error loading collectors and coordinators:', err);
           setCollectors([]);
         }
       }
@@ -741,7 +741,7 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
                 {dispatchType === 'open' && 'Select sites to dispatch. Any data collector in the matching area can claim these sites on a first-come, first-served basis.'}
                 {dispatchType === 'state' && 'Select a state to dispatch sites to all data collectors in that state.'}
                 {dispatchType === 'locality' && 'Select a locality to dispatch sites. All data collectors in that locality will see these sites and can claim them.'}
-                {dispatchType === 'individual' && 'Select a data collector to assign sites directly to them.'}
+                {dispatchType === 'individual' && 'Select a data collector or coordinator to assign sites directly to them.'}
               </>
             )}
             {step === 'costs' && 'Enter transportation costs (required) and optional other costs for each site. Enumerator fee will be calculated when claimed.'}
@@ -842,7 +842,7 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
 
             {dispatchType === 'individual' && (
               <div className="space-y-2">
-                <Label>Search Data Collector</Label>
+                <Label>Search Data Collector or Coordinator</Label>
                 <Input
                   placeholder="Search by name, username, or email..."
                   value={search}
