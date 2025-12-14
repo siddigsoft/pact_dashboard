@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +8,11 @@ import { useAppContext } from "@/context/AppContext";
 import { useAuthorization } from "@/hooks/use-authorization";
 import { SiteVisit } from "@/types";
 import { Link } from "react-router-dom";
-import { Plus, ChevronLeft, Search, MapPin, Clock, AlertTriangle, Building2 } from "lucide-react";
+import { Plus, ChevronLeft, Search, MapPin, Clock, AlertTriangle, Building2, FileText, Wallet, History, ExternalLink, User, RefreshCw } from "lucide-react";
+import { formatDistanceToNow } from 'date-fns';
+import { DataFreshnessBadge } from "@/components/realtime";
+import { queryClient } from "@/lib/queryClient";
+import { useRealtimeSiteVisits } from "@/hooks/use-realtime-site-visits";
 import { useSiteVisitContext } from "@/context/siteVisit/SiteVisitContext";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
 import { format, isValid } from "date-fns";
@@ -21,6 +25,8 @@ import VisitFilters from '@/components/site-visit/VisitFilters';
 import ViewToggle from '@/components/site-visit/ViewToggle';
 import AssignmentMap from '@/components/site-visit/AssignmentMap';
 import { Skeleton } from "@/components/ui/skeleton";
+import { SiteVisitGridSkeleton } from "@/components/ui/skeletons";
+import { useDebounce } from "@/hooks/useDebounce";
 import { getStatusColor, getStatusLabel, getStatusDescription, isOverdue } from "@/utils/siteVisitUtils";
 import { useToast } from "@/hooks/use-toast";
 import FloatingMessenger from "@/components/communication/FloatingMessenger";
@@ -28,18 +34,25 @@ import { useMMP } from "@/context/mmp/MMPContext";
 import LeafletMapContainer from '@/components/map/LeafletMapContainer';
 import { sudanStates, getStateName, getLocalityName } from '@/data/sudanStates';
 import { supabase } from '@/integrations/supabase/client';
+import { useUserProjects } from '@/hooks/useUserProjects';
+import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 
 const SiteVisits = () => {
   const { currentUser, hasRole } = useAppContext();
   const { canViewAllSiteVisits, checkPermission, hasAnyRole } = useAuthorization();
+  const { isSuperAdmin } = useSuperAdmin();
   const { siteVisits } = useSiteVisitContext();
   const { mmpFiles } = useMMP();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { toast } = useToast();
   
+  // Real-time subscription for site visits
+  const { lastRefresh, forceRefresh } = useRealtimeSiteVisits();
+  
   const [filteredVisits, setFilteredVisits] = useState<SiteVisit[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
   const [statusFilter, setStatusFilter] = useState(searchParams.get("status") || "all");
   const [sortBy, setSortBy] = useState("dueDate");
   const [activeFilters, setActiveFilters] = useState({
@@ -50,6 +63,7 @@ const SiteVisits = () => {
   const [view, setView] = useState<'grid' | 'map' | 'calendar'>('grid');
   const [isLoading, setIsLoading] = useState(true);
   const [selectedVisit, setSelectedVisit] = useState<SiteVisit | null>(null);
+  const [showCompletedMap, setShowCompletedMap] = useState(false);
   const countryParam = (searchParams.get("country") || "").toUpperCase();
   const regionParam = searchParams.get("region") || "";
   const hubParam = searchParams.get("hub") || "";
@@ -69,8 +83,26 @@ const SiteVisits = () => {
     mapDefaultZoom = countryCenters[countryParam].zoom;
   }
 
-  // Page-level access guard: require read permission or admin
-  const canAccess = checkPermission('site_visits', 'read') || hasAnyRole(['admin']);
+  // Check if user is a data collector based on role name (for access check)
+  const isDataCollectorForAccess = useMemo(() => {
+    if (!currentUser) return false;
+    const role = (currentUser.role || '').toLowerCase().replace(/[\s_-]/g, '');
+    return role === 'datacollector' || role.includes('datacollector');
+  }, [currentUser]);
+
+  // Check if user is a coordinator based on role name (for access check)
+  const isCoordinatorForAccess = useMemo(() => {
+    if (!currentUser) return false;
+    const role = (currentUser.role || '').toLowerCase().replace(/[\s_-]/g, '');
+    return role === 'coordinator' || role.includes('coordinator');
+  }, [currentUser]);
+
+  // Page-level access guard: require read permission, admin, data collector, or coordinator role
+  // Data Collectors and Coordinators are field workers who MUST have access to site visits
+  const canAccess = checkPermission('site_visits', 'read') || 
+                   hasAnyRole(['admin', 'Admin', 'DataCollector', 'Data Collector', 'Coordinator', 'ict', 'ICT', 'Supervisor', 'supervisor']) ||
+                   isDataCollectorForAccess ||
+                   isCoordinatorForAccess;
   if (!canAccess) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -171,6 +203,15 @@ const SiteVisits = () => {
     fetchHubName();
   }, [isSupervisor, supervisorHubId]);
 
+  // Get user's project team memberships from projects table (team.members, team.teamComposition)
+  const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
+
+  // Check if user can view all projects (admins, ICT, FOM, super admins don't need team membership filter)
+  const canViewAllProjects = useMemo(() => {
+    if (isAdminOrSuperUser) return true;
+    return hasAnyRole(['admin', 'Admin', 'ict', 'ICT', 'fom', 'Field Operation Manager (FOM)', 'Field Operations Manager']);
+  }, [hasAnyRole, isAdminOrSuperUser]);
+
   // Get user's geographic assignment from profile (state and locality)
   // Works for both data collectors and coordinators who can claim sites within their locality
   const userGeographicInfo = useMemo(() => {
@@ -245,9 +286,50 @@ const SiteVisits = () => {
   useEffect(() => {
     const canViewAll = canViewAllSiteVisits();
     
+    // SuperAdmin can see ALL site visits without any restrictions
+    if (isSuperAdmin) {
+      let filtered = [...siteVisits];
+      
+      // Apply status filter if set
+      if (statusFilter && statusFilter !== "all") {
+        filtered = filtered.filter(visit => 
+          visit.status?.toLowerCase() === statusFilter.toLowerCase()
+        );
+      }
+      
+      // Apply search filter
+      if (debouncedSearchTerm.trim()) {
+        const search = debouncedSearchTerm.toLowerCase();
+        filtered = filtered.filter(visit =>
+          (visit.siteName && visit.siteName.toLowerCase().includes(search)) ||
+          (visit.siteCode && visit.siteCode.toLowerCase().includes(search)) ||
+          (visit.locality && visit.locality.toLowerCase().includes(search)) ||
+          (visit.state && visit.state.toLowerCase().includes(search))
+        );
+      }
+      
+      // Sort filtered visits
+      filtered.sort((a, b) => {
+        if (sortBy === "dueDate") {
+          return new Date(a.dueDate || 0).getTime() - new Date(b.dueDate || 0).getTime();
+        } else if (sortBy === "priority") {
+          const priorityOrder = { high: 0, medium: 1, low: 2 };
+          return (priorityOrder[a.priority as keyof typeof priorityOrder] || 2) - 
+                 (priorityOrder[b.priority as keyof typeof priorityOrder] || 2);
+        }
+        return 0;
+      });
+      
+      setFilteredVisits(filtered);
+      return;
+    }
+    
     // For field workers (data collectors and coordinators), apply special filtering logic:
     // - "dispatched" status: show ONLY dispatched visits matching user's state AND locality
+    //   This is where geographic filtering applies - users can only SEE and CLAIM sites in their locality
     // - "assigned", "accepted", "ongoing", "completed": filter by assignedTo === currentUser.id
+    //   No additional geo filter here - users must see work assigned to them regardless of location
+    //   (ClaimSiteButton/AcceptSiteButton enforce locality rules at claim time, not view time)
     // - Other statuses or "all": filter by assignedTo === currentUser.id
     let filtered: SiteVisit[];
     
@@ -358,8 +440,8 @@ const SiteVisits = () => {
       filtered = filtered.filter(v => (v.dueDate || "").startsWith(monthParam));
     }
 
-    if (searchTerm) {
-      const search = searchTerm.toLowerCase();
+    if (debouncedSearchTerm) {
+      const search = debouncedSearchTerm.toLowerCase();
       filtered = filtered.filter(
         visit => 
           visit.siteName.toLowerCase().includes(search) ||
@@ -367,6 +449,29 @@ const SiteVisits = () => {
           (visit.locality && visit.locality.toLowerCase().includes(search)) ||
           (visit.state && visit.state.toLowerCase().includes(search))
       );
+    }
+
+    // Apply project team membership filter
+    // Users can only see sites from projects they're team members of (unless they can view all projects)
+    // Exception: Field workers (data collectors, coordinators) can see dispatched sites in their locality even without project membership
+    if (!canViewAllProjects) {
+      const beforeCount = filtered.length;
+      filtered = filtered.filter(visit => {
+        const projectId = visit.mmpDetails?.projectId;
+        const isDispatched = visit.status?.toLowerCase() === 'dispatched';
+        
+        // Field workers can see dispatched sites in their locality (already filtered by geography)
+        // This is the ONLY exception to the project membership rule
+        if (isFieldWorker && isDispatched) return true;
+        
+        // All other sites require project membership
+        // If visit has no project ID, we can't verify membership, so hide it
+        if (!projectId) return false;
+        
+        // Check if user is a team member of this project
+        return userProjectIds.includes(projectId);
+      });
+      console.log(`👥 Project team filter: ${filtered.length} of ${beforeCount} sites visible (user is in ${userProjectIds.length} projects)`);
     }
 
     filtered.sort((a, b) => {
@@ -398,7 +503,7 @@ const SiteVisits = () => {
       }
       setSelectedVisit(selected || null);
     }
-  }, [currentUser, siteVisits, statusFilter, searchTerm, sortBy, view, hubParam, regionParam, monthParam, isFieldWorker, canViewAllSiteVisits, isSupervisor, supervisorHubName]);
+  }, [currentUser, siteVisits, statusFilter, debouncedSearchTerm, sortBy, view, hubParam, regionParam, monthParam, isFieldWorker, canViewAllSiteVisits, isSupervisor, supervisorHubName, canViewAllProjects, userProjectIds, isSuperAdmin]);
 
   const handleRemoveFilter = (filterType: string) => {
     setActiveFilters(prev => ({
@@ -602,8 +707,80 @@ const SiteVisits = () => {
       );
     }
     
+    // Build completed visits map locations
+    const completedMapLocations = statusFilter === 'completed' 
+      ? filteredVisits
+          .map(v => {
+            const lat = (v as any)?.coordinates?.latitude ?? (v as any)?.location?.latitude;
+            const lng = (v as any)?.coordinates?.longitude ?? (v as any)?.location?.longitude;
+            if (!lat || !lng || isNaN(lat) || isNaN(lng)) return null;
+            return {
+              id: v.id,
+              name: v.siteName,
+              latitude: lat as number,
+              longitude: lng as number,
+              type: 'site' as const,
+              status: v.status,
+            };
+          })
+          .filter(Boolean) as Array<{id:string;name:string;latitude:number;longitude:number;type:'site';status:string}>
+      : [];
+
     return (
-      <div className="grid gap-4 sm:gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+      <div className="space-y-6">
+        {/* Completed Visits Map Section */}
+        {statusFilter === 'completed' && (
+          <Card className="overflow-hidden" data-testid="completed-visits-map-section">
+            <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+              <div>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <MapPin className="h-5 w-5 text-emerald-600" />
+                  Completed Visits Map
+                </CardTitle>
+                <CardDescription>
+                  {completedMapLocations.length} of {filteredVisits.length} completed visits have GPS coordinates
+                </CardDescription>
+              </div>
+              <Button
+                variant={showCompletedMap ? "default" : "outline"}
+                size="sm"
+                onClick={() => setShowCompletedMap(!showCompletedMap)}
+                data-testid="button-toggle-completed-map"
+              >
+                <MapPin className="h-4 w-4 mr-2" />
+                {showCompletedMap ? 'Hide Map' : 'Show Map'}
+              </Button>
+            </CardHeader>
+            {showCompletedMap && (
+              <CardContent className="p-0">
+                {completedMapLocations.length > 0 ? (
+                  <div className="h-[400px] w-full">
+                    <LeafletMapContainer
+                      locations={completedMapLocations}
+                      height="400px"
+                      defaultCenter={mapDefaultCenter}
+                      defaultZoom={mapDefaultZoom}
+                      onLocationClick={(id) => {
+                        const v = filteredVisits.find(x => x.id === id);
+                        if (v) {
+                          navigate(`/site-visits/${id}`);
+                        }
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <div className="p-8 text-center text-muted-foreground">
+                    <MapPin className="h-12 w-12 mx-auto mb-4 opacity-30" />
+                    <p>No GPS coordinates available for completed visits</p>
+                  </div>
+                )}
+              </CardContent>
+            )}
+          </Card>
+        )}
+
+        {/* Grid View */}
+        <div className="grid gap-4 sm:gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
         {filteredVisits.map((visit) => (
           <Card 
             key={visit.id} 
@@ -668,6 +845,29 @@ const SiteVisits = () => {
                   <div className="text-xs text-muted-foreground truncate">
                     CP: <span className="font-medium">{visit.cpName || 'N/A'}</span>
                   </div>
+                  {/* GPS Coordinates - only show for completed visits */}
+                  {visit.status === 'completed' && (
+                    (() => {
+                      const lat = (visit as any)?.coordinates?.latitude ?? (visit as any)?.location?.latitude;
+                      const lng = (visit as any)?.coordinates?.longitude ?? (visit as any)?.location?.longitude;
+                      if (lat && lng && !isNaN(lat) && !isNaN(lng)) {
+                        return (
+                          <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1 bg-emerald-50 dark:bg-emerald-950/30 px-2 py-1 rounded" data-testid={`gps-coords-${visit.id}`}>
+                            <MapPin className="h-3 w-3 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+                            <span className="font-mono text-emerald-700 dark:text-emerald-300">
+                              {Number(lat).toFixed(5)}, {Number(lng).toFixed(5)}
+                            </span>
+                          </div>
+                        );
+                      }
+                      return (
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1 bg-amber-50 dark:bg-amber-950/30 px-2 py-1 rounded">
+                          <MapPin className="h-3 w-3 text-amber-500 flex-shrink-0" />
+                          <span className="text-amber-600 dark:text-amber-400">No GPS coordinates</span>
+                        </div>
+                      );
+                    })()
+                  )}
                 </div>
               </div>
 
@@ -722,6 +922,7 @@ const SiteVisits = () => {
             </div>
           </div>
         )}
+        </div>
       </div>
     );
   };
@@ -736,10 +937,18 @@ const SiteVisits = () => {
       <div className="container mx-auto p-6 space-y-6">
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-2" data-testid="text-page-title-fom">
-              <MapPin className="h-8 w-8 text-primary" />
-              Site Visits Dashboard
-            </h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-2" data-testid="text-page-title-fom">
+                <MapPin className="h-8 w-8 text-primary" />
+                Site Visits Dashboard
+              </h1>
+              <DataFreshnessBadge 
+                lastUpdated={lastRefresh}
+                onRefresh={forceRefresh}
+                staleThresholdMinutes={5}
+                variant="badge"
+              />
+            </div>
             <p className="text-muted-foreground mt-1">
               Browse sites by state and filter by status
             </p>
@@ -747,11 +956,13 @@ const SiteVisits = () => {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => navigate("/dashboard")}
+            asChild
             data-testid="button-back-dashboard-fom"
           >
-            <ChevronLeft className="h-4 w-4 mr-2" />
-            Dashboard
+            <Link to="/dashboard">
+              <ChevronLeft className="h-4 w-4 mr-2" />
+              Dashboard
+            </Link>
           </Button>
         </div>
 
@@ -804,10 +1015,18 @@ const SiteVisits = () => {
       {/* Header - Matching Hub Operations Style */}
       <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-2" data-testid="text-page-title-site-visits">
-            <MapPin className="h-8 w-8 text-primary" />
-            Site Visits
-          </h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-2" data-testid="text-page-title-site-visits">
+              <MapPin className="h-8 w-8 text-primary" />
+              Site Visits
+            </h1>
+            <DataFreshnessBadge 
+              lastUpdated={lastRefresh}
+              onRefresh={forceRefresh}
+              staleThresholdMinutes={5}
+              variant="badge"
+            />
+          </div>
           <p className="text-muted-foreground mt-1">
             {isFieldWorker 
               ? "View and manage your assigned site visits" 
@@ -818,11 +1037,37 @@ const SiteVisits = () => {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => navigate("/dashboard")}
+            asChild
             data-testid="button-back-dashboard"
           >
-            <ChevronLeft className="h-4 w-4 mr-2" />
-            Dashboard
+            <Link to="/dashboard">
+              <ChevronLeft className="h-4 w-4 mr-2" />
+              Dashboard
+            </Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild data-testid="link-documents">
+            <Link to="/documents">
+              <FileText className="h-4 w-4 mr-2" />
+              Documents
+            </Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild data-testid="link-wallet-reports">
+            <Link to="/wallet-reports">
+              <Wallet className="h-4 w-4 mr-2" />
+              Wallet Reports
+            </Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild data-testid="link-audit-logs">
+            <Link to="/audit-logs">
+              <History className="h-4 w-4 mr-2" />
+              Audit Logs
+            </Link>
+          </Button>
+          <Button variant="outline" size="sm" asChild data-testid="link-map">
+            <Link to="/map">
+              <MapPin className="h-4 w-4 mr-2" />
+              Map
+            </Link>
           </Button>
           {!isFieldWorker && (checkPermission('site_visits', 'create') || hasAnyRole(['admin'])) && (
             <Button 

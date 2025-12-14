@@ -10,6 +10,7 @@ import { Progress } from '@/components/ui/progress';
 import { Upload, FileCheck, Send, Eye, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { useAppContext } from '@/context/AppContext';
+import { insertNotifications } from '@/services/mmpActions';
 import { supabase } from '@/integrations/supabase/client';
 import { sudanStates } from '@/data/sudanStates';
 import { useAuthorization } from '@/hooks/use-authorization';
@@ -26,10 +27,9 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
 }) => {
   const [permits, setPermits] = useState<MMPStatePermitDocument[]>([]);
   const { toast } = useToast();
-  const { updateMMP } = useMMP();
-  const { currentUser } = useAppContext();
+  const { updateMMP, refreshMMPFiles } = useMMP();
+  const { currentUser, users } = useAppContext();
   const [hasForwarded, setHasForwarded] = useState(false);
-  const { users } = useAppContext();
   const navigate = useNavigate();
   const { hasAnyRole } = useAuthorization();
 
@@ -248,11 +248,14 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
     try {
       const mmpId = mmpFile?.id || mmpFile?.mmpId;
       if (!mmpId) return;
-      const { data: recipients } = await supabase
-        .from('profiles')
-        .select('id, role')
-        .in('role', ['admin', 'ict']);
-      const rows = (recipients || []).map(r => ({
+      
+      // Get admin and ICT users from context
+      const recipients = users.filter(u => {
+        const role = (u.role || '').toString().toLowerCase();
+        return role === 'admin' || role === 'ict';
+      });
+      
+      const rows = recipients.map(r => ({
         user_id: r.id,
         title: decision === 'verified' ? 'Permit accepted' : 'Permit rejected',
         message: `${mmpFile?.name || 'MMP'} • ${doc.fileName} ${decision}. ${doc.state ? `State: ${doc.state}. ` : ''}${doc.locality ? `Locality: ${doc.locality}. ` : ''}${doc.verificationNotes ? `Reason: ${doc.verificationNotes}` : ''}`.trim(),
@@ -261,13 +264,14 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
         related_entity_id: mmpId,
         related_entity_type: 'mmpFile'
       }));
-      if (rows.length) await supabase.from('notifications').insert(rows);
+      
+      if (rows.length) await insertNotifications(rows);
     } catch (e) {
       console.warn('Failed to notify admins/ICT about permit decision:', e);
     }
   };
 
-  const persistPermits = (docs: MMPStatePermitDocument[]) => {
+  const persistPermits = async (docs: MMPStatePermitDocument[]) => {
     const now = new Date().toISOString();
     const permitsData: MMPPermitsData = {
       federal: docs.some(d => d.permitType === 'federal'),
@@ -280,39 +284,12 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
     };
 
     if (mmpFile?.id) {
-      updateMMP(mmpFile.id, { permits: permitsData } as any);
+      await updateMMP(mmpFile.id, { permits: permitsData } as any);
+      // Refresh context to ensure real-time updates propagate
+      await refreshMMPFiles();
     }
     if (onVerificationComplete) {
       onVerificationComplete(permitsData);
-      // Also persist directly with retry to ensure DB state is updated even on transient failures
-      (async () => {
-        if (!mmpFile?.id) return;
-        let attempt = 0;
-        let delay = 500;
-        while (attempt < 3) {
-          try {
-            const { error } = await supabase
-              .from('mmp_files')
-              .update({ permits: permitsData, updated_at: new Date().toISOString() })
-              .eq('id', mmpFile.id);
-            if (!error) return;
-            console.warn('Persist permits attempt failed:', error?.message || error);
-          } catch (e) {
-            console.warn('Persist permits transport error:', e);
-          }
-          await new Promise(res => setTimeout(res, delay));
-          delay *= 2;
-          attempt++;
-        }
-        toast({
-          title: 'Sync delayed',
-          description: 'Could not sync permit changes to server. They remain locally and will retry shortly.',
-          variant: 'destructive',
-        });
-      })();
-    } else if (mmpFile?.id) {
-      // Directly persist if no callback provided
-      updateMMP(mmpFile.id, { permits: permitsData } as any);
     }
   };
 
@@ -333,11 +310,12 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
         if (!mmpId) return;
 
         // 1) Notify FOMs and Supervisors that a permit was uploaded
-        const { data: recipients } = await supabase
-          .from('profiles')
-          .select('id, role, hub_id')
-          .in('role', ['fom', 'supervisor']);
-        const rows = (recipients || []).map(r => ({
+        // Get FOMs and Supervisors from context
+        const recipients = users.filter(u => {
+          const role = (u.role || '').toString().toLowerCase();
+          return role === 'fom' || role === 'supervisor';
+        });
+        const rows = recipients.map(r => ({
           user_id: r.id,
           title: 'Permit uploaded',
           message: `${mmpFile?.name || 'MMP'} has a new permit uploaded`,
@@ -346,20 +324,13 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
           related_entity_id: mmpId,
           related_entity_type: 'mmpFile'
         }));
-        if (rows.length) await supabase.from('notifications').insert(rows);
+        if (rows.length) await insertNotifications(rows);
 
         // 2) Share entries to State Coordinators for CP review
-        // Fetch entries if not present
-        let entries = Array.isArray(mmpFile?.siteEntries) && mmpFile.siteEntries.length > 0
+        // Use site entries from context (already loaded with MMP file)
+        const entries = Array.isArray(mmpFile?.siteEntries) && mmpFile.siteEntries.length > 0
           ? mmpFile.siteEntries
           : [];
-        if (!entries.length && mmpFile?.id) {
-          const { data: dbEntries } = await supabase
-            .from('mmp_site_entries')
-            .select('state, locality')
-            .eq('mmp_file_id', mmpFile.id);
-          entries = dbEntries || [];
-        }
 
         if (!entries.length) return;
 
@@ -387,18 +358,17 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
 
         if (targetPairs.size === 0) return;
 
-        // Build filters and fetch coordinators
+        // Build filters and get coordinators from context
         const allStates = Array.from(new Set(Array.from(targetPairs).map(k => k.split('|')[0])));
-        const { data: coords } = await supabase
-          .from('profiles')
-          .select('id, state_id, locality_id, role')
-          .eq('role', 'coordinator')
-          .in('state_id', allStates);
+        const coordinators = users.filter(u => {
+          const role = (u.role || '').toString().toLowerCase();
+          return role === 'coordinator' && u.stateId && allStates.includes(u.stateId);
+        });
 
-        const coordRows = (coords || []).filter(c => {
+        const coordRows = coordinators.filter(c => {
           // If we matched a specific locality, ensure locality match; otherwise state match is enough
-          const key1 = `${c.state_id}|${c.locality_id || ''}`;
-          const key2 = `${c.state_id}|`;
+          const key1 = `${c.stateId}|${c.localityId || ''}`;
+          const key2 = `${c.stateId}|`;
           return targetPairs.has(key1) || targetPairs.has(key2);
         }).map(c => ({
           user_id: c.id,
@@ -410,14 +380,14 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
           related_entity_type: 'mmpFile'
         }));
 
-        if (coordRows.length) await supabase.from('notifications').insert(coordRows);
+        if (coordRows.length) await insertNotifications(coordRows);
       } catch (e) {
         console.warn('Permit upload notifications/share failed:', e);
       }
     })();
   };
 
-  const handleVerifyPermit = (permitId: string, status: 'verified' | 'rejected', notes?: string) => {
+  const handleVerifyPermit = async (permitId: string, status: 'verified' | 'rejected', notes?: string) => {
     let decidedDoc: MMPStatePermitDocument | undefined;
     const updatedPermits = permits.map(permit => {
       if (permit.id === permitId) {
@@ -448,6 +418,8 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
             .eq('site_code', (decidedDoc as any).siteCode)
             .eq('mmp_file_id', mmpFile?.id || mmpFile?.mmpId);
         }
+        // Refresh context to reflect the update
+        await refreshMMPFiles();
       } catch (e) {
         console.warn('Failed to update mmp_site_entries status to approved:', e);
       }
@@ -458,13 +430,15 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
 
     // As soon as any permit is verified, update MMP status/workflow to 'permitsVerified'
     if (mmpFile?.id) {
-      updateMMP(mmpFile.id, {
+      await updateMMP(mmpFile.id, {
         status: 'approved',
         workflow: {
           ...(mmpFile.workflow || {}),
           currentStage: 'permitsVerified',
         },
       });
+      // Refresh context to ensure real-time updates propagate
+      await refreshMMPFiles();
     }
   };
 

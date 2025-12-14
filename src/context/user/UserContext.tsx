@@ -1,10 +1,12 @@
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { User } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { useRoles } from '@/hooks/use-roles';
 import { AppRole } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
+import { EmailNotificationService } from '@/services/email-notification.service';
+import i18n from '@/lib/i18n';
 
 interface UserContextType {
   currentUser: User | null;
@@ -29,6 +31,8 @@ interface UserContextType {
   verificationEmail?: string;
   resendVerificationEmail: (email?: string) => Promise<boolean>;
   clearEmailVerificationNotice: () => void;
+  sendPasswordRecoveryEmail: (email: string) => Promise<boolean>;
+  adminSetUserPassword: (email: string, newPassword: string) => Promise<boolean>;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -253,10 +257,102 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     refreshUsers();
-    
-    const pollingInterval = setInterval(refreshUsers, 300000);
-    
-    return () => clearInterval(pollingInterval);
+
+    // Set up real-time subscriptions for users and roles
+    const usersChannel = supabase
+      .channel('users-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'profiles'
+        },
+        (payload) => {
+          console.log('Profiles change detected:', payload);
+          refreshUsers();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'user_roles'
+        },
+        (payload) => {
+          console.log('User roles change detected:', payload);
+          refreshUsers();
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ Users real-time subscription active');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('❌ Users real-time subscription error - Check if replication is enabled in Supabase');
+        } else if (status === 'TIMED_OUT') {
+          console.warn('⏱️ Users real-time subscription timed out');
+        } else {
+          console.log('Users subscription status:', status);
+        }
+      });
+
+    // Cleanup subscription on unmount
+    return () => {
+      supabase.removeChannel(usersChannel);
+    };
+  }, []);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('profiles-updates')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'profiles' },
+        (payload) => {
+          const updated: any = (payload as any).new;
+          if (!updated || !updated.id) return;
+
+          let locationData: any | undefined = undefined;
+          if (updated.location !== undefined) {
+            try {
+              locationData = typeof updated.location === 'string'
+                ? JSON.parse(updated.location)
+                : updated.location;
+            } catch (e) {
+              console.warn('Failed to parse profile.location from realtime payload');
+            }
+          }
+
+          setAppUsers(prev => prev.map(u => {
+            if (u.id !== updated.id) return u;
+            return {
+              ...u,
+              availability: updated.availability ?? u.availability,
+              location: locationData !== undefined ? { ...(u.location || {}), ...locationData } : u.location,
+            };
+          }));
+
+          setCurrentUser(prev => {
+            if (!prev || prev.id !== updated.id) return prev;
+            const next = {
+              ...prev,
+              availability: updated.availability ?? prev.availability,
+              location: locationData !== undefined ? { ...(prev.location || {}), ...locationData } : prev.location,
+            } as User;
+            try {
+              localStorage.setItem('PACTCurrentUser', JSON.stringify(next));
+              localStorage.setItem(`user-${next.id}`, JSON.stringify(next));
+            } catch {}
+            return next;
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      try { supabase.removeChannel(channel); } catch {}
+    };
   }, []);
 
   useEffect(() => {
@@ -336,8 +432,8 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const isApproved = (profileData?.status === 'approved');
       if (!isApproved) {
         toast({
-          title: 'Pending approval',
-          description: 'Your account is pending approval by an administrator.',
+          title: i18n.t('notifications.auth.pendingApproval'),
+          description: i18n.t('notifications.auth.pendingApprovalDesc'),
         });
         await supabase.auth.signOut();
         return false;
@@ -597,8 +693,8 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const isApproved = (profileData?.status === 'approved');
         if (!isApproved) {
           toast({
-            title: 'Pending approval',
-            description: 'Your account is pending approval by an administrator.',
+            title: i18n.t('notifications.auth.pendingApproval'),
+            description: i18n.t('notifications.auth.pendingApprovalDesc'),
           });
           await supabase.auth.signOut();
           return false;
@@ -797,6 +893,26 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         title: "User approved",
         description: "The user can now log in to the system.",
       });
+
+      // Send welcome email to the newly approved user
+      try {
+        const { data: userProfile } = await supabase
+          .from('profiles')
+          .select('email, full_name, role')
+          .eq('id', userId)
+          .single();
+
+        if (userProfile?.email) {
+          EmailNotificationService.sendWelcomeEmail(
+            userProfile.email,
+            userProfile.full_name || 'User',
+            userProfile.role || 'Data Collector'
+          );
+        }
+      } catch (emailError) {
+        console.error('Failed to send welcome email:', emailError);
+      }
+
       return true;
     } catch (error) {
       console.error("User approval error:", error);
@@ -1074,6 +1190,76 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const sendPasswordRecoveryEmail = async (email: string): Promise<boolean> => {
+    try {
+      // Use custom OTP flow instead of Supabase's built-in resetPasswordForEmail
+      const { data, error } = await supabase.functions.invoke('verify-reset-otp', {
+        body: { 
+          email: email.toLowerCase(),
+          action: 'generate'
+        },
+      });
+
+      if (error || !data?.success) {
+        console.error('Password recovery error:', error || data?.error);
+        toast({
+          title: 'Failed to send recovery email',
+          description: error?.message || data?.error || 'An error occurred while sending the password recovery email.',
+          variant: 'destructive',
+        });
+        return false;
+      }
+
+      toast({
+        title: 'Recovery code sent',
+        description: `A 6-digit verification code has been sent to ${email}. The user should check their inbox.`,
+      });
+      return true;
+    } catch (error: any) {
+      console.error('Password recovery error:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to send password recovery email.',
+        variant: 'destructive',
+      });
+      return false;
+    }
+  };
+
+  const adminSetUserPassword = async (email: string, newPassword: string): Promise<boolean> => {
+    try {
+      const { data: userData, error: lookupError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', email)
+        .maybeSingle();
+
+      if (lookupError || !userData) {
+        toast({
+          title: 'User not found',
+          description: `No user found with email ${email}.`,
+          variant: 'destructive',
+        });
+        return false;
+      }
+
+      toast({
+        title: 'Password update requires Supabase Admin',
+        description: 'Direct password setting requires Supabase service role. Please use "Send Recovery Email" instead, or update via Supabase Dashboard.',
+        variant: 'destructive',
+      });
+      return false;
+    } catch (error: any) {
+      console.error('Admin set password error:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to set user password.',
+        variant: 'destructive',
+      });
+      return false;
+    }
+  };
+
   const contextValue: UserContextType = {
     currentUser,
     authReady,
@@ -1097,6 +1283,8 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     verificationEmail: emailVerification.email,
     resendVerificationEmail,
     clearEmailVerificationNotice,
+    sendPasswordRecoveryEmail,
+    adminSetUserPassword,
   };
 
   return (
@@ -1124,6 +1312,8 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         verificationEmail: emailVerification.email,
         resendVerificationEmail,
         clearEmailVerificationNotice,
+        sendPasswordRecoveryEmail,
+        adminSetUserPassword,
       }}
     >
       {children}

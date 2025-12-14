@@ -3,7 +3,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { RefreshCw, Archive, Trash2, Upload } from 'lucide-react';
+import { RefreshCw, Archive, Trash2, Upload, Send } from 'lucide-react';
 import { 
   AlertDialog, 
   AlertDialogAction, 
@@ -22,10 +22,12 @@ interface MMPFileManagementProps {
   canArchive: boolean;
   canDelete: boolean;
   canApprove: boolean;
+  canForward?: boolean;
   onArchive: () => void;
   onDelete: () => void;
   onResetApproval: () => void;
   onApprove: () => void;
+  onForward?: () => void;
 }
 
 const MMPFileManagement = ({ 
@@ -36,7 +38,9 @@ const MMPFileManagement = ({
   onDelete, 
   onResetApproval, 
   canApprove,
-  onApprove
+  onApprove,
+  canForward,
+  onForward
 }: MMPFileManagementProps) => {
   const navigate = useNavigate();
   const isApproved = mmpFile.status === 'approved';
@@ -95,6 +99,16 @@ const MMPFileManagement = ({
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
+            )}
+
+            {canForward && onForward && (
+              <Button 
+                onClick={onForward}
+                className="bg-blue-600 text-white hover:bg-blue-700 shadow hover:shadow-md active:scale-95 active:translate-y-0.5 transition transform"
+              >
+                <Send className="h-4 w-4 mr-2" />
+                Forward to FOMs
+              </Button>
             )}
             
             {canArchive && (

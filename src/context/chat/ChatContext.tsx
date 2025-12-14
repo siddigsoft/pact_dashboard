@@ -258,11 +258,14 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       type: 'private',
       participants: [...participants, currentUserId],
       unreadCount: 0,
-      messages: [],
       isGroup: false,
       status: 'active',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
+      createdBy: currentUserId,
+      stateId: null,
+      relatedEntityId: null,
+      relatedEntityType: null,
     };
 
     setChats(prevChats => [...prevChats, newChat]);
@@ -282,11 +285,14 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       type: 'group',
       participants: [...participants, currentUserId],
       unreadCount: 0,
-      messages: [],
       isGroup: true,
       status: 'active',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
+      createdBy: currentUserId,
+      stateId: null,
+      relatedEntityId: null,
+      relatedEntityType: null,
     };
 
     setChats(prevChats => [...prevChats, newChat]);
@@ -485,7 +491,10 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const searchMessages = (chatId: string, searchTerm: string): ChatMessage[] => {
     const chatMessages = messages[chatId] || [];
     const lowerSearchTerm = searchTerm.toLowerCase();
-    return chatMessages.filter(msg => msg.content.toLowerCase().includes(lowerSearchTerm));
+    return chatMessages.filter(msg => {
+      const normalized = msg.content?.toLowerCase() ?? '';
+      return normalized.includes(lowerSearchTerm);
+    });
   };
 
   const downloadAttachment = async (chatId: string, messageId: string, attachmentUrl: string): Promise<void> => {

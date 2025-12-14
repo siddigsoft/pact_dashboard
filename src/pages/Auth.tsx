@@ -31,8 +31,12 @@ import {
   DialogTitle 
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { useDevice } from "@/hooks/use-device";
+import { MobileAuthScreen } from "@/components/mobile/MobileAuthScreen";
 
 const Auth = () => {
+  const { isNative, isMobile: isDeviceMobile, isLoading: isDeviceLoading } = useDevice();
+  const isMobileView = isNative || isDeviceMobile;
   const navigate = useNavigate();
   const [resendLoading, setResendLoading] = useState(false);
 
@@ -90,6 +94,11 @@ const Auth = () => {
     { label: "Protected", value: "Secure", icon: Shield }
   ];
 
+  // Show mobile auth screen for mobile devices
+  if (isMobileView && !isDeviceLoading) {
+    return <MobileAuthScreen />;
+  }
+
   return (
     <div className="min-h-screen bg-background relative overflow-hidden flex items-center justify-center p-4">
       {/* Animated Background Layer */}
@@ -104,21 +113,21 @@ const Auth = () => {
       <div className="relative z-10 w-full max-w-6xl">
         <Card className="overflow-hidden border-2 shadow-2xl" data-testid="card-auth-container">
           <div className="grid lg:grid-cols-2">
-            {/* Left Hero Column */}
-            <div className="hidden lg:flex flex-col justify-between p-12 bg-gradient-to-br from-muted/50 to-muted/30 border-r">
-              <div className="space-y-8">
+            {/* Left Hero Column - Compact */}
+            <div className="hidden lg:flex flex-col justify-between p-8 bg-gradient-to-br from-muted/50 to-muted/30 border-r">
+              <div className="space-y-6">
                 {/* Logo & Branding */}
-                <div className="space-y-4">
+                <div className="space-y-3">
                   <div className="flex items-center gap-3">
                     <img 
                       src={PactLogo} 
                       alt="PACT Logo" 
-                      className="h-16 w-16"
+                      className="h-12 w-12"
                       data-testid="img-auth-logo"
                     />
                     <div>
-                      <h2 className="text-2xl font-bold">PACT Platform</h2>
-                      <p className="text-sm text-muted-foreground">
+                      <h2 className="text-xl font-bold tracking-tight">PACT Command Center</h2>
+                      <p className="text-xs text-muted-foreground">
                         Field Operations Command Center
                       </p>
                     </div>
@@ -126,55 +135,55 @@ const Auth = () => {
                   
                   <Badge 
                     variant="secondary" 
-                    className="gap-2"
+                    className="gap-1.5 text-xs"
                     data-testid="badge-system-status"
                   >
-                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                    <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
                     All Systems Operational
                   </Badge>
                 </div>
 
                 {/* Platform Stats */}
-                <div className="grid grid-cols-3 gap-4 py-6 border-y">
+                <div className="grid grid-cols-3 gap-3 py-4 border-y">
                   {platformStats.map((stat, index) => {
                     const Icon = stat.icon;
                     return (
                       <div 
                         key={index}
-                        className="text-center space-y-1"
+                        className="text-center space-y-0.5"
                         data-testid={`stat-${stat.label.toLowerCase().replace(/\s+/g, '-')}`}
                       >
-                        <Icon className="w-4 h-4 mx-auto text-muted-foreground" />
-                        <p className="text-xl font-bold">{stat.value}</p>
-                        <p className="text-xs text-muted-foreground">{stat.label}</p>
+                        <Icon className="w-3.5 h-3.5 mx-auto text-muted-foreground" />
+                        <p className="text-lg font-bold">{stat.value}</p>
+                        <p className="text-[10px] text-muted-foreground">{stat.label}</p>
                       </div>
                     );
                   })}
                 </div>
 
                 {/* Security Features */}
-                <div className="space-y-4">
-                  <h3 className="font-semibold flex items-center gap-2">
-                    <Shield className="w-5 h-5 text-primary" />
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold flex items-center gap-2">
+                    <Shield className="w-4 h-4 text-primary" />
                     Enterprise-Grade Security
                   </h3>
                   
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-2 gap-2">
                     {securityFeatures.map((feature, index) => {
                       const Icon = feature.icon;
                       return (
                         <div 
                           key={index}
-                          className="p-4 rounded-md border bg-card hover-elevate"
+                          className="p-3 rounded-md border bg-card hover-elevate"
                           data-testid={`feature-${feature.label.toLowerCase().replace(/\s+/g, '-')}`}
                         >
-                          <div className="flex flex-col items-center text-center gap-2">
-                            <div className={`p-2 rounded-md bg-muted ${feature.color}`}>
-                              <Icon className="w-5 h-5" />
+                          <div className="flex flex-col items-center text-center gap-1.5">
+                            <div className={`p-1.5 rounded-md bg-muted ${feature.color}`}>
+                              <Icon className="w-4 h-4" />
                             </div>
                             <div>
-                              <p className="text-sm font-semibold">{feature.label}</p>
-                              <p className="text-xs text-muted-foreground">
+                              <p className="text-xs font-semibold">{feature.label}</p>
+                              <p className="text-[10px] text-muted-foreground leading-tight">
                                 {feature.description}
                               </p>
                             </div>
@@ -188,45 +197,45 @@ const Auth = () => {
 
             </div>
 
-            {/* Right Auth Form Column */}
-            <div className="p-8 md:p-12 flex flex-col justify-center">
+            {/* Right Auth Form Column - Compact */}
+            <div className="p-6 md:p-8 flex flex-col justify-center">
               {/* Mobile Logo */}
-              <div className="lg:hidden flex flex-col items-center mb-8">
+              <div className="lg:hidden flex flex-col items-center mb-6">
                 <img 
                   src={PactLogo} 
                   alt="PACT Logo" 
-                  className="h-16 w-16 mb-4"
+                  className="h-12 w-12 mb-3"
                   data-testid="img-auth-logo-mobile"
                 />
                 <Badge 
                   variant="secondary" 
-                  className="gap-2"
+                  className="gap-1.5 text-xs"
                   data-testid="badge-system-status-mobile"
                 >
-                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                  <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
                   System Operational
                 </Badge>
               </div>
 
-              <CardHeader className="space-y-2 text-center px-0 pb-6">
-                <CardTitle className="text-3xl font-bold" data-testid="heading-auth-title">
+              <CardHeader className="space-y-1 text-center px-0 pb-4">
+                <CardTitle className="text-xl font-bold tracking-tight" data-testid="heading-auth-title">
                   Welcome Back
                 </CardTitle>
-                <CardDescription className="text-base" data-testid="text-auth-description">
+                <CardDescription className="text-sm" data-testid="text-auth-description">
                   Sign in to access your field operations dashboard
                 </CardDescription>
               </CardHeader>
 
               <div className="w-full">
-                <Tabs defaultValue="login" className="space-y-6 w-full">
+                <Tabs defaultValue="login" className="space-y-4 w-full">
                   <TabsList 
-                    className="grid w-full grid-cols-2"
+                    className="grid w-full grid-cols-2 h-9"
                     data-testid="tabs-auth"
                   >
-                    <TabsTrigger value="login" data-testid="tab-login">
+                    <TabsTrigger value="login" className="text-sm" data-testid="tab-login">
                       Login
                     </TabsTrigger>
-                    <TabsTrigger value="signup" data-testid="tab-signup">
+                    <TabsTrigger value="signup" className="text-sm" data-testid="tab-signup">
                       Sign Up
                     </TabsTrigger>
                   </TabsList>
@@ -242,7 +251,7 @@ const Auth = () => {
               </div>
 
               {/* Help Text */}
-              <div className="mt-8 text-center text-sm text-muted-foreground">
+              <div className="mt-6 text-center text-xs text-muted-foreground">
                 <p>
                   Protected by enterprise-grade security.
                   <br />

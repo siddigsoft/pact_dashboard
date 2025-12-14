@@ -1091,17 +1091,18 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
               </div>
             )}
 
-            {/* Start Visit Button for Accepted/Assigned Sites */}
+            {/* Start Visit Button for Startable Sites */}
             {(() => {
               const acceptedBy = site?.accepted_by || site?.acceptedBy || row.acceptedBy;
               const status = (row.status || site?.status || '').toLowerCase();
-              const isAcceptedOrAssigned = status === 'accepted' || status === 'assigned';
-              const isOwner = acceptedBy === currentUserId || (status === 'assigned' && site?.accepted_by === currentUserId);
+              const isStartable = ['accepted', 'assigned', 'verified', 'approved', 'dispatched'].includes(status);
+              const isOwner = acceptedBy === currentUserId || (status === 'assigned' && site?.accepted_by === currentUserId) || 
+                             ['verified', 'approved', 'dispatched'].includes(status);
               
-              if (isAcceptedOrAssigned && isOwner && onStartVisit && !isEditing) {
+              if (isStartable && isOwner && onStartVisit && !isEditing) {
                 return (
                   <div className="border-t pt-4">
-                    <div className="flex items-center justify-between gap-4">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                       <div>
                         <p className="text-sm font-medium">Ready to start your visit?</p>
                         <p className="text-xs text-muted-foreground">
@@ -1113,10 +1114,11 @@ const SiteDetailDialog: React.FC<SiteDetailDialogProps> = ({
                           onStartVisit(site);
                           onOpenChange(false);
                         }}
-                        className="bg-blue-600 hover:bg-blue-700"
+                        className="w-full sm:w-auto min-h-[52px] sm:min-h-[40px] rounded-full bg-black dark:bg-white text-white dark:text-black font-bold text-base active:scale-95 hover:bg-black/90 dark:hover:bg-white/90"
                         data-testid="button-start-visit-dialog"
+                        aria-label="Start site visit"
                       >
-                        <Play className="h-4 w-4 mr-2" />
+                        <Play className="h-5 w-5 mr-2" />
                         Start Visit
                       </Button>
                     </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate, useLocation, Outlet } from "react-router-dom";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import AppSidebar from "@/components/AppSidebar";
@@ -14,6 +14,8 @@ import { GlobalRefreshBar } from "@/components/GlobalRefreshBar";
 import { NotificationInitializer } from "@/components/NotificationInitializer";
 import { MobileBottomNav } from "@/components/mobile/MobileBottomNav";
 import { useLiveDashboard } from "@/hooks/useLiveDashboard";
+import { RealtimeBanner } from "@/components/realtime";
+import { queryClient } from "@/lib/queryClient";
 
 interface MainLayoutContentProps {
   children?: React.ReactNode;
@@ -21,11 +23,10 @@ interface MainLayoutContentProps {
 
 const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
   // Get app context - now this will be available since we've fixed the provider order
-  const { currentUser } = useAppContext();
+  const { currentUser, authReady } = useAppContext();
   useLiveDashboard();
   const navigate = useNavigate();
   const location = useLocation();
-  const [isAuthorized, setIsAuthorized] = useState<boolean>(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { viewMode, isTransitioning } = useViewMode();
   const isMobile = viewMode === 'mobile';
@@ -40,18 +41,30 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
     if (path === '/users') return 'Team Members';
     if (path.startsWith('/projects')) return 'Projects';
     if (path === '/archive') return 'Archives';
-    return 'PACT Platform';
+    return 'PACT Command Center';
   };
 
   useEffect(() => {
-    if (!currentUser) {
+    // Only redirect after auth is ready AND user is confirmed not logged in
+    if (authReady && !currentUser) {
       navigate("/auth");
-    } else {
-      setIsAuthorized(true);
     }
-  }, [currentUser, navigate]);
+  }, [currentUser, authReady, navigate]);
 
-  if (!isAuthorized) {
+  // Show loading while auth is hydrating
+  if (!authReady) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-gray-900">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-10 w-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Don't render layout if not authenticated
+  if (!currentUser) {
     return null;
   }
 
@@ -61,6 +74,10 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
 
   const isHomeRoute = location.pathname === '/dashboard';
 
+  const handleGlobalRefresh = useCallback(async () => {
+    await queryClient.invalidateQueries();
+  }, []);
+
   return (
     <TooltipProvider>
       <UpdateDialog />
@@ -69,6 +86,12 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
         <div className={`min-h-screen flex w-full ${isTransitioning ? 'transition-all duration-300 ease-in-out' : ''}`}>
           {!isMobile && !isTablet && <AppSidebar />}
           <SidebarInset className={`${isMobile ? 'bg-gray-50 dark:bg-gray-900' : ''} relative z-0 flex flex-col min-w-0 overflow-x-hidden min-h-0`}>
+            {/* Realtime Connection Banner - Shows when offline/reconnecting */}
+            <RealtimeBanner 
+              onRefresh={handleGlobalRefresh}
+              dismissible={true}
+              showOnlyWhenDisconnected={true}
+            />
             {isMobile ? (
               <MobileAppHeader
                 toggleSidebar={toggleSidebar}
@@ -82,11 +105,11 @@ const MainLayoutContent: React.FC<MainLayoutContentProps> = ({ children }) => {
             )}
             {/* Global Refresh Bar - Available on all pages */}
             <GlobalRefreshBar />
-            <div className={`flex-1 ${isMobile ? 'px-3 pb-16 pt-2' : 'p-4 md:p-6 lg:p-8'} ${isMobile ? 'bg-gray-50 dark:bg-gray-900 scroll-container' : 'bg-slate-50/70 dark:bg-gray-900/70'} overflow-y-auto relative z-0 min-w-0 min-h-0`}>
+            <div className={`flex-1 flex flex-col ${isMobile ? 'px-1 pb-12 pt-0.5' : 'p-1 md:p-1.5 lg:p-2'} ${isMobile ? 'bg-gray-50 dark:bg-gray-900 overflow-hidden' : 'bg-slate-50/70 dark:bg-gray-900/70 scroll-container overflow-y-auto'} relative z-0 min-w-0 min-h-0`}>
               {children || <Outlet />}
             </div>
             {isMobile && <MobileBottomNav />}
-            <OnlineOfflineToggle variant="drawer" />
+            <OnlineOfflineToggle variant="floating" />
           </SidebarInset>
         </div>
       </SidebarProvider>

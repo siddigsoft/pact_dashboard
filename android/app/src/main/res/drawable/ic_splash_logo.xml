@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="200dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+    
+    <!-- PACT Splash Logo - White on Black (Uber Style) -->
+    
+    <!-- Outer Ring -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M100,20
+            A80,80 0 1,1 99.99,20
+            A80,80 0 1,1 100,20
+            M100,28
+            A72,72 0 1,0 100.01,28
+            A72,72 0 1,0 100,28" />
+    
+    <!-- Inner filled circle -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M100,45
+            A55,55 0 1,1 99.99,45
+            A55,55 0 1,1 100,45" />
+    
+    <!-- PACT Text - Black on White circle -->
+    <!-- P -->
+    <path
+        android:fillColor="#000000"
+        android:pathData="M52,80 L52,120 L60,120 L60,105 L70,105 
+            C80,105 86,100 86,90 C86,80 80,75 70,75 L52,80
+            M60,85 L68,85 C74,85 78,88 78,92 C78,96 74,99 68,99 L60,99 L60,85" />
+    
+    <!-- A -->
+    <path
+        android:fillColor="#000000"
+        android:pathData="M88,120 L98,120 L101,110 L119,110 L122,120 L132,120 L115,75 L105,75 L88,120
+            M104,102 L110,82 L116,102 L104,102" />
+    
+    <!-- C -->
+    <path
+        android:fillColor="#000000"
+        android:pathData="M158,75 C142,75 132,85 132,97.5 C132,110 142,120 158,120 
+            C168,120 175,116 180,110 L172,103 C169,107 164,110 158,110 
+            C148,110 142,104 142,97.5 C142,91 148,85 158,85 
+            C164,85 169,88 172,92 L180,85 C175,79 168,75 158,75" />
+    
+    <!-- PACT Wordmark below -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M45,155 L45,175 L50,175 L50,168 L55,168 
+            C60,168 63,166 63,162 C63,158 60,155 55,155 L45,155
+            M50,159 L54,159 C57,159 58,160 58,162 C58,164 57,165 54,165 L50,165 L50,159" />
+    
+    <!-- A -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M65,175 L70,175 L71,172 L79,172 L80,175 L85,175 L78,155 L72,155 L65,175
+            M73,168 L75,161 L77,168 L73,168" />
+    
+    <!-- C -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M95,155 C88,155 84,159 84,165 C84,171 88,175 95,175 
+            C99,175 101,174 104,172 L101,169 C100,170 98,171 95,171 
+            C91,171 88,169 88,165 C88,161 91,159 95,159 
+            C98,159 100,160 101,161 L104,158 C101,156 99,155 95,155" />
+    
+    <!-- T -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M106,155 L106,159 L112,159 L112,175 L117,175 L117,159 L123,159 L123,155 L106,155" />
+</vector>

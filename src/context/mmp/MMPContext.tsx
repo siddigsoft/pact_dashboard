@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { MMPFile } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 import { MMPContextType } from './types';
@@ -348,7 +348,7 @@ export const useMMPProvider = () => {
     }).eq('id', id);
   };
 
-  const refreshMMPFiles = async () => {
+  const refreshMMPFiles = useCallback(async () => {
     try {
       setLoading(true);
       
@@ -386,7 +386,7 @@ export const useMMPProvider = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     refreshMMPFiles();
@@ -409,7 +409,17 @@ export const useMMPProvider = () => {
           refreshMMPFiles();
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ MMP context real-time subscription active');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('❌ MMP context real-time subscription error - Check if replication is enabled in Supabase');
+        } else if (status === 'TIMED_OUT') {
+          console.warn('⏱️ MMP context real-time subscription timed out');
+        } else {
+          console.log('MMP context subscription status:', status);
+        }
+      });
 
     return () => {
       supabase.removeChannel(channel);

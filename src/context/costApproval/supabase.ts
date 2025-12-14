@@ -319,9 +319,10 @@ export const updateCostSubmission = async (
 
 /**
  * Review a cost submission (approve/reject)
+ * Now includes signature tracking for audit trail
  */
 export const reviewCostSubmission = async (
-  request: ReviewCostSubmissionRequest,
+  request: ReviewCostSubmissionRequest & { signatureId?: string },
   reviewerId: string
 ): Promise<SiteVisitCostSubmission> => {
   const dbData: any = {
@@ -331,6 +332,11 @@ export const reviewCostSubmission = async (
     approval_notes: request.approvalNotes,
     updated_at: new Date().toISOString()
   };
+  
+  // Include signature reference if provided
+  if (request.signatureId) {
+    dbData.approval_signature_id = request.signatureId;
+  }
 
   // Set status based on action - aligned with SQL workflow
   if (request.action === 'approve') {
@@ -368,11 +374,13 @@ export const reviewCostSubmission = async (
 
 /**
  * Mark cost submission as paid
+ * Now includes signature tracking for payment audit trail
  */
 export const markCostSubmissionPaid = async (
   submissionId: string,
   walletTransactionId: string,
-  paidAmountCents?: number
+  paidAmountCents?: number,
+  paymentSignatureId?: string
 ): Promise<SiteVisitCostSubmission> => {
   // Fetch existing submission to get approved amount
   const { data: existing, error: fetchError } = await supabase
@@ -389,15 +397,22 @@ export const markCostSubmissionPaid = async (
   // Use provided amount, or approved amount, or total cost
   const finalPaidAmount = paidAmountCents ?? existing.paid_amount_cents ?? existing.total_cost_cents;
 
+  const updateData: any = {
+    status: 'paid',
+    wallet_transaction_id: walletTransactionId,
+    paid_at: new Date().toISOString(),
+    paid_amount_cents: finalPaidAmount,
+    updated_at: new Date().toISOString()
+  };
+  
+  // Include payment signature reference if provided
+  if (paymentSignatureId) {
+    updateData.payment_signature_id = paymentSignatureId;
+  }
+
   const { data, error } = await supabase
     .from('site_visit_cost_submissions')
-    .update({
-      status: 'paid',
-      wallet_transaction_id: walletTransactionId, // Use correct column name
-      paid_at: new Date().toISOString(),
-      paid_amount_cents: finalPaidAmount, // Record actual paid amount
-      updated_at: new Date().toISOString()
-    })
+    .update(updateData)
     .eq('id', submissionId)
     .eq('status', 'approved') // Only mark paid if approved
     .select()

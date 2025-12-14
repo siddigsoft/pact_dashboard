@@ -63,7 +63,7 @@ export function OfflineStatusBar({ className, compact = false }: OfflineStatusBa
       return (
         <div 
           className={cn(
-            "flex items-center gap-2 px-3 py-1.5 bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded-full text-sm",
+            "flex items-center gap-2 px-3 py-1.5 bg-black/10 dark:bg-white/10 text-black dark:text-white rounded-full text-sm font-medium",
             className
           )}
           data-testid="sync-status-compact"
@@ -80,7 +80,7 @@ export function OfflineStatusBar({ className, compact = false }: OfflineStatusBa
           variant="ghost"
           size="sm"
           onClick={() => syncNow()}
-          className={cn("gap-2 text-amber-600 dark:text-amber-400", className)}
+          className={cn("gap-2 text-black dark:text-white", className)}
           data-testid="button-sync-pending"
         >
           <CloudOff className="h-3.5 w-3.5" />
@@ -95,11 +95,11 @@ export function OfflineStatusBar({ className, compact = false }: OfflineStatusBa
   return (
     <div 
       className={cn(
-        "p-4 rounded-lg border",
+        "p-4 rounded-2xl border",
         !isOnline ? "bg-destructive/5 border-destructive/20" : 
-        isSyncing ? "bg-blue-500/5 border-blue-500/20" :
-        hasPendingData ? "bg-amber-500/5 border-amber-500/20" :
-        "bg-emerald-500/5 border-emerald-500/20",
+        isSyncing ? "bg-black/5 dark:bg-white/5 border-black/10 dark:border-white/10" :
+        hasPendingData ? "bg-black/5 dark:bg-white/5 border-black/10 dark:border-white/10" :
+        "bg-black/5 dark:bg-white/5 border-black/10 dark:border-white/10",
         className
       )}
       data-testid="offline-status-full"
@@ -109,18 +109,16 @@ export function OfflineStatusBar({ className, compact = false }: OfflineStatusBa
           <div className={cn(
             "p-2 rounded-full",
             !isOnline ? "bg-destructive/10" :
-            isSyncing ? "bg-blue-500/10" :
-            hasPendingData ? "bg-amber-500/10" :
-            "bg-emerald-500/10"
+            "bg-black/10 dark:bg-white/10"
           )}>
             {!isOnline ? (
               <WifiOff className="h-5 w-5 text-destructive" />
             ) : isSyncing ? (
-              <RefreshCw className="h-5 w-5 text-blue-500 animate-spin" />
+              <RefreshCw className="h-5 w-5 text-black dark:text-white animate-spin" />
             ) : hasPendingData ? (
-              <CloudOff className="h-5 w-5 text-amber-500" />
+              <CloudOff className="h-5 w-5 text-black dark:text-white" />
             ) : (
-              <Cloud className="h-5 w-5 text-emerald-500" />
+              <Cloud className="h-5 w-5 text-black dark:text-white" />
             )}
           </div>
           
@@ -173,9 +171,9 @@ export function OfflineStatusBar({ className, compact = false }: OfflineStatusBa
             {lastSyncResult && !isSyncing && (
               <div className="flex items-center gap-2 mt-2">
                 {lastSyncResult.success ? (
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                  <CheckCircle2 className="h-3.5 w-3.5 text-black dark:text-white" />
                 ) : (
-                  <AlertCircle className="h-3.5 w-3.5 text-amber-500" />
+                  <AlertCircle className="h-3.5 w-3.5 text-destructive" />
                 )}
                 <span className="text-xs text-muted-foreground">
                   Last sync: {lastSyncResult.synced} synced
@@ -232,8 +230,7 @@ export function OfflineIndicator() {
       className={cn(
         "fixed top-0 left-0 right-0 z-50 flex items-center justify-center gap-2 py-1 text-xs font-medium",
         !isOnline ? "bg-destructive text-destructive-foreground" :
-        isSyncing ? "bg-blue-500 text-white" :
-        "bg-amber-500 text-white"
+        "bg-black dark:bg-white text-white dark:text-black"
       )}
       data-testid="offline-banner"
     >

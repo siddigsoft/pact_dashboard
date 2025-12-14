@@ -14,10 +14,14 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { RoleWithPermissions, CreateRoleRequest, UpdateRoleRequest, AssignRoleRequest, AppRole } from '@/types/roles';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuthorization } from '@/hooks/use-authorization';
+import { useApproval } from '@/context/approval/ApprovalContext';
+import { useToast } from '@/hooks/use-toast';
 
 const RoleManagement = () => {
   const { currentUser, users, refreshUsers } = useAppContext();
   const { canManageRoles: canManageRolesAuth } = useAuthorization();
+  const { canBypassApproval, createApprovalRequest, hasPendingRequest } = useApproval();
+  const { toast } = useToast();
   const {
     roles,
     isLoading,
@@ -73,8 +77,47 @@ const RoleManagement = () => {
   };
 
   const handleDeleteRole = async (roleId: string) => {
-    if (confirm('Are you sure you want to delete this role? This action cannot be undone.')) {
+    const roleToDelete = roles.find(r => r.id === roleId);
+    if (!roleToDelete) return;
+
+    if (!confirm('Are you sure you want to delete this role? This action cannot be undone.')) {
+      return;
+    }
+
+    // SuperAdmin can bypass approval and delete directly
+    if (canBypassApproval()) {
       await deleteRole(roleId);
+      toast({
+        title: "Role deleted",
+        description: `${roleToDelete.display_name || roleToDelete.name} has been deleted.`,
+      });
+    } else if (hasPendingRequest('role', roleId)) {
+      toast({
+        title: "Request Pending",
+        description: "An approval request is already pending for this role.",
+        variant: "destructive"
+      });
+    } else {
+      // Non-SuperAdmin: create approval request
+      const result = await createApprovalRequest({
+        type: 'delete_role',
+        resourceType: 'role',
+        resourceId: roleId,
+        resourceName: roleToDelete.display_name || roleToDelete.name,
+        reason: `Delete role: ${roleToDelete.display_name || roleToDelete.name}`
+      });
+      if (result.success) {
+        toast({
+          title: "Request Submitted",
+          description: "Your deletion request has been sent to SuperAdmin for approval.",
+        });
+      } else {
+        toast({
+          title: "Request Failed",
+          description: result.error || "Failed to submit approval request.",
+          variant: "destructive"
+        });
+      }
     }
   };
 

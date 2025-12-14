@@ -1,6 +1,9 @@
 import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useWallet } from '@/context/wallet/WalletContext';
 import { useAppContext } from '@/context/AppContext';
+import { useRealtimeWallet } from '@/hooks/use-realtime-wallet';
+import { DataFreshnessBadge } from '@/components/realtime';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -32,7 +35,11 @@ import {
   AlertCircle,
   CheckCircle2,
   Activity,
-  Zap
+  Zap,
+  ArrowLeft,
+  Menu,
+  Bell,
+  Settings
 } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, subMonths, isWithinInterval } from 'date-fns';
 import { DEFAULT_CURRENCY } from '@/types/wallet';
@@ -47,6 +54,7 @@ const formatCurrency = (amount: number, currency: string = DEFAULT_CURRENCY) => 
 };
 
 const WalletPage = () => {
+  const navigate = useNavigate();
   const { currentUser } = useAppContext();
   const { 
     wallet, 
@@ -61,6 +69,9 @@ const WalletPage = () => {
     refreshTransactions,
     refreshWithdrawalRequests
   } = useWallet();
+
+  // Real-time wallet updates
+  const { lastRefresh } = useRealtimeWallet();
 
   const [withdrawalDialogOpen, setWithdrawalDialogOpen] = useState(false);
   const [withdrawalAmount, setWithdrawalAmount] = useState('');
@@ -263,6 +274,46 @@ const WalletPage = () => {
 
   return (
     <div className="relative min-h-screen overflow-y-auto max-h-screen">
+      {/* Black App Bar */}
+      <div className="fixed top-0 left-0 right-0 bg-black text-white flex items-center justify-between px-4 z-50" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 12px)', paddingBottom: '12px' }}>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
+            aria-label="Back to dashboard"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </button>
+          <div>
+            <h1 className="text-xl font-bold">Wallet</h1>
+            <p className="text-white/60 text-xs">Manage your funds</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={handleRefresh}
+            className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
+            aria-label="Refresh"
+          >
+            <RefreshCw className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => navigate('/notifications')}
+            className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors relative"
+            aria-label="Notifications"
+          >
+            <Bell className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => navigate('/settings')}
+            className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
+            aria-label="Settings"
+          >
+            <Settings className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
       {/* Cyber Background with Animated Grid */}
       <div className="fixed inset-0 bg-gradient-to-br from-slate-950 via-blue-950 to-purple-950 -z-10">
         <div className="absolute inset-0 bg-[linear-gradient(rgba(59,130,246,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(59,130,246,0.05)_1px,transparent_1px)] bg-[size:50px_50px] [mask-image:radial-gradient(ellipse_80%_50%_at_50%_0%,#000,transparent)]"></div>
@@ -270,7 +321,7 @@ const WalletPage = () => {
         <div className="absolute bottom-20 right-20 w-96 h-96 bg-purple-500/20 rounded-full blur-[120px] animate-pulse" style={{ animationDelay: '1s' }}></div>
       </div>
 
-      <div className="relative space-y-6 p-3 sm:p-4 md:p-6 lg:p-8">
+      <div className="relative space-y-6 p-3 sm:p-4 md:p-6 lg:p-8" style={{ paddingTop: 'calc(env(safe-area-inset-top) + 80px)' }}>
         {/* Cyber Header */}
         <div className="relative">
           <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 via-purple-500/10 to-cyan-500/10 rounded-2xl blur-xl"></div>
@@ -291,6 +342,7 @@ const WalletPage = () => {
                   <p className="text-blue-300/80 mt-1 text-lg">
                     Cyber-Financial Command Center
                   </p>
+                  <DataFreshnessBadge lastUpdated={lastRefresh} className="mt-2" />
                 </div>
               </div>
               <div className="flex items-center gap-2 flex-wrap justify-center sm:justify-start">
@@ -510,6 +562,43 @@ const WalletPage = () => {
             </div>
             <p className="text-xs text-cyan-300/70 mt-1">
               {completedWithdrawals.length} approved
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Weekly/Monthly Earnings Summary */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+        <Card className="bg-gradient-to-br from-slate-900/80 to-teal-900/80 border-teal-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(20,184,166,0.2)]">
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+            <CardTitle className="text-xs sm:text-sm font-medium uppercase tracking-wide text-teal-300">
+              This Week
+            </CardTitle>
+            <Zap className="w-4 h-4 sm:w-5 sm:h-5 text-teal-400" />
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="text-xl sm:text-2xl font-bold tabular-nums bg-gradient-to-r from-teal-400 to-cyan-400 bg-clip-text text-transparent">
+              {formatCurrency(stats?.weeklyEarnings || 0)}
+            </div>
+            <p className="text-xs text-teal-300/70 mt-1">
+              {stats?.weeklySiteVisits || 0} site visit{(stats?.weeklySiteVisits || 0) !== 1 ? 's' : ''} completed
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-slate-900/80 to-rose-900/80 border-rose-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(244,63,94,0.2)]">
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+            <CardTitle className="text-xs sm:text-sm font-medium uppercase tracking-wide text-rose-300">
+              This Month
+            </CardTitle>
+            <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-rose-400" />
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="text-xl sm:text-2xl font-bold tabular-nums bg-gradient-to-r from-rose-400 to-pink-400 bg-clip-text text-transparent">
+              {formatCurrency(stats?.monthlyEarnings || 0)}
+            </div>
+            <p className="text-xs text-rose-300/70 mt-1">
+              {format(new Date(), 'MMMM yyyy')}
             </p>
           </CardContent>
         </Card>

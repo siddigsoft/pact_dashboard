@@ -5,6 +5,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './lib/queryClient';
 import { isSupabaseConfigured } from './integrations/supabase/client';
 import { ConfigurationError } from './components/ConfigurationError';
+import { isMobileApp } from './utils/platformDetection';
 
 // Import AppProviders
 import { AppProviders } from './context/AppContext';
@@ -15,10 +16,10 @@ const Auth = lazy(() => import('./pages/Auth'));
 const Register = lazy(() => import('./pages/Register'));
 const RegistrationSuccess = lazy(() => import('./pages/RegistrationSuccess'));
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
+const ResetPassword = lazy(() => import('./pages/ResetPassword'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const MMP = lazy(() => import('./pages/MMP'));
 const MMPUpload = lazy(() => import('./pages/MMPUpload'));
-const MMPDetail = lazy(() => import('./pages/MMPDetail'));
 const MMPDetailView = lazy(() => import('./pages/MMPDetailView'));
 const MMPVerification = lazy(() => import('./pages/MMPVerification'));
 const MMPDetailedVerification = lazy(() => import('./pages/MMPDetailedVerification'));
@@ -67,26 +68,42 @@ const AdminWalletDetail = lazy(() => import('./pages/AdminWalletDetail'));
 const WithdrawalApproval = lazy(() => import('./pages/WithdrawalApproval'));
 const FinanceApproval = lazy(() => import('./pages/FinanceApproval'));
 const DownPaymentApproval = lazy(() => import('./pages/DownPaymentApproval'));
+const SupervisorApprovals = lazy(() => import('./pages/SupervisorApprovals'));
 const WalletReports = lazy(() => import('./pages/WalletReports'));
 const BudgetPage = lazy(() => import('./pages/Budget'));
 const Classifications = lazy(() => import('./pages/Classifications'));
 const ClassificationFeeManagement = lazy(() => import('./pages/ClassificationFeeManagement'));
 const CostSubmission = lazy(() => import('./pages/CostSubmission'));
+const DemoDataCollector = lazy(() => import('./pages/DemoDataCollector'));
 const FinancialOperations = lazy(() => import('./pages/FinancialOperations'));
 const SuperAdminManagement = lazy(() => import('./components/superAdmin/SuperAdminManagementPage').then(module => ({ default: module.SuperAdminManagementPage })));
+const SuperAdminDataManagement = lazy(() => import('./components/superAdmin/SuperAdminDataManagement').then(module => ({ default: module.SuperAdminDataManagement })));
 const HubOperations = lazy(() => import('./pages/HubOperations'));
+const HubManagement = lazy(() => import('./pages/HubManagement'));
 const TrackerPreparationPlan = lazy(() => import('./pages/TrackerPreparationPlan'));
 const NotificationsPage = lazy(() => import('./pages/Notifications'));
 const Documentation = lazy(() => import('./pages/Documentation'));
 const PublicDocumentation = lazy(() => import('./pages/PublicDocumentation'));
+const SignaturesPage = lazy(() => import('./pages/Signatures'));
+const DocumentsPage = lazy(() => import('./pages/Documents'));
+const ApprovalDashboard = lazy(() => import('./pages/ApprovalDashboard'));
+const AuditLogs = lazy(() => import('./pages/AuditLogs'));
+const EmailTracking = lazy(() => import('./pages/EmailTracking'));
 
 // Components (keep these eagerly loaded as they're used immediately)
 import MainLayout from './components/MainLayout';
 import { Toaster } from './components/ui/toaster';
 import { Toaster as SonnerToaster } from './components/ui/sonner';
+import { Toaster as HotToaster } from 'react-hot-toast';
 import { useAppContext } from './context/AppContext';
+import { NotificationProvider } from './context/NotificationContext';
+import { NotificationStack } from './components/NotificationStack';
+import { useNotifications } from './context/NotificationContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import { debugDatabase } from './utils/debug-db';
+import { useFCM } from './hooks/useFCM';
+import { MobilePermissionGuard } from './components/mobile/MobilePermissionGuard';
+import { LiveDashboardProvider } from './context/realtime/LiveDashboardContext';
 
 // Loading component for Suspense fallback
 const PageLoader = () => (
@@ -94,6 +111,19 @@ const PageLoader = () => (
     <div className="text-sm text-muted-foreground animate-pulse">Loading...</div>
   </div>
 );
+
+// Notification display component
+const AppNotifications = () => {
+  const { notifications, remove } = useNotifications();
+  
+  return <NotificationStack notifications={notifications} onRemove={remove} displayType="top" />;
+};
+
+// FCM initialization component - must be inside AppProviders context
+const FCMInitializer = () => {
+  useFCM();
+  return null;
+};
 
 // Redirect for old MMP view paths
 const MmpViewRedirect = () => {
@@ -127,7 +157,8 @@ const AuthGuard = ({ children }) => {
 
   if (
     !currentUser &&
-    !['/auth', '/login', '/register', '/registration-success', '/forgot-password'].includes(location.pathname)
+    !['/', '/auth', '/login', '/register', '/registration-success', '/forgot-password', '/reset-password', '/documentation'].includes(location.pathname) &&
+    !location.pathname.startsWith('/demo/')
   ) {
     return <Navigate to="/auth" replace />;
   }
@@ -146,13 +177,15 @@ const AppRoutes = () => {
       <Route path="/register" element={<Register />} />
       <Route path="/registration-success" element={<RegistrationSuccess />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/demo/data-collector" element={<DemoDataCollector />} />
 
       {/* Protected routes */}
   <Route element={<AuthGuard><MainLayout /></AuthGuard>}>
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/mmp" element={<MMP />} />
         <Route path="/mmp/upload" element={<MMPUpload />} />
-        <Route path="/mmp/:id" element={<MMPDetail />} />
+        <Route path="/mmp/:id" element={<MMPDetailView />} />
         <Route path="/mmp/:id/view" element={<MMPDetailView />} />
         <Route path="/mmp/:id/edit" element={<EditMMP />} />
         <Route path="/mmp/edit/:id" element={<EditMMP />} />
@@ -177,6 +210,7 @@ const AppRoutes = () => {
         <Route path="/reports" element={<Reports />} />
         <Route path="/documentation" element={<Documentation />} />
         <Route path="/public-documentation" element={<PublicDocumentation />} />
+        <Route path="/documents" element={<DocumentsPage />} />
         <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/wallet" element={<WalletPage />} />
@@ -185,6 +219,7 @@ const AppRoutes = () => {
         <Route path="/withdrawal-approval" element={<WithdrawalApproval />} />
         <Route path="/finance-approval" element={<FinanceApproval />} />
         <Route path="/down-payment-approval" element={<DownPaymentApproval />} />
+        <Route path="/supervisor-approvals" element={<SupervisorApprovals />} />
         <Route path="/wallet-reports" element={<WalletReports />} />
         <Route path="/budget" element={<BudgetPage />} />
         <Route path="/cost-submission" element={<CostSubmission />} />
@@ -206,6 +241,7 @@ const AppRoutes = () => {
         <Route path="/calendar" element={<Calendar />} />
         <Route path="/role-management" element={<RoleManagement />} />
         <Route path="/super-admin-management" element={<SuperAdminManagement />} />
+        <Route path="/super-admin-data" element={<SuperAdminDataManagement />} />
   <Route path="/monitoring-plan" element={<MonitoringPlanPage />} />
   <Route path="/field-operation-manager" element={<FieldOperationManagerPage />} />
   <Route path="/search" element={<GlobalSearchPage />} />
@@ -214,7 +250,12 @@ const AppRoutes = () => {
   <Route path="/coordinator/sites" element={<CoordinatorSites />} />
   <Route path="/coordinator-dashboard" element={<CoordinatorDashboard />} />
   <Route path="/hub-operations" element={<HubOperations />} />
+  <Route path="/hub-management" element={<HubManagement />} />
         <Route path="/tracker-preparation-plan" element={<TrackerPreparationPlan />} />
+        <Route path="/signatures" element={<SignaturesPage />} />
+        <Route path="/approval-dashboard" element={<ApprovalDashboard />} />
+        <Route path="/audit-logs" element={<AuditLogs />} />
+        <Route path="/email-tracking" element={<EmailTracking />} />
       </Route>
 
       {/* Redirects */}
@@ -249,6 +290,17 @@ function App() {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       (window as any).debugDatabase = debugDatabase;
+    }
+  }, []);
+
+  // Set platform attribute for mobile-specific styling
+  useEffect(() => {
+    const platform = isMobileApp() ? 'mobile' : 'web';
+    document.body.setAttribute('data-platform', platform);
+    
+    // Also add class for CSS support queries
+    if (platform === 'mobile') {
+      document.body.classList.add('mobile-app');
     }
   }, []);
 
@@ -298,13 +350,32 @@ function App() {
           <QueryClientProvider client={queryClient}>
             <Router>
               <AppProviders>
-                <Suspense fallback={<PageLoader />}>
-                  <AuthGuard>
-                    <AppRoutes />
-                  </AuthGuard>
-                </Suspense>
-                <Toaster />
-                <SonnerToaster />
+                <NotificationProvider>
+                  <LiveDashboardProvider>
+                    <FCMInitializer />
+                    <Suspense fallback={<PageLoader />}>
+                      <AuthGuard>
+                        <MobilePermissionGuard>
+                          <AppRoutes />
+                        </MobilePermissionGuard>
+                      </AuthGuard>
+                    </Suspense>
+                    <AppNotifications />
+                  </LiveDashboardProvider>
+                  <Toaster />
+                  <SonnerToaster />
+                  <HotToaster
+                    position="bottom-center"
+                    toastOptions={{
+                      style: {
+                        background: '#fff',
+                        border: '1px solid #e5e7eb',
+                        padding: '12px',
+                        color: '#111',
+                      },
+                    }}
+                  />
+                </NotificationProvider>
               </AppProviders>
             </Router>
           </QueryClientProvider>

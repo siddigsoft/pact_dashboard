@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,6 +25,7 @@ import {
   TrendingUp,
   Wallet,
   Shield,
+  PenTool,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -37,14 +38,8 @@ import { useToast } from "@/components/ui/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { DatePickerWithRange } from "@/components/ui/date-range-picker";
 import { DateRange } from "react-day-picker";
-import * as XLSX from "xlsx";
-import { saveAs } from "file-saver";
-import {
-  generateSiteVisitsPDF,
-  generateProjectBudgetPDF,
-  generateMMPProgressPDF,
-  generateTeamPerformancePDF,
-} from "@/utils/pdfReportGenerator";
+// Dynamic imports for heavy export libraries (loaded on-demand to improve initial page load)
+// XLSX, file-saver, and PDF generators are dynamically imported when needed
 import ReportChart, {
   generateSiteVisitsChartData,
   generateProjectBudgetChartData,
@@ -58,6 +53,13 @@ import { FinancialReports } from "@/components/reports/FinancialReports";
 import { AnalyticsReports } from "@/components/reports/AnalyticsReports";
 import { ProjectCostReports } from "@/components/reports/ProjectCostReports";
 import { AuditingReports } from "@/components/reports/AuditingReports";
+import { DocumentsReport } from "@/components/reports/DocumentsReport";
+import { ReceiptsReport } from "@/components/reports/ReceiptsReport";
+import { SignaturesReport } from "@/components/reports/SignaturesReport";
+import { useMMP } from "@/context/mmp/MMPContext";
+import { useSiteVisitContext } from "@/context/siteVisit/SiteVisitContext";
+import { useProjectContext } from "@/context/project/ProjectContext";
+import { useUser } from "@/context/user/UserContext";
 
 const Reports: React.FC = () => {
   const [activeTab, setActiveTab] = useState("executive");
@@ -89,124 +91,101 @@ const Reports: React.FC = () => {
     );
   }
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [siteVisits, setSiteVisits] = useState<any[]>([]);
-  const [mmpFiles, setMmpFiles] = useState<any[]>([]);
-  const [projects, setProjects] = useState<any[]>([]);
-  const [profiles, setProfiles] = useState<any[]>([]);
   const [chartCanvas, setChartCanvas] = useState<HTMLCanvasElement | null>(null);
   const [showChart, setShowChart] = useState(false);
   const [exporting, setExporting] = useState(false);
+
+  // Use context hooks for real-time data
+  const { mmpFiles: contextMmpFiles, loading: mmpLoading } = useMMP();
+  const { siteVisits: contextSiteVisits, loading: siteVisitsLoading } = useSiteVisitContext();
+  const { projects: contextProjects, loading: projectsLoading } = useProjectContext();
+  const { users } = useUser();
+
+  const loading = mmpLoading || siteVisitsLoading || projectsLoading;
+
+  // Filter data by date range
+  const siteVisits = useMemo(() => {
+    if (!dateRange) return contextSiteVisits || [];
+    const from = dateRange.from ? startOfDay(dateRange.from).toISOString() : null;
+    const to = dateRange.to ? endOfDay(dateRange.to).toISOString() : null;
+    
+    return (contextSiteVisits || []).filter((visit: any) => {
+      const visitDate = visit.visitDate || visit.visit_date;
+      if (!visitDate) return false;
+      if (from && visitDate < from) return false;
+      if (to && visitDate > to) return false;
+      return true;
+    });
+  }, [contextSiteVisits, dateRange]);
+
+  const mmpFiles = useMemo(() => {
+    if (!dateRange) return contextMmpFiles || [];
+    const from = dateRange.from ? startOfDay(dateRange.from).toISOString() : null;
+    const to = dateRange.to ? endOfDay(dateRange.to).toISOString() : null;
+    
+    return (contextMmpFiles || []).filter((mmp: any) => {
+      const createdAt = mmp.uploadedAt || mmp.uploaded_at || mmp.createdAt || mmp.created_at;
+      if (!createdAt) return false;
+      if (from && createdAt < from) return false;
+      if (to && createdAt > to) return false;
+      return true;
+    });
+  }, [contextMmpFiles, dateRange]);
+
+  const projects = useMemo(() => {
+    if (!dateRange) return contextProjects || [];
+    const from = dateRange.from ? startOfDay(dateRange.from).toISOString() : null;
+    const to = dateRange.to ? endOfDay(dateRange.to).toISOString() : null;
+    
+    return (contextProjects || []).filter((project: any) => {
+      const createdAt = project.createdAt || project.created_at;
+      if (!createdAt) return false;
+      if (from && createdAt < from) return false;
+      if (to && createdAt > to) return false;
+      return true;
+    });
+  }, [contextProjects, dateRange]);
+
+  const profiles = useMemo(() => {
+    return (users || []).map((user: any) => ({
+      id: user.id,
+      full_name: user.name || user.fullName,
+      role: user.role,
+      email: user.email,
+    }));
+  }, [users]);
 
   const handleBackToDashboard = () => {
     navigate("/dashboard");
   };
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-
-        let svQuery = supabase.from("mmp_site_entries").select("*");
-        let mmpQuery = supabase.from("mmp_files").select("*");
-        let projQuery = supabase.from("projects").select("*");
-        let profQuery = supabase.from("profiles").select("id, full_name, role, email");
-
-        if (dateRange?.from) {
-          const from = startOfDay(dateRange.from).toISOString();
-          svQuery = svQuery.gte("visit_date", from);
-          mmpQuery = mmpQuery.gte("created_at", from);
-          projQuery = projQuery.gte("created_at", from);
-        }
-        if (dateRange?.to) {
-          const to = endOfDay(dateRange.to).toISOString();
-          svQuery = svQuery.lte("visit_date", to);
-          mmpQuery = mmpQuery.lte("created_at", to);
-          projQuery = projQuery.lte("created_at", to);
-        }
-
-        // Sensible ordering for display/export
-        svQuery = svQuery.order("visit_date", { ascending: false });
-        mmpQuery = mmpQuery.order("created_at", { ascending: false });
-        projQuery = projQuery.order("created_at", { ascending: false });
-
-        const [svRes, mmpRes, projRes, profRes] = await Promise.all([
-          svQuery,
-          mmpQuery,
-          projQuery,
-          profQuery,
-        ]);
-
-        if (svRes.error) throw svRes.error;
-        if (mmpRes.error) throw mmpRes.error;
-        if (projRes.error) throw projRes.error;
-        if (profRes.error) throw profRes.error;
-
-        setSiteVisits(svRes.data || []);
-        setMmpFiles(mmpRes.data || []);
-        setProjects(projRes.data || []);
-        setProfiles(profRes.data || []);
-      } catch (e: any) {
-        setError(e?.message || "Failed to load reports data");
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
-  }, [dateRange]);
+  // Use context refresh methods
+  const { refreshMMPFiles } = useMMP();
+  const { refreshSiteVisits } = useSiteVisitContext();
+  const { fetchProjects } = useProjectContext();
 
   const fetchLatestForReports = async () => {
     try {
-      setLoading(true);
       setError(null);
-
-      let svQuery = supabase.from("mmp_site_entries").select("*");
-      let mmpQuery = supabase.from("mmp_files").select("*");
-      let projQuery = supabase.from("projects").select("*");
-      let profQuery = supabase.from("profiles").select("id, full_name, role, email");
-
-      if (dateRange?.from) {
-        const from = startOfDay(dateRange.from).toISOString();
-        svQuery = svQuery.gte("due_date", from);
-        mmpQuery = mmpQuery.gte("created_at", from);
-        projQuery = projQuery.gte("created_at", from);
-      }
-      if (dateRange?.to) {
-        const to = endOfDay(dateRange.to).toISOString();
-        svQuery = svQuery.lte("due_date", to);
-        mmpQuery = mmpQuery.lte("created_at", to);
-        projQuery = projQuery.lte("created_at", to);
-      }
-
-      svQuery = svQuery.order("due_date", { ascending: false });
-      mmpQuery = mmpQuery.order("created_at", { ascending: false });
-      projQuery = projQuery.order("created_at", { ascending: false });
-
-      const [svRes, mmpRes, projRes, profRes] = await Promise.all([
-        svQuery,
-        mmpQuery,
-        projQuery,
-        profQuery,
+      // Refresh all context data - real-time subscriptions will handle updates
+      await Promise.all([
+        refreshMMPFiles(),
+        refreshSiteVisits(),
+        fetchProjects(),
       ]);
 
-      if (svRes.error) throw svRes.error;
-      if (mmpRes.error) throw mmpRes.error;
-      if (projRes.error) throw projRes.error;
-      if (profRes.error) throw profRes.error;
-
+      // Data will be automatically updated via context real-time subscriptions
+      // Return current filtered data
       return {
-        siteVisits: svRes.data || [],
-        mmpFiles: mmpRes.data || [],
-        projects: projRes.data || [],
-        profiles: profRes.data || [],
+        siteVisits,
+        mmpFiles,
+        projects,
+        profiles,
       };
     } catch (e: any) {
-      setError(e?.message || "Failed to load reports data");
+      setError(e?.message || "Failed to refresh reports data");
       throw e;
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -286,7 +265,12 @@ const Reports: React.FC = () => {
     return true;
   };
 
-  const exportXLSX = (rows: any[], baseName: string) => {
+  const exportXLSX = async (rows: any[], baseName: string) => {
+    // Dynamic import for XLSX and file-saver (reduces initial bundle size)
+    const [XLSX, { saveAs }] = await Promise.all([
+      import("xlsx"),
+      import("file-saver")
+    ]);
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Report");
@@ -299,18 +283,21 @@ const Reports: React.FC = () => {
   const exportPDF = async (rows: any[], reportType: string, baseName: string) => {
     const dateRangeObj = dateRange ? { from: dateRange.from, to: dateRange.to } : undefined;
     
+    // Dynamic import for PDF generators (reduces initial bundle size)
+    const pdfGenerators = await import("@/utils/pdfReportGenerator");
+    
     switch (reportType) {
       case "site_visits":
-        await generateSiteVisitsPDF(rows, dateRangeObj, chartCanvas || undefined);
+        await pdfGenerators.generateSiteVisitsPDF(rows, dateRangeObj, chartCanvas || undefined);
         break;
       case "project_budget":
-        await generateProjectBudgetPDF(rows, dateRangeObj, chartCanvas || undefined);
+        await pdfGenerators.generateProjectBudgetPDF(rows, dateRangeObj, chartCanvas || undefined);
         break;
       case "mmp_progress":
-        await generateMMPProgressPDF(rows, dateRangeObj, chartCanvas || undefined);
+        await pdfGenerators.generateMMPProgressPDF(rows, dateRangeObj, chartCanvas || undefined);
         break;
       case "team_performance":
-        await generateTeamPerformancePDF(rows, dateRangeObj, chartCanvas || undefined);
+        await pdfGenerators.generateTeamPerformancePDF(rows, dateRangeObj, chartCanvas || undefined);
         break;
       default:
         console.warn("Unknown report type for PDF export:", reportType);
@@ -396,26 +383,21 @@ const Reports: React.FC = () => {
       const projs = latest.projects;
       const profs = latest.profiles;
 
-      setSiteVisits(sv);
-      setMmpFiles(mmps);
-      setProjects(projs);
-      setProfiles(profs);
-
       switch (report.id) {
         case "financial_site_visits_fees":
-          exportXLSX(buildSiteVisitsRows(sv), "site_visits_fees_summary");
+          await exportXLSX(buildSiteVisitsRows(sv), "site_visits_fees_summary");
           break;
         case "financial_project_budget":
-          exportXLSX(buildProjectBudgetRows(projs), "project_budget_summary");
+          await exportXLSX(buildProjectBudgetRows(projs), "project_budget_summary");
           break;
         case "operational_site_visits":
-          exportXLSX(buildSiteVisitsRows(sv), "site_visits_performance");
+          await exportXLSX(buildSiteVisitsRows(sv), "site_visits_performance");
           break;
         case "operational_mmp_progress":
-          exportXLSX(buildMMPProgressRows(mmps), "mmp_implementation_progress");
+          await exportXLSX(buildMMPProgressRows(mmps), "mmp_implementation_progress");
           break;
         default:
-          exportXLSX([], "report");
+          await exportXLSX([], "report");
       }
       const fileName = `${report.name.toLowerCase().replace(/\s+/g, '_')}_${format(new Date(report.date), 'yyyy-MM-dd')}.xlsx`;
       toast({
@@ -442,11 +424,6 @@ const Reports: React.FC = () => {
       const mmps = latest.mmpFiles;
       const projs = latest.projects;
       const profs = latest.profiles;
-
-      setSiteVisits(sv);
-      setMmpFiles(mmps);
-      setProjects(projs);
-      setProfiles(profs);
 
       switch (report.id) {
         case "financial_site_visits_fees":
@@ -490,21 +467,16 @@ const Reports: React.FC = () => {
       const projs = latest.projects;
       const profs = latest.profiles;
 
-      setSiteVisits(sv);
-      setMmpFiles(mmps);
-      setProjects(projs);
-      setProfiles(profs);
-
       if (reportType === "Financial Summary") {
-        exportXLSX(buildSiteVisitsRows(sv), "financial_summary");
+        await exportXLSX(buildSiteVisitsRows(sv), "financial_summary");
       } else if (reportType === "Site Visit Report") {
-        exportXLSX(buildSiteVisitsRows(sv), "site_visit_report");
+        await exportXLSX(buildSiteVisitsRows(sv), "site_visit_report");
       } else if (reportType === "Team Performance Report") {
-        exportXLSX(buildTeamPerformanceRows(sv, profs), "team_performance_report");
+        await exportXLSX(buildTeamPerformanceRows(sv, profs), "team_performance_report");
       } else if (reportType === "MMP Implementation Report") {
-        exportXLSX(buildMMPProgressRows(mmps), "mmp_implementation_report");
+        await exportXLSX(buildMMPProgressRows(mmps), "mmp_implementation_report");
       } else {
-        exportXLSX([], reportType.toLowerCase().replace(/\s+/g, '_'));
+        await exportXLSX([], reportType.toLowerCase().replace(/\s+/g, '_'));
       }
       const timestamp = format(new Date(), 'yyyy-MM-dd');
       const fileName = `${reportType.toLowerCase().replace(/\s+/g, '_')}_${timestamp}.xlsx`;
@@ -530,11 +502,6 @@ const Reports: React.FC = () => {
       const mmps = latest.mmpFiles;
       const projs = latest.projects;
       const profs = latest.profiles;
-
-      setSiteVisits(sv);
-      setMmpFiles(mmps);
-      setProjects(projs);
-      setProfiles(profs);
 
       if (reportType === "Financial Summary") {
         await exportPDF(buildSiteVisitsRows(sv), "site_visits", "financial_summary");
@@ -605,7 +572,7 @@ const Reports: React.FC = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-1 p-1 h-auto">
+        <TabsList className="grid w-full grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-1 p-1 h-auto">
           <TabsTrigger value="executive" className="py-2 text-xs data-[state=active]:bg-blue-50">
             <span className="flex items-center gap-1">
               <LayoutDashboard className="h-3 w-3" />
@@ -628,6 +595,24 @@ const Reports: React.FC = () => {
             <span className="flex items-center gap-1">
               <BarChart4 className="h-3 w-3" />
               <span className="hidden sm:inline">Costs</span>
+            </span>
+          </TabsTrigger>
+          <TabsTrigger value="documents" className="py-2 text-xs data-[state=active]:bg-blue-50">
+            <span className="flex items-center gap-1">
+              <FileSpreadsheet className="h-3 w-3" />
+              <span className="hidden sm:inline">Documents</span>
+            </span>
+          </TabsTrigger>
+          <TabsTrigger value="receipts" className="py-2 text-xs data-[state=active]:bg-blue-50">
+            <span className="flex items-center gap-1">
+              <FileDown className="h-3 w-3" />
+              <span className="hidden sm:inline">Receipts</span>
+            </span>
+          </TabsTrigger>
+          <TabsTrigger value="signatures" className="py-2 text-xs data-[state=active]:bg-blue-50">
+            <span className="flex items-center gap-1">
+              <PenTool className="h-3 w-3" />
+              <span className="hidden sm:inline">Signatures</span>
             </span>
           </TabsTrigger>
           <TabsTrigger value="auditing" className="py-2 text-xs data-[state=active]:bg-blue-50">
@@ -659,6 +644,18 @@ const Reports: React.FC = () => {
 
         <TabsContent value="project_costs" className="mt-4">
           <ProjectCostReports />
+        </TabsContent>
+
+        <TabsContent value="documents" className="mt-4">
+          <DocumentsReport />
+        </TabsContent>
+
+        <TabsContent value="receipts" className="mt-4">
+          <ReceiptsReport />
+        </TabsContent>
+
+        <TabsContent value="signatures" className="mt-4">
+          <SignaturesReport />
         </TabsContent>
 
         <TabsContent value="auditing" className="mt-4">

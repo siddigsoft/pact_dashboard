@@ -20,7 +20,7 @@ const EditMMP: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { getMmpById, updateMMP } = useMMP();
+  const { getMmpById, updateMMP, refreshMMPFiles } = useMMP();
   const { checkPermission, hasAnyRole } = useAuthorization();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
@@ -153,6 +153,9 @@ const EditMMP: React.FC = () => {
             .insert([{ ...updateData, mmp_file_id: id }]);
         }
       }
+
+      // Refresh context to ensure real-time updates propagate
+      await refreshMMPFiles();
 
       // Update local state with edited sites (optimistic) and notify
       const updatedMMP = { ...mmpFile, siteEntries: sites };

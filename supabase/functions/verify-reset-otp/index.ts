@@ -1,0 +1,332 @@
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders })
+  }
+
+  try {
+    const { email, otp, action } = await req.json()
+
+    if (!email) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Email is required' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      )
+    }
+
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+
+    if (!supabaseUrl || !serviceRoleKey) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Server configuration error' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      )
+    }
+
+    const supabase = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { autoRefreshToken: false, persistSession: false }
+    })
+
+    if (action === 'generate') {
+      const { data: userData, error: lookupError } = await supabase
+        .from('profiles')
+        .select('id, full_name, email')
+        .eq('email', email.toLowerCase())
+        .maybeSingle()
+
+      if (lookupError || !userData) {
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            message: 'If an account exists with this email, a reset code will be sent.' 
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString()
+      // Extended to 1 hour to give users enough time to complete the reset
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString()
+
+      // First delete any existing tokens for this email to avoid duplicates
+      const { error: deleteError } = await supabase
+        .from('password_reset_tokens')
+        .delete()
+        .eq('email', email.toLowerCase())
+
+      if (deleteError) {
+        console.log('Warning: Could not delete old tokens:', deleteError.message)
+      }
+
+      // Now insert a fresh token
+      console.log(`[DEBUG v2] Inserting OTP for ${email.toLowerCase()}: otp=${generatedOtp}, expires=${expiresAt}`)
+      
+      const { data: insertData, error: storeError } = await supabase
+        .from('password_reset_tokens')
+        .insert({
+          email: email.toLowerCase(),
+          otp: generatedOtp,
+          expires_at: expiresAt,
+          used: false
+        })
+        .select()
+
+      console.log(`[DEBUG v2] Insert result: data=${JSON.stringify(insertData)}, error=${storeError ? storeError.message : 'none'}`)
+
+      if (storeError) {
+        console.error('CRITICAL: Could not store OTP in database:', storeError.message, storeError)
+        return new Response(
+          JSON.stringify({ success: false, error: 'Failed to generate reset code. Please try again.' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+        )
+      }
+      
+      console.log(`[DEBUG v2] OTP stored successfully in database for ${email.toLowerCase()}`)
+
+      const smtpHost = Deno.env.get('SMTP_HOST')
+      const smtpPort = Deno.env.get('SMTP_PORT') || '465'
+      const smtpUser = Deno.env.get('SMTP_USER')
+      const smtpPassword = Deno.env.get('SMTP_PASSWORD')
+
+      console.log(`SMTP Config Check: host=${smtpHost ? 'SET' : 'MISSING'}, port=${smtpPort}, user=${smtpUser ? smtpUser.substring(0,5)+'...' : 'MISSING'}, pass=${smtpPassword ? 'SET' : 'MISSING'}`)
+
+      if (smtpHost && smtpUser && smtpPassword) {
+        try {
+          // Use nodemailer via npm - compatible with Supabase Edge Functions
+          const nodemailer = await import('npm:nodemailer@6.9.8')
+          
+          const portNum = Number(smtpPort)
+          console.log(`Attempting SMTP connection to ${smtpHost}:${portNum}`)
+          
+          // Create transporter with IONOS SMTP settings
+          const transporter = nodemailer.default.createTransport({
+            host: smtpHost,
+            port: portNum,
+            secure: portNum === 465, // true for 465, false for 587
+            auth: {
+              user: smtpUser,
+              pass: smtpPassword,
+            },
+            tls: {
+              rejectUnauthorized: false // Allow self-signed certs
+            }
+          })
+
+          console.log('Nodemailer transporter created')
+
+          const recipientName = userData.full_name || 'User'
+          const resetLink = `https://app.pactorg.com/reset-password?email=${encodeURIComponent(email)}`
+          const emailHtml = `
+            <!DOCTYPE html>
+            <html dir="ltr">
+            <head>
+              <meta charset="utf-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>PACT Password Reset | إعادة تعيين كلمة المرور</title>
+            </head>
+            <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
+              <div style="background-color: white; border-radius: 8px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                <div style="text-align: center; margin-bottom: 30px;">
+                  <h1 style="color: #1a1a2e; margin: 0; font-size: 24px;">PACT Workflow Platform</h1>
+                  <p style="color: #666; margin: 5px 0 0 0; font-size: 14px;">منصة باكت للعمليات الميدانية</p>
+                </div>
+                
+                <!-- English Section -->
+                <div style="margin-bottom: 20px;">
+                  <p style="color: #333; font-size: 16px; line-height: 1.5;">Hello ${recipientName},</p>
+                  <p style="color: #333; font-size: 16px; line-height: 1.5;">We received a request to reset your password. Use the code below to complete your password reset:</p>
+                </div>
+                
+                <!-- Code Display -->
+                <div style="background-color: #f0f4f8; border-radius: 8px; padding: 20px; text-align: center; margin: 20px 0;">
+                  <span style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #1a1a2e;">${generatedOtp}</span>
+                </div>
+                
+                <p style="color: #666; font-size: 14px; line-height: 1.5;">This code expires in 1 hour. If you didn't request this reset, please ignore this email.</p>
+                
+                <!-- Arabic Section -->
+                <div dir="rtl" style="margin-top: 25px; padding-top: 25px; border-top: 1px solid #eee; text-align: right;">
+                  <p style="color: #333; font-size: 16px; line-height: 1.8; font-family: 'Segoe UI', Tahoma, Arial, sans-serif;">مرحباً ${recipientName}،</p>
+                  <p style="color: #333; font-size: 16px; line-height: 1.8; font-family: 'Segoe UI', Tahoma, Arial, sans-serif;">لقد تلقينا طلباً لإعادة تعيين كلمة المرور الخاصة بك. استخدم الرمز أدناه لإكمال إعادة تعيين كلمة المرور:</p>
+                  <div style="background-color: #f0f4f8; border-radius: 8px; padding: 15px; text-align: center; margin: 15px 0;">
+                    <span style="font-size: 28px; font-weight: bold; letter-spacing: 8px; color: #1a1a2e;">${generatedOtp}</span>
+                  </div>
+                  <p style="color: #666; font-size: 14px; line-height: 1.8; font-family: 'Segoe UI', Tahoma, Arial, sans-serif;">ينتهي هذا الرمز خلال ساعة واحدة. إذا لم تطلب إعادة التعيين، يرجى تجاهل هذا البريد الإلكتروني.</p>
+                </div>
+                
+                <div style="text-align: center; margin: 25px 0;">
+                  <a href="${resetLink}" style="display: inline-block; padding: 14px 30px; background-color: #9b87f5; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
+                    Reset Password | إعادة تعيين كلمة المرور
+                  </a>
+                </div>
+                <p style="color: #999; font-size: 12px; text-align: center; margin-top: 15px;">
+                  Or copy this link | أو انسخ هذا الرابط: <a href="${resetLink}" style="color: #9b87f5;">${resetLink}</a>
+                </p>
+                <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+                <p style="color: #999; font-size: 12px; text-align: center;">
+                  This is an automated message from PACT Workflow Platform.<br>
+                  هذه رسالة آلية من منصة باكت للعمليات الميدانية.<br>
+                  ICT Team - PACT Command Center Platform<br>
+                  فريق تكنولوجيا المعلومات - منصة مركز قيادة باكت
+                </p>
+              </div>
+            </body>
+            </html>
+          `
+
+          const mailOptions = {
+            from: `"PACT Workflow" <${smtpUser}>`,
+            to: email,
+            subject: 'PACT Password Reset Code | رمز إعادة تعيين كلمة المرور',
+            text: `Hello ${recipientName},\n\nYour password reset code is: ${generatedOtp}\n\nThis code expires in 1 hour.\n\nClick here to reset your password: ${resetLink}\n\n---\n\nمرحباً ${recipientName}،\n\nرمز إعادة تعيين كلمة المرور الخاص بك هو: ${generatedOtp}\n\nينتهي هذا الرمز خلال ساعة واحدة.\n\nانقر هنا لإعادة تعيين كلمة المرور: ${resetLink}\n\n- PACT Workflow Platform | منصة باكت`,
+            html: emailHtml,
+          }
+
+          const info = await transporter.sendMail(mailOptions)
+          console.log(`Password reset email sent successfully to ${email}, messageId: ${info.messageId}`)
+          
+          // Log successful email to audit_logs
+          try {
+            await supabase.from('audit_logs').insert({
+              action: 'email_sent',
+              entity_type: 'email',
+              entity_name: 'Password Reset OTP',
+              description: `Password reset code sent to ${email}`,
+              success: true,
+              actor_id: String(userData.id),
+              actor_name: recipientName,
+              metadata: {
+                recipient: email,
+                subject: 'PACT Password Reset Code',
+                emailType: 'password_reset',
+                provider: 'IONOS SMTP'
+              }
+            })
+          } catch (logError) {
+            console.error('Audit log insert failed:', logError)
+          }
+        } catch (emailError) {
+          const errMsg = (emailError as Error)?.message || 'Unknown SMTP error'
+          console.error('Email sending error:', errMsg)
+          
+          // Log failed email to audit_logs
+          try {
+            await supabase.from('audit_logs').insert({
+              action: 'email_failed',
+              entity_type: 'email',
+              entity_name: 'Password Reset OTP',
+              description: `Failed to send password reset code to ${email}`,
+              success: false,
+              error_message: errMsg,
+              actor_id: String(userData.id),
+              actor_name: userData.full_name || 'User',
+              metadata: {
+                recipient: email,
+                subject: 'PACT Password Reset Code',
+                emailType: 'password_reset',
+                provider: 'IONOS SMTP',
+                error: errMsg
+              }
+            })
+          } catch (logError) {
+            console.error('Audit log insert failed:', logError)
+          }
+        }
+      } else {
+        console.log(`[DEV MODE] Password reset OTP for ${email}: ${generatedOtp}`)
+        
+        // Log missing SMTP config
+        try {
+          await supabase.from('audit_logs').insert({
+            action: 'email_skipped',
+            entity_type: 'email',
+            entity_name: 'Password Reset OTP',
+            description: `SMTP not configured - password reset code for ${email} not sent`,
+            success: false,
+            error_message: 'SMTP credentials not configured in Edge Function secrets',
+            actor_id: String(userData.id),
+            actor_name: userData.full_name || 'User',
+            metadata: {
+              recipient: email,
+              subject: 'PACT Password Reset Code',
+              emailType: 'password_reset',
+              reason: 'missing_smtp_config'
+            }
+          })
+        } catch (logError) {
+          console.error('Audit log insert failed:', logError)
+        }
+      }
+
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          message: 'If an account exists with this email, a reset code will be sent.' 
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    if (!otp) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'OTP is required for verification' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      )
+    }
+
+    // Get the latest unused token for this email
+    const { data: storedTokens, error: tokenError } = await supabase
+      .from('password_reset_tokens')
+      .select('*')
+      .eq('email', email.toLowerCase())
+      .eq('used', false)
+      .order('created_at', { ascending: false })
+      .limit(1)
+
+    const storedToken = storedTokens?.[0] || null
+
+    if (tokenError) {
+      console.error('Token lookup error:', tokenError)
+      return new Response(
+        JSON.stringify({ success: false, error: 'Database error. Please try again.' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      )
+    }
+
+    let isValid = false
+    
+    if (storedToken) {
+      const isExpired = new Date(storedToken.expires_at) < new Date()
+      isValid = storedToken.otp === otp && !isExpired
+      console.log(`OTP verification for ${email.toLowerCase()}: stored=${storedToken.otp}, provided=${otp}, expired=${isExpired}, valid=${isValid}`)
+    } else {
+      console.log(`No token found in database for ${email.toLowerCase()}`)
+    }
+
+    if (!isValid) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Invalid or expired verification code' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      )
+    }
+
+    return new Response(
+      JSON.stringify({ success: true, message: 'OTP verified successfully' }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
+  } catch (error) {
+    console.error('Unexpected error:', error)
+    return new Response(
+      JSON.stringify({ success: false, error: error.message || 'An unexpected error occurred' }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+    )
+  }
+})
