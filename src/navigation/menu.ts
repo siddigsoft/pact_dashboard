@@ -158,6 +158,9 @@ export const getWorkflowMenuGroups = (
   if (!isHidden('/super-admin-data') && isSuperAdmin) {
     adminItems.push({ id: 'super-admin-data', title: 'Data Management', url: '/super-admin-data', icon: Database, priority: 3.5, isPinned: isPinned('/super-admin-data') });
   }
+  if (!isHidden('/permissions-management') && isSuperAdmin) {
+    adminItems.push({ id: 'permissions-management', title: 'Permissions Management', url: '/permissions-management', icon: ShieldCheck, priority: 3.6, isPinned: isPinned('/permissions-management') });
+  }
   if (!isHidden('/classifications') && (isAdmin || isFinancialAdmin)) {
     adminItems.push({ id: 'classifications', title: 'Classifications', url: '/classifications', icon: Award, priority: 4, isPinned: isPinned('/classifications') });
   }
