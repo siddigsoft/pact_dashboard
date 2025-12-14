@@ -11,6 +11,7 @@ import { useSettingsSafe } from '@/context/settings/SettingsContext';
 import { getWorkflowMenuGroups, MenuGroup } from '@/navigation/menu';
 import { useMemo } from 'react';
 import { DEFAULT_MENU_PREFERENCES } from '@/types/user-preferences';
+import { DownloadForOffline } from './DownloadForOffline';
 
 interface GridCard {
   id: string;
@@ -95,12 +96,17 @@ export function MobileHomeGrid({ className, greeting, userName }: MobileHomeGrid
   return (
     <div className={cn("flex flex-col h-full", className)}>
       <div className="px-4 py-4">
-        <p className="text-sm text-black/60 dark:text-white/60" data-testid="text-greeting">
-          {displayGreeting},
-        </p>
-        <h1 className="text-xl font-bold text-black dark:text-white" data-testid="text-username">
-          {displayName}
-        </h1>
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <p className="text-sm text-black/60 dark:text-white/60" data-testid="text-greeting">
+              {displayGreeting},
+            </p>
+            <h1 className="text-xl font-bold text-black dark:text-white" data-testid="text-username">
+              {displayName}
+            </h1>
+          </div>
+          <DownloadForOffline compact />
+        </div>
       </div>
 
       <div className="flex-1 px-3 pb-4 overflow-y-auto">
