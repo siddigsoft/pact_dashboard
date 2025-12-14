@@ -9,7 +9,7 @@ import { ArrowLeft, MapPin, Mail, Phone, Award, Calendar, Edit, UserCheck, UserX
 import { BankakAccountForm, BankakAccountFormValues } from "@/components/BankakAccountForm";
 import type { User } from "@/types/user";
 import { AppRole } from "@/types/roles";
-import { sudanStates, getLocalitiesByState, getHubNameForState, hubs, getStatesInHub } from "@/data/sudanStates";
+import { sudanStates, getLocalitiesByState, getHubNameForState } from "@/data/sudanStates";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
@@ -604,65 +604,15 @@ const UserDetail: React.FC = () => {
                   </div>
                   <div className="space-y-1">
                     <h3 className="font-medium text-xs sm:text-sm text-muted-foreground">Hub</h3>
-                    {editMode ? (
-                      <select
-                        className="border rounded px-3 py-2 w-full h-11 min-h-[44px] text-sm sm:text-base"
-                        value={editForm.hubId || ""}
-                        onChange={e => {
-                          handleEditChange("hubId", e.target.value || undefined);
-                          handleEditChange("stateId", undefined);
-                          handleEditChange("localityId", undefined);
-                        }}
-                      >
-                        <option value="">Select hub</option>
-                        {hubs.map(hub => (
-                          <option key={hub.id} value={hub.id}>{hub.name}</option>
-                        ))}
-                      </select>
-                    ) : (
-                      <p className="font-semibold text-sm sm:text-base md:text-base leading-relaxed break-words">{hubDisplayName || user.hubId || 'Not set'}</p>
-                    )}
+                    <p className="font-semibold text-sm sm:text-base md:text-base leading-relaxed break-words">{hubDisplayName || user.hubId || 'Not set'}</p>
                   </div>
                   <div className="space-y-1">
                     <h3 className="font-medium text-xs sm:text-sm text-muted-foreground">State</h3>
-                    {editMode ? (
-                      <select
-                        className="border rounded px-3 py-2 w-full h-11 min-h-[44px] text-sm sm:text-base"
-                        value={editForm.stateId || ""}
-                        onChange={e => {
-                          handleEditChange("stateId", e.target.value || undefined);
-                          handleEditChange("localityId", undefined);
-                        }}
-                        disabled={!editForm.hubId}
-                      >
-                        <option value="">Select state</option>
-                        {editForm.hubId ? getStatesInHub(editForm.hubId).map(state => (
-                          <option key={state.id} value={state.id}>{state.name}</option>
-                        )) : sudanStates.map(state => (
-                          <option key={state.id} value={state.id}>{state.name}</option>
-                        ))}
-                      </select>
-                    ) : (
-                      <p className="font-semibold text-sm sm:text-base md:text-base leading-relaxed break-words">{user.stateId ? (sudanStates.find(s => s.id === user.stateId)?.name || user.stateId) : 'Not set'}</p>
-                    )}
+                    <p className="font-semibold text-sm sm:text-base md:text-base leading-relaxed break-words">{user.stateId ? (sudanStates.find(s => s.id === user.stateId)?.name || user.stateId) : 'Not set'}</p>
                   </div>
                   <div className="space-y-1 sm:col-span-2">
                     <h3 className="font-medium text-xs sm:text-sm text-muted-foreground">Locality</h3>
-                    {editMode ? (
-                      <select
-                        className="border rounded px-3 py-2 w-full h-11 min-h-[44px] text-sm sm:text-base"
-                        value={editForm.localityId || ""}
-                        onChange={e => handleEditChange("localityId", e.target.value || undefined)}
-                        disabled={!editForm.stateId}
-                      >
-                        <option value="">Select locality</option>
-                        {editForm.stateId && getLocalitiesByState(editForm.stateId).map(locality => (
-                          <option key={locality.id} value={locality.id}>{locality.name}</option>
-                        ))}
-                      </select>
-                    ) : (
-                      <p className="font-semibold text-sm sm:text-base md:text-base leading-relaxed break-words">{user.stateId && user.localityId ? (getLocalitiesByState(user.stateId).find(l => l.id === user.localityId)?.name || user.localityId) : 'Not set'}</p>
-                    )}
+                    <p className="font-semibold text-sm sm:text-base md:text-base leading-relaxed break-words">{user.stateId && user.localityId ? (getLocalitiesByState(user.stateId).find(l => l.id === user.localityId)?.name || user.localityId) : 'Not set'}</p>
                   </div>
                 </div>
               </TabsContent>
