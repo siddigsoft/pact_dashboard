@@ -44,6 +44,9 @@ import {
   Calendar,
   FileText,
   Copy,
+  Radio,
+  Wifi,
+  WifiOff,
 } from 'lucide-react';
 import { format, parseISO, isValid } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
@@ -188,9 +191,68 @@ export default function EmailTracking() {
     }
   };
 
+  // Real-time subscription state
+  const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
+
   useEffect(() => {
     fetchEmailLogs();
-  }, []);
+
+    // Set up real-time subscription for new email/OTP logs
+    const channel = supabase
+      .channel('email-tracking-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'audit_logs',
+          filter: 'module=eq.notification',
+        },
+        (payload) => {
+          const newLog = payload.new as EmailLog;
+          // Only add if it's email or OTP type
+          if (newLog.entity_type === 'email' || newLog.entity_type === 'otp') {
+            setEmailLogs((prev) => {
+              // Check if log already exists to avoid duplicates
+              if (prev.some((log) => log.id === newLog.id)) {
+                return prev;
+              }
+              return [newLog, ...prev];
+            });
+            // Update stats
+            setStats((prev) => ({
+              total: prev.total + 1,
+              successful: newLog.success ? prev.successful + 1 : prev.successful,
+              failed: !newLog.success ? prev.failed + 1 : prev.failed,
+              emails: newLog.entity_type === 'email' ? prev.emails + 1 : prev.emails,
+              otpSent: newLog.entity_type === 'otp' && !newLog.tags?.includes('verification') 
+                ? prev.otpSent + 1 
+                : prev.otpSent,
+              otpVerified: newLog.entity_type === 'otp' && newLog.tags?.includes('verification') 
+                ? prev.otpVerified + 1 
+                : prev.otpVerified,
+            }));
+            // Show toast for new email
+            toast({
+              title: 'New notification logged',
+              description: newLog.entity_type === 'email' 
+                ? `Email to ${newLog.metadata?.recipient || 'unknown'}` 
+                : `OTP ${newLog.tags?.includes('verification') ? 'verification' : 'sent'}`,
+            });
+          }
+        }
+      )
+      .subscribe((status) => {
+        setIsRealtimeConnected(status === 'SUBSCRIBED');
+        if (status === 'SUBSCRIBED') {
+          console.log('[EmailTracking] Real-time subscription active');
+        }
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [toast]);
 
   const filteredLogs = emailLogs.filter(log => {
     const matchesSearch = searchQuery === '' ||
@@ -369,15 +431,38 @@ export default function EmailTracking() {
             </p>
           </div>
         </div>
-        <Button
-          onClick={fetchEmailLogs}
-          variant="outline"
-          disabled={loading}
-          data-testid="button-refresh"
-        >
-          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-3">
+          {/* Real-time connection indicator */}
+          <Badge
+            variant="outline"
+            className={isRealtimeConnected 
+              ? "bg-green-500/10 text-green-600 border-green-500/30" 
+              : "bg-yellow-500/10 text-yellow-600 border-yellow-500/30"
+            }
+            data-testid="badge-realtime-status"
+          >
+            {isRealtimeConnected ? (
+              <>
+                <Radio className="h-3 w-3 mr-1 animate-pulse" />
+                Live
+              </>
+            ) : (
+              <>
+                <WifiOff className="h-3 w-3 mr-1" />
+                Connecting...
+              </>
+            )}
+          </Badge>
+          <Button
+            onClick={fetchEmailLogs}
+            variant="outline"
+            disabled={loading}
+            data-testid="button-refresh"
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {/* Stats Cards */}
