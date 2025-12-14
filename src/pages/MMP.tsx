@@ -194,72 +194,55 @@ const SitesDisplayTable: React.FC<{
 
 // Component to display verified sites using MMPSiteEntriesTable
 const VerifiedSitesDisplay: React.FC<{ verifiedSites: SiteVisitRow[] }> = ({ verifiedSites }) => {
-  const [verifiedSiteEntries, setVerifiedSiteEntries] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { mmpFiles, loading: mmpLoading, refreshMMPFiles } = useMMP();
 
-  useEffect(() => {
-    const loadVerifiedSites = async () => {
-      if (verifiedSites.length === 0) {
-        setVerifiedSiteEntries([]);
-        setLoading(false);
-        return;
+  // Derive verified site entries from context
+  const verifiedSiteEntries = useMemo(() => {
+    if (verifiedSites.length === 0) return [];
+
+    // Get unique mmp_ids from verified sites
+    const mmpIds = [...new Set(verifiedSites.map(s => s.mmpId).filter(Boolean))];
+    if (mmpIds.length === 0) return [];
+
+    // Get all site entries from context for these MMPs
+    const entries: any[] = [];
+    mmpFiles.forEach((mmp: any) => {
+      if (mmpIds.includes(mmp.id) && Array.isArray(mmp.siteEntries)) {
+        mmp.siteEntries
+          .filter((entry: any) => {
+            // Filter for verified sites (case-insensitive)
+            const status = String(entry.status || '').toLowerCase();
+            return status === 'verified';
+          })
+          .forEach((entry: any) => {
+            entries.push({
+              ...entry,
+              verified_by: entry.verified_by || undefined,
+              verified_at: entry.verified_at || undefined,
+              verification_notes: entry.verification_notes || undefined,
+              // Map to camelCase for MMPSiteEntriesTable
+              siteName: entry.site_name || entry.siteName,
+              siteCode: entry.site_code || entry.siteCode,
+              hubOffice: entry.hub_office || entry.hubOffice,
+              cpName: entry.cp_name || entry.cpName,
+              siteActivity: entry.activity_at_site || entry.siteActivity,
+              monitoringBy: entry.monitoring_by || entry.monitoringBy,
+              surveyTool: entry.survey_tool || entry.surveyTool,
+              useMarketDiversion: entry.use_market_diversion ?? entry.useMarketDiversion,
+              useWarehouseMonitoring: entry.use_warehouse_monitoring ?? entry.useWarehouseMonitoring,
+              visitDate: entry.visit_date || entry.visitDate,
+              comments: entry.comments,
+              cost: entry.cost,
+              additionalData: entry.additional_data || entry.additionalData || {}
+            });
+          });
       }
+    });
 
-      try {
-        // Get unique mmp_ids from verified sites
-        const mmpIds = [...new Set(verifiedSites.map(s => s.mmpId).filter(Boolean))];
+    return entries;
+  }, [verifiedSites, mmpFiles]);
 
-        if (mmpIds.length === 0) {
-          setVerifiedSiteEntries([]);
-          setLoading(false);
-          return;
-        }
-
-        // Load from mmp_site_entries
-        // Filter for verified sites (case-insensitive)
-        const { data: mmpEntries, error: mmpError } = await supabase
-          .from('mmp_site_entries')
-          .select('*')
-          .in('mmp_file_id', mmpIds)
-          .ilike('status', 'verified');
-
-        if (mmpError) throw mmpError;
-
-        // Format mmp_site_entries for MMPSiteEntriesTable
-        const mergedEntries = (mmpEntries || []).map(entry => {
-          return {
-            ...entry,
-            verified_by: entry.verified_by || undefined,
-            verified_at: entry.verified_at || undefined,
-            verification_notes: entry.verification_notes || undefined,
-            // Map to camelCase for MMPSiteEntriesTable
-            siteName: entry.site_name,
-            siteCode: entry.site_code,
-            hubOffice: entry.hub_office,
-            cpName: entry.cp_name,
-            siteActivity: entry.activity_at_site,
-            monitoringBy: entry.monitoring_by,
-            surveyTool: entry.survey_tool,
-            useMarketDiversion: entry.use_market_diversion,
-            useWarehouseMonitoring: entry.use_warehouse_monitoring,
-            visitDate: entry.visit_date,
-            comments: entry.comments,
-            cost: entry.cost,
-            additionalData: entry.additional_data || {}
-          };
-        });
-
-        setVerifiedSiteEntries(mergedEntries);
-      } catch (error) {
-        console.error('Failed to load verified sites:', error);
-        setVerifiedSiteEntries([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadVerifiedSites();
-  }, [verifiedSites]);
+  const loading = mmpLoading;
 
   if (loading) {
     return (
@@ -342,7 +325,9 @@ const VerifiedSitesDisplay: React.FC<{ verifiedSites: SiteVisitRow[] }> = ({ ver
 
               // Verification data is now stored directly in mmp_site_entries, no need to update site_visits
             }
-            setVerifiedSiteEntries(sites as any[]);
+            
+            // Refresh context to ensure real-time updates propagate
+            await refreshMMPFiles();
             return true;
           } catch (error) {
             console.error('Failed to update verified sites:', error);
@@ -356,7 +341,7 @@ const VerifiedSitesDisplay: React.FC<{ verifiedSites: SiteVisitRow[] }> = ({ ver
 
 const MMP = () => {
   const navigate = useNavigate();
-  const { mmpFiles, loading, updateMMP } = useMMP();
+  const { mmpFiles, loading, updateMMP, refreshMMPFiles } = useMMP();
   const { checkPermission, hasAnyRole, currentUser } = useAuthorization();
   const { toast } = useToast();
   const { reconcileSiteVisitFee } = useWallet();
@@ -566,148 +551,8 @@ const MMP = () => {
         variant: 'default'
       });
 
-      // Reload enumerator data instead of full page reload
-      if (canClaimSites && currentUser?.id) {
-        setLoadingEnumerator(true);
-        try {
-          // Convert collector's stateId/localityId to names for matching with site entries
-          const collectorStateName = currentUser.stateId ? sudanStates.find(s => s.id === currentUser.stateId)?.name : undefined;
-          const collectorLocalityName = currentUser.stateId && currentUser.localityId
-            ? sudanStates.find(s => s.id === currentUser.stateId)?.localities.find(l => l.id === currentUser.localityId)?.name
-            : undefined;
-
-          // Build query for "Available Sites" - status = "Dispatched" (bulk dispatched)
-          // These are unclaimed sites (accepted_by IS NULL) in the collector's area
-          let availableSitesQuery = supabase
-            .from('mmp_site_entries')
-            .select('*')
-            .ilike('status', 'Dispatched') // Only "Dispatched" status (bulk dispatched)
-            .is('accepted_by', null); // Only unclaimed sites
-
-          // Add state/locality filters if we have the names
-          // CRITICAL: If user has a locality set, filter by EXACT locality only (not by state OR locality)
-          // This ensures users only see sites in their assigned locality, not the entire state
-          if (collectorLocalityName) {
-            // User has locality set - filter by EXACT locality match only
-            availableSitesQuery = availableSitesQuery.ilike('locality', collectorLocalityName);
-          } else if (collectorStateName) {
-            // User only has state set (no locality) - filter by state
-            availableSitesQuery = availableSitesQuery.ilike('state', collectorStateName);
-          }
-
-          availableSitesQuery = availableSitesQuery
-            .order('created_at', { ascending: false })
-            .limit(1000);
-
-          // Load smart assigned sites for "Smart Assigned" tab
-          const smartAssignedQuery = supabase
-            .from('mmp_site_entries')
-            .select('*')
-            .ilike('status', 'Assigned')
-            .eq('accepted_by', currentUser.id)
-            .order('created_at', { ascending: false })
-            .limit(1000);
-
-          // Load accepted sites for "My Sites" tab
-          const mySitesQuery = supabase
-            .from('mmp_site_entries')
-            .select('*')
-            .eq('accepted_by', currentUser.id)
-            .order('created_at', { ascending: false })
-            .limit(1000);
-
-          // Execute all queries in parallel
-          const [availableResult, smartAssignedResult, mySitesResult] = await Promise.all([
-            availableSitesQuery,
-            smartAssignedQuery,
-            mySitesQuery
-          ]);
-
-          // Format entries for display
-          const formatEntries = (entries: any[]) => entries.map(entry => {
-            const additionalData = entry.additional_data || {};
-            const enumeratorFee = entry.enumerator_fee;
-            const transportFee = entry.transport_fee;
-            return {
-              ...entry,
-              siteName: entry.site_name,
-              siteCode: entry.site_code,
-              hubOffice: entry.hub_office,
-              cpName: entry.cp_name,
-              siteActivity: entry.activity_at_site,
-              monitoringBy: entry.monitoring_by,
-              surveyTool: entry.survey_tool,
-              useMarketDiversion: entry.use_market_diversion,
-              useWarehouseMonitoring: entry.use_warehouse_monitoring,
-              visitDate: entry.visit_date,
-              comments: entry.comments,
-              enumerator_fee: enumeratorFee,
-              enumeratorFee: enumeratorFee,
-              transport_fee: transportFee,
-              transportFee: transportFee,
-              cost: entry.cost,
-              status: entry.status,
-              verified_by: entry.verified_by,
-              verified_at: entry.verified_at,
-              dispatched_by: entry.dispatched_by,
-              dispatched_at: entry.dispatched_at,
-              accepted_by: entry.accepted_by,
-              accepted_at: entry.accepted_at,
-              cost_acknowledged: entry.cost_acknowledged,
-              updated_at: entry.updated_at,
-              additionalData: additionalData
-            };
-          });
-
-          const availableEntries = formatEntries(availableResult.data || []);
-          const rawSmartAssigned = formatEntries(smartAssignedResult.data || []);
-          const smartAssignedEntries = rawSmartAssigned.filter(entry => !entry.cost_acknowledged);
-          const mySitesEntries = formatEntries(mySitesResult.data || []);
-
-          // Store all entries for reference
-          setEnumeratorSiteEntries(availableEntries);
-
-          // Group available sites by state and locality combined
-          const groupedByStateLocality = availableEntries.reduce((acc, entry) => {
-            const state = entry.state || 'Unknown State';
-            const locality = entry.locality || 'Unknown Locality';
-            const key = `${state} - ${locality}`;
-            if (!acc[key]) acc[key] = [];
-            acc[key].push(entry);
-            return acc;
-          }, {} as Record<string, any[]>);
-          setEnumeratorGroupedByStates(groupedByStateLocality);
-          setEnumeratorGroupedByLocality({});
-
-          // Set smart assigned entries
-          setEnumeratorSmartAssigned(smartAssignedEntries);
-
-          // Build deduplicated union for "My Sites"
-          try {
-            const byId = new Map<string, any>();
-            (smartAssignedEntries || []).forEach((e: any) => {
-              if (e && e.id) byId.set(String(e.id), e);
-            });
-            (mySitesEntries || []).forEach((e: any) => {
-              if (!e) return;
-              const key = e.id ? String(e.id) : `${e.mmp_file_id || e.mmpId}-${e.site_code || e.siteCode || ''}`;
-              if (!byId.has(key)) byId.set(key, e);
-            });
-            setEnumeratorMySites(Array.from(byId.values()));
-          } catch (e) {
-            setEnumeratorMySites(mySitesEntries);
-          }
-
-        } catch (reloadError) {
-          // Fallback to page reload if data reload fails
-          window.location.reload();
-        } finally {
-          setLoadingEnumerator(false);
-        }
-      } else {
-        // Fallback for non-enumerator users
-        window.location.reload();
-      }
+      // Refresh context to ensure real-time updates propagate
+      await refreshMMPFiles();
     } catch (error: any) {
       console.error('Failed to accept site:', error);
       toast({
@@ -792,58 +637,8 @@ const MMP = () => {
         variant: 'default'
       });
 
-      // Reload available sites data
-      const loadEnumeratorEntries = async () => {
-        if (!canClaimSites || !currentUser?.id) return;
-
-        try {
-          // Load available sites in the enumerator's state or locality for "Available Sites" tab
-          const availableSitesQuery = supabase
-            .from('mmp_site_entries')
-            .select('*')
-            .ilike('status', 'Dispatched')
-            .or(`state.eq.${currentUser.stateId},locality.eq.${currentUser.localityId}`)
-            .is('accepted_by', null) // Only show unclaimed dispatched sites
-            .order('created_at', { ascending: false })
-            .limit(1000);
-
-          const { data: availableEntries, error: availableError } = await availableSitesQuery;
-          if (availableError) throw availableError;
-
-          // Format entries for display
-          const formatEntries = (entries: any[]) => entries.map(entry => {
-            const additionalData = entry.additional_data || {};
-            return {
-              ...entry,
-              siteName: entry.site_name,
-              siteCode: entry.site_code,
-              enumerator_fee: entry.enumerator_fee,
-              enumeratorFee: entry.enumerator_fee,
-              transport_fee: entry.transport_fee,
-              transportFee: entry.transport_fee,
-              additionalData: additionalData
-            };
-          });
-
-          const formattedAvailable = formatEntries(availableEntries || []);
-          setEnumeratorSiteEntries(formattedAvailable);
-
-          // Group available sites by state and locality combined
-          const groupedByStateLocality = formattedAvailable.reduce((acc, entry) => {
-            const state = entry.state || 'Unknown State';
-            const locality = entry.locality || 'Unknown Locality';
-            const key = `${state} - ${locality}`;
-            if (!acc[key]) acc[key] = [];
-            acc[key].push(entry);
-            return acc;
-          }, {} as Record<string, any[]>);
-          setEnumeratorGroupedByStates(groupedByStateLocality);
-        } catch (error) {
-          console.error('Failed to reload enumerator entries:', error);
-        }
-      };
-
-      await loadEnumeratorEntries();
+      // Refresh context to ensure real-time updates propagate
+      await refreshMMPFiles();
     } catch (error: any) {
       console.error('Failed to send back site:', error);
       toast({
@@ -1799,349 +1594,219 @@ const MMP = () => {
     return { pending, verified };
   }, [isFOM, categorizedMMPs.new]);
 
-  // Always load the count for the badge, regardless of active tab
-  useEffect(() => {
-    const loadApprovedCostedCount = async () => {
-      try {
-        // Count entries with status = 'Approved and Costed'
-        const { count, error } = await supabase
-          .from('mmp_site_entries')
-          .select('*', { count: 'exact', head: true })
-          .or('status.ilike.%Approved and Costed%,status.ilike.%approved%costed%');
-
-        if (error) throw error;
-        setApprovedCostedCount(count || 0);
-      } catch (error) {
-        console.error('Failed to load approved and costed count:', error);
-        setApprovedCostedCount(0);
-      }
+  // Calculate all counts from context using useMemo
+  const siteEntryCounts = useMemo(() => {
+    const allEntries = mmpFiles.flatMap(mmp => {
+      const entries = mmp.siteEntries || [];
+      return entries.map(entry => ({
+        ...entry,
+        mmp_file_id: mmp.id,
+        mmpId: mmp.id
+      }));
+    });
+    
+    return {
+      dispatched: allEntries.filter(e => {
+        const status = String(e.status || '').toLowerCase();
+        const acceptedBy = (e as any).accepted_by;
+        return status === 'dispatched' && !acceptedBy;
+      }).length,
+      accepted: allEntries.filter(e => {
+        const status = String(e.status || '').toLowerCase();
+        return status === 'accepted';
+      }).length,
+      smartAssigned: allEntries.filter(e => {
+        const status = String(e.status || '').toLowerCase();
+        return status === 'assigned';
+      }).length,
+      ongoing: allEntries.filter(e => {
+        const status = String(e.status || '').toLowerCase();
+        return /inprogress|in_progress|ongoing/.test(status);
+      }).length,
+      completed: allEntries.filter(e => {
+        const status = String(e.status || '').toLowerCase();
+        return status === 'completed';
+      }).length,
+      rejected: allEntries.filter(e => {
+        const status = String(e.status || '').toLowerCase();
+        return status === 'rejected' || status === 'declined';
+      }).length,
+      approvedCosted: allEntries.filter(e => {
+        const status = String(e.status || '').toLowerCase();
+        return status === 'approved and costed';
+      }).length
     };
+  }, [mmpFiles]);
 
-    loadApprovedCostedCount();
-  }, [mmpFiles]); // Reload when MMP files change
-
-  // Always load the dispatched count for the badge, regardless of active tab
+  // Update count state from calculated values
   useEffect(() => {
-    const loadDispatchedCount = async () => {
-      try {
-        // Use database count instead of loading all entries
-        // Count entries with status = 'Dispatched' only
-        // BUT exclude entries that are already accepted (status = 'accepted' or accepted_by is not null)
-        const { count, error } = await supabase
-          .from('mmp_site_entries')
-          .select('*', { count: 'exact', head: true })
-          .ilike('status', 'Dispatched')
-          .not('status', 'ilike', 'accepted')
-          .is('accepted_by', null);
+    setDispatchedCount(siteEntryCounts.dispatched);
+    setAcceptedCount(siteEntryCounts.accepted);
+    setSmartAssignedCount(siteEntryCounts.smartAssigned);
+    setOngoingCount(siteEntryCounts.ongoing);
+    setCompletedCount(siteEntryCounts.completed);
+    setRejectedCount(siteEntryCounts.rejected);
+    setApprovedCostedCount(siteEntryCounts.approvedCosted);
+  }, [siteEntryCounts]);
 
-        if (error) throw error;
-
-        setDispatchedCount(count || 0);
-      } catch (error) {
-        console.error('Failed to load dispatched count:', error);
-        setDispatchedCount(0);
-      }
+  // Helper function to format site entries for display
+  const formatSiteEntry = useCallback((entry: any) => {
+    const additionalData = entry.additional_data || entry.additionalData || {};
+    const enumeratorFee = entry.enumerator_fee;
+    const transportFee = entry.transport_fee;
+    return {
+      ...entry,
+      siteName: entry.site_name || entry.siteName,
+      siteCode: entry.site_code || entry.siteCode,
+      hubOffice: entry.hub_office || entry.hubOffice,
+      cpName: entry.cp_name || entry.cpName,
+      siteActivity: entry.activity_at_site || entry.siteActivity,
+      monitoringBy: entry.monitoring_by || entry.monitoringBy,
+      surveyTool: entry.survey_tool || entry.surveyTool,
+      useMarketDiversion: entry.use_market_diversion ?? entry.useMarketDiversion,
+      useWarehouseMonitoring: entry.use_warehouse_monitoring ?? entry.useWarehouseMonitoring,
+      visitDate: entry.visit_date || entry.visitDate,
+      comments: entry.comments,
+      enumerator_fee: enumeratorFee,
+      enumeratorFee: enumeratorFee,
+      transport_fee: transportFee,
+      transportFee: transportFee,
+      cost: entry.cost,
+      status: entry.status,
+      verified_by: entry.verified_by,
+      verified_at: entry.verified_at,
+      dispatched_by: entry.dispatched_by,
+      dispatched_at: entry.dispatched_at,
+      accepted_by: entry.accepted_by,
+      accepted_at: entry.accepted_at,
+      updated_at: entry.updated_at,
+      additionalData: additionalData,
+      mmp_file_id: entry.mmp_file_id || entry.mmpId,
+      mmpId: entry.mmp_file_id || entry.mmpId
     };
+  }, []);
 
-    loadDispatchedCount();
-  }, [mmpFiles]); // Reload when MMP files change
+  // Extract all site entries from MMP context
+  const allSiteEntries = useMemo(() => {
+    return mmpFiles.flatMap(mmp => {
+      const entries = mmp.siteEntries || [];
+      return entries.map(entry => ({
+        ...entry,
+        mmp_file_id: mmp.id,
+        mmpId: mmp.id
+      }));
+    });
+  }, [mmpFiles]);
 
-  // Always load the accepted count for the badge, regardless of active tab
+  // Derive enumerator data from context (Available Sites, Smart Assigned, My Sites)
+  const enumeratorData = useMemo(() => {
+    if (!canClaimSites || !currentUser?.id) {
+      return {
+        availableSites: [],
+        smartAssigned: [],
+        mySites: [],
+        groupedByStateLocality: {},
+        loading: false
+      };
+    }
+
+    // Convert collector's stateId/localityId to names for matching
+    const collectorStateName = currentUser.stateId 
+      ? sudanStates.find(s => s.id === currentUser.stateId)?.name 
+      : undefined;
+    const collectorLocalityName = currentUser.stateId && currentUser.localityId
+      ? sudanStates.find(s => s.id === currentUser.stateId)
+          ?.localities.find(l => l.id === currentUser.localityId)?.name
+      : undefined;
+
+    // Format all entries
+    const formattedEntries = allSiteEntries.map(formatSiteEntry);
+
+    // Filter available sites: status = "Dispatched", accepted_by = null, in collector's area
+    const availableSites = formattedEntries.filter(entry => {
+      const status = String(entry.status || '').toLowerCase();
+      if (status !== 'dispatched') return false;
+      if (entry.accepted_by) return false; // Must be unclaimed
+
+      // Filter by location
+      if (collectorLocalityName) {
+        // User has locality set - filter by EXACT locality match only
+        return String(entry.locality || '').toLowerCase() === collectorLocalityName.toLowerCase();
+      } else if (collectorStateName) {
+        // User only has state set (no locality) - filter by state
+        return String(entry.state || '').toLowerCase() === collectorStateName.toLowerCase();
+      }
+      return false; // No location = no sites
+    }).sort((a, b) => {
+      // Sort by created_at descending
+      const aDate = a.created_at || a.createdAt || '';
+      const bDate = b.created_at || b.createdAt || '';
+      return bDate.localeCompare(aDate);
+    }).slice(0, 1000); // Limit to 1000
+
+    // Filter smart assigned: status = "Assigned", accepted_by = currentUser.id, not cost-acknowledged
+    const smartAssigned = formattedEntries.filter(entry => {
+      const status = String(entry.status || '').toLowerCase();
+      if (status !== 'assigned') return false;
+      if (entry.accepted_by !== currentUser.id) return false;
+      return !entry.cost_acknowledged; // Exclude cost-acknowledged sites
+    }).sort((a, b) => {
+      const aDate = a.created_at || a.createdAt || '';
+      const bDate = b.created_at || b.createdAt || '';
+      return bDate.localeCompare(aDate);
+    }).slice(0, 1000);
+
+    // Filter my sites: accepted_by = currentUser.id
+    const mySites = formattedEntries.filter(entry => {
+      return entry.accepted_by === currentUser.id;
+    }).sort((a, b) => {
+      const aDate = a.created_at || a.createdAt || '';
+      const bDate = b.created_at || b.createdAt || '';
+      return bDate.localeCompare(aDate);
+    }).slice(0, 1000);
+
+    // Group available sites by state and locality combined
+    const groupedByStateLocality = availableSites.reduce((acc, entry) => {
+      const state = entry.state || 'Unknown State';
+      const locality = entry.locality || 'Unknown Locality';
+      const key = `${state} - ${locality}`;
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(entry);
+      return acc;
+    }, {} as Record<string, any[]>);
+
+    // Build deduplicated union for "My Sites" (prefer smartAssigned entries first)
+    const mySitesDeduplicated = (() => {
+      const byId = new Map<string, any>();
+      smartAssigned.forEach((e: any) => {
+        if (e && e.id) byId.set(String(e.id), e);
+      });
+      mySites.forEach((e: any) => {
+        if (!e) return;
+        const key = e.id ? String(e.id) : `${e.mmp_file_id || e.mmpId}-${e.site_code || e.siteCode || ''}`;
+        if (!byId.has(key)) byId.set(key, e);
+      });
+      return Array.from(byId.values());
+    })();
+
+    return {
+      availableSites,
+      smartAssigned,
+      mySites: mySitesDeduplicated,
+      groupedByStateLocality,
+      loading: loading
+    };
+  }, [allSiteEntries, canClaimSites, currentUser?.id, currentUser?.stateId, currentUser?.localityId, formatSiteEntry, loading]);
+
+  // Set enumerator state from derived data
   useEffect(() => {
-    const loadAcceptedCount = async () => {
-      try {
-        // Use database count instead of loading all entries
-        // Count entries with status = 'accepted' only
-        const { count, error } = await supabase
-          .from('mmp_site_entries')
-          .select('*', { count: 'exact', head: true })
-          .ilike('status', 'accepted');
-
-        if (error) throw error;
-
-        setAcceptedCount(count || 0);
-      } catch (error) {
-        console.error('Failed to load accepted count:', error);
-        setAcceptedCount(0);
-      }
-    };
-
-    loadAcceptedCount();
-  }, [mmpFiles]); // Reload when MMP files change
-
-  // Always load the smart assigned count for the badge, regardless of active tab
-  useEffect(() => {
-    const loadSmartAssignedCount = async () => {
-      try {
-        // Use database count instead of loading all entries
-        // Count entries with status = 'Assigned' only
-        const { count, error } = await supabase
-          .from('mmp_site_entries')
-          .select('*', { count: 'exact', head: true })
-          .ilike('status', 'Assigned');
-
-        if (error) throw error;
-
-        setSmartAssignedCount(count || 0);
-      } catch (error) {
-        console.error('Failed to load smart assigned count:', error);
-        setSmartAssignedCount(0);
-      }
-    };
-
-    loadSmartAssignedCount();
-  }, [mmpFiles]); // Reload when MMP files change
-
-  // Always load the ongoing count for the badge, regardless of active tab
-  useEffect(() => {
-    const loadOngoingCount = async () => {
-      try {
-        // Use database count instead of loading all entries
-        // Count entries with status = 'inprogress' or 'in_progress' or 'ongoing' (case-insensitive)
-        const { count, error } = await supabase
-          .from('mmp_site_entries')
-          .select('*', { count: 'exact', head: true })
-          .or('status.ilike.%inprogress%,status.ilike.%in_progress%,status.ilike.%ongoing%');
-
-        if (error) throw error;
-
-        setOngoingCount(count || 0);
-      } catch (error) {
-        console.error('Failed to load ongoing count:', error);
-        setOngoingCount(0);
-      }
-    };
-
-    loadOngoingCount();
-  }, [mmpFiles]); // Reload when MMP files change
-
-  // Always load the completed count for the badge, regardless of active tab
-  useEffect(() => {
-    const loadCompletedCount = async () => {
-      try {
-        // Use database count instead of loading all entries
-        // Count entries with status = 'completed'
-        const { count, error } = await supabase
-          .from('mmp_site_entries')
-          .select('*', { count: 'exact', head: true })
-          .ilike('status', 'completed');
-
-        if (error) throw error;
-
-        setCompletedCount(count || 0);
-      } catch (error) {
-        console.error('Failed to load completed count:', error);
-        setCompletedCount(0);
-      }
-    };
-
-    loadCompletedCount();
-  }, [mmpFiles]); // Reload when MMP files change
-
-  // Always load the rejected count for the badge, regardless of active tab
-  useEffect(() => {
-    const loadRejectedCount = async () => {
-      try {
-        // Use database count instead of loading all entries
-        // Count entries with status = 'rejected'
-        const { count, error } = await supabase
-          .from('mmp_site_entries')
-          .select('*', { count: 'exact', head: true })
-          .ilike('status', 'rejected');
-
-        if (error) throw error;
-
-        setRejectedCount(count || 0);
-      } catch (error) {
-        console.error('Failed to load rejected count:', error);
-        setRejectedCount(0);
-      }
-    };
-
-    loadRejectedCount();
-  }, [mmpFiles]); // Reload when MMP files change
-
-  // Load enumerator site entries when user can claim sites (DataCollector or Coordinator)
-  useEffect(() => {
-    const loadEnumeratorEntries = async () => {
-      if (!canClaimSites || !currentUser?.id) {
-        setEnumeratorSiteEntries([]);
-        setEnumeratorGroupedByStates({});
-        setEnumeratorGroupedByLocality({});
-        setEnumeratorSmartAssigned([]);
-        return;
-      }
-
-      setLoadingEnumerator(true);
-      try {
-        // Load available sites in the enumerator's state or locality for "Available Sites" tab
-        // These are sites with status "Dispatched" (bulk dispatched by state/locality)
-        // Convert collector's stateId/localityId to names for matching with site entries
-        const collectorStateName = currentUser.stateId ? sudanStates.find(s => s.id === currentUser.stateId)?.name : undefined;
-        const collectorLocalityName = currentUser.stateId && currentUser.localityId
-          ? sudanStates.find(s => s.id === currentUser.stateId)?.localities.find(l => l.id === currentUser.localityId)?.name
-          : undefined;
-        
-        // Build query for "Available Sites" - status = "Dispatched" (bulk dispatched)
-        // These are unclaimed sites (accepted_by IS NULL) in the collector's area
-        let availableSitesQuery = supabase
-          .from('mmp_site_entries')
-          .select('*')
-          .ilike('status', 'Dispatched') // Only "Dispatched" status (bulk dispatched)
-          .is('accepted_by', null); // Only unclaimed sites
-        
-        // Add state/locality filters if we have the names
-        // CRITICAL: If user has a locality set, filter by EXACT locality only (not by state OR locality)
-        // This ensures users only see sites in their assigned locality, not the entire state
-        if (collectorLocalityName) {
-          // User has locality set - filter by EXACT locality match only
-          availableSitesQuery = availableSitesQuery.ilike('locality', collectorLocalityName);
-        } else if (collectorStateName) {
-          // User only has state set (no locality) - filter by state
-          availableSitesQuery = availableSitesQuery.ilike('state', collectorStateName);
-        } else {
-          // If no state/locality is set, do NOT load all sites - this is a misconfiguration
-          // Return empty result to prevent showing all sites to users without proper assignment
-          availableSitesQuery = availableSitesQuery.eq('id', 'NEVER_MATCH_NO_GEO_ASSIGNMENT');
-        }
-        
-        availableSitesQuery = availableSitesQuery
-          .order('created_at', { ascending: false })
-          .limit(1000);
-
-        // Load smart assigned sites for "Smart Assigned" tab
-        // These are sites with status "Assigned" (individually dispatched to this collector)
-        // When individually dispatched, accepted_by is set immediately, so we filter by accepted_by
-        // Only show sites that haven't been cost-acknowledged yet
-        const smartAssignedQuery = supabase
-          .from('mmp_site_entries')
-          .select('*')
-          .ilike('status', 'Assigned')
-          .eq('accepted_by', currentUser.id) // Only sites individually assigned to this collector
-          .order('created_at', { ascending: false })
-          .limit(1000);
-
-        // Load accepted sites for "My Sites" tab (all sites accepted/claimed by this collector)
-        // Includes:
-        // - "Assigned" sites (individually dispatched, accepted_by already set)
-        // - "Dispatched" sites that this collector has accepted (accepted_by = currentUser.id)
-        // - "accepted" status sites (legacy or manually accepted)
-        const mySitesQuery = supabase
-          .from('mmp_site_entries')
-          .select('*')
-          .eq('accepted_by', currentUser.id) // All sites where this collector is the accepted_by
-          .order('created_at', { ascending: false })
-          .limit(1000);
-
-        // Execute all queries in parallel
-        const [availableResult, smartAssignedResult, mySitesResult] = await Promise.all([
-          availableSitesQuery,
-          smartAssignedQuery,
-          mySitesQuery
-        ]);
-
-        if (availableResult.error) {
-          throw availableResult.error;
-        }
-        if (smartAssignedResult.error) {
-          throw smartAssignedResult.error;
-        }
-        if (mySitesResult.error) {
-          throw mySitesResult.error;
-        }
-
-        // Format entries for display
-        const formatEntries = (entries: any[]) => entries.map(entry => {
-          const additionalData = entry.additional_data || {};
-          const enumeratorFee = entry.enumerator_fee;
-          const transportFee = entry.transport_fee;
-          return {
-            ...entry,
-            siteName: entry.site_name,
-            siteCode: entry.site_code,
-            hubOffice: entry.hub_office,
-            cpName: entry.cp_name,
-            siteActivity: entry.activity_at_site,
-            monitoringBy: entry.monitoring_by,
-            surveyTool: entry.survey_tool,
-            useMarketDiversion: entry.use_market_diversion,
-            useWarehouseMonitoring: entry.use_warehouse_monitoring,
-            visitDate: entry.visit_date,
-            comments: entry.comments,
-            enumerator_fee: enumeratorFee,
-            enumeratorFee: enumeratorFee,
-            transport_fee: transportFee,
-            transportFee: transportFee,
-            cost: entry.cost,
-            status: entry.status,
-            verified_by: entry.verified_by,
-            verified_at: entry.verified_at,
-            dispatched_by: entry.dispatched_by,
-            dispatched_at: entry.dispatched_at,
-            accepted_by: entry.accepted_by,
-            accepted_at: entry.accepted_at,
-            updated_at: entry.updated_at,
-            additionalData: additionalData
-          };
-        });
-
-        const availableEntries = formatEntries(availableResult.data || []);
-        // Filter smart assigned to exclude cost-acknowledged sites (they move to My Sites)
-        const rawSmartAssigned = formatEntries(smartAssignedResult.data || []);
-        const smartAssignedEntries = rawSmartAssigned.filter(entry => !entry.cost_acknowledged);
-        const mySitesEntries = formatEntries(mySitesResult.data || []);
-
-        // Store all entries for reference
-        setEnumeratorSiteEntries(availableEntries);
-
-        // Group available sites by state and locality combined (for Available Sites tab)
-        const groupedByStateLocality = availableEntries.reduce((acc, entry) => {
-          const state = entry.state || 'Unknown State';
-          const locality = entry.locality || 'Unknown Locality';
-          const key = `${state} - ${locality}`;
-          if (!acc[key]) acc[key] = [];
-          acc[key].push(entry);
-          return acc;
-        }, {} as Record<string, any[]>);
-        setEnumeratorGroupedByStates(groupedByStateLocality); // Reuse this state for available sites
-        setEnumeratorGroupedByLocality({}); // Clear locality grouping since we're combining
-
-        // Set smart assigned entries (accepted sites)
-        setEnumeratorSmartAssigned(smartAssignedEntries);
-
-        // Build deduplicated union for "My Sites"
-        try {
-          const byId = new Map<string, any>();
-          // prefer smartAssigned entries first
-          (smartAssignedEntries || []).forEach((e: any) => {
-            if (e && e.id) byId.set(String(e.id), e);
-          });
-          // then include mySitesEntries (may overlap)
-          (mySitesEntries || []).forEach((e: any) => {
-            if (!e) return;
-            const key = e.id ? String(e.id) : `${e.mmp_file_id || e.mmpId}-${e.site_code || e.siteCode || ''}`;
-            if (!byId.has(key)) byId.set(key, e);
-          });
-          setEnumeratorMySites(Array.from(byId.values()));
-        } catch (e) {
-          // fallback
-          setEnumeratorMySites(mySitesEntries);
-        }
-
-      } catch (error) {
-        console.error('Failed to load enumerator site entries:', error);
-        setEnumeratorSiteEntries([]);
-        setEnumeratorGroupedByStates({});
-        setEnumeratorGroupedByLocality({});
-        setEnumeratorSmartAssigned([]);
-        setEnumeratorMySites([]);
-      } finally {
-        setLoadingEnumerator(false);
-      }
-    };
-
-    loadEnumeratorEntries();
-  }, [canClaimSites, currentUser?.id, currentUser?.stateId, currentUser?.localityId, mmpFiles]); // Reload when MMP files change or user changes
+    setEnumeratorSiteEntries(enumeratorData.availableSites);
+    setEnumeratorGroupedByStates(enumeratorData.groupedByStateLocality);
+    setEnumeratorGroupedByLocality({});
+    setEnumeratorSmartAssigned(enumeratorData.smartAssigned);
+    setEnumeratorMySites(enumeratorData.mySites);
+    setLoadingEnumerator(enumeratorData.loading);
+  }, [enumeratorData]);
 
   // Load approved and costed site entries only when the tab is active
   useEffect(() => {
@@ -2786,45 +2451,41 @@ const MMP = () => {
     return entries;
   }, [isAdmin, isICT, isFOM, forwardedSubTab, forwardedSubcategories, categorizedMMPs.forwarded]);
 
-  // - Coordinator: Verified only
-  useEffect(() => {
-    const loadStats = async () => {
-      if (!(isAdmin || isICT || isFOM || isCoordinator)) return;
-      let list: any[] = [];
-      if (isFOM) {
-        list = [ ...(categorizedMMPs.verified || []), ...(categorizedMMPs.forwarded || []) ];
-      } else if (isAdmin || isICT || isCoordinator) {
-        list = [ ...(categorizedMMPs.verified || []) ];
+  // Derive site visit stats from context (Admin/ICT/FOM/Coordinator)
+  const { siteVisitStats: derivedStats, siteVisitRows: derivedRows } = useMemo(() => {
+    if (!(isAdmin || isICT || isFOM || isCoordinator)) {
+      return { siteVisitStats: {}, siteVisitRows: [] };
+    }
+    
+    let list: any[] = [];
+    if (isFOM) {
+      list = [ ...(categorizedMMPs.verified || []), ...(categorizedMMPs.forwarded || []) ];
+    } else if (isAdmin || isICT || isCoordinator) {
+      list = [ ...(categorizedMMPs.verified || []) ];
+    }
+    if (list.length === 0) {
+      return { siteVisitStats: {}, siteVisitRows: [] };
+    }
+    
+    const ids = list.map(m => m.id);
+    const map: Record<string, {
+      exists: boolean; hasCosted: boolean; hasAssigned: boolean; hasInProgress: boolean; hasAccepted: boolean; hasCompleted: boolean; hasRejected: boolean; hasDispatched: boolean; allApprovedAndCosted: boolean;
+    }> = {};
+    const rows: SiteVisitRow[] = [];
+    
+    // Initialize map for all MMPs
+    for (const id of ids) {
+      if (!map[id]) {
+        map[id] = { exists: false, hasCosted: false, hasAssigned: false, hasInProgress: false, hasAccepted: false, hasCompleted: false, hasRejected: false, hasDispatched: false, allApprovedAndCosted: false };
       }
-      if (list.length === 0) {
-        setSiteVisitStats({});
-        return;
-      }
-      const ids = list.map(m => m.id);
-      try {
-        // Load ALL mmp_site_entries to check cost and status for "Approved & Costed"
-        const { data: mmpEntriesData, error: mmpEntriesError } = await supabase
-          .from('mmp_site_entries')
-          .select('id,mmp_file_id,status,site_code,state,locality,site_name,verification_notes,cost,verified_by,verified_at,dispatched_at,accepted_by,accepted_at')
-          .in('mmp_file_id', ids);
-        if (mmpEntriesError) throw mmpEntriesError;
-        
-        const map: Record<string, {
-          exists: boolean; hasCosted: boolean; hasAssigned: boolean; hasInProgress: boolean; hasAccepted: boolean; hasCompleted: boolean; hasRejected: boolean; hasDispatched: boolean; allApprovedAndCosted: boolean;
-        }> = {};
-        const rows: SiteVisitRow[] = [];
-        
-        // Initialize map for all MMPs
-        for (const id of ids) {
-          if (!map[id]) {
-            map[id] = { exists: false, hasCosted: false, hasAssigned: false, hasInProgress: false, hasAccepted: false, hasCompleted: false, hasRejected: false, hasDispatched: false, allApprovedAndCosted: false };
-          }
-        }
-        
-        // Process mmp_site_entries - this is now the single source of truth
-        const entriesByMmp = new Map<string, any[]>();
-        for (const entry of (mmpEntriesData || []) as any[]) {
-          const mmpId = entry.mmp_file_id;
+    }
+    
+    // Process site entries from context
+    const entriesByMmp = new Map<string, any[]>();
+    mmpFiles.forEach((mmp: any) => {
+      if (ids.includes(mmp.id) && Array.isArray(mmp.siteEntries)) {
+        mmp.siteEntries.forEach((entry: any) => {
+          const mmpId = mmp.id;
           if (!entriesByMmp.has(mmpId)) {
             entriesByMmp.set(mmpId, []);
           }
@@ -2838,57 +2499,56 @@ const MMP = () => {
           
           const status = String(entry.status || '').toLowerCase();
           if (status === 'assigned') map[mmpId].hasAssigned = true;
-          if (status === 'accepted' || entry.accepted_by) map[mmpId].hasAccepted = true;
+          if (status === 'accepted' || (entry as any).accepted_by) map[mmpId].hasAccepted = true;
           if (status === 'inprogress' || status === 'in_progress') map[mmpId].hasInProgress = true;
           if (status === 'completed') map[mmpId].hasCompleted = true;
           if (status === 'rejected' || status === 'declined') map[mmpId].hasRejected = true;
-          if (status === 'dispatched' || entry.dispatched_at) map[mmpId].hasDispatched = true;
+          if (status === 'dispatched' || (entry as any).dispatched_at) map[mmpId].hasDispatched = true;
           
           const cost = Number(entry.cost || 0);
           if (cost > 0) map[mmpId].hasCosted = true;
           
-            const siteRow: SiteVisitRow = {
-              id: entry.id || `${entry.mmp_file_id}-${entry.site_code}`,
-              mmpId: entry.mmp_file_id,
-              siteName: entry.site_name || entry.site_code || 'Site',
-              siteCode: entry.site_code || undefined,
-              state: entry.state || undefined,
-              locality: entry.locality || undefined,
+          const siteRow: SiteVisitRow = {
+            id: entry.id || `${mmpId}-${entry.site_code || entry.siteCode}`,
+            mmpId: mmpId,
+            siteName: entry.site_name || entry.siteName || entry.site_code || entry.siteCode || 'Site',
+            siteCode: entry.site_code || entry.siteCode || undefined,
+            state: entry.state || undefined,
+            locality: entry.locality || undefined,
             status: entry.status || 'Pending',
             feesTotal: cost,
             verifiedBy: entry.verified_by || undefined,
             verifiedAt: entry.verified_at || undefined,
-            };
-            rows.push(siteRow);
-        }
-        
-        // Check if all entries for each MMP are approved and costed
-        for (const [mmpId, entries] of entriesByMmp.entries()) {
-          if (!map[mmpId]) {
-            map[mmpId] = { exists: false, hasCosted: false, hasAssigned: false, hasInProgress: false, hasAccepted: false, hasCompleted: false, hasRejected: false, hasDispatched: false, allApprovedAndCosted: false };
-          }
-          
-          // For "Approved & Costed", ALL entries must have AND status = 'verified'
-          if (entries.length > 0) {
-            const allApprovedAndCosted = entries.every(entry => {
-              const status = String(entry.status || '').toLowerCase();
-              return status === 'approved and costed';
-            });
-            map[mmpId].allApprovedAndCosted = allApprovedAndCosted;
-          }
-        }
-        
-        setSiteVisitStats(map);
-        setSiteVisitRows(rows);
-      } catch (e) {
-        console.warn('Failed to load site visit stats', e);
-        setSiteVisitStats({});
-        setSiteVisitRows([]);
+          };
+          rows.push(siteRow);
+        });
       }
-    };
-    loadStats();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAdmin, isICT, categorizedMMPs.verified?.length]);
+    });
+    
+    // Check if all entries for each MMP are approved and costed
+    for (const [mmpId, entries] of entriesByMmp.entries()) {
+      if (!map[mmpId]) {
+        map[mmpId] = { exists: false, hasCosted: false, hasAssigned: false, hasInProgress: false, hasAccepted: false, hasCompleted: false, hasRejected: false, hasDispatched: false, allApprovedAndCosted: false };
+      }
+      
+      // For "Approved & Costed", ALL entries must have status = 'approved and costed'
+      if (entries.length > 0) {
+        const allApprovedAndCosted = entries.every(entry => {
+          const status = String(entry.status || '').toLowerCase();
+          return status === 'approved and costed';
+        });
+        map[mmpId].allApprovedAndCosted = allApprovedAndCosted;
+      }
+    }
+    
+    return { siteVisitStats: map, siteVisitRows: rows };
+  }, [isAdmin, isICT, isFOM, isCoordinator, categorizedMMPs.verified, categorizedMMPs.forwarded, mmpFiles]);
+
+  // Update state from derived values
+  useEffect(() => {
+    setSiteVisitStats(derivedStats);
+    setSiteVisitRows(derivedRows);
+  }, [derivedStats, derivedRows]);
 
   if (!canRead) {
     return (
