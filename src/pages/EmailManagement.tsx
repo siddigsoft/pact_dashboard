@@ -56,6 +56,11 @@ import {
   Wrench,
   Tag,
   ChevronRight,
+  Clock,
+  Calendar,
+  Play,
+  TestTube,
+  Sparkles,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
@@ -697,6 +702,11 @@ export default function EmailManagement() {
   const [templateSearch, setTemplateSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
 
+  // Template preview state
+  const [previewWithSampleData, setPreviewWithSampleData] = useState(true);
+  const [templateTestEmail, setTemplateTestEmail] = useState('');
+  const [sendingTestEmail, setSendingTestEmail] = useState(false);
+
   // Compose state
   const [users, setUsers] = useState<UserForEmail[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
@@ -706,6 +716,11 @@ export default function EmailManagement() {
   const [sendingEmail, setSendingEmail] = useState(false);
   const [userSearch, setUserSearch] = useState('');
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
+
+  // Scheduling state
+  const [isScheduled, setIsScheduled] = useState(false);
+  const [scheduledDate, setScheduledDate] = useState('');
+  const [scheduledTime, setScheduledTime] = useState('');
 
   // Load templates from localStorage with version check
   useEffect(() => {
@@ -956,6 +971,130 @@ export default function EmailManagement() {
   const getCategoryCount = (categoryId: string) => {
     if (categoryId === 'all') return templates.length;
     return templates.filter(t => t.category === categoryId).length;
+  };
+
+  // Sample data for template preview
+  const getSampleData = (): Record<string, string> => ({
+    recipientName: 'Ahmed Mohamed',
+    loginUrl: 'https://pact.app/login',
+    role: 'Field Coordinator',
+    oldRole: 'Data Collector',
+    newRole: 'Field Coordinator',
+    effectiveDate: format(new Date(), 'PPP'),
+    reason: 'Project restructuring',
+    contactEmail: 'support@pactorg.com',
+    otpCode: '123456',
+    expiryMinutes: '15',
+    changeDate: format(new Date(), 'PPP p'),
+    ipAddress: '192.168.1.100',
+    enabledDate: format(new Date(), 'PPP'),
+    deviceInfo: 'Chrome on Windows',
+    location: 'Khartoum, Sudan',
+    loginTime: format(new Date(), 'PPP p'),
+    siteName: 'Al-Fashir Community Center',
+    visitDate: format(new Date(), 'PPP'),
+    visitTime: '09:00 AM',
+    projectName: 'Sudan Community Development',
+    instructions: 'Complete beneficiary survey and GPS capture',
+    contactPerson: 'Fatima Ali',
+    collectorName: 'Omar Hassan',
+    status: 'Completed',
+    notes: 'All objectives met successfully',
+    originalDate: format(new Date(), 'PPP'),
+    newDate: format(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), 'PPP'),
+    cancelledBy: 'Program Manager',
+    requestedBy: 'Field Supervisor',
+    deadline: format(new Date(Date.now() + 3 * 24 * 60 * 60 * 1000), 'PPP'),
+    amount: '50,000',
+    approvedBy: 'Finance Director',
+    approvalDate: format(new Date(), 'PPP'),
+    referenceNumber: 'DP-2024-001234',
+    rejectedBy: 'Finance Manager',
+    transactionId: 'TXN-2024-005678',
+    processedDate: format(new Date(), 'PPP p'),
+    auditType: 'Quarterly Financial Review',
+    auditDate: format(new Date(), 'PPP'),
+    auditorName: 'External Audit Team',
+    policyName: 'Data Protection Policy',
+    updateDate: format(new Date(), 'PPP'),
+    keyChanges: 'Updated data retention period to 7 years',
+    complianceArea: 'Financial Reporting',
+    dueDate: format(new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), 'PPP'),
+    requirements: 'Submit quarterly expense reports',
+    privacyOfficer: 'Legal Department',
+    alertLevel: 'HIGH',
+    incidentType: 'System Breach',
+    briefDescription: 'Unauthorized access detected',
+    immediateActions: 'Change passwords and review access logs',
+    evacuationRoute: 'Exit via main stairwell to parking lot',
+    assemblyPoint: 'North parking lot near main gate',
+    emergencyContact: '+249-123-456-789',
+    serviceName: 'Database Server',
+    outageTime: format(new Date(), 'PPP p'),
+    affectedUsers: 'All field teams',
+    estimatedRestoration: '2 hours',
+    workaround: 'Use offline mode in mobile app',
+    statusUrl: 'https://status.pactorg.com',
+  });
+
+  // Replace variables in template with sample or actual data
+  const replaceVariables = (content: string, data: Record<string, string>): string => {
+    let result = content;
+    Object.entries(data).forEach(([key, value]) => {
+      result = result.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'g'), value);
+    });
+    return result;
+  };
+
+  // Send test email with template
+  const sendTestTemplateEmail = async () => {
+    if (!selectedTemplate) return;
+    
+    if (!templateTestEmail || !templateTestEmail.includes('@')) {
+      toast({
+        title: 'Invalid email',
+        description: 'Please enter a valid email address',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setSendingTestEmail(true);
+    try {
+      const sampleData = getSampleData();
+      const renderedSubject = replaceVariables(selectedTemplate.subject, sampleData);
+      const renderedHtml = replaceVariables(selectedTemplate.htmlContent, sampleData);
+      const renderedText = replaceVariables(selectedTemplate.textContent, sampleData);
+
+      const { data, error } = await supabase.functions.invoke('send-email', {
+        body: {
+          to: templateTestEmail,
+          subject: `[TEST] ${renderedSubject}`,
+          html: renderedHtml,
+          text: renderedText,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data?.success) {
+        toast({
+          title: 'Test email sent',
+          description: `Template preview sent to ${templateTestEmail}`,
+        });
+        setTemplateTestEmail('');
+      } else {
+        throw new Error(data?.error || 'Failed to send test email');
+      }
+    } catch (error: any) {
+      toast({
+        title: 'Failed to send test email',
+        description: error.message || 'Could not send test email',
+        variant: 'destructive',
+      });
+    } finally {
+      setSendingTestEmail(false);
+    }
   };
 
   const filteredUsers = users.filter(u =>
@@ -1570,65 +1709,252 @@ export default function EmailManagement() {
                     placeholder="Write your message here..."
                     value={composeMessage}
                     onChange={(e) => setComposeMessage(e.target.value)}
-                    rows={10}
+                    rows={8}
                     data-testid="input-compose-message"
                   />
                 </div>
 
-                <Button
-                  className="w-full"
-                  onClick={sendBulkEmail}
-                  disabled={sendingEmail || selectedUsers.length === 0}
-                  data-testid="button-send-email"
-                >
-                  {sendingEmail ? (
+                {/* Scheduling Section */}
+                <div className="p-4 rounded-lg border bg-muted/30 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-primary" />
+                      <div>
+                        <p className="text-sm font-medium flex items-center gap-2">
+                          Schedule Email
+                          <Badge variant="secondary" className="text-xs">Preview</Badge>
+                        </p>
+                        <p className="text-xs text-muted-foreground">Send at a specific date and time</p>
+                      </div>
+                    </div>
+                    <Switch
+                      checked={isScheduled}
+                      onCheckedChange={setIsScheduled}
+                      data-testid="switch-schedule-email"
+                    />
+                  </div>
+                  
+                  {isScheduled && (
                     <>
-                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                      Sending to {selectedUsers.length} user(s)...
-                    </>
-                  ) : (
-                    <>
-                      <Send className="h-4 w-4 mr-2" />
-                      Send to {selectedUsers.length} user(s)
+                      <div className="grid gap-3 sm:grid-cols-2 pt-2">
+                        <div className="space-y-1">
+                          <Label className="text-xs">Date</Label>
+                          <Input
+                            type="date"
+                            value={scheduledDate}
+                            onChange={(e) => setScheduledDate(e.target.value)}
+                            min={format(new Date(), 'yyyy-MM-dd')}
+                            data-testid="input-schedule-date"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Time</Label>
+                          <Input
+                            type="time"
+                            value={scheduledTime}
+                            onChange={(e) => setScheduledTime(e.target.value)}
+                            data-testid="input-schedule-time"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-2 p-2 rounded bg-amber-500/10 border border-amber-500/20 text-xs">
+                        <AlertTriangle className="h-3 w-3 text-amber-500 mt-0.5 shrink-0" />
+                        <span className="text-muted-foreground">
+                          Scheduling is a preview feature. Emails will be queued for demonstration purposes. 
+                          Full scheduling requires backend cron job infrastructure.
+                        </span>
+                      </div>
                     </>
                   )}
-                </Button>
+                </div>
+
+                {/* Send/Schedule Buttons */}
+                <div className="space-y-2">
+                  {isScheduled ? (
+                    <Button
+                      className="w-full"
+                      onClick={() => {
+                        if (!scheduledDate || !scheduledTime) {
+                          toast({
+                            title: 'Missing schedule',
+                            description: 'Please select both date and time for scheduling',
+                            variant: 'destructive',
+                          });
+                          return;
+                        }
+                        const scheduledDateTime = new Date(`${scheduledDate}T${scheduledTime}`);
+                        toast({
+                          title: 'Email Queued (Preview)',
+                          description: `Email to ${selectedUsers.length} user(s) queued for ${format(scheduledDateTime, 'PPP')} at ${format(scheduledDateTime, 'p')}. Note: Full scheduling requires backend infrastructure.`,
+                        });
+                        setIsScheduled(false);
+                        setScheduledDate('');
+                        setScheduledTime('');
+                        setSelectedUsers([]);
+                        setComposeSubject('');
+                        setComposeMessage('');
+                      }}
+                      disabled={selectedUsers.length === 0 || !composeSubject || !composeMessage}
+                      data-testid="button-schedule-email"
+                    >
+                      <Calendar className="h-4 w-4 mr-2" />
+                      Schedule for {selectedUsers.length} user(s)
+                    </Button>
+                  ) : (
+                    <Button
+                      className="w-full"
+                      onClick={sendBulkEmail}
+                      disabled={sendingEmail || selectedUsers.length === 0}
+                      data-testid="button-send-email"
+                    >
+                      {sendingEmail ? (
+                        <>
+                          <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                          Sending to {selectedUsers.length} user(s)...
+                        </>
+                      ) : (
+                        <>
+                          <Send className="h-4 w-4 mr-2" />
+                          Send Now to {selectedUsers.length} user(s)
+                        </>
+                      )}
+                    </Button>
+                  )}
+                  
+                  {/* Broadcast Info */}
+                  <div className="flex items-center gap-2 p-2 rounded bg-muted/50 text-xs text-muted-foreground">
+                    <Users className="h-3 w-3" />
+                    <span>Each recipient will receive a personalized email with their name</span>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </div>
         </TabsContent>
       </Tabs>
 
-      {/* Template Preview Dialog */}
+      {/* Template Preview Dialog - Enhanced */}
       <Dialog open={!!selectedTemplate} onOpenChange={() => setSelectedTemplate(null)}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{selectedTemplate?.name}</DialogTitle>
-            <DialogDescription>Template preview</DialogDescription>
+            <DialogTitle className="flex items-center gap-2">
+              <Eye className="h-5 w-5" />
+              {selectedTemplate?.name}
+            </DialogTitle>
+            <DialogDescription>Preview and test your email template</DialogDescription>
           </DialogHeader>
           {selectedTemplate && (
             <div className="space-y-4">
+              {/* Preview Mode Toggle */}
+              <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-primary" />
+                  <div>
+                    <p className="text-sm font-medium">Preview with Sample Data</p>
+                    <p className="text-xs text-muted-foreground">Replace variables with realistic example values</p>
+                  </div>
+                </div>
+                <Switch
+                  checked={previewWithSampleData}
+                  onCheckedChange={setPreviewWithSampleData}
+                  data-testid="switch-preview-sample-data"
+                />
+              </div>
+
+              {/* Subject */}
               <div>
                 <Label className="text-muted-foreground">Subject</Label>
-                <p className="font-medium">{selectedTemplate.subject}</p>
+                <p className="font-medium mt-1">
+                  {previewWithSampleData 
+                    ? replaceVariables(selectedTemplate.subject, getSampleData())
+                    : selectedTemplate.subject}
+                </p>
               </div>
+
+              {/* Variables */}
               <div>
-                <Label className="text-muted-foreground">Variables</Label>
+                <Label className="text-muted-foreground">Variables Used</Label>
                 <div className="flex gap-2 flex-wrap mt-1">
-                  {selectedTemplate.variables.map(v => (
-                    <Badge key={v} variant="outline">{`{{${v}}}`}</Badge>
-                  ))}
+                  {selectedTemplate.variables.length > 0 ? (
+                    selectedTemplate.variables.map(v => (
+                      <Badge key={v} variant="outline">{`{{${v}}}`}</Badge>
+                    ))
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No variables in this template</p>
+                  )}
                 </div>
               </div>
+
+              {/* HTML Content Preview */}
               <div>
-                <Label className="text-muted-foreground">HTML Content</Label>
+                <div className="flex items-center justify-between mb-2">
+                  <Label className="text-muted-foreground">Email Preview</Label>
+                  <Badge variant="secondary" className="text-xs">
+                    {previewWithSampleData ? 'With Sample Data' : 'Raw Template'}
+                  </Badge>
+                </div>
                 <div 
-                  className="mt-2 p-4 rounded-lg border bg-white dark:bg-gray-900 max-h-[300px] overflow-auto"
-                  dangerouslySetInnerHTML={{ __html: selectedTemplate.htmlContent }}
+                  className="p-4 rounded-lg border bg-white dark:bg-gray-900 max-h-[300px] overflow-auto"
+                  dangerouslySetInnerHTML={{ 
+                    __html: previewWithSampleData 
+                      ? replaceVariables(selectedTemplate.htmlContent, getSampleData())
+                      : selectedTemplate.htmlContent 
+                  }}
                 />
+              </div>
+
+              {/* Send Test Email */}
+              <div className="p-4 rounded-lg border bg-muted/30 space-y-3">
+                <div className="flex items-center gap-2">
+                  <TestTube className="h-4 w-4 text-primary" />
+                  <Label className="font-medium">Send Test Email</Label>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Send this template with sample data to verify it looks correct
+                </p>
+                <div className="flex gap-2 flex-wrap">
+                  <Input
+                    placeholder="Enter test email address..."
+                    value={templateTestEmail}
+                    onChange={(e) => setTemplateTestEmail(e.target.value)}
+                    className="flex-1 min-w-[200px]"
+                    data-testid="input-template-test-email"
+                  />
+                  <Button
+                    onClick={sendTestTemplateEmail}
+                    disabled={sendingTestEmail || smtpStatus !== 'configured'}
+                    data-testid="button-send-test-template"
+                  >
+                    {sendingTestEmail ? (
+                      <>
+                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                        Sending...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="h-4 w-4 mr-2" />
+                        Send Test
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
             </div>
           )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSelectedTemplate(null)}>
+              Close
+            </Button>
+            <Button onClick={() => {
+              if (selectedTemplate) {
+                handleEditTemplate(selectedTemplate);
+                setSelectedTemplate(null);
+              }
+            }} data-testid="button-edit-from-preview">
+              <Edit className="h-4 w-4 mr-2" />
+              Edit Template
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
