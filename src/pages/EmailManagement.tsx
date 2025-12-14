@@ -545,6 +545,8 @@ const defaultTemplates: EmailTemplate[] = [
 ];
 
 const TEMPLATES_STORAGE_KEY = 'pact_email_templates';
+const TEMPLATES_VERSION_KEY = 'pact_email_templates_version';
+const CURRENT_TEMPLATES_VERSION = '2.0-bilingual';
 
 export default function EmailManagement() {
   const navigate = useNavigate();
@@ -571,12 +573,28 @@ export default function EmailManagement() {
   const [userSearch, setUserSearch] = useState('');
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
 
-  // Load templates from localStorage
+  // Load templates from localStorage with version check
   useEffect(() => {
+    const storedVersion = localStorage.getItem(TEMPLATES_VERSION_KEY);
+    
+    // If version doesn't match, reset to new bilingual templates
+    if (storedVersion !== CURRENT_TEMPLATES_VERSION) {
+      setTemplates(defaultTemplates);
+      localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(defaultTemplates));
+      localStorage.setItem(TEMPLATES_VERSION_KEY, CURRENT_TEMPLATES_VERSION);
+      return;
+    }
+    
     const stored = localStorage.getItem(TEMPLATES_STORAGE_KEY);
     if (stored) {
       try {
-        setTemplates(JSON.parse(stored));
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setTemplates(parsed);
+        } else {
+          setTemplates(defaultTemplates);
+          localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(defaultTemplates));
+        }
       } catch {
         setTemplates(defaultTemplates);
         localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(defaultTemplates));
