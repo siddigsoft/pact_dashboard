@@ -151,8 +151,9 @@ export const NotificationTriggerService = {
 
       console.log(`[NOTIFICATION] Successfully inserted notification with id:`, data?.[0]?.id);
 
-      // Send email for high priority or explicit email requests
-      const shouldSendEmail = sendEmail || priority === 'urgent' || priority === 'high';
+      // Send email for all notifications by default (unless explicitly disabled)
+      // All field operations notifications are important and should trigger emails
+      const shouldSendEmail = sendEmail !== false; // Send email unless explicitly set to false
       console.log(`[NOTIFICATION] Should send email: ${shouldSendEmail} (sendEmail=${sendEmail}, priority=${priority})`);
       
       if (shouldSendEmail) {
