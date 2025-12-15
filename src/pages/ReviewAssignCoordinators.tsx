@@ -352,8 +352,7 @@ const ReviewAssignCoordinators: React.FC = () => {
 
       await insertNotifications(notifications);
       
-      // Refresh MMP context to reflect changes
-      await refreshMMPFiles();
+      // Removed: await refreshMMPFiles(); // To prevent page reload on hosted app
 
       toast({ title: 'Batch Forwarded', description: `Sites were forwarded to ${allCoordinators.find(c => c.id === coordinatorId)?.fullName || 'Coordinator'}${attachStatePermitMap[groupKey] ? ' with state permit attached' : ''}${supervisorId ? ` and notified ${allSupervisors.find(s => s.id === supervisorId)?.fullName || 'Supervisor'}` : ''}.`, variant: 'default' });
       
