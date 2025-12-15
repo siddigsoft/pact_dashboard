@@ -1031,6 +1031,116 @@ export const NotificationTriggerService = {
   },
 
   /**
+   * Notify supervisors, FOMs, admins, and super admins when a site is verified by a coordinator
+   * - Sends in-app notification to all hub management users
+   * - Sends bilingual email with role-based personalized greetings
+   */
+  async siteVerifiedByCoordinator(
+    hubId: string,
+    siteName: string,
+    mmpName: string,
+    coordinatorName: string,
+    siteId?: string
+  ): Promise<number> {
+    try {
+      let successCount = 0;
+
+      // 1. Get hub management users (supervisors, FOMs, admins)
+      const managementUsers = await this.getHubManagementUsers(hubId);
+      
+      // 2. Send in-app notifications and bilingual emails to all management users
+      for (const user of managementUsers) {
+        const sent = await this.send({
+          userId: user.id,
+          title: 'Site Verified by Coordinator',
+          message: `Site "${siteName}" from MMP "${mmpName}" has been verified by Coordinator ${coordinatorName}`,
+          type: 'success',
+          category: 'assignments',
+          priority: 'medium',
+          link: siteId ? `/mmp?site=${siteId}` : '/mmp',
+          relatedEntityId: siteId,
+          relatedEntityType: 'siteVisit',
+          sendEmail: false // We send bilingual email separately
+        });
+        if (sent) successCount++;
+
+        // Send bilingual email with role-based greeting
+        if (user.email) {
+          try {
+            const roleInfo = formatRoleName(user.role);
+            await EmailNotificationService.sendSiteVerifiedByCoordinator(
+              user.email,
+              user.full_name || 'Team Member',
+              siteName,
+              mmpName,
+              coordinatorName,
+              siteId,
+              roleInfo
+            );
+            console.log(`[NOTIFICATION] Sent bilingual Site Verified email to ${roleInfo.en}: ${user.email}`);
+          } catch (emailError) {
+            console.error(`[NOTIFICATION] Failed to send bilingual email to ${user.email}:`, emailError);
+          }
+        }
+      }
+
+      // 3. Also notify Admins and Super Admins who may not be in the hub
+      const { data: adminUsers, error: adminError } = await supabase
+        .from('profiles')
+        .select('id, full_name, email, role')
+        .in('role', ['admin', 'super_admin', 'Admin', 'SuperAdmin']);
+
+      if (adminError) {
+        console.error('Error fetching admins for Site Verified notification:', adminError);
+      } else if (adminUsers && adminUsers.length > 0) {
+        // Filter out admins already notified via hub management
+        const notifiedIds = new Set(managementUsers.map(u => u.id));
+        const remainingAdmins = adminUsers.filter(a => !notifiedIds.has(a.id));
+
+        for (const admin of remainingAdmins) {
+          const sent = await this.send({
+            userId: admin.id,
+            title: 'Site Verified by Coordinator',
+            message: `Site "${siteName}" from MMP "${mmpName}" has been verified by Coordinator ${coordinatorName}`,
+            type: 'success',
+            category: 'assignments',
+            priority: 'medium',
+            link: siteId ? `/mmp?site=${siteId}` : '/mmp',
+            relatedEntityId: siteId,
+            relatedEntityType: 'siteVisit',
+            sendEmail: false
+          });
+          if (sent) successCount++;
+
+          // Send bilingual email with role-based greeting
+          if (admin.email) {
+            try {
+              const roleInfo = formatRoleName(admin.role);
+              await EmailNotificationService.sendSiteVerifiedByCoordinator(
+                admin.email,
+                admin.full_name || 'Administrator',
+                siteName,
+                mmpName,
+                coordinatorName,
+                siteId,
+                roleInfo
+              );
+              console.log(`[NOTIFICATION] Sent bilingual Site Verified email to ${roleInfo.en}: ${admin.email}`);
+            } catch (emailError) {
+              console.error(`[NOTIFICATION] Failed to send bilingual email to ${admin.email}:`, emailError);
+            }
+          }
+        }
+      }
+
+      return successCount;
+    } catch (error) {
+      console.error('Failed to send site verified notifications:', error);
+      return 0;
+    }
+  },
+
+  /**
    * Notify supervisor when sites are sent back to FOM
    */
   async siteReturnedToFOM(

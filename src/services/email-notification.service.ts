@@ -526,6 +526,124 @@ ${messageAr}
   },
 
   // ============================================
+  // TEMPLATE 6D: Site Verified by Coordinator - Bilingual
+  // ============================================
+  async sendSiteVerifiedByCoordinator(
+    email: string,
+    recipientName: string,
+    siteName: string,
+    mmpName: string,
+    coordinatorName: string,
+    siteId?: string,
+    recipientRole?: { en: string; ar: string }
+  ): Promise<EmailNotificationResult> {
+    const viewSiteUrl = siteId ? `${APP_URL}/mmp?site=${siteId}` : `${APP_URL}/mmp`;
+    
+    const titleEn = 'Site Verified by Coordinator';
+    const titleAr = 'تم التحقق من الموقع بواسطة المنسق';
+    
+    // Personalized greeting based on role
+    const roleEn = recipientRole?.en || 'Team Member';
+    const roleAr = recipientRole?.ar || 'عضو الفريق';
+    const greetingEn = `Dear ${recipientName} (${roleEn}),`;
+    const greetingAr = `عزيزي ${recipientName} (${roleAr})،`;
+    
+    const messageEn = `The site "${siteName}" from MMP "${mmpName}" has been verified by Coordinator ${coordinatorName}. The site is now ready for FOM review and approval.`;
+    const messageAr = `تم التحقق من الموقع "${siteName}" من خطة المراقبة الشهرية "${mmpName}" بواسطة المنسق ${coordinatorName}. الموقع جاهز الآن لمراجعة وموافقة مدير العمليات الميدانية.`;
+
+    const html = `
+      <!DOCTYPE html>
+      <html dir="ltr">
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${titleEn} | ${titleAr}</title>
+      </head>
+      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
+        <div style="background-color: white; border-radius: 8px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <div style="text-align: center; margin-bottom: 30px;">
+            <h1 style="color: #1a1a2e; margin: 0; font-size: 24px;">PACT Workflow Platform</h1>
+            <p style="color: #666; margin: 5px 0 0 0; font-size: 14px;">منصة باكت للعمليات الميدانية</p>
+          </div>
+          
+          <!-- English Section -->
+          <div style="margin-bottom: 25px; padding-bottom: 25px; border-bottom: 1px solid #eee;">
+            <p style="color: #333; font-size: 16px; line-height: 1.5;">${greetingEn}</p>
+            <p style="color: #333; font-size: 16px; line-height: 1.5;">${messageEn}</p>
+            
+            <div style="background-color: #e8f5e9; border-left: 4px solid #4caf50; border-radius: 4px; padding: 16px; margin: 20px 0;">
+              <p style="margin: 0; color: #333;"><strong>Site Name:</strong> ${siteName}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>MMP Name:</strong> ${mmpName}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>Verified By:</strong> ${coordinatorName}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>Status:</strong> <span style="color: #4caf50; font-weight: bold;">Verified</span></p>
+            </div>
+          </div>
+          
+          <!-- Arabic Section -->
+          <div dir="rtl" style="margin-top: 25px; padding-top: 25px; border-top: 1px solid #eee; text-align: right;">
+            <p style="color: #333; font-size: 16px; line-height: 1.8;">${greetingAr}</p>
+            <p style="color: #333; font-size: 16px; line-height: 1.8;">${messageAr}</p>
+            
+            <div style="background-color: #e8f5e9; border-right: 4px solid #4caf50; border-radius: 4px; padding: 16px; margin: 20px 0;">
+              <p style="margin: 0; color: #333;"><strong>اسم الموقع:</strong> ${siteName}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>اسم خطة المراقبة الشهرية:</strong> ${mmpName}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>تم التحقق بواسطة:</strong> ${coordinatorName}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>الحالة:</strong> <span style="color: #4caf50; font-weight: bold;">تم التحقق</span></p>
+            </div>
+          </div>
+          
+          <div style="text-align: center; margin: 25px 0;">
+            <a href="${viewSiteUrl}" style="display: inline-block; padding: 14px 30px; background-color: #4caf50; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
+              View Site | عرض الموقع
+            </a>
+          </div>
+          
+          <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+          <p style="color: #999; font-size: 12px; text-align: center;">
+            This is an automated message from PACT Workflow Platform.<br>
+            هذه رسالة آلية من منصة باكت للعمليات الميدانية.<br>
+            ICT Team - PACT Command Center Platform<br>
+            فريق تكنولوجيا المعلومات - منصة مركز قيادة باكت
+          </p>
+        </div>
+      </body>
+      </html>
+    `;
+    
+    const text = `${greetingEn}
+
+${messageEn}
+
+Site Name: ${siteName}
+MMP Name: ${mmpName}
+Verified By: ${coordinatorName}
+Status: Verified
+
+View Site: ${viewSiteUrl}
+
+---
+
+${greetingAr}
+
+${messageAr}
+
+اسم الموقع: ${siteName}
+اسم خطة المراقبة الشهرية: ${mmpName}
+تم التحقق بواسطة: ${coordinatorName}
+الحالة: تم التحقق
+
+- PACT Workflow Platform | منصة باكت`;
+
+    return this.sendEmail({
+      to: email,
+      subject: `${titleEn} | ${titleAr}`,
+      recipientName,
+      html,
+      text,
+    });
+  },
+
+  // ============================================
   // TEMPLATE 7: Site Assignment
   // ============================================
   async sendSiteAssignment(
