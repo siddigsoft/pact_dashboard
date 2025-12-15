@@ -76,23 +76,39 @@ This is a **caching and routing issue**:
 
 ### Solutions
 
-#### Solution 1: Fix Vercel Routing (Recommended)
-Update `vercel.json` to exclude static assets from the catch-all rewrite:
+#### Solution 1: Fix Web Server Configuration (VPS Deployment)
 
-```json
-{
-  "rewrites": [
-    {
-      "source": "/(js|assets|css|images|fonts|.*\\.(js|css|png|jpg|jpeg|gif|svg|woff|woff2|ttf|eot))",
-      "destination": "/$1"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
-  ]
-}
-```
+Since you're deploying on your own VPS, you need to configure your web server (Nginx or Apache) to properly serve static assets.
+
+**For Nginx:**
+1. Use the provided `nginx.conf` file
+2. Update the paths to match your VPS setup:
+   ```bash
+   sudo nano /etc/nginx/sites-available/your-app
+   # Copy contents from nginx.conf and update paths
+   ```
+3. Enable the site:
+   ```bash
+   sudo ln -s /etc/nginx/sites-available/your-app /etc/nginx/sites-enabled/
+   sudo nginx -t  # Test configuration
+   sudo systemctl reload nginx
+   ```
+
+**For Apache:**
+1. Copy the `.htaccess` file to your `dist/` directory on the VPS
+2. Ensure mod_rewrite is enabled:
+   ```bash
+   sudo a2enmod rewrite
+   sudo systemctl restart apache2
+   ```
+3. Update your Apache virtual host to allow .htaccess:
+   ```apache
+   <Directory /var/www/your-app/dist>
+       Options Indexes FollowSymLinks
+       AllowOverride All
+       Require all granted
+   </Directory>
+   ```
 
 #### Solution 2: Clear Browser Cache
 1. **Hard Refresh**: Press `Ctrl+Shift+R` (Windows/Linux) or `Cmd+Shift+R` (Mac)
@@ -133,47 +149,51 @@ self.addEventListener('activate', (event) => {
 ### Step 1: Apply Database Migration
 Run the `app_versions` migration on your Supabase database (see Solution 1 above).
 
-### Step 2: Fix Vercel Routing
-Update `vercel.json` to properly handle static assets:
+### Step 2: Configure Web Server on VPS
 
-```json
-{
-  "rewrites": [
-    {
-      "source": "/js/:path*",
-      "destination": "/js/:path*"
-    },
-    {
-      "source": "/assets/:path*",
-      "destination": "/assets/:path*"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
-    }
-  ],
-  "headers": [
-    {
-      "source": "/js/(.*)",
-      "headers": [
-        {
-          "key": "Content-Type",
-          "value": "application/javascript"
-        },
-        {
-          "key": "Cache-Control",
-          "value": "public, max-age=31536000, immutable"
-        }
-      ]
-    }
-  ]
-}
-```
+**If using Nginx:**
+1. Copy `nginx.conf` to your server:
+   ```bash
+   sudo cp nginx.conf /etc/nginx/sites-available/your-app-name
+   ```
+2. Edit the file and update:
+   - `server_name` with your domain or IP
+   - `root` path to point to your `dist` directory
+   - All `/var/www/your-app/dist` paths to match your actual deployment path
+3. Test and reload:
+   ```bash
+   sudo nginx -t
+   sudo ln -s /etc/nginx/sites-available/your-app-name /etc/nginx/sites-enabled/
+   sudo systemctl reload nginx
+   ```
 
-### Step 3: Rebuild and Redeploy
+**If using Apache:**
+1. Copy `.htaccess` to your `dist/` directory on the VPS
+2. Ensure mod_rewrite and mod_headers are enabled:
+   ```bash
+   sudo a2enmod rewrite headers expires
+   sudo systemctl restart apache2
+   ```
+3. Update your virtual host configuration to allow .htaccess overrides
+
+### Step 3: Rebuild and Deploy to VPS
 ```bash
+# Build the project
 npm run build
-# Then deploy to Vercel
+
+# Copy dist folder to your VPS (using scp, rsync, or your preferred method)
+# Example with rsync:
+rsync -avz --delete dist/ user@your-vps-ip:/var/www/your-app/dist/
+
+# Or with scp:
+scp -r dist/* user@your-vps-ip:/var/www/your-app/dist/
+
+# Then reload your web server
+# For Nginx:
+ssh user@your-vps-ip "sudo systemctl reload nginx"
+
+# For Apache:
+ssh user@your-vps-ip "sudo systemctl reload apache2"
 ```
 
 ### Step 4: Clear Browser Cache
@@ -184,10 +204,12 @@ After deployment, users should clear their browser cache or do a hard refresh.
 ## Prevention
 
 1. **Always run migrations** before deploying code that uses new tables
-2. **Use proper routing** that excludes static assets from SPA fallback
-3. **Implement cache invalidation** in service workers
-4. **Use versioned builds** with hash-based filenames (already implemented)
-5. **Test after deployment** to ensure all assets load correctly
+2. **Configure web server properly** to serve static assets with correct MIME types before SPA fallback
+3. **Test server configuration** with `nginx -t` or `apache2ctl configtest` before reloading
+4. **Implement cache invalidation** in service workers
+5. **Use versioned builds** with hash-based filenames (already implemented)
+6. **Test after deployment** to ensure all assets load correctly
+7. **Monitor error logs** on your VPS: `/var/log/nginx/error.log` or `/var/log/apache2/error.log`
 
 ---
 
