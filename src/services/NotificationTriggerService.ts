@@ -1107,7 +1107,7 @@ export const NotificationTriggerService = {
           link: siteId ? `/mmp?site=${siteId}` : '/mmp',
           relatedEntityId: siteId,
           relatedEntityType: 'siteVisit',
-          sendEmail: false // We send bilingual email separately
+          sendEmail: false
         });
         if (sent) successCount++;
 
