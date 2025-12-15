@@ -262,8 +262,19 @@ const Auth = () => {
                     </TabsContent>
                   </Tabs>
                 ) : (
-                  <div data-testid="content-signup">
+                  <div className="space-y-4" data-testid="content-signup">
                     <AuthForm mode="signup" />
+                    <div className="text-center text-sm text-muted-foreground">
+                      <span>Already have an account? </span>
+                      <button
+                        type="button"
+                        onClick={() => navigate("/auth")}
+                        className="text-primary font-semibold hover:underline"
+                        data-testid="link-signin-from-signup"
+                      >
+                        Sign in
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
