@@ -107,82 +107,38 @@ export const NotificationTriggerService = {
     }
 
     try {
-      // Map to actual database schema columns
-      // Schema columns: id, event_type, entity_type, entity_id, priority, status, recipient_id,
-      // recipient_email, recipient_role, title_en, title_ar, message_en, message_ar, triggered_by,
-      // triggered_by_name, workflow_stage, action_url, metadata, email_sent, email_sent_at,
-      // email_error, read_at, created_at, updated_at, user_id, is_read, type, title, message,
-      // link, related_entity_id, related_entity_type
-      const notificationData = {
-        // Primary fields (used by usePersistentNotifications for mobile app and web UI)
-        recipient_id: userId,
-        title_en: title,
-        title_ar: title, // Same content for now, can be localized later
-        message_en: message,
-        message_ar: message, // Same content for now, can be localized later
-        status: 'pending' as const,
-        event_type: category || 'system', // category maps to event_type in DB
-        entity_type: relatedEntityType || null,
-        entity_id: relatedEntityId || null,
-        action_url: link || null,
-        // Legacy fields (for backward compatibility with old NotificationContext)
-        user_id: userId,
-        title: title,
-        message: message,
-        type: type,
-        link: link,
-        related_entity_id: relatedEntityId,
-        related_entity_type: relatedEntityType,
-        is_read: false,
-        // Common fields
+      // Use dispatch-notification edge function to bypass RLS
+      // The edge function uses the service role key and handles both DB insert and email
+      const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://app.pactorg.com';
+      const actionUrl = emailActionUrl || (link ? `${baseUrl}${link}` : undefined);
+      
+      const payload = {
+        event_type: category || 'system',
+        entity_type: relatedEntityType || undefined,
+        entity_id: relatedEntityId || undefined,
         priority: priority === 'urgent' ? 'urgent' : priority === 'high' ? 'high' : 'normal',
-        email_sent: false,
-        created_at: new Date().toISOString()
+        recipient_ids: [userId],
+        title_en: title,
+        title_ar: title,
+        message_en: message,
+        message_ar: message,
+        action_url: actionUrl,
+        send_email: sendEmail !== false // Send email by default
       };
 
-      console.log(`[NOTIFICATION] Inserting into database:`, JSON.stringify(notificationData));
+      console.log(`[NOTIFICATION] Calling dispatch-notification edge function:`, JSON.stringify(payload));
 
-      const { data, error } = await supabase.from('notifications').insert(notificationData).select('id');
+      const { data, error } = await supabase.functions.invoke('dispatch-notification', {
+        body: payload
+      });
 
       if (error) {
-        console.error('[NOTIFICATION] Failed to create notification:', error);
+        console.error('[NOTIFICATION] Edge function error:', error);
         return false;
       }
 
-      console.log(`[NOTIFICATION] Successfully inserted notification with id:`, data?.[0]?.id);
-
-      // Send email for all notifications by default (unless explicitly disabled)
-      // All field operations notifications are important and should trigger emails
-      const shouldSendEmail = sendEmail !== false; // Send email unless explicitly set to false
-      console.log(`[NOTIFICATION] Should send email: ${shouldSendEmail} (sendEmail=${sendEmail}, priority=${priority})`);
-      
-      if (shouldSendEmail) {
-        try {
-          const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://app.pactorg.com';
-          console.log(`[NOTIFICATION] Sending email to user ${userId}`);
-          const emailResult = await EmailNotificationService.sendToUser(userId, {
-            title,
-            message,
-            type,
-            actionUrl: emailActionUrl || (link ? `${baseUrl}${link}` : undefined),
-            actionLabel: emailActionLabel || 'View Details'
-          });
-          console.log(`[NOTIFICATION] Email result:`, emailResult);
-          
-          // Update notification with email status
-          if (data?.[0]?.id) {
-            await supabase.from('notifications').update({
-              email_sent: emailResult.success,
-              email_sent_at: emailResult.success ? new Date().toISOString() : null,
-              email_error: emailResult.error || null
-            }).eq('id', data[0].id);
-          }
-        } catch (emailError) {
-          console.error('[NOTIFICATION] Failed to send email notification:', emailError);
-        }
-      }
-
-      return true;
+      console.log(`[NOTIFICATION] Edge function response:`, data);
+      return data?.success === true;
     } catch (error) {
       console.error('[NOTIFICATION] Error sending notification:', error);
       return false;
