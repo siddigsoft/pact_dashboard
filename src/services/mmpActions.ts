@@ -117,15 +117,20 @@ export async function forwardSitesToCoordinator(opts: {
     })
     .in('id', siteEntryIds);
 
-  if (updateError && updateError.code !== 'PGRST100') {
+  if (updateError) {
+    console.error('Batch update error:', updateError);
     // PGRST100 happens because we can't merge JSON easily via update; we'll do row-by-row fallback.
+    // For other errors, still try row-by-row as a fallback before giving up.
     const updates = siteEntryIds.map(async (id) => {
       const { data: existing, error: loadError } = await supabase
         .from('mmp_site_entries')
         .select('additional_data')
         .eq('id', id)
         .single();
-      if (loadError) throw loadError;
+      if (loadError) {
+        console.error(`Failed to load site entry ${id}:`, loadError);
+        throw loadError;
+      }
       const existingAD = existing?.additional_data || {};
       const nextAD = {
         ...existingAD,
@@ -155,7 +160,43 @@ export async function forwardSitesToCoordinator(opts: {
           additional_data: nextAD,
         })
         .eq('id', id);
-      if (rowUpdateError) throw rowUpdateError;
+      if (rowUpdateError) {
+        console.error(`Failed to update site entry ${id}:`, rowUpdateError);
+        throw rowUpdateError;
+      }
+    });
+    await Promise.all(updates);
+  } else {
+    // Batch update succeeded, but we still need to update additional_data for each entry
+    // since batch updates can't merge JSON fields
+    const updates = siteEntryIds.map(async (id) => {
+      const { data: existing, error: loadError } = await supabase
+        .from('mmp_site_entries')
+        .select('additional_data')
+        .eq('id', id)
+        .single();
+      if (loadError) return; // Skip if can't load
+      const existingAD = existing?.additional_data || {};
+      const nextAD = {
+        ...existingAD,
+        assigned_to: coordinatorId,
+        assigned_by: currentUserId || null,
+        assigned_at: forwardedAt,
+        supervisor_id: supervisorId || null,
+        notes: `Forwarded from MMP ${mmpName || mmpId || ''} for CP verification`,
+        ...(attachStatePermit
+          ? {
+              state_permit_attached: true,
+              state_permit_state_id: stateId,
+              state_permit_attached_at: forwardedAt,
+            }
+          : {}),
+      };
+
+      await supabase
+        .from('mmp_site_entries')
+        .update({ additional_data: nextAD })
+        .eq('id', id);
     });
     await Promise.all(updates);
   }
