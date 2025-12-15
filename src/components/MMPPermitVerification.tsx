@@ -154,8 +154,11 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
 
       // Helper: merge by id or fileName, ensuring no duplicates
       const mergeLists = (a: MMPStatePermitDocument[], b: MMPStatePermitDocument[]) => {
+        // Prefer fileUrl as the primary key (storage + persisted share the same URL), then id, then fileName
+        const keyOf = (d: MMPStatePermitDocument) =>
+          (d.fileUrl || d.id || d.fileName || '').toString();
+
         const aByKey = new Map<string, MMPStatePermitDocument>();
-        const keyOf = (d: MMPStatePermitDocument) => (d.id || d.fileName || '').toString();
         a.forEach(d => aByKey.set(keyOf(d), d));
         const out: MMPStatePermitDocument[] = [];
         // start with storage list (has correct URLs/paths)
@@ -179,7 +182,7 @@ const MMPPermitVerification: React.FC<MMPPermitVerificationProps> = ({
           const key = keyOf(pd);
           if (!aByKey.has(key)) out.push(pd);
         });
-        // Final deduplication by key to ensure no duplicates
+        // Final deduplication by key to ensure no duplicates even if ids differ
         const finalMap = new Map<string, MMPStatePermitDocument>();
         out.forEach(doc => finalMap.set(keyOf(doc), doc));
         return Array.from(finalMap.values());

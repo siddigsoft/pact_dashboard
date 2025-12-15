@@ -487,8 +487,8 @@ export function AcceptSiteButton({
       </Button>
 
       <Dialog open={showConfirmation} onOpenChange={setShowConfirmation}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-lg max-h-[75vh] overflow-hidden p-0 flex flex-col">
+          <DialogHeader className="px-6 pt-6">
             <DialogTitle className="flex items-center gap-2">
               <Wallet className="h-5 w-5 text-primary" />
               {dialogTitle}
@@ -501,7 +501,7 @@ export function AcceptSiteButton({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-4">
+          <div className="flex-1 overflow-y-auto px-6 pb-4 space-y-4">
             <div className="bg-muted/50 rounded-lg p-4 space-y-3">
               <div className="flex items-start gap-3">
                 <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />
@@ -531,7 +531,7 @@ export function AcceptSiteButton({
                 </div>
               )}
             </div>
-
+            
             {feeBreakdown && (
               <>
                 {canSeeBreakdown ? (
@@ -629,7 +629,7 @@ export function AcceptSiteButton({
             )}
           </div>
 
-          <DialogFooter className="gap-2 sm:gap-0">
+          <DialogFooter className="gap-2 sm:gap-0 px-6 pb-6">
             <Button
               variant="outline"
               onClick={() => setShowConfirmation(false)}

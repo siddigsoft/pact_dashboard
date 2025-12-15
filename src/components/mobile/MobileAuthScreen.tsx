@@ -617,7 +617,7 @@ export function MobileAuthScreen({ onAuthSuccess }: MobileAuthScreenProps) {
                 className="w-full h-11 text-sm font-semibold rounded-full gap-2 border-black/20 dark:border-white/20 mt-3"
                 onClick={() => {
                   hapticPresets.buttonPress();
-                  navigate('/register');
+                  navigate('/auth?view=signup&tab=signup');
                 }}
                 data-testid="button-mobile-signup"
               >
