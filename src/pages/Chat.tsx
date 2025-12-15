@@ -31,6 +31,7 @@ import {
   Clapperboard
 } from 'lucide-react';
 import { JitsiCallModal } from '@/components/calls/JitsiCallModal';
+import { RealtimeStatusDot } from '@/components/realtime/RealtimeBanner';
 
 const Chat: React.FC = () => {
   const { currentUser } = useAppContext();
@@ -329,7 +330,10 @@ const Chat: React.FC = () => {
                   </button>
                 </div>
               </div>
-              <h1 className="text-xl font-bold text-white tracking-tight">Messages</h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl font-bold text-white tracking-tight">Messages</h1>
+                <RealtimeStatusDot className="h-2.5 w-2.5" />
+              </div>
               <p className="text-white/60 text-xs">
                 {activeTab === 'conversations' ? `${filteredChats.length} conversations` : `${filteredUsers.length} contacts`}
               </p>
@@ -625,7 +629,10 @@ const Chat: React.FC = () => {
         {/* Header with Search */}
         <div className="p-4 border-b border-gray-200 dark:border-gray-800">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg font-semibold text-black dark:text-white">Messages</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-semibold text-black dark:text-white">Messages</h2>
+              <RealtimeStatusDot className="h-2.5 w-2.5" />
+            </div>
             <button 
               onClick={() => setActiveTab('contacts')}
               className="w-8 h-8 rounded-full bg-black dark:bg-white text-white dark:text-black flex items-center justify-center hover:opacity-90 transition-opacity"

@@ -18,6 +18,8 @@ import { useNotifications } from '@/context/notifications/NotificationContext';
 import ChatNotificationIndicator from '@/components/chat/ChatNotificationIndicator';
 import NavBrand from './navbar/NavBrand';
 import { GlobalSearch } from './navbar/GlobalSearch';
+import { RealtimeActivityIndicator } from '@/components/realtime';
+import { useFocusReconnect } from '@/hooks/useFocusReconnect';
 
 const featureList = [
         { name: 'Dashboard', path: '/dashboard' },
@@ -55,6 +57,9 @@ const Navbar = () => {
         const [globalSearch, setGlobalSearch] = useState('');
         const [showDropdown, setShowDropdown] = useState(false);
 
+        // Auto-reconnect when window regains focus
+        useFocusReconnect();
+
         const filteredFeatures = globalSearch
                 ? featureList.filter(f =>
                                 f.name.toLowerCase().includes(globalSearch.trim().toLowerCase())
@@ -90,6 +95,13 @@ const Navbar = () => {
                         </div>
 
                         <div className="ml-auto flex items-center gap-1 sm:gap-2 flex-wrap sm:flex-nowrap justify-end">
+                                {/* Realtime Status */}
+                                <RealtimeActivityIndicator 
+                                        variant="pulse" 
+                                        size="sm" 
+                                        showTooltip={true}
+                                />
+
                                 {/* Theme Toggle */}
                                 <Button
                                         variant="ghost"

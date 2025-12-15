@@ -20,10 +20,8 @@ import { fetchHubs } from '@/services/mmpActions';
 import { supabase } from '@/integrations/supabase/client';
 import { sudanStates } from '@/data/sudanStates';
 import { format, parseISO } from 'date-fns';
-import { saveAs } from 'file-saver';
-import { jsPDF } from 'jspdf';
-import 'jspdf-autotable';
-import * as XLSX from 'xlsx';
+// Dynamic imports for heavy export libraries (loaded on-demand to improve initial page load)
+// saveAs, jsPDF, and XLSX are dynamically imported when needed
 import {
   TrackerLineItem,
   TrackerSummary,
@@ -462,7 +460,10 @@ export default function TrackerPreparationPlan() {
     toast({ title: 'Configuration Loaded', description: `Loaded: ${config.name}` });
   };
 
-  const exportToExcel = () => {
+  const exportToExcel = async () => {
+    // Dynamic import for XLSX (reduces initial bundle size)
+    const XLSX = await import('xlsx');
+    
     const summaryData = [
       ['TRACKER PREPARATION PLAN - PLANNED VS ACTUAL COVERAGE REPORT'],
       [''],
@@ -575,7 +576,11 @@ export default function TrackerPreparationPlan() {
     toast({ title: 'Export Complete', description: `Downloaded: ${fileName}` });
   };
 
-  const exportToPDF = () => {
+  const exportToPDF = async () => {
+    // Dynamic import for jsPDF (reduces initial bundle size)
+    const { jsPDF } = await import('jspdf');
+    await import('jspdf-autotable');
+    
     const doc = new jsPDF('landscape');
     const pageWidth = doc.internal.pageSize.getWidth();
     

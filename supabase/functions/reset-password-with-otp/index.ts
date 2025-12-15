@@ -42,17 +42,39 @@ serve(async (req) => {
       auth: { autoRefreshToken: false, persistSession: false }
     })
 
-    // Verify the OTP first
-    const { data: storedToken, error: tokenError } = await supabase
+    console.log(`Password reset attempt for email: ${email.toLowerCase()}, OTP provided: ${otp}`)
+
+    // Verify the OTP first - get the latest unused token for this email
+    const { data: storedTokens, error: tokenError } = await supabase
       .from('password_reset_tokens')
       .select('*')
       .eq('email', email.toLowerCase())
       .eq('used', false)
-      .maybeSingle()
+      .order('created_at', { ascending: false })
+      .limit(1)
+    
+    const storedToken = storedTokens?.[0] || null
 
-    if (tokenError || !storedToken) {
+    console.log('Token lookup result:', { storedToken, tokenError })
+
+    if (tokenError) {
+      console.error('Token lookup error:', tokenError)
       return new Response(
-        JSON.stringify({ success: false, error: 'No valid reset code found. Please request a new one.' }),
+        JSON.stringify({ success: false, error: 'Database error. Please try again.' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      )
+    }
+
+    if (!storedToken) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'No reset code found for this email. Please request a new one.' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+      )
+    }
+
+    if (storedToken.used) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'This reset code has already been used. Please request a new one.' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
       )
     }
@@ -72,28 +94,35 @@ serve(async (req) => {
       )
     }
 
-    // Find the user by email
-    const { data: users, error: userLookupError } = await supabase.auth.admin.listUsers()
+    // Find the user by email using profiles table (more reliable than listUsers pagination)
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('email', email.toLowerCase())
+      .maybeSingle()
     
-    if (userLookupError) {
-      console.error('User lookup error:', userLookupError)
+    console.log('Profile lookup result:', { profile, profileError })
+
+    if (profileError) {
+      console.error('Profile lookup error:', profileError)
       return new Response(
         JSON.stringify({ success: false, error: 'Could not find user account.' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
       )
     }
 
-    const targetUser = users.users.find(u => u.email?.toLowerCase() === email.toLowerCase())
-    
-    if (!targetUser) {
+    if (!profile) {
+      console.error('No profile found for email:', email.toLowerCase())
       return new Response(
         JSON.stringify({ success: false, error: 'No account found with this email.' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
       )
     }
 
-    // Update the password
-    const { error: updateError } = await supabase.auth.admin.updateUserById(targetUser.id, {
+    console.log('Found user ID:', profile.id, 'Updating password...')
+
+    // Update the password using the user ID from profiles
+    const { error: updateError } = await supabase.auth.admin.updateUserById(profile.id, {
       password: newPassword
     })
 
@@ -119,7 +148,7 @@ serve(async (req) => {
         entity_name: email,
         description: `Password reset completed for ${email}`,
         success: true,
-        actor_id: targetUser.id,
+        actor_id: profile.id,
         actor_name: email,
         metadata: {
           method: 'otp_verification',
