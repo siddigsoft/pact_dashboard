@@ -8,7 +8,6 @@ import { ProjectProvider } from './project/ProjectContext';
 import { ChatProvider } from './chat/ChatContextSupabase';
 import { CommunicationProvider } from './communications/CommunicationContext';
 import { CallProvider } from './communications/CallContext';
-import { NavigationProvider } from './NavigationContext';
 import { ViewModeProvider } from './ViewModeContext';
 import { ArchiveProvider } from './archive/ArchiveContext';
 import { SettingsProvider } from './settings/SettingsContext';
@@ -142,10 +141,9 @@ const CompositeContextProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
 export const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   return (
-    <NavigationProvider>
-      <ViewModeProvider>
-        <SyncStatusProvider>
-          <NotificationProvider>
+    <ViewModeProvider>
+      <SyncStatusProvider>
+        <NotificationProvider>
           <UserProvider>
             <ClassificationProvider>
               <WalletProvider>
@@ -163,18 +161,18 @@ export const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children
                                       <AuditProvider>
                                         <ApprovalProvider>
                                           <ActiveVisitProvider>
-                                          <ChatProvider>
-                                          <CallProvider>
-                                            <CommunicationProvider>
-                                              <GlobalPresenceProvider>
-                                                <BrowserNotificationListener />
-                                                <GlobalCallOverlay />
-                                                <MobilePushNotificationOverlay />
-                                                {children}
-                                              </GlobalPresenceProvider>
-                                            </CommunicationProvider>
-                                          </CallProvider>
-                                        </ChatProvider>
+                                            <ChatProvider>
+                                              <CallProvider>
+                                                <CommunicationProvider>
+                                                  <GlobalPresenceProvider>
+                                                    <BrowserNotificationListener />
+                                                    <GlobalCallOverlay />
+                                                    <MobilePushNotificationOverlay />
+                                                    {children}
+                                                  </GlobalPresenceProvider>
+                                                </CommunicationProvider>
+                                              </CallProvider>
+                                            </ChatProvider>
                                           </ActiveVisitProvider>
                                         </ApprovalProvider>
                                       </AuditProvider>
@@ -192,12 +190,13 @@ export const AppProviders: React.FC<{ children: React.ReactNode }> = ({ children
               </WalletProvider>
             </ClassificationProvider>
           </UserProvider>
-          </NotificationProvider>
-        </SyncStatusProvider>
-      </ViewModeProvider>
-    </NavigationProvider>
+        </NotificationProvider>
+      </SyncStatusProvider>
+    </ViewModeProvider>
   );
-};export const useAppContext = () => {
+};
+
+export const useAppContext = () => {
   const context = useContext(AppContext);
   if (!context) {
     throw new Error('useAppContext must be used within AppProviders');
