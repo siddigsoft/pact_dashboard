@@ -159,7 +159,7 @@
     if (!isHidden('/wallet') && (isSuperAdmin || isDataCollector)) {
       overviewItems.push({ id: 'my-wallet', title: "My Wallet", url: "/wallet", icon: CreditCard, priority: 2, isPinned: isPinned('/wallet') });
     }
-    if (!isHidden('/cost-submission') && (isSuperAdmin || isDataCollector || isAdmin || isCoordinator)) {
+    if (!isHidden('/cost-submission') && (isSuperAdmin || isAdmin || isSupervisor || isFOM)) {
       overviewItems.push({ id: 'cost-submission', title: "Cost Submission", url: "/cost-submission", icon: Receipt, priority: 3, isPinned: isPinned('/cost-submission') });
     }
     if (!isHidden('/signatures')) {
