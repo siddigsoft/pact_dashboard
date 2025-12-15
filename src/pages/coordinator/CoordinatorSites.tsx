@@ -3149,14 +3149,14 @@ const CoordinatorSites: React.FC = () => {
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="state_required" className="flex items-center justify-center gap-2 rounded-md py-2 px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-100 data-[state=active]:text-blue-800 data-[state=active]:shadow-sm">
                 <AlertTriangle className="h-4 w-4" />
-                State Permit Required
+                State Permit Status
                 <Badge variant="secondary" className="ml-2">
                   {statePermitRequiredCount}
                 </Badge>
               </TabsTrigger>
               <TabsTrigger value="local_required" className="flex items-center justify-center gap-2 rounded-md py-2 px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-100 data-[state=active]:text-blue-800 data-[state=active]:shadow-sm">
                 <MapPin className="h-4 w-4" />
-                Local Permit Required
+                Locality Permit Status
                 <Badge variant="secondary" className="ml-2">
                   {localPermitRequiredCount}
                 </Badge>
