@@ -211,14 +211,7 @@ const generatePlainText = (
     : 'أنت تتلقى هذا الإشعار كجزء من فريق باكت.';
   
   text += `\n\n---\n\n${greetingAr}\n\n${titleArText}\n\n${messageArText}`;
-  text += `\n\n---\n\n${roleNoticeEn}\n${roleNoticeAr}`;
-  text += '\n\n[Management Oversight Notice]';
-  text += '\nThis notification has been sent to relevant management for oversight and accountability.';
-  text += '\nتم إرسال هذا الإشعار إلى الإدارة المعنية للإشراف والمساءلة.';
-  text += '\n\n---\n\nThis is an automated message from PACT Workflow Platform.';
-  text += '\nهذه رسالة آلية من منصة باكت للعمليات الميدانية.';
-  text += '\nICT Team - PACT Command Center Platform';
-  text += '\nفريق تكنولوجيا المعلومات - منصة مركز قيادة باكت';
+  text += '\n\n---\nPACT Workflow Platform | منصة باكت';
   return text;
 };
 
@@ -398,12 +391,7 @@ Log in at: ${APP_URL}/login
 يمكنك الآن تسجيل الدخول للوصول إلى لوحة التحكم الخاصة بك والبدء في إدارة مهامك.
 
 ---
-
-[Management Oversight Notice]
-This notification has been sent to relevant management for oversight and accountability.
-تم إرسال هذا الإشعار إلى الإدارة المعنية للإشراف والمساءلة.
-
-- PACT Workflow Platform | منصة باكت`;
+PACT Workflow Platform | منصة باكت`;
 
     return this.sendEmail({
       to: email,
@@ -525,12 +513,7 @@ ${messageAr}
 ${isRecipientFOM ? 'الإجراء المطلوب: إرفاق التصاريح' : ''}
 
 ---
-
-[Management Oversight Notice]
-This notification has been sent to relevant management for oversight and accountability.
-تم إرسال هذا الإشعار إلى الإدارة المعنية للإشراف والمساءلة.
-
-- PACT Workflow Platform | منصة باكت`;
+PACT Workflow Platform | منصة باكت`;
 
     return this.sendEmail({
       to: email,
@@ -1276,26 +1259,16 @@ This notification is sent to Hub Supervisors, Field Operations Managers, Adminis
     const text = `Hello ${recipientName},
 
 Your verification code is: ${otpCode}
-
 This code expires in ${expiryMinutes} minutes.
-
-Do not share this code with anyone.
 
 ---
 
 مرحباً ${recipientName}،
-
-رمز التحقق الخاص بك هو: ${otpCode}
-
-ينتهي هذا الرمز خلال ${expiryMinutes} دقائق.
-
-لا تشارك هذا الرمز مع أي شخص.
+رمز التحقق: ${otpCode}
+ينتهي خلال ${expiryMinutes} دقائق.
 
 ---
-
-PACT Workflow Platform | منصة باكت
-ICT Team - PACT Command Center Platform
-فريق تكنولوجيا المعلومات - منصة مركز قيادة باكت`;
+PACT Workflow Platform`;
     
     return this.sendEmail({
       to: email,
