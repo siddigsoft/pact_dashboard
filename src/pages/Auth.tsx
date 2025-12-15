@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Card,
   CardContent,
@@ -36,7 +36,15 @@ import { MobileAuthScreen } from "@/components/mobile/MobileAuthScreen";
 
 const Auth = () => {
   const { isNative, isMobile: isDeviceMobile, isLoading: isDeviceLoading } = useDevice();
+  const [searchParams] = useSearchParams();
   const isMobileView = isNative || isDeviceMobile;
+  const forceWebSignup = searchParams.get("view") === "signup";
+  const initialTab = forceWebSignup ? "signup" : searchParams.get("tab") ?? "login";
+  const showTabs = !forceWebSignup;
+  const headingTitle = forceWebSignup ? "Create Account" : "Welcome Back";
+  const headingDescription = forceWebSignup 
+    ? "Create your field operations account"
+    : "Sign in to access your field operations dashboard";
   const navigate = useNavigate();
   const [resendLoading, setResendLoading] = useState(false);
 
@@ -95,7 +103,7 @@ const Auth = () => {
   ];
 
   // Show mobile auth screen for mobile devices
-  if (isMobileView && !isDeviceLoading) {
+  if (isMobileView && !isDeviceLoading && !forceWebSignup) {
     return <MobileAuthScreen />;
   }
 
@@ -219,35 +227,56 @@ const Auth = () => {
 
               <CardHeader className="space-y-1 text-center px-0 pb-4">
                 <CardTitle className="text-xl font-bold tracking-tight" data-testid="heading-auth-title">
-                  Welcome Back
+                  {headingTitle}
                 </CardTitle>
                 <CardDescription className="text-sm" data-testid="text-auth-description">
-                  Sign in to access your field operations dashboard
+                  {headingDescription}
                 </CardDescription>
               </CardHeader>
 
               <div className="w-full">
-                <Tabs defaultValue="login" className="space-y-4 w-full">
-                  <TabsList 
-                    className="grid w-full grid-cols-2 h-9"
-                    data-testid="tabs-auth"
+                {showTabs ? (
+                  <Tabs 
+                    key={initialTab}
+                    defaultValue={initialTab}
+                    className="space-y-4 w-full"
                   >
-                    <TabsTrigger value="login" className="text-sm" data-testid="tab-login">
-                      Login
-                    </TabsTrigger>
-                    <TabsTrigger value="signup" className="text-sm" data-testid="tab-signup">
-                      Sign Up
-                    </TabsTrigger>
-                  </TabsList>
-                  
-                  <TabsContent value="login" data-testid="content-login">
-                    <AuthForm mode="login" />
-                  </TabsContent>
-                  
-                  <TabsContent value="signup" data-testid="content-signup">
+                    <TabsList 
+                      className="grid w-full grid-cols-2 h-9"
+                      data-testid="tabs-auth"
+                    >
+                      <TabsTrigger value="login" className="text-sm" data-testid="tab-login">
+                        Login
+                      </TabsTrigger>
+                      <TabsTrigger value="signup" className="text-sm" data-testid="tab-signup">
+                        Sign Up
+                      </TabsTrigger>
+                    </TabsList>
+                    
+                    <TabsContent value="login" data-testid="content-login">
+                      <AuthForm mode="login" />
+                    </TabsContent>
+                    
+                    <TabsContent value="signup" data-testid="content-signup">
+                      <AuthForm mode="signup" />
+                    </TabsContent>
+                  </Tabs>
+                ) : (
+                  <div className="space-y-4" data-testid="content-signup">
                     <AuthForm mode="signup" />
-                  </TabsContent>
-                </Tabs>
+                    <div className="text-center text-sm text-muted-foreground">
+                      <span>Already have an account? </span>
+                      <button
+                        type="button"
+                        onClick={() => navigate("/auth")}
+                        className="text-primary font-semibold hover:underline"
+                        data-testid="link-signin-from-signup"
+                      >
+                        Sign in
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Help Text */}
