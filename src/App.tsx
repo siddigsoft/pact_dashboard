@@ -102,6 +102,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import { debugDatabase } from './utils/debug-db';
 import { useFCM } from './hooks/useFCM';
 import { MobilePermissionGuard } from './components/mobile/MobilePermissionGuard';
+import { LiveDashboardProvider } from './context/realtime/LiveDashboardContext';
 
 // Loading component for Suspense fallback
 const PageLoader = () => (
@@ -321,62 +322,64 @@ function App() {
   }
 
   return (
-    <NotificationProvider>
-      <ThemeProvider
-        attribute="class"
-        defaultTheme="light"
-        enableSystem={false}
-        disableTransitionOnChange
-      >
-        {isMounted && (
-          <ErrorBoundary
-            fallback={
-              <div className="min-h-screen flex items-center justify-center">
-                <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg max-w-md">
-                  <h2 className="text-2xl font-bold text-red-600 mb-4">Something went wrong</h2>
-                  <p className="mb-4">The application encountered an unexpected error. Please refresh the page to try again.</p>
-                  <button
-                    onClick={() => window.location.reload()}
-                    className="px-4 py-2 bg-primary text-white rounded hover:bg-primary/90"
-                  >
-                    Refresh Page
-                  </button>
-                </div>
+    <ThemeProvider
+      attribute="class"
+      defaultTheme="light"
+      enableSystem={false}
+      disableTransitionOnChange
+    >
+      {isMounted && (
+        <ErrorBoundary
+          fallback={
+            <div className="min-h-screen flex items-center justify-center">
+              <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg max-w-md">
+                <h2 className="text-2xl font-bold text-red-600 mb-4">Something went wrong</h2>
+                <p className="mb-4">The application encountered an unexpected error. Please refresh the page to try again.</p>
+                <button
+                  onClick={() => window.location.reload()}
+                  className="px-4 py-2 bg-primary text-white rounded hover:bg-primary/90"
+                >
+                  Refresh Page
+                </button>
               </div>
-            }
-          >
-            <QueryClientProvider client={queryClient}>
-              <Router>
-                <AppProviders>
-                  <FCMInitializer />
-                  <Suspense fallback={<PageLoader />}>
-                    <AuthGuard>
-                      <MobilePermissionGuard>
-                        <AppRoutes />
-                      </MobilePermissionGuard>
-                    </AuthGuard>
-                </Suspense>
-                <AppNotifications />
-                <Toaster />
-                <SonnerToaster />
-                <HotToaster
-                  position="bottom-center"
-                  toastOptions={{
-                    style: {
-                      background: '#fff',
-                      border: '1px solid #e5e7eb',
-                      padding: '12px',
-                      color: '#111',
-                    },
-                  }}
-                />
+            </div>
+          }
+        >
+          <QueryClientProvider client={queryClient}>
+            <Router>
+              <AppProviders>
+                <NotificationProvider>
+                  <LiveDashboardProvider>
+                    <FCMInitializer />
+                    <Suspense fallback={<PageLoader />}>
+                      <AuthGuard>
+                        <MobilePermissionGuard>
+                          <AppRoutes />
+                        </MobilePermissionGuard>
+                      </AuthGuard>
+                    </Suspense>
+                    <AppNotifications />
+                  </LiveDashboardProvider>
+                  <Toaster />
+                  <SonnerToaster />
+                  <HotToaster
+                    position="bottom-center"
+                    toastOptions={{
+                      style: {
+                        background: '#fff',
+                        border: '1px solid #e5e7eb',
+                        padding: '12px',
+                        color: '#111',
+                      },
+                    }}
+                  />
+                </NotificationProvider>
               </AppProviders>
             </Router>
           </QueryClientProvider>
         </ErrorBoundary>
       )}
-      </ThemeProvider>
-    </NotificationProvider>
+    </ThemeProvider>
   );
 }
 

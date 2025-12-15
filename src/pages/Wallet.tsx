@@ -561,6 +561,43 @@ const WalletPage = () => {
         </Card>
       </div>
 
+      {/* Weekly/Monthly Earnings Summary */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+        <Card className="bg-gradient-to-br from-slate-900/80 to-teal-900/80 border-teal-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(20,184,166,0.2)]">
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+            <CardTitle className="text-xs sm:text-sm font-medium uppercase tracking-wide text-teal-300">
+              This Week
+            </CardTitle>
+            <Zap className="w-4 h-4 sm:w-5 sm:h-5 text-teal-400" />
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="text-xl sm:text-2xl font-bold tabular-nums bg-gradient-to-r from-teal-400 to-cyan-400 bg-clip-text text-transparent">
+              {formatCurrency(stats?.weeklyEarnings || 0)}
+            </div>
+            <p className="text-xs text-teal-300/70 mt-1">
+              {stats?.weeklySiteVisits || 0} site visit{(stats?.weeklySiteVisits || 0) !== 1 ? 's' : ''} completed
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-slate-900/80 to-rose-900/80 border-rose-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(244,63,94,0.2)]">
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+            <CardTitle className="text-xs sm:text-sm font-medium uppercase tracking-wide text-rose-300">
+              This Month
+            </CardTitle>
+            <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-rose-400" />
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="text-xl sm:text-2xl font-bold tabular-nums bg-gradient-to-r from-rose-400 to-pink-400 bg-clip-text text-transparent">
+              {formatCurrency(stats?.monthlyEarnings || 0)}
+            </div>
+            <p className="text-xs text-rose-300/70 mt-1">
+              {format(new Date(), 'MMMM yyyy')}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
       {/* Additional Metrics */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <Card className="bg-gradient-to-br from-slate-900/80 to-green-900/80 border-green-500/30 backdrop-blur-xl shadow-[0_0_20px_rgba(34,197,94,0.2)]">
