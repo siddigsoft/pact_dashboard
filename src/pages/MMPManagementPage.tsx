@@ -38,10 +38,33 @@ const FieldOperationManagerPage = () => {
     );
   }
 
+  // Check if user is admin
+  const isAdmin = hasAnyRole(['admin', 'Admin', 'super_admin', 'Super Admin']);
+  const isFOM = hasAnyRole(['fom', 'Field Operation Manager (FOM)', FIELD_OP_ROLE]);
+
+  // Filter MMPs for FOM users - only show MMPs forwarded to them
+  const filteredMMPs = useMemo(() => {
+    if (!mmpFiles) return [];
+    
+    // Admins see all MMPs
+    if (isAdmin) return mmpFiles;
+    
+    // FOMs only see MMPs forwarded to them
+    if (isFOM && currentUser?.id) {
+      return mmpFiles.filter((mmp: any) => {
+        const workflow = mmp.workflow || {};
+        const forwardedToFomIds = workflow.forwardedToFomIds || [];
+        return Array.isArray(forwardedToFomIds) && forwardedToFomIds.includes(currentUser.id);
+      });
+    }
+    
+    return mmpFiles;
+  }, [mmpFiles, isAdmin, isFOM, currentUser?.id]);
+
   // Calculate total sites per hub (fallback to 0 if not present)
   const sitesPerHub = useMemo(() => {
     const map: Record<string, number> = {};
-    (mmpFiles || []).forEach(mmp => {
+    (filteredMMPs || []).forEach(mmp => {
       // Use mmp.hub if exists, else fallback to mmp.projectHub or 'Unknown'
       const hub = (mmp as any).hub || (mmp as any).projectHub || 'Unknown';
       // Use mmp.sites?.length if exists, else mmp.siteCount, else 0
@@ -54,7 +77,7 @@ const FieldOperationManagerPage = () => {
       map[hub] = (map[hub] || 0) + siteCount;
     });
     return map;
-  }, [mmpFiles]);
+  }, [filteredMMPs]);
 
   return (
     <div className="container mx-auto p-6 md:p-10 space-y-8">
@@ -81,7 +104,7 @@ const FieldOperationManagerPage = () => {
               </tr>
             </thead>
             <tbody>
-              {(mmpFiles || []).map(mmp => {
+              {(filteredMMPs || []).map(mmp => {
                 // uploadedBy may be a string in format "Name (Role)" or an object
                 const uploadedBy = (mmp as any).uploadedBy;
                 let uploadedByName = '-';
@@ -194,7 +217,7 @@ const FieldOperationManagerPage = () => {
                   </tr>
                 );
               })}
-              {(!mmpFiles || mmpFiles.length === 0) && (
+              {(!filteredMMPs || filteredMMPs.length === 0) && (
                 <tr>
                   <td colSpan={7} className="text-center py-6 text-muted-foreground">
                     No MMPs uploaded yet.
