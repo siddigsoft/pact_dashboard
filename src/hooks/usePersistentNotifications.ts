@@ -28,14 +28,14 @@ export interface PersistentNotification {
 }
 
 export function usePersistentNotifications() {
-  const { user } = useUser();
+  const { currentUser } = useUser();
   const [notifications, setNotifications] = useState<PersistentNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [urgentCount, setUrgentCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchNotifications = useCallback(async () => {
-    if (!user?.id) {
+    if (!currentUser?.id) {
       setNotifications([]);
       setUnreadCount(0);
       setUrgentCount(0);
@@ -47,7 +47,7 @@ export function usePersistentNotifications() {
       const { data, error } = await supabase
         .from('notifications')
         .select('*')
-        .eq('recipient_id', user.id)
+        .eq('recipient_id', currentUser.id)
         .order('created_at', { ascending: false })
         .limit(100);
 
@@ -74,17 +74,17 @@ export function usePersistentNotifications() {
     } finally {
       setIsLoading(false);
     }
-  }, [user?.id]);
+  }, [currentUser?.id]);
 
   const markAsRead = useCallback(async (notificationId: string) => {
-    if (!user?.id) return;
+    if (!currentUser?.id) return;
 
     try {
       const { error } = await supabase
         .from('notifications')
         .update({ status: 'read', read_at: new Date().toISOString() })
         .eq('id', notificationId)
-        .eq('recipient_id', user.id);
+        .eq('recipient_id', currentUser.id);
 
       if (error) {
         console.error('Error marking notification as read:', error);
@@ -98,16 +98,16 @@ export function usePersistentNotifications() {
     } catch (err) {
       console.error('Error marking notification as read:', err);
     }
-  }, [user?.id]);
+  }, [currentUser?.id]);
 
   const markAllAsRead = useCallback(async () => {
-    if (!user?.id) return;
+    if (!currentUser?.id) return;
 
     try {
       const { error } = await supabase
         .from('notifications')
         .update({ status: 'read', read_at: new Date().toISOString() })
-        .eq('recipient_id', user.id)
+        .eq('recipient_id', currentUser.id)
         .neq('status', 'read');
 
       if (error) {
@@ -123,17 +123,17 @@ export function usePersistentNotifications() {
     } catch (err) {
       console.error('Error marking all as read:', err);
     }
-  }, [user?.id]);
+  }, [currentUser?.id]);
 
   const deleteNotification = useCallback(async (notificationId: string) => {
-    if (!user?.id) return;
+    if (!currentUser?.id) return;
 
     try {
       const { error } = await supabase
         .from('notifications')
         .delete()
         .eq('id', notificationId)
-        .eq('recipient_id', user.id);
+        .eq('recipient_id', currentUser.id);
 
       if (error) {
         console.error('Error deleting notification:', error);
@@ -144,24 +144,24 @@ export function usePersistentNotifications() {
     } catch (err) {
       console.error('Error deleting notification:', err);
     }
-  }, [user?.id]);
+  }, [currentUser?.id]);
 
   useEffect(() => {
     fetchNotifications();
   }, [fetchNotifications]);
 
   useEffect(() => {
-    if (!user?.id) return;
+    if (!currentUser?.id) return;
 
     const channel = supabase
-      .channel(`notifications:${user.id}`)
+      .channel(`notifications:${currentUser.id}`)
       .on(
         'postgres_changes',
         {
           event: 'INSERT',
           schema: 'public',
           table: 'notifications',
-          filter: `recipient_id=eq.${user.id}`
+          filter: `recipient_id=eq.${currentUser.id}`
         },
         (payload) => {
           const newNotification = payload.new as PersistentNotification;
@@ -178,7 +178,7 @@ export function usePersistentNotifications() {
           event: 'UPDATE',
           schema: 'public',
           table: 'notifications',
-          filter: `recipient_id=eq.${user.id}`
+          filter: `recipient_id=eq.${currentUser.id}`
         },
         (payload) => {
           const updatedNotification = payload.new as PersistentNotification;
@@ -192,7 +192,7 @@ export function usePersistentNotifications() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user?.id]);
+  }, [currentUser?.id]);
 
   const getNotificationsByPriority = useCallback((priority: 'urgent' | 'high' | 'normal') => {
     return notifications.filter(n => n.priority === priority);
