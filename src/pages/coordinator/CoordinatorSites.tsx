@@ -4284,45 +4284,58 @@ const CoordinatorSites: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      {/* State Permit Question Dialog */}
-      <Dialog open={statePermitQuestionDialogOpen} onOpenChange={setStatePermitQuestionDialogOpen}>
-        <DialogContent>
+      {/* State Permit Question Dialog - Using 3 Questions Flow */}
+      <Dialog open={statePermitQuestionDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          setStatePermitQuestionDialogOpen(false);
+          setSelectedStateForWorkflow(null);
+        }
+      }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>State Permit Required</DialogTitle>
+            <DialogTitle>State Permit Verification</DialogTitle>
             <DialogDescription>
-              State permits for <strong>{selectedStateForWorkflow?.state}</strong> have not been uploaded by the FOM.
+              Please answer the following questions about state permit requirements for <strong>{selectedStateForWorkflow?.state}</strong>.
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
-            <p className="text-sm text-muted-foreground">
-              State permits are required before you can access local permits. You need to upload the state permit first.
-              Do you have the state permit for this state?
-            </p>
-          </div>
-          <DialogFooter>
-            <Button 
-              variant="outline" 
-              onClick={() => {
+          {selectedStateForWorkflow && (
+            <PermitVerificationQuestions
+              state={selectedStateForWorkflow.state}
+              locality={selectedStateForWorkflow.localities?.[0]?.locality || ''}
+              mmpFileId={selectedStateForWorkflow.localities?.[0]?.sites?.[0]?.mmp_file_id}
+              onComplete={(decision: PermitDecision) => {
+                setStatePermitQuestionDialogOpen(false);
+                
+                if (decision.canProceed) {
+                  // User has permits or can work without them
+                  if (decision.hasStatePermit) {
+                    // Show state permit upload dialog
+                    const stateKey = selectedStateForWorkflow.state;
+                    setExpandedStates(prev => new Set([...prev, stateKey]));
+                  } else {
+                    // Proceed without state permit - unlock localities for this state
+                    toast.success(`Proceeding without state permit for ${selectedStateForWorkflow.state}. Localities are now accessible.`);
+                    setSelectedStateForWorkflow(null);
+                    // Switch to local permit tab
+                    setNewSitesSubTab('local_required');
+                  }
+                } else {
+                  setSelectedStateForWorkflow(null);
+                }
+              }}
+              onSendBackToFOM={(reason: string) => {
+                setStatePermitQuestionDialogOpen(false);
+                toast.success(`Request sent to FOM to upload state permit for ${selectedStateForWorkflow?.state}. Reason: ${reason}`);
+                setSelectedStateForWorkflow(null);
+              }}
+              onCancel={() => {
                 setStatePermitQuestionDialogOpen(false);
                 setSelectedStateForWorkflow(null);
               }}
-            >
-              Cancel
-            </Button>
-            <Button 
-              onClick={() => {
-                setStatePermitQuestionDialogOpen(false);
-                // Show state permit upload dialog
-                if (selectedStateForWorkflow) {
-                  const stateKey = selectedStateForWorkflow.state;
-                  setExpandedStates(prev => new Set([...prev, stateKey]));
-                }
-              }}
-              className="bg-blue-600 hover:bg-blue-700"
-            >
-              Yes, upload state permit
-            </Button>
-          </DialogFooter>
+              existingStatePermit={false}
+              existingLocalityPermit={false}
+            />
+          )}
         </DialogContent>
       </Dialog>
 
