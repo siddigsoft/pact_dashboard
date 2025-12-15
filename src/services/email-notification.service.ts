@@ -155,6 +155,14 @@ const generateNotificationEmailHTML = (
           <span style="direction: rtl; display: inline-block;">${roleNoticeAr}</span>
         </p>
         
+        <!-- Management Oversight Notice -->
+        <div style="background-color: #f8f9fa; border-radius: 6px; padding: 12px; margin-bottom: 20px;">
+          <p style="color: #555; font-size: 11px; text-align: center; margin: 0; line-height: 1.6;">
+            This notification has been sent to relevant management for oversight and accountability.<br>
+            <span style="direction: rtl; display: inline-block;">تم إرسال هذا الإشعار إلى الإدارة المعنية للإشراف والمساءلة.</span>
+          </p>
+        </div>
+        
         <!-- Platform Footer -->
         <p style="color: #999; font-size: 12px; text-align: center;">
           This is an automated message from PACT Workflow Platform.<br>
@@ -204,7 +212,10 @@ const generatePlainText = (
   
   text += `\n\n---\n\n${greetingAr}\n\n${titleArText}\n\n${messageArText}`;
   text += `\n\n---\n\n${roleNoticeEn}\n${roleNoticeAr}`;
-  text += '\n\nThis is an automated message from PACT Workflow Platform.';
+  text += '\n\n[Management Oversight Notice]';
+  text += '\nThis notification has been sent to relevant management for oversight and accountability.';
+  text += '\nتم إرسال هذا الإشعار إلى الإدارة المعنية للإشراف والمساءلة.';
+  text += '\n\n---\n\nThis is an automated message from PACT Workflow Platform.';
   text += '\nهذه رسالة آلية من منصة باكت للعمليات الميدانية.';
   text += '\nICT Team - PACT Command Center Platform';
   text += '\nفريق تكنولوجيا المعلومات - منصة مركز قيادة باكت';
@@ -344,6 +355,15 @@ export const EmailNotificationService = {
           </div>
           
           <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+          
+          <!-- Management Oversight Notice -->
+          <div style="background-color: #f8f9fa; border-radius: 6px; padding: 12px; margin-bottom: 20px;">
+            <p style="color: #555; font-size: 11px; text-align: center; margin: 0; line-height: 1.6;">
+              This notification has been sent to relevant management for oversight and accountability.<br>
+              <span style="direction: rtl; display: inline-block;">تم إرسال هذا الإشعار إلى الإدارة المعنية للإشراف والمساءلة.</span>
+            </p>
+          </div>
+          
           <p style="color: #999; font-size: 12px; text-align: center;">
             This is an automated message from PACT Workflow Platform.<br>
             هذه رسالة آلية من منصة باكت للعمليات الميدانية.<br>
@@ -376,6 +396,12 @@ Log in at: ${APP_URL}/login
 الدور: ${role}
 
 يمكنك الآن تسجيل الدخول للوصول إلى لوحة التحكم الخاصة بك والبدء في إدارة مهامك.
+
+---
+
+[Management Oversight Notice]
+This notification has been sent to relevant management for oversight and accountability.
+تم إرسال هذا الإشعار إلى الإدارة المعنية للإشراف والمساءلة.
 
 - PACT Workflow Platform | منصة باكت`;
 
@@ -458,6 +484,15 @@ Log in at: ${APP_URL}/login
           </div>
           
           <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+          
+          <!-- Management Oversight Notice -->
+          <div style="background-color: #f8f9fa; border-radius: 6px; padding: 12px; margin-bottom: 20px;">
+            <p style="color: #555; font-size: 11px; text-align: center; margin: 0; line-height: 1.6;">
+              This notification has been sent to relevant management for oversight and accountability.<br>
+              <span style="direction: rtl; display: inline-block;">تم إرسال هذا الإشعار إلى الإدارة المعنية للإشراف والمساءلة.</span>
+            </p>
+          </div>
+          
           <p style="color: #999; font-size: 12px; text-align: center;">
             This is an automated message from PACT Workflow Platform.<br>
             هذه رسالة آلية من منصة باكت للعمليات الميدانية.<br>
@@ -488,6 +523,12 @@ ${messageAr}
 اسم خطة المراقبة الشهرية: ${mmpName}
 تم الإرسال بواسطة: ${forwarderName}
 ${isRecipientFOM ? 'الإجراء المطلوب: إرفاق التصاريح' : ''}
+
+---
+
+[Management Oversight Notice]
+This notification has been sent to relevant management for oversight and accountability.
+تم إرسال هذا الإشعار إلى الإدارة المعنية للإشراف والمساءلة.
 
 - PACT Workflow Platform | منصة باكت`;
 
@@ -1181,48 +1222,87 @@ This notification is sent to Hub Supervisors, Field Operations Managers, Adminis
   ): Promise<EmailNotificationResult> {
     const html = `
       <!DOCTYPE html>
-      <html>
+      <html dir="ltr">
       <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Verification Code</title>
+        <title>Verification Code | رمز التحقق</title>
       </head>
-      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
+      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
         <div style="background-color: white; border-radius: 8px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
           <div style="text-align: center; margin-bottom: 30px;">
-            <h1 style="color: #1a1a2e; margin: 0; font-size: 24px;">PACT Workflow Platform</h1>
+            <h1 style="color: #1a1a2e; margin: 0; font-size: 24px;">PACT Command Center</h1>
+            <p style="color: #666; margin: 5px 0 0 0; font-size: 14px;">مركز قيادة باكت</p>
           </div>
           
-          <h2 style="color: #333; text-align: center;">Verification Code</h2>
-          
-          <p style="color: #333; font-size: 16px; line-height: 1.5;">Hello ${recipientName},</p>
-          
-          <div style="background-color: #e3f2fd; border-left: 4px solid #2196f3; border-radius: 4px; padding: 20px; margin: 20px 0; text-align: center;">
-            <p style="margin: 0; font-size: 14px; color: #666;">Your verification code is:</p>
-            <p style="margin: 10px 0; font-size: 36px; font-weight: bold; letter-spacing: 8px; color: #1a1a2e;">${otpCode}</p>
-            <p style="margin: 0; font-size: 12px; color: #999;">This code expires in ${expiryMinutes} minutes</p>
+          <!-- English Section -->
+          <div style="margin-bottom: 25px; padding-bottom: 25px; border-bottom: 1px solid #eee;">
+            <p style="color: #333; font-size: 16px; line-height: 1.5;">Hello ${recipientName},</p>
+            <p style="color: #333; font-size: 16px; line-height: 1.5;">Your verification code is:</p>
+            
+            <div style="background-color: #e3f2fd; border-left: 4px solid #2196f3; border-radius: 4px; padding: 20px; margin: 20px 0; text-align: center;">
+              <p style="margin: 10px 0; font-size: 36px; font-weight: bold; letter-spacing: 8px; color: #1a1a2e;">${otpCode}</p>
+              <p style="margin: 0; font-size: 12px; color: #999;">This code expires in ${expiryMinutes} minutes</p>
+            </div>
+            
+            <p style="color: #555; font-size: 14px; line-height: 1.5;">Enter this code to complete your verification. Do not share this code with anyone.</p>
           </div>
           
-          <p style="color: #555; font-size: 14px; line-height: 1.5;">Enter this code to complete your verification. Do not share this code with anyone.</p>
-          
-          <p style="color: #666; font-size: 13px;">If you did not request this code, please ignore this email or contact support if you have concerns.</p>
+          <!-- Arabic Section -->
+          <div dir="rtl" style="margin-top: 25px; padding-top: 25px; border-top: 1px solid #eee; text-align: right;">
+            <p style="color: #333; font-size: 16px; line-height: 1.8;">مرحباً ${recipientName}،</p>
+            <p style="color: #333; font-size: 16px; line-height: 1.8;">رمز التحقق الخاص بك هو:</p>
+            
+            <div style="background-color: #e3f2fd; border-right: 4px solid #2196f3; border-radius: 4px; padding: 20px; margin: 20px 0; text-align: center;">
+              <p style="margin: 10px 0; font-size: 36px; font-weight: bold; letter-spacing: 8px; color: #1a1a2e;">${otpCode}</p>
+              <p style="margin: 0; font-size: 12px; color: #999;">ينتهي هذا الرمز خلال ${expiryMinutes} دقائق</p>
+            </div>
+            
+            <p style="color: #555; font-size: 14px; line-height: 1.8;">أدخل هذا الرمز لإكمال التحقق. لا تشارك هذا الرمز مع أي شخص.</p>
+          </div>
           
           <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
           <p style="color: #999; font-size: 12px; text-align: center;">
             This is an automated message from PACT Workflow Platform.<br>
-            ICT Team - PACT Command Center Platform
+            هذه رسالة آلية من منصة باكت للعمليات الميدانية.<br>
+            ICT Team - PACT Command Center Platform<br>
+            فريق تكنولوجيا المعلومات - منصة مركز قيادة باكت
           </p>
         </div>
       </body>
       </html>
     `;
     
+    const text = `Hello ${recipientName},
+
+Your verification code is: ${otpCode}
+
+This code expires in ${expiryMinutes} minutes.
+
+Do not share this code with anyone.
+
+---
+
+مرحباً ${recipientName}،
+
+رمز التحقق الخاص بك هو: ${otpCode}
+
+ينتهي هذا الرمز خلال ${expiryMinutes} دقائق.
+
+لا تشارك هذا الرمز مع أي شخص.
+
+---
+
+PACT Workflow Platform | منصة باكت
+ICT Team - PACT Command Center Platform
+فريق تكنولوجيا المعلومات - منصة مركز قيادة باكت`;
+    
     return this.sendEmail({
       to: email,
-      subject: `Your PACT Verification Code: ${otpCode}`,
+      subject: `Your PACT Verification Code | رمز التحقق: ${otpCode}`,
       recipientName,
       html,
-      text: `Hello ${recipientName},\n\nYour verification code is: ${otpCode}\n\nThis code expires in ${expiryMinutes} minutes.\n\nDo not share this code with anyone.\n\n---\nPACT Workflow Platform`,
+      text,
     });
   },
 
