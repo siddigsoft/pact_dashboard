@@ -9,6 +9,7 @@ import { fetchSiteVisits, createSiteVisitInDb, updateSiteVisitInDb, deleteSiteVi
 import { useNotifications } from '../notifications/NotificationContext';
 import { useWallet } from '../wallet/WalletContext';
 import { supabase } from '@/integrations/supabase/client';
+import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 
 const SiteVisitContext = createContext<SiteVisitContextType | undefined>(undefined);
 
@@ -660,6 +661,68 @@ export const SiteVisitProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           relatedEntityId: siteVisitId,
           relatedEntityType: "siteVisit",
         });
+      }
+
+      // Notify hub supervisor of activity coverage progress
+      try {
+        const hubId = siteVisit.hubOffice || siteVisit.hub;
+        const activityName = siteVisit.activity || siteVisit.mainActivity;
+        
+        if (hubId && activityName) {
+          // Query total sites for this activity in this hub (properly scoped)
+          const { data: totalByMainActivity } = await supabase
+            .from('mmp_site_entries')
+            .select('id')
+            .eq('hub_office', hubId)
+            .eq('main_activity', activityName);
+          
+          const { data: totalByActivityAtSite } = await supabase
+            .from('mmp_site_entries')
+            .select('id')
+            .eq('hub_office', hubId)
+            .eq('activity_at_site', activityName);
+          
+          // Merge and deduplicate
+          const allIds = new Set([
+            ...(totalByMainActivity || []).map(s => s.id),
+            ...(totalByActivityAtSite || []).map(s => s.id)
+          ]);
+          const totalSites = allIds.size;
+          
+          // Query completed sites for this activity in this hub
+          const { data: completedByMainActivity } = await supabase
+            .from('mmp_site_entries')
+            .select('id')
+            .eq('hub_office', hubId)
+            .eq('main_activity', activityName)
+            .eq('status', 'completed');
+          
+          const { data: completedByActivityAtSite } = await supabase
+            .from('mmp_site_entries')
+            .select('id')
+            .eq('hub_office', hubId)
+            .eq('activity_at_site', activityName)
+            .eq('status', 'completed');
+          
+          const completedIds = new Set([
+            ...(completedByMainActivity || []).map(s => s.id),
+            ...(completedByActivityAtSite || []).map(s => s.id)
+          ]);
+          const completedSites = completedIds.size;
+          
+          if (totalSites > 0) {
+            const coveragePercent = Math.round((completedSites / totalSites) * 100);
+            await NotificationTriggerService.activityCoverageUpdate(
+              hubId,
+              activityName,
+              coveragePercent,
+              totalSites,
+              completedSites
+            );
+          }
+        }
+      } catch (coverageErr) {
+        console.warn('Failed to send activity coverage notification:', coverageErr);
       }
 
       toast({
