@@ -185,11 +185,12 @@ export const navigationConfig: NavigationGroup[] = [
       {
         id: 'wallet',
         icon: Wallet,
-        label: 'Wallet',
+        label: 'My Wallet',
         path: '/wallet',
         category: 'secondary',
         priority: 76,
-        description: 'Digital wallet'
+        roles: ['Admin' as AppRole, 'FinancialAdmin' as AppRole, 'Field Operation Manager (FOM)' as AppRole, 'Supervisor' as AppRole, 'Coordinator' as AppRole, 'DataCollector' as AppRole],
+        description: 'My digital wallet'
       },
       {
         id: 'admin-wallets',
@@ -232,7 +233,7 @@ export const navigationConfig: NavigationGroup[] = [
         description: 'Budget management'
       }
     ],
-    roles: ['Admin' as AppRole, 'FinancialAdmin' as AppRole, 'Field Operation Manager (FOM)' as AppRole, 'Supervisor' as AppRole]
+    roles: ['Admin' as AppRole, 'FinancialAdmin' as AppRole, 'Field Operation Manager (FOM)' as AppRole, 'Supervisor' as AppRole, 'Coordinator' as AppRole, 'DataCollector' as AppRole]
   },
   {
     id: 'operations',

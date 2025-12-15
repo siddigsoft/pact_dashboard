@@ -6,7 +6,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { useAppContext } from '@/context/AppContext';
-import { appendForwardedToFom, fetchFomUsers, insertNotifications } from '@/services/mmpActions';
+import { appendForwardedToFom, fetchFomUsers } from '@/services/mmpActions';
+import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 
 interface ForwardToFOMDialogProps {
   open: boolean;
@@ -74,48 +75,23 @@ export const ForwardToFOMDialog: React.FC<ForwardToFOMDialogProps> = ({ open, on
     setLoading(true);
     try {
       const ids = Array.from(selected);
-      // Insert notifications with correct column names
-      const rows = ids.map(uid => ({
-        recipient_id: uid,
-        title_en: 'MMP forwarded to you',
-        title_ar: 'تم إعادة توجيه خطة الرصد الشهرية إليك',
-        message_en: `${mmpName || 'MMP'} has been forwarded to you for permits attachment`,
-        message_ar: `تم إعادة توجيه ${mmpName || 'خطة الرصد الشهرية'} إليك لإرفاق التصاريح`,
-        priority: 'normal',
-        status: 'unread',
-        action_url: `/mmp/${mmpId}`,
-        entity_id: mmpId,
-        entity_type: 'mmpFile',
-        event_type: 'mmp_forwarded',
-        triggered_by: currentUser?.id,
-        triggered_by_name: currentUser?.name || currentUser?.fullName || 'System'
-      }));
-      await insertNotifications(rows);
+      const forwarderName = currentUser?.name || currentUser?.fullName || 'Admin';
 
-      // Notify the forwarder themself
-      if (currentUser?.id) {
-        await insertNotifications([{
-          recipient_id: currentUser.id,
-          title_en: 'MMP forwarded',
-          title_ar: 'تم إعادة توجيه خطة الرصد الشهرية',
-          message_en: `You forwarded ${mmpName || 'MMP'} to ${ids.length} FOM(s)`,
-          message_ar: `لقد أعدت توجيه ${mmpName || 'خطة الرصد الشهرية'} إلى ${ids.length} مدير(ين) عمليات ميدانية`,
-          priority: 'low',
-          status: 'unread',
-          action_url: `/mmp/${mmpId}`,
-          entity_id: mmpId,
-          entity_type: 'mmpFile',
-          event_type: 'mmp_forwarded_confirmation',
-          triggered_by: currentUser.id,
-          triggered_by_name: currentUser?.name || currentUser?.fullName || 'System'
-        }]);
-      }
+      // Send notifications to FOMs and all Admins/Super Admins with email
+      // This uses NotificationTriggerService which properly inserts into notifications table
+      // and sends emails to all recipients
+      await NotificationTriggerService.mmpForwardedToFOM(
+        ids,
+        mmpName || 'MMP',
+        mmpId,
+        forwarderName
+      );
 
       // Update workflow field
       await appendForwardedToFom(mmpId, ids);
       await refreshMMPFiles();
 
-      toast({ title: 'MMP forwarded', description: `Forwarded to ${ids.length} FOM(s)` });
+      toast({ title: 'MMP forwarded', description: `Forwarded to ${ids.length} FOM(s). Email notifications sent.` });
       try { onForwarded?.(ids); } catch {}
       onOpenChange(false);
       setSelected(new Set());

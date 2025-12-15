@@ -1112,6 +1112,80 @@ export const NotificationTriggerService = {
       priority: isToday ? 'high' : 'medium',
       link: '/mmp'
     });
+  },
+
+  /**
+   * Notify FOM and all Admins/Super Admins when MMP is forwarded to FOM
+   * - Sends notification to all selected FOMs
+   * - Sends notification to all Admins and Super Admins
+   * - Sends email notifications to all recipients
+   */
+  async mmpForwardedToFOM(
+    fomUserIds: string[],
+    mmpName: string,
+    mmpId: string,
+    forwarderName?: string
+  ): Promise<number> {
+    try {
+      let successCount = 0;
+
+      // 1. Notify all selected FOMs with email
+      for (const fomId of fomUserIds) {
+        const sent = await this.send({
+          userId: fomId,
+          title: 'MMP Forwarded to You',
+          message: `MMP "${mmpName}" has been forwarded to you for permits attachment${forwarderName ? ` by ${forwarderName}` : ''}`,
+          type: 'info',
+          category: 'assignments',
+          priority: 'high',
+          link: `/mmp/${mmpId}`,
+          relatedEntityId: mmpId,
+          relatedEntityType: 'mmpFile',
+          sendEmail: true,
+          emailActionUrl: `/mmp/${mmpId}`,
+          emailActionLabel: 'View MMP'
+        });
+        if (sent) successCount++;
+      }
+
+      // 2. Fetch all Admins and Super Admins
+      const { data: adminUsers, error: adminError } = await supabase
+        .from('profiles')
+        .select('id')
+        .in('role', ['admin', 'super_admin', 'Admin', 'SuperAdmin']);
+
+      if (adminError) {
+        console.error('Error fetching admins for MMP forward notification:', adminError);
+      } else if (adminUsers && adminUsers.length > 0) {
+        // 3. Notify all Admins/Super Admins with email
+        // Note: Admins who are also FOMs get both notifications - the FOM notification about their assignment
+        // AND the admin notification about the forwarding action. This is intentional for full visibility.
+        const adminIds = adminUsers.map(u => u.id);
+        
+        for (const adminId of adminIds) {
+          const sent = await this.send({
+            userId: adminId,
+            title: 'MMP Forwarded to FOM',
+            message: `MMP "${mmpName}" has been forwarded to ${fomUserIds.length} Field Operations Manager(s)${forwarderName ? ` by ${forwarderName}` : ''}`,
+            type: 'info',
+            category: 'assignments',
+            priority: 'high',
+            link: `/mmp/${mmpId}`,
+            relatedEntityId: mmpId,
+            relatedEntityType: 'mmpFile',
+            sendEmail: true,
+            emailActionUrl: `/mmp/${mmpId}`,
+            emailActionLabel: 'View MMP'
+          });
+          if (sent) successCount++;
+        }
+      }
+
+      return successCount;
+    } catch (error) {
+      console.error('Failed to send MMP forwarded to FOM notifications:', error);
+      return 0;
+    }
   }
 };
 
