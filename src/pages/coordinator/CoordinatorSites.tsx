@@ -200,47 +200,68 @@ const SiteEditForm: React.FC<SiteEditFormProps> = ({ site, onSave, onCancel, hub
         </div>
       )}
 
-      {/* Site Details Summary */}
-      <div className="border rounded-md p-3 bg-muted/30 mb-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-          <div><span className="text-muted-foreground">Locality:</span> <span className="font-medium">{formData.locality}</span></div>
-          <div><span className="text-muted-foreground">Site Name:</span> <span className="font-medium">{formData.site_name}</span></div>
-          <div><span className="text-muted-foreground">Site ID:</span> <span className="font-medium">{formData.site_code}</span></div>
-          <div><span className="text-muted-foreground">CP name:</span> <span className="font-medium">{formData.cp_name || (formData as any)?.additional_data?.cp_name || '-'}</span></div>
-          <div className="md:col-span-3"><span className="text-muted-foreground">Activity at the site:</span> <span className="font-medium">{Array.isArray(formData.activity_at_site) && formData.activity_at_site.length > 0 ? formData.activity_at_site.join(', ') : (formData.main_activity || formData.activity || '-')}</span></div>
-          <div className="md:col-span-3"><span className="text-muted-foreground">Activity Details:</span> <span className="font-medium">{formData.activity || formData.main_activity || '-'}</span></div>
-          <div><span className="text-muted-foreground">Visit by:</span> <span className="font-medium">{formData.monitoring_by || (formData as any)?.additional_data?.monitoring_by || '-'}</span></div>
-          <div><span className="text-muted-foreground">Tool to be used:</span> <span className="font-medium">{formData.survey_tool || (formData as any)?.additional_data?.survey_tool || '-'}</span></div>
-          <div><span className="text-muted-foreground">Use Market Diversion Monitoring:</span> <span className="font-medium">{formData.use_market_diversion ? 'Yes' : 'No'}</span></div>
-          <div><span className="text-muted-foreground">Use Warehouse Monitoring:</span> <span className="font-medium">{formData.use_warehouse_monitoring ? 'Yes' : 'No'}</span></div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Expected Visit Dates */}
-        {isDMActivity ? (
+      {/* Check if site is in read-only mode (verified, approved, or completed) */}
+      {(() => {
+        const isReadOnly = ['verified', 'approved', 'completed'].includes(site.status?.toLowerCase() || '');
+        return (
           <>
-            <div>
-              <Label>Expected Distribution Start <span className="text-red-500">*</span></Label>
-              <DatePicker date={expectedStartDate} onSelect={setExpectedStartDate} className="w-full" />
+            {/* Site Details Summary */}
+            <div className="border rounded-md p-3 bg-muted/30 mb-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                <div><span className="text-muted-foreground">Locality:</span> <span className="font-medium">{formData.locality}</span></div>
+                <div><span className="text-muted-foreground">Site Name:</span> <span className="font-medium">{formData.site_name}</span></div>
+                <div><span className="text-muted-foreground">Site ID:</span> <span className="font-medium">{formData.site_code}</span></div>
+                <div><span className="text-muted-foreground">CP name:</span> <span className="font-medium">{formData.cp_name || (formData as any)?.additional_data?.cp_name || '-'}</span></div>
+                <div className="md:col-span-3"><span className="text-muted-foreground">Activity at the site:</span> <span className="font-medium">{Array.isArray(formData.activity_at_site) && formData.activity_at_site.length > 0 ? formData.activity_at_site.join(', ') : (formData.main_activity || formData.activity || '-')}</span></div>
+                <div className="md:col-span-3"><span className="text-muted-foreground">Activity Details:</span> <span className="font-medium">{formData.activity || formData.main_activity || '-'}</span></div>
+                <div><span className="text-muted-foreground">Visit by:</span> <span className="font-medium">{formData.monitoring_by || (formData as any)?.additional_data?.monitoring_by || '-'}</span></div>
+                <div><span className="text-muted-foreground">Tool to be used:</span> <span className="font-medium">{formData.survey_tool || (formData as any)?.additional_data?.survey_tool || '-'}</span></div>
+                <div><span className="text-muted-foreground">Use Market Diversion Monitoring:</span> <span className="font-medium">{formData.use_market_diversion ? 'Yes' : 'No'}</span></div>
+                <div><span className="text-muted-foreground">Use Warehouse Monitoring:</span> <span className="font-medium">{formData.use_warehouse_monitoring ? 'Yes' : 'No'}</span></div>
+                {/* Show verification info for verified sites */}
+                {isReadOnly && formData.verified_at && (
+                  <>
+                    <div><span className="text-muted-foreground">Verified At:</span> <span className="font-medium">{new Date(formData.verified_at).toLocaleDateString()}</span></div>
+                    <div><span className="text-muted-foreground">Verified By:</span> <span className="font-medium">{formData.verified_by || '-'}</span></div>
+                    {formData.visit_date && (
+                      <div><span className="text-muted-foreground">Expected Visit Date:</span> <span className="font-medium">{new Date(formData.visit_date).toLocaleDateString()}</span></div>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
-            <div>
-              <Label>Expected Distribution End <span className="text-red-500">*</span></Label>
-              <DatePicker date={expectedEndDate} onSelect={setExpectedEndDate} className="w-full" />
-            </div>
-            <div className="md:col-span-2">
-              <Label>Expected Visit Date <span className="text-red-500">*</span></Label>
-              <DatePicker date={visitDate} onSelect={setVisitDate} className="w-full" />
-              <p className="text-xs text-muted-foreground mt-1">Must be within the expected period above.</p>
-            </div>
+
+            {/* Only show date pickers for non-verified sites */}
+            {!isReadOnly && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Expected Visit Dates */}
+                {isDMActivity ? (
+                  <>
+                    <div>
+                      <Label>Expected Distribution Start <span className="text-red-500">*</span></Label>
+                      <DatePicker date={expectedStartDate} onSelect={setExpectedStartDate} className="w-full" />
+                    </div>
+                    <div>
+                      <Label>Expected Distribution End <span className="text-red-500">*</span></Label>
+                      <DatePicker date={expectedEndDate} onSelect={setExpectedEndDate} className="w-full" />
+                    </div>
+                    <div className="md:col-span-2">
+                      <Label>Expected Visit Date <span className="text-red-500">*</span></Label>
+                      <DatePicker date={visitDate} onSelect={setVisitDate} className="w-full" />
+                      <p className="text-xs text-muted-foreground mt-1">Must be within the expected period above.</p>
+                    </div>
+                  </>
+                ) : (
+                  <div>
+                    <Label>Expected Visit Date <span className="text-red-500">*</span></Label>
+                    <DatePicker date={visitDate} onSelect={setVisitDate} className="w-full" />
+                  </div>
+                )}
+              </div>
+            )}
           </>
-        ) : (
-          <div>
-            <Label>Expected Visit Date <span className="text-red-500">*</span></Label>
-            <DatePicker date={visitDate} onSelect={setVisitDate} className="w-full" />
-          </div>
-        )}
-      </div>
+        );
+      })()}
 
       <DialogFooter>
         {site.status?.toLowerCase() === 'permits_attached' ? (
@@ -335,8 +356,19 @@ const SiteEditForm: React.FC<SiteEditFormProps> = ({ site, onSave, onCancel, hub
               Re-verify Site
             </Button>
           </>
+        ) : site.status?.toLowerCase() === 'verified' || site.status?.toLowerCase() === 'approved' || site.status?.toLowerCase() === 'completed' ? (
+          // For verified/approved/completed sites, only show Close button (read-only mode)
+          <>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground mr-auto">
+              <CheckCircle className="h-4 w-4 text-green-600" />
+              <span>This site has been verified and cannot be edited.</span>
+            </div>
+            <Button type="button" variant="outline" onClick={onCancel}>
+              Close
+            </Button>
+          </>
         ) : (
-          // For other sites, show both Save and Verify buttons
+          // For other sites (new, pending, etc.), show both Save and Verify buttons
           <>
             <Button type="button" variant="outline" onClick={onCancel}>
               Cancel
