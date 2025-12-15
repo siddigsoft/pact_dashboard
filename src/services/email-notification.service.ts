@@ -12,6 +12,41 @@ import { logEmailSend } from '@/utils/audit-logger';
 // Base URL for links in emails
 const APP_URL = 'https://app.pactorg.com';
 
+/**
+ * Format role names for display in emails
+ * Converts snake_case roles to readable titles
+ */
+const formatRoleName = (role: string): string => {
+  const roleMapping: Record<string, string> = {
+    'field_operations_manager': 'Field Operations Manager',
+    'fom': 'Field Operations Manager',
+    'hub_fom': 'Hub Field Operations Manager',
+    'coordinator': 'Coordinator',
+    'field_coordinator': 'Field Coordinator',
+    'data_collector': 'Data Collector',
+    'enumerator': 'Enumerator',
+    'supervisor': 'Supervisor',
+    'hub_supervisor': 'Hub Supervisor',
+    'admin': 'Administrator',
+    'super_admin': 'Super Administrator',
+    'finance': 'Finance Officer',
+    'finance_officer': 'Finance Officer',
+    'hr': 'HR Manager',
+    'viewer': 'Viewer',
+  };
+  
+  const lowerRole = role.toLowerCase();
+  if (roleMapping[lowerRole]) {
+    return roleMapping[lowerRole];
+  }
+  
+  // Fallback: convert snake_case to Title Case
+  return role
+    .split('_')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
+};
+
 export interface EmailNotificationResult {
   success: boolean;
   messageId?: string;
@@ -317,9 +352,15 @@ Log in at: ${APP_URL}/login
     mmpName: string,
     forwarderName: string,
     mmpId: string,
-    isRecipientFOM: boolean = true
+    isRecipientFOM: boolean = true,
+    recipientRole?: string
   ): Promise<EmailNotificationResult> {
     const viewMmpUrl = `${APP_URL}/mmp/${mmpId}`;
+    
+    // Format the title for display
+    const displayTitle = recipientRole ? formatRoleName(recipientRole) : (isRecipientFOM ? 'Field Operations Manager' : 'Administrator');
+    const greetingEn = `Hello ${recipientName}, ${displayTitle},`;
+    const greetingAr = `مرحباً ${recipientName}، ${displayTitle}،`;
     
     const titleEn = isRecipientFOM ? 'MMP Forwarded to You' : 'MMP Forwarded to FOM';
     const titleAr = isRecipientFOM ? 'تم إرسال خطة المراقبة الشهرية إليك' : 'تم إرسال خطة المراقبة الشهرية إلى مدير العمليات الميدانية';
@@ -349,7 +390,7 @@ Log in at: ${APP_URL}/login
           
           <!-- English Section -->
           <div style="margin-bottom: 25px; padding-bottom: 25px; border-bottom: 1px solid #eee;">
-            <p style="color: #333; font-size: 16px; line-height: 1.5;">Hello ${recipientName},</p>
+            <p style="color: #333; font-size: 16px; line-height: 1.5;">${greetingEn}</p>
             <p style="color: #333; font-size: 16px; line-height: 1.5;">${messageEn}</p>
             
             <div style="background-color: #e3f2fd; border-left: 4px solid #2196f3; border-radius: 4px; padding: 16px; margin: 20px 0;">
@@ -361,7 +402,7 @@ Log in at: ${APP_URL}/login
           
           <!-- Arabic Section -->
           <div dir="rtl" style="margin-top: 25px; padding-top: 25px; border-top: 1px solid #eee; text-align: right;">
-            <p style="color: #333; font-size: 16px; line-height: 1.8;">مرحباً ${recipientName}،</p>
+            <p style="color: #333; font-size: 16px; line-height: 1.8;">${greetingAr}</p>
             <p style="color: #333; font-size: 16px; line-height: 1.8;">${messageAr}</p>
             
             <div style="background-color: #e3f2fd; border-right: 4px solid #2196f3; border-radius: 4px; padding: 16px; margin: 20px 0;">
@@ -398,7 +439,7 @@ Log in at: ${APP_URL}/login
       </html>
     `;
     
-    const text = `Hello ${recipientName},
+    const text = `${greetingEn}
 
 ${messageEn}
 
@@ -410,7 +451,7 @@ View MMP: ${viewMmpUrl}
 
 ---
 
-مرحباً ${recipientName}،
+${greetingAr}
 
 ${messageAr}
 
@@ -438,9 +479,15 @@ ${isRecipientFOM ? 'الإجراء المطلوب: إرفاق التصاريح' 
     mmpName: string,
     forwarderName: string,
     coordinatorCount: number,
-    mmpId?: string
+    mmpId?: string,
+    recipientRole?: string
   ): Promise<EmailNotificationResult> {
     const viewMmpUrl = mmpId ? `${APP_URL}/mmp/${mmpId}` : `${APP_URL}/mmp`;
+    
+    // Format the title for display
+    const displayTitle = recipientRole ? formatRoleName(recipientRole) : 'Team Member';
+    const greetingEn = `Hello ${recipientName}, ${displayTitle},`;
+    const greetingAr = `مرحباً ${recipientName}، ${displayTitle}،`;
     
     const titleEn = 'MMP Forwarded to Coordinators';
     const titleAr = 'تم إرسال خطة المراقبة الشهرية إلى المنسقين';
@@ -465,7 +512,7 @@ ${isRecipientFOM ? 'الإجراء المطلوب: إرفاق التصاريح' 
           
           <!-- English Section -->
           <div style="margin-bottom: 25px; padding-bottom: 25px; border-bottom: 1px solid #eee;">
-            <p style="color: #333; font-size: 16px; line-height: 1.5;">Hello ${recipientName},</p>
+            <p style="color: #333; font-size: 16px; line-height: 1.5;">${greetingEn}</p>
             <p style="color: #333; font-size: 16px; line-height: 1.5;">${messageEn}</p>
             
             <div style="background-color: #fff3e0; border-left: 4px solid #ff9800; border-radius: 4px; padding: 16px; margin: 20px 0;">
@@ -477,7 +524,7 @@ ${isRecipientFOM ? 'الإجراء المطلوب: إرفاق التصاريح' 
           
           <!-- Arabic Section -->
           <div dir="rtl" style="margin-top: 25px; padding-top: 25px; border-top: 1px solid #eee; text-align: right;">
-            <p style="color: #333; font-size: 16px; line-height: 1.8;">مرحباً ${recipientName}،</p>
+            <p style="color: #333; font-size: 16px; line-height: 1.8;">${greetingAr}</p>
             <p style="color: #333; font-size: 16px; line-height: 1.8;">${messageAr}</p>
             
             <div style="background-color: #fff3e0; border-right: 4px solid #ff9800; border-radius: 4px; padding: 16px; margin: 20px 0;">
@@ -514,7 +561,7 @@ ${isRecipientFOM ? 'الإجراء المطلوب: إرفاق التصاريح' 
       </html>
     `;
     
-    const text = `Hello ${recipientName},
+    const text = `${greetingEn}
 
 ${messageEn}
 
@@ -526,7 +573,7 @@ View MMP: ${viewMmpUrl}
 
 ---
 
-مرحباً ${recipientName}،
+${greetingAr}
 
 ${messageAr}
 
