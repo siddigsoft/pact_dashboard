@@ -200,22 +200,102 @@ export const EmailNotificationService = {
   },
 
   // ============================================
-  // TEMPLATE 6: Welcome Email (New User)
+  // TEMPLATE 6: Welcome Email (New User) - Bilingual
   // ============================================
   async sendWelcomeEmail(
     email: string,
     recipientName: string,
     role: string
   ): Promise<EmailNotificationResult> {
-    return this.sendNotification(email, recipientName, {
-      title: 'Welcome to PACT Workflow Platform',
-      message: `Your account has been created with the role of "${role}". You can now log in to access your dashboard and start managing your assignments.`,
-      type: 'success',
-      details: [
-        { label: 'Role', value: role },
-      ],
-      actionUrl: '/login',
-      actionLabel: 'Log In Now',
+    const html = `
+      <!DOCTYPE html>
+      <html dir="ltr">
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Welcome to PACT | مرحباً بك في باكت</title>
+      </head>
+      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
+        <div style="background-color: white; border-radius: 8px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <div style="text-align: center; margin-bottom: 30px;">
+            <h1 style="color: #1a1a2e; margin: 0; font-size: 24px;">PACT Workflow Platform</h1>
+            <p style="color: #666; margin: 5px 0 0 0; font-size: 14px;">منصة باكت للعمليات الميدانية</p>
+          </div>
+          
+          <!-- English Section -->
+          <div style="margin-bottom: 25px; padding-bottom: 25px; border-bottom: 1px solid #eee;">
+            <p style="color: #333; font-size: 16px; line-height: 1.5;">Hello ${recipientName},</p>
+            <p style="color: #333; font-size: 16px; line-height: 1.5;">Welcome to PACT Workflow Platform! Your account has been approved and is now active.</p>
+            
+            <div style="background-color: #e8f5e9; border-left: 4px solid #4caf50; border-radius: 4px; padding: 16px; margin: 20px 0;">
+              <p style="margin: 0; color: #333;"><strong>Account Status:</strong> Approved</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>Role:</strong> ${role}</p>
+            </div>
+            
+            <p style="color: #333; font-size: 16px; line-height: 1.5;">You can now log in to access your dashboard and start managing your assignments.</p>
+          </div>
+          
+          <!-- Arabic Section -->
+          <div dir="rtl" style="margin-top: 25px; padding-top: 25px; border-top: 1px solid #eee; text-align: right;">
+            <p style="color: #333; font-size: 16px; line-height: 1.8;">مرحباً ${recipientName}،</p>
+            <p style="color: #333; font-size: 16px; line-height: 1.8;">أهلاً بك في منصة باكت للعمليات الميدانية! تمت الموافقة على حسابك وأصبح نشطاً الآن.</p>
+            
+            <div style="background-color: #e8f5e9; border-right: 4px solid #4caf50; border-radius: 4px; padding: 16px; margin: 20px 0;">
+              <p style="margin: 0; color: #333;"><strong>حالة الحساب:</strong> تمت الموافقة</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>الدور:</strong> ${role}</p>
+            </div>
+            
+            <p style="color: #333; font-size: 16px; line-height: 1.8;">يمكنك الآن تسجيل الدخول للوصول إلى لوحة التحكم الخاصة بك والبدء في إدارة مهامك.</p>
+          </div>
+          
+          <div style="text-align: center; margin: 25px 0;">
+            <a href="${APP_URL}/login" style="display: inline-block; padding: 14px 30px; background-color: #9b87f5; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
+              Log In Now | تسجيل الدخول
+            </a>
+          </div>
+          
+          <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+          <p style="color: #999; font-size: 12px; text-align: center;">
+            This is an automated message from PACT Workflow Platform.<br>
+            هذه رسالة آلية من منصة باكت للعمليات الميدانية.<br>
+            ICT Team - PACT Command Center Platform<br>
+            فريق تكنولوجيا المعلومات - منصة مركز قيادة باكت
+          </p>
+        </div>
+      </body>
+      </html>
+    `;
+    
+    const text = `Hello ${recipientName},
+
+Welcome to PACT Workflow Platform! Your account has been approved and is now active.
+
+Account Status: Approved
+Role: ${role}
+
+You can now log in to access your dashboard and start managing your assignments.
+
+Log in at: ${APP_URL}/login
+
+---
+
+مرحباً ${recipientName}،
+
+أهلاً بك في منصة باكت للعمليات الميدانية! تمت الموافقة على حسابك وأصبح نشطاً الآن.
+
+حالة الحساب: تمت الموافقة
+الدور: ${role}
+
+يمكنك الآن تسجيل الدخول للوصول إلى لوحة التحكم الخاصة بك والبدء في إدارة مهامك.
+
+- PACT Workflow Platform | منصة باكت`;
+
+    return this.sendEmail({
+      to: email,
+      subject: 'Welcome to PACT | مرحباً بك في باكت',
+      recipientName,
+      html,
+      text,
     });
   },
 

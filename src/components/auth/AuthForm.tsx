@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/select";
 import { Mail, Lock, Eye, EyeOff, User, Phone, Badge } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useTranslation } from 'react-i18next';
 import { useAppContext } from '@/context/AppContext';
 import AvatarUpload from '@/components/registration/AvatarUpload';
 import { hubs, sudanStates, getLocalitiesByState } from '@/data/sudanStates';
@@ -23,6 +24,7 @@ interface AuthFormProps {
 }
 
 const AuthForm = ({ mode }: AuthFormProps) => {
+  const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
@@ -321,8 +323,8 @@ const AuthForm = ({ mode }: AuthFormProps) => {
           const success = await login(email, password);
           if (success) {
             toast({
-              title: "Welcome back!",
-              description: "You have successfully logged in.",
+              title: t('notifications.auth.loginSuccess'),
+              description: t('notifications.auth.loginSuccessDesc'),
               variant: "default"
             });
             navigate('/dashboard');
@@ -363,8 +365,8 @@ const AuthForm = ({ mode }: AuthFormProps) => {
     }
     
     toast({
-      title: "Welcome back!",
-      description: "You have successfully logged in with two-factor authentication.",
+      title: t('notifications.auth.loginSuccess'),
+      description: t('notifications.auth.loginSuccessDesc'),
       variant: "default"
     });
     
