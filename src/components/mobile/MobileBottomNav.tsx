@@ -28,29 +28,12 @@ interface MobileBottomNavProps {
 }
 
 const getNavItemsForRole = (hasRole: (role: AppRole) => boolean): NavItem[] => {
-  // Fixed navigation: Home, Sites, and conditionally Wallet
+  // Fixed navigation: Home, Sites, SOS, Wallet - Wallet is available to all field users
   const items: NavItem[] = [
     { icon: LayoutDashboard, label: 'Home', path: '/dashboard', offlineCapable: false },
     { icon: MapPin, label: 'Sites', path: '/site-visits', offlineCapable: true },
+    { icon: Wallet, label: 'Wallet', path: '/wallet', offlineCapable: false },
   ];
-
-  // Wallet is only visible to management roles, not Data Collectors or Coordinators
-  const canViewWallet = hasRole('SuperAdmin' as AppRole) || 
-    hasRole('Admin' as AppRole) || 
-    hasRole('admin' as AppRole) ||
-    hasRole('FinancialAdmin' as AppRole) || 
-    hasRole('financialAdmin' as AppRole) ||
-    hasRole('Field Operation Manager (FOM)' as AppRole) || 
-    hasRole('fom' as AppRole) ||
-    hasRole('Supervisor' as AppRole) || 
-    hasRole('supervisor' as AppRole) ||
-    hasRole('ProjectManager' as AppRole) ||
-    hasRole('projectManager' as AppRole) ||
-    hasRole('SeniorOperationsLead' as AppRole);
-
-  if (canViewWallet) {
-    items.push({ icon: Wallet, label: 'Wallet', path: '/wallet', offlineCapable: false });
-  }
 
   return items;
 };
