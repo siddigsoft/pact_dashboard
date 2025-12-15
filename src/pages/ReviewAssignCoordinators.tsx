@@ -566,7 +566,20 @@ const ReviewAssignCoordinators: React.FC = () => {
                           <div className="flex items-center gap-3">
                             <Select 
                               value={selectedId} 
-                              onValueChange={val => setAssignmentMap(a => ({ ...a, [groupKey]: val }))}
+                              onValueChange={val => {
+                                setAssignmentMap(a => ({ ...a, [groupKey]: val }));
+                                // Auto-select supervisor for the hub that has the coordinator's state
+                                const coord = allCoordinators.find(c => c.id === val);
+                                if (coord) {
+                                  const hubForState = hubStates.find(hs => hs.state_id === coord.stateId);
+                                  if (hubForState) {
+                                    const supervisorForHub = allSupervisors.find(s => s.hubId === hubForState.hub_id);
+                                    if (supervisorForHub) {
+                                      setSupervisorMap(s => ({ ...s, [groupKey]: supervisorForHub.id }));
+                                    }
+                                  }
+                                }
+                              }}
                             >
                               <SelectTrigger className="max-w-md">
                                 <SelectValue placeholder="Select coordinator..." />
@@ -576,26 +589,32 @@ const ReviewAssignCoordinators: React.FC = () => {
                                 {allCoordinators.filter(c => c.stateId === stateId).map(c => (
                                   <SelectItem key={c.id} value={c.id}>
                                     {c.fullName || c.name || c.email}
-                                    {recommended?.id === c.id ? '' : ''}
                                   </SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
-                            <Select 
-                              value={supervisorMap[groupKey] || ''} 
-                              onValueChange={val => setSupervisorMap(s => ({ ...s, [groupKey]: val }))}
-                            >
-                              <SelectTrigger className="max-w-md">
-                                <SelectValue placeholder="Select supervisor (optional - for notifications only)..." />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {allSupervisors.map(s => (
-                                  <SelectItem key={s.id} value={s.id}>
-                                    {s.fullName || s.name || s.email}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                            {/* Filter supervisors by the hub that contains the group's state */}
+                            {(() => {
+                              const hubForGroupState = hubStates.find(hs => hs.state_id === stateId);
+                              const hubId = hubForGroupState?.hub_id;
+                              return (
+                                <Select 
+                                  value={supervisorMap[groupKey] || ''} 
+                                  onValueChange={val => setSupervisorMap(s => ({ ...s, [groupKey]: val }))}
+                                >
+                                  <SelectTrigger className="max-w-md">
+                                    <SelectValue placeholder="Select supervisor (optional - for notifications only)..." />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {allSupervisors.filter(s => s.hubId === hubId).map(s => (
+                                      <SelectItem key={s.id} value={s.id}>
+                                        {s.fullName || s.name || s.email}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              );
+                            })()}
                           </div>
                           
                           {/* State Permit Attachment Option */}
