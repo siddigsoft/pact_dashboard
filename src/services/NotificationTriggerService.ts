@@ -1119,9 +1119,9 @@ export const NotificationTriggerService = {
 
   /**
    * Notify FOM and all Admins/Super Admins when MMP is forwarded to FOM
-   * - Sends notification to all selected FOMs
-   * - Sends notification to all Admins and Super Admins
-   * - Sends email notifications to all recipients
+   * - Sends notification to all selected FOMs with bilingual email
+   * - Sends notification to all Admins and Super Admins with bilingual email
+   * - Uses dedicated bilingual email template for professional formatting
    */
   async mmpForwardedToFOM(
     fomUserIds: string[],
@@ -1131,56 +1131,101 @@ export const NotificationTriggerService = {
   ): Promise<number> {
     try {
       let successCount = 0;
+      const sender = forwarderName || 'System';
 
-      // 1. Notify all selected FOMs with email
+      // 1. Fetch FOM user details for bilingual emails
+      const { data: fomUsers, error: fomError } = await supabase
+        .from('profiles')
+        .select('id, full_name, email')
+        .in('id', fomUserIds);
+
+      if (fomError) {
+        console.error('Error fetching FOM user details:', fomError);
+      }
+
+      // 2. Notify all selected FOMs with bilingual email
       for (const fomId of fomUserIds) {
+        const fomUser = fomUsers?.find(u => u.id === fomId);
+        const recipientName = fomUser?.full_name || 'Field Operations Manager';
+        const recipientEmail = fomUser?.email;
+
+        // Create in-app notification
         const sent = await this.send({
           userId: fomId,
           title: 'MMP Forwarded to You',
-          message: `MMP "${mmpName}" has been forwarded to you for permits attachment${forwarderName ? ` by ${forwarderName}` : ''}`,
+          message: `MMP "${mmpName}" has been forwarded to you for permits attachment by ${sender}`,
           type: 'info',
           category: 'assignments',
           priority: 'high',
           link: `/mmp/${mmpId}`,
           relatedEntityId: mmpId,
           relatedEntityType: 'mmpFile',
-          sendEmail: true,
-          emailActionUrl: `/mmp/${mmpId}`,
-          emailActionLabel: 'View MMP'
+          sendEmail: false // We send bilingual email separately
         });
         if (sent) successCount++;
+
+        // Send bilingual email directly
+        if (recipientEmail) {
+          try {
+            await EmailNotificationService.sendMMPForwardedToFOM(
+              recipientEmail,
+              recipientName,
+              mmpName,
+              sender,
+              mmpId,
+              true // isRecipientFOM
+            );
+            console.log(`[NOTIFICATION] Sent bilingual MMP forwarded email to FOM: ${recipientEmail}`);
+          } catch (emailError) {
+            console.error(`[NOTIFICATION] Failed to send bilingual email to FOM ${recipientEmail}:`, emailError);
+          }
+        }
       }
 
-      // 2. Fetch all Admins and Super Admins
+      // 3. Fetch all Admins and Super Admins
       const { data: adminUsers, error: adminError } = await supabase
         .from('profiles')
-        .select('id')
+        .select('id, full_name, email')
         .in('role', ['admin', 'super_admin', 'Admin', 'SuperAdmin']);
 
       if (adminError) {
         console.error('Error fetching admins for MMP forward notification:', adminError);
       } else if (adminUsers && adminUsers.length > 0) {
-        // 3. Notify all Admins/Super Admins with email
-        // Note: Admins who are also FOMs get both notifications - the FOM notification about their assignment
-        // AND the admin notification about the forwarding action. This is intentional for full visibility.
-        const adminIds = adminUsers.map(u => u.id);
-        
-        for (const adminId of adminIds) {
+        // 4. Notify all Admins/Super Admins with bilingual email
+        for (const admin of adminUsers) {
+          const recipientName = admin.full_name || 'Administrator';
+          
+          // Create in-app notification
           const sent = await this.send({
-            userId: adminId,
+            userId: admin.id,
             title: 'MMP Forwarded to FOM',
-            message: `MMP "${mmpName}" has been forwarded to ${fomUserIds.length} Field Operations Manager(s)${forwarderName ? ` by ${forwarderName}` : ''}`,
+            message: `MMP "${mmpName}" has been forwarded to ${fomUserIds.length} Field Operations Manager(s) by ${sender}`,
             type: 'info',
             category: 'assignments',
             priority: 'high',
             link: `/mmp/${mmpId}`,
             relatedEntityId: mmpId,
             relatedEntityType: 'mmpFile',
-            sendEmail: true,
-            emailActionUrl: `/mmp/${mmpId}`,
-            emailActionLabel: 'View MMP'
+            sendEmail: false // We send bilingual email separately
           });
           if (sent) successCount++;
+
+          // Send bilingual email directly
+          if (admin.email) {
+            try {
+              await EmailNotificationService.sendMMPForwardedToFOM(
+                admin.email,
+                recipientName,
+                mmpName,
+                sender,
+                mmpId,
+                false // isRecipientFOM (admin gets info notification, not action required)
+              );
+              console.log(`[NOTIFICATION] Sent bilingual MMP forwarded email to Admin: ${admin.email}`);
+            } catch (emailError) {
+              console.error(`[NOTIFICATION] Failed to send bilingual email to Admin ${admin.email}:`, emailError);
+            }
+          }
         }
       }
 
