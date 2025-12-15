@@ -108,19 +108,36 @@ export const NotificationTriggerService = {
 
     try {
       // Map to actual database schema columns
+      // Schema columns: id, event_type, entity_type, entity_id, priority, status, recipient_id,
+      // recipient_email, recipient_role, title_en, title_ar, message_en, message_ar, triggered_by,
+      // triggered_by_name, workflow_stage, action_url, metadata, email_sent, email_sent_at,
+      // email_error, read_at, created_at, updated_at, user_id, is_read, type, title, message,
+      // link, related_entity_id, related_entity_type
       const notificationData = {
+        // Primary fields (used by usePersistentNotifications for mobile app and web UI)
         recipient_id: userId,
         title_en: title,
-        title_ar: title,
+        title_ar: title, // Same content for now, can be localized later
         message_en: message,
-        message_ar: message,
-        priority: priority,
-        action_url: link,
-        entity_id: relatedEntityId,
-        entity_type: relatedEntityType,
-        event_type: category,
-        status: 'pending',
-        email_sent: false
+        message_ar: message, // Same content for now, can be localized later
+        status: 'pending' as const,
+        event_type: category || 'system', // category maps to event_type in DB
+        entity_type: relatedEntityType || null,
+        entity_id: relatedEntityId || null,
+        action_url: link || null,
+        // Legacy fields (for backward compatibility with old NotificationContext)
+        user_id: userId,
+        title: title,
+        message: message,
+        type: type,
+        link: link,
+        related_entity_id: relatedEntityId,
+        related_entity_type: relatedEntityType,
+        is_read: false,
+        // Common fields
+        priority: priority === 'urgent' ? 'urgent' : priority === 'high' ? 'high' : 'normal',
+        email_sent: false,
+        created_at: new Date().toISOString()
       };
 
       console.log(`[NOTIFICATION] Inserting into database:`, JSON.stringify(notificationData));
@@ -773,15 +790,15 @@ export const NotificationTriggerService = {
    * Helper: Find all management users for hub notifications
    * Includes: Hub Supervisors, Hub FOMs, all Super Admins, and all Admins
    */
-  async getHubManagementUsers(hubId: string): Promise<{ id: string; full_name: string; email: string }[]> {
+  async getHubManagementUsers(hubId: string): Promise<{ id: string; full_name: string; email: string; role: string }[]> {
     try {
-      const allUsers: { id: string; full_name: string; email: string }[] = [];
+      const allUsers: { id: string; full_name: string; email: string; role: string }[] = [];
       const seenIds = new Set<string>();
 
       // 1. Get hub supervisors (role = 'supervisor' in the specific hub)
       const { data: supervisors, error: supError } = await supabase
         .from('profiles')
-        .select('id, full_name, email')
+        .select('id, full_name, email, role')
         .eq('hub_id', hubId)
         .eq('role', 'supervisor');
 
@@ -789,7 +806,7 @@ export const NotificationTriggerService = {
         supervisors.forEach(s => {
           if (!seenIds.has(s.id)) {
             seenIds.add(s.id);
-            allUsers.push(s);
+            allUsers.push({ ...s, role: s.role || 'supervisor' });
           }
         });
       }
@@ -797,7 +814,7 @@ export const NotificationTriggerService = {
       // 2. Get hub FOMs (role = 'fom' in the specific hub)
       const { data: foms, error: fomError } = await supabase
         .from('profiles')
-        .select('id, full_name, email')
+        .select('id, full_name, email, role')
         .eq('hub_id', hubId)
         .eq('role', 'fom');
 
@@ -805,7 +822,7 @@ export const NotificationTriggerService = {
         foms.forEach(f => {
           if (!seenIds.has(f.id)) {
             seenIds.add(f.id);
-            allUsers.push(f);
+            allUsers.push({ ...f, role: f.role || 'fom' });
           }
         });
       }
@@ -813,14 +830,14 @@ export const NotificationTriggerService = {
       // 3. Get all super admins (global, not hub-specific)
       const { data: superAdmins, error: saError } = await supabase
         .from('profiles')
-        .select('id, full_name, email')
+        .select('id, full_name, email, role')
         .in('role', ['super_admin', 'superAdmin']);
 
       if (!saError && superAdmins) {
         superAdmins.forEach(sa => {
           if (!seenIds.has(sa.id)) {
             seenIds.add(sa.id);
-            allUsers.push(sa);
+            allUsers.push({ ...sa, role: sa.role || 'super_admin' });
           }
         });
       }
@@ -828,14 +845,14 @@ export const NotificationTriggerService = {
       // 4. Get all admins (global, not hub-specific)
       const { data: admins, error: adminError } = await supabase
         .from('profiles')
-        .select('id, full_name, email')
+        .select('id, full_name, email, role')
         .eq('role', 'admin');
 
       if (!adminError && admins) {
         admins.forEach(a => {
           if (!seenIds.has(a.id)) {
             seenIds.add(a.id);
-            allUsers.push(a);
+            allUsers.push({ ...a, role: a.role || 'admin' });
           }
         });
       }
@@ -922,7 +939,8 @@ export const NotificationTriggerService = {
               mmpName,
               sender,
               coordinatorCount,
-              mmpId
+              mmpId,
+              user.role // pass role for greeting
             );
             console.log(`[NOTIFICATION] Sent bilingual MMP->Coordinators email to: ${user.email}`);
           } catch (emailError) {
@@ -934,7 +952,7 @@ export const NotificationTriggerService = {
       // 3. Also notify Admins and Super Admins who may not be in the hub
       const { data: adminUsers, error: adminError } = await supabase
         .from('profiles')
-        .select('id, full_name, email')
+        .select('id, full_name, email, role')
         .in('role', ['admin', 'super_admin', 'Admin', 'SuperAdmin']);
 
       if (adminError) {
@@ -968,7 +986,8 @@ export const NotificationTriggerService = {
                 mmpName,
                 sender,
                 coordinatorCount,
-                mmpId
+                mmpId,
+                admin.role
               );
               console.log(`[NOTIFICATION] Sent bilingual MMP->Coordinators email to Admin: ${admin.email}`);
             } catch (emailError) {
@@ -1322,14 +1341,23 @@ export const NotificationTriggerService = {
     forwarderName?: string
   ): Promise<number> {
     try {
+      console.log(`[NOTIFICATION-DEBUG] mmpForwardedToFOM called with:`, {
+        fomUserIds,
+        mmpName,
+        mmpId,
+        forwarderName
+      });
+      
       let successCount = 0;
       const sender = forwarderName || 'System';
 
-      // 1. Fetch FOM user details for bilingual emails
+      // 1. Fetch FOM user details for bilingual emails (including role)
       const { data: fomUsers, error: fomError } = await supabase
         .from('profiles')
-        .select('id, full_name, email')
+        .select('id, full_name, email, role')
         .in('id', fomUserIds);
+
+      console.log(`[NOTIFICATION-DEBUG] Fetched FOM users:`, { fomUsers, fomError });
 
       if (fomError) {
         console.error('Error fetching FOM user details:', fomError);
@@ -1340,6 +1368,9 @@ export const NotificationTriggerService = {
         const fomUser = fomUsers?.find(u => u.id === fomId);
         const recipientName = fomUser?.full_name || 'Field Operations Manager';
         const recipientEmail = fomUser?.email;
+        const recipientRole = fomUser?.role;
+
+        console.log(`[NOTIFICATION-DEBUG] Processing FOM:`, { fomId, recipientName, recipientEmail });
 
         // Create in-app notification
         const sent = await this.send({
@@ -1354,6 +1385,7 @@ export const NotificationTriggerService = {
           relatedEntityType: 'mmpFile',
           sendEmail: false // We send bilingual email separately
         });
+        console.log(`[NOTIFICATION-DEBUG] FOM notification send result:`, sent);
         if (sent) successCount++;
 
         // Send bilingual email directly
@@ -1365,7 +1397,8 @@ export const NotificationTriggerService = {
               mmpName,
               sender,
               mmpId,
-              true // isRecipientFOM
+              true, // isRecipientFOM
+              recipientRole // pass role for greeting
             );
             console.log(`[NOTIFICATION] Sent bilingual MMP forwarded email to FOM: ${recipientEmail}`);
           } catch (emailError) {
@@ -1374,10 +1407,10 @@ export const NotificationTriggerService = {
         }
       }
 
-      // 3. Fetch all Admins and Super Admins
+      // 3. Fetch all Admins and Super Admins (including role)
       const { data: adminUsers, error: adminError } = await supabase
         .from('profiles')
-        .select('id, full_name, email')
+        .select('id, full_name, email, role')
         .in('role', ['admin', 'super_admin', 'Admin', 'SuperAdmin']);
 
       if (adminError) {
@@ -1411,7 +1444,8 @@ export const NotificationTriggerService = {
                 mmpName,
                 sender,
                 mmpId,
-                false // isRecipientFOM (admin gets info notification, not action required)
+                false, // isRecipientFOM (admin gets info notification, not action required)
+                admin.role // pass role for greeting
               );
               console.log(`[NOTIFICATION] Sent bilingual MMP forwarded email to Admin: ${admin.email}`);
             } catch (emailError) {
