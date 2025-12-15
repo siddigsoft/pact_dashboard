@@ -286,6 +286,31 @@ const ReviewAssignCoordinators: React.FC = () => {
     return acc;
   }, {} as Record<string, any[]>);
 
+  // Initialize selectedSites for groups that don't have it set yet
+  // This must be in useEffect to avoid re-renders during render
+  useEffect(() => {
+    if (!mmpFile || loading || loadingForwardedStates) return;
+
+    const updates: Record<string, Set<string>> = {};
+    let hasUpdates = false;
+
+    Object.entries(filteredGroupMap).forEach(([groupKey, groupSites]) => {
+      // Only initialize if not already set
+      if (!selectedSites[groupKey]) {
+        const unforwardedSites = groupSites.filter((site: any) => !forwardedSiteIds.has(site.id));
+        if (unforwardedSites.length > 0) {
+          updates[groupKey] = new Set(unforwardedSites.map((site: any) => site.id));
+          hasUpdates = true;
+        }
+      }
+    });
+
+    if (hasUpdates) {
+      setSelectedSites(prev => ({ ...prev, ...updates }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredGroupMap, forwardedSiteIds, mmpFile, loading, loadingForwardedStates]);
+
   // All coordinators in the system
   const allCoordinators = users.filter(u => u.role === 'coordinator');
 
@@ -535,11 +560,6 @@ const ReviewAssignCoordinators: React.FC = () => {
                 const unforwardedSites = groupSites.filter((site: any) => !forwardedSiteIds.has(site.id));
                 const hasUnforwardedSites = unforwardedSites.length > 0;
                 const hasForwardedSites = forwardedSites.length > 0;
-                
-                // Initialize selectedSites for this group if not set (only for unforwarded sites)
-                if (!selectedSites[groupKey] && hasUnforwardedSites) {
-                  setSelectedSites(s => ({ ...s, [groupKey]: new Set(unforwardedSites.map((site: any) => site.id)) }));
-                }
                 
                 return (
                   <div key={groupKey} className="border rounded-lg p-4 bg-gray-50">
