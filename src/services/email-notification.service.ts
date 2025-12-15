@@ -255,6 +255,15 @@ export const EmailNotificationService = {
           </div>
           
           <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+          
+          <!-- Management Oversight Notice -->
+          <div style="background-color: #f8f9fa; border-radius: 4px; padding: 12px; margin-bottom: 20px;">
+            <p style="color: #666; font-size: 11px; text-align: center; margin: 0; line-height: 1.5;">
+              This notification has been sent to relevant management including Administrators, Field Operations Managers, and Supervisors for oversight and accountability.<br><br>
+              <span dir="rtl">تم إرسال هذا الإشعار إلى الإدارة المعنية بما في ذلك المسؤولين ومديري العمليات الميدانية والمشرفين للإشراف والمساءلة.</span>
+            </p>
+          </div>
+          
           <p style="color: #999; font-size: 12px; text-align: center;">
             This is an automated message from PACT Workflow Platform.<br>
             هذه رسالة آلية من منصة باكت للعمليات الميدانية.<br>
@@ -293,6 +302,367 @@ Log in at: ${APP_URL}/login
     return this.sendEmail({
       to: email,
       subject: 'Welcome to PACT | مرحباً بك في باكت',
+      recipientName,
+      html,
+      text,
+    });
+  },
+
+  // ============================================
+  // TEMPLATE 6B: MMP Forwarded to FOM - Bilingual
+  // ============================================
+  async sendMMPForwardedToFOM(
+    email: string,
+    recipientName: string,
+    mmpName: string,
+    forwarderName: string,
+    mmpId: string,
+    isRecipientFOM: boolean = true
+  ): Promise<EmailNotificationResult> {
+    const viewMmpUrl = `${APP_URL}/mmp/${mmpId}`;
+    
+    const titleEn = isRecipientFOM ? 'MMP Forwarded to You' : 'MMP Forwarded to FOM';
+    const titleAr = isRecipientFOM ? 'تم إرسال خطة المراقبة الشهرية إليك' : 'تم إرسال خطة المراقبة الشهرية إلى مدير العمليات الميدانية';
+    
+    const messageEn = isRecipientFOM 
+      ? `The Monthly Monitoring Plan "${mmpName}" has been forwarded to you for permits attachment by ${forwarderName}. Please review and attach the necessary permits.`
+      : `The Monthly Monitoring Plan "${mmpName}" has been forwarded to the Field Operations Manager(s) for permits attachment by ${forwarderName}.`;
+    
+    const messageAr = isRecipientFOM
+      ? `تم إرسال خطة المراقبة الشهرية "${mmpName}" إليك لإرفاق التصاريح بواسطة ${forwarderName}. يرجى المراجعة وإرفاق التصاريح اللازمة.`
+      : `تم إرسال خطة المراقبة الشهرية "${mmpName}" إلى مدير(مديري) العمليات الميدانية لإرفاق التصاريح بواسطة ${forwarderName}.`;
+
+    const html = `
+      <!DOCTYPE html>
+      <html dir="ltr">
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${titleEn} | ${titleAr}</title>
+      </head>
+      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
+        <div style="background-color: white; border-radius: 8px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <div style="text-align: center; margin-bottom: 30px;">
+            <h1 style="color: #1a1a2e; margin: 0; font-size: 24px;">PACT Workflow Platform</h1>
+            <p style="color: #666; margin: 5px 0 0 0; font-size: 14px;">منصة باكت للعمليات الميدانية</p>
+          </div>
+          
+          <!-- English Section -->
+          <div style="margin-bottom: 25px; padding-bottom: 25px; border-bottom: 1px solid #eee;">
+            <p style="color: #333; font-size: 16px; line-height: 1.5;">Hello ${recipientName},</p>
+            <p style="color: #333; font-size: 16px; line-height: 1.5;">${messageEn}</p>
+            
+            <div style="background-color: #e3f2fd; border-left: 4px solid #2196f3; border-radius: 4px; padding: 16px; margin: 20px 0;">
+              <p style="margin: 0; color: #333;"><strong>MMP Name:</strong> ${mmpName}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>Forwarded By:</strong> ${forwarderName}</p>
+              ${isRecipientFOM ? '<p style="margin: 10px 0 0 0; color: #333;"><strong>Action Required:</strong> Attach Permits</p>' : ''}
+            </div>
+          </div>
+          
+          <!-- Arabic Section -->
+          <div dir="rtl" style="margin-top: 25px; padding-top: 25px; border-top: 1px solid #eee; text-align: right;">
+            <p style="color: #333; font-size: 16px; line-height: 1.8;">مرحباً ${recipientName}،</p>
+            <p style="color: #333; font-size: 16px; line-height: 1.8;">${messageAr}</p>
+            
+            <div style="background-color: #e3f2fd; border-right: 4px solid #2196f3; border-radius: 4px; padding: 16px; margin: 20px 0;">
+              <p style="margin: 0; color: #333;"><strong>اسم خطة المراقبة الشهرية:</strong> ${mmpName}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>تم الإرسال بواسطة:</strong> ${forwarderName}</p>
+              ${isRecipientFOM ? '<p style="margin: 10px 0 0 0; color: #333;"><strong>الإجراء المطلوب:</strong> إرفاق التصاريح</p>' : ''}
+            </div>
+          </div>
+          
+          <div style="text-align: center; margin: 25px 0;">
+            <a href="${viewMmpUrl}" style="display: inline-block; padding: 14px 30px; background-color: #9b87f5; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
+              View MMP | عرض خطة المراقبة الشهرية
+            </a>
+          </div>
+          
+          <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+          
+          <!-- Management Oversight Notice -->
+          <div style="background-color: #f8f9fa; border-radius: 4px; padding: 12px; margin-bottom: 20px;">
+            <p style="color: #666; font-size: 11px; text-align: center; margin: 0; line-height: 1.5;">
+              This notification has been sent to relevant management including Administrators, Field Operations Managers, and Supervisors for oversight and accountability.<br><br>
+              <span dir="rtl">تم إرسال هذا الإشعار إلى الإدارة المعنية بما في ذلك المسؤولين ومديري العمليات الميدانية والمشرفين للإشراف والمساءلة.</span>
+            </p>
+          </div>
+          
+          <p style="color: #999; font-size: 12px; text-align: center;">
+            This is an automated message from PACT Workflow Platform.<br>
+            هذه رسالة آلية من منصة باكت للعمليات الميدانية.<br>
+            ICT Team - PACT Command Center Platform<br>
+            فريق تكنولوجيا المعلومات - منصة مركز قيادة باكت
+          </p>
+        </div>
+      </body>
+      </html>
+    `;
+    
+    const text = `Hello ${recipientName},
+
+${messageEn}
+
+MMP Name: ${mmpName}
+Forwarded By: ${forwarderName}
+${isRecipientFOM ? 'Action Required: Attach Permits' : ''}
+
+View MMP: ${viewMmpUrl}
+
+---
+
+مرحباً ${recipientName}،
+
+${messageAr}
+
+اسم خطة المراقبة الشهرية: ${mmpName}
+تم الإرسال بواسطة: ${forwarderName}
+${isRecipientFOM ? 'الإجراء المطلوب: إرفاق التصاريح' : ''}
+
+- PACT Workflow Platform | منصة باكت`;
+
+    return this.sendEmail({
+      to: email,
+      subject: `${titleEn} | ${titleAr}`,
+      recipientName,
+      html,
+      text,
+    });
+  },
+
+  // ============================================
+  // TEMPLATE 6C: MMP Forwarded to Coordinators - Bilingual
+  // ============================================
+  async sendMMPForwardedToCoordinators(
+    email: string,
+    recipientName: string,
+    mmpName: string,
+    forwarderName: string,
+    coordinatorCount: number,
+    mmpId?: string
+  ): Promise<EmailNotificationResult> {
+    const viewMmpUrl = mmpId ? `${APP_URL}/mmp/${mmpId}` : `${APP_URL}/mmp`;
+    
+    const titleEn = 'MMP Forwarded to Coordinators';
+    const titleAr = 'تم إرسال خطة المراقبة الشهرية إلى المنسقين';
+    
+    const messageEn = `The Monthly Monitoring Plan "${mmpName}" has been forwarded to ${coordinatorCount} Coordinator(s) for site assignment and data collection by ${forwarderName}. Please monitor progress and ensure timely completion.`;
+    const messageAr = `تم إرسال خطة المراقبة الشهرية "${mmpName}" إلى ${coordinatorCount} منسق(ين) لتوزيع المواقع وجمع البيانات بواسطة ${forwarderName}. يرجى متابعة التقدم وضمان الإنجاز في الوقت المحدد.`;
+
+    const html = `
+      <!DOCTYPE html>
+      <html dir="ltr">
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${titleEn} | ${titleAr}</title>
+      </head>
+      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
+        <div style="background-color: white; border-radius: 8px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <div style="text-align: center; margin-bottom: 30px;">
+            <h1 style="color: #1a1a2e; margin: 0; font-size: 24px;">PACT Workflow Platform</h1>
+            <p style="color: #666; margin: 5px 0 0 0; font-size: 14px;">منصة باكت للعمليات الميدانية</p>
+          </div>
+          
+          <!-- English Section -->
+          <div style="margin-bottom: 25px; padding-bottom: 25px; border-bottom: 1px solid #eee;">
+            <p style="color: #333; font-size: 16px; line-height: 1.5;">Hello ${recipientName},</p>
+            <p style="color: #333; font-size: 16px; line-height: 1.5;">${messageEn}</p>
+            
+            <div style="background-color: #fff3e0; border-left: 4px solid #ff9800; border-radius: 4px; padding: 16px; margin: 20px 0;">
+              <p style="margin: 0; color: #333;"><strong>MMP Name:</strong> ${mmpName}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>Forwarded By:</strong> ${forwarderName}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>Coordinators Assigned:</strong> ${coordinatorCount}</p>
+            </div>
+          </div>
+          
+          <!-- Arabic Section -->
+          <div dir="rtl" style="margin-top: 25px; padding-top: 25px; border-top: 1px solid #eee; text-align: right;">
+            <p style="color: #333; font-size: 16px; line-height: 1.8;">مرحباً ${recipientName}،</p>
+            <p style="color: #333; font-size: 16px; line-height: 1.8;">${messageAr}</p>
+            
+            <div style="background-color: #fff3e0; border-right: 4px solid #ff9800; border-radius: 4px; padding: 16px; margin: 20px 0;">
+              <p style="margin: 0; color: #333;"><strong>اسم خطة المراقبة الشهرية:</strong> ${mmpName}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>تم الإرسال بواسطة:</strong> ${forwarderName}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>عدد المنسقين:</strong> ${coordinatorCount}</p>
+            </div>
+          </div>
+          
+          <div style="text-align: center; margin: 25px 0;">
+            <a href="${viewMmpUrl}" style="display: inline-block; padding: 14px 30px; background-color: #9b87f5; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
+              View MMP | عرض خطة المراقبة الشهرية
+            </a>
+          </div>
+          
+          <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+          
+          <!-- Management Oversight Notice -->
+          <div style="background-color: #f8f9fa; border-radius: 4px; padding: 12px; margin-bottom: 20px;">
+            <p style="color: #666; font-size: 11px; text-align: center; margin: 0; line-height: 1.5;">
+              This notification has been sent to relevant management including Administrators, Field Operations Managers, and Supervisors for oversight and accountability.<br><br>
+              <span dir="rtl">تم إرسال هذا الإشعار إلى الإدارة المعنية بما في ذلك المسؤولين ومديري العمليات الميدانية والمشرفين للإشراف والمساءلة.</span>
+            </p>
+          </div>
+          
+          <p style="color: #999; font-size: 12px; text-align: center;">
+            This is an automated message from PACT Workflow Platform.<br>
+            هذه رسالة آلية من منصة باكت للعمليات الميدانية.<br>
+            ICT Team - PACT Command Center Platform<br>
+            فريق تكنولوجيا المعلومات - منصة مركز قيادة باكت
+          </p>
+        </div>
+      </body>
+      </html>
+    `;
+    
+    const text = `Hello ${recipientName},
+
+${messageEn}
+
+MMP Name: ${mmpName}
+Forwarded By: ${forwarderName}
+Coordinators Assigned: ${coordinatorCount}
+
+View MMP: ${viewMmpUrl}
+
+---
+
+مرحباً ${recipientName}،
+
+${messageAr}
+
+اسم خطة المراقبة الشهرية: ${mmpName}
+تم الإرسال بواسطة: ${forwarderName}
+عدد المنسقين: ${coordinatorCount}
+
+- PACT Workflow Platform | منصة باكت`;
+
+    return this.sendEmail({
+      to: email,
+      subject: `${titleEn} | ${titleAr}`,
+      recipientName,
+      html,
+      text,
+    });
+  },
+
+  // ============================================
+  // TEMPLATE 6D: Site Verified by Coordinator - Bilingual
+  // ============================================
+  async sendSiteVerifiedByCoordinator(
+    email: string,
+    recipientName: string,
+    siteName: string,
+    coordinatorName: string,
+    mmpName: string,
+    siteId?: string
+  ): Promise<EmailNotificationResult> {
+    const viewSiteUrl = siteId ? `${APP_URL}/mmp?site=${siteId}` : `${APP_URL}/mmp`;
+    
+    const titleEn = 'Site Verified by Coordinator';
+    const titleAr = 'تم التحقق من الموقع بواسطة المنسق';
+    
+    const messageEn = `The site "${siteName}" from MMP "${mmpName}" has been verified by Coordinator ${coordinatorName}. The site visit data has been reviewed and approved.`;
+    const messageAr = `تم التحقق من الموقع "${siteName}" من خطة المراقبة الشهرية "${mmpName}" بواسطة المنسق ${coordinatorName}. تمت مراجعة بيانات زيارة الموقع والموافقة عليها.`;
+
+    const html = `
+      <!DOCTYPE html>
+      <html dir="ltr">
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${titleEn} | ${titleAr}</title>
+      </head>
+      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
+        <div style="background-color: white; border-radius: 8px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <div style="text-align: center; margin-bottom: 30px;">
+            <h1 style="color: #1a1a2e; margin: 0; font-size: 24px;">PACT Workflow Platform</h1>
+            <p style="color: #666; margin: 5px 0 0 0; font-size: 14px;">منصة باكت للعمليات الميدانية</p>
+          </div>
+          
+          <!-- English Section -->
+          <div style="margin-bottom: 25px; padding-bottom: 25px; border-bottom: 1px solid #eee;">
+            <p style="color: #333; font-size: 16px; line-height: 1.5;">Hello ${recipientName},</p>
+            <p style="color: #333; font-size: 16px; line-height: 1.5;">${messageEn}</p>
+            
+            <div style="background-color: #e8f5e9; border-left: 4px solid #4caf50; border-radius: 4px; padding: 16px; margin: 20px 0;">
+              <p style="margin: 0; color: #333;"><strong>Site Name:</strong> ${siteName}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>MMP:</strong> ${mmpName}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>Verified By:</strong> ${coordinatorName}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>Status:</strong> Verified</p>
+            </div>
+          </div>
+          
+          <!-- Arabic Section -->
+          <div dir="rtl" style="margin-top: 25px; padding-top: 25px; border-top: 1px solid #eee; text-align: right;">
+            <p style="color: #333; font-size: 16px; line-height: 1.8;">مرحباً ${recipientName}،</p>
+            <p style="color: #333; font-size: 16px; line-height: 1.8;">${messageAr}</p>
+            
+            <div style="background-color: #e8f5e9; border-right: 4px solid #4caf50; border-radius: 4px; padding: 16px; margin: 20px 0;">
+              <p style="margin: 0; color: #333;"><strong>اسم الموقع:</strong> ${siteName}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>خطة المراقبة الشهرية:</strong> ${mmpName}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>تم التحقق بواسطة:</strong> ${coordinatorName}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>الحالة:</strong> تم التحقق</p>
+            </div>
+          </div>
+          
+          <div style="text-align: center; margin: 25px 0;">
+            <a href="${viewSiteUrl}" style="display: inline-block; padding: 14px 30px; background-color: #9b87f5; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
+              View Site | عرض الموقع
+            </a>
+          </div>
+          
+          <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+          
+          <!-- Management Oversight Notice -->
+          <div style="background-color: #f8f9fa; border-radius: 4px; padding: 12px; margin-bottom: 20px;">
+            <p style="color: #666; font-size: 11px; text-align: center; margin: 0; line-height: 1.5;">
+              This notification has been sent to relevant management including Administrators, Field Operations Managers, and Supervisors for oversight and accountability.<br><br>
+              <span dir="rtl">تم إرسال هذا الإشعار إلى الإدارة المعنية بما في ذلك المسؤولين ومديري العمليات الميدانية والمشرفين للإشراف والمساءلة.</span>
+            </p>
+          </div>
+          
+          <p style="color: #999; font-size: 12px; text-align: center;">
+            This is an automated message from PACT Workflow Platform.<br>
+            هذه رسالة آلية من منصة باكت للعمليات الميدانية.<br>
+            ICT Team - PACT Command Center Platform<br>
+            فريق تكنولوجيا المعلومات - منصة مركز قيادة باكت
+          </p>
+        </div>
+      </body>
+      </html>
+    `;
+    
+    const text = `Hello ${recipientName},
+
+${messageEn}
+
+Site Name: ${siteName}
+MMP: ${mmpName}
+Verified By: ${coordinatorName}
+Status: Verified
+
+View Site: ${viewSiteUrl}
+
+---
+
+مرحباً ${recipientName}،
+
+${messageAr}
+
+اسم الموقع: ${siteName}
+خطة المراقبة الشهرية: ${mmpName}
+تم التحقق بواسطة: ${coordinatorName}
+الحالة: تم التحقق
+
+---
+This notification has been sent to relevant management for oversight and accountability.
+تم إرسال هذا الإشعار إلى الإدارة المعنية للإشراف والمساءلة.
+
+- PACT Workflow Platform | منصة باكت`;
+
+    return this.sendEmail({
+      to: email,
+      subject: `${titleEn} | ${titleAr}`,
       recipientName,
       html,
       text,
