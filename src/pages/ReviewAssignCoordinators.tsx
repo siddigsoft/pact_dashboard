@@ -503,7 +503,7 @@ const ReviewAssignCoordinators: React.FC = () => {
               onClick={() => setWithStatePermitOnly(prev => !prev)}
               className={withStatePermitOnly ? 'bg-blue-600 text-white' : ''}
             >
-              With State Permit
+              Federal Permit Attached
             </Button>
           </div>
 
@@ -523,7 +523,7 @@ const ReviewAssignCoordinators: React.FC = () => {
                 const [stateId, localityId] = groupKey.split('|');
                 const isUnassigned = stateId === 'unassigned';
                 const recommended = isUnassigned ? null : getRecommendedCoordinator(stateId, localityId);
-                const selectedId = assignmentMap[groupKey] || recommended?.id || '';
+                const selectedId = assignmentMap[groupKey] || '';  // Removed: recommended?.id || ''
                 
                 // Separate forwarded and unforwarded sites
                 const forwardedSites = groupSites.filter((site: any) => forwardedSiteIds.has(site.id));
@@ -566,35 +566,55 @@ const ReviewAssignCoordinators: React.FC = () => {
                           <div className="flex items-center gap-3">
                             <Select 
                               value={selectedId} 
-                              onValueChange={val => setAssignmentMap(a => ({ ...a, [groupKey]: val }))}
+                              onValueChange={val => {
+                                setAssignmentMap(a => ({ ...a, [groupKey]: val }));
+                                // Auto-select supervisor for the hub that has the coordinator's state
+                                const coord = allCoordinators.find(c => c.id === val);
+                                if (coord) {
+                                  const hubForState = hubStates.find(hs => hs.state_id === coord.stateId);
+                                  if (hubForState) {
+                                    const supervisorForHub = allSupervisors.find(s => s.hubId === hubForState.hub_id);
+                                    if (supervisorForHub) {
+                                      setSupervisorMap(s => ({ ...s, [groupKey]: supervisorForHub.id }));
+                                    }
+                                  }
+                                }
+                              }}
                             >
                               <SelectTrigger className="max-w-md">
                                 <SelectValue placeholder="Select coordinator..." />
                               </SelectTrigger>
                               <SelectContent>
-                                {allCoordinators.map(c => (
+                                {/* Filter coordinators to only those in the same state as the group */}
+                                {allCoordinators.filter(c => c.stateId === stateId).map(c => (
                                   <SelectItem key={c.id} value={c.id}>
                                     {c.fullName || c.name || c.email}
-                                    {recommended?.id === c.id ? ' (Recommended)' : ''}
                                   </SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
-                            <Select 
-                              value={supervisorMap[groupKey] || ''} 
-                              onValueChange={val => setSupervisorMap(s => ({ ...s, [groupKey]: val }))}
-                            >
-                              <SelectTrigger className="max-w-md">
-                                <SelectValue placeholder="Select supervisor (optional - for notifications only)..." />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {allSupervisors.map(s => (
-                                  <SelectItem key={s.id} value={s.id}>
-                                    {s.fullName || s.name || s.email}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                            {/* Filter supervisors by the hub that contains the group's state */}
+                            {(() => {
+                              const hubForGroupState = hubStates.find(hs => hs.state_id === stateId);
+                              const hubId = hubForGroupState?.hub_id;
+                              return (
+                                <Select 
+                                  value={supervisorMap[groupKey] || ''} 
+                                  onValueChange={val => setSupervisorMap(s => ({ ...s, [groupKey]: val }))}
+                                >
+                                  <SelectTrigger className="max-w-md">
+                                    <SelectValue placeholder="Select supervisor (optional - for notifications only)..." />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {allSupervisors.filter(s => s.hubId === hubId).map(s => (
+                                      <SelectItem key={s.id} value={s.id}>
+                                        {s.fullName || s.name || s.email}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              );
+                            })()}
                           </div>
                           
                           {/* State Permit Attachment Option */}

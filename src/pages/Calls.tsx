@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import { 
   Search, 
   Phone, 
@@ -483,11 +484,14 @@ const Calls = () => {
           {!isCallActive && (
             <>
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <input
+                <div className="absolute left-0 inset-y-0 flex items-center pl-3 pointer-events-none">
+                  <Search className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <Input
                   type="text"
                   placeholder="Search contacts..."
-                  className="w-full h-9 pl-9 pr-3 rounded-xl bg-gray-100 dark:bg-gray-900 text-black dark:text-white placeholder:text-gray-500 text-sm font-medium focus:outline-none"
+                  style={{ paddingLeft: '2.75rem' }}
+                  className="h-9 bg-gray-100 dark:bg-gray-900 text-black dark:text-white placeholder:text-gray-500 text-sm font-medium"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   data-testid="input-search"

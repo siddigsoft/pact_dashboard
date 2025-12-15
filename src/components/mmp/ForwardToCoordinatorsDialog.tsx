@@ -364,7 +364,7 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Forward to Coordinators</DialogTitle>
           <DialogDescription>

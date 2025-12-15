@@ -9,11 +9,12 @@ import { ArrowLeft, MapPin, Mail, Phone, Award, Calendar, Edit, UserCheck, UserX
 import { BankakAccountForm, BankakAccountFormValues } from "@/components/BankakAccountForm";
 import type { User } from "@/types/user";
 import { AppRole } from "@/types/roles";
-import { sudanStates, getLocalitiesByState, getHubNameForState } from "@/data/sudanStates";
+import { sudanStates, getLocalitiesByState, getHubNameForState, hubs, getStatesInHub } from "@/data/sudanStates";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useSettings } from "@/context/settings/SettingsContext";
 import UserClassificationBadge from "@/components/user/UserClassificationBadge";
@@ -70,6 +71,10 @@ const UserDetail: React.FC = () => {
   const [classificationHistory, setClassificationHistory] = useState<ClassificationHistory[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [hubDisplayName, setHubDisplayName] = useState<string | null>(null);
+  
+  // Location dropdown state management
+  const [availableStates, setAvailableStates] = useState<typeof sudanStates>([]);
+  const [availableLocalities, setAvailableLocalities] = useState<{ id: string; name: string; }[]>([]);
 
   useEffect(() => {
     if (id) {
@@ -89,6 +94,55 @@ const UserDetail: React.FC = () => {
       }
     }
   }, [id, users, navigate, toast]);
+
+  // Update available states when hub changes in edit mode
+  useEffect(() => {
+    if (editMode && editForm.hubId) {
+      const statesInHub = getStatesInHub(editForm.hubId);
+      setAvailableStates(statesInHub);
+      
+      // If current state is not in the new hub, reset state and locality
+      if (editForm.stateId && !statesInHub.some(s => s.id === editForm.stateId)) {
+        handleEditChange("stateId", undefined);
+        handleEditChange("localityId", undefined);
+      }
+    } else if (editMode) {
+      // If no hub selected, show all states
+      setAvailableStates(sudanStates);
+    }
+  }, [editForm.hubId, editMode]);
+
+  // Update available localities when state changes in edit mode
+  useEffect(() => {
+    if (editMode && editForm.stateId) {
+      const localities = getLocalitiesByState(editForm.stateId);
+      setAvailableLocalities(localities);
+      
+      // If current locality is not in the new state, reset locality
+      if (editForm.localityId && !localities.some(l => l.id === editForm.localityId)) {
+        handleEditChange("localityId", undefined);
+      }
+    } else if (editMode) {
+      setAvailableLocalities([]);
+    }
+  }, [editForm.stateId, editMode]);
+
+  // Initialize available states and localities when entering edit mode
+  useEffect(() => {
+    if (editMode && user) {
+      if (user.hubId) {
+        const statesInHub = getStatesInHub(user.hubId);
+        setAvailableStates(statesInHub);
+      } else {
+        setAvailableStates(sudanStates);
+      }
+      
+      if (user.stateId) {
+        const localities = getLocalitiesByState(user.stateId);
+        setAvailableLocalities(localities);
+      }
+    }
+  }, [editMode, user]);
 
   useEffect(() => {
     const fetchHubName = async () => {
@@ -447,21 +501,80 @@ const UserDetail: React.FC = () => {
                   )}
                 </div>
               </div>
-              <div className="flex items-center gap-3 min-h-[44px] p-2 sm:p-3 rounded-lg hover:bg-muted/50 transition-colors">
-                <MapPin className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  {editMode ? (
-                    <Input
-                      value={editForm.stateId || ""}
-                      placeholder="State ID"
-                      onChange={e => handleEditChange("stateId", e.target.value)}
-                      className="h-10 text-sm sm:text-base"
-                    />
-                  ) : (
+              {editMode ? (
+                <>
+                  <div className="flex items-center gap-3 min-h-[44px] p-2 sm:p-3 rounded-lg hover:bg-muted/50 transition-colors">
+                    <MapPin className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <Select
+                        value={editForm.hubId || ""}
+                        onValueChange={(value) => handleEditChange("hubId", value)}
+                      >
+                        <SelectTrigger className="h-10 text-sm sm:text-base">
+                          <SelectValue placeholder="Select hub" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {hubs.map((hub) => (
+                            <SelectItem key={hub.id} value={hub.id}>
+                              {hub.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 min-h-[44px] p-2 sm:p-3 rounded-lg hover:bg-muted/50 transition-colors">
+                    <MapPin className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <Select
+                        value={editForm.stateId || ""}
+                        onValueChange={(value) => handleEditChange("stateId", value)}
+                        disabled={!editForm.hubId}
+                      >
+                        <SelectTrigger className="h-10 text-sm sm:text-base">
+                          <SelectValue placeholder="Select state" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableStates.map((state) => (
+                            <SelectItem key={state.id} value={state.id}>
+                              {state.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 min-h-[44px] p-2 sm:p-3 rounded-lg hover:bg-muted/50 transition-colors">
+                    <MapPin className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <Select
+                        value={editForm.localityId || ""}
+                        onValueChange={(value) => handleEditChange("localityId", value)}
+                        disabled={!editForm.stateId}
+                      >
+                        <SelectTrigger className="h-10 text-sm sm:text-base">
+                          <SelectValue placeholder="Select locality (optional)" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">None</SelectItem>
+                          {availableLocalities.map((locality) => (
+                            <SelectItem key={locality.id} value={locality.id}>
+                              {locality.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="flex items-center gap-3 min-h-[44px] p-2 sm:p-3 rounded-lg hover:bg-muted/50 transition-colors">
+                  <MapPin className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
                     <span className="text-sm sm:text-base break-words">{getUserLocation(user)}</span>
-                  )}
+                  </div>
                 </div>
-              </div>
+              )}
               <div className="flex items-center gap-3 min-h-[44px] p-2 sm:p-3 rounded-lg hover:bg-muted/50 transition-colors">
                 <Award className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                 <span className="text-sm sm:text-base">Rating: {user.performance?.rating ?? "-"}/5</span>
@@ -629,15 +742,72 @@ const UserDetail: React.FC = () => {
                   </div>
                   <div className="space-y-1">
                     <h3 className="font-medium text-xs sm:text-sm text-muted-foreground">Hub</h3>
-                    <p className="font-semibold text-sm sm:text-base md:text-base leading-relaxed break-words">{hubDisplayName || user.hubId || 'Not set'}</p>
+                    {editMode ? (
+                      <Select
+                        value={editForm.hubId || ""}
+                        onValueChange={(value) => handleEditChange("hubId", value)}
+                      >
+                        <SelectTrigger className="h-11 min-h-[44px] text-sm sm:text-base">
+                          <SelectValue placeholder="Select hub" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {hubs.map((hub) => (
+                            <SelectItem key={hub.id} value={hub.id}>
+                              {hub.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <p className="font-semibold text-sm sm:text-base md:text-base leading-relaxed break-words">{hubDisplayName || user.hubId || 'Not set'}</p>
+                    )}
                   </div>
                   <div className="space-y-1">
                     <h3 className="font-medium text-xs sm:text-sm text-muted-foreground">State</h3>
-                    <p className="font-semibold text-sm sm:text-base md:text-base leading-relaxed break-words">{user.stateId ? (sudanStates.find(s => s.id === user.stateId)?.name || user.stateId) : 'Not set'}</p>
+                    {editMode ? (
+                      <Select
+                        value={editForm.stateId || ""}
+                        onValueChange={(value) => handleEditChange("stateId", value)}
+                        disabled={!editForm.hubId}
+                      >
+                        <SelectTrigger className="h-11 min-h-[44px] text-sm sm:text-base">
+                          <SelectValue placeholder="Select state" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableStates.map((state) => (
+                            <SelectItem key={state.id} value={state.id}>
+                              {state.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <p className="font-semibold text-sm sm:text-base md:text-base leading-relaxed break-words">{user.stateId ? (sudanStates.find(s => s.id === user.stateId)?.name || user.stateId) : 'Not set'}</p>
+                    )}
                   </div>
                   <div className="space-y-1 sm:col-span-2">
                     <h3 className="font-medium text-xs sm:text-sm text-muted-foreground">Locality</h3>
-                    <p className="font-semibold text-sm sm:text-base md:text-base leading-relaxed break-words">{user.stateId && user.localityId ? (getLocalitiesByState(user.stateId).find(l => l.id === user.localityId)?.name || user.localityId) : 'Not set'}</p>
+                    {editMode ? (
+                      <Select
+                        value={editForm.localityId || ""}
+                        onValueChange={(value) => handleEditChange("localityId", value || undefined)}
+                        disabled={!editForm.stateId}
+                      >
+                        <SelectTrigger className="h-11 min-h-[44px] text-sm sm:text-base">
+                          <SelectValue placeholder="Select locality (optional)" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">None</SelectItem>
+                          {availableLocalities.map((locality) => (
+                            <SelectItem key={locality.id} value={locality.id}>
+                              {locality.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <p className="font-semibold text-sm sm:text-base md:text-base leading-relaxed break-words">{user.stateId && user.localityId ? (getLocalitiesByState(user.stateId).find(l => l.id === user.localityId)?.name || user.localityId) : 'Not set'}</p>
+                    )}
                   </div>
                 </div>
               </TabsContent>
