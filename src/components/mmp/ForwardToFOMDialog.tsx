@@ -74,28 +74,40 @@ export const ForwardToFOMDialog: React.FC<ForwardToFOMDialogProps> = ({ open, on
     setLoading(true);
     try {
       const ids = Array.from(selected);
-      // Insert notifications
+      // Insert notifications with correct column names
       const rows = ids.map(uid => ({
-        user_id: uid,
-        title: 'MMP forwarded to you',
-        message: `${mmpName || 'MMP'} has been forwarded to you for permits attachment`,
-        type: 'info',
-        link: `/mmp/${mmpId}`,
-        related_entity_id: mmpId,
-        related_entity_type: 'mmpFile'
+        recipient_id: uid,
+        title_en: 'MMP forwarded to you',
+        title_ar: 'تم إعادة توجيه خطة الرصد الشهرية إليك',
+        message_en: `${mmpName || 'MMP'} has been forwarded to you for permits attachment`,
+        message_ar: `تم إعادة توجيه ${mmpName || 'خطة الرصد الشهرية'} إليك لإرفاق التصاريح`,
+        priority: 'normal',
+        status: 'unread',
+        action_url: `/mmp/${mmpId}`,
+        entity_id: mmpId,
+        entity_type: 'mmpFile',
+        event_type: 'mmp_forwarded',
+        triggered_by: currentUser?.id,
+        triggered_by_name: currentUser?.name || currentUser?.fullName || 'System'
       }));
       await insertNotifications(rows);
 
       // Notify the forwarder themself
       if (currentUser?.id) {
         await insertNotifications([{
-          user_id: currentUser.id,
-          title: 'MMP forwarded',
-          message: `You forwarded ${mmpName || 'MMP'} to ${ids.length} FOM(s)`,
-          type: 'success',
-          link: `/mmp/${mmpId}`,
-          related_entity_id: mmpId,
-          related_entity_type: 'mmpFile'
+          recipient_id: currentUser.id,
+          title_en: 'MMP forwarded',
+          title_ar: 'تم إعادة توجيه خطة الرصد الشهرية',
+          message_en: `You forwarded ${mmpName || 'MMP'} to ${ids.length} FOM(s)`,
+          message_ar: `لقد أعدت توجيه ${mmpName || 'خطة الرصد الشهرية'} إلى ${ids.length} مدير(ين) عمليات ميدانية`,
+          priority: 'low',
+          status: 'unread',
+          action_url: `/mmp/${mmpId}`,
+          entity_id: mmpId,
+          entity_type: 'mmpFile',
+          event_type: 'mmp_forwarded_confirmation',
+          triggered_by: currentUser.id,
+          triggered_by_name: currentUser?.name || currentUser?.fullName || 'System'
         }]);
       }
 

@@ -1,0 +1,924 @@
+import { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  Shield,
+  ShieldCheck,
+  User,
+  Users,
+  Save,
+  RefreshCw,
+  Search,
+  Eye,
+  Lock,
+  Unlock,
+  Check,
+  X,
+  AlertTriangle,
+  LayoutDashboard,
+  FolderKanban,
+  Database,
+  ClipboardList,
+  DollarSign,
+  CreditCard,
+  BarChart3,
+  Settings,
+  MessageSquare,
+  Building2,
+  MapPin,
+  FileText,
+  Receipt,
+  Sparkles,
+  Phone,
+  Bell,
+  Calendar,
+  Map,
+  Archive,
+  CheckCircle,
+  FileSignature,
+  ScrollText,
+  Mail,
+  BookOpen,
+  Activity,
+  Wallet,
+  TrendingUp,
+  Banknote,
+} from 'lucide-react';
+import { useAppContext } from '@/context/AppContext';
+import { useAuthorization } from '@/hooks/use-authorization';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
+
+interface ScreenPermission {
+  screenId: string;
+  screenName: string;
+  screenNameAr: string;
+  path: string;
+  icon: any;
+  category: string;
+  permissions: {
+    read: boolean;
+    write: boolean;
+    open: boolean;
+    create: boolean;
+  };
+  isVisible: boolean;
+}
+
+interface UserScreenPermissions {
+  userId: string;
+  screens: ScreenPermission[];
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
+const SYSTEM_SCREENS: Omit<ScreenPermission, 'permissions' | 'isVisible'>[] = [
+  // Overview
+  { screenId: 'dashboard', screenName: 'Dashboard', screenNameAr: 'لوحة المعلومات', path: '/dashboard', icon: LayoutDashboard, category: 'Overview' },
+  { screenId: 'my-wallet', screenName: 'My Wallet', screenNameAr: 'محفظتي', path: '/wallet', icon: Wallet, category: 'Overview' },
+  { screenId: 'cost-submission', screenName: 'Cost Submission', screenNameAr: 'تقديم التكاليف', path: '/cost-submission', icon: Receipt, category: 'Overview' },
+  { screenId: 'signatures', screenName: 'Signatures', screenNameAr: 'التوقيعات', path: '/signatures', icon: FileSignature, category: 'Overview' },
+  
+  // Communication
+  { screenId: 'chat', screenName: 'Chat', screenNameAr: 'المحادثات', path: '/chat', icon: MessageSquare, category: 'Communication' },
+  { screenId: 'calls', screenName: 'Calls', screenNameAr: 'المكالمات', path: '/calls', icon: Phone, category: 'Communication' },
+  { screenId: 'notifications', screenName: 'Notifications', screenNameAr: 'الإشعارات', path: '/notifications', icon: Bell, category: 'Communication' },
+  
+  // Planning
+  { screenId: 'projects', screenName: 'Projects', screenNameAr: 'المشاريع', path: '/projects', icon: FolderKanban, category: 'Planning' },
+  { screenId: 'mmp', screenName: 'MMP Management', screenNameAr: 'إدارة خطط الرصد الشهرية', path: '/mmp', icon: Database, category: 'Planning' },
+  { screenId: 'hub-operations', screenName: 'Hub Operations', screenNameAr: 'عمليات المحور', path: '/hub-operations', icon: Building2, category: 'Planning' },
+  { screenId: 'hub-management', screenName: 'Hub Management', screenNameAr: 'إدارة المحاور', path: '/hub-management', icon: Building2, category: 'Planning' },
+  
+  // Field Operations
+  { screenId: 'site-visits', screenName: 'Site Visits', screenNameAr: 'الزيارات الميدانية', path: '/site-visits', icon: ClipboardList, category: 'Field Operations' },
+  { screenId: 'field-team', screenName: 'Field Team', screenNameAr: 'الفريق الميداني', path: '/field-team', icon: Activity, category: 'Field Operations' },
+  { screenId: 'field-operation-manager', screenName: 'Field Operation Manager', screenNameAr: 'مدير العمليات الميدانية', path: '/field-operation-manager', icon: MapPin, category: 'Field Operations' },
+  
+  // Verification & Review
+  { screenId: 'site-verification', screenName: 'Site Verification', screenNameAr: 'التحقق من الموقع', path: '/coordinator/sites', icon: CheckCircle, category: 'Verification' },
+  { screenId: 'archive', screenName: 'Archive', screenNameAr: 'الأرشيف', path: '/archive', icon: Archive, category: 'Verification' },
+  
+  // Data & Reports
+  { screenId: 'data-visibility', screenName: 'Data Visibility', screenNameAr: 'رؤية البيانات', path: '/data-visibility', icon: Eye, category: 'Data & Reports' },
+  { screenId: 'reports', screenName: 'Reports', screenNameAr: 'التقارير', path: '/reports', icon: BarChart3, category: 'Data & Reports' },
+  { screenId: 'calendar', screenName: 'Calendar', screenNameAr: 'التقويم', path: '/calendar', icon: Calendar, category: 'Data & Reports' },
+  { screenId: 'tracker-preparation-plan', screenName: 'Tracker Preparation', screenNameAr: 'إعداد المتتبع', path: '/tracker-preparation-plan', icon: BarChart3, category: 'Data & Reports' },
+  { screenId: 'documents', screenName: 'Documents', screenNameAr: 'المستندات', path: '/documents', icon: FileText, category: 'Data & Reports' },
+  { screenId: 'advanced-map', screenName: 'Advanced Map', screenNameAr: 'الخريطة المتقدمة', path: '/map', icon: Map, category: 'Data & Reports' },
+  { screenId: 'wallet-reports', screenName: 'Wallet Reports', screenNameAr: 'تقارير المحفظة', path: '/wallet-reports', icon: BarChart3, category: 'Data & Reports' },
+  
+  // Finance
+  { screenId: 'budget', screenName: 'Budget', screenNameAr: 'الميزانية', path: '/budget', icon: DollarSign, category: 'Finance' },
+  { screenId: 'admin-wallets', screenName: 'Wallets', screenNameAr: 'المحافظ', path: '/admin/wallets', icon: CreditCard, category: 'Finance' },
+  { screenId: 'financial-operations', screenName: 'Financial Operations', screenNameAr: 'العمليات المالية', path: '/financial-operations', icon: TrendingUp, category: 'Finance' },
+  { screenId: 'supervisor-approvals', screenName: 'Tier 1 Approvals', screenNameAr: 'موافقات المستوى الأول', path: '/supervisor-approvals', icon: ClipboardList, category: 'Finance' },
+  { screenId: 'withdrawal-approval', screenName: 'Tier 2 Approvals', screenNameAr: 'موافقات المستوى الثاني', path: '/withdrawal-approval', icon: ClipboardList, category: 'Finance' },
+  { screenId: 'down-payment-approval', screenName: 'Down-Payment Approval', screenNameAr: 'موافقة الدفعة المقدمة', path: '/down-payment-approval', icon: DollarSign, category: 'Finance' },
+  { screenId: 'finance-approval', screenName: 'Finance Approval', screenNameAr: 'الموافقة المالية', path: '/finance-approval', icon: Banknote, category: 'Finance' },
+  
+  // Administration
+  { screenId: 'users', screenName: 'User Management', screenNameAr: 'إدارة المستخدمين', path: '/users', icon: Users, category: 'Administration' },
+  { screenId: 'role-management', screenName: 'Role Management', screenNameAr: 'إدارة الأدوار', path: '/role-management', icon: Shield, category: 'Administration' },
+  { screenId: 'classifications', screenName: 'Classifications', screenNameAr: 'التصنيفات', path: '/classifications', icon: FileText, category: 'Administration' },
+  { screenId: 'classification-fees', screenName: 'Classification Fees', screenNameAr: 'رسوم التصنيف', path: '/classification-fees', icon: DollarSign, category: 'Administration' },
+  { screenId: 'settings', screenName: 'Settings', screenNameAr: 'الإعدادات', path: '/settings', icon: Settings, category: 'Administration' },
+  
+  // Super Admin
+  { screenId: 'super-admin-management', screenName: 'Super Admin Management', screenNameAr: 'إدارة المشرف الأعلى', path: '/super-admin-management', icon: ShieldCheck, category: 'Super Admin' },
+  { screenId: 'approval-dashboard', screenName: 'Approval Dashboard', screenNameAr: 'لوحة الموافقات', path: '/approval-dashboard', icon: ClipboardList, category: 'Super Admin' },
+  { screenId: 'permissions-management', screenName: 'User Permissions', screenNameAr: 'صلاحيات المستخدم', path: '/permissions-management', icon: ShieldCheck, category: 'Super Admin' },
+  { screenId: 'audit-logs', screenName: 'Audit Logs', screenNameAr: 'سجلات التدقيق', path: '/audit-logs', icon: ScrollText, category: 'Super Admin' },
+  { screenId: 'email-tracking', screenName: 'Email Tracking', screenNameAr: 'تتبع البريد الإلكتروني', path: '/email-tracking', icon: Mail, category: 'Super Admin' },
+  { screenId: 'email-management', screenName: 'Email Management', screenNameAr: 'إدارة البريد الإلكتروني', path: '/email-management', icon: Mail, category: 'Super Admin' },
+  
+  // Help & Support
+  { screenId: 'documentation', screenName: 'Documentation', screenNameAr: 'الوثائق', path: '/documentation', icon: BookOpen, category: 'Help & Support' },
+];
+
+const PERMISSION_LABELS = {
+  read: { en: 'Read', ar: 'قراءة', abbr: 'R', description: 'View data on this screen' },
+  write: { en: 'Write', ar: 'كتابة', abbr: 'W', description: 'Edit existing data' },
+  open: { en: 'Open', ar: 'فتح', abbr: 'O', description: 'Access this screen' },
+  create: { en: 'Create', ar: 'إنشاء', abbr: 'C', description: 'Create new records' },
+};
+
+const CATEGORIES = [
+  'Overview',
+  'Communication',
+  'Planning',
+  'Field Operations',
+  'Verification',
+  'Data & Reports',
+  'Finance',
+  'Administration',
+  'Super Admin',
+  'Help & Support',
+];
+
+const PermissionsManagement = () => {
+  const navigate = useNavigate();
+  const { currentUser, users } = useAppContext();
+  const { isSuperAdmin } = useAuthorization();
+  const { toast } = useToast();
+
+  const [selectedUserId, setSelectedUserId] = useState<string>('');
+  const [userPermissions, setUserPermissions] = useState<UserScreenPermissions | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [hasChanges, setHasChanges] = useState(false);
+
+  const selectedUser = users.find(u => u.id === selectedUserId);
+
+  useEffect(() => {
+    if (!isSuperAdmin()) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [isSuperAdmin, navigate]);
+
+  const initializeDefaultPermissions = (): ScreenPermission[] => {
+    return SYSTEM_SCREENS.map(screen => ({
+      ...screen,
+      permissions: {
+        read: true,
+        write: false,
+        open: true,
+        create: false,
+      },
+      isVisible: true,
+    }));
+  };
+
+  const loadUserPermissions = async (userId: string) => {
+    setIsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('user_screen_permissions')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error loading permissions:', error);
+        // Fallback to default permissions on error
+        setUserPermissions({
+          userId,
+          screens: initializeDefaultPermissions(),
+        });
+        toast({
+          title: 'Using default permissions',
+          description: 'Could not load saved permissions. Showing defaults.',
+        });
+      } else if (data) {
+        const screensData = typeof data.screens === 'string' 
+          ? JSON.parse(data.screens) 
+          : data.screens;
+        // Merge with system screens to handle any new screens added
+        const mergedScreens = SYSTEM_SCREENS.map(systemScreen => {
+          const existingScreen = screensData.find((s: ScreenPermission) => s.screenId === systemScreen.screenId);
+          if (existingScreen) {
+            return { ...systemScreen, ...existingScreen };
+          }
+          return {
+            ...systemScreen,
+            permissions: { read: true, write: false, open: true, create: false },
+            isVisible: true,
+          };
+        });
+        setUserPermissions({
+          userId,
+          screens: mergedScreens,
+          updatedAt: data.updated_at,
+          updatedBy: data.updated_by,
+        });
+      } else {
+        setUserPermissions({
+          userId,
+          screens: initializeDefaultPermissions(),
+        });
+      }
+      setHasChanges(false);
+    } catch (err) {
+      console.error('Error:', err);
+      // Fallback to default permissions on any error
+      setUserPermissions({
+        userId,
+        screens: initializeDefaultPermissions(),
+      });
+      toast({
+        title: 'Using default permissions',
+        description: 'Could not load saved permissions. Showing defaults.',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const saveUserPermissions = async () => {
+    if (!userPermissions || !currentUser) return;
+
+    setIsSaving(true);
+    try {
+      const { error } = await supabase
+        .from('user_screen_permissions')
+        .upsert({
+          user_id: userPermissions.userId,
+          screens: userPermissions.screens,
+          updated_at: new Date().toISOString(),
+          updated_by: currentUser.id,
+        }, {
+          onConflict: 'user_id',
+        });
+
+      if (error) {
+        console.error('Error saving permissions:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to save permissions. The table may not exist yet.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      toast({
+        title: 'Success',
+        description: 'Permissions saved successfully',
+      });
+      setHasChanges(false);
+    } catch (err) {
+      console.error('Error:', err);
+      toast({
+        title: 'Error',
+        description: 'An unexpected error occurred',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const updatePermission = (screenId: string, permissionType: keyof ScreenPermission['permissions'], value: boolean) => {
+    if (!userPermissions) return;
+
+    setUserPermissions(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        screens: prev.screens.map(screen =>
+          screen.screenId === screenId
+            ? { ...screen, permissions: { ...screen.permissions, [permissionType]: value } }
+            : screen
+        ),
+      };
+    });
+    setHasChanges(true);
+  };
+
+  const updateVisibility = (screenId: string, isVisible: boolean) => {
+    if (!userPermissions) return;
+
+    setUserPermissions(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        screens: prev.screens.map(screen =>
+          screen.screenId === screenId
+            ? { ...screen, isVisible }
+            : screen
+        ),
+      };
+    });
+    setHasChanges(true);
+  };
+
+  const toggleAllPermissions = (screenId: string, enable: boolean) => {
+    if (!userPermissions) return;
+
+    setUserPermissions(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        screens: prev.screens.map(screen =>
+          screen.screenId === screenId
+            ? {
+                ...screen,
+                permissions: {
+                  read: enable,
+                  write: enable,
+                  open: enable,
+                  create: enable,
+                },
+                isVisible: enable,
+              }
+            : screen
+        ),
+      };
+    });
+    setHasChanges(true);
+  };
+
+  const toggleCategoryPermissions = (category: string, enable: boolean) => {
+    if (!userPermissions) return;
+
+    setUserPermissions(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        screens: prev.screens.map(screen =>
+          screen.category === category
+            ? {
+                ...screen,
+                permissions: {
+                  read: enable,
+                  write: enable,
+                  open: enable,
+                  create: enable,
+                },
+                isVisible: enable,
+              }
+            : screen
+        ),
+      };
+    });
+    setHasChanges(true);
+  };
+
+  useEffect(() => {
+    if (selectedUserId) {
+      loadUserPermissions(selectedUserId);
+    } else {
+      setUserPermissions(null);
+    }
+  }, [selectedUserId]);
+
+  const filteredScreens = useMemo(() => {
+    if (!userPermissions) return [];
+    
+    return userPermissions.screens.filter(screen => {
+      const matchesSearch = 
+        screen.screenName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        screen.screenNameAr.includes(searchQuery) ||
+        screen.path.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      const matchesCategory = selectedCategory === 'all' || screen.category === selectedCategory;
+      
+      return matchesSearch && matchesCategory;
+    });
+  }, [userPermissions, searchQuery, selectedCategory]);
+
+  const groupedScreens = useMemo(() => {
+    const groups: Record<string, ScreenPermission[]> = {};
+    filteredScreens.forEach(screen => {
+      if (!groups[screen.category]) {
+        groups[screen.category] = [];
+      }
+      groups[screen.category].push(screen);
+    });
+    return groups;
+  }, [filteredScreens]);
+
+  if (!isSuperAdmin()) {
+    return null;
+  }
+
+  return (
+    <div className="container mx-auto p-6 space-y-6">
+      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+            <ShieldCheck className="h-8 w-8 text-blue-600" />
+            User Permissions Management
+          </h1>
+          <p className="text-gray-600 dark:text-gray-400 mt-1">
+            Manage screen access and permissions for each user
+          </p>
+        </div>
+        {hasChanges && (
+          <Button
+            onClick={saveUserPermissions}
+            disabled={isSaving}
+            data-testid="button-save-permissions"
+          >
+            {isSaving ? (
+              <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4 mr-2" />
+            )}
+            Save Changes
+          </Button>
+        )}
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <User className="h-5 w-5" />
+            Select User
+          </CardTitle>
+          <CardDescription>
+            Choose a user to manage their screen permissions
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label>User</Label>
+              <Select
+                value={selectedUserId}
+                onValueChange={setSelectedUserId}
+              >
+                <SelectTrigger data-testid="select-user">
+                  <SelectValue placeholder="Select a user..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {users.map(user => (
+                    <SelectItem key={user.id} value={user.id} data-testid={`dropdown-user-${user.id}`}>
+                      {user.name} ({user.email})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {selectedUser && (
+              <>
+                <div className="space-y-2">
+                  <Label>Role</Label>
+                  <div className="flex items-center h-10">
+                    <Badge variant="outline">{selectedUser.role}</Badge>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Status</Label>
+                  <div className="flex items-center h-10">
+                    <Badge variant={selectedUser.status === 'active' ? 'default' : 'secondary'}>
+                      {selectedUser.status || 'Active'}
+                    </Badge>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {selectedUserId && userPermissions && (
+        <>
+          {/* Permission Stats Summary */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <Card>
+              <CardContent className="pt-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-2xl font-bold text-green-600">{userPermissions.screens.filter(s => s.isVisible).length}</p>
+                    <p className="text-xs text-muted-foreground">Visible Screens</p>
+                  </div>
+                  <Eye className="h-8 w-8 text-green-200" />
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-2xl font-bold text-blue-600">{userPermissions.screens.filter(s => s.permissions.read).length}</p>
+                    <p className="text-xs text-muted-foreground">Read Access</p>
+                  </div>
+                  <Shield className="h-8 w-8 text-blue-200" />
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-2xl font-bold text-orange-600">{userPermissions.screens.filter(s => s.permissions.write).length}</p>
+                    <p className="text-xs text-muted-foreground">Write Access</p>
+                  </div>
+                  <Lock className="h-8 w-8 text-orange-200" />
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-2xl font-bold">{userPermissions.screens.length}</p>
+                    <p className="text-xs text-muted-foreground">Total Screens</p>
+                  </div>
+                  <LayoutDashboard className="h-8 w-8 text-gray-200" />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Quick Preset Actions */}
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Sparkles className="h-5 w-5" />
+                  Quick Permission Presets
+                </CardTitle>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setUserPermissions(prev => {
+                        if (!prev) return prev;
+                        return {
+                          ...prev,
+                          screens: prev.screens.map(s => ({
+                            ...s,
+                            isVisible: true,
+                            permissions: { read: true, write: true, open: true, create: true }
+                          }))
+                        };
+                      });
+                      setHasChanges(true);
+                    }}
+                    data-testid="button-preset-full-access"
+                  >
+                    <Unlock className="h-3 w-3 mr-1" />
+                    Full Access
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setUserPermissions(prev => {
+                        if (!prev) return prev;
+                        return {
+                          ...prev,
+                          screens: prev.screens.map(s => ({
+                            ...s,
+                            isVisible: true,
+                            permissions: { read: true, write: false, open: true, create: false }
+                          }))
+                        };
+                      });
+                      setHasChanges(true);
+                    }}
+                    data-testid="button-preset-read-only"
+                  >
+                    <Eye className="h-3 w-3 mr-1" />
+                    Read Only
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setUserPermissions(prev => {
+                        if (!prev) return prev;
+                        return {
+                          ...prev,
+                          screens: prev.screens.map(s => ({
+                            ...s,
+                            isVisible: false,
+                            permissions: { read: false, write: false, open: false, create: false }
+                          }))
+                        };
+                      });
+                      setHasChanges(true);
+                    }}
+                    data-testid="button-preset-no-access"
+                  >
+                    <Lock className="h-3 w-3 mr-1" />
+                    No Access
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const fieldScreens = ['dashboard', 'site-visits', 'cost-submission', 'signatures', 'chat', 'notifications', 'mmp'];
+                      setUserPermissions(prev => {
+                        if (!prev) return prev;
+                        return {
+                          ...prev,
+                          screens: prev.screens.map(s => ({
+                            ...s,
+                            isVisible: fieldScreens.includes(s.screenId),
+                            permissions: {
+                              read: fieldScreens.includes(s.screenId),
+                              write: s.screenId === 'cost-submission' || s.screenId === 'signatures',
+                              open: fieldScreens.includes(s.screenId),
+                              create: s.screenId === 'cost-submission'
+                            }
+                          }))
+                        };
+                      });
+                      setHasChanges(true);
+                    }}
+                    data-testid="button-preset-field-worker"
+                  >
+                    <MapPin className="h-3 w-3 mr-1" />
+                    Field Worker
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Search className="h-5 w-5" />
+                Filter Screens
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Search</Label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search screens..."
+                      value={searchQuery}
+                      onChange={e => setSearchQuery(e.target.value)}
+                      className="pl-10"
+                      data-testid="input-search-screens"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Category</Label>
+                  <Select
+                    value={selectedCategory}
+                    onValueChange={setSelectedCategory}
+                  >
+                    <SelectTrigger data-testid="select-category">
+                      <SelectValue placeholder="All categories" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all" data-testid="dropdown-category-all">All Categories</SelectItem>
+                      {CATEGORIES.map(cat => (
+                        <SelectItem key={cat} value={cat} data-testid={`dropdown-category-${cat.toLowerCase().replace(/\s+/g, '-')}`}>{cat}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="flex items-center justify-between gap-4 text-sm text-muted-foreground">
+            <div className="flex items-center gap-4">
+              <span className="flex items-center gap-1">
+                <Badge variant="outline" className="bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-300">R</Badge>
+                Read
+              </span>
+              <span className="flex items-center gap-1">
+                <Badge variant="outline" className="bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-300">W</Badge>
+                Write
+              </span>
+              <span className="flex items-center gap-1">
+                <Badge variant="outline" className="bg-purple-50 text-purple-700 dark:bg-purple-900/20 dark:text-purple-300">O</Badge>
+                Open
+              </span>
+              <span className="flex items-center gap-1">
+                <Badge variant="outline" className="bg-orange-50 text-orange-700 dark:bg-orange-900/20 dark:text-orange-300">C</Badge>
+                Create
+              </span>
+            </div>
+            <span className="flex items-center gap-1">
+              <Eye className="h-4 w-4" /> Visible in navigation
+            </span>
+          </div>
+
+          {isLoading ? (
+            <Card>
+              <CardContent className="py-12 text-center">
+                <RefreshCw className="h-8 w-8 animate-spin mx-auto text-muted-foreground mb-4" />
+                <p className="text-muted-foreground">Loading permissions...</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-6">
+              {CATEGORIES.filter(cat => groupedScreens[cat]?.length > 0).map(category => (
+                <Card key={category}>
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <CardTitle className="text-base">{category}</CardTitle>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => toggleCategoryPermissions(category, true)}
+                          data-testid={`button-enable-all-${category}`}
+                        >
+                          <Unlock className="h-3 w-3 mr-1" />
+                          Enable All
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => toggleCategoryPermissions(category, false)}
+                          data-testid={`button-disable-all-${category}`}
+                        >
+                          <Lock className="h-3 w-3 mr-1" />
+                          Disable All
+                        </Button>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-[250px]">Screen</TableHead>
+                          <TableHead className="w-[100px] text-center">Visible</TableHead>
+                          <TableHead className="w-[80px] text-center">Read</TableHead>
+                          <TableHead className="w-[80px] text-center">Write</TableHead>
+                          <TableHead className="w-[80px] text-center">Open</TableHead>
+                          <TableHead className="w-[80px] text-center">Create</TableHead>
+                          <TableHead className="w-[120px] text-center">Quick Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {groupedScreens[category]?.map(screen => {
+                          const IconComponent = screen.icon;
+                          return (
+                            <TableRow key={screen.screenId} data-testid={`row-screen-${screen.screenId}`}>
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  <IconComponent className="h-4 w-4 text-muted-foreground" />
+                                  <div>
+                                    <p className="font-medium">{screen.screenName}</p>
+                                    <p className="text-xs text-muted-foreground">{screen.path}</p>
+                                  </div>
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <Switch
+                                  checked={screen.isVisible}
+                                  onCheckedChange={checked => updateVisibility(screen.screenId, checked)}
+                                  data-testid={`switch-visible-${screen.screenId}`}
+                                />
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <Checkbox
+                                  checked={screen.permissions.read}
+                                  onCheckedChange={checked => updatePermission(screen.screenId, 'read', !!checked)}
+                                  data-testid={`checkbox-read-${screen.screenId}`}
+                                />
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <Checkbox
+                                  checked={screen.permissions.write}
+                                  onCheckedChange={checked => updatePermission(screen.screenId, 'write', !!checked)}
+                                  data-testid={`checkbox-write-${screen.screenId}`}
+                                />
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <Checkbox
+                                  checked={screen.permissions.open}
+                                  onCheckedChange={checked => updatePermission(screen.screenId, 'open', !!checked)}
+                                  data-testid={`checkbox-open-${screen.screenId}`}
+                                />
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <Checkbox
+                                  checked={screen.permissions.create}
+                                  onCheckedChange={checked => updatePermission(screen.screenId, 'create', !!checked)}
+                                  data-testid={`checkbox-create-${screen.screenId}`}
+                                />
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <div className="flex items-center justify-center gap-1">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => toggleAllPermissions(screen.screenId, true)}
+                                    title="Grant all permissions"
+                                    data-testid={`button-grant-all-${screen.screenId}`}
+                                  >
+                                    <Check className="h-4 w-4 text-green-600" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => toggleAllPermissions(screen.screenId, false)}
+                                    title="Revoke all permissions"
+                                    data-testid={`button-revoke-all-${screen.screenId}`}
+                                  >
+                                    <X className="h-4 w-4 text-red-600" />
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+
+          {hasChanges && (
+            <div className="sticky bottom-4 flex justify-end">
+              <Card className="shadow-lg border-2 border-primary/20">
+                <CardContent className="py-3 px-4 flex items-center gap-4">
+                  <AlertTriangle className="h-5 w-5 text-amber-500" />
+                  <span className="text-sm font-medium">You have unsaved changes</span>
+                  <Button
+                    onClick={saveUserPermissions}
+                    disabled={isSaving}
+                    data-testid="button-save-bottom"
+                  >
+                    {isSaving ? (
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Save className="h-4 w-4 mr-2" />
+                    )}
+                    Save Changes
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+        </>
+      )}
+
+      {!selectedUserId && (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <Users className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+            <h3 className="text-lg font-medium mb-2">Select a User</h3>
+            <p className="text-muted-foreground">
+              Choose a user from the dropdown above to manage their screen permissions.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+};
+
+export default PermissionsManagement;
