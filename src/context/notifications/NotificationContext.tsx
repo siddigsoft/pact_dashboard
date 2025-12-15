@@ -126,17 +126,19 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   }, [currentUserId]);
 
   // Helper to map DB row to UI Notification (using correct schema column names)
+  // Supports both old columns (title, message, link, related_entity_id/type) 
+  // and new columns (title_en, message_en, action_url, entity_id/type)
   const mapDbToNotification = useCallback((row: any): Notification => ({
     id: row.id,
-    userId: row.recipient_id,
-    title: row.title_en || row.title,
-    message: row.message_en || row.message,
-    type: row.status === 'read' ? 'success' : (row.priority === 'urgent' ? 'error' : 'info'),
-    isRead: !!row.read_at || row.status === 'read',
+    userId: row.recipient_id || row.user_id,
+    title: row.title_en || row.title || '',
+    message: row.message_en || row.message || '',
+    type: row.type || (row.status === 'read' ? 'success' : (row.priority === 'urgent' ? 'error' : 'info')),
+    isRead: row.is_read || !!row.read_at || row.status === 'read',
     createdAt: row.created_at,
-    link: row.action_url || undefined,
-    relatedEntityId: row.entity_id || undefined,
-    relatedEntityType: row.entity_type || undefined,
+    link: row.action_url || row.link || undefined,
+    relatedEntityId: row.entity_id || row.related_entity_id || undefined,
+    relatedEntityType: row.entity_type || row.related_entity_type || undefined,
     category: row.event_type || undefined,
     priority: row.priority || undefined,
     targetRoles: row.recipient_role ? [row.recipient_role] : undefined,
@@ -172,10 +174,11 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         return;
       }
       try {
+        // Fetch notifications where recipient_id OR user_id matches current user
         const { data, error } = await supabase
           .from('notifications')
           .select('*')
-          .eq('recipient_id', currentUserId)
+          .or(`recipient_id.eq.${currentUserId},user_id.eq.${currentUserId}`)
           .order('created_at', { ascending: false })
           .limit(50);
         if (!cancelled) {
@@ -198,8 +201,10 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     const subscribeRealtime = () => {
       if (!currentUserId) return;
       try {
+        // Subscribe to notifications for both recipient_id and user_id
         channel = supabase
           .channel(`notifications-${currentUserId}`)
+          // Listen for recipient_id
           .on('postgres_changes', {
             event: 'INSERT',
             schema: 'public',
@@ -208,7 +213,27 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           }, (payload) => {
             const n = mapDbToNotification((payload as any).new);
             if (filterByRoleAndProject(n)) {
-              setAppNotifications(prev => [n, ...prev].slice(0, 50));
+              setAppNotifications(prev => {
+                // Avoid duplicates
+                if (prev.some(p => p.id === n.id)) return prev;
+                return [n, ...prev].slice(0, 50);
+              });
+            }
+          })
+          // Listen for user_id
+          .on('postgres_changes', {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'notifications',
+            filter: `user_id=eq.${currentUserId}`,
+          }, (payload) => {
+            const n = mapDbToNotification((payload as any).new);
+            if (filterByRoleAndProject(n)) {
+              setAppNotifications(prev => {
+                // Avoid duplicates
+                if (prev.some(p => p.id === n.id)) return prev;
+                return [n, ...prev].slice(0, 50);
+              });
             }
           })
           .on('postgres_changes', {
@@ -223,10 +248,30 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
             );
           })
           .on('postgres_changes', {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'notifications',
+            filter: `user_id=eq.${currentUserId}`,
+          }, (payload) => {
+            const updated = mapDbToNotification((payload as any).new);
+            setAppNotifications(prev => 
+              prev.map(n => n.id === updated.id ? updated : n)
+            );
+          })
+          .on('postgres_changes', {
             event: 'DELETE',
             schema: 'public',
             table: 'notifications',
             filter: `recipient_id=eq.${currentUserId}`,
+          }, (payload) => {
+            const deletedId = (payload as any).old.id;
+            setAppNotifications(prev => prev.filter(n => n.id !== deletedId));
+          })
+          .on('postgres_changes', {
+            event: 'DELETE',
+            schema: 'public',
+            table: 'notifications',
+            filter: `user_id=eq.${currentUserId}`,
           }, (payload) => {
             const deletedId = (payload as any).old.id;
             setAppNotifications(prev => prev.filter(n => n.id !== deletedId));
@@ -283,20 +328,28 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     });
 
     // Fire-and-forget persistence to Supabase (using correct schema columns)
+    // Insert with both recipient_id and user_id for compatibility
     (async () => {
       try {
         await supabase.from('notifications').insert({
           recipient_id: notification.userId,
+          user_id: notification.userId,
           title_en: notification.title,
+          title: notification.title,
           title_ar: notification.title,
           message_en: notification.message,
+          message: notification.message,
           message_ar: notification.message,
           priority: notification.priority || 'normal',
           action_url: notification.link,
+          link: notification.link,
           entity_id: notification.relatedEntityId,
+          related_entity_id: notification.relatedEntityId,
           entity_type: notification.relatedEntityType,
+          related_entity_type: notification.relatedEntityType,
           event_type: notification.category || 'system',
           status: 'pending',
+          is_read: false,
           email_sent: false,
         });
       } catch (err) {
@@ -308,8 +361,10 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const markNotificationAsRead = useCallback(async (notificationId: string) => {
     setAppNotifications(prev => prev.map(n => n.id === notificationId ? { ...n, isRead: true } : n));
     try {
+      // Update both is_read and read_at for schema compatibility
       await supabase.from('notifications').update({ 
         status: 'read', 
+        is_read: true,
         read_at: new Date().toISOString() 
       }).eq('id', notificationId);
     } catch (err) {
@@ -338,14 +393,13 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     console.log(`Attempting to delete all notifications for user: ${userId}`);
     
     // Delete all notifications for the current user from the database
-    // The RLS policy will ensure only the user's own notifications are deleted
+    // Delete by both recipient_id and user_id for schema compatibility
     try {
-      // Delete all notifications for the current user
-      // Note: Supabase DELETE returns the deleted rows if .select() is used
+      // Delete notifications where recipient_id OR user_id matches
       const { data: deletedData, error } = await supabase
         .from('notifications')
         .delete()
-        .eq('recipient_id', userId) // Filter by recipient_id
+        .or(`recipient_id.eq.${userId},user_id.eq.${userId}`)
         .select('id');
       
       if (error) {
@@ -373,7 +427,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       const { data: remaining, error: verifyError } = await supabase
         .from('notifications')
         .select('id')
-        .eq('recipient_id', userId)
+        .or(`recipient_id.eq.${userId},user_id.eq.${userId}`)
         .limit(1);
       
       if (verifyError) {
