@@ -40,7 +40,7 @@ export const useLiveDashboardCore = (options: LiveDashboardOptions = {}) => {
     
     queueTableRefresh(table, eventType);
     
-    if (enableToasts) {
+    if (enableToasts && table !== 'mmp_site_entries') {
       queueRealtimeToast(table, eventType, showToast, {
         enabled: enableToasts,
         batchWindow: toastBatchWindow,
