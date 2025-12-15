@@ -48,6 +48,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 
 export default function FinanceApproval() {
   const { adminListWithdrawalRequests, adminProcessWithdrawal, adminRejectWithdrawal } = useWallet();
@@ -350,8 +351,40 @@ export default function FinanceApproval() {
         }
         
         await adminProcessWithdrawal(selectedRequest.id, auditNotes);
+        
+        // Notify hub supervisor of financial transaction approval
+        if ((selectedRequest as any).requesterHub) {
+          const userName = getUserName(selectedRequest.userId, selectedRequest);
+          await NotificationTriggerService.financialTransactionApproval(
+            (selectedRequest as any).requesterHub,
+            'withdrawal',
+            selectedRequest.amount,
+            selectedRequest.currency || 'SDG',
+            {
+              userName,
+              status: 'approved',
+              transactionId: selectedRequest.id
+            }
+          );
+        }
       } else if (dialogType === 'reject') {
         await adminRejectWithdrawal(selectedRequest.id, notes);
+        
+        // Notify hub supervisor of financial transaction rejection
+        if ((selectedRequest as any).requesterHub) {
+          const userName = getUserName(selectedRequest.userId, selectedRequest);
+          await NotificationTriggerService.financialTransactionApproval(
+            (selectedRequest as any).requesterHub,
+            'withdrawal',
+            selectedRequest.amount,
+            selectedRequest.currency || 'SDG',
+            {
+              userName,
+              status: 'rejected',
+              transactionId: selectedRequest.id
+            }
+          );
+        }
       }
       await fetchAllRequests();
       setDialogType(null);
