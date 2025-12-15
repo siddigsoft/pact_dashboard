@@ -1079,6 +1079,112 @@ export const NotificationTriggerService = {
   },
 
   /**
+   * Notify management when a Coordinator verifies a site
+   * Sends bilingual email + in-app notification to: Admins, Super Admins, Hub Supervisors, Hub FOMs
+   */
+  async siteVerifiedByCoordinator(
+    hubId: string,
+    siteName: string,
+    coordinatorName: string,
+    mmpName: string,
+    siteId?: string
+  ): Promise<number> {
+    try {
+      let successCount = 0;
+
+      // 1. Get hub management users (supervisors, FOMs, admins, super admins)
+      const managementUsers = await this.getHubManagementUsers(hubId);
+      
+      // 2. Send in-app notifications and bilingual emails
+      for (const user of managementUsers) {
+        const sent = await this.send({
+          userId: user.id,
+          title: 'Site Verified by Coordinator',
+          message: `Site "${siteName}" from MMP "${mmpName}" has been verified by ${coordinatorName}`,
+          type: 'success',
+          category: 'assignments',
+          priority: 'medium',
+          link: siteId ? `/mmp?site=${siteId}` : '/mmp',
+          relatedEntityId: siteId,
+          relatedEntityType: 'siteVisit',
+          sendEmail: false // We send bilingual email separately
+        });
+        if (sent) successCount++;
+
+        // Send bilingual email
+        if (user.email) {
+          try {
+            await EmailNotificationService.sendSiteVerifiedByCoordinator(
+              user.email,
+              user.full_name || 'Team Member',
+              siteName,
+              coordinatorName,
+              mmpName,
+              siteId
+            );
+            console.log(`[NOTIFICATION] Sent bilingual site verification email to: ${user.email}`);
+          } catch (emailError) {
+            console.error(`[NOTIFICATION] Failed to send bilingual email to ${user.email}:`, emailError);
+          }
+        }
+      }
+
+      // 3. Also notify Admins and Super Admins who may not be in the hub
+      const { data: adminUsers, error: adminError } = await supabase
+        .from('profiles')
+        .select('id, full_name, email')
+        .in('role', ['admin', 'super_admin', 'Admin', 'SuperAdmin']);
+
+      if (adminError) {
+        console.error('Error fetching admins for site verification notification:', adminError);
+      } else if (adminUsers && adminUsers.length > 0) {
+        // Filter out admins already notified via hub management
+        const notifiedIds = new Set(managementUsers.map(u => u.id));
+        const remainingAdmins = adminUsers.filter(a => !notifiedIds.has(a.id));
+
+        for (const admin of remainingAdmins) {
+          const sent = await this.send({
+            userId: admin.id,
+            title: 'Site Verified by Coordinator',
+            message: `Site "${siteName}" from MMP "${mmpName}" has been verified by ${coordinatorName}`,
+            type: 'success',
+            category: 'assignments',
+            priority: 'medium',
+            link: siteId ? `/mmp?site=${siteId}` : '/mmp',
+            relatedEntityId: siteId,
+            relatedEntityType: 'siteVisit',
+            sendEmail: false
+          });
+          if (sent) successCount++;
+
+          // Send bilingual email
+          if (admin.email) {
+            try {
+              await EmailNotificationService.sendSiteVerifiedByCoordinator(
+                admin.email,
+                admin.full_name || 'Administrator',
+                siteName,
+                coordinatorName,
+                mmpName,
+                siteId
+              );
+              console.log(`[NOTIFICATION] Sent bilingual site verification email to Admin: ${admin.email}`);
+            } catch (emailError) {
+              console.error(`[NOTIFICATION] Failed to send bilingual email to Admin ${admin.email}:`, emailError);
+            }
+          }
+        }
+      }
+
+      console.log(`[NOTIFICATION] Site verification notifications sent to ${successCount} management users`);
+      return successCount;
+    } catch (error) {
+      console.error('Failed to send site verified by coordinator notifications:', error);
+      return 0;
+    }
+  },
+
+  /**
    * Notify supervisor of financial transaction approvals
    */
   async financialTransactionApproval(
