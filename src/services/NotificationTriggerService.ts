@@ -98,72 +98,75 @@ export const NotificationTriggerService = {
       emailActionLabel
     } = options;
 
+    console.log(`[NOTIFICATION] Starting send to user ${userId}: "${title}"`);
+
     const shouldSend = await shouldSendNotification(userId, category, priority);
     if (!shouldSend) {
-      console.log(`Notification suppressed for user ${userId}: ${title}`);
+      console.log(`[NOTIFICATION] Suppressed for user ${userId}: ${title}`);
       return false;
     }
 
     try {
-      const { error } = await supabase.from('notifications').insert({
-        user_id: userId,
-        title,
-        message,
-        type,
-        category,
-        priority,
-        link,
-        related_entity_id: relatedEntityId,
-        related_entity_type: relatedEntityType,
-        target_roles: targetRoles,
-        project_id: projectId,
-        is_read: false
-      });
+      // Map to actual database schema columns
+      const notificationData = {
+        recipient_id: userId,
+        title_en: title,
+        title_ar: title,
+        message_en: message,
+        message_ar: message,
+        priority: priority,
+        action_url: link,
+        entity_id: relatedEntityId,
+        entity_type: relatedEntityType,
+        event_type: category,
+        status: 'pending',
+        email_sent: false
+      };
+
+      console.log(`[NOTIFICATION] Inserting into database:`, JSON.stringify(notificationData));
+
+      const { data, error } = await supabase.from('notifications').insert(notificationData).select('id');
 
       if (error) {
-        if (error.message?.includes('column') || error.code === '42703') {
-          console.warn('Notifications table missing some columns, inserting without them');
-          const { error: fallbackError } = await supabase.from('notifications').insert({
-            user_id: userId,
-            title,
-            message,
-            type,
-            link,
-            related_entity_id: relatedEntityId,
-            related_entity_type: relatedEntityType,
-            is_read: false
-          });
-          
-          if (fallbackError) {
-            console.error('Failed to create notification (fallback):', fallbackError);
-            return false;
-          }
-        } else {
-          console.error('Failed to create notification:', error);
-          return false;
-        }
+        console.error('[NOTIFICATION] Failed to create notification:', error);
+        return false;
       }
+
+      console.log(`[NOTIFICATION] Successfully inserted notification with id:`, data?.[0]?.id);
 
       // Send email for high priority or explicit email requests
       const shouldSendEmail = sendEmail || priority === 'urgent' || priority === 'high';
+      console.log(`[NOTIFICATION] Should send email: ${shouldSendEmail} (sendEmail=${sendEmail}, priority=${priority})`);
+      
       if (shouldSendEmail) {
         try {
-          const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
-          await EmailNotificationService.sendToUser(userId, {
+          const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://app.pactorg.com';
+          console.log(`[NOTIFICATION] Sending email to user ${userId}`);
+          const emailResult = await EmailNotificationService.sendToUser(userId, {
             title,
             message,
             type,
             actionUrl: emailActionUrl || (link ? `${baseUrl}${link}` : undefined),
             actionLabel: emailActionLabel || 'View Details'
           });
+          console.log(`[NOTIFICATION] Email result:`, emailResult);
+          
+          // Update notification with email status
+          if (data?.[0]?.id) {
+            await supabase.from('notifications').update({
+              email_sent: emailResult.success,
+              email_sent_at: emailResult.success ? new Date().toISOString() : null,
+              email_error: emailResult.error || null
+            }).eq('id', data[0].id);
+          }
         } catch (emailError) {
-          console.error('Failed to send email notification:', emailError);
+          console.error('[NOTIFICATION] Failed to send email notification:', emailError);
         }
       }
 
       return true;
     } catch (error) {
-      console.error('Error sending notification:', error);
+      console.error('[NOTIFICATION] Error sending notification:', error);
       return false;
     }
   },
@@ -1112,6 +1115,80 @@ export const NotificationTriggerService = {
       priority: isToday ? 'high' : 'medium',
       link: '/mmp'
     });
+  },
+
+  /**
+   * Notify FOM and all Admins/Super Admins when MMP is forwarded to FOM
+   * - Sends notification to all selected FOMs
+   * - Sends notification to all Admins and Super Admins
+   * - Sends email notifications to all recipients
+   */
+  async mmpForwardedToFOM(
+    fomUserIds: string[],
+    mmpName: string,
+    mmpId: string,
+    forwarderName?: string
+  ): Promise<number> {
+    try {
+      let successCount = 0;
+
+      // 1. Notify all selected FOMs with email
+      for (const fomId of fomUserIds) {
+        const sent = await this.send({
+          userId: fomId,
+          title: 'MMP Forwarded to You',
+          message: `MMP "${mmpName}" has been forwarded to you for permits attachment${forwarderName ? ` by ${forwarderName}` : ''}`,
+          type: 'info',
+          category: 'assignments',
+          priority: 'high',
+          link: `/mmp/${mmpId}`,
+          relatedEntityId: mmpId,
+          relatedEntityType: 'mmpFile',
+          sendEmail: true,
+          emailActionUrl: `/mmp/${mmpId}`,
+          emailActionLabel: 'View MMP'
+        });
+        if (sent) successCount++;
+      }
+
+      // 2. Fetch all Admins and Super Admins
+      const { data: adminUsers, error: adminError } = await supabase
+        .from('profiles')
+        .select('id')
+        .in('role', ['admin', 'super_admin', 'Admin', 'SuperAdmin']);
+
+      if (adminError) {
+        console.error('Error fetching admins for MMP forward notification:', adminError);
+      } else if (adminUsers && adminUsers.length > 0) {
+        // 3. Notify all Admins/Super Admins with email
+        // Note: Admins who are also FOMs get both notifications - the FOM notification about their assignment
+        // AND the admin notification about the forwarding action. This is intentional for full visibility.
+        const adminIds = adminUsers.map(u => u.id);
+        
+        for (const adminId of adminIds) {
+          const sent = await this.send({
+            userId: adminId,
+            title: 'MMP Forwarded to FOM',
+            message: `MMP "${mmpName}" has been forwarded to ${fomUserIds.length} Field Operations Manager(s)${forwarderName ? ` by ${forwarderName}` : ''}`,
+            type: 'info',
+            category: 'assignments',
+            priority: 'high',
+            link: `/mmp/${mmpId}`,
+            relatedEntityId: mmpId,
+            relatedEntityType: 'mmpFile',
+            sendEmail: true,
+            emailActionUrl: `/mmp/${mmpId}`,
+            emailActionLabel: 'View MMP'
+          });
+          if (sent) successCount++;
+        }
+      }
+
+      return successCount;
+    } catch (error) {
+      console.error('Failed to send MMP forwarded to FOM notifications:', error);
+      return 0;
+    }
   }
 };
 

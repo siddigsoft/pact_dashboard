@@ -28,7 +28,7 @@ interface MobileBottomNavProps {
 }
 
 const getNavItemsForRole = (hasRole: (role: AppRole) => boolean): NavItem[] => {
-  // Fixed navigation: Home, Sites, SOS, Wallet only
+  // Fixed navigation: Home, Sites, SOS, Wallet - Wallet is available to all field users
   const items: NavItem[] = [
     { icon: LayoutDashboard, label: 'Home', path: '/dashboard', offlineCapable: false },
     { icon: MapPin, label: 'Sites', path: '/site-visits', offlineCapable: true },
