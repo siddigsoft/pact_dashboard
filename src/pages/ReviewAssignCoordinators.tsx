@@ -503,7 +503,7 @@ const ReviewAssignCoordinators: React.FC = () => {
               onClick={() => setWithStatePermitOnly(prev => !prev)}
               className={withStatePermitOnly ? 'bg-blue-600 text-white' : ''}
             >
-              With State Permit
+              Federal Permit Attached
             </Button>
           </div>
 
@@ -523,7 +523,7 @@ const ReviewAssignCoordinators: React.FC = () => {
                 const [stateId, localityId] = groupKey.split('|');
                 const isUnassigned = stateId === 'unassigned';
                 const recommended = isUnassigned ? null : getRecommendedCoordinator(stateId, localityId);
-                const selectedId = assignmentMap[groupKey] || recommended?.id || '';
+                const selectedId = assignmentMap[groupKey] || '';  // Removed: recommended?.id || ''
                 
                 // Separate forwarded and unforwarded sites
                 const forwardedSites = groupSites.filter((site: any) => forwardedSiteIds.has(site.id));
@@ -572,10 +572,11 @@ const ReviewAssignCoordinators: React.FC = () => {
                                 <SelectValue placeholder="Select coordinator..." />
                               </SelectTrigger>
                               <SelectContent>
-                                {allCoordinators.map(c => (
+                                {/* Filter coordinators to only those in the same state as the group */}
+                                {allCoordinators.filter(c => c.stateId === stateId).map(c => (
                                   <SelectItem key={c.id} value={c.id}>
                                     {c.fullName || c.name || c.email}
-                                    {recommended?.id === c.id ? ' (Recommended)' : ''}
+                                    {recommended?.id === c.id ? '' : ''}
                                   </SelectItem>
                                 ))}
                               </SelectContent>
