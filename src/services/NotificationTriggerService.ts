@@ -1322,6 +1322,13 @@ export const NotificationTriggerService = {
     forwarderName?: string
   ): Promise<number> {
     try {
+      console.log(`[NOTIFICATION-DEBUG] mmpForwardedToFOM called with:`, {
+        fomUserIds,
+        mmpName,
+        mmpId,
+        forwarderName
+      });
+      
       let successCount = 0;
       const sender = forwarderName || 'System';
 
@@ -1330,6 +1337,8 @@ export const NotificationTriggerService = {
         .from('profiles')
         .select('id, full_name, email')
         .in('id', fomUserIds);
+
+      console.log(`[NOTIFICATION-DEBUG] Fetched FOM users:`, { fomUsers, fomError });
 
       if (fomError) {
         console.error('Error fetching FOM user details:', fomError);
@@ -1340,6 +1349,8 @@ export const NotificationTriggerService = {
         const fomUser = fomUsers?.find(u => u.id === fomId);
         const recipientName = fomUser?.full_name || 'Field Operations Manager';
         const recipientEmail = fomUser?.email;
+
+        console.log(`[NOTIFICATION-DEBUG] Processing FOM:`, { fomId, recipientName, recipientEmail });
 
         // Create in-app notification
         const sent = await this.send({
@@ -1354,6 +1365,7 @@ export const NotificationTriggerService = {
           relatedEntityType: 'mmpFile',
           sendEmail: false // We send bilingual email separately
         });
+        console.log(`[NOTIFICATION-DEBUG] FOM notification send result:`, sent);
         if (sent) successCount++;
 
         // Send bilingual email directly
