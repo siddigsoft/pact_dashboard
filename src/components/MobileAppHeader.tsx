@@ -183,7 +183,9 @@ const MobileAppHeader = ({
           id: 'finance',
           label: 'Finance & Wallet',
           items: [
-            { id: 'wallet', icon: Wallet, title: 'My Wallet', url: '/wallet' },
+            ...(hasAnyRole(['SuperAdmin', 'Admin', 'FinancialAdmin', 'Field Operation Manager (FOM)', 'Supervisor', 'ProjectManager', 'SeniorOperationsLead']) ? [
+              { id: 'wallet', icon: Wallet, title: 'My Wallet', url: '/wallet' }
+            ] : []),
             ...(hasAnyRole(['SuperAdmin', 'Admin', 'DataCollector', 'Coordinator', 'Supervisor']) ? [
               { id: 'cost-submission', icon: Receipt, title: 'Submit Costs', url: '/cost-submission' }
             ] : []),
