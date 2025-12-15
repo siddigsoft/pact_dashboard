@@ -763,51 +763,114 @@ export const NotificationTriggerService = {
   },
 
   // =============================================
-  // HUB SUPERVISOR NOTIFICATION METHODS
+  // HUB SUPERVISOR & MANAGEMENT NOTIFICATION METHODS
   // =============================================
 
   /**
-   * Helper: Find all supervisors for a given hub
+   * Helper: Find all management users for hub notifications
+   * Includes: Hub Supervisors, Hub FOMs, all Super Admins, and all Admins
    */
-  async getHubSupervisors(hubId: string): Promise<{ id: string; full_name: string; email: string }[]> {
+  async getHubManagementUsers(hubId: string): Promise<{ id: string; full_name: string; email: string }[]> {
     try {
-      const { data: supervisors, error } = await supabase
+      const allUsers: { id: string; full_name: string; email: string }[] = [];
+      const seenIds = new Set<string>();
+
+      // 1. Get hub supervisors (role = 'supervisor' in the specific hub)
+      const { data: supervisors, error: supError } = await supabase
         .from('profiles')
         .select('id, full_name, email')
         .eq('hub_id', hubId)
         .eq('role', 'supervisor');
 
-      if (error) {
-        console.error('Failed to fetch hub supervisors:', error);
-        return [];
+      if (!supError && supervisors) {
+        supervisors.forEach(s => {
+          if (!seenIds.has(s.id)) {
+            seenIds.add(s.id);
+            allUsers.push(s);
+          }
+        });
       }
 
-      return supervisors || [];
+      // 2. Get hub FOMs (role = 'fom' in the specific hub)
+      const { data: foms, error: fomError } = await supabase
+        .from('profiles')
+        .select('id, full_name, email')
+        .eq('hub_id', hubId)
+        .eq('role', 'fom');
+
+      if (!fomError && foms) {
+        foms.forEach(f => {
+          if (!seenIds.has(f.id)) {
+            seenIds.add(f.id);
+            allUsers.push(f);
+          }
+        });
+      }
+
+      // 3. Get all super admins (global, not hub-specific)
+      const { data: superAdmins, error: saError } = await supabase
+        .from('profiles')
+        .select('id, full_name, email')
+        .in('role', ['super_admin', 'superAdmin']);
+
+      if (!saError && superAdmins) {
+        superAdmins.forEach(sa => {
+          if (!seenIds.has(sa.id)) {
+            seenIds.add(sa.id);
+            allUsers.push(sa);
+          }
+        });
+      }
+
+      // 4. Get all admins (global, not hub-specific)
+      const { data: admins, error: adminError } = await supabase
+        .from('profiles')
+        .select('id, full_name, email')
+        .eq('role', 'admin');
+
+      if (!adminError && admins) {
+        admins.forEach(a => {
+          if (!seenIds.has(a.id)) {
+            seenIds.add(a.id);
+            allUsers.push(a);
+          }
+        });
+      }
+
+      return allUsers;
     } catch (error) {
-      console.error('Error getting hub supervisors:', error);
+      console.error('Error getting hub management users:', error);
       return [];
     }
   },
 
   /**
-   * Notify all supervisors of a specific hub
+   * @deprecated Use getHubManagementUsers instead
+   * Helper: Find all supervisors for a given hub (legacy method for backward compatibility)
+   */
+  async getHubSupervisors(hubId: string): Promise<{ id: string; full_name: string; email: string }[]> {
+    return this.getHubManagementUsers(hubId);
+  },
+
+  /**
+   * Notify all hub management users (supervisors, FOMs, admins, super admins)
    */
   async notifyHubSupervisor(
     hubId: string,
     options: Omit<TriggerNotificationOptions, 'userId'>
   ): Promise<number> {
     try {
-      const supervisors = await this.getHubSupervisors(hubId);
+      const managementUsers = await this.getHubManagementUsers(hubId);
       
-      if (supervisors.length === 0) {
-        console.log(`No supervisors found for hub ${hubId}`);
+      if (managementUsers.length === 0) {
+        console.log(`No management users found for hub ${hubId}`);
         return 0;
       }
 
-      const userIds = supervisors.map(s => s.id);
+      const userIds = managementUsers.map(u => u.id);
       return await this.sendBulk(userIds, options);
     } catch (error) {
-      console.error('Failed to notify hub supervisor:', error);
+      console.error('Failed to notify hub management:', error);
       return 0;
     }
   },
