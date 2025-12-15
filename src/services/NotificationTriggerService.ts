@@ -107,18 +107,34 @@ export const NotificationTriggerService = {
     }
 
     try {
-      // Map to actual database schema columns (user_id, title, message, type)
+      // Map to actual database schema columns - use BOTH old and new column patterns for compatibility
+      // Old pattern: recipient_id, title_en, message_en, status (used by usePersistentNotifications)
+      // New pattern: user_id, title, message, is_read (legacy support)
       const notificationData = {
+        // Primary fields (old pattern - used by mobile app and web UI)
+        recipient_id: userId,
+        title_en: title,
+        title_ar: title, // Same content for now, can be localized later
+        message_en: message,
+        message_ar: message, // Same content for now, can be localized later
+        status: 'pending' as const,
+        event_type: category || 'system',
+        entity_type: relatedEntityType || null,
+        entity_id: relatedEntityId || null,
+        action_url: link || null,
+        // Legacy fields (new pattern - for backward compatibility)
         user_id: userId,
         title: title,
         message: message,
         type: type,
-        priority: priority,
+        category: category,
         link: link,
         related_entity_id: relatedEntityId,
         related_entity_type: relatedEntityType,
-        category: category,
         is_read: false,
+        // Common fields
+        priority: priority === 'urgent' ? 'urgent' : priority === 'high' ? 'high' : 'normal',
+        email_sent: false,
         created_at: new Date().toISOString()
       };
 
