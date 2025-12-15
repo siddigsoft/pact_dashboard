@@ -22,6 +22,8 @@ import { useCoordinatorLocalityPermits } from '@/hooks/use-coordinator-permits';
 import { LocalityPermitUpload } from '@/components/LocalityPermitUpload';
 import { StatePermitUpload } from '@/components/StatePermitUpload';
 import { LocalityPermitStatus } from '@/types/coordinator-permits';
+import { PermitVerificationQuestions, PermitDecision } from '@/components/PermitVerificationQuestions';
+import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 
 // Predefined options for dropdowns
 const HUB_OFFICE_OPTIONS = [
@@ -546,6 +548,11 @@ const CoordinatorSites: React.FC = () => {
   // Individual site verification without permit dialog state
   const [siteWithoutPermitDialogOpen, setSiteWithoutPermitDialogOpen] = useState(false);
   const [selectedSiteForWithoutPermit, setSelectedSiteForWithoutPermit] = useState<SiteVisit | null>(null);
+
+  // Permit verification questions dialog state (for state/locality permit workflow)
+  const [permitVerificationDialogOpen, setPermitVerificationDialogOpen] = useState(false);
+  const [siteForPermitVerification, setSiteForPermitVerification] = useState<SiteVisit | null>(null);
+  const [pendingVerificationData, setPendingVerificationData] = useState<any>(null);
 
   // Confirmation dialog for proceeding without permit
   const [confirmWithoutPermitDialogOpen, setConfirmWithoutPermitDialogOpen] = useState(false);
@@ -1469,6 +1476,33 @@ const CoordinatorSites: React.FC = () => {
         description: 'The site has been marked as rejected.',
       });
 
+      // Notify hub supervisor about site rejection
+      try {
+        const site = sites.find(s => s.id === siteId);
+        if (site?.hub_office) {
+          const { data: hubData } = await supabase
+            .from('hubs')
+            .select('id')
+            .eq('name', site.hub_office)
+            .single();
+
+          if (hubData?.id) {
+            await NotificationTriggerService.siteOperationNotification(
+              hubData.id,
+              'rejected',
+              site.site_name,
+              {
+                actorName: currentUser?.fullName || currentUser?.username || 'Coordinator',
+                siteId: site.id,
+                reason: notes
+              }
+            );
+          }
+        }
+      } catch (supervisorErr) {
+        console.warn('Failed to notify hub supervisor:', supervisorErr);
+      }
+
       // Reload sites and badge counts
       loadSites();
       // Reload badge counts
@@ -1504,6 +1538,177 @@ const CoordinatorSites: React.FC = () => {
         variant: 'destructive'
       });
     }
+  };
+
+  // Handle sending site back to FOM when coordinator cannot proceed without permit
+  const handleSendBackToFOM = async (reason: string) => {
+    if (!siteForPermitVerification) return;
+    
+    try {
+      const site = siteForPermitVerification;
+      
+      // Update site status to 'returned_to_fom'
+      const { error } = await supabase
+        .from('mmp_site_entries')
+        .update({
+          status: 'returned_to_fom',
+          verification_notes: reason,
+          verified_at: new Date().toISOString(),
+          verified_by: currentUser?.username || currentUser?.fullName || currentUser?.email || 'System',
+        })
+        .eq('id', site.id);
+
+      if (error) throw error;
+
+      // Try to send notification to FOM (find FOM for this MMP)
+      try {
+        const { data: mmpData } = await supabase
+          .from('mmp_files')
+          .select('uploaded_by')
+          .eq('id', site.mmp_file_id)
+          .single();
+
+        if (mmpData?.uploaded_by) {
+          await supabase.from('notifications').insert({
+            user_id: mmpData.uploaded_by,
+            title: 'Site Returned by Coordinator',
+            message: `Site ${site.site_name} (${site.site_code}) in ${site.locality}, ${site.state} has been returned. Reason: ${reason}`,
+            type: 'warning',
+            read: false,
+          });
+        }
+      } catch (notifErr) {
+        console.warn('Failed to send notification to FOM:', notifErr);
+      }
+
+      // Notify hub supervisor about site being sent back to FOM
+      try {
+        // Get hub_id from the site's hub_office or state
+        const { data: hubData } = await supabase
+          .from('hubs')
+          .select('id')
+          .eq('name', site.hub_office)
+          .single();
+
+        if (hubData?.id) {
+          await NotificationTriggerService.siteReturnedToFOM(
+            hubData.id,
+            site.site_name,
+            1,
+            reason,
+            currentUser?.fullName || currentUser?.username || 'Coordinator'
+          );
+        }
+      } catch (supervisorErr) {
+        console.warn('Failed to notify hub supervisor:', supervisorErr);
+      }
+
+      toast({
+        title: 'Site Returned to FOM',
+        description: 'The site has been sent back to FOM for action.',
+      });
+
+      // Close dialogs and reload
+      setPermitVerificationDialogOpen(false);
+      setSiteForPermitVerification(null);
+      setPendingVerificationData(null);
+      loadSites();
+    } catch (error) {
+      console.error('Error sending site back to FOM:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to send site back to FOM. Please try again.',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  // Handle completion of permit verification questions
+  const handlePermitVerificationComplete = async (decision: PermitDecision) => {
+    if (!siteForPermitVerification || !pendingVerificationData) return;
+    
+    try {
+      // Store permit decision in additional_data
+      const site = siteForPermitVerification;
+      const additionalData = {
+        ...(site.additional_data || {}),
+        permit_decision: decision,
+        ...(pendingVerificationData.additional_data || {}),
+      };
+
+      // Now proceed with the actual verification
+      const updateData: any = {
+        ...pendingVerificationData,
+        status: 'verified',
+        verified_at: new Date().toISOString(),
+        verified_by: currentUser?.username || currentUser?.fullName || currentUser?.email || 'System',
+        additional_data: additionalData,
+      };
+
+      const { error } = await supabase
+        .from('mmp_site_entries')
+        .update(updateData)
+        .eq('id', site.id);
+
+      if (error) throw error;
+
+      // Update MMP workflow
+      try {
+        const { data: mmpData } = await supabase
+          .from('mmp_files')
+          .select('workflow, status')
+          .eq('id', site.mmp_file_id)
+          .single();
+
+        if (mmpData) {
+          const workflow = (mmpData.workflow as any) || {};
+          if (!workflow.coordinatorVerified) {
+            const updatedWorkflow = {
+              ...workflow,
+              coordinatorVerified: true,
+              coordinatorVerifiedAt: new Date().toISOString(),
+              coordinatorVerifiedBy: currentUser?.username || currentUser?.fullName || currentUser?.email || 'System',
+              currentStage: workflow.currentStage === 'awaitingCoordinatorVerification' ? 'verified' : (workflow.currentStage || 'verified'),
+              lastUpdated: new Date().toISOString()
+            };
+            await updateMMP(site.mmp_file_id, {
+              workflow: updatedWorkflow,
+              status: 'pending'
+            });
+          }
+        }
+      } catch (syncErr) {
+        console.warn('Failed to sync MMP workflow:', syncErr);
+      }
+
+      toast({
+        title: 'Site Verified',
+        description: 'The site has been verified successfully.',
+      });
+
+      // Close dialogs and reload
+      setPermitVerificationDialogOpen(false);
+      setSiteForPermitVerification(null);
+      setPendingVerificationData(null);
+      setEditDialogOpen(false);
+      setSelectedSiteForEdit(null);
+      loadSites();
+      setActiveTab('verified');
+    } catch (error) {
+      console.error('Error completing verification:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to complete verification. Please try again.',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  // Function to start permit verification workflow (called when user clicks Verify on permits_attached site)
+  const startPermitVerificationWorkflow = (site: SiteVisit, verificationData: any) => {
+    setSiteForPermitVerification(site);
+    setPendingVerificationData(verificationData);
+    setPermitVerificationDialogOpen(true);
   };
 
   const handleVisitDateChange = async (siteId: string, date: Date | undefined) => {
@@ -1666,6 +1871,36 @@ const CoordinatorSites: React.FC = () => {
         description: `${selectedSites.size} site(s) have been verified successfully.`,
       });
 
+      // Notify hub supervisors about verified sites
+      try {
+        const selectedSitesData = sites.filter(site => selectedSites.has(site.id));
+        const hubsNotified = new Set<string>();
+        for (const site of selectedSitesData) {
+          if (site.hub_office && !hubsNotified.has(site.hub_office)) {
+            const { data: hubData } = await supabase
+              .from('hubs')
+              .select('id')
+              .eq('name', site.hub_office)
+              .single();
+            if (hubData?.id) {
+              const sitesInHub = selectedSitesData.filter(s => s.hub_office === site.hub_office);
+              await NotificationTriggerService.siteOperationNotification(
+                hubData.id,
+                'verified',
+                sitesInHub.length > 1 ? `${sitesInHub.length} sites` : site.site_name,
+                {
+                  actorName: currentUser?.username || currentUser?.fullName || 'Coordinator',
+                  siteCount: sitesInHub.length
+                }
+              );
+              hubsNotified.add(site.hub_office);
+            }
+          }
+        }
+      } catch (notifyErr) {
+        console.warn('Failed to notify supervisors about verification:', notifyErr);
+      }
+
       // Clear selection and reload sites
       setSelectedSites(new Set());
       setBulkVerificationNotes('');
@@ -1764,6 +1999,36 @@ const CoordinatorSites: React.FC = () => {
         title: 'Bulk Approval Complete',
         description: `${selectedSites.size} site(s) have been approved successfully.`,
       });
+
+      // Notify hub supervisors about approved sites
+      try {
+        const selectedSitesData = sites.filter(site => selectedSites.has(site.id));
+        const hubsNotified = new Set<string>();
+        for (const site of selectedSitesData) {
+          if (site.hub_office && !hubsNotified.has(site.hub_office)) {
+            const { data: hubData } = await supabase
+              .from('hubs')
+              .select('id')
+              .eq('name', site.hub_office)
+              .single();
+            if (hubData?.id) {
+              const sitesInHub = selectedSitesData.filter(s => s.hub_office === site.hub_office);
+              await NotificationTriggerService.siteOperationNotification(
+                hubData.id,
+                'approved',
+                sitesInHub.length > 1 ? `${sitesInHub.length} sites` : site.site_name,
+                {
+                  actorName: currentUser?.username || currentUser?.fullName || 'Coordinator',
+                  siteCount: sitesInHub.length
+                }
+              );
+              hubsNotified.add(site.hub_office);
+            }
+          }
+        }
+      } catch (notifyErr) {
+        console.warn('Failed to notify supervisors about approval:', notifyErr);
+      }
 
       // Clear selection and reload sites
       setSelectedSites(new Set());
@@ -1903,6 +2168,36 @@ const CoordinatorSites: React.FC = () => {
         title: 'Bulk Verification Complete',
         description: `${localitySites.length} site(s) in this locality have been verified successfully.`,
       });
+
+      // Notify hub supervisors about verified sites in locality
+      try {
+        const hubsNotified = new Set<string>();
+        for (const site of localitySites) {
+          if (site.hub_office && !hubsNotified.has(site.hub_office)) {
+            const { data: hubData } = await supabase
+              .from('hubs')
+              .select('id')
+              .eq('name', site.hub_office)
+              .single();
+            if (hubData?.id) {
+              const sitesInHub = localitySites.filter(s => s.hub_office === site.hub_office);
+              await NotificationTriggerService.siteOperationNotification(
+                hubData.id,
+                'verified',
+                sitesInHub.length > 1 ? `${sitesInHub.length} sites in ${site.locality}` : site.site_name,
+                {
+                  actorName: currentUser?.username || currentUser?.fullName || 'Coordinator',
+                  siteCount: sitesInHub.length,
+                  locality: site.locality
+                }
+              );
+              hubsNotified.add(site.hub_office);
+            }
+          }
+        }
+      } catch (notifyErr) {
+        console.warn('Failed to notify supervisors about locality verification:', notifyErr);
+      }
 
       // Clear state and reload sites
       setBulkLocalityVerifyDialogOpen(false);
@@ -3391,6 +3686,13 @@ const CoordinatorSites: React.FC = () => {
 
                   // Only set verification fields if shouldVerify is true
                   if (shouldVerify) {
+                    // For sites with permits_attached status, trigger permit verification questions first
+                    if (selectedSiteForEdit.status?.toLowerCase() === 'permits_attached') {
+                      // Open permit verification questions dialog instead of immediate verification
+                      startPermitVerificationWorkflow(selectedSiteForEdit, updateData);
+                      return; // Exit - verification will be completed after permit questions
+                    }
+                    
                     updateData.status = 'verified';
                     updateData.verified_at = new Date().toISOString();
                     updateData.verified_by = currentUser?.username || currentUser?.fullName || currentUser?.email || 'System';
@@ -3463,6 +3765,30 @@ const CoordinatorSites: React.FC = () => {
                       : 'Site details have been saved successfully.',
                   });
 
+                  // Notify hub supervisor about site verification
+                  if (shouldVerify && selectedSiteForEdit?.hub_office) {
+                    try {
+                      const { data: hubData } = await supabase
+                        .from('hubs')
+                        .select('id')
+                        .eq('name', selectedSiteForEdit.hub_office)
+                        .single();
+                      if (hubData?.id) {
+                        await NotificationTriggerService.siteOperationNotification(
+                          hubData.id,
+                          'verified',
+                          selectedSiteForEdit.site_name,
+                          {
+                            actorName: currentUser?.username || currentUser?.fullName || 'Coordinator',
+                            siteId: selectedSiteForEdit.id
+                          }
+                        );
+                      }
+                    } catch (notifyErr) {
+                      console.warn('Failed to notify supervisor about verification:', notifyErr);
+                    }
+                  }
+
                   // Reload sites and badge counts
                   loadSites();
                   // Reload badge counts
@@ -3507,6 +3833,40 @@ const CoordinatorSites: React.FC = () => {
               states={states}
               localities={localities}
               hubStates={hubStates}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Permit Verification Questions Dialog */}
+      <Dialog open={permitVerificationDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          setPermitVerificationDialogOpen(false);
+          setSiteForPermitVerification(null);
+          setPendingVerificationData(null);
+        }
+      }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>State & Locality Permit Verification</DialogTitle>
+            <DialogDescription>
+              Please answer the following questions about permit requirements before completing verification.
+            </DialogDescription>
+          </DialogHeader>
+          {siteForPermitVerification && (
+            <PermitVerificationQuestions
+              state={siteForPermitVerification.state}
+              locality={siteForPermitVerification.locality}
+              mmpFileId={siteForPermitVerification.mmp_file_id}
+              onComplete={handlePermitVerificationComplete}
+              onSendBackToFOM={handleSendBackToFOM}
+              onCancel={() => {
+                setPermitVerificationDialogOpen(false);
+                setSiteForPermitVerification(null);
+                setPendingVerificationData(null);
+              }}
+              existingStatePermit={false}
+              existingLocalityPermit={false}
             />
           )}
         </DialogContent>
