@@ -420,12 +420,19 @@ ${isRecipientFOM ? 'الإجراء المطلوب: إرفاق التصاريح' 
     mmpName: string,
     forwarderName: string,
     coordinatorCount: number,
-    mmpId?: string
+    mmpId?: string,
+    recipientRole?: { en: string; ar: string }
   ): Promise<EmailNotificationResult> {
     const viewMmpUrl = mmpId ? `${APP_URL}/mmp/${mmpId}` : `${APP_URL}/mmp`;
     
     const titleEn = 'MMP Forwarded to Coordinators';
     const titleAr = 'تم إرسال خطة المراقبة الشهرية إلى المنسقين';
+    
+    // Personalized greeting based on role
+    const roleEn = recipientRole?.en || 'Team Member';
+    const roleAr = recipientRole?.ar || 'عضو الفريق';
+    const greetingEn = `Dear ${recipientName} (${roleEn}),`;
+    const greetingAr = `عزيزي ${recipientName} (${roleAr})،`;
     
     const messageEn = `The Monthly Monitoring Plan "${mmpName}" has been forwarded to ${coordinatorCount} Coordinator(s) for site assignment and data collection by ${forwarderName}. Please monitor progress and ensure timely completion.`;
     const messageAr = `تم إرسال خطة المراقبة الشهرية "${mmpName}" إلى ${coordinatorCount} منسق(ين) لتوزيع المواقع وجمع البيانات بواسطة ${forwarderName}. يرجى متابعة التقدم وضمان الإنجاز في الوقت المحدد.`;
@@ -447,7 +454,7 @@ ${isRecipientFOM ? 'الإجراء المطلوب: إرفاق التصاريح' 
           
           <!-- English Section -->
           <div style="margin-bottom: 25px; padding-bottom: 25px; border-bottom: 1px solid #eee;">
-            <p style="color: #333; font-size: 16px; line-height: 1.5;">Hello ${recipientName},</p>
+            <p style="color: #333; font-size: 16px; line-height: 1.5;">${greetingEn}</p>
             <p style="color: #333; font-size: 16px; line-height: 1.5;">${messageEn}</p>
             
             <div style="background-color: #fff3e0; border-left: 4px solid #ff9800; border-radius: 4px; padding: 16px; margin: 20px 0;">
@@ -459,7 +466,7 @@ ${isRecipientFOM ? 'الإجراء المطلوب: إرفاق التصاريح' 
           
           <!-- Arabic Section -->
           <div dir="rtl" style="margin-top: 25px; padding-top: 25px; border-top: 1px solid #eee; text-align: right;">
-            <p style="color: #333; font-size: 16px; line-height: 1.8;">مرحباً ${recipientName}،</p>
+            <p style="color: #333; font-size: 16px; line-height: 1.8;">${greetingAr}</p>
             <p style="color: #333; font-size: 16px; line-height: 1.8;">${messageAr}</p>
             
             <div style="background-color: #fff3e0; border-right: 4px solid #ff9800; border-radius: 4px; padding: 16px; margin: 20px 0;">
@@ -487,7 +494,7 @@ ${isRecipientFOM ? 'الإجراء المطلوب: إرفاق التصاريح' 
       </html>
     `;
     
-    const text = `Hello ${recipientName},
+    const text = `${greetingEn}
 
 ${messageEn}
 
@@ -499,7 +506,7 @@ View MMP: ${viewMmpUrl}
 
 ---
 
-مرحباً ${recipientName}،
+${greetingAr}
 
 ${messageAr}
 
