@@ -350,6 +350,15 @@ export const useMMPProvider = () => {
 
   const refreshMMPFiles = useCallback(async () => {
     try {
+      // Check if user is authenticated before loading data
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        // Not authenticated - don't load MMP data
+        setMMPFiles([]);
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
       
       const { data: mmpData, error } = await supabase
@@ -393,36 +402,50 @@ export const useMMPProvider = () => {
   }, []);
 
   useEffect(() => {
-    const channel = supabase
-      .channel('mmp_context_changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'mmp_files' },
-        () => {
-          refreshMMPFiles();
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'mmp_site_entries' },
-        () => {
-          refreshMMPFiles();
-        }
-      )
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          console.log('✅ MMP context real-time subscription active');
-        } else if (status === 'CHANNEL_ERROR') {
-          console.error('❌ MMP context real-time subscription error - Check if replication is enabled in Supabase');
-        } else if (status === 'TIMED_OUT') {
-          console.warn('⏱️ MMP context real-time subscription timed out');
-        } else {
-          console.log('MMP context subscription status:', status);
-        }
-      });
+    let channel: any = null;
+
+    const setupSubscription = async () => {
+      // Only set up realtime subscription if user is authenticated
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        return; // Don't set up subscription for unauthenticated users
+      }
+
+      channel = supabase
+        .channel('mmp_context_changes')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'mmp_files' },
+          () => {
+            refreshMMPFiles();
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'mmp_site_entries' },
+          () => {
+            refreshMMPFiles();
+          }
+        )
+        .subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            console.log('✅ MMP context real-time subscription active');
+          } else if (status === 'CHANNEL_ERROR') {
+            console.error('❌ MMP context real-time subscription error - Check if replication is enabled in Supabase');
+          } else if (status === 'TIMED_OUT') {
+            console.warn('⏱️ MMP context real-time subscription timed out');
+          } else {
+            console.log('MMP context subscription status:', status);
+          }
+        });
+    };
+
+    setupSubscription();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [refreshMMPFiles]);
 
