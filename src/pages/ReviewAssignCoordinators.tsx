@@ -324,39 +324,45 @@ const ReviewAssignCoordinators: React.FC = () => {
         mmpId
       });
 
-      // Send notifications
-      const notifications = [
-        {
-          user_id: coordinatorId,
-          title: 'Sites forwarded for CP verification',
-          message: `${mmpFile?.name || 'MMP'}: ${siteIds.length} site(s) have been forwarded for your CP review${attachStatePermitMap[groupKey] ? ' (State permit attached)' : ''}`,
-          type: 'info',
-          link: `/coordinator/sites`,
-          related_entity_id: mmpId,
-          related_entity_type: 'mmpFile',
+      // Show success toast immediately after forwarding
+      toast({ title: 'Batch Forwarded', description: `Sites were forwarded to ${allCoordinators.find(c => c.id === coordinatorId)?.fullName || 'Coordinator'}${attachStatePermitMap[groupKey] ? ' with state permit attached' : ''}${supervisorId ? ` and notified ${allSupervisors.find(s => s.id === supervisorId)?.fullName || 'Supervisor'}` : ''}.`, variant: 'default' });
+
+      // Attempt to send notifications (don't fail the whole operation if this fails)
+      try {
+        const notifications = [
+          {
+            user_id: coordinatorId,
+            title: 'Sites forwarded for CP verification',
+            message: `${mmpFile?.name || 'MMP'}: ${siteIds.length} site(s) have been forwarded for your CP review${attachStatePermitMap[groupKey] ? ' (State permit attached)' : ''}`,
+            type: 'info',
+            link: `/coordinator/sites`,
+            related_entity_id: mmpId,
+            related_entity_type: 'mmpFile',
+          }
+        ];
+
+        // Send notification to supervisor if selected
+        if (supervisorId) {
+          notifications.push({
+            user_id: supervisorId,
+            title: 'Sites assigned to coordinator for verification',
+            message: `${mmpFile?.name || 'MMP'}: ${siteIds.length} site(s) have been assigned to ${allCoordinators.find(c => c.id === coordinatorId)?.fullName || 'Coordinator'} for CP verification${attachStatePermitMap[groupKey] ? ' (State permit attached)' : ''}`,
+            type: 'info',
+            link: `/supervisor/sites`,
+            related_entity_id: mmpId,
+            related_entity_type: 'mmpFile',
+          });
         }
-      ];
 
-      // Send notification to supervisor if selected
-      if (supervisorId) {
-        notifications.push({
-          user_id: supervisorId,
-          title: 'Sites assigned to coordinator for verification',
-          message: `${mmpFile?.name || 'MMP'}: ${siteIds.length} site(s) have been assigned to ${allCoordinators.find(c => c.id === coordinatorId)?.fullName || 'Coordinator'} for CP verification${attachStatePermitMap[groupKey] ? ' (State permit attached)' : ''}`,
-          type: 'info',
-          link: `/supervisor/sites`,
-          related_entity_id: mmpId,
-          related_entity_type: 'mmpFile',
-        });
+        await insertNotifications(notifications);
+      } catch (notifErr) {
+        console.warn('Failed to send notifications:', notifErr);
+        // Optionally, you could show a separate toast for notification failure here if needed
       }
-
-      await insertNotifications(notifications);
       
       // Removed: await refreshMMPFiles(); // To prevent page reload on hosted app
 
-      toast({ title: 'Batch Forwarded', description: `Sites were forwarded to ${allCoordinators.find(c => c.id === coordinatorId)?.fullName || 'Coordinator'}${attachStatePermitMap[groupKey] ? ' with state permit attached' : ''}${supervisorId ? ` and notified ${allSupervisors.find(s => s.id === supervisorId)?.fullName || 'Supervisor'}` : ''}.`, variant: 'default' });
-      
-      // Mark sites as forwarded to prevent re-forwarding
+      // Update local state to reflect forwarded sites
       const newForwarded = new Set(forwardedSiteIds);
       siteIds.forEach(id => newForwarded.add(id));
       setForwardedSiteIds(newForwarded);
