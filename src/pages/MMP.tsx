@@ -1436,7 +1436,7 @@ const MMP = () => {
   const isDataCollector = hasRole(['DataCollector', 'datacollector', 'enumerator', 'Enumerator']);
   // Coordinators have full data collector capabilities (can claim sites, view transport fees, etc.)
   const canClaimSites = isDataCollector || isCoordinator;
-  const canRead = checkPermission('mmp', 'read') || isAdmin || isFOM || isCoordinator || isICT;
+  const canRead = checkPermission('mmp', 'read') || isAdmin || isFOM || isCoordinator || isICT || isDataCollector;
   // Only Admin and ICT accounts should see the Upload button on the MMP management page.
   // We intentionally DO NOT fallback to checkPermission here to prevent other roles (e.g. FOM)
   // that may have broad permissions from seeing the upload control.
