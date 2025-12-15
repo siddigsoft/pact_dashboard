@@ -1480,18 +1480,34 @@ const MMP = () => {
     let filteredMMPs = mmpFiles;
 
     // PROJECT TEAM MEMBERSHIP FILTER
-    // Only show MMPs from projects the user belongs to (unless admin/superuser)
-    if (!isAdminOrSuperUser && userProjectIds.length > 0) {
-      filteredMMPs = mmpFiles.filter(mmp => {
-        // If MMP has no projectId, exclude it from non-admin users
-        if (!mmp.projectId) return false;
-        return userProjectIds.includes(mmp.projectId);
-      });
-    } else if (!isAdminOrSuperUser && userProjectIds.length === 0) {
-      // User is not admin and has no project assignments - show no MMPs
-      // But allow Data Collectors to see Available Sites (handled separately)
-      if (!canClaimSites) {
-        filteredMMPs = [];
+    // Only show MMPs from projects the user belongs to (unless admin/superuser).
+    // For FOMs, still honor project membership but also allow MMPs explicitly forwarded to them.
+    if (!isAdminOrSuperUser) {
+      if (userProjectIds.length > 0) {
+        filteredMMPs = mmpFiles.filter(mmp => {
+          const inProject = mmp.projectId ? userProjectIds.includes(mmp.projectId) : false;
+          if (isFOM) {
+            const workflow = mmp.workflow as any;
+            const forwardedToFomIds = workflow?.forwardedToFomIds || [];
+            const isForwarded = forwardedToFomIds.includes(currentUser?.id || '');
+            return inProject || isForwarded;
+          }
+          // Non-FOM path
+          return inProject;
+        });
+      } else if (userProjectIds.length === 0) {
+        // User is not admin and has no project assignments - show no MMPs
+        // But allow Data Collectors to see Available Sites (handled separately)
+        // For FOMs with no project membership, we still allow forwarded MMPs
+        if (isFOM) {
+          filteredMMPs = mmpFiles.filter(mmp => {
+            const workflow = mmp.workflow as any;
+            const forwardedToFomIds = workflow?.forwardedToFomIds || [];
+            return forwardedToFomIds.includes(currentUser?.id || '');
+          });
+        } else if (!canClaimSites) {
+          filteredMMPs = [];
+        }
       }
     }
 
@@ -1518,12 +1534,10 @@ const MMP = () => {
 
     const newMMPs = filteredMMPs.filter(mmp => {
       if (isFOM) {
-        // For FOM: New MMPs are those forwarded to them that haven't been processed yet
+        // For FOM: New MMPs are all items forwarded to them (regardless of coordinator forwarding)
         const workflow = mmp.workflow as any;
         const forwardedToFomIds = workflow?.forwardedToFomIds || [];
-        // Keep showing items forwarded to this FOM under "New MMPs" until they are forwarded to coordinators
-        return forwardedToFomIds.includes(currentUser?.id || '') &&
-               workflow?.forwardedToCoordinators !== true;
+        return forwardedToFomIds.includes(currentUser?.id || '');
       } else if (isCoordinator) {
         // For Coordinator: They don't see "new" MMPs, only verified ones with sites to verify
         return false;
