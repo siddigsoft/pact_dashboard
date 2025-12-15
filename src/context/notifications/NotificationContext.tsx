@@ -125,22 +125,22 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     fetchUserRoleAndProjects();
   }, [currentUserId]);
 
-  // Helper to map DB row to UI Notification
+  // Helper to map DB row to UI Notification (using correct schema column names)
   const mapDbToNotification = useCallback((row: any): Notification => ({
     id: row.id,
-    userId: row.user_id,
-    title: row.title,
-    message: row.message,
-    type: row.type,
-    isRead: !!row.is_read,
+    userId: row.recipient_id,
+    title: row.title_en || row.title,
+    message: row.message_en || row.message,
+    type: row.status === 'read' ? 'success' : (row.priority === 'urgent' ? 'error' : 'info'),
+    isRead: !!row.read_at || row.status === 'read',
     createdAt: row.created_at,
-    link: row.link || undefined,
-    relatedEntityId: row.related_entity_id || undefined,
-    relatedEntityType: row.related_entity_type || undefined,
-    category: row.category || undefined,
+    link: row.action_url || undefined,
+    relatedEntityId: row.entity_id || undefined,
+    relatedEntityType: row.entity_type || undefined,
+    category: row.event_type || undefined,
     priority: row.priority || undefined,
-    targetRoles: row.target_roles || undefined,
-    projectId: row.project_id || undefined,
+    targetRoles: row.recipient_role ? [row.recipient_role] : undefined,
+    projectId: undefined,
   }), []);
 
   // Filter notifications by user role and project
@@ -175,8 +175,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         const { data, error } = await supabase
           .from('notifications')
           .select('*')
-          .eq('user_id', currentUserId)
-          .neq('title', 'Chat System Active') // Exclude Chat System Active notifications
+          .eq('recipient_id', currentUserId)
           .order('created_at', { ascending: false })
           .limit(50);
         if (!cancelled) {
@@ -205,11 +204,10 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
             event: 'INSERT',
             schema: 'public',
             table: 'notifications',
-            filter: `user_id=eq.${currentUserId}`,
+            filter: `recipient_id=eq.${currentUserId}`,
           }, (payload) => {
             const n = mapDbToNotification((payload as any).new);
-            // Filter out Chat System Active notifications and apply role/project filter
-            if (n.title !== 'Chat System Active' && filterByRoleAndProject(n)) {
+            if (filterByRoleAndProject(n)) {
               setAppNotifications(prev => [n, ...prev].slice(0, 50));
             }
           })
@@ -217,7 +215,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
             event: 'UPDATE',
             schema: 'public',
             table: 'notifications',
-            filter: `user_id=eq.${currentUserId}`,
+            filter: `recipient_id=eq.${currentUserId}`,
           }, (payload) => {
             const updated = mapDbToNotification((payload as any).new);
             setAppNotifications(prev => 
@@ -228,7 +226,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
             event: 'DELETE',
             schema: 'public',
             table: 'notifications',
-            filter: `user_id=eq.${currentUserId}`,
+            filter: `recipient_id=eq.${currentUserId}`,
           }, (payload) => {
             const deletedId = (payload as any).old.id;
             setAppNotifications(prev => prev.filter(n => n.id !== deletedId));
@@ -284,19 +282,22 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       return updatedNotifications;
     });
 
-    // Fire-and-forget persistence to Supabase
+    // Fire-and-forget persistence to Supabase (using correct schema columns)
     (async () => {
       try {
         await supabase.from('notifications').insert({
-          user_id: notification.userId,
-          title: notification.title,
-          message: notification.message,
-          type: notification.type,
-          link: notification.link,
-          related_entity_id: notification.relatedEntityId,
-          related_entity_type: notification.relatedEntityType,
-          target_roles: notification.targetRoles,
-          project_id: notification.projectId,
+          recipient_id: notification.userId,
+          title_en: notification.title,
+          title_ar: notification.title,
+          message_en: notification.message,
+          message_ar: notification.message,
+          priority: notification.priority || 'normal',
+          action_url: notification.link,
+          entity_id: notification.relatedEntityId,
+          entity_type: notification.relatedEntityType,
+          event_type: notification.category || 'system',
+          status: 'pending',
+          email_sent: false,
         });
       } catch (err) {
         console.warn('Failed to persist notification:', err);
@@ -307,7 +308,10 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const markNotificationAsRead = useCallback(async (notificationId: string) => {
     setAppNotifications(prev => prev.map(n => n.id === notificationId ? { ...n, isRead: true } : n));
     try {
-      await supabase.from('notifications').update({ is_read: true }).eq('id', notificationId);
+      await supabase.from('notifications').update({ 
+        status: 'read', 
+        read_at: new Date().toISOString() 
+      }).eq('id', notificationId);
     } catch (err) {
       console.warn('Failed to persist read state:', err);
     }
@@ -341,7 +345,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       const { data: deletedData, error } = await supabase
         .from('notifications')
         .delete()
-        .eq('user_id', userId) // Filter by user_id
+        .eq('recipient_id', userId) // Filter by recipient_id
         .select('id');
       
       if (error) {
@@ -369,7 +373,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       const { data: remaining, error: verifyError } = await supabase
         .from('notifications')
         .select('id')
-        .eq('user_id', userId)
+        .eq('recipient_id', userId)
         .limit(1);
       
       if (verifyError) {
