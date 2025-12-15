@@ -357,17 +357,17 @@ function App() {
               <NavigationProvider>
                 <AppProviders>
                   <NotificationProvider>
-                    <LiveDashboardProvider>
-                      <FCMInitializer />
-                      <Suspense fallback={<PageLoader />}>
+                    <Suspense fallback={<PageLoader />}>
+                      <LiveDashboardProvider>
+                        <FCMInitializer />
                         <AuthGuard>
                           <MobilePermissionGuard>
                             <AppRoutes />
                           </MobilePermissionGuard>
                         </AuthGuard>
-                      </Suspense>
-                      <AppNotifications />
-                    </LiveDashboardProvider>
+                      </LiveDashboardProvider>
+                    </Suspense>
+                    <AppNotifications />
                     <Toaster />
                     <SonnerToaster />
                     <HotToaster
