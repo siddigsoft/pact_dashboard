@@ -74,6 +74,10 @@ The frontend, built with React 18, TypeScript, Tailwind CSS v3, and Shadcn UI, f
     - Admin password reset capabilities via `admin-change-password` edge function
     - OTP verification via `verify-reset-otp` edge function
     - Bilingual support (English/Arabic) for all password-related emails
+*   **Email Verification System:**
+    - "Resend Verification Email" button on login page when email not confirmed
+    - Admin ability to manually confirm user emails via `admin-confirm-email` edge function
+    - Button available in User Detail page for admins to confirm emails
 *   **Email Notification System:**
     - IONOS SMTP integration (noreply@pactorg.com)
     - `send-email` edge function for transactional emails
