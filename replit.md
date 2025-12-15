@@ -92,6 +92,12 @@ The frontend, built with React 18, TypeScript, Tailwind CSS v3, and Shadcn UI, f
     - `useRealtimeHealth` hook for connection health monitoring
     - `useFocusReconnect` hook for automatic reconnection on tab focus
     - Realtime subscriptions on signatures, site visits, MMP, and chat tables
+*   **Hub Management Notification System:**
+    - Centralized notification service in `src/services/NotificationTriggerService.ts`
+    - `getHubManagementUsers(hubId)` fetches all management users: Hub Supervisors, Hub FOMs, all Super Admins, and all Admins
+    - Notifications sent for: MMP forwarding, site operations (claimed/rejected/verified/approved), financial transactions, activity coverage milestones, activity dates
+    - Deduplication via Set to prevent duplicate notifications
+    - Backward-compatible `getHubSupervisors(hubId)` method (deprecated, calls getHubManagementUsers)
 
 ### System Design Choices
 The project utilizes a unified Supabase client for all Supabase interactions, ensuring consistent authentication and session management. The system integrates the complete Sudan administrative structure.
