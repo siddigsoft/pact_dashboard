@@ -1371,10 +1371,10 @@ const CoordinatorSites: React.FC = () => {
             .eq('site_code', site.site_code);
 
           // Mark MMP as coordinator-verified when first site is verified
-          // Get current MMP workflow
+          // Get current MMP workflow and name for notification
           const { data: mmpData, error: mmpError } = await supabase
             .from('mmp_files')
-            .select('workflow, status')
+            .select('workflow, status, name')
             .eq('id', site.mmp_file_id)
             .single();
 
@@ -1409,6 +1409,38 @@ const CoordinatorSites: React.FC = () => {
         title: 'Site Verified',
         description: 'The site has been marked as verified.',
       });
+
+      // Send notification to hub management about site verification
+      try {
+        const site = sites.find(s => s.id === siteId);
+        if (site) {
+          // Get hub ID from hubs array
+          const hub = hubs.find(h => h.name === site.hub_office);
+          const hubId = hub?.id || '';
+          
+          // Get MMP name for notification
+          const { data: mmpInfo } = await supabase
+            .from('mmp_files')
+            .select('name')
+            .eq('id', site.mmp_file_id)
+            .single();
+          
+          const mmpName = mmpInfo?.name || 'Unknown MMP';
+          const coordinatorName = currentUser?.fullName || currentUser?.username || currentUser?.email || 'Coordinator';
+          
+          if (hubId) {
+            await NotificationTriggerService.siteVerifiedByCoordinator(
+              hubId,
+              site.site_name,
+              coordinatorName,
+              mmpName,
+              siteId
+            );
+          }
+        }
+      } catch (notifErr) {
+        console.warn('Failed to send verification notification:', notifErr);
+      }
 
       // Reload sites and badge counts
       loadSites();

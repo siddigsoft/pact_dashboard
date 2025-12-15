@@ -199,7 +199,8 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
                 stateData.hub_id,
                 mmpName || 'MMP',
                 selectedCoordinators.size,
-                mmpId
+                mmpId,
+                currentUser?.full_name || currentUser?.email || 'Field Operations Manager'
               );
             }
           }
@@ -273,7 +274,8 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
               firstCoord.hub_id,
               mmpName || 'MMP',
               ids.length,
-              mmpId
+              mmpId,
+              currentUser?.full_name || currentUser?.email || 'Field Operations Manager'
             );
           }
         } catch (e) {
@@ -342,7 +344,8 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
               firstCoord.hub_id,
               mmpName || 'MMP',
               ids.length,
-              mmpId
+              mmpId,
+              currentUser?.full_name || currentUser?.email || 'Field Operations Manager'
             );
           }
         } catch (e) {
