@@ -324,40 +324,45 @@ const ReviewAssignCoordinators: React.FC = () => {
         mmpId
       });
 
-      // Send notifications
-      const notifications = [
-        {
-          user_id: coordinatorId,
-          title: 'Sites forwarded for CP verification',
-          message: `${mmpFile?.name || 'MMP'}: ${siteIds.length} site(s) have been forwarded for your CP review${attachStatePermitMap[groupKey] ? ' (State permit attached)' : ''}`,
-          type: 'info',
-          link: `/coordinator/sites`,
-          related_entity_id: mmpId,
-          related_entity_type: 'mmpFile',
-        }
-      ];
-
-      // Send notification to supervisor if selected
-      if (supervisorId) {
-        notifications.push({
-          user_id: supervisorId,
-          title: 'Sites assigned to coordinator for verification',
-          message: `${mmpFile?.name || 'MMP'}: ${siteIds.length} site(s) have been assigned to ${allCoordinators.find(c => c.id === coordinatorId)?.fullName || 'Coordinator'} for CP verification${attachStatePermitMap[groupKey] ? ' (State permit attached)' : ''}`,
-          type: 'info',
-          link: `/supervisor/sites`,
-          related_entity_id: mmpId,
-          related_entity_type: 'mmpFile',
-        });
-      }
-
-      await insertNotifications(notifications);
-      
-      // Refresh MMP context to reflect changes
-      await refreshMMPFiles();
-
+      // Show success toast immediately after forwarding
       toast({ title: 'Batch Forwarded', description: `Sites were forwarded to ${allCoordinators.find(c => c.id === coordinatorId)?.fullName || 'Coordinator'}${attachStatePermitMap[groupKey] ? ' with state permit attached' : ''}${supervisorId ? ` and notified ${allSupervisors.find(s => s.id === supervisorId)?.fullName || 'Supervisor'}` : ''}.`, variant: 'default' });
+
+      // Attempt to send notifications (don't fail the whole operation if this fails)
+      try {
+        const notifications = [
+          {
+            user_id: coordinatorId,
+            title: 'Sites forwarded for CP verification',
+            message: `${mmpFile?.name || 'MMP'}: ${siteIds.length} site(s) have been forwarded for your CP review${attachStatePermitMap[groupKey] ? ' (State permit attached)' : ''}`,
+            type: 'info',
+            link: `/coordinator/sites`,
+            related_entity_id: mmpId,
+            related_entity_type: 'mmpFile',
+          }
+        ];
+
+        // Send notification to supervisor if selected
+        if (supervisorId) {
+          notifications.push({
+            user_id: supervisorId,
+            title: 'Sites assigned to coordinator for verification',
+            message: `${mmpFile?.name || 'MMP'}: ${siteIds.length} site(s) have been assigned to ${allCoordinators.find(c => c.id === coordinatorId)?.fullName || 'Coordinator'} for CP verification${attachStatePermitMap[groupKey] ? ' (State permit attached)' : ''}`,
+            type: 'info',
+            link: `/supervisor/sites`,
+            related_entity_id: mmpId,
+            related_entity_type: 'mmpFile',
+          });
+        }
+
+        await insertNotifications(notifications);
+      } catch (notifErr) {
+        console.warn('Failed to send notifications:', notifErr);
+        // Optionally, you could show a separate toast for notification failure here if needed
+      }
       
-      // Mark sites as forwarded to prevent re-forwarding
+      // Removed: await refreshMMPFiles(); // To prevent page reload on hosted app
+
+      // Update local state to reflect forwarded sites
       const newForwarded = new Set(forwardedSiteIds);
       siteIds.forEach(id => newForwarded.add(id));
       setForwardedSiteIds(newForwarded);
@@ -503,7 +508,7 @@ const ReviewAssignCoordinators: React.FC = () => {
               onClick={() => setWithStatePermitOnly(prev => !prev)}
               className={withStatePermitOnly ? 'bg-blue-600 text-white' : ''}
             >
-              With State Permit
+              Federal Permit Attached
             </Button>
           </div>
 
@@ -523,7 +528,7 @@ const ReviewAssignCoordinators: React.FC = () => {
                 const [stateId, localityId] = groupKey.split('|');
                 const isUnassigned = stateId === 'unassigned';
                 const recommended = isUnassigned ? null : getRecommendedCoordinator(stateId, localityId);
-                const selectedId = assignmentMap[groupKey] || recommended?.id || '';
+                const selectedId = assignmentMap[groupKey] || '';  // Removed: recommended?.id || ''
                 
                 // Separate forwarded and unforwarded sites
                 const forwardedSites = groupSites.filter((site: any) => forwardedSiteIds.has(site.id));
@@ -566,35 +571,55 @@ const ReviewAssignCoordinators: React.FC = () => {
                           <div className="flex items-center gap-3">
                             <Select 
                               value={selectedId} 
-                              onValueChange={val => setAssignmentMap(a => ({ ...a, [groupKey]: val }))}
+                              onValueChange={val => {
+                                setAssignmentMap(a => ({ ...a, [groupKey]: val }));
+                                // Auto-select supervisor for the hub that has the coordinator's state
+                                const coord = allCoordinators.find(c => c.id === val);
+                                if (coord) {
+                                  const hubForState = hubStates.find(hs => hs.state_id === coord.stateId);
+                                  if (hubForState) {
+                                    const supervisorForHub = allSupervisors.find(s => s.hubId === hubForState.hub_id);
+                                    if (supervisorForHub) {
+                                      setSupervisorMap(s => ({ ...s, [groupKey]: supervisorForHub.id }));
+                                    }
+                                  }
+                                }
+                              }}
                             >
                               <SelectTrigger className="max-w-md">
                                 <SelectValue placeholder="Select coordinator..." />
                               </SelectTrigger>
                               <SelectContent>
-                                {allCoordinators.map(c => (
+                                {/* Filter coordinators to only those in the same state as the group */}
+                                {allCoordinators.filter(c => c.stateId === stateId).map(c => (
                                   <SelectItem key={c.id} value={c.id}>
                                     {c.fullName || c.name || c.email}
-                                    {recommended?.id === c.id ? ' (Recommended)' : ''}
                                   </SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
-                            <Select 
-                              value={supervisorMap[groupKey] || ''} 
-                              onValueChange={val => setSupervisorMap(s => ({ ...s, [groupKey]: val }))}
-                            >
-                              <SelectTrigger className="max-w-md">
-                                <SelectValue placeholder="Select supervisor (optional - for notifications only)..." />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {allSupervisors.map(s => (
-                                  <SelectItem key={s.id} value={s.id}>
-                                    {s.fullName || s.name || s.email}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                            {/* Filter supervisors by the hub that contains the group's state */}
+                            {(() => {
+                              const hubForGroupState = hubStates.find(hs => hs.state_id === stateId);
+                              const hubId = hubForGroupState?.hub_id;
+                              return (
+                                <Select 
+                                  value={supervisorMap[groupKey] || ''} 
+                                  onValueChange={val => setSupervisorMap(s => ({ ...s, [groupKey]: val }))}
+                                >
+                                  <SelectTrigger className="max-w-md">
+                                    <SelectValue placeholder="Select supervisor (optional - for notifications only)..." />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {allSupervisors.filter(s => s.hubId === hubId).map(s => (
+                                      <SelectItem key={s.id} value={s.id}>
+                                        {s.fullName || s.name || s.email}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              );
+                            })()}
                           </div>
                           
                           {/* State Permit Attachment Option */}

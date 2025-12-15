@@ -8,6 +8,8 @@ import { useToast } from '@/hooks/use-toast';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { useAppContext } from '@/context/AppContext';
 import { fetchCoordinatorUsers, insertNotifications, forwardSitesToCoordinator } from '@/services/mmpActions';
+import { supabase } from '@/integrations/supabase/client';
+import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 
 interface ForwardToCoordinatorsDialogProps {
   open: boolean;
@@ -179,6 +181,29 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
         }
 
         toast({ title: 'Sites forwarded', description: `Forwarded sites to coordinators by locality` });
+
+        // Notify hub supervisors for each group
+        for (const group of siteGroups!) {
+          const groupKey = `${group.stateId}|${group.localityId}`;
+          const selectedCoordinators = groupSelections[groupKey] || new Set();
+          if (selectedCoordinators.size > 0) {
+            // Find hub ID for this state
+            const { data: stateData } = await supabase
+              .from('hub_states')
+              .select('hub_id')
+              .eq('state_id', group.stateId)
+              .single();
+            
+            if (stateData?.hub_id) {
+              await NotificationTriggerService.mmpForwardedToCoordinators(
+                stateData.hub_id,
+                mmpName || 'MMP',
+                selectedCoordinators.size,
+                mmpId
+              );
+            }
+          }
+        }
       } else if (isSiteForwarding) {
         // Forward all sites to coordinators (existing logic)
         const now = new Date().toISOString();
@@ -239,6 +264,21 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
         } catch {}
 
         toast({ title: 'Sites forwarded', description: `Forwarded to ${ids.length} Coordinator(s)` });
+
+        // Notify hub supervisors - get hub from first selected coordinator
+        try {
+          const firstCoord = coordinators.find(c => selected.has(c.id));
+          if (firstCoord?.hub_id) {
+            await NotificationTriggerService.mmpForwardedToCoordinators(
+              firstCoord.hub_id,
+              mmpName || 'MMP',
+              ids.length,
+              mmpId
+            );
+          }
+        } catch (e) {
+          console.error('Failed to notify hub supervisor:', e);
+        }
       } else if (mmpId) {
         // Forward MMP to coordinators (existing logic)
         // Insert notifications
@@ -293,6 +333,21 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
         await supabase.from('mmp_files').update({ workflow: next }).eq('id', mmpId);
 
         toast({ title: 'MMP forwarded', description: `Forwarded to ${ids.length} Coordinator(s)` });
+
+        // Notify hub supervisors - get hub from first selected coordinator
+        try {
+          const firstCoord = coordinators.find(c => selected.has(c.id));
+          if (firstCoord?.hub_id) {
+            await NotificationTriggerService.mmpForwardedToCoordinators(
+              firstCoord.hub_id,
+              mmpName || 'MMP',
+              ids.length,
+              mmpId
+            );
+          }
+        } catch (e) {
+          console.error('Failed to notify hub supervisor:', e);
+        }
       }
 
       try { onForwarded?.(Array.from(selected)); } catch {}
@@ -309,7 +364,7 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Forward to Coordinators</DialogTitle>
           <DialogDescription>
