@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { useAudit } from '@/context/audit/AuditContext';
@@ -20,6 +20,19 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar as CalendarComponent } from '@/components/ui/calendar';
+import { 
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Progress } from '@/components/ui/progress';
 import { 
   Search, 
   Filter, 
@@ -41,9 +54,20 @@ import {
   Circle,
   PlayCircle,
   PauseCircle,
-  StopCircle
+  StopCircle,
+  Users,
+  Zap,
+  FileSpreadsheet,
+  X,
+  Info,
+  RotateCcw,
+  Eye,
+  TrendingUp,
+  History,
+  ChevronLeft
 } from 'lucide-react';
-import { format, isToday, isYesterday, parseISO } from 'date-fns';
+import { format, isToday, isYesterday, parseISO, subDays, startOfDay, endOfDay, isWithinInterval } from 'date-fns';
+import * as XLSX from 'xlsx';
 
 const AuditLogs = () => {
   const navigate = useNavigate();
@@ -54,9 +78,32 @@ const AuditLogs = () => {
   const [moduleFilter, setModuleFilter] = useState<AuditModule | 'all'>('all');
   const [actionFilter, setActionFilter] = useState<AuditAction | 'all'>('all');
   const [severityFilter, setSeverityFilter] = useState<AuditSeverity | 'all'>('all');
+  const [successFilter, setSuccessFilter] = useState<'all' | 'success' | 'failed'>('all');
+  const [actorFilter, setActorFilter] = useState<string>('all');
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
   const [expandedEntityId, setExpandedEntityId] = useState<string | null>(null);
+  const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('timeline');
+  const [dateRange, setDateRange] = useState<{ from: Date | undefined; to: Date | undefined }>({
+    from: undefined,
+    to: undefined,
+  });
+  const [quickDateFilter, setQuickDateFilter] = useState<string>('all');
+  const [newLogCount, setNewLogCount] = useState(0);
+  const [lastLogCount, setLastLogCount] = useState(0);
+  const [isLiveMode, setIsLiveMode] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const logsPerPage = 100;
+
+  // Auto-refresh in live mode
+  useEffect(() => {
+    if (isLiveMode) {
+      const interval = setInterval(() => {
+        refreshLogs();
+      }, 30000); // Refresh every 30 seconds
+      return () => clearInterval(interval);
+    }
+  }, [isLiveMode, refreshLogs]);
 
   if (!isSuperAdmin) {
     return (
@@ -73,6 +120,51 @@ const AuditLogs = () => {
 
   const stats = useMemo(() => getAuditStats(), [logs]);
 
+  // Get unique actors for the filter dropdown
+  const uniqueActors = useMemo(() => {
+    const actors = new Map<string, { id: string; name: string; email?: string; count: number }>();
+    for (const log of logs) {
+      if (!actors.has(log.actorId)) {
+        actors.set(log.actorId, {
+          id: log.actorId,
+          name: log.actorName,
+          email: log.actorEmail,
+          count: 1,
+        });
+      } else {
+        const actor = actors.get(log.actorId)!;
+        actor.count++;
+      }
+    }
+    return Array.from(actors.values()).sort((a, b) => b.count - a.count);
+  }, [logs]);
+
+  // Apply quick date filter
+  const getDateRangeFromQuickFilter = (filter: string) => {
+    const now = new Date();
+    switch (filter) {
+      case 'today':
+        return { from: startOfDay(now), to: endOfDay(now) };
+      case 'yesterday':
+        return { from: startOfDay(subDays(now, 1)), to: endOfDay(subDays(now, 1)) };
+      case 'last7days':
+        return { from: startOfDay(subDays(now, 7)), to: endOfDay(now) };
+      case 'last30days':
+        return { from: startOfDay(subDays(now, 30)), to: endOfDay(now) };
+      case 'last90days':
+        return { from: startOfDay(subDays(now, 90)), to: endOfDay(now) };
+      default:
+        return { from: undefined, to: undefined };
+    }
+  };
+
+  const effectiveDateRange = useMemo(() => {
+    if (quickDateFilter !== 'all' && quickDateFilter !== 'custom') {
+      return getDateRangeFromQuickFilter(quickDateFilter);
+    }
+    return dateRange;
+  }, [quickDateFilter, dateRange]);
+
   const filteredLogs = useMemo(() => {
     let result = [...logs];
 
@@ -88,23 +180,78 @@ const AuditLogs = () => {
       result = result.filter(log => log.severity === severityFilter);
     }
 
+    if (successFilter !== 'all') {
+      result = result.filter(log => successFilter === 'success' ? log.success : !log.success);
+    }
+
+    if (actorFilter !== 'all') {
+      result = result.filter(log => log.actorId === actorFilter);
+    }
+
+    // Date range filter
+    if (effectiveDateRange.from || effectiveDateRange.to) {
+      result = result.filter(log => {
+        const logDate = parseISO(log.timestamp);
+        if (effectiveDateRange.from && effectiveDateRange.to) {
+          return isWithinInterval(logDate, { start: effectiveDateRange.from, end: effectiveDateRange.to });
+        }
+        if (effectiveDateRange.from) {
+          return logDate >= effectiveDateRange.from;
+        }
+        if (effectiveDateRange.to) {
+          return logDate <= effectiveDateRange.to;
+        }
+        return true;
+      });
+    }
+
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       result = result.filter(log =>
         log.description.toLowerCase().includes(query) ||
         log.actorName.toLowerCase().includes(query) ||
         log.entityName?.toLowerCase().includes(query) ||
-        log.entityId.toLowerCase().includes(query)
+        log.entityId.toLowerCase().includes(query) ||
+        log.actorEmail?.toLowerCase().includes(query)
       );
     }
 
     return result;
-  }, [logs, moduleFilter, actionFilter, severityFilter, searchQuery]);
+  }, [logs, moduleFilter, actionFilter, severityFilter, successFilter, actorFilter, effectiveDateRange, searchQuery]);
+
+  // Pagination
+  const paginatedLogs = useMemo(() => {
+    const startIndex = (currentPage - 1) * logsPerPage;
+    return filteredLogs.slice(startIndex, startIndex + logsPerPage);
+  }, [filteredLogs, currentPage]);
+
+  const totalPages = Math.ceil(filteredLogs.length / logsPerPage);
+
+  // Track new logs based on filtered count - only increment on actual new logs
+  const [prevFilterKey, setPrevFilterKey] = useState('');
+  const [isInitialized, setIsInitialized] = useState(false);
+  const filterKey = `${moduleFilter}-${actionFilter}-${severityFilter}-${successFilter}-${actorFilter}-${quickDateFilter}-${dateRange.from?.getTime()}-${dateRange.to?.getTime()}-${searchQuery}-${currentPage}`;
+  
+  useEffect(() => {
+    // If filters or page changed, reset the counter and mark as initialized
+    if (filterKey !== prevFilterKey) {
+      setNewLogCount(0);
+      setLastLogCount(filteredLogs.length);
+      setPrevFilterKey(filterKey);
+      setIsInitialized(true);
+      return;
+    }
+    // Only increment if we're initialized and new logs arrived (not just filter changes)
+    if (isInitialized && filteredLogs.length > lastLogCount) {
+      setNewLogCount(filteredLogs.length - lastLogCount);
+    }
+    setLastLogCount(filteredLogs.length);
+  }, [filteredLogs.length, filterKey, prevFilterKey, lastLogCount, isInitialized]);
 
   const groupedByDate = useMemo(() => {
     const groups: Record<string, AuditLogEntry[]> = {};
     
-    for (const log of filteredLogs) {
+    for (const log of paginatedLogs) {
       const date = parseISO(log.timestamp);
       let key: string;
       
@@ -123,7 +270,7 @@ const AuditLogs = () => {
     }
     
     return groups;
-  }, [filteredLogs]);
+  }, [paginatedLogs]);
 
   interface EntityWorkflow {
     entityId: string;
@@ -185,6 +332,61 @@ const AuditLogs = () => {
     }
     
     return Object.values(entities).sort(
+      (a, b) => new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime()
+    );
+  }, [filteredLogs]);
+
+  // Group by user for User Activity tab
+  interface UserActivity {
+    userId: string;
+    userName: string;
+    userEmail?: string;
+    userRole: string;
+    logs: AuditLogEntry[];
+    lastActivity: string;
+    totalActions: number;
+    moduleBreakdown: Record<string, number>;
+    severityBreakdown: Record<string, number>;
+    successRate: number;
+  }
+
+  const groupedByUser = useMemo(() => {
+    const users: Record<string, UserActivity> = {};
+    
+    for (const log of filteredLogs) {
+      if (!users[log.actorId]) {
+        users[log.actorId] = {
+          userId: log.actorId,
+          userName: log.actorName,
+          userEmail: log.actorEmail,
+          userRole: log.actorRole,
+          logs: [],
+          lastActivity: log.timestamp,
+          totalActions: 0,
+          moduleBreakdown: {},
+          severityBreakdown: {},
+          successRate: 0,
+        };
+      }
+      
+      const user = users[log.actorId];
+      user.logs.push(log);
+      user.totalActions++;
+      user.moduleBreakdown[log.module] = (user.moduleBreakdown[log.module] || 0) + 1;
+      user.severityBreakdown[log.severity] = (user.severityBreakdown[log.severity] || 0) + 1;
+      
+      if (new Date(log.timestamp) > new Date(user.lastActivity)) {
+        user.lastActivity = log.timestamp;
+      }
+    }
+    
+    // Calculate success rates
+    for (const user of Object.values(users)) {
+      const successCount = user.logs.filter(l => l.success).length;
+      user.successRate = user.totalActions > 0 ? (successCount / user.totalActions) * 100 : 0;
+    }
+    
+    return Object.values(users).sort(
       (a, b) => new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime()
     );
   }, [filteredLogs]);
@@ -257,6 +459,10 @@ const AuditLogs = () => {
     setExpandedEntityId(expandedEntityId === entityKey ? null : entityKey);
   };
 
+  const toggleUserExpanded = (userId: string) => {
+    setExpandedUserId(expandedUserId === userId ? null : userId);
+  };
+
   const getSeverityColor = (severity: AuditSeverity) => {
     switch (severity) {
       case 'critical': return 'destructive';
@@ -275,13 +481,9 @@ const AuditLogs = () => {
     }
   };
 
-  const handleExport = () => {
-    const data = exportLogs({
-      module: moduleFilter !== 'all' ? moduleFilter : undefined,
-      action: actionFilter !== 'all' ? actionFilter : undefined,
-      severity: severityFilter !== 'all' ? severityFilter : undefined,
-      searchQuery: searchQuery || undefined,
-    });
+  const handleExportJSON = () => {
+    // Export all filtered logs (respects all active filters including dates, success, actor)
+    const data = JSON.stringify(filteredLogs, null, 2);
     
     const blob = new Blob([data], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -294,9 +496,84 @@ const AuditLogs = () => {
     URL.revokeObjectURL(url);
   };
 
+  const handleExportExcel = () => {
+    const exportData = filteredLogs.map(log => ({
+      'Timestamp': format(parseISO(log.timestamp), 'yyyy-MM-dd HH:mm:ss'),
+      'Module': AUDIT_MODULE_LABELS[log.module],
+      'Action': AUDIT_ACTION_LABELS[log.action],
+      'Severity': AUDIT_SEVERITY_LABELS[log.severity],
+      'Actor': log.actorName,
+      'Actor Email': log.actorEmail || '',
+      'Actor Role': log.actorRole,
+      'Entity Type': log.entityType,
+      'Entity ID': log.entityId,
+      'Entity Name': log.entityName || '',
+      'Description': log.description,
+      'Details': log.details || '',
+      'Success': log.success ? 'Yes' : 'No',
+      'Error': log.errorMessage || '',
+      'Workflow Step': log.workflowStep ? WORKFLOW_STEP_LABELS[log.workflowStep] : '',
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Audit Logs');
+    
+    // Auto-size columns
+    const colWidths = Object.keys(exportData[0] || {}).map(key => ({
+      wch: Math.max(key.length, 15)
+    }));
+    worksheet['!cols'] = colWidths;
+    
+    XLSX.writeFile(workbook, `audit-logs-${format(new Date(), 'yyyy-MM-dd-HHmm')}.xlsx`);
+  };
+
+  const handleExportCSV = () => {
+    const exportData = filteredLogs.map(log => ({
+      'Timestamp': format(parseISO(log.timestamp), 'yyyy-MM-dd HH:mm:ss'),
+      'Module': AUDIT_MODULE_LABELS[log.module],
+      'Action': AUDIT_ACTION_LABELS[log.action],
+      'Severity': AUDIT_SEVERITY_LABELS[log.severity],
+      'Actor': log.actorName,
+      'Actor Email': log.actorEmail || '',
+      'Description': log.description,
+      'Success': log.success ? 'Yes' : 'No',
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const csv = XLSX.utils.sheet_to_csv(worksheet);
+    
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `audit-logs-${format(new Date(), 'yyyy-MM-dd-HHmm')}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   const toggleLogExpanded = (logId: string) => {
     setExpandedLogId(expandedLogId === logId ? null : logId);
   };
+
+  const clearAllFilters = () => {
+    setSearchQuery('');
+    setModuleFilter('all');
+    setActionFilter('all');
+    setSeverityFilter('all');
+    setSuccessFilter('all');
+    setActorFilter('all');
+    setQuickDateFilter('all');
+    setDateRange({ from: undefined, to: undefined });
+    setCurrentPage(1);
+    setNewLogCount(0);
+  };
+
+  const hasActiveFilters = moduleFilter !== 'all' || actionFilter !== 'all' || 
+    severityFilter !== 'all' || successFilter !== 'all' || actorFilter !== 'all' ||
+    quickDateFilter !== 'all' || searchQuery.trim() !== '';
 
   const moduleOptions = Object.entries(AUDIT_MODULE_LABELS) as [AuditModule, string][];
   const actionOptions = Object.entries(AUDIT_ACTION_LABELS) as [AuditAction, string][];
@@ -304,34 +581,87 @@ const AuditLogs = () => {
 
   return (
     <div className="space-y-6 p-6">
+      {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold" data-testid="text-page-title">Audit Log Explorer</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold" data-testid="text-page-title">Audit Log Explorer</h1>
+            {newLogCount > 0 && (
+              <Badge className="bg-green-500 text-white animate-pulse" data-testid="badge-new-logs">
+                <Zap className="h-3 w-3 mr-1" />
+                {newLogCount} new
+              </Badge>
+            )}
+          </div>
           <p className="text-muted-foreground">Complete audit trail of all system activities</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Live Mode Toggle */}
+          <div className="flex items-center gap-2 mr-2">
+            <Switch
+              id="live-mode"
+              checked={isLiveMode}
+              onCheckedChange={setIsLiveMode}
+              data-testid="switch-live-mode"
+            />
+            <Label htmlFor="live-mode" className="flex items-center gap-1 text-sm cursor-pointer">
+              {isLiveMode ? (
+                <>
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                  </span>
+                  Live
+                </>
+              ) : (
+                <>
+                  <Circle className="h-2 w-2 text-muted-foreground" />
+                  Paused
+                </>
+              )}
+            </Label>
+          </div>
+          
           <Button 
             variant="outline" 
             size="sm" 
-            onClick={() => refreshLogs()}
+            onClick={() => { refreshLogs(); setNewLogCount(0); }}
             data-testid="button-refresh-logs"
           >
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh
           </Button>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={handleExport}
-            data-testid="button-export-logs"
-          >
-            <Download className="h-4 w-4 mr-2" />
-            Export
-          </Button>
+          
+          {/* Export Dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" data-testid="button-export-dropdown">
+                <Download className="h-4 w-4 mr-2" />
+                Export
+                <ChevronDown className="h-4 w-4 ml-1" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={handleExportExcel} data-testid="button-export-excel">
+                <FileSpreadsheet className="h-4 w-4 mr-2" />
+                Export to Excel
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExportCSV} data-testid="button-export-csv">
+                <FileText className="h-4 w-4 mr-2" />
+                Export to CSV
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleExportJSON} data-testid="button-export-json">
+                <FileText className="h-4 w-4 mr-2" />
+                Export to JSON
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-4">
+      {/* Stats Cards */}
+      <div className="grid gap-4 md:grid-cols-5">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Logs</CardTitle>
@@ -339,57 +669,115 @@ const AuditLogs = () => {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold" data-testid="text-total-logs">{stats.totalLogs}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {filteredLogs.length} matching filters
+            </p>
           </CardContent>
         </Card>
-        <Card>
+        <Card 
+          className={`cursor-pointer transition-colors ${severityFilter === 'info' ? 'ring-2 ring-green-500' : ''}`}
+          onClick={() => setSeverityFilter(severityFilter === 'info' ? 'all' : 'info')}
+          data-testid="card-filter-info"
+        >
+          <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Info</CardTitle>
+            <Info className="h-4 w-4 text-green-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600" data-testid="text-info-count">
+              {stats.bySeverity.info || 0}
+            </div>
+          </CardContent>
+        </Card>
+        <Card 
+          className={`cursor-pointer transition-colors ${severityFilter === 'warning' ? 'ring-2 ring-yellow-500' : ''}`}
+          onClick={() => setSeverityFilter(severityFilter === 'warning' ? 'all' : 'warning')}
+          data-testid="card-filter-warning"
+        >
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Warnings</CardTitle>
             <AlertTriangle className="h-4 w-4 text-yellow-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold" data-testid="text-warning-count">{stats.bySeverity.warning || 0}</div>
+            <div className="text-2xl font-bold text-yellow-600" data-testid="text-warning-count">
+              {stats.bySeverity.warning || 0}
+            </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card 
+          className={`cursor-pointer transition-colors ${severityFilter === 'error' ? 'ring-2 ring-destructive' : ''}`}
+          onClick={() => setSeverityFilter(severityFilter === 'error' ? 'all' : 'error')}
+          data-testid="card-filter-error"
+        >
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Errors</CardTitle>
             <XCircle className="h-4 w-4 text-destructive" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold" data-testid="text-error-count">{stats.bySeverity.error || 0}</div>
+            <div className="text-2xl font-bold text-destructive" data-testid="text-error-count">
+              {stats.bySeverity.error || 0}
+            </div>
           </CardContent>
         </Card>
-        <Card>
+        <Card 
+          className={`cursor-pointer transition-colors ${severityFilter === 'critical' ? 'ring-2 ring-destructive' : ''}`}
+          onClick={() => setSeverityFilter(severityFilter === 'critical' ? 'all' : 'critical')}
+          data-testid="card-filter-critical"
+        >
           <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Critical</CardTitle>
             <Shield className="h-4 w-4 text-destructive" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold" data-testid="text-critical-count">{stats.bySeverity.critical || 0}</div>
+            <div className="text-2xl font-bold text-destructive" data-testid="text-critical-count">
+              {stats.bySeverity.critical || 0}
+            </div>
           </CardContent>
         </Card>
       </div>
 
+      {/* Filters */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Filter className="h-5 w-5" />
-            Filters
-          </CardTitle>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Filter className="h-5 w-5" />
+              Filters
+              {hasActiveFilters && (
+                <Badge variant="secondary" className="ml-2">
+                  Active
+                </Badge>
+              )}
+            </CardTitle>
+            {hasActiveFilters && (
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={clearAllFilters}
+                data-testid="button-clear-filters"
+              >
+                <RotateCcw className="h-4 w-4 mr-2" />
+                Clear All
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 md:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            {/* Search */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search logs..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
                 className="pl-10"
                 data-testid="input-search-logs"
               />
             </div>
-            <Select value={moduleFilter} onValueChange={(v) => setModuleFilter(v as AuditModule | 'all')}>
+            
+            {/* Module Filter */}
+            <Select value={moduleFilter} onValueChange={(v) => { setModuleFilter(v as AuditModule | 'all'); setCurrentPage(1); }}>
               <SelectTrigger data-testid="select-module-filter">
                 <SelectValue placeholder="All Modules" />
               </SelectTrigger>
@@ -400,7 +788,9 @@ const AuditLogs = () => {
                 ))}
               </SelectContent>
             </Select>
-            <Select value={actionFilter} onValueChange={(v) => setActionFilter(v as AuditAction | 'all')}>
+            
+            {/* Action Filter */}
+            <Select value={actionFilter} onValueChange={(v) => { setActionFilter(v as AuditAction | 'all'); setCurrentPage(1); }}>
               <SelectTrigger data-testid="select-action-filter">
                 <SelectValue placeholder="All Actions" />
               </SelectTrigger>
@@ -411,7 +801,104 @@ const AuditLogs = () => {
                 ))}
               </SelectContent>
             </Select>
-            <Select value={severityFilter} onValueChange={(v) => setSeverityFilter(v as AuditSeverity | 'all')}>
+            
+            {/* Actor Filter */}
+            <Select value={actorFilter} onValueChange={(v) => { setActorFilter(v); setCurrentPage(1); }}>
+              <SelectTrigger data-testid="select-actor-filter">
+                <SelectValue placeholder="All Users" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Users</SelectItem>
+                {uniqueActors.slice(0, 50).map((actor) => (
+                  <SelectItem key={actor.id} value={actor.id}>
+                    <div className="flex items-center gap-2">
+                      <span>{actor.name}</span>
+                      <Badge variant="outline" className="text-xs">{actor.count}</Badge>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          
+          {/* Second Row */}
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mt-4">
+            {/* Quick Date Filter */}
+            <Select value={quickDateFilter} onValueChange={(v) => { setQuickDateFilter(v); setCurrentPage(1); }}>
+              <SelectTrigger data-testid="select-date-filter">
+                <Calendar className="h-4 w-4 mr-2" />
+                <SelectValue placeholder="All Time" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Time</SelectItem>
+                <SelectItem value="today">Today</SelectItem>
+                <SelectItem value="yesterday">Yesterday</SelectItem>
+                <SelectItem value="last7days">Last 7 Days</SelectItem>
+                <SelectItem value="last30days">Last 30 Days</SelectItem>
+                <SelectItem value="last90days">Last 90 Days</SelectItem>
+                <SelectItem value="custom">Custom Range</SelectItem>
+              </SelectContent>
+            </Select>
+            
+            {/* Custom Date Range Picker */}
+            {quickDateFilter === 'custom' && (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="justify-start text-left font-normal" data-testid="button-date-range">
+                    <Calendar className="mr-2 h-4 w-4" />
+                    {dateRange.from ? (
+                      dateRange.to ? (
+                        <>
+                          {format(dateRange.from, "LLL dd")} - {format(dateRange.to, "LLL dd")}
+                        </>
+                      ) : (
+                        format(dateRange.from, "LLL dd, y")
+                      )
+                    ) : (
+                      <span>Pick a date range</span>
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <CalendarComponent
+                    initialFocus
+                    mode="range"
+                    defaultMonth={dateRange.from}
+                    selected={{ from: dateRange.from, to: dateRange.to }}
+                    onSelect={(range) => {
+                      setDateRange({ from: range?.from, to: range?.to });
+                      setCurrentPage(1);
+                    }}
+                    numberOfMonths={2}
+                  />
+                </PopoverContent>
+              </Popover>
+            )}
+            
+            {/* Success Filter */}
+            <Select value={successFilter} onValueChange={(v) => { setSuccessFilter(v as 'all' | 'success' | 'failed'); setCurrentPage(1); }}>
+              <SelectTrigger data-testid="select-success-filter">
+                <SelectValue placeholder="All Results" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Results</SelectItem>
+                <SelectItem value="success">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-green-500" />
+                    Successful Only
+                  </div>
+                </SelectItem>
+                <SelectItem value="failed">
+                  <div className="flex items-center gap-2">
+                    <XCircle className="h-4 w-4 text-destructive" />
+                    Failed Only
+                  </div>
+                </SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* Severity Filter (in case quick click on cards doesn't work) */}
+            <Select value={severityFilter} onValueChange={(v) => { setSeverityFilter(v as AuditSeverity | 'all'); setCurrentPage(1); }}>
               <SelectTrigger data-testid="select-severity-filter">
                 <SelectValue placeholder="All Severities" />
               </SelectTrigger>
@@ -426,11 +913,16 @@ const AuditLogs = () => {
         </CardContent>
       </Card>
 
+      {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="timeline" data-testid="tab-timeline">
             <Clock className="h-4 w-4 mr-2" />
             Timeline
+          </TabsTrigger>
+          <TabsTrigger value="users" data-testid="tab-users">
+            <Users className="h-4 w-4 mr-2" />
+            User Activity
           </TabsTrigger>
           <TabsTrigger value="workflows" data-testid="tab-workflows">
             <GitBranch className="h-4 w-4 mr-2" />
@@ -446,6 +938,7 @@ const AuditLogs = () => {
           </TabsTrigger>
         </TabsList>
 
+        {/* Timeline Tab */}
         <TabsContent value="timeline" className="mt-4">
           <Card>
             <CardContent className="p-0">
@@ -463,7 +956,7 @@ const AuditLogs = () => {
                   <div className="divide-y">
                     {Object.entries(groupedByDate).map(([date, dayLogs]) => (
                       <div key={date}>
-                        <div className="sticky top-0 bg-muted/50 backdrop-blur px-4 py-2 text-sm font-medium flex items-center gap-2">
+                        <div className="sticky top-0 bg-muted/50 backdrop-blur px-4 py-2 text-sm font-medium flex items-center gap-2 z-10">
                           <Calendar className="h-4 w-4" />
                           {date}
                           <Badge variant="outline" className="ml-2">{dayLogs.length}</Badge>
@@ -489,8 +982,11 @@ const AuditLogs = () => {
                                     <Badge variant="outline" className="text-xs">
                                       {AUDIT_MODULE_LABELS[log.module]}
                                     </Badge>
+                                    {!log.success && (
+                                      <Badge variant="destructive" className="text-xs">Failed</Badge>
+                                    )}
                                   </div>
-                                  <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
+                                  <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground flex-wrap">
                                     <span className="flex items-center gap-1">
                                       <User className="h-3 w-3" />
                                       {log.actorName}
@@ -534,10 +1030,16 @@ const AuditLogs = () => {
                                       <span className="text-muted-foreground">Actor Role:</span>
                                       <span className="ml-2 font-medium">{log.actorRole}</span>
                                     </div>
+                                    {log.actorEmail && (
+                                      <div>
+                                        <span className="text-muted-foreground">Actor Email:</span>
+                                        <span className="ml-2 font-medium">{log.actorEmail}</span>
+                                      </div>
+                                    )}
                                     {log.workflowStep && (
                                       <div>
                                         <span className="text-muted-foreground">Workflow Step:</span>
-                                        <Badge variant="outline" className="ml-2">{log.workflowStep}</Badge>
+                                        <Badge variant="outline" className="ml-2">{WORKFLOW_STEP_LABELS[log.workflowStep]}</Badge>
                                       </div>
                                     )}
                                     <div>
@@ -565,7 +1067,7 @@ const AuditLogs = () => {
                                           <div key={field} className="flex items-center gap-2 text-xs">
                                             <span className="font-medium">{field}:</span>
                                             <span className="text-destructive line-through">{String(change.from)}</span>
-                                            <span className="text-muted-foreground">→</span>
+                                            <ArrowRight className="h-3 w-3" />
                                             <span className="text-green-600">{String(change.to)}</span>
                                           </div>
                                         ))}
@@ -588,10 +1090,201 @@ const AuditLogs = () => {
                   </div>
                 )}
               </ScrollArea>
+              
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between px-4 py-3 border-t">
+                  <p className="text-sm text-muted-foreground">
+                    Showing {((currentPage - 1) * logsPerPage) + 1} - {Math.min(currentPage * logsPerPage, filteredLogs.length)} of {filteredLogs.length}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      data-testid="button-prev-page"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                      Previous
+                    </Button>
+                    <span className="text-sm text-muted-foreground">
+                      Page {currentPage} of {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                      data-testid="button-next-page"
+                    >
+                      Next
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
 
+        {/* User Activity Tab */}
+        <TabsContent value="users" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Users className="h-5 w-5" />
+                User Activity Tracking
+              </CardTitle>
+              <CardDescription>
+                Monitor individual user activities and behavior patterns
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              <ScrollArea className="h-[600px]">
+                {loading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : groupedByUser.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                    <Users className="h-12 w-12 mb-4" />
+                    <p>No user activities found</p>
+                  </div>
+                ) : (
+                  <div className="divide-y">
+                    {groupedByUser.map((user) => {
+                      const isExpanded = expandedUserId === user.userId;
+                      
+                      return (
+                        <div key={user.userId}>
+                          <div 
+                            className="px-4 py-4 hover-elevate cursor-pointer"
+                            onClick={() => toggleUserExpanded(user.userId)}
+                            data-testid={`user-activity-${user.userId}`}
+                          >
+                            <div className="flex items-start gap-4">
+                              <Avatar>
+                                <AvatarFallback>
+                                  {user.userName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-medium">{user.userName}</span>
+                                  <Badge variant="outline" className="text-xs">{user.userRole}</Badge>
+                                  {user.successRate === 100 && (
+                                    <Badge className="bg-green-500 text-white text-xs">Perfect Record</Badge>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground flex-wrap">
+                                  {user.userEmail && (
+                                    <span className="flex items-center gap-1">
+                                      <User className="h-3 w-3" />
+                                      {user.userEmail}
+                                    </span>
+                                  )}
+                                  <span className="flex items-center gap-1">
+                                    <Activity className="h-3 w-3" />
+                                    {user.totalActions} actions
+                                  </span>
+                                  <span className="flex items-center gap-1">
+                                    <Clock className="h-3 w-3" />
+                                    Last: {format(parseISO(user.lastActivity), 'MMM d, HH:mm')}
+                                  </span>
+                                </div>
+                                {/* Mini stats */}
+                                <div className="flex items-center gap-3 mt-2">
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-xs text-muted-foreground">Success:</span>
+                                    <span className={`text-xs font-medium ${user.successRate >= 90 ? 'text-green-600' : user.successRate >= 70 ? 'text-yellow-600' : 'text-destructive'}`}>
+                                      {user.successRate.toFixed(0)}%
+                                    </span>
+                                  </div>
+                                  {user.severityBreakdown.warning && (
+                                    <Badge variant="secondary" className="text-xs">
+                                      <AlertTriangle className="h-3 w-3 mr-1 text-yellow-500" />
+                                      {user.severityBreakdown.warning} warnings
+                                    </Badge>
+                                  )}
+                                  {user.severityBreakdown.error && (
+                                    <Badge variant="destructive" className="text-xs">
+                                      {user.severityBreakdown.error} errors
+                                    </Badge>
+                                  )}
+                                </div>
+                              </div>
+                              <div>
+                                {isExpanded ? (
+                                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                                ) : (
+                                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {isExpanded && (
+                            <div className="px-4 pb-4">
+                              <div className="ml-14 space-y-4">
+                                {/* Module Breakdown */}
+                                <div className="bg-muted/50 rounded-md p-4">
+                                  <h4 className="text-sm font-medium mb-3">Activity by Module</h4>
+                                  <div className="space-y-2">
+                                    {Object.entries(user.moduleBreakdown)
+                                      .sort(([,a], [,b]) => b - a)
+                                      .slice(0, 5)
+                                      .map(([module, count]) => (
+                                        <div key={module} className="flex items-center justify-between">
+                                          <span className="text-sm">{AUDIT_MODULE_LABELS[module as AuditModule]}</span>
+                                          <div className="flex items-center gap-2">
+                                            <div className="w-24 h-2 bg-muted rounded-full overflow-hidden">
+                                              <div 
+                                                className="h-full bg-primary rounded-full"
+                                                style={{ width: `${(count / user.totalActions) * 100}%` }}
+                                              />
+                                            </div>
+                                            <span className="text-xs font-medium w-8 text-right">{count}</span>
+                                          </div>
+                                        </div>
+                                      ))}
+                                  </div>
+                                </div>
+                                
+                                {/* Recent Activity */}
+                                <div>
+                                  <h4 className="text-sm font-medium mb-3">Recent Activity</h4>
+                                  <div className="border rounded-md divide-y">
+                                    {user.logs.slice(0, 10).map((log) => (
+                                      <div key={log.id} className="p-3 text-sm">
+                                        <div className="flex items-center gap-2">
+                                          {getSeverityIcon(log.severity)}
+                                          <span className="font-medium">{AUDIT_ACTION_LABELS[log.action]}</span>
+                                          <Badge variant="outline" className="text-xs">{AUDIT_MODULE_LABELS[log.module]}</Badge>
+                                          {!log.success && <Badge variant="destructive" className="text-xs">Failed</Badge>}
+                                        </div>
+                                        <p className="text-muted-foreground mt-1 ml-6">{log.description}</p>
+                                        <p className="text-xs text-muted-foreground mt-1 ml-6">
+                                          {format(parseISO(log.timestamp), 'MMM d, yyyy HH:mm:ss')}
+                                        </p>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Workflows Tab */}
         <TabsContent value="workflows" className="mt-4">
           <Card>
             <CardHeader>
@@ -616,7 +1309,7 @@ const AuditLogs = () => {
                   </div>
                 ) : (
                   <div className="divide-y">
-                    {groupedByEntity.map((entity) => {
+                    {groupedByEntity.slice(0, 100).map((entity) => {
                       const entityKey = `${entity.entityType}:${entity.entityId}`;
                       const isExpanded = expandedEntityId === entityKey;
                       
@@ -641,7 +1334,7 @@ const AuditLogs = () => {
                                     {AUDIT_MODULE_LABELS[entity.module]}
                                   </Badge>
                                 </div>
-                                <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
+                                <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground flex-wrap">
                                   <span className="flex items-center gap-1">
                                     <FileText className="h-3 w-3" />
                                     {entity.entityType}
@@ -734,12 +1427,13 @@ const AuditLogs = () => {
           </Card>
         </TabsContent>
 
+        {/* Table View Tab */}
         <TabsContent value="table" className="mt-4">
           <Card>
             <CardContent className="p-0">
               <ScrollArea className="h-[600px]">
                 <table className="w-full">
-                  <thead className="sticky top-0 bg-background border-b">
+                  <thead className="sticky top-0 bg-background border-b z-10">
                     <tr className="text-left text-sm text-muted-foreground">
                       <th className="px-4 py-3 font-medium">Timestamp</th>
                       <th className="px-4 py-3 font-medium">Module</th>
@@ -747,10 +1441,11 @@ const AuditLogs = () => {
                       <th className="px-4 py-3 font-medium">Actor</th>
                       <th className="px-4 py-3 font-medium">Description</th>
                       <th className="px-4 py-3 font-medium">Severity</th>
+                      <th className="px-4 py-3 font-medium">Status</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
-                    {filteredLogs.map((log) => (
+                    {paginatedLogs.map((log) => (
                       <tr 
                         key={log.id} 
                         className="hover-elevate cursor-pointer"
@@ -764,22 +1459,69 @@ const AuditLogs = () => {
                           <Badge variant="outline">{AUDIT_MODULE_LABELS[log.module]}</Badge>
                         </td>
                         <td className="px-4 py-3 text-sm">{AUDIT_ACTION_LABELS[log.action]}</td>
-                        <td className="px-4 py-3 text-sm">{log.actorName}</td>
+                        <td className="px-4 py-3 text-sm">
+                          <div>
+                            <p>{log.actorName}</p>
+                            {log.actorEmail && (
+                              <p className="text-xs text-muted-foreground">{log.actorEmail}</p>
+                            )}
+                          </div>
+                        </td>
                         <td className="px-4 py-3 text-sm max-w-md truncate">{log.description}</td>
                         <td className="px-4 py-3">
                           <Badge variant={getSeverityColor(log.severity)}>
                             {AUDIT_SEVERITY_LABELS[log.severity]}
                           </Badge>
                         </td>
+                        <td className="px-4 py-3">
+                          {log.success ? (
+                            <CheckCircle className="h-4 w-4 text-green-500" />
+                          ) : (
+                            <XCircle className="h-4 w-4 text-destructive" />
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </ScrollArea>
+              
+              {/* Pagination for table */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between px-4 py-3 border-t">
+                  <p className="text-sm text-muted-foreground">
+                    Showing {((currentPage - 1) * logsPerPage) + 1} - {Math.min(currentPage * logsPerPage, filteredLogs.length)} of {filteredLogs.length}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                      Previous
+                    </Button>
+                    <span className="text-sm text-muted-foreground">
+                      Page {currentPage} of {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                    >
+                      Next
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
 
+        {/* Statistics Tab */}
         <TabsContent value="stats" className="mt-4">
           <div className="grid gap-6 md:grid-cols-2">
             <Card>
@@ -834,6 +1576,117 @@ const AuditLogs = () => {
                         </div>
                       </div>
                     ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Severity Distribution</CardTitle>
+                <CardDescription>Breakdown by severity level</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Info className="h-4 w-4 text-green-500" />
+                      <span className="text-sm">Info</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Progress value={(stats.bySeverity.info || 0) / stats.totalLogs * 100} className="w-32 h-2" />
+                      <span className="text-sm font-medium w-12 text-right">{stats.bySeverity.info || 0}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 text-yellow-500" />
+                      <span className="text-sm">Warning</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Progress value={(stats.bySeverity.warning || 0) / stats.totalLogs * 100} className="w-32 h-2" />
+                      <span className="text-sm font-medium w-12 text-right">{stats.bySeverity.warning || 0}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <XCircle className="h-4 w-4 text-destructive" />
+                      <span className="text-sm">Error</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Progress value={(stats.bySeverity.error || 0) / stats.totalLogs * 100} className="w-32 h-2" />
+                      <span className="text-sm font-medium w-12 text-right">{stats.bySeverity.error || 0}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Shield className="h-4 w-4 text-destructive" />
+                      <span className="text-sm">Critical</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Progress value={(stats.bySeverity.critical || 0) / stats.totalLogs * 100} className="w-32 h-2" />
+                      <span className="text-sm font-medium w-12 text-right">{stats.bySeverity.critical || 0}</span>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Success Rate</CardTitle>
+                <CardDescription>Overall action success rate</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {(() => {
+                    const successCount = filteredLogs.filter(l => l.success).length;
+                    const failureCount = filteredLogs.filter(l => !l.success).length;
+                    const successRate = filteredLogs.length > 0 ? (successCount / filteredLogs.length) * 100 : 0;
+                    
+                    return (
+                      <>
+                        <div className="flex items-center justify-center">
+                          <div className="relative h-32 w-32">
+                            <svg className="h-full w-full -rotate-90" viewBox="0 0 36 36">
+                              <circle
+                                className="stroke-muted"
+                                strokeWidth="3"
+                                fill="none"
+                                cx="18"
+                                cy="18"
+                                r="15.9"
+                              />
+                              <circle
+                                className="stroke-green-500"
+                                strokeWidth="3"
+                                strokeLinecap="round"
+                                fill="none"
+                                cx="18"
+                                cy="18"
+                                r="15.9"
+                                strokeDasharray={`${successRate} 100`}
+                              />
+                            </svg>
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <span className="text-2xl font-bold">{successRate.toFixed(0)}%</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4 text-center">
+                          <div className="p-3 bg-green-50 dark:bg-green-950 rounded-md">
+                            <CheckCircle className="h-5 w-5 text-green-500 mx-auto mb-1" />
+                            <p className="text-lg font-bold text-green-600">{successCount}</p>
+                            <p className="text-xs text-muted-foreground">Successful</p>
+                          </div>
+                          <div className="p-3 bg-red-50 dark:bg-red-950 rounded-md">
+                            <XCircle className="h-5 w-5 text-destructive mx-auto mb-1" />
+                            <p className="text-lg font-bold text-destructive">{failureCount}</p>
+                            <p className="text-xs text-muted-foreground">Failed</p>
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
               </CardContent>
             </Card>

@@ -183,7 +183,7 @@
     if (!isHidden('/projects') && (isSuperAdmin || isAdmin || isICT || perms.projects)) {
       planningItems.push({ id: 'projects', title: "Projects", url: "/projects", icon: FolderKanban, priority: 1, isPinned: isPinned('/projects') });
     }
-    if (!isHidden('/mmp') && (isSuperAdmin || isAdmin || isICT || perms.mmp || isCoordinator)) {
+    if (!isHidden('/mmp') && (isSuperAdmin || isAdmin || isICT || perms.mmp || isCoordinator || isDataCollector)) {
       const mmpTitle = (!isSuperAdmin && (isDataCollector || isCoordinator)) ? "My Sites Management" : "MMP Management";
       planningItems.push({ id: 'mmp-management', title: mmpTitle, url: "/mmp", icon: Database, priority: 2, isPinned: isPinned('/mmp') });
     }
@@ -244,8 +244,34 @@
     if (!isHidden('/documentation')) {
       helpItems.push({ id: 'documentation', title: "Documentation", url: "/documentation", icon: BookOpen, priority: 1, isPinned: isPinned('/documentation') });
     }
-    if (helpItems.length) groups.push({ id: 'help', label: "Help & Support", order: 7, items: helpItems });
+    if (helpItems.length) groups.push({ id: 'help', label: "Help & Support", order: 9, items: helpItems });
 
+    // Finance category - Financial operations and approvals
+    const financeItems: MenuGroup['items'] = [];
+    if (!isHidden('/budget') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
+      financeItems.push({ id: 'budget', title: "Budget", url: "/budget", icon: DollarSign, priority: 1, isPinned: isPinned('/budget') });
+    }
+    if (!isHidden('/admin/wallets') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
+      financeItems.push({ id: 'wallets', title: "Wallets", url: "/admin/wallets", icon: CreditCard, priority: 2, isPinned: isPinned('/admin/wallets') });
+    }
+    if (!isHidden('/financial-operations') && (isSuperAdmin || perms.financialOperations)) {
+      financeItems.push({ id: 'financial-ops', title: "Financial Operations", url: "/financial-operations", icon: TrendingUp, priority: 3, isPinned: isPinned('/financial-operations') });
+    }
+    if (!isHidden('/supervisor-approvals') && (isSuperAdmin || isAdmin || isFinancialAdmin || isSupervisor || isFOM)) {
+      financeItems.push({ id: 'supervisor-approvals', title: "Tier 1 Approvals", url: "/supervisor-approvals", icon: ClipboardCheck, priority: 4, isPinned: isPinned('/supervisor-approvals') });
+    }
+    if (!isHidden('/withdrawal-approval') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
+      financeItems.push({ id: 'withdrawal-approval', title: "Tier 2 Approvals", url: "/withdrawal-approval", icon: ClipboardCheck, priority: 5, isPinned: isPinned('/withdrawal-approval') });
+    }
+    if (!isHidden('/down-payment-approval') && (isSuperAdmin || isAdmin || isFinancialAdmin || isSupervisor)) {
+      financeItems.push({ id: 'down-payment-approval', title: "Down-Payment Approval", url: "/down-payment-approval", icon: DollarSign, priority: 6, isPinned: isPinned('/down-payment-approval') });
+    }
+    if (!isHidden('/finance-approval') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
+      financeItems.push({ id: 'finance-approval', title: "Finance Approval", url: "/finance-approval", icon: Banknote, priority: 7, isPinned: isPinned('/finance-approval') });
+    }
+    if (financeItems.length) groups.push({ id: 'finance', label: "Finance", order: 6, items: financeItems });
+
+    // Administration category - User and role management
     const adminItems: MenuGroup['items'] = [];
     if (!isHidden('/users') && (isSuperAdmin || isAdmin || isICT || perms.users)) {
       adminItems.push({ id: 'user-management', title: "User Management", url: "/users", icon: Users, priority: 1, isPinned: isPinned('/users') });
@@ -253,49 +279,40 @@
     if (!isHidden('/role-management') && (isSuperAdmin || isAdmin || perms.roleManagement)) {
       adminItems.push({ id: 'role-management', title: "Role Management", url: "/role-management", icon: Shield, priority: 2, isPinned: isPinned('/role-management') });
     }
-    if (!isHidden('/super-admin-management') && isSuperAdmin) {
-      adminItems.push({ id: 'super-admin', title: "Super Admin", url: "/super-admin-management", icon: ShieldCheck, priority: 3, isPinned: isPinned('/super-admin-management') });
-    }
-    if (!isHidden('/approval-dashboard') && isSuperAdmin) {
-      adminItems.push({ id: 'approval-dashboard', title: "Approval Dashboard", url: "/approval-dashboard", icon: ClipboardCheck, priority: 3.5, isPinned: isPinned('/approval-dashboard') });
-    }
     if (!isHidden('/classifications') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
-      adminItems.push({ id: 'classifications', title: "Classifications", url: "/classifications", icon: Award, priority: 4, isPinned: isPinned('/classifications') });
+      adminItems.push({ id: 'classifications', title: "Classifications", url: "/classifications", icon: Award, priority: 3, isPinned: isPinned('/classifications') });
     }
     if (!isHidden('/classification-fees') && (isSuperAdmin || isAdmin)) {
-      adminItems.push({ id: 'classification-fees', title: "Classification Fees", url: "/classification-fees", icon: DollarSign, priority: 5, isPinned: isPinned('/classification-fees') });
-    }
-    if (!isHidden('/financial-operations') && (isSuperAdmin || perms.financialOperations)) {
-      adminItems.push({ id: 'financial-ops', title: "Financial Operations", url: "/financial-operations", icon: TrendingUp, priority: 5, isPinned: isPinned('/financial-operations') });
-    }
-    if (!isHidden('/budget') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
-      adminItems.push({ id: 'budget', title: "Budget", url: "/budget", icon: DollarSign, priority: 6, isPinned: isPinned('/budget') });
-    }
-    if (!isHidden('/admin/wallets') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
-      adminItems.push({ id: 'wallets', title: "Wallets", url: "/admin/wallets", icon: CreditCard, priority: 7, isPinned: isPinned('/admin/wallets') });
-    }
-    if (!isHidden('/supervisor-approvals') && (isSuperAdmin || isAdmin || isFinancialAdmin || isSupervisor || isFOM)) {
-      adminItems.push({ id: 'supervisor-approvals', title: "Supervisor Approvals (Tier 1)", url: "/supervisor-approvals", icon: ClipboardCheck, priority: 7.5, isPinned: isPinned('/supervisor-approvals') });
-    }
-    if (!isHidden('/withdrawal-approval') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
-      adminItems.push({ id: 'withdrawal-approval', title: "Admin Approvals (Tier 2)", url: "/withdrawal-approval", icon: ClipboardCheck, priority: 8, isPinned: isPinned('/withdrawal-approval') });
-    }
-    if (!isHidden('/down-payment-approval') && (isSuperAdmin || isAdmin || isFinancialAdmin || isSupervisor)) {
-      adminItems.push({ id: 'down-payment-approval', title: "Down-Payment Approval", url: "/down-payment-approval", icon: DollarSign, priority: 8.5, isPinned: isPinned('/down-payment-approval') });
-    }
-    if (!isHidden('/finance-approval') && (isSuperAdmin || isAdmin || isFinancialAdmin)) {
-      adminItems.push({ id: 'finance-approval', title: "Finance Approval", url: "/finance-approval", icon: Banknote, priority: 9, isPinned: isPinned('/finance-approval') });
+      adminItems.push({ id: 'classification-fees', title: "Classification Fees", url: "/classification-fees", icon: DollarSign, priority: 4, isPinned: isPinned('/classification-fees') });
     }
     if (!isHidden('/settings') && (isSuperAdmin || ((isAdmin || perms.settings) && !isDataCollector))) {
-      adminItems.push({ id: 'settings', title: "Settings", url: "/settings", icon: Settings, priority: 10, isPinned: isPinned('/settings') });
+      adminItems.push({ id: 'settings', title: "Settings", url: "/settings", icon: Settings, priority: 5, isPinned: isPinned('/settings') });
     }
-    if (!isHidden('/audit-logs') && isSuperAdmin) {
-      adminItems.push({ id: 'audit-logs', title: "Audit Logs", url: "/audit-logs", icon: ScrollText, priority: 11, isPinned: isPinned('/audit-logs') });
+    if (adminItems.length) groups.push({ id: 'admin', label: "Administration", order: 7, items: adminItems });
+
+    // Super Admin category - Super admin exclusive pages
+    if (isSuperAdmin) {
+      const superAdminItems: MenuGroup['items'] = [];
+      if (!isHidden('/super-admin-management')) {
+        superAdminItems.push({ id: 'super-admin', title: "Super Admin Management", url: "/super-admin-management", icon: ShieldCheck, priority: 1, isPinned: isPinned('/super-admin-management') });
+      }
+      if (!isHidden('/approval-dashboard')) {
+        superAdminItems.push({ id: 'approval-dashboard', title: "Approval Dashboard", url: "/approval-dashboard", icon: ClipboardCheck, priority: 2, isPinned: isPinned('/approval-dashboard') });
+      }
+      if (!isHidden('/permissions-management')) {
+        superAdminItems.push({ id: 'permissions-management', title: "User Permissions", url: "/permissions-management", icon: ShieldCheck, priority: 3, isPinned: isPinned('/permissions-management') });
+      }
+      if (!isHidden('/audit-logs')) {
+        superAdminItems.push({ id: 'audit-logs', title: "Audit Logs", url: "/audit-logs", icon: ScrollText, priority: 4, isPinned: isPinned('/audit-logs') });
+      }
+      if (!isHidden('/email-tracking')) {
+        superAdminItems.push({ id: 'email-tracking', title: "Email Tracking", url: "/email-tracking", icon: Mail, priority: 5, isPinned: isPinned('/email-tracking') });
+      }
+      if (!isHidden('/email-management')) {
+        superAdminItems.push({ id: 'email-management', title: "Email Management", url: "/email-management", icon: Mail, priority: 6, isPinned: isPinned('/email-management') });
+      }
+      if (superAdminItems.length) groups.push({ id: 'super-admin', label: "Super Admin", order: 8, items: superAdminItems });
     }
-    if (!isHidden('/email-tracking') && isSuperAdmin) {
-      adminItems.push({ id: 'email-tracking', title: "Email Tracking", url: "/email-tracking", icon: Mail, priority: 12, isPinned: isPinned('/email-tracking') });
-    }
-    if (adminItems.length) groups.push({ id: 'admin', label: "Administration", order: 6, items: adminItems });
 
     groups.forEach(group => {
       group.items.sort((a, b) => {

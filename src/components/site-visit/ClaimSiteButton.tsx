@@ -394,8 +394,8 @@ export function ClaimSiteButton({
       </Button>
 
       <Dialog open={showConfirmation} onOpenChange={setShowConfirmation}>
-        <DialogContent className="sm:max-w-md min-h-[400px] max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="sm:max-w-md max-h-[70vh] overflow-hidden p-0 flex flex-col">
+          <DialogHeader className="px-6 pt-6">
             <DialogTitle className="flex items-center gap-2">
               <Wallet className="h-5 w-5 text-primary" />
               Confirm Site Claim
@@ -408,103 +408,105 @@ export function ClaimSiteButton({
             </DialogDescription>
           </DialogHeader>
 
-          {feeBreakdown && (
-            <div className="space-y-4 py-4">
-              {canSeeBreakdown ? (
-                <>
-                  {feeBreakdown.classificationLevel && (
-                    <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                      <span className="text-sm font-medium">Your Classification</span>
-                      <Badge className={CLASSIFICATION_COLORS[feeBreakdown.classificationLevel]}>
-                        {CLASSIFICATION_LABELS[feeBreakdown.classificationLevel]}
-                      </Badge>
-                    </div>
-                  )}
-
-                  {feeBreakdown.feeSource === 'default' && (
-                    <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg">
-                      <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
-                      <p className="text-sm text-amber-800 dark:text-amber-200">
-                        No classification found. Using default rate of {feeBreakdown.enumeratorFee.toLocaleString()} SDG.
-                        Contact your supervisor to get classified for accurate rates.
-                      </p>
-                    </div>
-                  )}
-
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between py-2 border-b">
-                      <div className="flex items-center gap-2">
-                        <Car className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm">Transport Budget</span>
+          <div className="flex-1 overflow-y-auto px-6 pb-4">
+            {feeBreakdown && (
+              <div className="space-y-4 py-4">
+                {canSeeBreakdown ? (
+                  <>
+                    {feeBreakdown.classificationLevel && (
+                      <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                        <span className="text-sm font-medium">Your Classification</span>
+                        <Badge className={CLASSIFICATION_COLORS[feeBreakdown.classificationLevel]}>
+                          {CLASSIFICATION_LABELS[feeBreakdown.classificationLevel]}
+                        </Badge>
                       </div>
-                      <span className="font-medium">{feeBreakdown.transportBudget.toLocaleString()} SDG</span>
-                    </div>
+                    )}
 
-                    <div className="flex items-center justify-between py-2 border-b">
-                      <div className="flex items-center gap-2">
-                        <User className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm">Collector Fee</span>
+                    {feeBreakdown.feeSource === 'default' && (
+                      <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg">
+                        <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                        <p className="text-sm text-amber-800 dark:text-amber-200">
+                          No classification found. Using default rate of {feeBreakdown.enumeratorFee.toLocaleString()} SDG.
+                          Contact your supervisor to get classified for accurate rates.
+                        </p>
                       </div>
-                      <span className="font-medium">{feeBreakdown.enumeratorFee.toLocaleString()} SDG</span>
-                    </div>
+                    )}
 
-                    <div className="flex items-center justify-between py-3 bg-primary/10 rounded-lg px-3">
-                      <div className="flex items-center gap-2">
-                        <Wallet className="h-5 w-5 text-primary" />
-                        <span className="font-semibold">Total Payout</span>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between py-2 border-b">
+                        <div className="flex items-center gap-2">
+                          <Car className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm">Transport Budget</span>
+                        </div>
+                        <span className="font-medium">{feeBreakdown.transportBudget.toLocaleString()} SDG</span>
                       </div>
-                      <span className="text-xl font-bold text-primary">{feeBreakdown.totalPayout.toLocaleString()} SDG</span>
-                    </div>
-                  </div>
 
-                  <p className="text-xs text-muted-foreground text-center">
-                    This amount will be credited to your wallet after completing the site visit.
-                  </p>
-                </>
-              ) : (
-                <>
-                  {feeBreakdown.classificationLevel && (
-                    <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                      <span className="text-sm font-medium">Your Classification</span>
-                      <Badge className={CLASSIFICATION_COLORS[feeBreakdown.classificationLevel]}>
-                        {CLASSIFICATION_LABELS[feeBreakdown.classificationLevel]}
-                      </Badge>
-                    </div>
-                  )}
+                      <div className="flex items-center justify-between py-2 border-b">
+                        <div className="flex items-center gap-2">
+                          <User className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm">Collector Fee</span>
+                        </div>
+                        <span className="font-medium">{feeBreakdown.enumeratorFee.toLocaleString()} SDG</span>
+                      </div>
 
-                  <div className="flex flex-col items-center justify-center py-6 space-y-4">
-                    <div className="p-4 bg-primary/10 rounded-full">
-                      <Banknote className="h-10 w-10 text-primary" />
+                      <div className="flex items-center justify-between py-3 bg-primary/10 rounded-lg px-3">
+                        <div className="flex items-center gap-2">
+                          <Wallet className="h-5 w-5 text-primary" />
+                          <span className="font-semibold">Total Payout</span>
+                        </div>
+                        <span className="text-xl font-bold text-primary">{feeBreakdown.totalPayout.toLocaleString()} SDG</span>
+                      </div>
                     </div>
-                    
-                    <div className="text-center space-y-2">
-                      <p className="text-3xl font-bold text-primary">
-                        {feeBreakdown.totalPayout.toLocaleString()} SDG
-                      </p>
-                      <p className="text-sm text-muted-foreground max-w-xs">
-                        This is your total amount for this site visit, including transportation and your fees.
-                      </p>
+
+                    <p className="text-xs text-muted-foreground text-center">
+                      This amount will be credited to your wallet after completing the site visit.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    {feeBreakdown.classificationLevel && (
+                      <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                        <span className="text-sm font-medium">Your Classification</span>
+                        <Badge className={CLASSIFICATION_COLORS[feeBreakdown.classificationLevel]}>
+                          {CLASSIFICATION_LABELS[feeBreakdown.classificationLevel]}
+                        </Badge>
+                      </div>
+                    )}
+
+                    <div className="flex flex-col items-center justify-center py-6 space-y-4">
+                      <div className="p-4 bg-primary/10 rounded-full">
+                        <Banknote className="h-10 w-10 text-primary" />
+                      </div>
+                      
+                      <div className="text-center space-y-2">
+                        <p className="text-3xl font-bold text-primary">
+                          {feeBreakdown.totalPayout.toLocaleString()} SDG
+                        </p>
+                        <p className="text-sm text-muted-foreground max-w-xs">
+                          This is your total amount for this site visit, including transportation and your fees.
+                        </p>
+                      </div>
                     </div>
-                  </div>
 
-                  {feeBreakdown.feeSource === 'default' && (
-                    <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg">
-                      <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
-                      <p className="text-sm text-amber-800 dark:text-amber-200">
-                        Using default rate. Contact your supervisor to get classified for accurate rates.
-                      </p>
-                    </div>
-                  )}
+                    {feeBreakdown.feeSource === 'default' && (
+                      <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg">
+                        <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                        <p className="text-sm text-amber-800 dark:text-amber-200">
+                          Using default rate. Contact your supervisor to get classified for accurate rates.
+                        </p>
+                      </div>
+                    )}
 
-                  <p className="text-xs text-muted-foreground text-center">
-                    This amount will be credited to your wallet after completing the site visit.
-                  </p>
-                </>
-              )}
-            </div>
-          )}
+                    <p className="text-xs text-muted-foreground text-center">
+                      This amount will be credited to your wallet after completing the site visit.
+                    </p>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
 
-          <DialogFooter className="gap-2 sm:gap-0">
+          <DialogFooter className="gap-2 sm:gap-0 px-6 pb-6">
             <Button
               variant="outline"
               onClick={() => setShowConfirmation(false)}
