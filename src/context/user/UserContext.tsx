@@ -33,6 +33,7 @@ interface UserContextType {
   clearEmailVerificationNotice: () => void;
   sendPasswordRecoveryEmail: (email: string) => Promise<boolean>;
   adminSetUserPassword: (email: string, newPassword: string) => Promise<boolean>;
+  adminConfirmUserEmail: (userId: string) => Promise<boolean>;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -1260,6 +1261,51 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const adminConfirmUserEmail = async (userId: string): Promise<boolean> => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        toast({
+          title: 'Authentication required',
+          description: 'Please log in to perform this action.',
+          variant: 'destructive',
+        });
+        return false;
+      }
+
+      const { data, error } = await supabase.functions.invoke('admin-confirm-email', {
+        body: { userId },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (error || !data?.success) {
+        console.error('Email confirmation error:', error || data?.error);
+        toast({
+          title: 'Email confirmation failed',
+          description: error?.message || data?.error || 'An error occurred while confirming the email.',
+          variant: 'destructive',
+        });
+        return false;
+      }
+
+      toast({
+        title: 'Email confirmed',
+        description: 'The user\'s email has been manually confirmed. They can now log in.',
+      });
+      return true;
+    } catch (error: any) {
+      console.error('Admin confirm email error:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to confirm user email.',
+        variant: 'destructive',
+      });
+      return false;
+    }
+  };
+
   const contextValue: UserContextType = {
     currentUser,
     authReady,
@@ -1285,6 +1331,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     clearEmailVerificationNotice,
     sendPasswordRecoveryEmail,
     adminSetUserPassword,
+    adminConfirmUserEmail,
   };
 
   return (
@@ -1314,6 +1361,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         clearEmailVerificationNotice,
         sendPasswordRecoveryEmail,
         adminSetUserPassword,
+        adminConfirmUserEmail,
       }}
     >
       {children}

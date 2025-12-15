@@ -67,15 +67,35 @@ const AuthForm = ({ mode }: AuthFormProps) => {
   let login: (email: string, password: string) => Promise<boolean> = async () => false;
   let registerUser: (userData: Partial<UserType>) => Promise<boolean> = async () => false;
   let hydrateCurrentUser: () => Promise<boolean> = async () => false;
+  let emailVerificationPending = false;
+  let verificationEmail: string | undefined = undefined;
+  let resendVerificationEmail: (email?: string) => Promise<boolean> = async () => false;
+  let clearEmailVerificationNotice: () => void = () => {};
   
   try {
     const appContext = useAppContext();
     login = appContext.login;
     registerUser = appContext.registerUser;
     hydrateCurrentUser = appContext.hydrateCurrentUser;
+    emailVerificationPending = appContext.emailVerificationPending;
+    verificationEmail = appContext.verificationEmail;
+    resendVerificationEmail = appContext.resendVerificationEmail;
+    clearEmailVerificationNotice = appContext.clearEmailVerificationNotice;
   } catch (error) {
     console.error("Error accessing AppContext:", error);
   }
+  
+  // State for manual resend
+  const [isResending, setIsResending] = useState(false);
+  
+  const handleResendVerification = async () => {
+    setIsResending(true);
+    const targetEmail = verificationEmail || email;
+    if (targetEmail) {
+      await resendVerificationEmail(targetEmail);
+    }
+    setIsResending(false);
+  };
 
   useEffect(() => {
     const needsHub = ['dataCollector', 'coordinator', 'supervisor'].includes(role);
@@ -405,6 +425,24 @@ const AuthForm = ({ mode }: AuthFormProps) => {
   if (mode === 'login') {
     return (
       <form onSubmit={handleSubmit} className="space-y-3">
+        {emailVerificationPending && (
+          <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-md">
+            <p className="text-sm text-amber-800 dark:text-amber-200 mb-2">
+              Your email is not verified yet. Please check your inbox (and spam folder) for the verification link.
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleResendVerification}
+              disabled={isResending}
+              className="w-full"
+              data-testid="button-resend-verification"
+            >
+              {isResending ? 'Sending...' : 'Resend Verification Email'}
+            </Button>
+          </div>
+        )}
         <div className="space-y-1.5">
           <div id="login-email">
             <label className="text-xs font-medium text-muted-foreground">Email <span className="text-red-500">*</span></label>
