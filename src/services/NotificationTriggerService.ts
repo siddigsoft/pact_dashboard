@@ -107,27 +107,29 @@ export const NotificationTriggerService = {
     }
 
     try {
-      // Map to actual database schema columns - use BOTH old and new column patterns for compatibility
-      // Old pattern: recipient_id, title_en, message_en, status (used by usePersistentNotifications)
-      // New pattern: user_id, title, message, is_read (legacy support)
+      // Map to actual database schema columns
+      // Schema columns: id, event_type, entity_type, entity_id, priority, status, recipient_id,
+      // recipient_email, recipient_role, title_en, title_ar, message_en, message_ar, triggered_by,
+      // triggered_by_name, workflow_stage, action_url, metadata, email_sent, email_sent_at,
+      // email_error, read_at, created_at, updated_at, user_id, is_read, type, title, message,
+      // link, related_entity_id, related_entity_type
       const notificationData = {
-        // Primary fields (old pattern - used by mobile app and web UI)
+        // Primary fields (used by usePersistentNotifications for mobile app and web UI)
         recipient_id: userId,
         title_en: title,
         title_ar: title, // Same content for now, can be localized later
         message_en: message,
         message_ar: message, // Same content for now, can be localized later
         status: 'pending' as const,
-        event_type: category || 'system',
+        event_type: category || 'system', // category maps to event_type in DB
         entity_type: relatedEntityType || null,
         entity_id: relatedEntityId || null,
         action_url: link || null,
-        // Legacy fields (new pattern - for backward compatibility)
+        // Legacy fields (for backward compatibility with old NotificationContext)
         user_id: userId,
         title: title,
         message: message,
         type: type,
-        category: category,
         link: link,
         related_entity_id: relatedEntityId,
         related_entity_type: relatedEntityType,
