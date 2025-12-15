@@ -5,7 +5,7 @@ import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, MapPin, Mail, Phone, Award, Calendar, Edit, UserCheck, UserX, CreditCard, User as UserIcon } from "lucide-react";
+import { ArrowLeft, MapPin, Mail, Phone, Award, Calendar, Edit, UserCheck, UserX, CreditCard, User as UserIcon, ShieldCheck } from "lucide-react";
 import { BankakAccountForm, BankakAccountFormValues } from "@/components/BankakAccountForm";
 import type { User } from "@/types/user";
 import { AppRole } from "@/types/roles";
@@ -40,7 +40,7 @@ const availableRoles = [
 
 const UserDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const { users, currentUser, updateUser, approveUser, rejectUser, refreshUsers } = useUser();
+  const { users, currentUser, updateUser, approveUser, rejectUser, refreshUsers, adminConfirmUserEmail } = useUser();
   const [user, setUser] = useState<User | null>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -55,6 +55,7 @@ const UserDetail: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [isApproving, setIsApproving] = useState(false);
   const [isRejecting, setIsRejecting] = useState(false);
+  const [isConfirmingEmail, setIsConfirmingEmail] = useState(false);
 
   // Add loading state for save
   const [isLoadingUser, setIsLoadingUser] = useState(false);
@@ -318,6 +319,16 @@ const UserDetail: React.FC = () => {
     navigate("/users");
   };
 
+  const handleConfirmEmail = async () => {
+    if (!user || !adminConfirmUserEmail) return;
+    setIsConfirmingEmail(true);
+    const success = await adminConfirmUserEmail(user.id);
+    setIsConfirmingEmail(false);
+    if (success) {
+      toast({ title: "Email confirmed", description: `${user.name}'s email has been manually confirmed.` });
+    }
+  };
+
   if (isLoadingUser) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -465,13 +476,27 @@ const UserDetail: React.FC = () => {
             {/* Action Buttons */}
             {!user.isApproved && isAdmin && !editMode && (
               <div className="w-full flex flex-col gap-2 mt-4 sm:mt-6">
-                <Button onClick={handleApprove} disabled={isApproving} variant="default" className="min-h-[44px] px-6 w-full">
+                <Button onClick={handleApprove} disabled={isApproving} variant="default" className="min-h-[44px] px-6 w-full" data-testid="button-approve-user">
                   <UserCheck className="h-4 w-4 mr-2" />
                   Approve User
                 </Button>
-                <Button onClick={handleReject} disabled={isRejecting} variant="destructive" className="min-h-[44px] px-6 w-full">
+                <Button onClick={handleReject} disabled={isRejecting} variant="destructive" className="min-h-[44px] px-6 w-full" data-testid="button-reject-user">
                   <UserX className="h-4 w-4 mr-2" />
                   Reject User
+                </Button>
+              </div>
+            )}
+            {isAdmin && !editMode && (
+              <div className="w-full flex flex-col gap-2 mt-4 sm:mt-6">
+                <Button 
+                  onClick={handleConfirmEmail} 
+                  disabled={isConfirmingEmail} 
+                  variant="outline" 
+                  className="min-h-[44px] px-6 w-full"
+                  data-testid="button-confirm-email"
+                >
+                  <ShieldCheck className="h-4 w-4 mr-2" />
+                  {isConfirmingEmail ? 'Confirming...' : 'Confirm Email Manually'}
                 </Button>
               </div>
             )}
