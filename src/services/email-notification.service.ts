@@ -30,17 +30,38 @@ export interface EmailOptions {
 export interface NotificationEmailOptions {
   title: string;
   message: string;
+  titleAr?: string;
+  messageAr?: string;
   type?: 'info' | 'success' | 'warning' | 'error';
   actionUrl?: string;
   actionLabel?: string;
   details?: Array<{ label: string; value: string }>;
+  recipientRole?: { en: string; ar: string };
 }
+
+// Role display names for email footers
+const roleDisplayNames: Record<string, { en: string; ar: string }> = {
+  'super_admin': { en: 'Super Administrator', ar: 'المسؤول الأعلى' },
+  'admin': { en: 'Administrator', ar: 'المسؤول' },
+  'fom': { en: 'Field Operations Manager', ar: 'مدير العمليات الميدانية' },
+  'supervisor': { en: 'Supervisor', ar: 'المشرف' },
+  'coordinator': { en: 'Coordinator', ar: 'المنسق' },
+  'data_collector': { en: 'Data Collector', ar: 'جامع البيانات' },
+  'finance': { en: 'Finance', ar: 'المالية' },
+  'project_manager': { en: 'Project Manager', ar: 'مدير المشروع' },
+  'viewer': { en: 'Viewer', ar: 'المشاهد' }
+};
+
+// Get role display name
+export const getRoleDisplayName = (role: string): { en: string; ar: string } => {
+  return roleDisplayNames[role] || { en: role, ar: role };
+};
 
 const generateNotificationEmailHTML = (
   recipientName: string,
   options: NotificationEmailOptions
 ): string => {
-  const { title, message, type = 'info', actionUrl, actionLabel, details } = options;
+  const { title, message, titleAr, messageAr, type = 'info', actionUrl, actionLabel, details, recipientRole } = options;
   
   const typeColors: Record<string, { bg: string; border: string }> = {
     info: { bg: '#e3f2fd', border: '#2196f3' },
@@ -50,6 +71,17 @@ const generateNotificationEmailHTML = (
   };
   
   const colors = typeColors[type];
+  const fullUrl = actionUrl ? (actionUrl.startsWith('http') ? actionUrl : APP_URL + actionUrl) : '';
+  
+  // Role-based greeting
+  const roleEn = recipientRole?.en || '';
+  const roleAr = recipientRole?.ar || '';
+  const greetingEn = roleEn ? `Dear ${recipientName} (${roleEn}),` : `Hello ${recipientName},`;
+  const greetingAr = roleAr ? `عزيزي ${recipientName} (${roleAr})،` : `مرحباً ${recipientName}،`;
+  
+  // Arabic content (use provided or fallback)
+  const titleArText = titleAr || title;
+  const messageArText = messageAr || message;
   
   const detailsHtml = details?.length ? `
     <div style="background-color: ${colors.bg}; border-left: 4px solid ${colors.border}; border-radius: 4px; padding: 16px; margin: 20px 0;">
@@ -57,46 +89,78 @@ const generateNotificationEmailHTML = (
     </div>
   ` : '';
   
-  const actionButton = actionUrl ? `
+  const actionButton = fullUrl ? `
     <div style="text-align: center; margin: 25px 0;">
-      <a href="${actionUrl.startsWith('http') ? actionUrl : APP_URL + actionUrl}" 
-         style="display: inline-block; padding: 12px 30px; background-color: #9b87f5; color: white; text-decoration: none; border-radius: 6px; font-weight: 500;">
-        ${actionLabel || 'View Details'}
+      <a href="${fullUrl}" 
+         style="display: inline-block; padding: 14px 30px; background-color: #9b87f5; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
+        ${actionLabel || 'View Details'} | عرض التفاصيل
       </a>
     </div>
   ` : '';
+  
+  // Role notice for footer
+  const roleNoticeEn = roleEn 
+    ? `You are receiving this notification as a ${roleEn}.`
+    : 'You are receiving this notification as part of the PACT team.';
+  const roleNoticeAr = roleAr
+    ? `أنت تتلقى هذا الإشعار بصفتك ${roleAr}.`
+    : 'أنت تتلقى هذا الإشعار كجزء من فريق باكت.';
 
   return `
     <!DOCTYPE html>
-    <html>
+    <html dir="ltr">
     <head>
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>${title}</title>
+      <title>${title} | ${titleArText}</title>
     </head>
-    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
+    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
       <div style="background-color: white; border-radius: 8px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-        <div style="text-align: center; margin-bottom: 30px;">
-          <h1 style="color: #1a1a2e; margin: 0; font-size: 24px;">PACT Workflow Platform</h1>
+        <div style="text-align: center; margin-bottom: 30px; border-bottom: 2px solid ${colors.border}; padding-bottom: 20px;">
+          <h1 style="color: #1a1a2e; margin: 0; font-size: 24px;">PACT Command Center</h1>
+          <p style="color: #666; margin: 5px 0 0 0; font-size: 14px;">مركز قيادة باكت</p>
         </div>
         
-        <p style="color: #333; font-size: 16px; line-height: 1.5;">Hello ${recipientName},</p>
-        
-        ${detailsHtml || `
-        <div style="background-color: ${colors.bg}; border-left: 4px solid ${colors.border}; border-radius: 4px; padding: 16px; margin: 20px 0;">
-          <h2 style="color: #333; margin: 0 0 10px 0; font-size: 18px;">${title}</h2>
-          <p style="color: #555; margin: 0; font-size: 14px; line-height: 1.5;">${message}</p>
+        <!-- English Section -->
+        <div style="margin-bottom: 25px; padding-bottom: 25px; border-bottom: 1px solid #eee;">
+          <p style="color: #333; font-size: 16px; line-height: 1.5;">${greetingEn}</p>
+          
+          ${detailsHtml || `
+          <div style="background-color: ${colors.bg}; border-left: 4px solid ${colors.border}; border-radius: 4px; padding: 16px; margin: 20px 0;">
+            <h2 style="color: #333; margin: 0 0 10px 0; font-size: 18px;">${title}</h2>
+            <p style="color: #555; margin: 0; font-size: 14px; line-height: 1.5;">${message}</p>
+          </div>
+          `}
+          
+          ${!detailsHtml ? '' : `<p style="color: #555; font-size: 14px; line-height: 1.5;">${message}</p>`}
         </div>
-        `}
         
-        ${!detailsHtml ? '' : `<p style="color: #555; font-size: 14px; line-height: 1.5;">${message}</p>`}
+        <!-- Arabic Section -->
+        <div dir="rtl" style="margin-top: 25px; padding-top: 25px; border-top: 1px solid #eee; text-align: right;">
+          <p style="color: #333; font-size: 16px; line-height: 1.8;">${greetingAr}</p>
+          
+          <div style="background-color: ${colors.bg}; border-right: 4px solid ${colors.border}; border-radius: 4px; padding: 16px; margin: 20px 0;">
+            <h2 style="color: #333; margin: 0 0 10px 0; font-size: 18px;">${titleArText}</h2>
+            <p style="color: #555; margin: 0; font-size: 14px; line-height: 1.8;">${messageArText}</p>
+          </div>
+        </div>
         
         ${actionButton}
         
         <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+        
+        <!-- Role Notice -->
+        <p style="color: #666; font-size: 12px; text-align: center; margin-bottom: 15px;">
+          ${roleNoticeEn}<br>
+          <span style="direction: rtl; display: inline-block;">${roleNoticeAr}</span>
+        </p>
+        
+        <!-- Platform Footer -->
         <p style="color: #999; font-size: 12px; text-align: center;">
           This is an automated message from PACT Workflow Platform.<br>
-          ICT Team - PACT Command Center Platform
+          هذه رسالة آلية من منصة باكت للعمليات الميدانية.<br>
+          ICT Team - PACT Command Center Platform<br>
+          فريق تكنولوجيا المعلومات - منصة مركز قيادة باكت
         </p>
       </div>
     </body>
@@ -108,8 +172,19 @@ const generatePlainText = (
   recipientName: string,
   options: NotificationEmailOptions
 ): string => {
-  const { title, message, actionUrl, actionLabel, details } = options;
-  let text = `Hello ${recipientName},\n\n${title}\n\n`;
+  const { title, message, titleAr, messageAr, actionUrl, actionLabel, details, recipientRole } = options;
+  
+  // Role-based greeting
+  const roleEn = recipientRole?.en || '';
+  const roleAr = recipientRole?.ar || '';
+  const greetingEn = roleEn ? `Dear ${recipientName} (${roleEn}),` : `Hello ${recipientName},`;
+  const greetingAr = roleAr ? `عزيزي ${recipientName} (${roleAr})،` : `مرحباً ${recipientName}،`;
+  
+  // Arabic content
+  const titleArText = titleAr || title;
+  const messageArText = messageAr || message;
+  
+  let text = `${greetingEn}\n\n${title}\n\n`;
   if (details?.length) {
     text += details.map(d => `${d.label}: ${d.value}`).join('\n') + '\n\n';
   }
@@ -118,7 +193,21 @@ const generatePlainText = (
     const fullUrl = actionUrl.startsWith('http') ? actionUrl : APP_URL + actionUrl;
     text += `\n\n${actionLabel || 'View Details'}: ${fullUrl}`;
   }
-  text += '\n\n---\nThis is an automated message from PACT Workflow Platform.';
+  
+  // Role notice
+  const roleNoticeEn = roleEn 
+    ? `You are receiving this notification as a ${roleEn}.`
+    : 'You are receiving this notification as part of the PACT team.';
+  const roleNoticeAr = roleAr
+    ? `أنت تتلقى هذا الإشعار بصفتك ${roleAr}.`
+    : 'أنت تتلقى هذا الإشعار كجزء من فريق باكت.';
+  
+  text += `\n\n---\n\n${greetingAr}\n\n${titleArText}\n\n${messageArText}`;
+  text += `\n\n---\n\n${roleNoticeEn}\n${roleNoticeAr}`;
+  text += '\n\nThis is an automated message from PACT Workflow Platform.';
+  text += '\nهذه رسالة آلية من منصة باكت للعمليات الميدانية.';
+  text += '\nICT Team - PACT Command Center Platform';
+  text += '\nفريق تكنولوجيا المعلومات - منصة مركز قيادة باكت';
   return text;
 };
 
