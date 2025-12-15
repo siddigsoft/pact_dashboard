@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -461,7 +461,7 @@ const CoordinatorSites: React.FC = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { currentUser } = useAppContext();
-  const { updateMMP } = useMMP();
+  const { updateMMP, refreshMMPFiles, mmpFiles: contextMmpFiles } = useMMP();
   const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
   const siteVisitContext = useSiteVisitContext();
   const [isStartingVisit, setIsStartingVisit] = useState(false);
@@ -1244,47 +1244,56 @@ const CoordinatorSites: React.FC = () => {
   };
 
 
+  // React to MMP context changes for real-time updates
+  // The MMP context already has real-time subscriptions to mmp_site_entries and mmp_files
+  // When the context refreshes (due to real-time updates), we reload our filtered sites
+  const prevContextHashRef = useRef<string>('');
+  
   useEffect(() => {
-    let debounceId: number | null = null;
-    let lastReloadTime = 0;
-    const MIN_RELOAD_INTERVAL = 3000; // 3 seconds
+    if (!currentUser?.id) return;
+    
+    // Create a hash of relevant context data to detect changes
+    // This includes MMP file IDs and their site entry counts
+    const contextHash = JSON.stringify(
+      contextMmpFiles.map(mmp => ({
+        id: mmp.id,
+        siteEntryCount: mmp.siteEntries?.length || 0,
+        lastModified: mmp.modifiedAt || mmp.uploadedAt
+      }))
+    );
+    
+    // Only reload if the context actually changed
+    if (contextHash !== prevContextHashRef.current) {
+      prevContextHashRef.current = contextHash;
+      
+      let debounceId: number | null = null;
+      let lastReloadTime = 0;
+      const MIN_RELOAD_INTERVAL = 3000; // 3 seconds
 
-    const scheduleReload = () => {
-      const now = Date.now();
-      const timeSinceLast = now - lastReloadTime;
-      if (timeSinceLast < MIN_RELOAD_INTERVAL) {
-        if (debounceId) window.clearTimeout(debounceId);
-        debounceId = window.setTimeout(() => {
-          lastReloadTime = Date.now();
+      const scheduleReload = () => {
+        const now = Date.now();
+        const timeSinceLast = now - lastReloadTime;
+        if (timeSinceLast < MIN_RELOAD_INTERVAL) {
+          if (debounceId) window.clearTimeout(debounceId);
+          debounceId = window.setTimeout(() => {
+            lastReloadTime = Date.now();
+            loadSites();
+            debounceId = null;
+          }, MIN_RELOAD_INTERVAL - timeSinceLast);
+        } else {
+          if (debounceId) window.clearTimeout(debounceId);
+          lastReloadTime = now;
           loadSites();
-          debounceId = null;
-        }, MIN_RELOAD_INTERVAL - timeSinceLast);
-      } else {
-        if (debounceId) window.clearTimeout(debounceId);
-        lastReloadTime = now;
-        loadSites();
-      }
-    };
-
-    const channel = supabase
-      .channel('coordinator_sites_live')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'mmp_site_entries' },
-        (payload) => {
-          if ((payload.new as any)?.forwarded_to_user_id === currentUser?.id ||
-              (payload.old as any)?.forwarded_to_user_id === currentUser?.id) {
-            scheduleReload();
-          }
         }
-      )
-      .subscribe();
+      };
 
-    return () => {
-      try { supabase.removeChannel(channel); } catch {}
-      if (debounceId) window.clearTimeout(debounceId);
-    };
-  }, [currentUser?.id]);
+      scheduleReload();
+
+      return () => {
+        if (debounceId) window.clearTimeout(debounceId);
+      };
+    }
+  }, [contextMmpFiles, currentUser?.id]);
 
   // Loading timeout safeguard
   useEffect(() => {
