@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -461,7 +461,7 @@ const CoordinatorSites: React.FC = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { currentUser } = useAppContext();
-  const { updateMMP } = useMMP();
+  const { updateMMP, refreshMMPFiles, mmpFiles: contextMmpFiles } = useMMP();
   const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
   const siteVisitContext = useSiteVisitContext();
   const [isStartingVisit, setIsStartingVisit] = useState(false);
@@ -1244,47 +1244,56 @@ const CoordinatorSites: React.FC = () => {
   };
 
 
+  // React to MMP context changes for real-time updates
+  // The MMP context already has real-time subscriptions to mmp_site_entries and mmp_files
+  // When the context refreshes (due to real-time updates), we reload our filtered sites
+  const prevContextHashRef = useRef<string>('');
+  
   useEffect(() => {
-    let debounceId: number | null = null;
-    let lastReloadTime = 0;
-    const MIN_RELOAD_INTERVAL = 3000; // 3 seconds
+    if (!currentUser?.id) return;
+    
+    // Create a hash of relevant context data to detect changes
+    // This includes MMP file IDs and their site entry counts
+    const contextHash = JSON.stringify(
+      contextMmpFiles.map(mmp => ({
+        id: mmp.id,
+        siteEntryCount: mmp.siteEntries?.length || 0,
+        lastModified: mmp.modifiedAt || mmp.uploadedAt
+      }))
+    );
+    
+    // Only reload if the context actually changed
+    if (contextHash !== prevContextHashRef.current) {
+      prevContextHashRef.current = contextHash;
+      
+      let debounceId: number | null = null;
+      let lastReloadTime = 0;
+      const MIN_RELOAD_INTERVAL = 3000; // 3 seconds
 
-    const scheduleReload = () => {
-      const now = Date.now();
-      const timeSinceLast = now - lastReloadTime;
-      if (timeSinceLast < MIN_RELOAD_INTERVAL) {
-        if (debounceId) window.clearTimeout(debounceId);
-        debounceId = window.setTimeout(() => {
-          lastReloadTime = Date.now();
+      const scheduleReload = () => {
+        const now = Date.now();
+        const timeSinceLast = now - lastReloadTime;
+        if (timeSinceLast < MIN_RELOAD_INTERVAL) {
+          if (debounceId) window.clearTimeout(debounceId);
+          debounceId = window.setTimeout(() => {
+            lastReloadTime = Date.now();
+            loadSites();
+            debounceId = null;
+          }, MIN_RELOAD_INTERVAL - timeSinceLast);
+        } else {
+          if (debounceId) window.clearTimeout(debounceId);
+          lastReloadTime = now;
           loadSites();
-          debounceId = null;
-        }, MIN_RELOAD_INTERVAL - timeSinceLast);
-      } else {
-        if (debounceId) window.clearTimeout(debounceId);
-        lastReloadTime = now;
-        loadSites();
-      }
-    };
-
-    const channel = supabase
-      .channel('coordinator_sites_live')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'mmp_site_entries' },
-        (payload) => {
-          if ((payload.new as any)?.forwarded_to_user_id === currentUser?.id ||
-              (payload.old as any)?.forwarded_to_user_id === currentUser?.id) {
-            scheduleReload();
-          }
         }
-      )
-      .subscribe();
+      };
 
-    return () => {
-      try { supabase.removeChannel(channel); } catch {}
-      if (debounceId) window.clearTimeout(debounceId);
-    };
-  }, [currentUser?.id]);
+      scheduleReload();
+
+      return () => {
+        if (debounceId) window.clearTimeout(debounceId);
+      };
+    }
+  }, [contextMmpFiles, currentUser?.id]);
 
   // Loading timeout safeguard
   useEffect(() => {
@@ -3149,14 +3158,14 @@ const CoordinatorSites: React.FC = () => {
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="state_required" className="flex items-center justify-center gap-2 rounded-md py-2 px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-100 data-[state=active]:text-blue-800 data-[state=active]:shadow-sm">
                 <AlertTriangle className="h-4 w-4" />
-                State Permit Required
+                State Permit Status
                 <Badge variant="secondary" className="ml-2">
                   {statePermitRequiredCount}
                 </Badge>
               </TabsTrigger>
               <TabsTrigger value="local_required" className="flex items-center justify-center gap-2 rounded-md py-2 px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-100 data-[state=active]:text-blue-800 data-[state=active]:shadow-sm">
                 <MapPin className="h-4 w-4" />
-                Local Permit Required
+                Locality Permit Status
                 <Badge variant="secondary" className="ml-2">
                   {localPermitRequiredCount}
                 </Badge>
@@ -4284,45 +4293,58 @@ const CoordinatorSites: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      {/* State Permit Question Dialog */}
-      <Dialog open={statePermitQuestionDialogOpen} onOpenChange={setStatePermitQuestionDialogOpen}>
-        <DialogContent>
+      {/* State Permit Question Dialog - Using 3 Questions Flow */}
+      <Dialog open={statePermitQuestionDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          setStatePermitQuestionDialogOpen(false);
+          setSelectedStateForWorkflow(null);
+        }
+      }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>State Permit Required</DialogTitle>
+            <DialogTitle>State Permit Verification</DialogTitle>
             <DialogDescription>
-              State permits for <strong>{selectedStateForWorkflow?.state}</strong> have not been uploaded by the FOM.
+              Please answer the following questions about state permit requirements for <strong>{selectedStateForWorkflow?.state}</strong>.
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
-            <p className="text-sm text-muted-foreground">
-              State permits are required before you can access local permits. You need to upload the state permit first.
-              Do you have the state permit for this state?
-            </p>
-          </div>
-          <DialogFooter>
-            <Button 
-              variant="outline" 
-              onClick={() => {
+          {selectedStateForWorkflow && (
+            <PermitVerificationQuestions
+              state={selectedStateForWorkflow.state}
+              locality={selectedStateForWorkflow.localities?.[0]?.locality || ''}
+              mmpFileId={selectedStateForWorkflow.localities?.[0]?.sites?.[0]?.mmp_file_id}
+              onComplete={(decision: PermitDecision) => {
+                setStatePermitQuestionDialogOpen(false);
+                
+                if (decision.canProceed) {
+                  // User has permits or can work without them
+                  if (decision.hasStatePermit) {
+                    // Show state permit upload dialog
+                    const stateKey = selectedStateForWorkflow.state;
+                    setExpandedStates(prev => new Set([...prev, stateKey]));
+                  } else {
+                    // Proceed without state permit - unlock localities for this state
+                    toast.success(`Proceeding without state permit for ${selectedStateForWorkflow.state}. Localities are now accessible.`);
+                    setSelectedStateForWorkflow(null);
+                    // Switch to local permit tab
+                    setNewSitesSubTab('local_required');
+                  }
+                } else {
+                  setSelectedStateForWorkflow(null);
+                }
+              }}
+              onSendBackToFOM={(reason: string) => {
+                setStatePermitQuestionDialogOpen(false);
+                toast.success(`Request sent to FOM to upload state permit for ${selectedStateForWorkflow?.state}. Reason: ${reason}`);
+                setSelectedStateForWorkflow(null);
+              }}
+              onCancel={() => {
                 setStatePermitQuestionDialogOpen(false);
                 setSelectedStateForWorkflow(null);
               }}
-            >
-              Cancel
-            </Button>
-            <Button 
-              onClick={() => {
-                setStatePermitQuestionDialogOpen(false);
-                // Show state permit upload dialog
-                if (selectedStateForWorkflow) {
-                  const stateKey = selectedStateForWorkflow.state;
-                  setExpandedStates(prev => new Set([...prev, stateKey]));
-                }
-              }}
-              className="bg-blue-600 hover:bg-blue-700"
-            >
-              Yes, upload state permit
-            </Button>
-          </DialogFooter>
+              existingStatePermit={false}
+              existingLocalityPermit={false}
+            />
+          )}
         </DialogContent>
       </Dialog>
 
