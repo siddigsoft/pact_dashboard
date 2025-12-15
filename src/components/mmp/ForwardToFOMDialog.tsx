@@ -88,7 +88,7 @@ export const ForwardToFOMDialog: React.FC<ForwardToFOMDialogProps> = ({ open, on
         entity_type: 'mmpFile',
         event_type: 'mmp_forwarded',
         triggered_by: currentUser?.id,
-        triggered_by_name: currentUser?.name || currentUser?.full_name || 'System'
+        triggered_by_name: currentUser?.name || currentUser?.fullName || 'System'
       }));
       await insertNotifications(rows);
 
@@ -107,7 +107,7 @@ export const ForwardToFOMDialog: React.FC<ForwardToFOMDialogProps> = ({ open, on
           entity_type: 'mmpFile',
           event_type: 'mmp_forwarded_confirmation',
           triggered_by: currentUser.id,
-          triggered_by_name: currentUser?.name || currentUser?.full_name || 'System'
+          triggered_by_name: currentUser?.name || currentUser?.fullName || 'System'
         }]);
       }
 
