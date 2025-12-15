@@ -483,6 +483,21 @@ ${isRecipientFOM ? 'الإجراء المطلوب: إرفاق التصاريح' 
           </div>
           
           <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+          
+          <!-- Management Oversight Notice -->
+          <div style="background-color: #f0f4f8; border-radius: 6px; padding: 16px; margin-bottom: 20px;">
+            <p style="color: #555; font-size: 11px; margin: 0 0 8px 0; font-weight: 600;">
+              Management Oversight Notice:
+            </p>
+            <p style="color: #666; font-size: 11px; margin: 0; line-height: 1.5;">
+              This notification is sent to Hub Supervisors, Field Operations Managers, Administrators, and Super Administrators for transparency and accountability purposes.
+            </p>
+            <p dir="rtl" style="color: #666; font-size: 11px; margin: 10px 0 0 0; line-height: 1.8; text-align: right;">
+              <span style="font-weight: 600;">إشعار الرقابة الإدارية:</span><br>
+              يتم إرسال هذا الإشعار إلى مشرفي المحاور ومديري العمليات الميدانية والمسؤولين والمسؤولين الأعلى لأغراض الشفافية والمساءلة.
+            </p>
+          </div>
+          
           <p style="color: #999; font-size: 12px; text-align: center;">
             This is an automated message from PACT Workflow Platform.<br>
             هذه رسالة آلية من منصة باكت للعمليات الميدانية.<br>
@@ -513,6 +528,14 @@ ${messageAr}
 اسم خطة المراقبة الشهرية: ${mmpName}
 تم الإرسال بواسطة: ${forwarderName}
 عدد المنسقين: ${coordinatorCount}
+
+---
+
+Management Oversight Notice:
+This notification is sent to Hub Supervisors, Field Operations Managers, Administrators, and Super Administrators for transparency and accountability purposes.
+
+إشعار الرقابة الإدارية:
+يتم إرسال هذا الإشعار إلى مشرفي المحاور ومديري العمليات الميدانية والمسؤولين والمسؤولين الأعلى لأغراض الشفافية والمساءلة.
 
 - PACT Workflow Platform | منصة باكت`;
 
@@ -599,6 +622,21 @@ ${messageAr}
           </div>
           
           <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+          
+          <!-- Management Oversight Notice -->
+          <div style="background-color: #f0f4f8; border-radius: 6px; padding: 16px; margin-bottom: 20px;">
+            <p style="color: #555; font-size: 11px; margin: 0 0 8px 0; font-weight: 600;">
+              Management Oversight Notice:
+            </p>
+            <p style="color: #666; font-size: 11px; margin: 0; line-height: 1.5;">
+              This notification is sent to Hub Supervisors, Field Operations Managers, Administrators, and Super Administrators for transparency and accountability purposes.
+            </p>
+            <p dir="rtl" style="color: #666; font-size: 11px; margin: 10px 0 0 0; line-height: 1.8; text-align: right;">
+              <span style="font-weight: 600;">إشعار الرقابة الإدارية:</span><br>
+              يتم إرسال هذا الإشعار إلى مشرفي المحاور ومديري العمليات الميدانية والمسؤولين والمسؤولين الأعلى لأغراض الشفافية والمساءلة.
+            </p>
+          </div>
+          
           <p style="color: #999; font-size: 12px; text-align: center;">
             This is an automated message from PACT Workflow Platform.<br>
             هذه رسالة آلية من منصة باكت للعمليات الميدانية.<br>
@@ -631,6 +669,14 @@ ${messageAr}
 اسم خطة المراقبة الشهرية: ${mmpName}
 تم التحقق بواسطة: ${coordinatorName}
 الحالة: تم التحقق
+
+---
+
+Management Oversight Notice:
+This notification is sent to Hub Supervisors, Field Operations Managers, Administrators, and Super Administrators for transparency and accountability purposes.
+
+إشعار الرقابة الإدارية:
+يتم إرسال هذا الإشعار إلى مشرفي المحاور ومديري العمليات الميدانية والمسؤولين والمسؤولين الأعلى لأغراض الشفافية والمساءلة.
 
 - PACT Workflow Platform | منصة باكت`;
 
