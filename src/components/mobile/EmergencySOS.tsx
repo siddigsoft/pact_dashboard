@@ -233,12 +233,10 @@ export function EmergencySOS({ isVisible, onClose }: EmergencySOSProps) {
         type: 'warning' as const,
         title: 'EMERGENCY SOS ALERT',
         message: `Emergency alert from ${currentUser?.fullName || 'Field Worker'}. Location: ${currentLocation ? `${currentLocation.lat.toFixed(6)}, ${currentLocation.lng.toFixed(6)}` : 'Unknown'}`,
-        related_entity_type: 'sos',
+        related_entity_type: 'user' as const,
         related_entity_id: currentUser?.id,
         link: `/field-team?user=${currentUser?.id}${locationStr ? `&location=${encodeURIComponent(locationStr)}` : ''}`,
         is_read: false,
-        category: 'team',
-        priority: 'urgent',
       }));
 
       const { error } = await supabase.from('notifications').insert(notifications);
