@@ -107,20 +107,19 @@ export const NotificationTriggerService = {
     }
 
     try {
-      // Map to actual database schema columns
+      // Map to actual database schema columns (user_id, title, message, type)
       const notificationData = {
-        recipient_id: userId,
-        title_en: title,
-        title_ar: title,
-        message_en: message,
-        message_ar: message,
+        user_id: userId,
+        title: title,
+        message: message,
+        type: type,
         priority: priority,
-        action_url: link,
-        entity_id: relatedEntityId,
-        entity_type: relatedEntityType,
-        event_type: category,
-        status: 'pending',
-        email_sent: false
+        link: link,
+        related_entity_id: relatedEntityId,
+        related_entity_type: relatedEntityType,
+        category: category,
+        is_read: false,
+        created_at: new Date().toISOString()
       };
 
       console.log(`[NOTIFICATION] Inserting into database:`, JSON.stringify(notificationData));
