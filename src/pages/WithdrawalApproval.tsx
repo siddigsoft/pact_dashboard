@@ -42,6 +42,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { supabase } from '@/integrations/supabase/client';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { NotificationTriggerService } from '@/services/NotificationTriggerService';
 
 interface SupervisedRequest extends WithdrawalRequest {
   requesterName?: string;
@@ -254,8 +255,40 @@ export default function WithdrawalApproval() {
     try {
       if (dialogType === 'approve') {
         await approveWithdrawalRequest(selectedRequest.id, notes);
+        
+        // Notify hub supervisor of forwarding to finance
+        if (selectedRequest.requesterHub) {
+          const userName = getUserName(selectedRequest.userId, selectedRequest);
+          await NotificationTriggerService.financialTransactionApproval(
+            selectedRequest.requesterHub,
+            'withdrawal',
+            selectedRequest.amount,
+            selectedRequest.currency || 'SDG',
+            {
+              userName,
+              status: 'pending',
+              transactionId: selectedRequest.id
+            }
+          );
+        }
       } else if (dialogType === 'reject') {
         await rejectWithdrawalRequest(selectedRequest.id, notes);
+        
+        // Notify hub supervisor of rejection
+        if (selectedRequest.requesterHub) {
+          const userName = getUserName(selectedRequest.userId, selectedRequest);
+          await NotificationTriggerService.financialTransactionApproval(
+            selectedRequest.requesterHub,
+            'withdrawal',
+            selectedRequest.amount,
+            selectedRequest.currency || 'SDG',
+            {
+              userName,
+              status: 'rejected',
+              transactionId: selectedRequest.id
+            }
+          );
+        }
       }
       await refreshSupervisedWithdrawalRequests();
       setDialogType(null);

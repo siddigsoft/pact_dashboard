@@ -760,6 +760,295 @@ export const NotificationTriggerService = {
     });
 
     return true;
+  },
+
+  // =============================================
+  // HUB SUPERVISOR NOTIFICATION METHODS
+  // =============================================
+
+  /**
+   * Helper: Find all supervisors for a given hub
+   */
+  async getHubSupervisors(hubId: string): Promise<{ id: string; full_name: string; email: string }[]> {
+    try {
+      const { data: supervisors, error } = await supabase
+        .from('profiles')
+        .select('id, full_name, email')
+        .eq('hub_id', hubId)
+        .eq('role', 'supervisor');
+
+      if (error) {
+        console.error('Failed to fetch hub supervisors:', error);
+        return [];
+      }
+
+      return supervisors || [];
+    } catch (error) {
+      console.error('Error getting hub supervisors:', error);
+      return [];
+    }
+  },
+
+  /**
+   * Notify all supervisors of a specific hub
+   */
+  async notifyHubSupervisor(
+    hubId: string,
+    options: Omit<TriggerNotificationOptions, 'userId'>
+  ): Promise<number> {
+    try {
+      const supervisors = await this.getHubSupervisors(hubId);
+      
+      if (supervisors.length === 0) {
+        console.log(`No supervisors found for hub ${hubId}`);
+        return 0;
+      }
+
+      const userIds = supervisors.map(s => s.id);
+      return await this.sendBulk(userIds, options);
+    } catch (error) {
+      console.error('Failed to notify hub supervisor:', error);
+      return 0;
+    }
+  },
+
+  /**
+   * Notify supervisor when MMP is forwarded from FOM to Coordinators
+   */
+  async mmpForwardedToCoordinators(
+    hubId: string,
+    mmpName: string,
+    coordinatorCount: number,
+    mmpId?: string
+  ): Promise<number> {
+    return await this.notifyHubSupervisor(hubId, {
+      title: 'MMP Forwarded to Coordinators',
+      message: `MMP "${mmpName}" has been forwarded to ${coordinatorCount} coordinator(s) for review`,
+      type: 'info',
+      category: 'assignments',
+      priority: 'medium',
+      link: '/mmp',
+      relatedEntityId: mmpId,
+      relatedEntityType: 'mmpFile'
+    });
+  },
+
+  /**
+   * Notify supervisor when sites are sent back to FOM
+   */
+  async siteReturnedToFOM(
+    hubId: string,
+    siteName: string,
+    siteCount: number,
+    reason: string,
+    coordinatorName?: string
+  ): Promise<number> {
+    const message = siteCount > 1
+      ? `${siteCount} sites including "${siteName}" have been sent back to FOM${coordinatorName ? ` by ${coordinatorName}` : ''}. Reason: ${reason}`
+      : `Site "${siteName}" has been sent back to FOM${coordinatorName ? ` by ${coordinatorName}` : ''}. Reason: ${reason}`;
+
+    return await this.notifyHubSupervisor(hubId, {
+      title: 'Sites Returned to FOM',
+      message,
+      type: 'warning',
+      category: 'assignments',
+      priority: 'high',
+      link: '/mmp'
+    });
+  },
+
+  /**
+   * Notify supervisor of various site operations
+   */
+  async siteOperationNotification(
+    hubId: string,
+    operation: 'claimed' | 'rejected' | 'verified' | 'approved' | 'dispatched' | 'completed',
+    siteName: string,
+    details?: {
+      actorName?: string;
+      siteCount?: number;
+      siteId?: string;
+      reason?: string;
+    }
+  ): Promise<number> {
+    const operationMessages = {
+      claimed: {
+        title: 'Site Claimed',
+        message: `Site "${siteName}" has been claimed${details?.actorName ? ` by ${details.actorName}` : ''}`,
+        type: 'info' as const,
+        priority: 'medium' as NotificationPriority
+      },
+      rejected: {
+        title: 'Site Rejected',
+        message: `Site "${siteName}" has been rejected${details?.actorName ? ` by ${details.actorName}` : ''}${details?.reason ? `. Reason: ${details.reason}` : ''}`,
+        type: 'warning' as const,
+        priority: 'high' as NotificationPriority
+      },
+      verified: {
+        title: 'Site Verified',
+        message: `Site "${siteName}" has been verified${details?.actorName ? ` by ${details.actorName}` : ''}`,
+        type: 'success' as const,
+        priority: 'medium' as NotificationPriority
+      },
+      approved: {
+        title: 'Site Approved',
+        message: `Site "${siteName}" has been approved${details?.actorName ? ` by ${details.actorName}` : ''}`,
+        type: 'success' as const,
+        priority: 'medium' as NotificationPriority
+      },
+      dispatched: {
+        title: 'Sites Dispatched',
+        message: details?.siteCount 
+          ? `${details.siteCount} sites including "${siteName}" have been dispatched`
+          : `Site "${siteName}" has been dispatched`,
+        type: 'info' as const,
+        priority: 'medium' as NotificationPriority
+      },
+      completed: {
+        title: 'Site Visit Completed',
+        message: `Site visit to "${siteName}" has been completed${details?.actorName ? ` by ${details.actorName}` : ''}`,
+        type: 'success' as const,
+        priority: 'medium' as NotificationPriority
+      }
+    };
+
+    const opDetails = operationMessages[operation];
+
+    return await this.notifyHubSupervisor(hubId, {
+      title: opDetails.title,
+      message: opDetails.message,
+      type: opDetails.type,
+      category: 'assignments',
+      priority: opDetails.priority,
+      link: '/mmp',
+      relatedEntityId: details?.siteId,
+      relatedEntityType: 'siteVisit'
+    });
+  },
+
+  /**
+   * Notify supervisor of financial transaction approvals
+   */
+  async financialTransactionApproval(
+    hubId: string,
+    transactionType: 'withdrawal' | 'cost_submission' | 'down_payment' | 'reimbursement',
+    amount: number,
+    currency: string = 'SDG',
+    details?: {
+      userName?: string;
+      status?: 'approved' | 'rejected' | 'pending';
+      transactionId?: string;
+    }
+  ): Promise<number> {
+    const typeLabels = {
+      withdrawal: 'Withdrawal',
+      cost_submission: 'Cost Submission',
+      down_payment: 'Down Payment',
+      reimbursement: 'Reimbursement'
+    };
+
+    const statusLabels = {
+      approved: 'approved',
+      rejected: 'rejected',
+      pending: 'pending approval'
+    };
+
+    const label = typeLabels[transactionType];
+    const status = details?.status || 'pending';
+    const statusLabel = statusLabels[status];
+
+    return await this.notifyHubSupervisor(hubId, {
+      title: `${label} ${status === 'pending' ? 'Request' : status.charAt(0).toUpperCase() + status.slice(1)}`,
+      message: `${label} of ${currency} ${amount.toLocaleString()}${details?.userName ? ` by ${details.userName}` : ''} has been ${statusLabel}`,
+      type: status === 'approved' ? 'success' : status === 'rejected' ? 'error' : 'info',
+      category: 'financial',
+      priority: status === 'pending' ? 'high' : 'medium',
+      link: '/finance-approval',
+      relatedEntityId: details?.transactionId,
+      relatedEntityType: 'transaction'
+    });
+  },
+
+  /**
+   * Notify supervisor of activity coverage updates
+   */
+  async activityCoverageUpdate(
+    hubId: string,
+    activityName: string,
+    coveragePercent: number,
+    totalSites: number,
+    completedSites: number
+  ): Promise<number> {
+    const isComplete = coveragePercent >= 100;
+    const isMilestone = coveragePercent === 25 || coveragePercent === 50 || coveragePercent === 75 || coveragePercent >= 100;
+
+    if (!isMilestone) {
+      return 0;
+    }
+
+    return await this.notifyHubSupervisor(hubId, {
+      title: isComplete ? 'Activity Coverage Complete' : 'Activity Coverage Milestone',
+      message: isComplete 
+        ? `Activity "${activityName}" has reached 100% coverage (${completedSites}/${totalSites} sites completed)`
+        : `Activity "${activityName}" has reached ${coveragePercent}% coverage (${completedSites}/${totalSites} sites)`,
+      type: isComplete ? 'success' : 'info',
+      category: 'assignments',
+      priority: isComplete ? 'high' : 'medium',
+      link: '/tracker'
+    });
+  },
+
+  /**
+   * Notify supervisor when MMP is uploaded to their hub
+   */
+  async mmpUploadedToHub(
+    hubId: string,
+    mmpName: string,
+    siteCount: number,
+    uploaderName?: string,
+    mmpId?: string
+  ): Promise<number> {
+    return await this.notifyHubSupervisor(hubId, {
+      title: 'New MMP Uploaded',
+      message: `MMP "${mmpName}" with ${siteCount} sites has been uploaded${uploaderName ? ` by ${uploaderName}` : ''}`,
+      type: 'info',
+      category: 'assignments',
+      priority: 'high',
+      link: '/mmp',
+      relatedEntityId: mmpId,
+      relatedEntityType: 'mmpFile'
+    });
+  },
+
+  /**
+   * Notify supervisor of activity dates in their hub
+   */
+  async activityDateNotification(
+    hubId: string,
+    activityName: string,
+    siteName: string,
+    activityDate: string,
+    daysUntil: number
+  ): Promise<number> {
+    if (daysUntil > 7) {
+      return 0;
+    }
+
+    const isToday = daysUntil === 0;
+    const isTomorrow = daysUntil === 1;
+
+    return await this.notifyHubSupervisor(hubId, {
+      title: isToday ? 'Activity Today' : isTomorrow ? 'Activity Tomorrow' : 'Upcoming Activity',
+      message: isToday 
+        ? `Activity "${activityName}" at "${siteName}" is scheduled for today (${activityDate})`
+        : isTomorrow
+        ? `Activity "${activityName}" at "${siteName}" is scheduled for tomorrow (${activityDate})`
+        : `Activity "${activityName}" at "${siteName}" is scheduled in ${daysUntil} days (${activityDate})`,
+      type: isToday ? 'warning' : 'info',
+      category: 'assignments',
+      priority: isToday ? 'high' : 'medium',
+      link: '/mmp'
+    });
   }
 };
 
