@@ -44,6 +44,9 @@ import {
   Calendar,
   FileText,
   Copy,
+  Radio,
+  Wifi,
+  WifiOff,
 } from 'lucide-react';
 import { format, parseISO, isValid } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
@@ -67,6 +70,36 @@ interface EmailLog {
     destination?: string;
     purpose?: string;
     provider?: string;
+    smtpHost?: string;
+    smtpPort?: string;
+    smtpResponse?: string;
+    smtpResponseCode?: number;
+    retryCount?: number;
+    maxRetries?: number;
+    lastRetryAt?: string;
+    bounceType?: string;
+    bounceReason?: string;
+    spamScore?: number;
+    contentType?: string;
+    attachmentCount?: number;
+    templateId?: string;
+    templateName?: string;
+    recipientName?: string;
+    senderEmail?: string;
+    senderName?: string;
+    replyTo?: string;
+    cc?: string[];
+    bcc?: string[];
+    priority?: string;
+    headers?: Record<string, string>;
+    ipAddress?: string;
+    userAgent?: string;
+    deliveryStatus?: 'pending' | 'sent' | 'delivered' | 'bounced' | 'failed' | 'deferred';
+    deliveryAttempts?: number;
+    queuedAt?: string;
+    processedAt?: string;
+    openedAt?: string;
+    clickedAt?: string;
   };
   actor_name: string;
   actor_email?: string;
@@ -188,9 +221,116 @@ export default function EmailTracking() {
     }
   };
 
+  // Real-time subscription state
+  const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
+  const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
+  const [newLogIds, setNewLogIds] = useState<Set<string>>(new Set());
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
+
+  // Handle new log with animation
+  const handleNewLog = (newLog: EmailLog) => {
+    if (newLog.entity_type === 'email' || newLog.entity_type === 'otp') {
+      setEmailLogs((prev) => {
+        if (prev.some((log) => log.id === newLog.id)) {
+          return prev;
+        }
+        return [newLog, ...prev];
+      });
+      
+      // Mark as new for highlight animation
+      setNewLogIds((prev) => new Set(prev).add(newLog.id));
+      setTimeout(() => {
+        setNewLogIds((prev) => {
+          const next = new Set(prev);
+          next.delete(newLog.id);
+          return next;
+        });
+      }, 5000);
+      
+      // Update stats
+      setStats((prev) => ({
+        total: prev.total + 1,
+        successful: newLog.success ? prev.successful + 1 : prev.successful,
+        failed: !newLog.success ? prev.failed + 1 : prev.failed,
+        emails: newLog.entity_type === 'email' ? prev.emails + 1 : prev.emails,
+        otpSent: newLog.entity_type === 'otp' && !newLog.tags?.includes('verification') 
+          ? prev.otpSent + 1 
+          : prev.otpSent,
+        otpVerified: newLog.entity_type === 'otp' && newLog.tags?.includes('verification') 
+          ? prev.otpVerified + 1 
+          : prev.otpVerified,
+      }));
+      
+      setLastUpdate(new Date());
+      
+      // Show toast for new email
+      toast({
+        title: 'New notification logged',
+        description: newLog.entity_type === 'email' 
+          ? `Email to ${newLog.metadata?.recipient || 'unknown'}` 
+          : `OTP ${newLog.tags?.includes('verification') ? 'verification' : 'sent'}`,
+      });
+    }
+  };
+
   useEffect(() => {
     fetchEmailLogs();
-  }, []);
+
+    // Set up real-time subscription for new email/OTP logs
+    const channel = supabase
+      .channel('email-tracking-realtime', {
+        config: {
+          broadcast: { self: true },
+          presence: { key: 'email-tracking' },
+        },
+      })
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'audit_logs',
+          filter: 'module=eq.notification',
+        },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            handleNewLog(payload.new as EmailLog);
+          } else if (payload.eventType === 'UPDATE') {
+            // Handle updates to existing logs
+            const updatedLog = payload.new as EmailLog;
+            setEmailLogs((prev) => 
+              prev.map((log) => log.id === updatedLog.id ? updatedLog : log)
+            );
+            setLastUpdate(new Date());
+          }
+        }
+      )
+      .subscribe((status) => {
+        setIsRealtimeConnected(status === 'SUBSCRIBED');
+        if (status === 'SUBSCRIBED') {
+          console.log('[EmailTracking] Real-time subscription active');
+          setLastUpdate(new Date());
+        }
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [toast]);
+
+  // Auto-refresh polling as backup (every 5 seconds when enabled)
+  useEffect(() => {
+    if (!autoRefreshEnabled) return;
+    
+    const pollInterval = setInterval(() => {
+      // Only poll if realtime is not connected or as a backup
+      if (!isRealtimeConnected) {
+        fetchEmailLogs();
+      }
+    }, 5000);
+
+    return () => clearInterval(pollInterval);
+  }, [autoRefreshEnabled, isRealtimeConnected]);
 
   const filteredLogs = emailLogs.filter(log => {
     const matchesSearch = searchQuery === '' ||
@@ -369,15 +509,43 @@ export default function EmailTracking() {
             </p>
           </div>
         </div>
-        <Button
-          onClick={fetchEmailLogs}
-          variant="outline"
-          disabled={loading}
-          data-testid="button-refresh"
-        >
-          <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-3">
+          {/* Real-time connection indicator */}
+          <div className="flex items-center gap-2">
+            <Badge
+              variant="outline"
+              className={isRealtimeConnected 
+                ? "bg-green-500/10 text-green-600 border-green-500/30" 
+                : "bg-yellow-500/10 text-yellow-600 border-yellow-500/30"
+              }
+              data-testid="badge-realtime-status"
+            >
+              {isRealtimeConnected ? (
+                <>
+                  <Radio className="h-3 w-3 mr-1 animate-pulse" />
+                  Live
+                </>
+              ) : (
+                <>
+                  <WifiOff className="h-3 w-3 mr-1" />
+                  Connecting...
+                </>
+              )}
+            </Badge>
+            <span className="text-xs text-muted-foreground hidden sm:inline">
+              Updated {format(lastUpdate, 'h:mm:ss a')}
+            </span>
+          </div>
+          <Button
+            onClick={fetchEmailLogs}
+            variant="outline"
+            disabled={loading}
+            data-testid="button-refresh"
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -577,7 +745,11 @@ export default function EmailTracking() {
                     <TableRow 
                       key={log.id} 
                       data-testid={`row-email-${log.id}`}
-                      className="cursor-pointer hover-elevate"
+                      className={`cursor-pointer hover-elevate transition-colors duration-500 ${
+                        newLogIds.has(log.id) 
+                          ? 'bg-green-500/10 animate-pulse' 
+                          : ''
+                      }`}
                       onClick={() => setSelectedLog(log)}
                     >
                       <TableCell>{getStatusBadge(log.success)}</TableCell>
@@ -619,7 +791,7 @@ export default function EmailTracking() {
 
       {/* Log Detail Dialog */}
       <Dialog open={!!selectedLog} onOpenChange={() => setSelectedLog(null)}>
-        <DialogContent className="max-w-2xl" data-testid="dialog-log-details">
+        <DialogContent className="max-w-3xl max-h-[90vh]" data-testid="dialog-log-details">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {selectedLog?.entity_type === 'email' ? (
@@ -630,23 +802,51 @@ export default function EmailTracking() {
               {selectedLog?.entity_type === 'email' ? 'Email' : 'OTP'} Log Details
             </DialogTitle>
             <DialogDescription>
-              Complete details for this notification log entry
+              Complete details for troubleshooting and tracking
             </DialogDescription>
           </DialogHeader>
           
           {selectedLog && (
-            <ScrollArea className="max-h-[60vh]">
+            <ScrollArea className="max-h-[70vh]">
               <div className="space-y-4 pr-4">
-                {/* Status Section */}
-                <div className="flex items-center justify-between gap-2 p-3 rounded-lg bg-muted/50">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium">Status:</span>
-                    {getStatusBadge(selectedLog.success)}
+                {/* Status and Quick Actions */}
+                <div className="flex items-center justify-between gap-2 p-3 rounded-lg bg-muted/50 flex-wrap">
+                  <div className="flex items-center gap-4 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">Status:</span>
+                      {getStatusBadge(selectedLog.success)}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">Type:</span>
+                      {getTypeBadge(selectedLog)}
+                    </div>
+                    {selectedLog.metadata?.deliveryStatus && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">Delivery:</span>
+                        <Badge variant="outline" className={
+                          selectedLog.metadata.deliveryStatus === 'delivered' ? 'bg-green-500/10 text-green-600 border-green-500/30' :
+                          selectedLog.metadata.deliveryStatus === 'bounced' ? 'bg-red-500/10 text-red-600 border-red-500/30' :
+                          selectedLog.metadata.deliveryStatus === 'deferred' ? 'bg-yellow-500/10 text-yellow-600 border-yellow-500/30' :
+                          'bg-muted'
+                        }>
+                          {selectedLog.metadata.deliveryStatus}
+                        </Badge>
+                      </div>
+                    )}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium">Type:</span>
-                    {getTypeBadge(selectedLog)}
-                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const fullDetails = JSON.stringify(selectedLog, null, 2);
+                      navigator.clipboard.writeText(fullDetails);
+                      toast({ title: 'Copied', description: 'Full log details copied to clipboard' });
+                    }}
+                    data-testid="button-copy-all"
+                  >
+                    <Copy className="h-3 w-3 mr-1" />
+                    Copy All Details
+                  </Button>
                 </div>
 
                 {/* Basic Information */}
@@ -684,29 +884,84 @@ export default function EmailTracking() {
                         <span className="text-sm">{safeParseDateForDisplay(selectedLog.timestamp)}</span>
                       </div>
                     </div>
+
+                    {selectedLog.metadata?.messageId && (
+                      <div className="space-y-1">
+                        <label className="text-xs text-muted-foreground">Message ID</label>
+                        <div className="flex items-center gap-2">
+                          <code className="text-xs bg-muted px-2 py-1 rounded truncate flex-1">
+                            {selectedLog.metadata.messageId}
+                          </code>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => {
+                              navigator.clipboard.writeText(selectedLog.metadata?.messageId || '');
+                              toast({ title: 'Copied', description: 'Message ID copied' });
+                            }}
+                          >
+                            <Copy className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {selectedLog.metadata?.priority && (
+                      <div className="space-y-1">
+                        <label className="text-xs text-muted-foreground">Priority</label>
+                        <Badge variant="outline">{selectedLog.metadata.priority}</Badge>
+                      </div>
+                    )}
                   </div>
                 </div>
 
                 <Separator />
 
-                {/* Recipient Details */}
+                {/* Sender & Recipient Details */}
                 <div className="space-y-3">
                   <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-                    Recipient Details
+                    Sender & Recipient Details
                   </h4>
                   
-                  <div className="grid grid-cols-1 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {(selectedLog.metadata?.senderEmail || selectedLog.metadata?.senderName) && (
+                      <div className="space-y-1">
+                        <label className="text-xs text-muted-foreground">From</label>
+                        <div className="text-sm">
+                          {selectedLog.metadata.senderName && <span className="font-medium">{selectedLog.metadata.senderName} </span>}
+                          {selectedLog.metadata.senderEmail && <span className="text-muted-foreground">&lt;{selectedLog.metadata.senderEmail}&gt;</span>}
+                          {!selectedLog.metadata.senderName && !selectedLog.metadata.senderEmail && <span>noreply@pactorg.com</span>}
+                        </div>
+                      </div>
+                    )}
+
                     <div className="space-y-1">
-                      <label className="text-xs text-muted-foreground">
-                        {selectedLog.entity_type === 'email' ? 'Email Address' : 'Destination'}
-                      </label>
+                      <label className="text-xs text-muted-foreground">To</label>
                       <div className="flex items-center gap-2">
                         <Mail className="h-4 w-4 text-muted-foreground" />
                         <span className="text-sm font-medium">{getRecipient(selectedLog)}</span>
+                        {selectedLog.metadata?.recipientName && (
+                          <span className="text-xs text-muted-foreground">({selectedLog.metadata.recipientName})</span>
+                        )}
                       </div>
                     </div>
+
+                    {selectedLog.metadata?.replyTo && (
+                      <div className="space-y-1">
+                        <label className="text-xs text-muted-foreground">Reply-To</label>
+                        <span className="text-sm">{selectedLog.metadata.replyTo}</span>
+                      </div>
+                    )}
+
+                    {selectedLog.metadata?.cc && selectedLog.metadata.cc.length > 0 && (
+                      <div className="space-y-1">
+                        <label className="text-xs text-muted-foreground">CC</label>
+                        <span className="text-sm">{selectedLog.metadata.cc.join(', ')}</span>
+                      </div>
+                    )}
                     
-                    <div className="space-y-1">
+                    <div className="space-y-1 md:col-span-2">
                       <label className="text-xs text-muted-foreground">
                         {selectedLog.entity_type === 'email' ? 'Subject' : 'Purpose'}
                       </label>
@@ -720,15 +975,114 @@ export default function EmailTracking() {
 
                 <Separator />
 
+                {/* SMTP & Delivery Information */}
+                <div className="space-y-3">
+                  <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                    SMTP & Delivery Information
+                  </h4>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">Provider</label>
+                      <span className="text-sm">{selectedLog.metadata?.provider || 'IONOS SMTP'}</span>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">SMTP Server</label>
+                      <span className="text-sm">{selectedLog.metadata?.smtpHost || 'smtp.ionos.com'}</span>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs text-muted-foreground">Port</label>
+                      <span className="text-sm">{selectedLog.metadata?.smtpPort || '587'}</span>
+                    </div>
+
+                    {selectedLog.metadata?.smtpResponseCode && (
+                      <div className="space-y-1">
+                        <label className="text-xs text-muted-foreground">SMTP Response Code</label>
+                        <Badge variant={selectedLog.metadata.smtpResponseCode >= 200 && selectedLog.metadata.smtpResponseCode < 300 ? 'default' : 'destructive'}>
+                          {selectedLog.metadata.smtpResponseCode}
+                        </Badge>
+                      </div>
+                    )}
+
+                    {selectedLog.metadata?.smtpResponse && (
+                      <div className="space-y-1 md:col-span-2">
+                        <label className="text-xs text-muted-foreground">SMTP Response</label>
+                        <code className="text-xs bg-muted px-2 py-1 rounded block">
+                          {selectedLog.metadata.smtpResponse}
+                        </code>
+                      </div>
+                    )}
+
+                    {selectedLog.metadata?.deliveryAttempts !== undefined && (
+                      <div className="space-y-1">
+                        <label className="text-xs text-muted-foreground">Delivery Attempts</label>
+                        <span className="text-sm">{selectedLog.metadata.deliveryAttempts}</span>
+                      </div>
+                    )}
+
+                    {selectedLog.metadata?.retryCount !== undefined && (
+                      <div className="space-y-1">
+                        <label className="text-xs text-muted-foreground">Retry Count</label>
+                        <span className="text-sm">
+                          {selectedLog.metadata.retryCount}
+                          {selectedLog.metadata.maxRetries && ` / ${selectedLog.metadata.maxRetries}`}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Delivery Timeline */}
+                {(selectedLog.metadata?.queuedAt || selectedLog.metadata?.processedAt || selectedLog.metadata?.deliveredAt) && (
+                  <>
+                    <Separator />
+                    <div className="space-y-3">
+                      <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                        Delivery Timeline
+                      </h4>
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                        {selectedLog.metadata?.queuedAt && (
+                          <div className="space-y-1">
+                            <label className="text-xs text-muted-foreground">Queued</label>
+                            <span className="text-sm">{safeParseDateForDisplay(selectedLog.metadata.queuedAt)}</span>
+                          </div>
+                        )}
+                        {selectedLog.metadata?.processedAt && (
+                          <div className="space-y-1">
+                            <label className="text-xs text-muted-foreground">Processed</label>
+                            <span className="text-sm">{safeParseDateForDisplay(selectedLog.metadata.processedAt)}</span>
+                          </div>
+                        )}
+                        {selectedLog.metadata?.deliveredAt && (
+                          <div className="space-y-1">
+                            <label className="text-xs text-muted-foreground">Delivered</label>
+                            <span className="text-sm">{safeParseDateForDisplay(selectedLog.metadata.deliveredAt)}</span>
+                          </div>
+                        )}
+                        {selectedLog.metadata?.openedAt && (
+                          <div className="space-y-1">
+                            <label className="text-xs text-muted-foreground">Opened</label>
+                            <span className="text-sm">{safeParseDateForDisplay(selectedLog.metadata.openedAt)}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                <Separator />
+
                 {/* Actor Information */}
                 <div className="space-y-3">
                   <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-                    Actor Information
+                    Triggered By
                   </h4>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div className="space-y-1">
-                      <label className="text-xs text-muted-foreground">Sent By</label>
+                      <label className="text-xs text-muted-foreground">Actor</label>
                       <div className="flex items-center gap-2">
                         <User className="h-4 w-4 text-muted-foreground" />
                         <span className="text-sm">{selectedLog.actor_name || 'System'}</span>
@@ -741,12 +1095,25 @@ export default function EmailTracking() {
                         <span className="text-sm">{selectedLog.actor_email}</span>
                       </div>
                     )}
+
+                    {selectedLog.metadata?.templateName && (
+                      <div className="space-y-1">
+                        <label className="text-xs text-muted-foreground">Template Used</label>
+                        <Badge variant="secondary">{selectedLog.metadata.templateName}</Badge>
+                      </div>
+                    )}
+
+                    {selectedLog.metadata?.emailType && (
+                      <div className="space-y-1">
+                        <label className="text-xs text-muted-foreground">Email Type</label>
+                        <Badge variant="outline">{selectedLog.metadata.emailType}</Badge>
+                      </div>
+                    )}
                   </div>
                 </div>
 
-                <Separator />
-
                 {/* Description */}
+                <Separator />
                 <div className="space-y-3">
                   <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
                     Description
@@ -756,16 +1123,78 @@ export default function EmailTracking() {
                   </p>
                 </div>
 
-                {/* Metadata Section */}
+                {/* Error Message & Troubleshooting */}
+                {(selectedLog.error_message || !selectedLog.success) && (
+                  <>
+                    <Separator />
+                    <div className="space-y-3">
+                      <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+                        <AlertTriangle className="h-4 w-4 text-red-500" />
+                        Error Details & Troubleshooting
+                      </h4>
+                      
+                      {selectedLog.error_message && (
+                        <div className="bg-red-500/10 border border-red-500/30 p-3 rounded-lg space-y-2">
+                          <p className="text-sm font-medium text-red-600 dark:text-red-400">Error Message:</p>
+                          <p className="text-sm text-red-600 dark:text-red-400 font-mono">
+                            {selectedLog.error_message}
+                          </p>
+                        </div>
+                      )}
+
+                      {selectedLog.metadata?.bounceType && (
+                        <div className="bg-orange-500/10 border border-orange-500/30 p-3 rounded-lg">
+                          <p className="text-sm font-medium text-orange-600">Bounce Type: {selectedLog.metadata.bounceType}</p>
+                          {selectedLog.metadata.bounceReason && (
+                            <p className="text-sm text-orange-600 mt-1">{selectedLog.metadata.bounceReason}</p>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Troubleshooting Tips */}
+                      <div className="bg-blue-500/10 border border-blue-500/30 p-4 rounded-lg space-y-2">
+                        <p className="text-sm font-medium text-blue-600 dark:text-blue-400">Troubleshooting Tips:</p>
+                        <ul className="text-sm text-blue-600 dark:text-blue-400 list-disc list-inside space-y-1">
+                          {selectedLog.error_message?.toLowerCase().includes('authentication') && (
+                            <li>Check SMTP credentials in environment secrets (SMTP_USER, SMTP_PASSWORD)</li>
+                          )}
+                          {selectedLog.error_message?.toLowerCase().includes('connection') && (
+                            <li>Verify SMTP host and port settings (SMTP_HOST, SMTP_PORT)</li>
+                          )}
+                          {selectedLog.error_message?.toLowerCase().includes('timeout') && (
+                            <li>The mail server may be temporarily unavailable. Try again later.</li>
+                          )}
+                          {selectedLog.error_message?.toLowerCase().includes('rejected') && (
+                            <li>The recipient address may be invalid or the mailbox may be full</li>
+                          )}
+                          {selectedLog.error_message?.toLowerCase().includes('spam') && (
+                            <li>Email may have been flagged as spam. Check email content and sender reputation.</li>
+                          )}
+                          {selectedLog.metadata?.bounceType === 'hard' && (
+                            <li>Hard bounce: The email address does not exist. Remove from mailing list.</li>
+                          )}
+                          {selectedLog.metadata?.bounceType === 'soft' && (
+                            <li>Soft bounce: Temporary issue (mailbox full, server busy). Will retry automatically.</li>
+                          )}
+                          <li>Check the SMTP response code above for specific error details</li>
+                          <li>Verify the recipient email address is correct and active</li>
+                          <li>Contact IT support if the issue persists</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* Raw Metadata Section */}
                 {selectedLog.metadata && Object.keys(selectedLog.metadata).length > 0 && (
                   <>
                     <Separator />
                     <div className="space-y-3">
                       <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-                        Metadata
+                        Raw Metadata (Technical Details)
                       </h4>
                       <div className="bg-muted/50 p-3 rounded-lg">
-                        <pre className="text-xs overflow-x-auto whitespace-pre-wrap">
+                        <pre className="text-xs overflow-x-auto whitespace-pre-wrap max-h-48">
                           {JSON.stringify(selectedLog.metadata, null, 2)}
                         </pre>
                       </div>
@@ -787,24 +1216,6 @@ export default function EmailTracking() {
                             {tag}
                           </Badge>
                         ))}
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {/* Error Message */}
-                {selectedLog.error_message && (
-                  <>
-                    <Separator />
-                    <div className="space-y-3">
-                      <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-2">
-                        <AlertTriangle className="h-4 w-4 text-red-500" />
-                        Error Details
-                      </h4>
-                      <div className="bg-red-500/10 border border-red-500/30 p-3 rounded-lg">
-                        <p className="text-sm text-red-600 dark:text-red-400">
-                          {selectedLog.error_message}
-                        </p>
                       </div>
                     </div>
                   </>
