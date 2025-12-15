@@ -9,6 +9,7 @@ import { isMobileApp } from './utils/platformDetection';
 
 // Import AppProviders
 import { AppProviders } from './context/AppContext';
+import { NavigationProvider } from './context/NavigationContext';
 
 // Lazy-loaded pages for better code splitting
 const Index = lazy(() => import('./pages/Index'));
@@ -353,34 +354,36 @@ function App() {
         >
           <QueryClientProvider client={queryClient}>
             <Router>
-              <AppProviders>
-                <NotificationProvider>
-                  <LiveDashboardProvider>
-                    <FCMInitializer />
-                    <Suspense fallback={<PageLoader />}>
-                      <AuthGuard>
-                        <MobilePermissionGuard>
-                          <AppRoutes />
-                        </MobilePermissionGuard>
-                      </AuthGuard>
-                    </Suspense>
-                    <AppNotifications />
-                  </LiveDashboardProvider>
-                  <Toaster />
-                  <SonnerToaster />
-                  <HotToaster
-                    position="bottom-center"
-                    toastOptions={{
-                      style: {
-                        background: '#fff',
-                        border: '1px solid #e5e7eb',
-                        padding: '12px',
-                        color: '#111',
-                      },
-                    }}
-                  />
-                </NotificationProvider>
-              </AppProviders>
+              <NavigationProvider>
+                <AppProviders>
+                  <NotificationProvider>
+                    <LiveDashboardProvider>
+                      <FCMInitializer />
+                      <Suspense fallback={<PageLoader />}>
+                        <AuthGuard>
+                          <MobilePermissionGuard>
+                            <AppRoutes />
+                          </MobilePermissionGuard>
+                        </AuthGuard>
+                      </Suspense>
+                      <AppNotifications />
+                    </LiveDashboardProvider>
+                    <Toaster />
+                    <SonnerToaster />
+                    <HotToaster
+                      position="bottom-center"
+                      toastOptions={{
+                        style: {
+                          background: '#fff',
+                          border: '1px solid #e5e7eb',
+                          padding: '12px',
+                          color: '#111',
+                        },
+                      }}
+                    />
+                  </NotificationProvider>
+                </AppProviders>
+              </NavigationProvider>
             </Router>
           </QueryClientProvider>
         </ErrorBoundary>
