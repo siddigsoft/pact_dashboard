@@ -72,7 +72,8 @@ const menuSections: MenuSection[] = [
     id: 'finance',
     title: 'Finance & Wallet',
     items: [
-      { id: 'wallet', icon: Wallet, label: 'My Wallet', path: '/wallet', description: 'Balance and transactions' },
+      { id: 'wallet', icon: Wallet, label: 'My Wallet', path: '/wallet', description: 'Balance and transactions',
+        roles: ['SuperAdmin', 'Admin', 'FinancialAdmin', 'Field Operation Manager (FOM)', 'Supervisor', 'ProjectManager', 'SeniorOperationsLead'] },
       { id: 'cost-submission', icon: Receipt, label: 'Submit Costs', path: '/cost-submission', description: 'Expense submissions',
         roles: ['SuperAdmin', 'Admin', 'DataCollector', 'Coordinator', 'Supervisor'] },
       { id: 'finance', icon: DollarSign, label: 'Finance Overview', path: '/finance', description: 'Financial dashboard',
