@@ -53,9 +53,34 @@ function generateBilingualEmailHtml(
   message_ar: string,
   recipientName: string,
   actionUrl?: string,
-  eventType?: string
+  eventType?: string,
+  recipientRoles?: string[]
 ): string {
   const priorityColor = eventType?.includes('urgent') || eventType?.includes('rejected') ? '#dc2626' : '#9b87f5'
+  
+  const roleDisplayNames: Record<string, { en: string; ar: string }> = {
+    'super_admin': { en: 'Super Administrators', ar: 'المسؤولين الكبار' },
+    'admin': { en: 'Administrators', ar: 'المسؤولين' },
+    'fom': { en: 'Field Operations Managers', ar: 'مديري العمليات الميدانية' },
+    'supervisor': { en: 'Supervisors', ar: 'المشرفين' },
+    'coordinator': { en: 'Coordinators', ar: 'المنسقين' },
+    'data_collector': { en: 'Data Collectors', ar: 'جامعي البيانات' },
+    'finance': { en: 'Finance Team', ar: 'فريق المالية' },
+    'project_manager': { en: 'Project Managers', ar: 'مديري المشاريع' },
+    'viewer': { en: 'Viewers', ar: 'المشاهدين' }
+  }
+  
+  const uniqueRoles = [...new Set(recipientRoles || [])]
+  const rolesEn = uniqueRoles.map(role => roleDisplayNames[role]?.en || role).join(', ')
+  const rolesAr = uniqueRoles.map(role => roleDisplayNames[role]?.ar || role).join('، ')
+  
+  const recipientNoticeEn = uniqueRoles.length > 0 
+    ? `This notification has been sent to relevant management including ${rolesEn} for oversight and accountability.`
+    : 'This notification has been sent to relevant management for oversight and accountability.'
+  
+  const recipientNoticeAr = uniqueRoles.length > 0
+    ? `تم إرسال هذا الإشعار إلى الإدارة المعنية بما في ذلك ${rolesAr} للإشراف والمساءلة.`
+    : 'تم إرسال هذا الإشعار إلى الإدارة المعنية للإشراف والمساءلة.'
   
   return `
     <!DOCTYPE html>
@@ -84,7 +109,7 @@ function generateBilingualEmailHtml(
         <!-- Arabic Section -->
         <div style="margin-bottom: 30px; padding: 20px; background-color: #f0f4f8; border-radius: 8px; border-right: 4px solid ${priorityColor}; direction: rtl; text-align: right;">
           <h2 style="color: #1a1a2e; margin: 0 0 15px 0; font-size: 18px; font-family: 'Segoe UI', Tahoma, Arial, sans-serif;">${title_ar}</h2>
-          <p style="color: #333; font-size: 16px; line-height: 1.8; margin: 0 0 10px 0; font-family: 'Segoe UI', Tahoma, Arial, sans-serif;">عزيزي ${recipientName}،</p>
+          <p style="color: #333; font-size: 16px; line-height: 1.8; margin: 0 0 10px 0; font-family: 'Segoe UI', Tahoma, Arial, sans-serif;">مرحبا ${recipientName}،</p>
           <p style="color: #333; font-size: 15px; line-height: 1.8; margin: 0; font-family: 'Segoe UI', Tahoma, Arial, sans-serif;">${message_ar}</p>
         </div>
 
@@ -99,10 +124,19 @@ function generateBilingualEmailHtml(
 
         <!-- Footer -->
         <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+        
+        <!-- Recipients Notice -->
+        <p style="color: #666; font-size: 12px; text-align: center; margin-bottom: 15px;">
+          ${recipientNoticeEn}<br>
+          <span style="direction: rtl; display: inline-block;">${recipientNoticeAr}</span>
+        </p>
+        
+        <!-- Platform Info -->
         <p style="color: #999; font-size: 12px; text-align: center;">
-          This is an automated notification from PACT Command Center.<br>
-          هذا إشعار آلي من مركز قيادة باكت.<br><br>
-          ICT Team - PACT Sudan
+          This is an automated message from PACT Workflow Platform.<br>
+          هذه رسالة آلية من منصة باكت للعمليات الميدانية<br><br>
+          ICT Team - PACT Command Center Platform<br>
+          فريق تكنولوجيا المعلومات - منصة مركز قيادة باكت
         </p>
       </div>
     </body>
@@ -269,6 +303,7 @@ serve(async (req) => {
       // Send email if configured
       if (nodemailerTransporter && recipient.email && send_email) {
         try {
+          const allRecipientRoles = recipients.map(r => r.role).filter(Boolean)
           const emailHtml = generateBilingualEmailHtml(
             finalTitleEn,
             finalTitleAr,
@@ -276,7 +311,8 @@ serve(async (req) => {
             message_ar || message_en,
             recipient.full_name || 'Team Member',
             action_url,
-            event_type
+            event_type,
+            allRecipientRoles
           )
 
           const mailOptions = {

@@ -2,6 +2,46 @@ import { supabase } from '@/integrations/supabase/client';
 import { EmailNotificationService } from './email-notification.service';
 
 export type NotificationCategory = 'assignments' | 'approvals' | 'financial' | 'team' | 'system' | 'signatures' | 'calls' | 'messages';
+
+/**
+ * Helper function to format role strings into displayable titles
+ * Supports both English display and bilingual greetings
+ */
+export const formatRoleName = (role: string | null | undefined): { en: string; ar: string } => {
+  if (!role) return { en: 'Team Member', ar: 'عضو الفريق' };
+  
+  const roleMap: Record<string, { en: string; ar: string }> = {
+    'super_admin': { en: 'Super Administrator', ar: 'المدير العام' },
+    'superAdmin': { en: 'Super Administrator', ar: 'المدير العام' },
+    'SuperAdmin': { en: 'Super Administrator', ar: 'المدير العام' },
+    'admin': { en: 'Administrator', ar: 'المدير' },
+    'Admin': { en: 'Administrator', ar: 'المدير' },
+    'fom': { en: 'Field Operations Manager', ar: 'مدير العمليات الميدانية' },
+    'FOM': { en: 'Field Operations Manager', ar: 'مدير العمليات الميدانية' },
+    'supervisor': { en: 'Hub Supervisor', ar: 'مشرف المحور' },
+    'Supervisor': { en: 'Hub Supervisor', ar: 'مشرف المحور' },
+    'coordinator': { en: 'Coordinator', ar: 'المنسق' },
+    'Coordinator': { en: 'Coordinator', ar: 'المنسق' },
+    'data_collector': { en: 'Data Collector', ar: 'جامع البيانات' },
+    'dataCollector': { en: 'Data Collector', ar: 'جامع البيانات' },
+    'enumerator': { en: 'Enumerator', ar: 'العداد' },
+    'Enumerator': { en: 'Enumerator', ar: 'العداد' },
+    'finance': { en: 'Finance Officer', ar: 'موظف المالية' },
+    'Finance': { en: 'Finance Officer', ar: 'موظف المالية' },
+    'viewer': { en: 'Viewer', ar: 'مشاهد' },
+    'Viewer': { en: 'Viewer', ar: 'مشاهد' },
+  };
+  
+  return roleMap[role] || { en: role.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()), ar: role };
+};
+
+// Type for hub management users with role information
+interface HubManagementUser {
+  id: string;
+  full_name: string;
+  email: string;
+  role: string;
+}
 export type NotificationPriority = 'low' | 'medium' | 'high' | 'urgent';
 
 interface TriggerNotificationOptions {
@@ -772,16 +812,17 @@ export const NotificationTriggerService = {
   /**
    * Helper: Find all management users for hub notifications
    * Includes: Hub Supervisors, Hub FOMs, all Super Admins, and all Admins
+   * Returns role information for personalized email greetings
    */
-  async getHubManagementUsers(hubId: string): Promise<{ id: string; full_name: string; email: string }[]> {
+  async getHubManagementUsers(hubId: string): Promise<HubManagementUser[]> {
     try {
-      const allUsers: { id: string; full_name: string; email: string }[] = [];
+      const allUsers: HubManagementUser[] = [];
       const seenIds = new Set<string>();
 
       // 1. Get hub supervisors (role = 'supervisor' in the specific hub)
       const { data: supervisors, error: supError } = await supabase
         .from('profiles')
-        .select('id, full_name, email')
+        .select('id, full_name, email, role')
         .eq('hub_id', hubId)
         .eq('role', 'supervisor');
 
@@ -789,7 +830,7 @@ export const NotificationTriggerService = {
         supervisors.forEach(s => {
           if (!seenIds.has(s.id)) {
             seenIds.add(s.id);
-            allUsers.push(s);
+            allUsers.push({ ...s, role: s.role || 'supervisor' });
           }
         });
       }
@@ -797,7 +838,7 @@ export const NotificationTriggerService = {
       // 2. Get hub FOMs (role = 'fom' in the specific hub)
       const { data: foms, error: fomError } = await supabase
         .from('profiles')
-        .select('id, full_name, email')
+        .select('id, full_name, email, role')
         .eq('hub_id', hubId)
         .eq('role', 'fom');
 
@@ -805,7 +846,7 @@ export const NotificationTriggerService = {
         foms.forEach(f => {
           if (!seenIds.has(f.id)) {
             seenIds.add(f.id);
-            allUsers.push(f);
+            allUsers.push({ ...f, role: f.role || 'fom' });
           }
         });
       }
@@ -813,14 +854,14 @@ export const NotificationTriggerService = {
       // 3. Get all super admins (global, not hub-specific)
       const { data: superAdmins, error: saError } = await supabase
         .from('profiles')
-        .select('id, full_name, email')
+        .select('id, full_name, email, role')
         .in('role', ['super_admin', 'superAdmin']);
 
       if (!saError && superAdmins) {
         superAdmins.forEach(sa => {
           if (!seenIds.has(sa.id)) {
             seenIds.add(sa.id);
-            allUsers.push(sa);
+            allUsers.push({ ...sa, role: sa.role || 'super_admin' });
           }
         });
       }
@@ -828,14 +869,14 @@ export const NotificationTriggerService = {
       // 4. Get all admins (global, not hub-specific)
       const { data: admins, error: adminError } = await supabase
         .from('profiles')
-        .select('id, full_name, email')
+        .select('id, full_name, email, role')
         .eq('role', 'admin');
 
       if (!adminError && admins) {
         admins.forEach(a => {
           if (!seenIds.has(a.id)) {
             seenIds.add(a.id);
-            allUsers.push(a);
+            allUsers.push({ ...a, role: a.role || 'admin' });
           }
         });
       }
@@ -913,18 +954,20 @@ export const NotificationTriggerService = {
         });
         if (sent) successCount++;
 
-        // Send bilingual email
+        // Send bilingual email with role-based greeting
         if (user.email) {
           try {
+            const roleInfo = formatRoleName(user.role);
             await EmailNotificationService.sendMMPForwardedToCoordinators(
               user.email,
               user.full_name || 'Team Member',
               mmpName,
               sender,
               coordinatorCount,
-              mmpId
+              mmpId,
+              roleInfo
             );
-            console.log(`[NOTIFICATION] Sent bilingual MMP->Coordinators email to: ${user.email}`);
+            console.log(`[NOTIFICATION] Sent bilingual MMP->Coordinators email to ${roleInfo.en}: ${user.email}`);
           } catch (emailError) {
             console.error(`[NOTIFICATION] Failed to send bilingual email to ${user.email}:`, emailError);
           }
@@ -934,7 +977,7 @@ export const NotificationTriggerService = {
       // 3. Also notify Admins and Super Admins who may not be in the hub
       const { data: adminUsers, error: adminError } = await supabase
         .from('profiles')
-        .select('id, full_name, email')
+        .select('id, full_name, email, role')
         .in('role', ['admin', 'super_admin', 'Admin', 'SuperAdmin']);
 
       if (adminError) {
@@ -959,20 +1002,22 @@ export const NotificationTriggerService = {
           });
           if (sent) successCount++;
 
-          // Send bilingual email
+          // Send bilingual email with role-based greeting
           if (admin.email) {
             try {
+              const roleInfo = formatRoleName(admin.role);
               await EmailNotificationService.sendMMPForwardedToCoordinators(
                 admin.email,
                 admin.full_name || 'Administrator',
                 mmpName,
                 sender,
                 coordinatorCount,
-                mmpId
+                mmpId,
+                roleInfo
               );
-              console.log(`[NOTIFICATION] Sent bilingual MMP->Coordinators email to Admin: ${admin.email}`);
+              console.log(`[NOTIFICATION] Sent bilingual MMP->Coordinators email to ${roleInfo.en}: ${admin.email}`);
             } catch (emailError) {
-              console.error(`[NOTIFICATION] Failed to send bilingual email to Admin ${admin.email}:`, emailError);
+              console.error(`[NOTIFICATION] Failed to send bilingual email to ${admin.email}:`, emailError);
             }
           }
         }
@@ -981,6 +1026,116 @@ export const NotificationTriggerService = {
       return successCount;
     } catch (error) {
       console.error('Failed to send MMP forwarded to coordinators notifications:', error);
+      return 0;
+    }
+  },
+
+  /**
+   * Notify supervisors, FOMs, admins, and super admins when a site is verified by a coordinator
+   * - Sends in-app notification to all hub management users
+   * - Sends bilingual email with role-based personalized greetings
+   */
+  async siteVerifiedByCoordinator(
+    hubId: string,
+    siteName: string,
+    mmpName: string,
+    coordinatorName: string,
+    siteId?: string
+  ): Promise<number> {
+    try {
+      let successCount = 0;
+
+      // 1. Get hub management users (supervisors, FOMs, admins)
+      const managementUsers = await this.getHubManagementUsers(hubId);
+      
+      // 2. Send in-app notifications and bilingual emails to all management users
+      for (const user of managementUsers) {
+        const sent = await this.send({
+          userId: user.id,
+          title: 'Site Verified by Coordinator',
+          message: `Site "${siteName}" from MMP "${mmpName}" has been verified by Coordinator ${coordinatorName}`,
+          type: 'success',
+          category: 'assignments',
+          priority: 'medium',
+          link: siteId ? `/mmp?site=${siteId}` : '/mmp',
+          relatedEntityId: siteId,
+          relatedEntityType: 'siteVisit',
+          sendEmail: false // We send bilingual email separately
+        });
+        if (sent) successCount++;
+
+        // Send bilingual email with role-based greeting
+        if (user.email) {
+          try {
+            const roleInfo = formatRoleName(user.role);
+            await EmailNotificationService.sendSiteVerifiedByCoordinator(
+              user.email,
+              user.full_name || 'Team Member',
+              siteName,
+              mmpName,
+              coordinatorName,
+              siteId,
+              roleInfo
+            );
+            console.log(`[NOTIFICATION] Sent bilingual Site Verified email to ${roleInfo.en}: ${user.email}`);
+          } catch (emailError) {
+            console.error(`[NOTIFICATION] Failed to send bilingual email to ${user.email}:`, emailError);
+          }
+        }
+      }
+
+      // 3. Also notify Admins and Super Admins who may not be in the hub
+      const { data: adminUsers, error: adminError } = await supabase
+        .from('profiles')
+        .select('id, full_name, email, role')
+        .in('role', ['admin', 'super_admin', 'Admin', 'SuperAdmin']);
+
+      if (adminError) {
+        console.error('Error fetching admins for Site Verified notification:', adminError);
+      } else if (adminUsers && adminUsers.length > 0) {
+        // Filter out admins already notified via hub management
+        const notifiedIds = new Set(managementUsers.map(u => u.id));
+        const remainingAdmins = adminUsers.filter(a => !notifiedIds.has(a.id));
+
+        for (const admin of remainingAdmins) {
+          const sent = await this.send({
+            userId: admin.id,
+            title: 'Site Verified by Coordinator',
+            message: `Site "${siteName}" from MMP "${mmpName}" has been verified by Coordinator ${coordinatorName}`,
+            type: 'success',
+            category: 'assignments',
+            priority: 'medium',
+            link: siteId ? `/mmp?site=${siteId}` : '/mmp',
+            relatedEntityId: siteId,
+            relatedEntityType: 'siteVisit',
+            sendEmail: false
+          });
+          if (sent) successCount++;
+
+          // Send bilingual email with role-based greeting
+          if (admin.email) {
+            try {
+              const roleInfo = formatRoleName(admin.role);
+              await EmailNotificationService.sendSiteVerifiedByCoordinator(
+                admin.email,
+                admin.full_name || 'Administrator',
+                siteName,
+                mmpName,
+                coordinatorName,
+                siteId,
+                roleInfo
+              );
+              console.log(`[NOTIFICATION] Sent bilingual Site Verified email to ${roleInfo.en}: ${admin.email}`);
+            } catch (emailError) {
+              console.error(`[NOTIFICATION] Failed to send bilingual email to ${admin.email}:`, emailError);
+            }
+          }
+        }
+      }
+
+      return successCount;
+    } catch (error) {
+      console.error('Failed to send site verified notifications:', error);
       return 0;
     }
   },

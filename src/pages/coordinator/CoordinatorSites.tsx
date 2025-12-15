@@ -1410,6 +1410,33 @@ const CoordinatorSites: React.FC = () => {
         description: 'The site has been marked as verified.',
       });
 
+      // Trigger notification to supervisors, FOMs, admins, and super admins
+      try {
+        const site = sites.find(s => s.id === siteId);
+        if (site?.mmp_file_id) {
+          // Fetch MMP name and hub_id for notification
+          const { data: mmpInfo, error: mmpInfoError } = await supabase
+            .from('mmp_files')
+            .select('name, hub_id')
+            .eq('id', site.mmp_file_id)
+            .single();
+          
+          if (!mmpInfoError && mmpInfo) {
+            const coordinatorName = currentUser?.fullName || currentUser?.username || currentUser?.email || 'Coordinator';
+            await NotificationTriggerService.siteVerifiedByCoordinator(
+              mmpInfo.hub_id,
+              site.site_name,
+              mmpInfo.name || 'MMP',
+              coordinatorName,
+              siteId
+            );
+            console.log(`[NOTIFICATION] Site verified notification sent for site: ${site.site_name}`);
+          }
+        }
+      } catch (notifError) {
+        console.warn('Failed to send site verified notification:', notifError);
+      }
+
       // Reload sites and badge counts
       loadSites();
       // Reload badge counts
