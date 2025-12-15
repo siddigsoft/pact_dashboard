@@ -775,14 +775,7 @@ ${messageAr}
 الحالة: تم التحقق
 
 ---
-
-Management Oversight Notice:
-This notification is sent to Hub Supervisors, Field Operations Managers, Administrators, and Super Administrators for transparency and accountability purposes.
-
-إشعار الرقابة الإدارية:
-يتم إرسال هذا الإشعار إلى مشرفي المحاور ومديري العمليات الميدانية والمسؤولين والمسؤولين الأعلى لأغراض الشفافية والمساءلة.
-
-- PACT Workflow Platform | منصة باكت`;
+PACT Workflow Platform | منصة باكت`;
 
     return this.sendEmail({
       to: email,
