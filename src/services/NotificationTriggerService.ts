@@ -879,24 +879,110 @@ export const NotificationTriggerService = {
   },
 
   /**
-   * Notify supervisor when MMP is forwarded from FOM to Coordinators
+   * Notify supervisors, admins, and super admins when MMP is forwarded from FOM to Coordinators
+   * - Sends in-app notification to all hub management users
+   * - Sends bilingual email to supervisors, admins, and super admins
    */
   async mmpForwardedToCoordinators(
     hubId: string,
     mmpName: string,
     coordinatorCount: number,
-    mmpId?: string
+    mmpId?: string,
+    forwarderName?: string
   ): Promise<number> {
-    return await this.notifyHubSupervisor(hubId, {
-      title: 'MMP Forwarded to Coordinators',
-      message: `MMP "${mmpName}" has been forwarded to ${coordinatorCount} coordinator(s) for review`,
-      type: 'info',
-      category: 'assignments',
-      priority: 'medium',
-      link: '/mmp',
-      relatedEntityId: mmpId,
-      relatedEntityType: 'mmpFile'
-    });
+    try {
+      let successCount = 0;
+      const sender = forwarderName || 'Field Operations Manager';
+
+      // 1. Get hub management users (supervisors, FOMs, admins)
+      const managementUsers = await this.getHubManagementUsers(hubId);
+      
+      // 2. Send in-app notifications to all management users
+      for (const user of managementUsers) {
+        const sent = await this.send({
+          userId: user.id,
+          title: 'MMP Forwarded to Coordinators',
+          message: `MMP "${mmpName}" has been forwarded to ${coordinatorCount} coordinator(s) for site assignment by ${sender}`,
+          type: 'info',
+          category: 'assignments',
+          priority: 'high',
+          link: mmpId ? `/mmp/${mmpId}` : '/mmp',
+          relatedEntityId: mmpId,
+          relatedEntityType: 'mmpFile',
+          sendEmail: false // We send bilingual email separately
+        });
+        if (sent) successCount++;
+
+        // Send bilingual email
+        if (user.email) {
+          try {
+            await EmailNotificationService.sendMMPForwardedToCoordinators(
+              user.email,
+              user.full_name || 'Team Member',
+              mmpName,
+              sender,
+              coordinatorCount,
+              mmpId
+            );
+            console.log(`[NOTIFICATION] Sent bilingual MMP->Coordinators email to: ${user.email}`);
+          } catch (emailError) {
+            console.error(`[NOTIFICATION] Failed to send bilingual email to ${user.email}:`, emailError);
+          }
+        }
+      }
+
+      // 3. Also notify Admins and Super Admins who may not be in the hub
+      const { data: adminUsers, error: adminError } = await supabase
+        .from('profiles')
+        .select('id, full_name, email')
+        .in('role', ['admin', 'super_admin', 'Admin', 'SuperAdmin']);
+
+      if (adminError) {
+        console.error('Error fetching admins for MMP->Coordinators notification:', adminError);
+      } else if (adminUsers && adminUsers.length > 0) {
+        // Filter out admins already notified via hub management
+        const notifiedIds = new Set(managementUsers.map(u => u.id));
+        const remainingAdmins = adminUsers.filter(a => !notifiedIds.has(a.id));
+
+        for (const admin of remainingAdmins) {
+          const sent = await this.send({
+            userId: admin.id,
+            title: 'MMP Forwarded to Coordinators',
+            message: `MMP "${mmpName}" has been forwarded to ${coordinatorCount} coordinator(s) for site assignment by ${sender}`,
+            type: 'info',
+            category: 'assignments',
+            priority: 'high',
+            link: mmpId ? `/mmp/${mmpId}` : '/mmp',
+            relatedEntityId: mmpId,
+            relatedEntityType: 'mmpFile',
+            sendEmail: false
+          });
+          if (sent) successCount++;
+
+          // Send bilingual email
+          if (admin.email) {
+            try {
+              await EmailNotificationService.sendMMPForwardedToCoordinators(
+                admin.email,
+                admin.full_name || 'Administrator',
+                mmpName,
+                sender,
+                coordinatorCount,
+                mmpId
+              );
+              console.log(`[NOTIFICATION] Sent bilingual MMP->Coordinators email to Admin: ${admin.email}`);
+            } catch (emailError) {
+              console.error(`[NOTIFICATION] Failed to send bilingual email to Admin ${admin.email}:`, emailError);
+            }
+          }
+        }
+      }
+
+      return successCount;
+    } catch (error) {
+      console.error('Failed to send MMP forwarded to coordinators notifications:', error);
+      return 0;
+    }
   },
 
   /**
