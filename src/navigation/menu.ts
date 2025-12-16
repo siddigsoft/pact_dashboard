@@ -91,7 +91,7 @@ export const getWorkflowMenuGroups = (
   if (!isHidden('/projects') && (isAdmin || isICT || isProjectManager || perms.projects)) {
     planningItems.push({ id: 'projects', title: 'Projects', url: '/projects', icon: FolderKanban, priority: 1, isPinned: isPinned('/projects') });
   }
-  if (!isHidden('/mmp') && (isAdmin || isICT || perms.mmp || isCoordinator)) {
+  if (!isHidden('/mmp') && (isAdmin || isICT || perms.mmp || isCoordinator || isDataCollector)) {
     const mmpTitle = (isDataCollector || isCoordinator) ? 'My Sites Management' : 'MMP Management';
     planningItems.push({ id: 'mmp-management', title: mmpTitle, url: '/mmp', icon: Database, priority: 2, isPinned: isPinned('/mmp') });
   }
