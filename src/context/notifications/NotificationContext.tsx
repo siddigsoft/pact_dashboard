@@ -174,11 +174,12 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         return;
       }
       try {
-        // Fetch notifications where recipient_id matches current user
+        // Fetch notifications where recipient_id OR user_id matches current user
+        // Database has both columns - recipient_id is the primary one in extended schema
         const { data, error } = await supabase
           .from('notifications')
           .select('*')
-          .eq('recipient_id', currentUserId)
+          .or(`recipient_id.eq.${currentUserId},user_id.eq.${currentUserId}`)
           .order('created_at', { ascending: false })
           .limit(50);
         if (!cancelled) {
@@ -201,10 +202,11 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     const subscribeRealtime = () => {
       if (!currentUserId) return;
       try {
-        // Subscribe to notifications for recipient_id
+        // Subscribe to notifications for recipient_id or user_id
+        // Database uses recipient_id as primary column in extended schema
         channel = supabase
           .channel(`notifications-${currentUserId}`)
-          // Listen for recipient_id
+          // Listen for recipient_id (primary) and user_id (fallback)
           .on('postgres_changes', {
             event: 'INSERT',
             schema: 'public',
@@ -212,7 +214,24 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
             filter: `recipient_id=eq.${currentUserId}`,
           }, (payload) => {
             const n = mapDbToNotification((payload as any).new);
-            if (filterByRoleAndProject(n)) {
+            // Only add if it matches current user
+            if (n.userId === currentUserId && filterByRoleAndProject(n)) {
+              setAppNotifications(prev => {
+                // Avoid duplicates
+                if (prev.some(p => p.id === n.id)) return prev;
+                return [n, ...prev].slice(0, 50);
+              });
+            }
+          })
+          .on('postgres_changes', {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'notifications',
+            filter: `user_id=eq.${currentUserId}`,
+          }, (payload) => {
+            const n = mapDbToNotification((payload as any).new);
+            // Only add if it matches current user (double check)
+            if (n.userId === currentUserId && filterByRoleAndProject(n)) {
               setAppNotifications(prev => {
                 // Avoid duplicates
                 if (prev.some(p => p.id === n.id)) return prev;
@@ -227,9 +246,11 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
             filter: `recipient_id=eq.${currentUserId}`,
           }, (payload) => {
             const updated = mapDbToNotification((payload as any).new);
-            setAppNotifications(prev => 
-              prev.map(n => n.id === updated.id ? updated : n)
-            );
+            if (updated.userId === currentUserId) {
+              setAppNotifications(prev => 
+                prev.map(n => n.id === updated.id ? updated : n)
+              );
+            }
           })
           .on('postgres_changes', {
             event: 'UPDATE',
@@ -238,9 +259,11 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
             filter: `user_id=eq.${currentUserId}`,
           }, (payload) => {
             const updated = mapDbToNotification((payload as any).new);
-            setAppNotifications(prev => 
-              prev.map(n => n.id === updated.id ? updated : n)
-            );
+            if (updated.userId === currentUserId) {
+              setAppNotifications(prev => 
+                prev.map(n => n.id === updated.id ? updated : n)
+              );
+            }
           })
           .on('postgres_changes', {
             event: 'DELETE',
