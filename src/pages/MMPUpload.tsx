@@ -99,8 +99,9 @@ const MMPUpload = () => {
   const [validationErrors, setValidationErrors] = useState<any[] | null>(null);
   const [validationWarnings, setValidationWarnings] = useState<any[] | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const isAdmin = hasAnyRole(['admin']);
-  const canCreate = (checkPermission('mmp', 'create') || isAdmin) && hasAnyRole(['admin', 'ict']);
+  const isAdmin = hasAnyRole(['admin', 'Admin', 'Super Admin', 'superadmin', 'super admin']);
+  const isICT = hasAnyRole(['ict', 'ICT']);
+  const canCreate = checkPermission('mmp', 'create') || isAdmin || isICT;
   const { getMMPById, archiveMMP, approveMMP, deleteMMP, resetMMP } = useMMP();
 
   const [isParsing, setIsParsing] = useState(false);
