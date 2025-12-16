@@ -2590,6 +2590,46 @@ const MMP = () => {
 
   return (
     <div className="space-y-6 sm:space-y-10 min-h-screen bg-slate-50 dark:bg-gray-900 py-4 sm:py-8 px-1 sm:px-4 md:px-8">
+      {/* Header */}
+      <div className="flex flex-col gap-4 bg-blue-600 dark:bg-blue-900 p-2 sm:p-4 md:p-7 rounded-2xl shadow-xl border border-blue-100 dark:border-blue-900">
+        <div className="flex items-start sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+            <Button variant="ghost" size="icon" onClick={() => navigate('/dashboard')} className="hover:bg-blue-100 dark:hover:bg-blue-900/40 flex-shrink-0 h-8 w-8 sm:h-10 sm:w-10">
+              <ChevronLeft className="h-4 w-4 sm:h-5 sm:w-5 text-white dark:text-blue-200" />
+            </Button>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-3">
+                <h1 className="text-xl sm:text-2xl md:text-3xl font-extrabold text-white tracking-tight truncate">
+                  {canClaimSites ? 'My Sites Management' : 'MMP Management'}
+                </h1>
+                <DataFreshnessBadge 
+                  lastUpdated={mmpFiles.length > 0 ? new Date() : null}
+                  onRefresh={async () => { await queryClient.invalidateQueries({ queryKey: ['mmp'] }); }}
+                  staleThresholdMinutes={5}
+                  variant="compact"
+                />
+              </div>
+              <p className="text-blue-100 dark:text-blue-200/80 font-medium text-xs sm:text-sm md:text-base mt-1 leading-tight">
+                {isAdmin || isICT
+                  ? 'Upload, validate, and forward MMPs to Field Operations Managers'
+                  : isFOM
+                    ? 'Process MMPs, attach permits, and assign sites to coordinators'
+                    : canClaimSites
+                      ? 'View and manage your assigned sites.'
+                      : 'Manage your MMP files and site visits'}
+              </p>
+            </div>
+          </div>
+          {canCreate && (
+            <Button className="bg-blue-700 hover:bg-blue-800 text-white shadow-lg hover:shadow-xl transition-all duration-300 px-3 sm:px-4 md:px-6 py-2 rounded-full font-semibold text-xs sm:text-sm md:text-base flex-shrink-0 whitespace-nowrap" onClick={() => navigate('/mmp/upload')}>
+              <Upload className="h-3 w-3 sm:h-4 sm:w-4 md:h-5 md:w-5 mr-1 sm:mr-2" />
+              <span className="hidden xs:inline">Upload MMP</span>
+              <span className="xs:hidden">Upload</span>
+            </Button>
+          )}
+        </div>
+      </div>
+
       {/* Body */}
       <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-lg p-2 sm:p-4 md:p-6 overflow-y-auto max-h-[calc(100vh-200px)]">
         {loading ? (

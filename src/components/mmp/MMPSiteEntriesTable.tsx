@@ -366,14 +366,14 @@ const MMPSiteEntriesTable = ({
                         )}
                       </div>
 
-                      <div className="flex flex-col gap-2">
+                      <div className="flex gap-2 sm:flex-col">
                         {showClaimButton && site.status?.toLowerCase() === 'dispatched' && !site.accepted_by && currentUserId && (
                           <AcceptSiteButton
                             site={site}
                             userId={currentUserId}
                             onAccepted={onSiteClaimed}
                             size="default"
-                            className="w-full min-h-[44px] text-base font-semibold shadow-md bg-primary hover:bg-primary/90"
+                            className="w-full sm:w-auto min-h-[44px] text-base font-semibold shadow-md bg-primary hover:bg-primary/90"
                           />
                         )}
                         {showAcceptRejectForAssigned && site.status?.toLowerCase() === 'assigned' && site.accepted_by === currentUserId && currentUserId && (
@@ -383,7 +383,7 @@ const MMPSiteEntriesTable = ({
                             onAccepted={onSiteClaimed}
                             size="default"
                             isSmartAssigned={true}
-                            className="w-full bg-blue-600 hover:bg-blue-700"
+                            className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700"
                           />
                         )}
                         {/* Show Request Advance button for accepted/ongoing/in-progress sites with transport budget */}
@@ -396,7 +396,7 @@ const MMPSiteEntriesTable = ({
                           <RequestDownPaymentButton
                             site={site}
                             size="sm"
-                            className="w-full min-h-[44px]"
+                            className="w-full sm:w-auto"
                           />
                         )}
                         {showVisitActions ? (
@@ -405,11 +405,11 @@ const MMPSiteEntriesTable = ({
                               <Button 
                                 size="sm" 
                                 onClick={() => onStartVisit(site)} 
-                                className="w-full min-h-[44px] rounded-full bg-black dark:bg-white text-white dark:text-black font-bold text-base active:scale-95 hover:bg-black/90 dark:hover:bg-white/90"
+                                className="w-full sm:w-auto min-h-[52px] sm:min-h-[36px] rounded-full bg-black dark:bg-white text-white dark:text-black font-bold text-base sm:text-sm active:scale-95 hover:bg-black/90 dark:hover:bg-white/90"
                                 data-testid={`button-start-visit-${site.id}`}
                                 aria-label={`Start visit for ${site.site_name || site.siteName || 'site'}`}
                               >
-                                <Play className="h-5 w-5 mr-2" /> Start Visit
+                                <Play className="h-5 w-5 sm:h-4 sm:w-4 mr-2" /> Start Visit
                               </Button>
                             )}
                             {(site.status?.toLowerCase() === 'ongoing' || site.status?.toLowerCase() === 'in progress' || site.status?.toLowerCase() === 'in_progress') && onCompleteVisit && (
@@ -417,7 +417,7 @@ const MMPSiteEntriesTable = ({
                                 variant="default" 
                                 size="sm" 
                                 onClick={() => onCompleteVisit(site)} 
-                                className="w-full min-h-[44px] bg-green-600 hover:bg-green-700"
+                                className="bg-green-600 hover:bg-green-700"
                                 data-testid={`button-complete-visit-${site.id}`}
                               >
                                 Complete Visit
@@ -432,7 +432,7 @@ const MMPSiteEntriesTable = ({
                             setSelectedSite(site);
                             setDetailOpen(true);
                           }}
-                          className="w-full min-h-[44px] flex items-center justify-center gap-2"
+                          className="flex items-center gap-2"
                         >
                           <Eye className="h-4 w-4" />
                           View
