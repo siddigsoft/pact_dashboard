@@ -237,6 +237,9 @@ export function EmergencySOS({ isVisible, onClose }: EmergencySOSProps) {
         related_entity_id: currentUser?.id,
         link: `/field-team?user=${currentUser?.id}${locationStr ? `&location=${encodeURIComponent(locationStr)}` : ''}`,
         is_read: false,
+        event_type: 'system',
+        status: 'pending',
+        priority: 'urgent',
       }));
 
       const { error } = await supabase.from('notifications').insert(notifications);

@@ -72,10 +72,16 @@ export async function clearForwardedWorkflow(mmpId: string) {
   if (updateError) throw updateError;
 }
 
-// Insert notifications helper
+// Insert notifications helper - ensures event_type is always set
 export async function insertNotifications(rows: any[]) {
   if (!rows?.length) return;
-  const { error } = await supabase.from('notifications').insert(rows);
+  // Add default event_type if not provided (required by database constraint)
+  const sanitizedRows = rows.map(row => ({
+    ...row,
+    event_type: row.event_type || 'system',
+    status: row.status || 'pending',
+  }));
+  const { error } = await supabase.from('notifications').insert(sanitizedRows);
   if (error) throw error;
 }
 

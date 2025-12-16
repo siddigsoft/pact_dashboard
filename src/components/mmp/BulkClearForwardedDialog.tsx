@@ -130,6 +130,8 @@ export const BulkClearForwardedDialog: React.FC<BulkClearForwardedDialogProps> =
           message: `Cleared ${mmpRows.length} MMP(s); reset ${includeSiteVisitDeletion ? totalSiteVisits : 0} site entry status(es).`,
           type: 'info',
           related_entity_type: 'mmpFile',
+          event_type: 'system',
+          status: 'pending'
         });
       }
 
