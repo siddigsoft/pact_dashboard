@@ -10,60 +10,41 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout code
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Step 2: Set up Node.js
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-
-      # Step 3: Install dependencies locally (optional)
-      - name: Install dependencies
-        run: npm ci
-
-      # Step 4: Build project locally (optional)
-      - name: Build project
-        run: npx vite build
-
-      # Step 5: Deploy via SSH to VPS using hardcoded key
-      - name: Deploy to VPS via SSH
+      - name: Deploy to VPS via SSH (hardcoded key)
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: 209.38.78.38
-          username: root
+          username: deploy
           key: |
             -----BEGIN OPENSSH PRIVATE KEY-----
             b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
-            QyNTUxOQAAACCiuuDa9zYl5zmknsJpbAIPHByKUfpWuma+XFm/aj54OQAAAJDn+7H85/ux
-            /AAAAAtzc2gtZWQyNTUxOQAAACCiuuDa9zYl5zmknsJpbAIPHByKUfpWuma+XFm/aj54OQ
-            AAAECPMfc/1PwFqCYgv4VGK6QR4IFItzQXtzjMi6fvmgHWDKK64Nr3NiXnOaSewmlsAg8c
-            HIpR+la6Zr5cWb9qPng5AAAACnZwcy1hY2Nlc3MBAgM=
+            QyNTUxOQAAACDsHZyp7Dh6a5/4HF5NES28DX+A/+6j5+cVPKRDckPGQwAAAJjD7cU1w+3F
+            NQAAAAtzc2gtZWQyNTUxOQAAACDsHZyp7Dh6a5/4HF5NES28DX+A/+6j5+cVPKRDckPGQw
+            AAAEC1vOU+lUWcM2NmT4hRzQZTI3rhDcQhthO9CUrk0lkkrewdnKnsOHprn/gcXk0RLbwN
+            f4D/7qPn5xU8pENyQ8ZDAAAAE2dpdGh1Yi1hY3Rpb25zQHBhY3QBAg==
             -----END OPENSSH PRIVATE KEY-----
           script: |
-            # Navigate to project folder
+            set -e
+            echo "🚀 Deploying PACT Frontend (static)"
             cd /home/deploy/pact_dashboard
 
-            # Clean local changes
-            git reset --hard
-            git clean -fd
+            # Ensure Git can modify files (no sudo needed)
+            chmod -R u+w .
 
             # Pull latest code
-            git pull origin master_backup
+            git fetch origin
+            git reset --hard origin/master_backup
+            git clean -fd
 
-            # Install dependencies (dev + prod)
+            # Rebuild
             npm install
+            npm run build
 
-            # Build project using Vite
-            npx vite build
+            # Set safe permissions for Nginx (world-readable)
+            find dist -type d -exec chmod 755 {} \;
+            find dist -type f -exec chmod 644 {} \;
 
-            # Ensure PM2 is installed
-            npm install -g pm2
-
-            # Reload app if running, otherwise start
-            pm2 reload pact_dashboard --update-env || pm2 start dist/index.js --name pact_dashboard
-
-            # Optional: check PM2 status
-            pm2 list
+            echo "✅ Deployment completed successfully"

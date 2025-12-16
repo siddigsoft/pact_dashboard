@@ -36,8 +36,24 @@ export async function checkAppVersion(
       .eq('platform', platform)
       .single();
 
-    if (error || !data) {
-      console.warn('Could not fetch version info:', error);
+    // Handle 404 or missing table gracefully (table might not exist yet)
+    if (error) {
+      // Only log non-404 errors (404 means table doesn't exist, which is expected during initial setup)
+      if (error.code !== 'PGRST116' && error.message !== 'JSON object requested, multiple (or no) rows returned') {
+        console.warn('Could not fetch version info:', error);
+      }
+      // Return default values - app continues to work without version checking
+      return {
+        current: currentVersion,
+        minimum_supported: currentVersion,
+        latest: currentVersion,
+        update_required: false,
+        update_available: false,
+      };
+    }
+
+    if (!data) {
+      // Table exists but no data for this platform
       return {
         current: currentVersion,
         minimum_supported: currentVersion,
