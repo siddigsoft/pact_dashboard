@@ -1401,6 +1401,33 @@ const CoordinatorSites: React.FC = () => {
         description: 'The site has been marked as verified.',
       });
 
+      // Trigger notification to supervisors, FOMs, admins, and super admins
+      try {
+        const site = sites.find(s => s.id === siteId);
+        if (site?.mmp_file_id) {
+          // Fetch MMP name and hub_id for notification
+          const { data: mmpInfo, error: mmpInfoError } = await supabase
+            .from('mmp_files')
+            .select('name, hub_id')
+            .eq('id', site.mmp_file_id)
+            .single();
+          
+          if (!mmpInfoError && mmpInfo) {
+            const coordinatorName = currentUser?.fullName || currentUser?.username || currentUser?.email || 'Coordinator';
+            await NotificationTriggerService.siteVerifiedByCoordinator(
+              mmpInfo.hub_id,
+              site.site_name,
+              mmpInfo.name || 'MMP',
+              coordinatorName,
+              siteId
+            );
+            console.log(`[NOTIFICATION] Site verified notification sent for site: ${site.site_name}`);
+          }
+        }
+      } catch (notifError) {
+        console.warn('Failed to send site verified notification:', notifError);
+      }
+
       // Reload sites and badge counts
       loadSites();
       // Reload badge counts
@@ -3149,14 +3176,14 @@ const CoordinatorSites: React.FC = () => {
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="state_required" className="flex items-center justify-center gap-2 rounded-md py-2 px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-100 data-[state=active]:text-blue-800 data-[state=active]:shadow-sm">
                 <AlertTriangle className="h-4 w-4" />
-                State Permit Required
+                State Permit Status
                 <Badge variant="secondary" className="ml-2">
                   {statePermitRequiredCount}
                 </Badge>
               </TabsTrigger>
               <TabsTrigger value="local_required" className="flex items-center justify-center gap-2 rounded-md py-2 px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-100 data-[state=active]:text-blue-800 data-[state=active]:shadow-sm">
                 <MapPin className="h-4 w-4" />
-                Local Permit Required
+                Locality Permit Status
                 <Badge variant="secondary" className="ml-2">
                   {localPermitRequiredCount}
                 </Badge>
@@ -4284,45 +4311,58 @@ const CoordinatorSites: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      {/* State Permit Question Dialog */}
-      <Dialog open={statePermitQuestionDialogOpen} onOpenChange={setStatePermitQuestionDialogOpen}>
-        <DialogContent>
+      {/* State Permit Question Dialog - Using 3 Questions Flow */}
+      <Dialog open={statePermitQuestionDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          setStatePermitQuestionDialogOpen(false);
+          setSelectedStateForWorkflow(null);
+        }
+      }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>State Permit Required</DialogTitle>
+            <DialogTitle>State Permit Verification</DialogTitle>
             <DialogDescription>
-              State permits for <strong>{selectedStateForWorkflow?.state}</strong> have not been uploaded by the FOM.
+              Please answer the following questions about state permit requirements for <strong>{selectedStateForWorkflow?.state}</strong>.
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
-            <p className="text-sm text-muted-foreground">
-              State permits are required before you can access local permits. You need to upload the state permit first.
-              Do you have the state permit for this state?
-            </p>
-          </div>
-          <DialogFooter>
-            <Button 
-              variant="outline" 
-              onClick={() => {
+          {selectedStateForWorkflow && (
+            <PermitVerificationQuestions
+              state={selectedStateForWorkflow.state}
+              locality={selectedStateForWorkflow.localities?.[0]?.locality || ''}
+              mmpFileId={selectedStateForWorkflow.localities?.[0]?.sites?.[0]?.mmp_file_id}
+              onComplete={(decision: PermitDecision) => {
+                setStatePermitQuestionDialogOpen(false);
+                
+                if (decision.canProceed) {
+                  // User has permits or can work without them
+                  if (decision.hasStatePermit) {
+                    // Show state permit upload dialog
+                    const stateKey = selectedStateForWorkflow.state;
+                    setExpandedStates(prev => new Set([...prev, stateKey]));
+                  } else {
+                    // Proceed without state permit - unlock localities for this state
+                    toast.success(`Proceeding without state permit for ${selectedStateForWorkflow.state}. Localities are now accessible.`);
+                    setSelectedStateForWorkflow(null);
+                    // Switch to local permit tab
+                    setNewSitesSubTab('local_required');
+                  }
+                } else {
+                  setSelectedStateForWorkflow(null);
+                }
+              }}
+              onSendBackToFOM={(reason: string) => {
+                setStatePermitQuestionDialogOpen(false);
+                toast.success(`Request sent to FOM to upload state permit for ${selectedStateForWorkflow?.state}. Reason: ${reason}`);
+                setSelectedStateForWorkflow(null);
+              }}
+              onCancel={() => {
                 setStatePermitQuestionDialogOpen(false);
                 setSelectedStateForWorkflow(null);
               }}
-            >
-              Cancel
-            </Button>
-            <Button 
-              onClick={() => {
-                setStatePermitQuestionDialogOpen(false);
-                // Show state permit upload dialog
-                if (selectedStateForWorkflow) {
-                  const stateKey = selectedStateForWorkflow.state;
-                  setExpandedStates(prev => new Set([...prev, stateKey]));
-                }
-              }}
-              className="bg-blue-600 hover:bg-blue-700"
-            >
-              Yes, upload state permit
-            </Button>
-          </DialogFooter>
+              existingStatePermit={false}
+              existingLocalityPermit={false}
+            />
+          )}
         </DialogContent>
       </Dialog>
 
