@@ -33,6 +33,10 @@ jobs:
 
             cd /home/deploy/pact_dashboard
 
+            # 🔑 CRITICAL FIX: Ensure 'deploy' owns all files before Git operations
+            chown -R deploy:deploy .
+
+            # Now safe to reset and clean
             git fetch origin
             git reset --hard origin/master_backup
             git clean -fd
@@ -40,7 +44,7 @@ jobs:
             npm install
             npm run build
 
-            # Ensure correct permissions for Nginx
+            # Set permissions for Nginx (www-data must read files)
             chown -R deploy:www-data dist
             find dist -type d -exec chmod 755 {} \;
             find dist -type f -exec chmod 644 {} \;
