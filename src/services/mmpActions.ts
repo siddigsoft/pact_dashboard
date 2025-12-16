@@ -72,11 +72,66 @@ export async function clearForwardedWorkflow(mmpId: string) {
   if (updateError) throw updateError;
 }
 
-// Insert notifications helper
+// Insert notifications helper - maps to actual DB schema (supports both extended and simple columns)
 export async function insertNotifications(rows: any[]) {
   if (!rows?.length) return;
-  const { error } = await supabase.from('notifications').insert(rows);
-  if (error) throw error;
+  // Database has extended columns: recipient_id, title_en, title_ar, message_en, message_ar, 
+  // event_type, entity_id, entity_type, action_url, priority, status, etc.
+  // Also has simple columns: user_id, title, message, type, link, related_entity_id, related_entity_type
+  // We'll populate both sets to ensure compatibility
+  const sanitizedRows = rows.map(row => {
+    const recipientId = row.recipient_id || row.user_id;
+    const titleEn = row.title_en || row.title || '';
+    const titleAr = row.title_ar || row.title || '';
+    const messageEn = row.message_en || row.message || '';
+    const messageAr = row.message_ar || row.message || '';
+    const eventType = row.event_type || row.type || 'system';
+    const entityId = row.entity_id || row.related_entity_id || null;
+    const entityType = row.entity_type || row.related_entity_type || null;
+    const actionUrl = row.action_url || row.link || null;
+    const priority = row.priority || 'normal';
+    
+    // Map event_type to type for simple columns (info, success, warning, error)
+    let type = 'info';
+    if (row.type && ['info', 'success', 'warning', 'error'].includes(row.type)) {
+      type = row.type;
+    } else if (row.priority === 'urgent') {
+      type = 'error';
+    } else if (row.priority === 'high') {
+      type = 'warning';
+    } else if (row.event_type === 'system') {
+      type = 'info';
+    }
+    
+    return {
+      // Extended columns (primary)
+      recipient_id: recipientId,
+      title_en: titleEn,
+      title_ar: titleAr,
+      message_en: messageEn,
+      message_ar: messageAr,
+      event_type: eventType,
+      entity_id: entityId,
+      entity_type: entityType,
+      action_url: actionUrl,
+      priority: priority,
+      status: row.status || 'pending',
+      // Simple columns (for backward compatibility)
+      user_id: recipientId,
+      title: titleEn, // Use English title for simple column
+      message: messageEn, // Use English message for simple column
+      type: type,
+      link: actionUrl,
+      related_entity_id: entityId,
+      related_entity_type: entityType,
+      is_read: false,
+    };
+  });
+  const { error } = await supabase.from('notifications').insert(sanitizedRows);
+  if (error) {
+    console.error('[insertNotifications] Error inserting notifications:', error);
+    throw error;
+  }
 }
 
 // Batch update mmp_site_entries forwarding to coordinator
