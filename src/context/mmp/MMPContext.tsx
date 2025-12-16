@@ -208,8 +208,14 @@ const transformDBToMMPFile = (dbRecord: any): MMPFile => {
         verification_notes: migrated.verification_notes,
         dispatched_by: migrated.dispatched_by,
         dispatched_at: migrated.dispatched_at,
+        accepted_by: migrated.accepted_by,
+        accepted_at: migrated.accepted_at,
+        claimed_by: migrated.claimed_by,
+        claimed_at: migrated.claimed_at,
+        cost_acknowledged: migrated.cost_acknowledged ?? (migrated.additional_data || {})?.cost_acknowledged,
         additionalData: migrated.additional_data || {},
         status: migrated.status,
+        forwardedToUserId: migrated.forwarded_to_user_id,
       };
     });
   } else if (dbRecord.site_entries) {
@@ -568,6 +574,7 @@ export const useMMPProvider = () => {
             verified_at: migrated.verified_at ?? migrated.verifiedAt ?? null,
             dispatched_by: migrated.dispatched_by ?? migrated.dispatchedBy ?? null,
             dispatched_at: migrated.dispatched_at ?? migrated.dispatchedAt ?? null,
+            forwarded_to_user_id: migrated.forwarded_to_user_id ?? migrated.forwardedToUserId ?? null,
             additional_data: migrated.additional_data ?? migrated.additionalData ?? {},
             status: migrated.status ?? 'Pending',
           };
@@ -640,6 +647,7 @@ export const useMMPProvider = () => {
               dispatched_at: migrated.dispatched_at,
               additionalData: migrated.additional_data || {},
               status: migrated.status,
+              forwardedToUserId: migrated.forwarded_to_user_id,
             };
           });
           setMMPFiles((prev: MMPFile[]) => prev.map(m => (m.id === id ? { ...m, siteEntries: normalized } : m)));

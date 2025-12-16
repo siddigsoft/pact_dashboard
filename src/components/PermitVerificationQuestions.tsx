@@ -37,6 +37,7 @@ interface PermitVerificationQuestionsProps {
   onCancel: () => void;
   existingStatePermit?: boolean;
   existingLocalityPermit?: boolean;
+  onMoveSitesToCategory?: (category: string) => void;
 }
 
 type Step = 
@@ -57,6 +58,7 @@ export const PermitVerificationQuestions: React.FC<PermitVerificationQuestionsPr
   onCancel,
   existingStatePermit = false,
   existingLocalityPermit = false,
+  onMoveSitesToCategory,
 }) => {
   const [step, setStep] = useState<Step>(existingStatePermit ? 'locality_question' : 'state_question');
   
@@ -141,6 +143,14 @@ export const PermitVerificationQuestions: React.FC<PermitVerificationQuestionsPr
         uploaded: localityPermitUploaded,
       },
     };
+    // Check for the specific scenario: state uploaded, locality required but not available and can work without
+    if (
+      decision.statePermit.uploaded &&
+      decision.localityPermit.requirement === 'required_dont_have_it' &&
+      decision.localityPermit.canWorkWithout === 'yes'
+    ) {
+      onMoveSitesToCategory?.('permits_attached');
+    }
     onComplete(decision);
   };
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -165,6 +165,101 @@ const ReviewAssignCoordinators: React.FC = () => {
     loadData();
   }, [id, getMmpById, navigate, toast]);
 
+  // Convert Set to sorted array for stable dependency comparison
+  const forwardedSiteIdsArray = useMemo(() => {
+    return Array.from(forwardedSiteIds).sort();
+  }, [forwardedSiteIds]);
+
+  // Create stable dependency values to prevent unnecessary re-runs
+  const forwardedIdsKey = forwardedSiteIdsArray.join(',');
+  const statesLength = states.length;
+  const localitiesLength = localities.length;
+  const mmpFileId = mmpFile?.id;
+  const entriesLength = mmpFile?.siteEntries?.length || 0;
+
+  // Track initialization to prevent unnecessary re-runs
+  const initializationKeyRef = useRef<string>('');
+
+  // Initialize selectedSites for groups that don't have selections yet
+  // This must be in useEffect, not during render
+  useEffect(() => {
+    if (loading || loadingForwardedStates || loadingLocations || !mmpFile) return;
+    
+    // Compute entries from mmpFile (same as in render)
+    const entries: any[] = Array.isArray(mmpFile?.siteEntries) && mmpFile.siteEntries.length > 0 
+      ? mmpFile.siteEntries
+      : [];
+    
+    if (!entries.length) return;
+    
+    // Create a stable key to track if we've already initialized for this exact state
+    const initializationKey = `${mmpFileId}-${forwardedIdsKey}-${statesLength}-${localitiesLength}-${entriesLength}`;
+    
+    // Skip if we've already initialized for this exact state
+    if (initializationKeyRef.current === initializationKey && Object.keys(selectedSites).length > 0) {
+      return;
+    }
+    
+    // Recompute groupMap here (same logic as in render, but in useEffect)
+    const stateNameToId = new Map<string, string>();
+    states.forEach(state => {
+      const normalizedName = state.name.toLowerCase();
+      stateNameToId.set(normalizedName, state.id);
+      if (normalizedName.endsWith(' state')) {
+        stateNameToId.set(normalizedName.replace(/\s+state$/, ''), state.id);
+      }
+    });
+
+    const localitiesByState = new Map<string, Map<string, string>>();
+    states.forEach(state => {
+      const map = new Map<string, string>();
+      localities
+        .filter(loc => loc.state_id === state.id)
+        .forEach(loc => map.set(loc.name.toLowerCase(), loc.id));
+      localitiesByState.set(state.id, map);
+    });
+
+    const groupMap: Record<string, any[]> = {};
+    entries.forEach((e: any) => {
+      const sName = String(e.state || '').trim().toLowerCase();
+      const stateId = stateNameToId.get(sName);
+      const locName = String(e.locality || '').trim().toLowerCase();
+      const locMap = stateId ? localitiesByState.get(stateId) : null;
+      const localityId = locName && locMap ? (locMap.get(locName) || '') : '';
+      const key = stateId ? `${stateId}|${localityId}` : 'unassigned|unassigned';
+      if (!groupMap[key]) groupMap[key] = [];
+      groupMap[key].push(e);
+    });
+    
+    // Create a Set from the array for efficient lookups
+    const forwardedSet = new Set(forwardedSiteIdsArray);
+    
+    const newSelectedSites: Record<string, Set<string>> = { ...selectedSites };
+    let hasChanges = false;
+    
+    Object.entries(groupMap).forEach(([groupKey, groupSites]) => {
+      // Only initialize if not already set and has unforwarded sites
+      if (!newSelectedSites[groupKey]) {
+        const unforwardedSites = groupSites.filter((site: any) => !forwardedSet.has(site.id));
+        if (unforwardedSites.length > 0) {
+          newSelectedSites[groupKey] = new Set(unforwardedSites.map((site: any) => site.id));
+          hasChanges = true;
+        }
+      }
+    });
+    
+    if (hasChanges) {
+      setSelectedSites(newSelectedSites);
+      initializationKeyRef.current = initializationKey;
+    } else if (initializationKeyRef.current !== initializationKey) {
+      // Update key even if no changes to prevent re-running
+      initializationKeyRef.current = initializationKey;
+    }
+    // Note: We intentionally don't include states/localities/mmpFile in deps
+    // because we only want to re-run when the stable values change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [forwardedIdsKey, statesLength, localitiesLength, entriesLength, loading, loadingForwardedStates, loadingLocations, mmpFileId]);
+
   if (loading || loadingForwardedStates || loadingLocations) {
     return (
       <div className="container mx-auto px-4 py-8">
@@ -324,40 +419,45 @@ const ReviewAssignCoordinators: React.FC = () => {
         mmpId
       });
 
-      // Send notifications
-      const notifications = [
-        {
-          user_id: coordinatorId,
-          title: 'Sites forwarded for CP verification',
-          message: `${mmpFile?.name || 'MMP'}: ${siteIds.length} site(s) have been forwarded for your CP review${attachStatePermitMap[groupKey] ? ' (State permit attached)' : ''}`,
-          type: 'info',
-          link: `/coordinator/sites`,
-          related_entity_id: mmpId,
-          related_entity_type: 'mmpFile',
-        }
-      ];
-
-      // Send notification to supervisor if selected
-      if (supervisorId) {
-        notifications.push({
-          user_id: supervisorId,
-          title: 'Sites assigned to coordinator for verification',
-          message: `${mmpFile?.name || 'MMP'}: ${siteIds.length} site(s) have been assigned to ${allCoordinators.find(c => c.id === coordinatorId)?.fullName || 'Coordinator'} for CP verification${attachStatePermitMap[groupKey] ? ' (State permit attached)' : ''}`,
-          type: 'info',
-          link: `/supervisor/sites`,
-          related_entity_id: mmpId,
-          related_entity_type: 'mmpFile',
-        });
-      }
-
-      await insertNotifications(notifications);
-      
-      // Refresh MMP context to reflect changes
-      await refreshMMPFiles();
-
+      // Show success toast immediately after forwarding
       toast({ title: 'Batch Forwarded', description: `Sites were forwarded to ${allCoordinators.find(c => c.id === coordinatorId)?.fullName || 'Coordinator'}${attachStatePermitMap[groupKey] ? ' with state permit attached' : ''}${supervisorId ? ` and notified ${allSupervisors.find(s => s.id === supervisorId)?.fullName || 'Supervisor'}` : ''}.`, variant: 'default' });
+
+      // Attempt to send notifications (don't fail the whole operation if this fails)
+      try {
+        const notifications = [
+          {
+            user_id: coordinatorId,
+            title: 'Sites forwarded for CP verification',
+            message: `${mmpFile?.name || 'MMP'}: ${siteIds.length} site(s) have been forwarded for your CP review${attachStatePermitMap[groupKey] ? ' (State permit attached)' : ''}`,
+            type: 'info',
+            link: `/coordinator/sites`,
+            related_entity_id: mmpId,
+            related_entity_type: 'mmpFile',
+          }
+        ];
+
+        // Send notification to supervisor if selected
+        if (supervisorId) {
+          notifications.push({
+            user_id: supervisorId,
+            title: 'Sites assigned to coordinator for verification',
+            message: `${mmpFile?.name || 'MMP'}: ${siteIds.length} site(s) have been assigned to ${allCoordinators.find(c => c.id === coordinatorId)?.fullName || 'Coordinator'} for CP verification${attachStatePermitMap[groupKey] ? ' (State permit attached)' : ''}`,
+            type: 'info',
+            link: `/supervisor/sites`,
+            related_entity_id: mmpId,
+            related_entity_type: 'mmpFile',
+          });
+        }
+
+        await insertNotifications(notifications);
+      } catch (notifErr) {
+        console.warn('Failed to send notifications:', notifErr);
+        // Optionally, you could show a separate toast for notification failure here if needed
+      }
       
-      // Mark sites as forwarded to prevent re-forwarding
+      // Removed: await refreshMMPFiles(); // To prevent page reload on hosted app
+
+      // Update local state to reflect forwarded sites
       const newForwarded = new Set(forwardedSiteIds);
       siteIds.forEach(id => newForwarded.add(id));
       setForwardedSiteIds(newForwarded);
@@ -530,11 +630,6 @@ const ReviewAssignCoordinators: React.FC = () => {
                 const unforwardedSites = groupSites.filter((site: any) => !forwardedSiteIds.has(site.id));
                 const hasUnforwardedSites = unforwardedSites.length > 0;
                 const hasForwardedSites = forwardedSites.length > 0;
-                
-                // Initialize selectedSites for this group if not set (only for unforwarded sites)
-                if (!selectedSites[groupKey] && hasUnforwardedSites) {
-                  setSelectedSites(s => ({ ...s, [groupKey]: new Set(unforwardedSites.map((site: any) => site.id)) }));
-                }
                 
                 return (
                   <div key={groupKey} className="border rounded-lg p-4 bg-gray-50">

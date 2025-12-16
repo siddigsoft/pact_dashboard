@@ -3,6 +3,7 @@ import { MMPFile, MMPSiteEntry } from '@/types';
 import { toast } from 'sonner';
 import { validateCSV, CSVValidationError } from '@/utils/csvValidator';
 import { validateSitesAgainstRegistry, SiteMatchResult, RegistryLinkage } from '@/utils/sitesRegistryMatcher';
+import { insertNotifications } from '@/services/mmpActions';
 
 // Transform database record (snake_case) to MMPFile interface (camelCase)
 const transformDBToMMPFile = (dbRecord: any): MMPFile => {
@@ -102,11 +103,10 @@ async function notifyStakeholdersOnUpload(mmp: { id: string; name: string; hub?:
       action_url: `/mmp/${mmp.id}`,
       entity_id: mmp.id,
       entity_type: 'mmpFile',
-      event_type: 'system',
-      status: 'pending',
-      priority: 'normal'
+      type: 'info' // Use 'info' for system notifications
     }));
-    await supabase.from('notifications').insert(rows);
+    // Use insertNotifications helper which properly maps to database schema
+    await insertNotifications(rows);
   } catch {}
 }
 
