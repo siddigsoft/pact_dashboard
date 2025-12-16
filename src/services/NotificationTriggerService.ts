@@ -1419,7 +1419,8 @@ export const NotificationTriggerService = {
         // Send bilingual email directly
         if (recipientEmail) {
           try {
-            await EmailNotificationService.sendMMPForwardedToFOM(
+            console.log(`[NOTIFICATION] Attempting to send email to FOM: ${recipientEmail}`);
+            const emailResult = await EmailNotificationService.sendMMPForwardedToFOM(
               recipientEmail,
               recipientName,
               mmpName,
@@ -1427,10 +1428,16 @@ export const NotificationTriggerService = {
               mmpId,
               true // isRecipientFOM
             );
-            console.log(`[NOTIFICATION] Sent bilingual MMP forwarded email to FOM: ${recipientEmail}`);
+            if (emailResult.success) {
+              console.log(`[NOTIFICATION] Email sent successfully to FOM: ${recipientEmail}, messageId: ${emailResult.messageId}`);
+            } else {
+              console.error(`[NOTIFICATION] Email FAILED to FOM: ${recipientEmail}, error: ${emailResult.error}`);
+            }
           } catch (emailError) {
             console.error(`[NOTIFICATION] Failed to send bilingual email to FOM ${recipientEmail}:`, emailError);
           }
+        } else {
+          console.warn(`[NOTIFICATION] No email found for FOM user ${fomId}`);
         }
       }
 
@@ -1465,7 +1472,8 @@ export const NotificationTriggerService = {
           // Send bilingual email directly
           if (admin.email) {
             try {
-              await EmailNotificationService.sendMMPForwardedToFOM(
+              console.log(`[NOTIFICATION] Attempting to send email to Admin: ${admin.email}`);
+              const emailResult = await EmailNotificationService.sendMMPForwardedToFOM(
                 admin.email,
                 recipientName,
                 mmpName,
@@ -1473,7 +1481,11 @@ export const NotificationTriggerService = {
                 mmpId,
                 false // isRecipientFOM (admin gets info notification, not action required)
               );
-              console.log(`[NOTIFICATION] Sent bilingual MMP forwarded email to Admin: ${admin.email}`);
+              if (emailResult.success) {
+                console.log(`[NOTIFICATION] Email sent successfully to Admin: ${admin.email}, messageId: ${emailResult.messageId}`);
+              } else {
+                console.error(`[NOTIFICATION] Email FAILED to Admin: ${admin.email}, error: ${emailResult.error}`);
+              }
             } catch (emailError) {
               console.error(`[NOTIFICATION] Failed to send bilingual email to Admin ${admin.email}:`, emailError);
             }
@@ -1481,6 +1493,7 @@ export const NotificationTriggerService = {
         }
       }
 
+      console.log(`[NOTIFICATION] MMP Forward complete. Total notifications sent: ${successCount}`);
       return successCount;
     } catch (error) {
       console.error('Failed to send MMP forwarded to FOM notifications:', error);

@@ -77,26 +77,35 @@ export const ForwardToFOMDialog: React.FC<ForwardToFOMDialogProps> = ({ open, on
       const ids = Array.from(selected);
       const forwarderName = currentUser?.name || currentUser?.fullName || 'Admin';
 
+      console.log('[ForwardToFOMDialog] Starting forward process...');
+      console.log('[ForwardToFOMDialog] FOM IDs:', ids);
+      console.log('[ForwardToFOMDialog] MMP:', mmpName, mmpId);
+      console.log('[ForwardToFOMDialog] Forwarder:', forwarderName);
+
       // Send notifications to FOMs and all Admins/Super Admins with email
       // This uses NotificationTriggerService which properly inserts into notifications table
       // and sends emails to all recipients
-      await NotificationTriggerService.mmpForwardedToFOM(
+      const notificationCount = await NotificationTriggerService.mmpForwardedToFOM(
         ids,
         mmpName || 'MMP',
         mmpId,
         forwarderName
       );
+      console.log('[ForwardToFOMDialog] Notifications sent:', notificationCount);
 
       // Update workflow field
       await appendForwardedToFom(mmpId, ids);
       await refreshMMPFiles();
 
-      toast({ title: 'MMP forwarded', description: `Forwarded to ${ids.length} FOM(s). Email notifications sent.` });
+      toast({ 
+        title: 'MMP forwarded', 
+        description: `Forwarded to ${ids.length} FOM(s). ${notificationCount} notifications sent with emails.` 
+      });
       try { onForwarded?.(ids); } catch {}
       onOpenChange(false);
       setSelected(new Set());
     } catch (e: any) {
-      console.error('Forward failed', e);
+      console.error('[ForwardToFOMDialog] Forward failed:', e);
       toast({ title: 'Forward failed', description: e?.message || 'Unexpected error', variant: 'destructive' });
     } finally {
       setLoading(false);
