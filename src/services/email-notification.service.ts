@@ -25,6 +25,8 @@ export interface EmailOptions {
   recipientName?: string;
   html?: string;
   text?: string;
+  priority?: 'normal' | 'high' | 'urgent';
+  cc?: string[];
 }
 
 export interface NotificationEmailOptions {
@@ -220,19 +222,25 @@ export const EmailNotificationService = {
    * Send a custom email
    */
   async sendEmail(options: EmailOptions): Promise<EmailNotificationResult> {
-    const { to, subject, recipientName, html, text } = options;
+    const { to, subject, recipientName, html, text, priority, cc } = options;
     
     try {
-      console.log(`[EMAIL] Sending to ${to}: ${subject}`);
+      const priorityPrefix = priority === 'urgent' ? '[URGENT | عاجل] ' : 
+                            priority === 'high' ? '[HIGH PRIORITY | أولوية عالية] ' : '';
+      const finalSubject = priorityPrefix + subject;
+      
+      console.log(`[EMAIL] Sending to ${to}: ${finalSubject}${cc?.length ? ` (CC: ${cc.join(', ')})` : ''}`);
 
       const { data, error } = await supabase.functions.invoke('send-email', {
         body: {
           to,
-          subject,
+          subject: finalSubject,
           html,
           text,
           type: 'notification',
           recipientName: recipientName || 'User',
+          priority: priority || 'normal',
+          cc: cc || [],
         },
       });
 
@@ -420,13 +428,13 @@ PACT Workflow Platform | منصة باكت`;
     const roleEn = recipientRole?.en || 'Field Operations Manager';
     const roleAr = recipientRole?.ar || 'مدير العمليات الميدانية';
     
-    // Personalized subject with name and role
+    // Personalized subject with name, role, and MMP name
     const titleEn = isRecipientFOM 
-      ? `MMP Forwarded to ${recipientName} - ${roleEn}` 
-      : `MMP Forwarded to FOM`;
+      ? `MMP "${mmpName}" Forwarded to ${recipientName} - ${roleEn}` 
+      : `MMP "${mmpName}" Forwarded to FOM`;
     const titleAr = isRecipientFOM 
-      ? `تم إرسال خطة المراقبة الشهرية إلى ${recipientName} - ${roleAr}` 
-      : `تم إرسال خطة المراقبة الشهرية إلى مدير العمليات الميدانية`;
+      ? `خطة "${mmpName}" إلى ${recipientName} - ${roleAr}` 
+      : `خطة "${mmpName}" إلى مدير العمليات الميدانية`;
     
     const messageEn = isRecipientFOM 
       ? `The Monthly Monitoring Plan "${mmpName}" has been forwarded to you for permits attachment by ${forwarderName}. Please review and attach the necessary permits.`
@@ -552,9 +560,9 @@ PACT Workflow Platform | منصة باكت`;
     const roleEn = recipientRole?.en || 'Coordinator';
     const roleAr = recipientRole?.ar || 'المنسق';
     
-    // Personalized subject with name and role
-    const titleEn = `MMP Forwarded to ${recipientName} - ${roleEn}`;
-    const titleAr = `تم إرسال خطة المراقبة الشهرية إلى ${recipientName} - ${roleAr}`;
+    // Personalized subject with name, role, and MMP name
+    const titleEn = `MMP "${mmpName}" Forwarded to ${recipientName} - ${roleEn}`;
+    const titleAr = `خطة "${mmpName}" إلى ${recipientName} - ${roleAr}`;
     
     const greetingEn = `Dear ${recipientName} (${roleEn}),`;
     const greetingAr = `عزيزي ${recipientName} (${roleAr})،`;
@@ -677,9 +685,9 @@ PACT Workflow Platform | منصة باكت`;
     const roleEn = recipientRole?.en || 'Team Member';
     const roleAr = recipientRole?.ar || 'عضو الفريق';
     
-    // Personalized subject with name and role
-    const titleEn = `Site Verified - Notification to ${recipientName} - ${roleEn}`;
-    const titleAr = `تم التحقق من الموقع - إشعار إلى ${recipientName} - ${roleAr}`;
+    // Personalized subject with site name, recipient name and role
+    const titleEn = `Site "${siteName}" Verified - ${recipientName} - ${roleEn}`;
+    const titleAr = `تم التحقق من "${siteName}" - ${recipientName} - ${roleAr}`;
     
     const greetingEn = `Dear ${recipientName} (${roleEn}),`;
     const greetingAr = `عزيزي ${recipientName} (${roleAr})،`;
@@ -1601,6 +1609,502 @@ PACT Workflow Platform`;
     } else {
       return this.sendWithdrawalSubmitted(email, recipientName, amount, requestId, new Date().toLocaleString(), currency);
     }
+  },
+
+  // ============================================
+  // TEMPLATE: Task Deadline Reminder with Urgency
+  // ============================================
+  async sendTaskDeadlineReminder(
+    email: string,
+    recipientName: string,
+    taskName: string,
+    deadline: string,
+    hoursRemaining: number,
+    taskUrl?: string,
+    recipientRole?: { en: string; ar: string }
+  ): Promise<EmailNotificationResult> {
+    const roleEn = recipientRole?.en || 'Team Member';
+    const roleAr = recipientRole?.ar || 'عضو الفريق';
+    
+    const isUrgent = hoursRemaining <= 24;
+    const priority: 'urgent' | 'high' | 'normal' = hoursRemaining <= 12 ? 'urgent' : hoursRemaining <= 24 ? 'high' : 'normal';
+    
+    const timeTextEn = hoursRemaining <= 0 ? 'OVERDUE' : 
+                       hoursRemaining < 24 ? `${Math.round(hoursRemaining)} hours remaining` :
+                       `${Math.round(hoursRemaining / 24)} days remaining`;
+    const timeTextAr = hoursRemaining <= 0 ? 'متأخر' : 
+                       hoursRemaining < 24 ? `${Math.round(hoursRemaining)} ساعة متبقية` :
+                       `${Math.round(hoursRemaining / 24)} أيام متبقية`;
+
+    const html = `
+      <!DOCTYPE html>
+      <html dir="ltr">
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Task Deadline Reminder | تذكير بموعد المهمة</title>
+      </head>
+      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
+        <div style="background-color: white; border-radius: 8px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <div style="text-align: center; margin-bottom: 30px;">
+            <h1 style="color: #1a1a2e; margin: 0; font-size: 24px;">PACT Workflow Platform</h1>
+            <p style="color: #666; margin: 5px 0 0 0; font-size: 14px;">منصة باكت للعمليات الميدانية</p>
+          </div>
+          
+          ${isUrgent ? `
+          <div style="background-color: #ffebee; border: 2px solid #f44336; border-radius: 8px; padding: 15px; margin-bottom: 20px; text-align: center;">
+            <p style="color: #c62828; font-weight: bold; margin: 0; font-size: 18px;">URGENT: Deadline Approaching | عاجل: اقتراب الموعد النهائي</p>
+          </div>
+          ` : ''}
+          
+          <!-- English Section -->
+          <div style="margin-bottom: 25px; padding-bottom: 25px; border-bottom: 1px solid #eee;">
+            <p style="color: #333; font-size: 16px; line-height: 1.5;">Dear ${recipientName} (${roleEn}),</p>
+            <p style="color: #333; font-size: 16px; line-height: 1.5;">This is a reminder that your task deadline is approaching.</p>
+            
+            <div style="background-color: ${isUrgent ? '#fff3e0' : '#e3f2fd'}; border-left: 4px solid ${isUrgent ? '#ff9800' : '#2196f3'}; border-radius: 4px; padding: 16px; margin: 20px 0;">
+              <p style="margin: 0; color: #333;"><strong>Task:</strong> ${taskName}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>Deadline:</strong> ${deadline}</p>
+              <p style="margin: 10px 0 0 0; color: ${isUrgent ? '#c62828' : '#333'}; font-weight: ${isUrgent ? 'bold' : 'normal'};"><strong>Time Remaining:</strong> ${timeTextEn}</p>
+            </div>
+          </div>
+          
+          <!-- Arabic Section -->
+          <div dir="rtl" style="margin-top: 25px; padding-top: 25px; border-top: 1px solid #eee; text-align: right;">
+            <p style="color: #333; font-size: 16px; line-height: 1.8;">عزيزي ${recipientName} (${roleAr})،</p>
+            <p style="color: #333; font-size: 16px; line-height: 1.8;">هذا تذكير بأن موعد مهمتك يقترب.</p>
+            
+            <div style="background-color: ${isUrgent ? '#fff3e0' : '#e3f2fd'}; border-right: 4px solid ${isUrgent ? '#ff9800' : '#2196f3'}; border-radius: 4px; padding: 16px; margin: 20px 0;">
+              <p style="margin: 0; color: #333;"><strong>المهمة:</strong> ${taskName}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>الموعد النهائي:</strong> ${deadline}</p>
+              <p style="margin: 10px 0 0 0; color: ${isUrgent ? '#c62828' : '#333'}; font-weight: ${isUrgent ? 'bold' : 'normal'};"><strong>الوقت المتبقي:</strong> ${timeTextAr}</p>
+            </div>
+          </div>
+          
+          ${taskUrl ? `
+          <div style="text-align: center; margin: 25px 0;">
+            <a href="${taskUrl.startsWith('http') ? taskUrl : APP_URL + taskUrl}" style="display: inline-block; padding: 14px 30px; background-color: #9b87f5; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
+              View Task | عرض المهمة
+            </a>
+          </div>
+          ` : ''}
+          
+          <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+          <p style="color: #999; font-size: 12px; text-align: center;">
+            PACT Workflow Platform | منصة باكت للعمليات الميدانية
+          </p>
+        </div>
+      </body>
+      </html>
+    `;
+    
+    const text = `Dear ${recipientName} (${roleEn}),
+
+Task Deadline Reminder:
+Task: ${taskName}
+Deadline: ${deadline}
+Time Remaining: ${timeTextEn}
+
+---
+
+عزيزي ${recipientName} (${roleAr})،
+
+تذكير بموعد المهمة:
+المهمة: ${taskName}
+الموعد النهائي: ${deadline}
+الوقت المتبقي: ${timeTextAr}
+
+---
+PACT Workflow Platform | منصة باكت`;
+
+    return this.sendEmail({
+      to: email,
+      subject: `Task "${taskName}" Deadline - ${recipientName} | تذكير بموعد المهمة`,
+      recipientName,
+      html,
+      text,
+      priority,
+    });
+  },
+
+  // ============================================
+  // TEMPLATE: Site Approval Notification
+  // ============================================
+  async sendSiteApproved(
+    email: string,
+    recipientName: string,
+    siteName: string,
+    mmpName: string,
+    approvedBy: string,
+    approvalDate: string,
+    siteUrl?: string,
+    recipientRole?: { en: string; ar: string }
+  ): Promise<EmailNotificationResult> {
+    const roleEn = recipientRole?.en || 'Team Member';
+    const roleAr = recipientRole?.ar || 'عضو الفريق';
+
+    const html = `
+      <!DOCTYPE html>
+      <html dir="ltr">
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Site Approved | تمت الموافقة على الموقع</title>
+      </head>
+      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
+        <div style="background-color: white; border-radius: 8px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <div style="text-align: center; margin-bottom: 30px;">
+            <h1 style="color: #1a1a2e; margin: 0; font-size: 24px;">PACT Workflow Platform</h1>
+            <p style="color: #666; margin: 5px 0 0 0; font-size: 14px;">منصة باكت للعمليات الميدانية</p>
+          </div>
+          
+          <!-- Success Banner -->
+          <div style="background-color: #e8f5e9; border: 2px solid #4caf50; border-radius: 8px; padding: 15px; margin-bottom: 20px; text-align: center;">
+            <p style="color: #2e7d32; font-weight: bold; margin: 0; font-size: 18px;">Site Approved | تمت الموافقة</p>
+          </div>
+          
+          <!-- English Section -->
+          <div style="margin-bottom: 25px; padding-bottom: 25px; border-bottom: 1px solid #eee;">
+            <p style="color: #333; font-size: 16px; line-height: 1.5;">Dear ${recipientName} (${roleEn}),</p>
+            <p style="color: #333; font-size: 16px; line-height: 1.5;">The site has been approved and is now complete.</p>
+            
+            <div style="background-color: #e8f5e9; border-left: 4px solid #4caf50; border-radius: 4px; padding: 16px; margin: 20px 0;">
+              <p style="margin: 0; color: #333;"><strong>Site Name:</strong> ${siteName}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>MMP:</strong> ${mmpName}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>Approved By:</strong> ${approvedBy}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>Approval Date:</strong> ${approvalDate}</p>
+              <p style="margin: 10px 0 0 0; color: #4caf50; font-weight: bold;"><strong>Status:</strong> APPROVED</p>
+            </div>
+          </div>
+          
+          <!-- Arabic Section -->
+          <div dir="rtl" style="margin-top: 25px; padding-top: 25px; border-top: 1px solid #eee; text-align: right;">
+            <p style="color: #333; font-size: 16px; line-height: 1.8;">عزيزي ${recipientName} (${roleAr})،</p>
+            <p style="color: #333; font-size: 16px; line-height: 1.8;">تمت الموافقة على الموقع وهو الآن مكتمل.</p>
+            
+            <div style="background-color: #e8f5e9; border-right: 4px solid #4caf50; border-radius: 4px; padding: 16px; margin: 20px 0;">
+              <p style="margin: 0; color: #333;"><strong>اسم الموقع:</strong> ${siteName}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>خطة المراقبة:</strong> ${mmpName}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>تمت الموافقة بواسطة:</strong> ${approvedBy}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>تاريخ الموافقة:</strong> ${approvalDate}</p>
+              <p style="margin: 10px 0 0 0; color: #4caf50; font-weight: bold;"><strong>الحالة:</strong> تمت الموافقة</p>
+            </div>
+          </div>
+          
+          ${siteUrl ? `
+          <div style="text-align: center; margin: 25px 0;">
+            <a href="${siteUrl.startsWith('http') ? siteUrl : APP_URL + siteUrl}" style="display: inline-block; padding: 14px 30px; background-color: #4caf50; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
+              View Site | عرض الموقع
+            </a>
+          </div>
+          ` : ''}
+          
+          <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+          <p style="color: #999; font-size: 12px; text-align: center;">
+            PACT Workflow Platform | منصة باكت للعمليات الميدانية
+          </p>
+        </div>
+      </body>
+      </html>
+    `;
+    
+    const text = `Dear ${recipientName} (${roleEn}),
+
+Site Approved:
+Site: ${siteName}
+MMP: ${mmpName}
+Approved By: ${approvedBy}
+Date: ${approvalDate}
+
+---
+
+عزيزي ${recipientName} (${roleAr})،
+
+تمت الموافقة على الموقع:
+الموقع: ${siteName}
+الخطة: ${mmpName}
+الموافقة بواسطة: ${approvedBy}
+
+---
+PACT Workflow Platform | منصة باكت`;
+
+    return this.sendEmail({
+      to: email,
+      subject: `Site "${siteName}" Approved - ${recipientName} | تمت الموافقة على الموقع`,
+      recipientName,
+      html,
+      text,
+    });
+  },
+
+  // ============================================
+  // TEMPLATE: Permit Expiration Alert
+  // ============================================
+  async sendPermitExpirationAlert(
+    email: string,
+    recipientName: string,
+    permitType: string,
+    expirationDate: string,
+    daysRemaining: number,
+    mmpName: string,
+    permitUrl?: string,
+    recipientRole?: { en: string; ar: string }
+  ): Promise<EmailNotificationResult> {
+    const roleEn = recipientRole?.en || 'Team Member';
+    const roleAr = recipientRole?.ar || 'عضو الفريق';
+    
+    const isUrgent = daysRemaining <= 7;
+    const priority: 'urgent' | 'high' | 'normal' = daysRemaining <= 3 ? 'urgent' : daysRemaining <= 7 ? 'high' : 'normal';
+
+    const html = `
+      <!DOCTYPE html>
+      <html dir="ltr">
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Permit Expiration Alert | تنبيه انتهاء التصريح</title>
+      </head>
+      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
+        <div style="background-color: white; border-radius: 8px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <div style="text-align: center; margin-bottom: 30px;">
+            <h1 style="color: #1a1a2e; margin: 0; font-size: 24px;">PACT Workflow Platform</h1>
+            <p style="color: #666; margin: 5px 0 0 0; font-size: 14px;">منصة باكت للعمليات الميدانية</p>
+          </div>
+          
+          ${isUrgent ? `
+          <div style="background-color: #ffebee; border: 2px solid #f44336; border-radius: 8px; padding: 15px; margin-bottom: 20px; text-align: center;">
+            <p style="color: #c62828; font-weight: bold; margin: 0; font-size: 18px;">ALERT: Permit Expiring Soon | تنبيه: التصريح ينتهي قريباً</p>
+          </div>
+          ` : ''}
+          
+          <!-- English Section -->
+          <div style="margin-bottom: 25px; padding-bottom: 25px; border-bottom: 1px solid #eee;">
+            <p style="color: #333; font-size: 16px; line-height: 1.5;">Dear ${recipientName} (${roleEn}),</p>
+            <p style="color: #333; font-size: 16px; line-height: 1.5;">This is an alert that a permit is expiring soon. Please take action to renew it before the expiration date.</p>
+            
+            <div style="background-color: ${isUrgent ? '#ffebee' : '#fff3e0'}; border-left: 4px solid ${isUrgent ? '#f44336' : '#ff9800'}; border-radius: 4px; padding: 16px; margin: 20px 0;">
+              <p style="margin: 0; color: #333;"><strong>Permit Type:</strong> ${permitType}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>MMP:</strong> ${mmpName}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>Expiration Date:</strong> ${expirationDate}</p>
+              <p style="margin: 10px 0 0 0; color: ${isUrgent ? '#c62828' : '#e65100'}; font-weight: bold;"><strong>Days Remaining:</strong> ${daysRemaining} days</p>
+            </div>
+          </div>
+          
+          <!-- Arabic Section -->
+          <div dir="rtl" style="margin-top: 25px; padding-top: 25px; border-top: 1px solid #eee; text-align: right;">
+            <p style="color: #333; font-size: 16px; line-height: 1.8;">عزيزي ${recipientName} (${roleAr})،</p>
+            <p style="color: #333; font-size: 16px; line-height: 1.8;">هذا تنبيه بأن التصريح ينتهي قريباً. يرجى اتخاذ الإجراءات اللازمة لتجديده قبل تاريخ الانتهاء.</p>
+            
+            <div style="background-color: ${isUrgent ? '#ffebee' : '#fff3e0'}; border-right: 4px solid ${isUrgent ? '#f44336' : '#ff9800'}; border-radius: 4px; padding: 16px; margin: 20px 0;">
+              <p style="margin: 0; color: #333;"><strong>نوع التصريح:</strong> ${permitType}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>خطة المراقبة:</strong> ${mmpName}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>تاريخ الانتهاء:</strong> ${expirationDate}</p>
+              <p style="margin: 10px 0 0 0; color: ${isUrgent ? '#c62828' : '#e65100'}; font-weight: bold;"><strong>الأيام المتبقية:</strong> ${daysRemaining} أيام</p>
+            </div>
+          </div>
+          
+          ${permitUrl ? `
+          <div style="text-align: center; margin: 25px 0;">
+            <a href="${permitUrl.startsWith('http') ? permitUrl : APP_URL + permitUrl}" style="display: inline-block; padding: 14px 30px; background-color: #ff9800; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
+              Renew Permit | تجديد التصريح
+            </a>
+          </div>
+          ` : ''}
+          
+          <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+          <p style="color: #999; font-size: 12px; text-align: center;">
+            PACT Workflow Platform | منصة باكت للعمليات الميدانية
+          </p>
+        </div>
+      </body>
+      </html>
+    `;
+    
+    const text = `Dear ${recipientName} (${roleEn}),
+
+Permit Expiration Alert:
+Permit Type: ${permitType}
+MMP: ${mmpName}
+Expiration Date: ${expirationDate}
+Days Remaining: ${daysRemaining}
+
+---
+
+عزيزي ${recipientName} (${roleAr})،
+
+تنبيه انتهاء التصريح:
+نوع التصريح: ${permitType}
+الخطة: ${mmpName}
+تاريخ الانتهاء: ${expirationDate}
+الأيام المتبقية: ${daysRemaining}
+
+---
+PACT Workflow Platform | منصة باكت`;
+
+    return this.sendEmail({
+      to: email,
+      subject: `Permit "${permitType}" Expiring - ${daysRemaining} Days | تنبيه انتهاء التصريح`,
+      recipientName,
+      html,
+      text,
+      priority,
+    });
+  },
+
+  // ============================================
+  // TEMPLATE: Send Email with CC to Management
+  // ============================================
+  async sendWithManagementCC(
+    email: string,
+    recipientName: string,
+    options: NotificationEmailOptions,
+    ccEmails: string[]
+  ): Promise<EmailNotificationResult> {
+    const html = generateNotificationEmailHTML(recipientName, options);
+    const text = generatePlainText(recipientName, options);
+    
+    return this.sendEmail({
+      to: email,
+      subject: options.title,
+      recipientName,
+      html,
+      text,
+      cc: ccEmails,
+    });
+  },
+
+  // ============================================
+  // TEMPLATE: Weekly Summary Report
+  // ============================================
+  async sendWeeklySummary(
+    email: string,
+    recipientName: string,
+    weekStartDate: string,
+    weekEndDate: string,
+    stats: {
+      sitesVisited: number;
+      sitesApproved: number;
+      sitesPending: number;
+      mmpsCompleted: number;
+    },
+    recipientRole?: { en: string; ar: string }
+  ): Promise<EmailNotificationResult> {
+    const roleEn = recipientRole?.en || 'Team Member';
+    const roleAr = recipientRole?.ar || 'عضو الفريق';
+
+    const html = `
+      <!DOCTYPE html>
+      <html dir="ltr">
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Weekly Summary Report | التقرير الأسبوعي</title>
+      </head>
+      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
+        <div style="background-color: white; border-radius: 8px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <div style="text-align: center; margin-bottom: 30px;">
+            <h1 style="color: #1a1a2e; margin: 0; font-size: 24px;">PACT Workflow Platform</h1>
+            <p style="color: #666; margin: 5px 0 0 0; font-size: 14px;">منصة باكت للعمليات الميدانية</p>
+          </div>
+          
+          <div style="background-color: #e3f2fd; border-radius: 8px; padding: 15px; margin-bottom: 20px; text-align: center;">
+            <p style="color: #1565c0; font-weight: bold; margin: 0; font-size: 18px;">Weekly Summary | الملخص الأسبوعي</p>
+            <p style="color: #1565c0; margin: 5px 0 0 0; font-size: 14px;">${weekStartDate} - ${weekEndDate}</p>
+          </div>
+          
+          <!-- English Section -->
+          <div style="margin-bottom: 25px; padding-bottom: 25px; border-bottom: 1px solid #eee;">
+            <p style="color: #333; font-size: 16px; line-height: 1.5;">Dear ${recipientName} (${roleEn}),</p>
+            <p style="color: #333; font-size: 16px; line-height: 1.5;">Here is your weekly activity summary:</p>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin: 20px 0;">
+              <div style="background-color: #e3f2fd; border-radius: 8px; padding: 20px; text-align: center;">
+                <p style="margin: 0; font-size: 32px; font-weight: bold; color: #1565c0;">${stats.sitesVisited}</p>
+                <p style="margin: 5px 0 0 0; color: #666; font-size: 14px;">Sites Visited</p>
+              </div>
+              <div style="background-color: #e8f5e9; border-radius: 8px; padding: 20px; text-align: center;">
+                <p style="margin: 0; font-size: 32px; font-weight: bold; color: #2e7d32;">${stats.sitesApproved}</p>
+                <p style="margin: 5px 0 0 0; color: #666; font-size: 14px;">Sites Approved</p>
+              </div>
+              <div style="background-color: #fff3e0; border-radius: 8px; padding: 20px; text-align: center;">
+                <p style="margin: 0; font-size: 32px; font-weight: bold; color: #e65100;">${stats.sitesPending}</p>
+                <p style="margin: 5px 0 0 0; color: #666; font-size: 14px;">Sites Pending</p>
+              </div>
+              <div style="background-color: #f3e5f5; border-radius: 8px; padding: 20px; text-align: center;">
+                <p style="margin: 0; font-size: 32px; font-weight: bold; color: #7b1fa2;">${stats.mmpsCompleted}</p>
+                <p style="margin: 5px 0 0 0; color: #666; font-size: 14px;">MMPs Completed</p>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Arabic Section -->
+          <div dir="rtl" style="margin-top: 25px; padding-top: 25px; border-top: 1px solid #eee; text-align: right;">
+            <p style="color: #333; font-size: 16px; line-height: 1.8;">عزيزي ${recipientName} (${roleAr})،</p>
+            <p style="color: #333; font-size: 16px; line-height: 1.8;">إليك ملخص نشاطك الأسبوعي:</p>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin: 20px 0;">
+              <div style="background-color: #e3f2fd; border-radius: 8px; padding: 15px; text-align: center;">
+                <p style="margin: 0; font-size: 24px; font-weight: bold; color: #1565c0;">${stats.sitesVisited}</p>
+                <p style="margin: 5px 0 0 0; color: #666; font-size: 12px;">المواقع التي تمت زيارتها</p>
+              </div>
+              <div style="background-color: #e8f5e9; border-radius: 8px; padding: 15px; text-align: center;">
+                <p style="margin: 0; font-size: 24px; font-weight: bold; color: #2e7d32;">${stats.sitesApproved}</p>
+                <p style="margin: 5px 0 0 0; color: #666; font-size: 12px;">المواقع المعتمدة</p>
+              </div>
+              <div style="background-color: #fff3e0; border-radius: 8px; padding: 15px; text-align: center;">
+                <p style="margin: 0; font-size: 24px; font-weight: bold; color: #e65100;">${stats.sitesPending}</p>
+                <p style="margin: 5px 0 0 0; color: #666; font-size: 12px;">المواقع المعلقة</p>
+              </div>
+              <div style="background-color: #f3e5f5; border-radius: 8px; padding: 15px; text-align: center;">
+                <p style="margin: 0; font-size: 24px; font-weight: bold; color: #7b1fa2;">${stats.mmpsCompleted}</p>
+                <p style="margin: 5px 0 0 0; color: #666; font-size: 12px;">الخطط المكتملة</p>
+              </div>
+            </div>
+          </div>
+          
+          <div style="text-align: center; margin: 25px 0;">
+            <a href="${APP_URL}/dashboard" style="display: inline-block; padding: 14px 30px; background-color: #9b87f5; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
+              View Dashboard | عرض لوحة التحكم
+            </a>
+          </div>
+          
+          <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+          <p style="color: #999; font-size: 12px; text-align: center;">
+            PACT Workflow Platform | منصة باكت للعمليات الميدانية
+          </p>
+        </div>
+      </body>
+      </html>
+    `;
+    
+    const text = `Dear ${recipientName} (${roleEn}),
+
+Weekly Summary (${weekStartDate} - ${weekEndDate}):
+- Sites Visited: ${stats.sitesVisited}
+- Sites Approved: ${stats.sitesApproved}
+- Sites Pending: ${stats.sitesPending}
+- MMPs Completed: ${stats.mmpsCompleted}
+
+---
+
+عزيزي ${recipientName} (${roleAr})،
+
+الملخص الأسبوعي:
+- المواقع التي تمت زيارتها: ${stats.sitesVisited}
+- المواقع المعتمدة: ${stats.sitesApproved}
+- المواقع المعلقة: ${stats.sitesPending}
+- الخطط المكتملة: ${stats.mmpsCompleted}
+
+---
+PACT Workflow Platform | منصة باكت`;
+
+    return this.sendEmail({
+      to: email,
+      subject: `Weekly Summary (${weekStartDate} - ${weekEndDate}) - ${recipientName} | الملخص الأسبوعي`,
+      recipientName,
+      html,
+      text,
+    });
   },
 };
 

@@ -19,6 +19,8 @@ interface EmailRequest {
   recipientEmail?: string
   actionUrl?: string
   actionLabel?: string
+  priority?: 'normal' | 'high' | 'urgent'
+  cc?: string[]
 }
 
 function generateEmailHtml(
@@ -37,30 +39,71 @@ function generateEmailHtml(
       html: `
         <!DOCTYPE html>
         <html dir="ltr">
-        <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>PACT Verification Code</title></head>
-        <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>PACT Verification Code | رمز التحقق</title>
+        </head>
+        <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
           <div style="background-color: white; border-radius: 8px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
             <div style="text-align: center; margin-bottom: 30px;">
               <h1 style="color: #1a1a2e; margin: 0; font-size: 24px;">PACT Workflow Platform</h1>
+              <p style="color: #666; margin: 5px 0 0 0; font-size: 14px;">منصة باكت للعمليات الميدانية</p>
             </div>
-            <p style="color: #333; font-size: 16px;">Hello ${name},</p>
-            <p style="color: #333; font-size: 16px;">Your verification code is:</p>
-            <div style="background-color: #f0f4f8; border-radius: 8px; padding: 20px; text-align: center; margin: 20px 0;">
-              <span style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #1a1a2e;">${otp}</span>
+            
+            <!-- English Section -->
+            <div style="margin-bottom: 25px; padding-bottom: 25px; border-bottom: 1px solid #eee;">
+              <p style="color: #333; font-size: 16px; line-height: 1.5;">Hello ${name},</p>
+              <p style="color: #333; font-size: 16px; line-height: 1.5;">Your verification code is:</p>
+              <div style="background-color: #f0f4f8; border-radius: 8px; padding: 20px; text-align: center; margin: 20px 0;">
+                <span style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #1a1a2e;">${otp}</span>
+              </div>
+              <p style="color: #666; font-size: 14px; line-height: 1.5;">This code expires in 1 hour. Do not share this code with anyone.</p>
             </div>
-            <p style="color: #666; font-size: 14px;">This code expires in 1 hour.</p>
+            
+            <!-- Arabic Section -->
+            <div dir="rtl" style="margin-top: 25px; padding-top: 25px; border-top: 1px solid #eee; text-align: right;">
+              <p style="color: #333; font-size: 16px; line-height: 1.8;">مرحباً ${name}،</p>
+              <p style="color: #333; font-size: 16px; line-height: 1.8;">رمز التحقق الخاص بك هو:</p>
+              <div style="background-color: #f0f4f8; border-radius: 8px; padding: 15px; text-align: center; margin: 15px 0;">
+                <span style="font-size: 28px; font-weight: bold; letter-spacing: 8px; color: #1a1a2e;">${otp}</span>
+              </div>
+              <p style="color: #666; font-size: 14px; line-height: 1.8;">ينتهي هذا الرمز خلال ساعة واحدة. لا تشارك هذا الرمز مع أي شخص.</p>
+            </div>
+            
             <div style="text-align: center; margin: 25px 0;">
-              <a href="${resetLink}" style="display: inline-block; padding: 14px 30px; background-color: #9b87f5; color: white; text-decoration: none; border-radius: 6px; font-weight: 600;">
-                ${actionLabel || 'Go to PACT Platform'}
+              <a href="${resetLink}" style="display: inline-block; padding: 14px 30px; background-color: #9b87f5; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
+                ${actionLabel || 'Go to PACT Platform | الذهاب إلى المنصة'}
               </a>
             </div>
+            
             <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
-            <p style="color: #999; font-size: 12px; text-align: center;">PACT Workflow Platform</p>
+            <p style="color: #999; font-size: 12px; text-align: center;">
+              This is an automated message from PACT Workflow Platform.<br>
+              هذه رسالة آلية من منصة باكت للعمليات الميدانية.<br>
+              ICT Team - PACT Command Center Platform<br>
+              فريق تكنولوجيا المعلومات - منصة مركز قيادة باكت
+            </p>
           </div>
         </body>
         </html>
       `,
-      text: `Hello ${name},\n\nYour PACT verification code is: ${otp}\n\nThis code expires in 1 hour.\n\n- PACT Workflow Platform`
+      text: `Hello ${name},
+
+Your PACT verification code is: ${otp}
+
+This code expires in 1 hour.
+
+---
+
+مرحباً ${name}،
+
+رمز التحقق: ${otp}
+
+ينتهي خلال ساعة واحدة.
+
+---
+PACT Workflow Platform | منصة باكت`
     }
   }
 
@@ -70,30 +113,78 @@ function generateEmailHtml(
       html: `
         <!DOCTYPE html>
         <html dir="ltr">
-        <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>PACT Password Reset</title></head>
-        <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>PACT Password Reset | إعادة تعيين كلمة المرور</title>
+        </head>
+        <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
           <div style="background-color: white; border-radius: 8px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
             <div style="text-align: center; margin-bottom: 30px;">
               <h1 style="color: #1a1a2e; margin: 0; font-size: 24px;">PACT Workflow Platform</h1>
+              <p style="color: #666; margin: 5px 0 0 0; font-size: 14px;">منصة باكت للعمليات الميدانية</p>
             </div>
-            <p style="color: #333; font-size: 16px;">Hello ${name},</p>
-            <p style="color: #333; font-size: 16px;">We received a request to reset your password. Use the code below:</p>
-            <div style="background-color: #f0f4f8; border-radius: 8px; padding: 20px; text-align: center; margin: 20px 0;">
-              <span style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #1a1a2e;">${otp}</span>
+            
+            <!-- English Section -->
+            <div style="margin-bottom: 25px; padding-bottom: 25px; border-bottom: 1px solid #eee;">
+              <p style="color: #333; font-size: 16px; line-height: 1.5;">Hello ${name},</p>
+              <p style="color: #333; font-size: 16px; line-height: 1.5;">We received a request to reset your password. Use the code below to complete your password reset:</p>
+              <div style="background-color: #f0f4f8; border-radius: 8px; padding: 20px; text-align: center; margin: 20px 0;">
+                <span style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #1a1a2e;">${otp}</span>
+              </div>
+              <p style="color: #666; font-size: 14px; line-height: 1.5;">This code expires in 1 hour. If you didn't request this reset, please ignore this email.</p>
             </div>
-            <p style="color: #666; font-size: 14px;">This code expires in 1 hour. If you didn't request this reset, please ignore this email.</p>
+            
+            <!-- Arabic Section -->
+            <div dir="rtl" style="margin-top: 25px; padding-top: 25px; border-top: 1px solid #eee; text-align: right;">
+              <p style="color: #333; font-size: 16px; line-height: 1.8;">مرحباً ${name}،</p>
+              <p style="color: #333; font-size: 16px; line-height: 1.8;">لقد تلقينا طلباً لإعادة تعيين كلمة المرور الخاصة بك. استخدم الرمز أدناه:</p>
+              <div style="background-color: #f0f4f8; border-radius: 8px; padding: 15px; text-align: center; margin: 15px 0;">
+                <span style="font-size: 28px; font-weight: bold; letter-spacing: 8px; color: #1a1a2e;">${otp}</span>
+              </div>
+              <p style="color: #666; font-size: 14px; line-height: 1.8;">ينتهي هذا الرمز خلال ساعة واحدة. إذا لم تطلب إعادة التعيين، يرجى تجاهل هذا البريد.</p>
+            </div>
+            
             <div style="text-align: center; margin: 25px 0;">
-              <a href="${resetLink}" style="display: inline-block; padding: 14px 30px; background-color: #9b87f5; color: white; text-decoration: none; border-radius: 6px; font-weight: 600;">
-                Reset Password
+              <a href="${resetLink}" style="display: inline-block; padding: 14px 30px; background-color: #9b87f5; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
+                Reset Password | إعادة تعيين كلمة المرور
               </a>
             </div>
+            
+            <p style="color: #999; font-size: 12px; text-align: center; margin-top: 15px;">
+              Or copy this link | أو انسخ هذا الرابط:<br>
+              <a href="${resetLink}" style="color: #9b87f5; word-break: break-all;">${resetLink}</a>
+            </p>
+            
             <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
-            <p style="color: #999; font-size: 12px; text-align: center;">PACT Workflow Platform</p>
+            <p style="color: #999; font-size: 12px; text-align: center;">
+              This is an automated message from PACT Workflow Platform.<br>
+              هذه رسالة آلية من منصة باكت للعمليات الميدانية.<br>
+              ICT Team - PACT Command Center Platform<br>
+              فريق تكنولوجيا المعلومات - منصة مركز قيادة باكت
+            </p>
           </div>
         </body>
         </html>
       `,
-      text: `Hello ${name},\n\nYour password reset code is: ${otp}\n\nThis code expires in 1 hour.\n\nClick here to reset: ${resetLink}\n\n- PACT Workflow Platform`
+      text: `Hello ${name},
+
+Your password reset code is: ${otp}
+
+This code expires in 1 hour.
+
+Reset link: ${resetLink}
+
+---
+
+مرحباً ${name}،
+
+رمز إعادة تعيين كلمة المرور: ${otp}
+
+ينتهي خلال ساعة واحدة.
+
+---
+PACT Workflow Platform | منصة باكت`
     }
   }
 
@@ -126,9 +217,9 @@ serve(async (req) => {
     }
 
     const body = await req.json()
-    const { to, subject, html, text, type, otp, recipientName, recipientEmail, actionUrl, actionLabel }: EmailRequest = body
+    const { to, subject, html, text, type, otp, recipientName, recipientEmail, actionUrl, actionLabel, priority, cc }: EmailRequest = body
 
-    console.log('Email request - To:', to, 'Subject:', subject?.substring(0, 30), 'Type:', type)
+    console.log('Email request - To:', to, 'Subject:', subject?.substring(0, 30), 'Type:', type, 'Priority:', priority || 'normal')
 
     if (!to || !subject) {
       return new Response(
@@ -160,7 +251,7 @@ serve(async (req) => {
     // Import nodemailer
     const nodemailer = await import('npm:nodemailer@6.9.8')
     
-    // Create transporter - IONOS typically uses port 587 with STARTTLS
+    // Create transporter
     const transportConfig = {
       host: smtpHost,
       port: portNum,
@@ -199,12 +290,29 @@ serve(async (req) => {
 
     console.log(`Sending email to ${to}...`)
     
-    const mailOptions = {
+    // Build mail options with optional CC and priority
+    const mailOptions: any = {
       from: `"PACT Workflow" <${smtpUser}>`,
       to: to,
       subject: subject,
       text: emailText || 'Please view this email in an HTML-capable email client.',
       html: emailHtml || undefined,
+    }
+
+    // Add CC recipients if provided
+    if (cc && cc.length > 0) {
+      mailOptions.cc = cc.join(', ')
+      console.log(`CC: ${mailOptions.cc}`)
+    }
+
+    // Set priority headers for urgent emails
+    if (priority === 'urgent' || priority === 'high') {
+      mailOptions.priority = priority
+      mailOptions.headers = {
+        'X-Priority': priority === 'urgent' ? '1' : '2',
+        'X-MSMail-Priority': priority === 'urgent' ? 'High' : 'Normal',
+        'Importance': priority === 'urgent' ? 'high' : 'normal'
+      }
     }
 
     const info = await transporter.sendMail(mailOptions)
@@ -215,7 +323,8 @@ serve(async (req) => {
         success: true, 
         message: 'Email sent successfully',
         messageId: info.messageId || `email-${Date.now()}`,
-        deliveredAt: new Date().toISOString()
+        deliveredAt: new Date().toISOString(),
+        recipients: { to, cc: cc || [] }
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
