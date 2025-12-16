@@ -1,4 +1,4 @@
-name: Deploy to VPS Production (TEST ONLY)
+name: Deploy to VPS Production (TEST KEY)
 
 on:
   push:
@@ -13,7 +13,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Deploy to VPS (hardcoded creds — TEST)
+      - name: Deploy to VPS via SSH (hardcoded key)
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: 209.38.78.38
@@ -21,10 +21,10 @@ jobs:
           key: |
             -----BEGIN OPENSSH PRIVATE KEY-----
             b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
-            QyNTUxOQAAACCiuuDa9zYl5zmknsJpbAIPHByKUfpWuma+XFm/aj54OQAAAJDn+7H85/ux
-            /AAAAAtzc2gtZWQyNTUxOQAAACCiuuDa9zYl5zmknsJpbAIPHByKUfpWuma+XFm/aj54OQ
-            AAAECPMfc/1PwFqCYgv4VGK6QR4IFItzQXtzjMi6fvmgHWDKK64Nr3NiXnOaSewmlsAg8c
-            HIpR+la6Zr5cWb9qPng5AAAACnZwcy1hY2Nlc3MBAgM=
+            QyNTUxOQAAACDsHZyp7Dh6a5/4HF5NES28DX+A/+6j5+cVPKRDckPGQwAAAJjD7cU1w+3F
+            NQAAAAtzc2gtZWQyNTUxOQAAACDsHZyp7Dh6a5/4HF5NES28DX+A/+6j5+cVPKRDckPGQw
+            AAAEC1vOU+lUWcM2NmT4hRzQZTI3rhDcQhthO9CUrk0lkkrewdnKnsOHprn/gcXk0RLbwN
+            f4D/7qPn5xU8pENyQ8ZDAAAAE2dpdGh1Yi1hY3Rpb25zQHBhY3QBAg==
             -----END OPENSSH PRIVATE KEY-----
           script: |
             set -e
@@ -40,9 +40,9 @@ jobs:
             npm install
             npm run build
 
-            # Ensure Nginx can read files
+            # Ensure correct permissions for Nginx
             chown -R deploy:www-data dist
             find dist -type d -exec chmod 755 {} \;
             find dist -type f -exec chmod 644 {} \;
 
-            echo "✅ Deployment complete — static files ready"
+            echo "✅ Deployment completed successfully"
