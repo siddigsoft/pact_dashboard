@@ -165,6 +165,69 @@ const ReviewAssignCoordinators: React.FC = () => {
     loadData();
   }, [id, getMmpById, navigate, toast]);
 
+  // Initialize selectedSites for groups that don't have selections yet
+  // This must be in useEffect, not during render
+  useEffect(() => {
+    if (loading || loadingForwardedStates || loadingLocations || !mmpFile) return;
+    
+    // Compute entries from mmpFile (same as in render)
+    const entries: any[] = Array.isArray(mmpFile?.siteEntries) && mmpFile.siteEntries.length > 0 
+      ? mmpFile.siteEntries
+      : [];
+    
+    if (!entries.length) return;
+    
+    // Recompute groupMap here (same logic as in render, but in useEffect)
+    const stateNameToId = new Map<string, string>();
+    states.forEach(state => {
+      const normalizedName = state.name.toLowerCase();
+      stateNameToId.set(normalizedName, state.id);
+      if (normalizedName.endsWith(' state')) {
+        stateNameToId.set(normalizedName.replace(/\s+state$/, ''), state.id);
+      }
+    });
+
+    const localitiesByState = new Map<string, Map<string, string>>();
+    states.forEach(state => {
+      const map = new Map<string, string>();
+      localities
+        .filter(loc => loc.state_id === state.id)
+        .forEach(loc => map.set(loc.name.toLowerCase(), loc.id));
+      localitiesByState.set(state.id, map);
+    });
+
+    const groupMap: Record<string, any[]> = {};
+    entries.forEach((e: any) => {
+      const sName = String(e.state || '').trim().toLowerCase();
+      const stateId = stateNameToId.get(sName);
+      const locName = String(e.locality || '').trim().toLowerCase();
+      const locMap = stateId ? localitiesByState.get(stateId) : null;
+      const localityId = locName && locMap ? (locMap.get(locName) || '') : '';
+      const key = stateId ? `${stateId}|${localityId}` : 'unassigned|unassigned';
+      if (!groupMap[key]) groupMap[key] = [];
+      groupMap[key].push(e);
+    });
+    
+    const newSelectedSites: Record<string, Set<string>> = { ...selectedSites };
+    let hasChanges = false;
+    
+    Object.entries(groupMap).forEach(([groupKey, groupSites]) => {
+      // Only initialize if not already set and has unforwarded sites
+      if (!newSelectedSites[groupKey]) {
+        const unforwardedSites = groupSites.filter((site: any) => !forwardedSiteIds.has(site.id));
+        if (unforwardedSites.length > 0) {
+          newSelectedSites[groupKey] = new Set(unforwardedSites.map((site: any) => site.id));
+          hasChanges = true;
+        }
+      }
+    });
+    
+    if (hasChanges) {
+      setSelectedSites(newSelectedSites);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [forwardedSiteIds, states, localities, loading, loadingForwardedStates, loadingLocations, mmpFile]);
+
   if (loading || loadingForwardedStates || loadingLocations) {
     return (
       <div className="container mx-auto px-4 py-8">
@@ -535,11 +598,6 @@ const ReviewAssignCoordinators: React.FC = () => {
                 const unforwardedSites = groupSites.filter((site: any) => !forwardedSiteIds.has(site.id));
                 const hasUnforwardedSites = unforwardedSites.length > 0;
                 const hasForwardedSites = forwardedSites.length > 0;
-                
-                // Initialize selectedSites for this group if not set (only for unforwarded sites)
-                if (!selectedSites[groupKey] && hasUnforwardedSites) {
-                  setSelectedSites(s => ({ ...s, [groupKey]: new Set(unforwardedSites.map((site: any) => site.id)) }));
-                }
                 
                 return (
                   <div key={groupKey} className="border rounded-lg p-4 bg-gray-50">
