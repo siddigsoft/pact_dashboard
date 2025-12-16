@@ -3,7 +3,7 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { Upload, ChevronLeft, Trash2, Hand } from 'lucide-react';
+import { Upload, ChevronLeft, Trash2, Hand, FileText, ListChecks, CheckCircle, Eye, BarChart3 } from 'lucide-react';
 import { DataFreshnessBadge } from '@/components/realtime';
 import { queryClient } from '@/lib/queryClient';
 import { useMMP } from '@/context/mmp/MMPContext';
@@ -2589,22 +2589,51 @@ const MMP = () => {
   }
 
   return (
-    <div className="space-y-6 sm:space-y-10 min-h-screen bg-slate-50 dark:bg-gray-900 py-4 sm:py-8 px-1 sm:px-4 md:px-8">
-      {/* Header with Upload Button */}
-      {canCreate && (
-        <div className="flex justify-end">
-          <Button 
-            onClick={() => navigate('/mmp/upload')} 
-            className="flex items-center gap-2"
-            data-testid="button-upload-mmp"
-          >
-            <Upload className="h-4 w-4" />
-            Upload MMP
-          </Button>
+    <div className="space-y-6 min-h-screen bg-slate-50 dark:bg-gray-900 py-4 sm:py-6 px-2 sm:px-4 md:px-8">
+      {/* Blue Header Section */}
+      <div className="bg-gradient-to-r from-blue-600 to-blue-700 dark:from-blue-700 dark:to-blue-800 rounded-lg p-6 text-white shadow-lg">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-white/20 rounded-full">
+              <FileText className="h-8 w-8" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">MMP Management</h1>
+              <p className="text-blue-100 mt-1">
+                Monthly Monitoring Plans - Track, verify and manage site visits
+              </p>
+            </div>
+          </div>
+          {canCreate && (
+            <Button 
+              onClick={() => navigate('/mmp/upload')} 
+              className="bg-white text-blue-700 hover:bg-blue-50 shadow-md flex items-center gap-2"
+              data-testid="button-upload-mmp"
+            >
+              <Upload className="h-4 w-4" />
+              Upload MMP
+            </Button>
+          )}
         </div>
-      )}
+        <div className="mt-4 flex flex-wrap gap-3 text-sm">
+          <div className="flex items-center gap-2 bg-white/10 rounded-full px-3 py-1">
+            <ListChecks className="h-4 w-4" />
+            <span>Site Tracking</span>
+          </div>
+          <div className="flex items-center gap-2 bg-white/10 rounded-full px-3 py-1">
+            <CheckCircle className="h-4 w-4" />
+            <span>Verification Workflow</span>
+          </div>
+          <div className="flex items-center gap-2 bg-white/10 rounded-full px-3 py-1">
+            <BarChart3 className="h-4 w-4" />
+            <span>Progress Analytics</span>
+          </div>
+          <DataFreshnessBadge className="bg-white/10 rounded-full px-3 py-1" />
+        </div>
+      </div>
+
       {/* Body */}
-      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-lg p-2 sm:p-4 md:p-6 overflow-y-auto max-h-[calc(100vh-200px)]">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-blue-100 dark:border-blue-900/30 p-2 sm:p-4 md:p-6 overflow-y-auto max-h-[calc(100vh-280px)]">
         {loading ? (
           <MMPTabsSkeleton />
         ) : (
