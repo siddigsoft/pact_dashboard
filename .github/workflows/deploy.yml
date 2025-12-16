@@ -28,25 +28,22 @@ jobs:
             -----END OPENSSH PRIVATE KEY-----
           script: |
             set -e
-
             echo "🚀 Deploying PACT Frontend (static)"
-
             cd /home/deploy/pact_dashboard
 
-            # 🔑 CRITICAL FIX: Ensure 'deploy' owns all files before Git operations
-            sudo chown -R deploy:deploy /home/deploy/pact_dashboard
+            # Ensure Git can modify files (no sudo needed)
+            chmod -R u+w .
 
-
-            # Now safe to reset and clean
+            # Pull latest code
             git fetch origin
             git reset --hard origin/master_backup
             git clean -fd
 
+            # Rebuild
             npm install
             npm run build
 
-            # Set permissions for Nginx (www-data must read files)
-            chown -R deploy:www-data dist
+            # Set safe permissions for Nginx (world-readable)
             find dist -type d -exec chmod 755 {} \;
             find dist -type f -exec chmod 644 {} \;
 
