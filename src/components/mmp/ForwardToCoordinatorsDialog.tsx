@@ -151,13 +151,17 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
 
           // Insert notifications for coordinators in this group
           const rows = coordinatorIds.map(uid => ({
-            user_id: uid,
-            title: 'Sites forwarded to you',
-            message: `${siteNamesInGroup.join(', ')} (${group.stateName}${group.localityName ? ` - ${group.localityName}` : ''}) have been forwarded to you for verification`,
-            type: 'info',
-            link: `/mmp/${mmpId}`,
-            related_entity_id: siteIdsInGroup[0], // Use first site ID as reference
-            related_entity_type: 'mmpSiteEntry'
+            recipient_id: uid,
+            title_en: 'Sites forwarded to you',
+            title_ar: 'تم إرسال مواقع إليك',
+            message_en: `${siteNamesInGroup.join(', ')} (${group.stateName}${group.localityName ? ` - ${group.localityName}` : ''}) have been forwarded to you for verification`,
+            message_ar: `تم إرسال ${siteNamesInGroup.join(', ')} (${group.stateName}${group.localityName ? ` - ${group.localityName}` : ''}) إليك للتحقق`,
+            action_url: `/mmp/${mmpId}`,
+            entity_id: siteIdsInGroup[0], // Use first site ID as reference
+            entity_type: 'mmpSiteEntry',
+            event_type: 'assignments',
+            status: 'pending',
+            priority: 'normal'
           }));
           const { error: nErr } = await supabase.from('notifications').insert(rows);
           if (nErr) throw nErr;
@@ -168,13 +172,17 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
             const forwarderId = auth?.user?.id;
             if (forwarderId) {
               await supabase.from('notifications').insert({
-                user_id: forwarderId,
-                title: 'Sites forwarded',
-                message: `You forwarded ${siteNamesInGroup.join(', ')} (${group.stateName}${group.localityName ? ` - ${group.localityName}` : ''}) to ${coordinatorIds.length} Coordinator(s)`,
-                type: 'success',
-                link: `/mmp/${mmpId}`,
-                related_entity_id: siteIdsInGroup[0],
-                related_entity_type: 'mmpSiteEntry'
+                recipient_id: forwarderId,
+                title_en: 'Sites forwarded',
+                title_ar: 'تم إرسال المواقع',
+                message_en: `You forwarded ${siteNamesInGroup.join(', ')} (${group.stateName}${group.localityName ? ` - ${group.localityName}` : ''}) to ${coordinatorIds.length} Coordinator(s)`,
+                message_ar: `قمت بإرسال ${siteNamesInGroup.join(', ')} (${group.stateName}${group.localityName ? ` - ${group.localityName}` : ''}) إلى ${coordinatorIds.length} منسق(ين)`,
+                action_url: `/mmp/${mmpId}`,
+                entity_id: siteIdsInGroup[0],
+                entity_type: 'mmpSiteEntry',
+                event_type: 'system',
+                status: 'pending',
+                priority: 'normal'
               });
             }
           } catch {}
@@ -236,13 +244,17 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
         const ids = Array.from(selected);
         const siteNamesStr = siteNames?.join(', ') || 'sites';
         const rows = ids.map(uid => ({
-          user_id: uid,
-          title: 'Sites forwarded to you',
-          message: `${siteNamesStr} have been forwarded to you for verification`,
-          type: 'info',
-          link: `/mmp/${mmpId}`,
-          related_entity_id: siteIds![0], // Use first site ID as reference
-          related_entity_type: 'mmpSiteEntry'
+          recipient_id: uid,
+          title_en: 'Sites forwarded to you',
+          title_ar: 'تم إرسال مواقع إليك',
+          message_en: `${siteNamesStr} have been forwarded to you for verification`,
+          message_ar: `تم إرسال ${siteNamesStr} إليك للتحقق`,
+          action_url: `/mmp/${mmpId}`,
+          entity_id: siteIds![0], // Use first site ID as reference
+          entity_type: 'mmpSiteEntry',
+          event_type: 'assignments',
+          status: 'pending',
+          priority: 'normal'
         }));
         const { error: nErr } = await supabase.from('notifications').insert(rows);
         if (nErr) throw nErr;
@@ -253,13 +265,17 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
           const forwarderId = auth?.user?.id;
           if (forwarderId) {
             await supabase.from('notifications').insert({
-              user_id: forwarderId,
-              title: 'Sites forwarded',
-              message: `You forwarded ${siteNamesStr} to ${ids.length} Coordinator(s)`,
-              type: 'success',
-              link: `/mmp/${mmpId}`,
-              related_entity_id: siteIds![0],
-              related_entity_type: 'mmpSiteEntry'
+              recipient_id: forwarderId,
+              title_en: 'Sites forwarded',
+              title_ar: 'تم إرسال المواقع',
+              message_en: `You forwarded ${siteNamesStr} to ${ids.length} Coordinator(s)`,
+              message_ar: `قمت بإرسال ${siteNamesStr} إلى ${ids.length} منسق(ين)`,
+              action_url: `/mmp/${mmpId}`,
+              entity_id: siteIds![0],
+              entity_type: 'mmpSiteEntry',
+              event_type: 'system',
+              status: 'pending',
+              priority: 'normal'
             });
           }
         } catch {}
@@ -286,13 +302,17 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
         // Insert notifications
         const ids = Array.from(selected);
         const rows = ids.map(uid => ({
-          user_id: uid,
-          title: 'MMP forwarded to you',
-          message: `${mmpName || 'MMP'} has been forwarded to you for verification`,
-          type: 'info',
-          link: `/mmp/${mmpId}`,
-          related_entity_id: mmpId,
-          related_entity_type: 'mmpFile'
+          recipient_id: uid,
+          title_en: 'MMP forwarded to you',
+          title_ar: 'تم إرسال خطة المراقبة الشهرية إليك',
+          message_en: `${mmpName || 'MMP'} has been forwarded to you for verification`,
+          message_ar: `تم إرسال ${mmpName || 'خطة المراقبة الشهرية'} إليك للتحقق`,
+          action_url: `/mmp/${mmpId}`,
+          entity_id: mmpId,
+          entity_type: 'mmpFile',
+          event_type: 'assignments',
+          status: 'pending',
+          priority: 'normal'
         }));
         const { error: nErr } = await supabase.from('notifications').insert(rows);
         if (nErr) throw nErr;
@@ -303,13 +323,17 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
           const forwarderId = auth?.user?.id;
           if (forwarderId) {
             await supabase.from('notifications').insert({
-              user_id: forwarderId,
-              title: 'MMP forwarded',
-              message: `You forwarded ${mmpName || 'MMP'} to ${ids.length} Coordinator(s)`,
-              type: 'success',
-              link: `/mmp/${mmpId}`,
-              related_entity_id: mmpId,
-              related_entity_type: 'mmpFile'
+              recipient_id: forwarderId,
+              title_en: 'MMP forwarded',
+              title_ar: 'تم إرسال خطة المراقبة الشهرية',
+              message_en: `You forwarded ${mmpName || 'MMP'} to ${ids.length} Coordinator(s)`,
+              message_ar: `قمت بإرسال ${mmpName || 'خطة المراقبة الشهرية'} إلى ${ids.length} منسق(ين)`,
+              action_url: `/mmp/${mmpId}`,
+              entity_id: mmpId,
+              entity_type: 'mmpFile',
+              event_type: 'system',
+              status: 'pending',
+              priority: 'normal'
             });
           }
         } catch {}
