@@ -72,14 +72,22 @@ export async function clearForwardedWorkflow(mmpId: string) {
   if (updateError) throw updateError;
 }
 
-// Insert notifications helper - ensures event_type is always set
+// Insert notifications helper - maps legacy column names to actual DB schema
 export async function insertNotifications(rows: any[]) {
   if (!rows?.length) return;
-  // Add default event_type if not provided (required by database constraint)
+  // Map to correct database column names
   const sanitizedRows = rows.map(row => ({
-    ...row,
+    recipient_id: row.recipient_id || row.user_id,
+    title_en: row.title_en || row.title || '',
+    title_ar: row.title_ar || row.title || '',
+    message_en: row.message_en || row.message || '',
+    message_ar: row.message_ar || row.message || '',
+    action_url: row.action_url || row.link || null,
+    entity_id: row.entity_id || row.related_entity_id || null,
+    entity_type: row.entity_type || row.related_entity_type || null,
     event_type: row.event_type || 'system',
     status: row.status || 'pending',
+    priority: row.priority || 'normal',
   }));
   const { error } = await supabase.from('notifications').insert(sanitizedRows);
   if (error) throw error;

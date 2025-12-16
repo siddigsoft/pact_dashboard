@@ -229,14 +229,14 @@ export function EmergencySOS({ isVisible, onClose }: EmergencySOSProps) {
         ? `${currentLocation.lat.toFixed(6)},${currentLocation.lng.toFixed(6)}` 
         : '';
       const notifications = targetRecipients.map(recipient => ({
-        user_id: recipient.id,
-        type: 'warning' as const,
-        title: 'EMERGENCY SOS ALERT',
-        message: `Emergency alert from ${currentUser?.fullName || 'Field Worker'}. Location: ${currentLocation ? `${currentLocation.lat.toFixed(6)}, ${currentLocation.lng.toFixed(6)}` : 'Unknown'}`,
-        related_entity_type: 'user' as const,
-        related_entity_id: currentUser?.id,
-        link: `/field-team?user=${currentUser?.id}${locationStr ? `&location=${encodeURIComponent(locationStr)}` : ''}`,
-        is_read: false,
+        recipient_id: recipient.id,
+        title_en: 'EMERGENCY SOS ALERT',
+        title_ar: 'تنبيه طوارئ SOS',
+        message_en: `Emergency alert from ${currentUser?.fullName || 'Field Worker'}. Location: ${currentLocation ? `${currentLocation.lat.toFixed(6)}, ${currentLocation.lng.toFixed(6)}` : 'Unknown'}`,
+        message_ar: `تنبيه طوارئ من ${currentUser?.fullName || 'عامل ميداني'}. الموقع: ${currentLocation ? `${currentLocation.lat.toFixed(6)}, ${currentLocation.lng.toFixed(6)}` : 'غير معروف'}`,
+        entity_type: 'user',
+        entity_id: currentUser?.id,
+        action_url: `/field-team?user=${currentUser?.id}${locationStr ? `&location=${encodeURIComponent(locationStr)}` : ''}`,
         event_type: 'system',
         status: 'pending',
         priority: 'urgent',
