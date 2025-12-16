@@ -430,7 +430,7 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
       />
       
       {/* Notification list */}
-      <ScrollArea className="h-[380px] sm:h-[400px] md:h-[380px] bg-background max-h-[60vh] sm:max-h-[70vh]">
+      <ScrollArea className="h-[200px] sm:h-[220px] md:h-[200px] bg-background max-h-[40vh] sm:max-h-[45vh]">
         <div className="p-3 space-y-4">
           {viewMode === 'priority' ? (
             <>
