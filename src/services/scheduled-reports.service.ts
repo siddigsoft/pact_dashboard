@@ -289,13 +289,15 @@ export class ScheduledReportsService {
   ): Promise<void> {
     try {
       const notifications = recipientIds.map(userId => ({
-        user_id: userId,
-        type: 'report_generated',
-        title: `Scheduled Report: ${reportName}`,
-        message: `Your scheduled report "${reportName}" has been generated and is ready for download.`,
-        data: { filename, reportName },
-        read: false,
-        created_at: new Date().toISOString(),
+        recipient_id: userId,
+        title_en: `Scheduled Report: ${reportName}`,
+        title_ar: `تقرير مجدول: ${reportName}`,
+        message_en: `Your scheduled report "${reportName}" has been generated and is ready for download.`,
+        message_ar: `تم إنشاء تقريرك المجدول "${reportName}" وهو جاهز للتنزيل.`,
+        metadata: { filename, reportName },
+        event_type: 'system',
+        status: 'pending',
+        priority: 'normal'
       }));
 
       const { error } = await supabase
