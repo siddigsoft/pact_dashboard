@@ -411,12 +411,22 @@ PACT Workflow Platform | منصة باكت`;
     mmpName: string,
     forwarderName: string,
     mmpId: string,
-    isRecipientFOM: boolean = true
+    isRecipientFOM: boolean = true,
+    recipientRole?: { en: string; ar: string }
   ): Promise<EmailNotificationResult> {
     const viewMmpUrl = `${APP_URL}/mmp/${mmpId}`;
     
-    const titleEn = isRecipientFOM ? 'MMP Forwarded to You' : 'MMP Forwarded to FOM';
-    const titleAr = isRecipientFOM ? 'تم إرسال خطة المراقبة الشهرية إليك' : 'تم إرسال خطة المراقبة الشهرية إلى مدير العمليات الميدانية';
+    // Get role display names (default to FOM if not provided)
+    const roleEn = recipientRole?.en || 'Field Operations Manager';
+    const roleAr = recipientRole?.ar || 'مدير العمليات الميدانية';
+    
+    // Personalized subject with name and role
+    const titleEn = isRecipientFOM 
+      ? `MMP Forwarded to ${recipientName} - ${roleEn}` 
+      : `MMP Forwarded to FOM`;
+    const titleAr = isRecipientFOM 
+      ? `تم إرسال خطة المراقبة الشهرية إلى ${recipientName} - ${roleAr}` 
+      : `تم إرسال خطة المراقبة الشهرية إلى مدير العمليات الميدانية`;
     
     const messageEn = isRecipientFOM 
       ? `The Monthly Monitoring Plan "${mmpName}" has been forwarded to you for permits attachment by ${forwarderName}. Please review and attach the necessary permits.`
@@ -538,12 +548,14 @@ PACT Workflow Platform | منصة باكت`;
   ): Promise<EmailNotificationResult> {
     const viewMmpUrl = mmpId ? `${APP_URL}/mmp/${mmpId}` : `${APP_URL}/mmp`;
     
-    const titleEn = 'MMP Forwarded to Coordinators';
-    const titleAr = 'تم إرسال خطة المراقبة الشهرية إلى المنسقين';
-    
     // Personalized greeting based on role
-    const roleEn = recipientRole?.en || 'Team Member';
-    const roleAr = recipientRole?.ar || 'عضو الفريق';
+    const roleEn = recipientRole?.en || 'Coordinator';
+    const roleAr = recipientRole?.ar || 'المنسق';
+    
+    // Personalized subject with name and role
+    const titleEn = `MMP Forwarded to ${recipientName} - ${roleEn}`;
+    const titleAr = `تم إرسال خطة المراقبة الشهرية إلى ${recipientName} - ${roleAr}`;
+    
     const greetingEn = `Dear ${recipientName} (${roleEn}),`;
     const greetingAr = `عزيزي ${recipientName} (${roleAr})،`;
     
@@ -636,12 +648,7 @@ ${messageAr}
 عدد المنسقين: ${coordinatorCount}
 
 ---
-
-This notification has been sent to relevant management including Administrators, Field Operations Managers, and Supervisors for oversight and accountability.
-
-تم إرسال هذا الإشعار إلى الإدارة المعنية بما في ذلك المسؤولين ومديري العمليات الميدانية والمشرفين للإشراف والمساءلة.
-
-- PACT Workflow Platform | منصة باكت`;
+PACT Workflow Platform | منصة باكت`;
 
     return this.sendEmail({
       to: email,
@@ -666,12 +673,14 @@ This notification has been sent to relevant management including Administrators,
   ): Promise<EmailNotificationResult> {
     const viewSiteUrl = siteId ? `${APP_URL}/mmp?site=${siteId}` : `${APP_URL}/mmp`;
     
-    const titleEn = 'Site Verified by Coordinator';
-    const titleAr = 'تم التحقق من الموقع بواسطة المنسق';
-    
     // Personalized greeting based on role
     const roleEn = recipientRole?.en || 'Team Member';
     const roleAr = recipientRole?.ar || 'عضو الفريق';
+    
+    // Personalized subject with name and role
+    const titleEn = `Site Verified - Notification to ${recipientName} - ${roleEn}`;
+    const titleAr = `تم التحقق من الموقع - إشعار إلى ${recipientName} - ${roleAr}`;
+    
     const greetingEn = `Dear ${recipientName} (${roleEn}),`;
     const greetingAr = `عزيزي ${recipientName} (${roleAr})،`;
     
