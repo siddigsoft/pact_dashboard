@@ -42,7 +42,7 @@ interface HubManagementUser {
   email: string;
   role: string;
 }
-export type NotificationPriority = 'low' | 'medium' | 'high' | 'urgent';
+export type NotificationPriority = 'normal' | 'high' | 'urgent';
 
 interface TriggerNotificationOptions {
   userId: string;
@@ -127,7 +127,7 @@ export const NotificationTriggerService = {
       message,
       type = 'info',
       category = 'system',
-      priority = 'medium',
+      priority = 'normal',
       link,
       relatedEntityId,
       relatedEntityType,
@@ -149,7 +149,7 @@ export const NotificationTriggerService = {
     try {
       // Ensure event_type is never null - database constraint requires it
       const safeEventType = category || 'system';
-      const safePriority = priority || 'medium';
+      const safePriority = priority || 'normal';
       
       // Map to actual database schema columns
       const notificationData = {
@@ -223,7 +223,7 @@ export const NotificationTriggerService = {
       message: `Successfully uploaded "${mmpName}" with ${siteCount} sites`,
       type: 'success',
       category: 'system',
-      priority: 'medium',
+      priority: 'normal',
       link: `/mmp/${mmpId}`,
       relatedEntityId: mmpId,
       relatedEntityType: 'mmpFile'
@@ -242,7 +242,7 @@ export const NotificationTriggerService = {
   },
 
   async siteVisitReminder(userId: string, siteName: string, hoursUntilDeadline: number, siteId: string): Promise<void> {
-    const urgency = hoursUntilDeadline <= 4 ? 'urgent' : hoursUntilDeadline <= 24 ? 'high' : 'medium';
+    const urgency = hoursUntilDeadline <= 4 ? 'urgent' : hoursUntilDeadline <= 24 ? 'high' : 'normal';
     const type = hoursUntilDeadline <= 4 ? 'error' : hoursUntilDeadline <= 24 ? 'warning' : 'info';
     
     await this.send({
@@ -274,7 +274,7 @@ export const NotificationTriggerService = {
     const statusInfo = statusMessages[status];
     
     // All withdrawal status changes should trigger email notifications
-    const priority: NotificationPriority = status === 'approved' || status === 'rejected' ? 'high' : 'medium';
+    const priority: NotificationPriority = status === 'approved' || status === 'rejected' ? 'high' : 'normal';
     
     await this.send({
       userId,
@@ -315,7 +315,7 @@ export const NotificationTriggerService = {
 
   async budgetThresholdAlert(userId: string, projectName: string, percentUsed: number): Promise<void> {
     const type = percentUsed >= 100 ? 'error' : percentUsed >= 90 ? 'warning' : 'info';
-    const priority = percentUsed >= 100 ? 'urgent' : percentUsed >= 90 ? 'high' : 'medium';
+    const priority = percentUsed >= 100 ? 'urgent' : percentUsed >= 90 ? 'high' : 'normal';
     
     await this.send({
       userId,
@@ -347,7 +347,7 @@ export const NotificationTriggerService = {
       message: `${collectorName} has completed the visit to "${siteName}"`,
       type: 'success',
       category: 'assignments',
-      priority: 'medium',
+      priority: 'normal',
       link: `/mmp`,
       relatedEntityId: siteId,
       relatedEntityType: 'siteVisit'
@@ -375,7 +375,7 @@ export const NotificationTriggerService = {
       message: `Your transaction of ${currency} ${amount.toLocaleString()} has been digitally signed and recorded`,
       type: 'success',
       category: 'signatures',
-      priority: 'medium',
+      priority: 'normal',
       link: '/wallet',
       relatedEntityId: transactionId,
       relatedEntityType: 'transaction'
@@ -401,7 +401,7 @@ export const NotificationTriggerService = {
       message: `${signerName} has signed "${documentTitle}"`,
       type: 'info',
       category: 'signatures',
-      priority: 'medium',
+      priority: 'normal',
       link: '/signatures',
       relatedEntityId: documentId,
       relatedEntityType: 'document'
@@ -503,7 +503,7 @@ export const NotificationTriggerService = {
       message: `${senderName}: ${messagePreview.slice(0, 50)}${messagePreview.length > 50 ? '...' : ''}`,
       type: 'info',
       category: 'messages',
-      priority: 'medium',
+      priority: 'normal',
       link: chatId ? `/chat?userId=${chatId}` : '/chat',
       relatedEntityId: chatId,
       relatedEntityType: 'chat'
@@ -517,7 +517,7 @@ export const NotificationTriggerService = {
       message: `You have ${count} unread message${count > 1 ? 's' : ''}`,
       type: 'info',
       category: 'messages',
-      priority: 'medium',
+      priority: 'normal',
       link: '/chat'
     });
   },
@@ -615,7 +615,7 @@ export const NotificationTriggerService = {
         message,
         type: 'info',
         category: 'system',
-        priority: 'medium'
+        priority: 'normal'
       }, projectId);
     }
     
@@ -628,7 +628,7 @@ export const NotificationTriggerService = {
       message,
       type: 'info',
       category: 'system',
-      priority: 'medium',
+      priority: 'normal',
       projectId
     });
   },
@@ -679,7 +679,7 @@ export const NotificationTriggerService = {
         message: `${claimerName} has claimed the site "${siteName}"`,
         type: 'info' as const,
         category: 'assignments' as NotificationCategory,
-        priority: 'medium' as NotificationPriority,
+        priority: 'normal' as NotificationPriority,
         link: `/mmp`,
         relatedEntityId: siteId,
         relatedEntityType: 'siteVisit' as const
@@ -712,7 +712,7 @@ export const NotificationTriggerService = {
     siteId: string,
     hoursUntilDeadline: number
   ): Promise<void> {
-    const priority: NotificationPriority = hoursUntilDeadline <= 12 ? 'urgent' : hoursUntilDeadline <= 24 ? 'high' : 'medium';
+    const priority: NotificationPriority = hoursUntilDeadline <= 12 ? 'urgent' : hoursUntilDeadline <= 24 ? 'high' : 'normal';
     const type = hoursUntilDeadline <= 12 ? 'warning' : 'info';
     
     let message: string;
@@ -784,7 +784,7 @@ export const NotificationTriggerService = {
     }
 
     const priorityMap: Record<string, NotificationPriority> = {
-      '24h': 'medium',
+      '24h': 'normal',
       '12h': 'high',
       '6h': 'urgent'
     };
@@ -1061,7 +1061,7 @@ export const NotificationTriggerService = {
           message: `Site "${siteName}" from MMP "${mmpName}" has been verified by Coordinator ${coordinatorName}`,
           type: 'success',
           category: 'assignments',
-          priority: 'medium',
+          priority: 'normal',
           link: siteId ? `/mmp?site=${siteId}` : '/mmp',
           relatedEntityId: siteId,
           relatedEntityType: 'siteVisit',
@@ -1109,7 +1109,7 @@ export const NotificationTriggerService = {
             message: `Site "${siteName}" from MMP "${mmpName}" has been verified by Coordinator ${coordinatorName}`,
             type: 'success',
             category: 'assignments',
-            priority: 'medium',
+            priority: 'normal',
             link: siteId ? `/mmp?site=${siteId}` : '/mmp',
             relatedEntityId: siteId,
             relatedEntityType: 'siteVisit',
@@ -1188,7 +1188,7 @@ export const NotificationTriggerService = {
         title: 'Site Claimed',
         message: `Site "${siteName}" has been claimed${details?.actorName ? ` by ${details.actorName}` : ''}`,
         type: 'info' as const,
-        priority: 'medium' as NotificationPriority
+        priority: 'normal' as NotificationPriority
       },
       rejected: {
         title: 'Site Rejected',
@@ -1200,13 +1200,13 @@ export const NotificationTriggerService = {
         title: 'Site Verified',
         message: `Site "${siteName}" has been verified${details?.actorName ? ` by ${details.actorName}` : ''}`,
         type: 'success' as const,
-        priority: 'medium' as NotificationPriority
+        priority: 'normal' as NotificationPriority
       },
       approved: {
         title: 'Site Approved',
         message: `Site "${siteName}" has been approved${details?.actorName ? ` by ${details.actorName}` : ''}`,
         type: 'success' as const,
-        priority: 'medium' as NotificationPriority
+        priority: 'normal' as NotificationPriority
       },
       dispatched: {
         title: 'Sites Dispatched',
@@ -1214,13 +1214,13 @@ export const NotificationTriggerService = {
           ? `${details.siteCount} sites including "${siteName}" have been dispatched`
           : `Site "${siteName}" has been dispatched`,
         type: 'info' as const,
-        priority: 'medium' as NotificationPriority
+        priority: 'normal' as NotificationPriority
       },
       completed: {
         title: 'Site Visit Completed',
         message: `Site visit to "${siteName}" has been completed${details?.actorName ? ` by ${details.actorName}` : ''}`,
         type: 'success' as const,
-        priority: 'medium' as NotificationPriority
+        priority: 'normal' as NotificationPriority
       }
     };
 
@@ -1274,7 +1274,7 @@ export const NotificationTriggerService = {
       message: `${label} of ${currency} ${amount.toLocaleString()}${details?.userName ? ` by ${details.userName}` : ''} has been ${statusLabel}`,
       type: status === 'approved' ? 'success' : status === 'rejected' ? 'error' : 'info',
       category: 'financial',
-      priority: status === 'pending' ? 'high' : 'medium',
+      priority: status === 'pending' ? 'high' : 'normal',
       link: '/finance-approval',
       relatedEntityId: details?.transactionId,
       relatedEntityType: 'transaction'
@@ -1305,7 +1305,7 @@ export const NotificationTriggerService = {
         : `Activity "${activityName}" has reached ${coveragePercent}% coverage (${completedSites}/${totalSites} sites)`,
       type: isComplete ? 'success' : 'info',
       category: 'assignments',
-      priority: isComplete ? 'high' : 'medium',
+      priority: isComplete ? 'high' : 'normal',
       link: '/tracker'
     });
   },
@@ -1358,7 +1358,7 @@ export const NotificationTriggerService = {
         : `Activity "${activityName}" at "${siteName}" is scheduled in ${daysUntil} days (${activityDate})`,
       type: isToday ? 'warning' : 'info',
       category: 'assignments',
-      priority: isToday ? 'high' : 'medium',
+      priority: isToday ? 'high' : 'normal',
       link: '/mmp'
     });
   },
