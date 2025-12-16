@@ -147,23 +147,28 @@ export const NotificationTriggerService = {
     }
 
     try {
+      // Ensure event_type is never null - database constraint requires it
+      const safeEventType = category || 'system';
+      const safePriority = priority || 'medium';
+      
       // Map to actual database schema columns
       const notificationData = {
         recipient_id: userId,
-        title_en: title,
-        title_ar: title,
-        message_en: message,
-        message_ar: message,
-        priority: priority,
-        action_url: link,
-        entity_id: relatedEntityId,
-        entity_type: relatedEntityType,
-        event_type: category,
+        title_en: title || 'Notification',
+        title_ar: title || 'إشعار',
+        message_en: message || '',
+        message_ar: message || '',
+        priority: safePriority,
+        action_url: link || null,
+        entity_id: relatedEntityId || null,
+        entity_type: relatedEntityType || null,
+        event_type: safeEventType,
         status: 'pending',
         email_sent: false
       };
 
       console.log(`[NOTIFICATION] Inserting into database:`, JSON.stringify(notificationData));
+      console.log(`[NOTIFICATION] event_type="${safeEventType}", priority="${safePriority}"`);
 
       const { data, error } = await supabase.from('notifications').insert(notificationData).select('id');
 
