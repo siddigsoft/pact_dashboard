@@ -1619,13 +1619,18 @@ const CoordinatorSites: React.FC = () => {
             const sitesForThisMmp = sitesToReturn.filter(s => s.mmp_file_id === mmpFileId);
             const siteNames = sitesForThisMmp.map(s => `${s.site_name} (${s.site_code})`).join(', ');
             await supabase.from('notifications').insert({
-              user_id: mmpData.uploaded_by,
-              title: 'Sites Returned by Coordinator',
-              message: sitesForThisMmp.length > 1 
+              recipient_id: mmpData.uploaded_by,
+              title_en: 'Sites Returned by Coordinator',
+              title_ar: 'تم إرجاع المواقع من المنسق',
+              message_en: sitesForThisMmp.length > 1 
                 ? `${sitesForThisMmp.length} sites have been returned. Reason: ${reason}`
                 : `Site ${siteNames} has been returned. Reason: ${reason}`,
-              type: 'warning',
-              read: false,
+              message_ar: sitesForThisMmp.length > 1 
+                ? `تم إرجاع ${sitesForThisMmp.length} مواقع. السبب: ${reason}`
+                : `تم إرجاع الموقع ${siteNames}. السبب: ${reason}`,
+              event_type: 'approvals',
+              status: 'pending',
+              priority: 'high'
             });
           }
         } catch (notifErr) {

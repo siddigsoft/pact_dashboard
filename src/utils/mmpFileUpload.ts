@@ -94,13 +94,17 @@ async function notifyStakeholdersOnUpload(mmp: { id: string; name: string; hub?:
     if (userIds.length === 0) return;
 
     const rows = userIds.map(uid => ({
-      user_id: uid,
-      title: 'New MMP uploaded',
-      message: `${mmp.name} has been uploaded and is ready for verification`,
-      type: 'info',
-      link: `/mmp/${mmp.id}`,
-      related_entity_id: mmp.id,
-      related_entity_type: 'mmpFile'
+      recipient_id: uid,
+      title_en: 'New MMP uploaded',
+      title_ar: 'تم رفع خطة مراقبة شهرية جديدة',
+      message_en: `${mmp.name} has been uploaded and is ready for verification`,
+      message_ar: `تم رفع ${mmp.name} وهي جاهزة للتحقق`,
+      action_url: `/mmp/${mmp.id}`,
+      entity_id: mmp.id,
+      entity_type: 'mmpFile',
+      event_type: 'system',
+      status: 'pending',
+      priority: 'normal'
     }));
     await supabase.from('notifications').insert(rows);
   } catch {}
