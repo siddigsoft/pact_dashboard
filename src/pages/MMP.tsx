@@ -2594,7 +2594,7 @@ const MMP = () => {
       {canCreate && (
         <div className="flex justify-end">
           <Button 
-            onClick={() => navigate('/mmp-upload')} 
+            onClick={() => navigate('/mmp/upload')} 
             className="flex items-center gap-2"
             data-testid="button-upload-mmp"
           >
