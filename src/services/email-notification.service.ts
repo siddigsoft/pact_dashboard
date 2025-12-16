@@ -230,39 +230,46 @@ export const EmailNotificationService = {
       const finalSubject = priorityPrefix + subject;
       
       console.log(`[EMAIL] Sending to ${to}: ${finalSubject}${cc?.length ? ` (CC: ${cc.join(', ')})` : ''}`);
+      console.log(`[EMAIL] HTML length: ${html?.length || 0}, Text length: ${text?.length || 0}`);
 
+      const payload = {
+        to,
+        subject: finalSubject,
+        html,
+        text,
+        type: 'notification',
+        recipientName: recipientName || 'User',
+        priority: priority || 'normal',
+        cc: cc || [],
+      };
+      
+      console.log(`[EMAIL] Invoking send-email Edge Function...`);
       const { data, error } = await supabase.functions.invoke('send-email', {
-        body: {
-          to,
-          subject: finalSubject,
-          html,
-          text,
-          type: 'notification',
-          recipientName: recipientName || 'User',
-          priority: priority || 'normal',
-          cc: cc || [],
-        },
+        body: payload,
       });
 
       if (error) {
-        console.error('[EMAIL] Send failed:', error);
+        console.error('[EMAIL] Edge Function invocation failed:', error);
+        console.error('[EMAIL] Error details:', JSON.stringify(error, null, 2));
         await logEmailSend(to, subject, 'notification', false, undefined, error.message);
         return {
           success: false,
-          error: error.message || 'Failed to send email',
+          error: `Edge Function error: ${error.message || 'Unknown error'}. Make sure the send-email Edge Function is deployed to Supabase.`,
         };
       }
 
+      console.log('[EMAIL] Edge Function response:', JSON.stringify(data, null, 2));
+
       if (data && !data.success) {
-        console.error('[EMAIL] Send failed:', data.error);
+        console.error('[EMAIL] Email send failed:', data.error);
         await logEmailSend(to, subject, 'notification', false, undefined, data.error);
         return {
           success: false,
-          error: data.error || 'Failed to send email',
+          error: data.error || 'Failed to send email. Check SMTP secrets in Supabase Edge Functions.',
         };
       }
 
-      console.log(`[EMAIL] Sent successfully to ${to}`);
+      console.log(`[EMAIL] Sent successfully to ${to}, messageId: ${data?.messageId}`);
       const messageId = data?.messageId || `email-${Date.now()}`;
       await logEmailSend(to, subject, 'notification', true, messageId);
       return {
