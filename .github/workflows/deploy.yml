@@ -1,4 +1,4 @@
-name: Deploy to VPS Production (TEST KEY)
+name: Deploy to VPS Production
 
 on:
   push:
