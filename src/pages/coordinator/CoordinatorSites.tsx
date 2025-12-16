@@ -2818,7 +2818,7 @@ const CoordinatorSites: React.FC = () => {
             <Badge variant="secondary" className="text-xs">{newSitesCount}</Badge>
           </TabsTrigger>
           <TabsTrigger value="permits_attached" className="flex flex-col items-center justify-center gap-1 rounded-md py-2 px-1 sm:px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-xs sm:text-sm">
-            <span>Permits</span>
+            <span>CP Verification</span>
             <Badge variant="secondary" className="text-xs">{permitsAttachedCount}</Badge>
           </TabsTrigger>
           <TabsTrigger value="verified" className="flex flex-col items-center justify-center gap-1 rounded-md py-2 px-1 sm:px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-xs sm:text-sm">
