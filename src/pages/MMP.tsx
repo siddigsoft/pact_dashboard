@@ -3244,7 +3244,7 @@ const MMP = () => {
                             onClick={() => setMySitesSubTab('pending')} 
                             className={`${mySitesSubTab === 'pending' ? 'bg-green-100 hover:bg-green-200 text-green-800 border border-green-300' : ''} flex-shrink-0 whitespace-nowrap`}
                           >
-                            Pending Visits
+                            Inbox
                             <Badge variant="secondary" className="ml-2">
                               {enumeratorMySites.filter(site => {
                                 const status = (site.status || '').toLowerCase().replace(/[-_\s]/g, '');
@@ -3267,7 +3267,7 @@ const MMP = () => {
                             onClick={() => setMySitesSubTab('ongoing')} 
                             className={`${mySitesSubTab === 'ongoing' ? 'bg-yellow-100 hover:bg-yellow-200 text-yellow-800 border border-yellow-300' : ''} flex-shrink-0 whitespace-nowrap`}
                           >
-                            Ongoing
+                            Outbox
                             <Badge variant="secondary" className="ml-2">
                               {enumeratorMySites.filter(site => {
                                 const status = (site.status || '').toLowerCase().replace(/[-_\s]/g, '');
@@ -3284,7 +3284,7 @@ const MMP = () => {
                             onClick={() => setMySitesSubTab('completed')} 
                             className={`${mySitesSubTab === 'completed' ? 'bg-green-100 hover:bg-green-200 text-green-800 border border-green-300' : ''} flex-shrink-0 whitespace-nowrap`}
                           >
-                            Completed
+                            Sent
                             <Badge variant="secondary" className="ml-2">
                               {enumeratorMySites.filter(site => {
                                 const status = (site.status || '').toLowerCase();
@@ -3298,7 +3298,7 @@ const MMP = () => {
                             onClick={() => setMySitesSubTab('all')} 
                             className={`${mySitesSubTab === 'all' ? 'bg-blue-100 hover:bg-blue-200 text-blue-800 border border-blue-300' : ''} flex-shrink-0 whitespace-nowrap`}
                           >
-                            All Sites
+                            Drafts
                             <Badge variant="secondary" className="ml-2">
                               {enumeratorMySites.length}
                             </Badge>
