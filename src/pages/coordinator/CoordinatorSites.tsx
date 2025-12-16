@@ -461,13 +461,11 @@ const CoordinatorSites: React.FC = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { currentUser } = useAppContext();
-  const { updateMMP, refreshMMPFiles, mmpFiles: contextMmpFiles } = useMMP();
+  const { updateMMP, refreshMMPFiles, mmpFiles: contextMmpFiles, loading: contextLoading } = useMMP();
   const { userProjectIds, isAdminOrSuperUser } = useUserProjects();
   const siteVisitContext = useSiteVisitContext();
   const [isStartingVisit, setIsStartingVisit] = useState(false);
   const { permits, loading: permitsLoading, uploadPermit, fetchPermits } = useCoordinatorLocalityPermits();
-  const [loading, setLoading] = useState(true);
-  const [sites, setSites] = useState<SiteVisit[]>([]);
   const [localitiesData, setLocalitiesData] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState('new');
   const [verifyDialogOpen, setVerifyDialogOpen] = useState(false);
@@ -522,8 +520,6 @@ const CoordinatorSites: React.FC = () => {
   const [approvedSitesCount, setApprovedSitesCount] = useState(0);
   const [completedSitesCount, setCompletedSitesCount] = useState(0);
   const [rejectedSitesCount, setRejectedSitesCount] = useState(0);
-  // Loading guard to prevent concurrent loads
-  const [isLoadingRef] = useState({ current: false });
   
   // Subcategory counts for new sites tabs
   const [statePermitRequiredCount, setStatePermitRequiredCount] = useState(0);
@@ -586,11 +582,125 @@ const CoordinatorSites: React.FC = () => {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
+  // Filter coordinator-specific sites from MMP context data
+  const coordinatorSites = useMemo(() => {
+    if (!currentUser?.id || !contextMmpFiles || contextLoading) return [];
+    
+    // Non-admin users with no project assignments should see nothing
+    if (!isAdminOrSuperUser && userProjectIds.length === 0) {
+      return [];
+    }
+
+    const allSites: SiteVisit[] = [];
+    
+    // Collect all site entries from context that are forwarded to this coordinator
+    contextMmpFiles.forEach((mmp: any) => {
+      if (!mmp.siteEntries || !Array.isArray(mmp.siteEntries)) return;
+      
+      mmp.siteEntries.forEach((entry: any) => {
+        // Filter by forwarded_to_user_id
+        if (entry.forwardedToUserId !== currentUser.id) return;
+        
+        // For non-admins, also check project membership
+        if (!isAdminOrSuperUser) {
+          const projectId = mmp.projectId;
+          if (!projectId || !userProjectIds.includes(projectId)) return;
+        }
+
+        // Transform entry to SiteVisit format
+        const isUnverified = entry.status === 'Pending' || entry.status === 'Dispatched' || 
+                            entry.status === 'assigned' || entry.status === 'inProgress' || 
+                            entry.status === 'in_progress';
+        const visitDate = isUnverified ? null : entry.visitDate;
+
+        allSites.push({
+          id: entry.id,
+          site_name: entry.siteName || entry.site_name,
+          site_code: entry.siteCode || entry.site_code,
+          status: entry.status,
+          state: entry.state,
+          locality: entry.locality,
+          activity: entry.siteActivity || entry.activity_at_site || entry.mainActivity,
+          main_activity: entry.mainActivity || entry.main_activity,
+          activity_at_site: entry.siteActivity 
+            ? (typeof entry.siteActivity === 'string' ? entry.siteActivity.split(', ').filter(a => a.trim() !== '') : entry.siteActivity)
+            : [],
+          visit_date: visitDate,
+          assigned_at: entry.additionalData?.assigned_at || entry.additional_data?.assigned_at,
+          comments: entry.comments,
+          mmp_file_id: mmp.id,
+          hub_office: entry.hubOffice || entry.hub_office,
+          cp_name: entry.cpName || entry.cp_name,
+          monitoring_by: entry.monitoringBy || entry.monitoring_by,
+          survey_tool: entry.surveyTool || entry.survey_tool,
+          use_market_diversion: entry.useMarketDiversion ?? entry.use_market_diversion ?? false,
+          use_warehouse_monitoring: entry.useWarehouseMonitoring ?? entry.use_warehouse_monitoring ?? false,
+          verified_at: entry.verified_at,
+          verified_by: entry.verified_by,
+          verification_notes: entry.verification_notes,
+          additional_data: entry.additionalData || entry.additional_data || {},
+        });
+      });
+    });
+
+    return allSites;
+  }, [contextMmpFiles, contextLoading, currentUser?.id, userProjectIds, isAdminOrSuperUser]);
+
+  // Filter sites by active tab status
+  const sitesByTab = useMemo(() => {
+    if (!coordinatorSites) return [];
+    
+    let result = [...coordinatorSites];
+    
+    // Filter by status based on active tab
+    switch (activeTab) {
+      case 'new':
+        result = result.filter((e: any) => 
+          e.status === 'Pending' || e.status === 'Dispatched' || e.status === 'assigned' || e.status === 'inProgress' || e.status === 'in_progress'
+        );
+        break;
+      case 'permits_attached':
+        result = result.filter((e: any) => 
+          e.status?.toLowerCase() === 'permits_attached'
+        );
+        break;
+      case 'verified':
+        result = result.filter((e: any) => 
+          e.status?.toLowerCase() === 'verified'
+        );
+        break;
+      case 'approved':
+        result = result.filter((e: any) => 
+          e.status?.toLowerCase() === 'approved'
+        );
+        break;
+      case 'completed':
+        result = result.filter((e: any) => 
+          e.status?.toLowerCase() === 'completed'
+        );
+        break;
+      case 'rejected':
+        result = result.filter((e: any) => 
+          e.status?.toLowerCase() === 'rejected'
+        );
+        break;
+    }
+    
+    // Sort by assigned_at
+    result.sort((a: any, b: any) => {
+      const aAt = a.assigned_at || a.additional_data?.assigned_at;
+      const bAt = b.assigned_at || b.additional_data?.assigned_at;
+      return new Date(bAt || 0).getTime() - new Date(aAt || 0).getTime();
+    });
+    
+    return result;
+  }, [coordinatorSites, activeTab]);
+
   // Memoize filtered sites to avoid recalculation on every render
   const filteredSites = useMemo(() => {
-    if (!sites) return [];
+    if (!sitesByTab) return [];
     
-    let result = sites;
+    let result = sitesByTab;
     
     // Apply search filter
     if (debouncedSearchQuery) {
@@ -623,7 +733,7 @@ const CoordinatorSites: React.FC = () => {
     }
     
     return result;
-  }, [sites, debouncedSearchQuery, hubFilter, stateFilter, localityFilter, activityFilter, monitoringFilter, surveyToolFilter]);
+  }, [sitesByTab, debouncedSearchQuery, hubFilter, stateFilter, localityFilter, activityFilter, monitoringFilter, surveyToolFilter]);
 
   // Memoize paginated sites
   const paginatedSites = useMemo(() => {
@@ -715,107 +825,37 @@ const CoordinatorSites: React.FC = () => {
     fetchLocationData();
   }, [toast]);
 
-  // Load badge counts for all tabs (always loaded) - filtered by project membership
+  // Calculate badge counts from coordinator sites
   useEffect(() => {
-    if (!currentUser?.id) return;
-    
-    const loadBadgeCounts = async () => {
-      // Non-admin users with no project assignments should see nothing
-      if (!isAdminOrSuperUser && userProjectIds.length === 0) {
-        updateBadgeCounts([]);
-        return;
-      }
-      
-      try {
-        const userId = currentUser.id;
-        
-        // Fetch entries with mmp_file join to get project_id for filtering
-        const { data: userEntries, error: entriesError } = await supabase
-          .from('mmp_site_entries')
-          .select(`
-            id, status,
-            mmp_file:mmp_files!mmp_file_id(project_id)
-          `)
-          .eq('forwarded_to_user_id', userId)
-          .limit(5000);
-        
-        if (entriesError) {
-          console.warn('RLS or filter error, falling back to full fetch:', entriesError);
-          // Fallback: fetch all and filter client-side
-          const { data: allEntries } = await supabase
-            .from('mmp_site_entries')
-            .select(`
-              id, status, forwarded_to_user_id,
-              mmp_file:mmp_files!mmp_file_id(project_id)
-            `)
-            .limit(5000);
-          
-          let filtered = (allEntries || []).filter((entry: any) => {
-            return entry.forwarded_to_user_id === userId;
-          });
-          
-          // Apply project filter for non-admin users (userProjectIds.length > 0 is guaranteed here)
-          if (!isAdminOrSuperUser) {
-            filtered = filtered.filter((entry: any) => {
-              const projectId = entry.mmp_file?.project_id;
-              return projectId && userProjectIds.includes(projectId);
-            });
-          }
-          
-          updateBadgeCounts(filtered);
-          return;
-        }
-        
-        // Apply project filter for non-admin users (userProjectIds.length > 0 is guaranteed here)
-        let filtered = userEntries || [];
-        if (!isAdminOrSuperUser) {
-          filtered = filtered.filter((entry: any) => {
-            const projectId = entry.mmp_file?.project_id;
-            return projectId && userProjectIds.includes(projectId);
-          });
-        }
-        
-        updateBadgeCounts(filtered);
-      } catch (error) {
-        console.error('Error loading badge counts:', error);
-      }
-    };
+    const newCount = coordinatorSites.filter((e: any) => 
+      e.status === 'Pending' || e.status === 'Dispatched' || e.status === 'assigned' || e.status === 'inProgress' || e.status === 'in_progress'
+    ).length;
+    const permitsAttachedCount = coordinatorSites.filter((e: any) => 
+      e.status?.toLowerCase() === 'permits_attached'
+    ).length;
+    const verifiedCount = coordinatorSites.filter((e: any) => 
+      e.status?.toLowerCase() === 'verified'
+    ).length;
+    const approvedCount = coordinatorSites.filter((e: any) => 
+      e.status?.toLowerCase() === 'approved'
+    ).length;
+    const completedCount = coordinatorSites.filter((e: any) => 
+      e.status?.toLowerCase() === 'completed'
+    ).length;
+    const rejectedCount = coordinatorSites.filter((e: any) => 
+      e.status?.toLowerCase() === 'rejected'
+    ).length;
 
-    const updateBadgeCounts = (entries: any[]) => {
-      const newCount = entries.filter((e: any) => 
-        e.status === 'Pending' || e.status === 'Dispatched' || e.status === 'assigned' || e.status === 'inProgress' || e.status === 'in_progress'
-      ).length;
-      const permitsAttachedCount = entries.filter((e: any) => 
-        e.status?.toLowerCase() === 'permits_attached'
-      ).length;
-      const verifiedCount = entries.filter((e: any) => 
-        e.status?.toLowerCase() === 'verified'
-      ).length;
-      const approvedCount = entries.filter((e: any) => 
-        e.status?.toLowerCase() === 'approved'
-      ).length;
-      const completedCount = entries.filter((e: any) => 
-        e.status?.toLowerCase() === 'completed'
-      ).length;
-      const rejectedCount = entries.filter((e: any) => 
-        e.status?.toLowerCase() === 'rejected'
-      ).length;
+    setNewSitesCount(newCount);
+    setPermitsAttachedCount(permitsAttachedCount);
+    setVerifiedSitesCount(verifiedCount);
+    setApprovedSitesCount(approvedCount);
+    setCompletedSitesCount(completedCount);
+    setRejectedSitesCount(rejectedCount);
+  }, [coordinatorSites]);
 
-      setNewSitesCount(newCount);
-      setPermitsAttachedCount(permitsAttachedCount);
-      setVerifiedSitesCount(verifiedCount);
-      setApprovedSitesCount(approvedCount);
-      setCompletedSitesCount(completedCount);
-      setRejectedSitesCount(rejectedCount);
-    };
-
-    loadBadgeCounts();
-  }, [currentUser?.id, userProjectIds, isAdminOrSuperUser]);
-
-  // Load sites for active tab only - filtered by project membership
+  // Reset search and pagination when tab changes
   useEffect(() => {
-    loadSites();
-    // Reset search and pagination when tab changes
     setSearchQuery('');
     setCurrentPage(1);
     // Reset filters when tab changes
@@ -827,492 +867,145 @@ const CoordinatorSites: React.FC = () => {
     setSurveyToolFilter('all');
     // Reset expanded localities when tab changes
     setExpandedPermitsAttachedLocalities(new Set());
-  }, [currentUser?.id, activeTab]);
+  }, [activeTab]);
 
-  const loadSites = async () => {
-    if (!currentUser?.id) return;
 
-    // Prevent concurrent loads
-    if (isLoadingRef.current) {
-      console.log('Load already in progress, skipping...');
-      return;
-    }
 
-    // Non-admin users with no project assignments should see nothing
-    if (!isAdminOrSuperUser && userProjectIds.length === 0) {
-      setSites([]);
+
+  // Build locality data from coordinator sites
+  useEffect(() => {
+    if (!coordinatorSites || coordinatorSites.length === 0) {
       setLocalitiesData([]);
-      setLoading(false);
+      setStatePermitRequiredCount(0);
+      setLocalPermitRequiredCount(0);
       return;
     }
 
-    isLoadingRef.current = true;
-    setLoading(true);
-    try {
-      // Load forwarded entries with mmp_file join to get project_id for filtering
-      const { data: allEntries, error } = await supabase
-        .from('mmp_site_entries')
-        .select(`
-          id, site_name, site_code, status, state, locality, activity_at_site, main_activity, visit_date, comments, mmp_file_id, hub_office, cp_name, monitoring_by, survey_tool, use_market_diversion, use_warehouse_monitoring, verified_at, verified_by, verification_notes, additional_data, created_at, forwarded_to_user_id,
-          mmp_file:mmp_files!mmp_file_id(project_id)
-        `)
-        .eq('forwarded_to_user_id', currentUser.id)
-        .limit(5000);
-
-      if (error) {
-        console.warn('Filter error, falling back to full fetch:', error);
-        // Fallback: fetch all and filter client-side
-        const { data: fallbackEntries, error: fallbackError } = await supabase
-          .from('mmp_site_entries')
-          .select(`
-            id, site_name, site_code, status, state, locality, activity_at_site, main_activity, visit_date, comments, mmp_file_id, hub_office, cp_name, monitoring_by, survey_tool, use_market_diversion, use_warehouse_monitoring, verified_at, verified_by, verification_notes, additional_data, created_at, forwarded_to_user_id,
-            mmp_file:mmp_files!mmp_file_id(project_id)
-          `)
-          .limit(5000);
-        
-        if (fallbackError) throw fallbackError;
-        
-        // Continue with fallback data
-        const { allSites } = await processEntries(fallbackEntries || [], currentUser.id);
-        await rebuildLocalityDataInternal(allSites);
-        return;
+    // Group sites by state first, then by locality within each state
+    const statesMap = new Map<string, any>();
+    
+    coordinatorSites.forEach((site: any) => {
+      const stateKey = site.state;
+      if (!statesMap.has(stateKey)) {
+        statesMap.set(stateKey, {
+          state: site.state,
+          localities: new Map(),
+          totalSites: 0,
+          hasStatePermit: false,
+          statePermitUploadedAt: null,
+          statePermitVerified: false
+        });
       }
       
-      const { allSites } = await processEntries(allEntries || [], currentUser.id);
-      await rebuildLocalityDataInternal(allSites);
-    } catch (error) {
-      console.error('Error loading sites:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to load sites. Please try again.',
-        variant: 'destructive'
-      });
-    } finally {
-      setLoading(false);
-      isLoadingRef.current = false;
-    }
-  };
-
-  const processEntries = async (allEntries: any[], userId: string) => {
-    try {
+      const stateData = statesMap.get(stateKey);
+      const localityKey = site.locality;
       
-      // Filter entries forwarded to current user and by project membership for non-admins
-      // Note: userProjectIds.length > 0 is guaranteed here because loadSites returns early if empty
-      let filtered = (allEntries || []).filter((entry: any) => {
-        const isForwardedToUser = entry.forwarded_to_user_id === userId;
-        
-        // For non-admins, also check project membership
-        if (!isAdminOrSuperUser) {
-          const projectId = entry.mmp_file?.project_id;
-          return isForwardedToUser && projectId && userProjectIds.includes(projectId);
-        }
-        
-        return isForwardedToUser;
-      }).map((entry: any) => {
-        // Clear visit_date for unverified sites in the "new" tab
-        const isUnverified = entry.status === 'Pending' || entry.status === 'Dispatched' || entry.status === 'assigned' || entry.status === 'inProgress' || entry.status === 'in_progress';
-        const visitDate = isUnverified ? null : entry.visit_date;
-        
-        return {
-          id: entry.id,
-          site_name: entry.site_name,
-          site_code: entry.site_code,
-          status: entry.status,
-          state: entry.state,
-          locality: entry.locality,
-          activity: entry.activity_at_site || entry.main_activity,
-          main_activity: entry.main_activity,
-          activity_at_site: entry.activity_at_site 
-            ? entry.activity_at_site.split(', ').filter(a => a.trim() !== '') 
-            : [],
-          visit_date: visitDate,
-          assigned_at: entry.additional_data?.assigned_at || entry.created_at,
-          comments: entry.comments,
-          mmp_file_id: entry.mmp_file_id,
-          hub_office: entry.hub_office,
-          cp_name: entry.cp_name ?? entry.additional_data?.cp_name ?? null,
-          monitoring_by: entry.monitoring_by ?? entry.additional_data?.monitoring_by ?? null,
-          survey_tool: entry.survey_tool ?? entry.additional_data?.survey_tool ?? null,
-          use_market_diversion: (entry.use_market_diversion ?? entry.additional_data?.use_market_diversion) ?? false,
-          use_warehouse_monitoring: (entry.use_warehouse_monitoring ?? entry.additional_data?.use_warehouse_monitoring) ?? false,
-          verified_at: entry.verified_at,
-          verified_by: entry.verified_by,
-          verification_notes: entry.verification_notes,
-          additional_data: entry.additional_data
-        };
-      });
-
-      // Group sites by state first, then by locality within each state
-      const statesMap = new Map<string, any>();
-      
-      filtered.forEach((site: any) => {
-        const stateKey = site.state;
-        if (!statesMap.has(stateKey)) {
-          statesMap.set(stateKey, {
-            state: site.state,
-            localities: new Map(),
-            totalSites: 0,
-            hasStatePermit: false,
-            statePermitUploadedAt: null,
-            statePermitVerified: false
-          });
-        }
-        
-        const stateData = statesMap.get(stateKey);
-        const localityKey = site.locality;
-        
-        if (!stateData.localities.has(localityKey)) {
-          stateData.localities.set(localityKey, {
-            state: site.state,
-            locality: site.locality,
-            sites: [],
-            hasPermit: false,
-            permitId: null,
-            permitUploadedAt: null
-          });
-        }
-        
-        stateData.localities.get(localityKey).sites.push(site);
-        stateData.totalSites++;
-      });
-
-      // Build state/locality aggregates quickly without blocking on mmp_files
-      const statesArray = Array.from(statesMap.values()).map((stateData: any) => {
-        const localitiesArray = Array.from(stateData.localities.values()).map((locality: any) => ({
-          ...locality,
+      if (!stateData.localities.has(localityKey)) {
+        stateData.localities.set(localityKey, {
+          state: site.state,
+          locality: site.locality,
+          sites: [],
           hasPermit: false,
           permitId: null,
           permitUploadedAt: null
-        }));
-
-        // Consider site-level flag added when forwarding with state permit
-        let anySiteHasStatePermitFlag = false;
-        try {
-          const allSitesInState = localitiesArray.flatMap((loc: any) => loc.sites || []);
-          anySiteHasStatePermitFlag = allSitesInState.some((s: any) => s?.additional_data?.state_permit_attached === true);
-        } catch {}
-
-        return {
-          ...stateData,
-          localities: localitiesArray,
-          hasStatePermit: anySiteHasStatePermitFlag,
-          statePermitUploadedAt: null,
-          statePermitVerified: false
-        };
-      });
-
-      // Flatten sites from all states and localities (they will be filtered by the workflow)
-      let allSites: SiteVisit[] = [];
-      statesArray.forEach(stateData => {
-        stateData.localities.forEach((locality: any) => {
-          allSites = allSites.concat(locality.sites);
         });
-      });
+      }
+      
+      stateData.localities.get(localityKey).sites.push(site);
+      stateData.totalSites++;
+    });
 
-      // Filter by status based on active tab
-      switch (activeTab) {
-        case 'new':
-          allSites = allSites.filter((e: any) => 
-            e.status === 'Pending' || e.status === 'Dispatched' || e.status === 'assigned' || e.status === 'inProgress' || e.status === 'in_progress'
-          );
-          break;
-        case 'permits_attached':
-          allSites = allSites.filter((e: any) => 
-            e.status?.toLowerCase() === 'permits_attached'
-          );
-          break;
-        case 'verified':
-          allSites = allSites.filter((e: any) => 
-            e.status?.toLowerCase() === 'verified'
-          );
-          break;
-        case 'approved':
-          allSites = allSites.filter((e: any) => 
-            e.status?.toLowerCase() === 'approved'
-          );
-          break;
-        case 'completed':
-          allSites = allSites.filter((e: any) => 
-            e.status?.toLowerCase() === 'completed'
-          );
-          break;
-        case 'rejected':
-          allSites = allSites.filter((e: any) => 
-            e.status?.toLowerCase() === 'rejected'
-          );
-          break;
+    // Build state/locality aggregates
+    const statesArray = Array.from(statesMap.values()).map((stateData: any) => {
+      const localitiesArray = Array.from(stateData.localities.values()).map((locality: any) => ({
+        ...locality,
+        hasPermit: false,
+        permitId: null,
+        permitUploadedAt: null
+      }));
+
+      // Check if any site has state permit flag
+      let anySiteHasStatePermitFlag = false;
+      try {
+        const allSitesInState = localitiesArray.flatMap((loc: any) => loc.sites || []);
+        anySiteHasStatePermitFlag = allSitesInState.some((s: any) => s?.additional_data?.state_permit_attached === true);
+      } catch {}
+
+      return {
+        ...stateData,
+        localities: localitiesArray,
+        hasStatePermit: anySiteHasStatePermitFlag,
+        statePermitUploadedAt: null,
+        statePermitVerified: false
+      };
+    });
+
+    // Update permit statuses by checking MMP context
+    const enrichedStatesArray = statesArray.map((stateData: any) => {
+      const firstLocality = stateData.localities[0];
+      const mmpFileId = firstLocality?.sites?.[0]?.mmp_file_id;
+      if (mmpFileId) {
+        const mmpFile = contextMmpFiles.find(m => m.id === mmpFileId);
+        if (mmpFile?.permits?.statePermits) {
+          const statePermit = (mmpFile.permits.statePermits as any[]).find((sp: any) => sp.state === stateData.state);
+          if (statePermit) {
+            stateData.hasStatePermit = true;
+            stateData.statePermitVerified = !!statePermit.verified;
+            stateData.statePermitUploadedAt = statePermit.uploadedAt || null;
+          }
+        }
       }
 
-      // Sort by assigned_at
-      allSites.sort((a: any, b: any) => {
-        const aAt = a.assigned_at || a.created_at;
-        const bAt = b.assigned_at || b.created_at;
-        return new Date(bAt).getTime() - new Date(aAt).getTime();
-      });
-
-      setSites(allSites);
-      setLocalitiesData(statesArray); // Store states data instead of localities
-      setCurrentPage(1); // Reset pagination when tab changes
-      
-      // Calculate subcategory counts for new sites tabs
-      const statePermitRequiredCount = statesArray
-        .filter((state: any) => !state.hasStatePermit)
-        .reduce((total: number, state: any) => total + state.totalSites, 0);
-      
-      const localPermitRequiredCount = statesArray
-        .filter((state: any) => state.hasStatePermit)
-        .flatMap((state: any) => state.localities)
-        .filter((locality: any) => !locality.hasPermit)
-        .filter((locality: any) => {
-          // Only count localities that have pending sites
-          return locality.sites.some((site: SiteVisit) => 
-            site.status === 'Pending' || site.status === 'Dispatched' || 
-            site.status === 'assigned' || site.status === 'inProgress' || 
-            site.status === 'in_progress'
-          );
-        })
-        .reduce((total: number, locality: any) => {
-          // Only count sites that are in pending/new status
-          const pendingSites = locality.sites.filter((site: SiteVisit) => 
-            site.status === 'Pending' || site.status === 'Dispatched' || 
-            site.status === 'assigned' || site.status === 'inProgress' || 
-            site.status === 'in_progress'
-          );
-          return total + pendingSites.length;
-        }, 0);
-      
-      setStatePermitRequiredCount(statePermitRequiredCount);
-      setLocalPermitRequiredCount(localPermitRequiredCount);
-      
-      // Initialize visit dates state
-      const visitDates: { [key: string]: Date | undefined } = {};
-      allSites.forEach((site: any) => {
-        if (site.visit_date) {
-          visitDates[site.id] = new Date(site.visit_date);
-        }
-      });
-      setSiteVisitDates(visitDates);
-      return { allSites, statesArray };
-    } catch (error) {
-      console.error('Error loading sites:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to load sites. Please try again.',
-        variant: 'destructive'
-      });
-      throw error;
-    }
-  };
-
-  // Rebuild locality/permit aggregates based on provided sites
-  const rebuildLocalityDataInternal = async (sitesData: SiteVisit[]) => {
-    try {
-      if (!sitesData || sitesData.length === 0) {
-        setLocalitiesData([]);
-        setStatePermitRequiredCount(0);
-        setLocalPermitRequiredCount(0);
-        return;
-      }
-
-      const statesMap = new Map<string, any>();
-      sitesData.forEach((site: any) => {
-        const stateKey = site.state;
-        if (!statesMap.has(stateKey)) {
-          statesMap.set(stateKey, {
-            state: site.state,
-            localities: new Map(),
-            totalSites: 0,
-            hasStatePermit: false,
-            statePermitUploadedAt: null,
-            statePermitVerified: false
-          });
-        }
-
-        const stateData = statesMap.get(stateKey);
-        const localityKey = site.locality;
-        if (!stateData.localities.has(localityKey)) {
-          stateData.localities.set(localityKey, {
-            state: site.state,
-            locality: site.locality,
-            sites: [],
-            hasPermit: false,
-            permitId: null,
-            permitUploadedAt: null
-          });
-        }
-
-        stateData.localities.get(localityKey).sites.push(site);
-        stateData.totalSites++;
-      });
-
-      const uniqueMmpIds = Array.from(new Set(
-        sitesData.map((s: any) => s.mmp_file_id).filter(Boolean)
-      ));
-
-      let mmpFilesMap = new Map<string, any>();
-      if (uniqueMmpIds.length > 0) {
-        const { data: mmpFilesData } = await supabase
-          .from('mmp_files')
-          .select('id, permits')
-          .in('id', uniqueMmpIds);
-        mmpFilesMap = new Map((mmpFilesData || []).map((m: any) => [m.id, m]));
-      }
-
+      // Check locality permits
       const stateNameToId = new Map(hubStates.map((hs: any) => [hs.state_name, hs.state_id]));
       const localityKeyToId = new Map(localities.map((l: any) => [`${l.state_id}|${l.name}`, l.id]));
       const permitKeySet = new Set(permits.map((p: any) => `${p.stateId}|${p.localityId}`));
 
-      const statesArray = Array.from(statesMap.values()).map((stateData: any) => {
-        let statePermitVerified = false;
-        let statePermitUploaded = false;
-        let statePermitUploadedAt: any = null;
-
-        const firstLocality = stateData.localities.values().next().value;
-        const mmpFileId = firstLocality?.sites?.[0]?.mmp_file_id;
-        if (mmpFileId && mmpFilesMap.has(mmpFileId)) {
-          try {
-            const mmpData = mmpFilesMap.get(mmpFileId);
-            if (mmpData?.permits?.statePermits) {
-              const sp = (mmpData.permits.statePermits as any[]).find((x: any) => x.state === stateData.state);
-              if (sp) {
-                statePermitUploaded = true;
-                statePermitVerified = !!sp.verified;
-                statePermitUploadedAt = sp.uploadedAt || null;
-              }
-            }
-          } catch {}
-        }
-
-        const localitiesArray = Array.from(stateData.localities.values()).map((locality: any) => {
-          const resolvedStateId = stateNameToId.get(locality.state);
-          const resolvedLocalityId = resolvedStateId ? localityKeyToId.get(`${resolvedStateId}|${locality.locality}`) : undefined;
-          const hasPermit = resolvedStateId && resolvedLocalityId ? permitKeySet.has(`${resolvedStateId}|${resolvedLocalityId}`) : false;
-          return {
-            ...locality,
-            hasPermit,
-            permitId: null,
-            permitUploadedAt: null
-          };
-        });
-
-        let anySiteHasStatePermitFlag = false;
-        try {
-          const allSitesInState = localitiesArray.flatMap((loc: any) => loc.sites || []);
-          anySiteHasStatePermitFlag = allSitesInState.some((s: any) => s?.additional_data?.state_permit_attached === true);
-        } catch {}
-
-        const hasStatePermit = statePermitUploaded || anySiteHasStatePermitFlag;
-
+      stateData.localities = stateData.localities.map((locality: any) => {
+        const resolvedStateId = stateNameToId.get(locality.state);
+        const resolvedLocalityId = resolvedStateId ? localityKeyToId.get(`${resolvedStateId}|${locality.locality}`) : undefined;
+        const hasPermit = resolvedStateId && resolvedLocalityId ? permitKeySet.has(`${resolvedStateId}|${resolvedLocalityId}`) : false;
         return {
-          ...stateData,
-          localities: localitiesArray,
-          hasStatePermit,
-          statePermitUploadedAt,
-          statePermitVerified
+          ...locality,
+          hasPermit,
+          permitId: null,
+          permitUploadedAt: null
         };
       });
 
-      // Subcategory counts
-      const statePermitRequired = statesArray
-        .filter((state: any) => !state.hasStatePermit)
-        .reduce((total: number, state: any) => total + state.totalSites, 0);
+      return stateData;
+    });
 
-      const localPermitRequired = statesArray
-        .filter((state: any) => state.hasStatePermit)
-        .flatMap((state: any) => state.localities)
-        .filter((locality: any) => !locality.hasPermit)
-        .filter((locality: any) => {
-          return locality.sites.some((site: any) => 
-            site.status === 'Pending' || site.status === 'Dispatched' || 
-            site.status === 'assigned' || site.status === 'inProgress' || 
-            site.status === 'in_progress'
-          );
-        })
-        .reduce((total: number, locality: any) => {
-          const pendingSites = locality.sites.filter((site: any) => 
-            site.status === 'Pending' || site.status === 'Dispatched' || 
-            site.status === 'assigned' || site.status === 'inProgress' || 
-            site.status === 'in_progress'
-          );
-          return total + pendingSites.length;
-        }, 0);
+    setLocalitiesData(enrichedStatesArray);
 
-      setLocalitiesData(statesArray);
-      setStatePermitRequiredCount(statePermitRequired);
-      setLocalPermitRequiredCount(localPermitRequired);
-    } catch {}
-  };
+    // Calculate subcategory counts for new sites tabs
+    const statePermitRequired = enrichedStatesArray
+      .filter((state: any) => !state.hasStatePermit)
+      .reduce((total: number, state: any) => total + state.totalSites, 0);
 
+    const localPermitRequired = enrichedStatesArray
+      .filter((state: any) => state.hasStatePermit)
+      .flatMap((state: any) => state.localities)
+      .filter((locality: any) => !locality.hasPermit)
+      .filter((locality: any) => {
+        return locality.sites.some((site: SiteVisit) => 
+          site.status === 'Pending' || site.status === 'Dispatched' || 
+          site.status === 'assigned' || site.status === 'inProgress' || 
+          site.status === 'in_progress'
+        );
+      })
+      .reduce((total: number, locality: any) => {
+        const pendingSites = locality.sites.filter((site: SiteVisit) => 
+          site.status === 'Pending' || site.status === 'Dispatched' || 
+          site.status === 'assigned' || site.status === 'inProgress' || 
+          site.status === 'in_progress'
+        );
+        return total + pendingSites.length;
+      }, 0);
 
-  // React to MMP context changes for real-time updates
-  // The MMP context already has real-time subscriptions to mmp_site_entries and mmp_files
-  // When the context refreshes (due to real-time updates), we reload our filtered sites
-  const prevContextHashRef = useRef<string>('');
-  
-  useEffect(() => {
-    if (!currentUser?.id) return;
-    
-    // Create a hash of relevant context data to detect changes
-    // This includes MMP file IDs and their site entry counts
-    const contextHash = JSON.stringify(
-      contextMmpFiles.map(mmp => ({
-        id: mmp.id,
-        siteEntryCount: mmp.siteEntries?.length || 0,
-        lastModified: mmp.modifiedAt || mmp.uploadedAt
-      }))
-    );
-    
-    // Only reload if the context actually changed
-    if (contextHash !== prevContextHashRef.current) {
-      prevContextHashRef.current = contextHash;
-      
-      let debounceId: number | null = null;
-      let lastReloadTime = 0;
-      const MIN_RELOAD_INTERVAL = 3000; // 3 seconds
-
-      const scheduleReload = () => {
-        const now = Date.now();
-        const timeSinceLast = now - lastReloadTime;
-        if (timeSinceLast < MIN_RELOAD_INTERVAL) {
-          if (debounceId) window.clearTimeout(debounceId);
-          debounceId = window.setTimeout(() => {
-            lastReloadTime = Date.now();
-            loadSites();
-            debounceId = null;
-          }, MIN_RELOAD_INTERVAL - timeSinceLast);
-        } else {
-          if (debounceId) window.clearTimeout(debounceId);
-          lastReloadTime = now;
-          loadSites();
-        }
-      };
-
-      scheduleReload();
-
-      return () => {
-        if (debounceId) window.clearTimeout(debounceId);
-      };
-    }
-  }, [contextMmpFiles, currentUser?.id]);
-
-  // Loading timeout safeguard
-  useEffect(() => {
-    if (loading) {
-      const timeout = setTimeout(() => {
-        if (loading) {
-          console.warn('Loading timeout reached, forcing completion');
-          setLoading(false);
-          isLoadingRef.current = false;
-          toast({
-            title: 'Loading Timeout',
-            description: 'Data loading took too long. Please refresh the page.',
-            variant: 'destructive'
-          });
-        }
-      }, 30000);
-      return () => clearTimeout(timeout);
-    }
-  }, [loading]);
+    setStatePermitRequiredCount(statePermitRequired);
+    setLocalPermitRequiredCount(localPermitRequired);
+  }, [coordinatorSites, contextMmpFiles, hubStates, localities, permits]);
 
   const handleVerifySite = async (siteId: string, notes?: string) => {
     try {
@@ -1334,7 +1027,7 @@ const CoordinatorSites: React.FC = () => {
 
       if (error) throw error;
       try {
-        const site = sites.find(s => s.id === siteId);
+        const site = coordinatorSites.find(s => s.id === siteId);
         if (site?.mmp_file_id && site?.site_code) {
           // Get current site entry to check if cost exists
           const { data: currentEntry } = await supabase
@@ -1412,7 +1105,7 @@ const CoordinatorSites: React.FC = () => {
 
       // Trigger notification to supervisors, FOMs, admins, and super admins
       try {
-        const site = sites.find(s => s.id === siteId);
+        const site = coordinatorSites.find(s => s.id === siteId);
         if (site?.mmp_file_id) {
           // Fetch MMP name and hub_id for notification
           const { data: mmpInfo, error: mmpInfoError } = await supabase
@@ -1437,30 +1130,9 @@ const CoordinatorSites: React.FC = () => {
         console.warn('Failed to send site verified notification:', notifError);
       }
 
-      // Reload sites and badge counts
-      loadSites();
-      // Reload badge counts
-      if (currentUser?.id) {
-        const userId = currentUser.id;
-        // Load entries forwarded to current user
-        const { data: allEntries } = await supabase
-          .from('mmp_site_entries')
-          .select('id, status, forwarded_to_user_id');
-        
-        const userEntries = (allEntries || []).filter((entry: any) => {
-          return entry.forwarded_to_user_id === userId;
-        });
-        
-        const newCount = { count: userEntries.filter((e: any) => 
-          e.status === 'Pending' || e.status === 'Dispatched' || e.status === 'assigned' || e.status === 'inProgress' || e.status === 'in_progress'
-        ).length };
-        const verifiedCount = { count: userEntries.filter((e: any) => 
-          e.status?.toLowerCase() === 'verified'
-        ).length };
-        
-        setNewSitesCount(newCount.count || 0);
-        setVerifiedSitesCount(verifiedCount.count || 0);
-      }
+      // Context will automatically update via real-time subscriptions
+      await refreshMMPFiles();
+      // Badge counts will update automatically from coordinatorSites
       setActiveTab('verified');
       setVerifyDialogOpen(false);
       setVerificationNotes('');
@@ -1495,7 +1167,7 @@ const CoordinatorSites: React.FC = () => {
 
       if (error) throw error;
       try {
-        const site = sites.find(s => s.id === siteId);
+        const site = coordinatorSites.find(s => s.id === siteId);
         if (site?.mmp_file_id && site?.site_code) {
           const mmpUpdateData: any = { status: 'Rejected' };
           if (notes) {
@@ -1518,7 +1190,7 @@ const CoordinatorSites: React.FC = () => {
 
       // Notify hub supervisor about site rejection
       try {
-        const site = sites.find(s => s.id === siteId);
+        const site = coordinatorSites.find(s => s.id === siteId);
         if (site?.hub_office) {
           const { data: hubData } = await supabase
             .from('hubs')
@@ -1543,8 +1215,8 @@ const CoordinatorSites: React.FC = () => {
         console.warn('Failed to notify hub supervisor:', supervisorErr);
       }
 
-      // Reload sites and badge counts
-      loadSites();
+      // Context will automatically update via real-time subscriptions
+      await refreshMMPFiles();
       // Reload badge counts
       if (currentUser?.id) {
         const userId = currentUser.id;
@@ -1679,7 +1351,7 @@ const CoordinatorSites: React.FC = () => {
       setPendingVerificationData(null);
       setBulkSitesForPermitVerification([]);
       setBulkVerificationMode('single');
-      loadSites();
+                  await refreshMMPFiles();
     } catch (error) {
       console.error('Error sending sites back to FOM:', error);
       toast({
@@ -1802,7 +1474,7 @@ const CoordinatorSites: React.FC = () => {
       setSelectedSiteForEdit(null);
       setSelectedSites(new Set());
       setBulkVerifyDialogOpen(false);
-      loadSites();
+                  await refreshMMPFiles();
       setActiveTab('verified');
     } catch (error) {
       console.error('Error completing verification:', error);
@@ -1880,7 +1552,7 @@ const CoordinatorSites: React.FC = () => {
       setSelectedSites(new Set());
       setBulkVisitDate('');
       setBulkAssignDateDialogOpen(false);
-      loadSites();
+                  await refreshMMPFiles();
     } catch (error) {
       console.error('Error bulk assigning visit dates:', error);
       toast({
@@ -1902,7 +1574,7 @@ const CoordinatorSites: React.FC = () => {
     }
 
     // Get selected sites data
-    const selectedSitesData = sites.filter(site => selectedSites.has(site.id));
+    const selectedSitesData = coordinatorSites.filter(site => selectedSites.has(site.id));
     
     // Check if any selected sites have permits_attached status - these need permit verification questions
     const permitsAttachedSites = selectedSitesData.filter(s => s.status?.toLowerCase() === 'permits_attached');
@@ -2035,7 +1707,7 @@ const CoordinatorSites: React.FC = () => {
       setSelectedSites(new Set());
       setBulkVerificationNotes('');
       setBulkVerifyDialogOpen(false);
-      loadSites();
+                  await refreshMMPFiles();
       
       // Reload badge counts
       if (currentUser?.id) {
@@ -2102,7 +1774,7 @@ const CoordinatorSites: React.FC = () => {
 
       // Also update MMP files for approved sites
       try {
-        const selectedSitesData = sites.filter(site => selectedSites.has(site.id));
+        const selectedSitesData = coordinatorSites.filter(site => selectedSites.has(site.id));
         for (const site of selectedSitesData) {
           if (site?.mmp_file_id && site?.site_code) {
             const mmpUpdateData: any = { 
@@ -2132,7 +1804,7 @@ const CoordinatorSites: React.FC = () => {
 
       // Notify hub supervisors about approved sites
       try {
-        const selectedSitesData = sites.filter(site => selectedSites.has(site.id));
+        const selectedSitesData = coordinatorSites.filter(site => selectedSites.has(site.id));
         const hubsNotified = new Set<string>();
         for (const site of selectedSitesData) {
           if (site.hub_office && !hubsNotified.has(site.hub_office)) {
@@ -2164,7 +1836,7 @@ const CoordinatorSites: React.FC = () => {
       setSelectedSites(new Set());
       setBulkApprovalNotes('');
       setBulkApproveDialogOpen(false);
-      loadSites();
+                  await refreshMMPFiles();
       
       // Reload badge counts
       if (currentUser?.id) {
@@ -2317,8 +1989,7 @@ const CoordinatorSites: React.FC = () => {
                 sitesInHub.length > 1 ? `${sitesInHub.length} sites in ${site.locality}` : site.site_name,
                 {
                   actorName: currentUser?.username || currentUser?.fullName || 'Coordinator',
-                  siteCount: sitesInHub.length,
-                  locality: site.locality
+                  siteCount: sitesInHub.length
                 }
               );
               hubsNotified.add(site.hub_office);
@@ -2336,7 +2007,7 @@ const CoordinatorSites: React.FC = () => {
       setBulkLocalityVisitDateObj(undefined);
       setBulkExpectedStartDate(undefined);
       setBulkExpectedEndDate(undefined);
-      loadSites();
+                  await refreshMMPFiles();
       
       // Reload badge counts
       if (currentUser?.id) {
@@ -2473,8 +2144,8 @@ const CoordinatorSites: React.FC = () => {
         description: `${localitySites.length} site(s) in this locality have been verified successfully.`,
       });
 
-      // Reload sites and badge counts
-      loadSites();
+      // Context will automatically update via real-time subscriptions
+      await refreshMMPFiles();
       
       // Reload badge counts
       if (currentUser?.id) {
@@ -2544,7 +2215,7 @@ const CoordinatorSites: React.FC = () => {
       });
 
       // Refresh data and move to Permits Attached tab
-      loadSites();
+                  await refreshMMPFiles();
       setActiveTab('permits_attached');
     } catch (e) {
       console.warn('Error proceeding without local permit:', e);
@@ -2612,25 +2283,8 @@ const CoordinatorSites: React.FC = () => {
         });
 
         // Reload sites and badge counts
-        loadSites();
-        // Reload badge counts
-        if (currentUser?.id) {
-          const userId = currentUser.id;
-          const { data: allEntries } = await supabase
-            .from('mmp_site_entries')
-            .select('id, status, additional_data');
-          
-          const userEntries = (allEntries || []).filter((entry: any) => {
-            const ad = entry.additional_data || {};
-            return ad.assigned_to === userId;
-          });
-          
-          const permitsAttachedCount = { count: userEntries.filter((e: any) => 
-            e.status?.toLowerCase() === 'permits_attached'
-          ).length };
-          
-          setPermitsAttachedCount(permitsAttachedCount.count || 0);
-        }
+        await refreshMMPFiles();
+        // Badge counts will update automatically from coordinatorSites
 
         // Navigate to "Permits Attached" tab
         setActiveTab('permits_attached');
@@ -3130,7 +2784,7 @@ const CoordinatorSites: React.FC = () => {
     );
   };
 
-  if (loading) {
+  if (contextLoading) {
     return (
       <div className="container mx-auto px-4 py-8">
         <div className="text-center">
@@ -3225,7 +2879,7 @@ const CoordinatorSites: React.FC = () => {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  {loading || permitsLoading ? (
+                  {contextLoading || permitsLoading ? (
                     <div className="text-center py-8">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
                       <p className="text-muted-foreground">Loading states...</p>
@@ -3272,7 +2926,7 @@ const CoordinatorSites: React.FC = () => {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  {loading || permitsLoading ? (
+                  {contextLoading || permitsLoading ? (
                     <div className="text-center py-8">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
                       <p className="text-muted-foreground">Loading localities...</p>
@@ -3459,14 +3113,14 @@ const CoordinatorSites: React.FC = () => {
                       className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
                     />
                     <Label htmlFor="select-all-sites" className="text-sm font-medium">
-                      Select All ({filteredSites.length} sites)
+                      Select All ({sitesByTab.length} sites)
                     </Label>
                   </div>
                 )}
               </div>
             </CardHeader>
             <CardContent>
-              {filteredSites.length === 0 ? (
+              {sitesByTab.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <CheckCircle className="h-12 w-12 mx-auto mb-4 opacity-20" />
                   <p>{searchQuery ? 'No sites match your search.' : 'No verified sites yet.'}</p>
@@ -3479,7 +3133,7 @@ const CoordinatorSites: React.FC = () => {
                   {totalPages > 1 && (
                     <div className="flex items-center justify-between mt-4 pt-4 border-t">
                       <div className="text-sm text-muted-foreground">
-                        Showing {((currentPage - 1) * itemsPerPage) + 1} - {Math.min(currentPage * itemsPerPage, filteredSites.length)} of {filteredSites.length}
+                        Showing {((currentPage - 1) * itemsPerPage) + 1} - {Math.min(currentPage * itemsPerPage, sitesByTab.length)} of {sitesByTab.length}
                       </div>
                       <div className="flex items-center gap-2">
                         <Button
@@ -3530,7 +3184,7 @@ const CoordinatorSites: React.FC = () => {
               </div>
             </CardHeader>
             <CardContent>
-              {filteredSites.length === 0 ? (
+              {sitesByTab.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <FileCheck className="h-12 w-12 mx-auto mb-4 opacity-20" />
                   <p>{searchQuery ? 'No sites match your search.' : 'Approved sites will appear here.'}</p>
@@ -3544,7 +3198,7 @@ const CoordinatorSites: React.FC = () => {
                   {totalPages > 1 && (
                     <div className="flex items-center justify-between mt-4 pt-4 border-t">
                       <div className="text-sm text-muted-foreground">
-                        Showing {((currentPage - 1) * itemsPerPage) + 1} - {Math.min(currentPage * itemsPerPage, filteredSites.length)} of {filteredSites.length}
+                        Showing {((currentPage - 1) * itemsPerPage) + 1} - {Math.min(currentPage * itemsPerPage, sitesByTab.length)} of {sitesByTab.length}
                       </div>
                       <div className="flex items-center gap-2">
                         <Button
@@ -3595,7 +3249,7 @@ const CoordinatorSites: React.FC = () => {
               </div>
             </CardHeader>
             <CardContent>
-              {filteredSites.length === 0 ? (
+              {sitesByTab.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <CheckCircle className="h-12 w-12 mx-auto mb-4 opacity-20" />
                   <p>{searchQuery ? 'No sites match your search.' : 'Completed sites will appear here.'}</p>
@@ -3663,7 +3317,7 @@ const CoordinatorSites: React.FC = () => {
               </div>
             </CardHeader>
             <CardContent>
-              {filteredSites.length === 0 ? (
+              {sitesByTab.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
                   <XCircle className="h-12 w-12 mx-auto mb-4 opacity-20" />
                   <p>{searchQuery ? 'No sites match your search.' : 'No rejected sites.'}</p>
@@ -3676,7 +3330,7 @@ const CoordinatorSites: React.FC = () => {
                   {totalPages > 1 && (
                     <div className="flex items-center justify-between mt-4 pt-4 border-t">
                       <div className="text-sm text-muted-foreground">
-                        Showing {((currentPage - 1) * itemsPerPage) + 1} - {Math.min(currentPage * itemsPerPage, filteredSites.length)} of {filteredSites.length}
+                        Showing {((currentPage - 1) * itemsPerPage) + 1} - {Math.min(currentPage * itemsPerPage, sitesByTab.length)} of {sitesByTab.length}
                       </div>
                       <div className="flex items-center gap-2">
                         <Button
@@ -3940,7 +3594,7 @@ const CoordinatorSites: React.FC = () => {
                   }
 
                   // Reload sites and badge counts
-                  loadSites();
+                  await refreshMMPFiles();
                   // Reload badge counts
                   if (currentUser?.id) {
                     const userId = currentUser.id;
@@ -4347,26 +4001,31 @@ const CoordinatorSites: React.FC = () => {
               onComplete={(decision: PermitDecision) => {
                 setStatePermitQuestionDialogOpen(false);
                 
-                if (decision.canProceed) {
-                  // User has permits or can work without them
-                  if (decision.hasStatePermit) {
-                    // Show state permit upload dialog
-                    const stateKey = selectedStateForWorkflow.state;
-                    setExpandedStates(prev => new Set([...prev, stateKey]));
-                  } else {
-                    // Proceed without state permit - unlock localities for this state
-                    toast.success(`Proceeding without state permit for ${selectedStateForWorkflow.state}. Localities are now accessible.`);
-                    setSelectedStateForWorkflow(null);
-                    // Switch to local permit tab
-                    setNewSitesSubTab('local_required');
-                  }
+                // Check if state permit is required and can work without it
+                const statePermit = decision.statePermit;
+                if (statePermit.requirement === 'not_required' || (statePermit.requirement === 'required_dont_have_it' && statePermit.canWorkWithout === 'yes')) {
+                  // Can proceed without state permit
+                  toast({
+                    title: 'Success',
+                    description: `Proceeding without state permit for ${selectedStateForWorkflow.state}. Localities are now accessible.`
+                  });
+                  setSelectedStateForWorkflow(null);
+                  // Switch to local permit tab
+                  setNewSitesSubTab('local_required');
+                } else if (statePermit.uploaded) {
+                  // State permit uploaded - show upload dialog to confirm
+                  const stateKey = selectedStateForWorkflow.state;
+                  setExpandedStates(prev => new Set([...prev, stateKey]));
                 } else {
                   setSelectedStateForWorkflow(null);
                 }
               }}
               onSendBackToFOM={(reason: string) => {
                 setStatePermitQuestionDialogOpen(false);
-                toast.success(`Request sent to FOM to upload state permit for ${selectedStateForWorkflow?.state}. Reason: ${reason}`);
+                toast({
+                  title: 'Request Sent',
+                  description: `Request sent to FOM to upload state permit for ${selectedStateForWorkflow?.state}. Reason: ${reason}`
+                });
                 setSelectedStateForWorkflow(null);
               }}
               onCancel={() => {
@@ -4397,9 +4056,9 @@ const CoordinatorSites: React.FC = () => {
                 state={selectedStateForWorkflow.state}
                 mmpFileId={selectedStateForWorkflow.localities?.[0]?.sites?.[0]?.mmp_file_id}
                 userType="coordinator"
-                onPermitUploaded={() => {
+                onPermitUploaded={async () => {
                   // After state permit is uploaded, reload sites data to update state categorization
-                  loadSites();
+                  await refreshMMPFiles();
                   
                   // Switch to local permit required tab since state permit is now uploaded
                   setNewSitesSubTab('local_required');
