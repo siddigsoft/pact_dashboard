@@ -212,6 +212,7 @@ const transformDBToMMPFile = (dbRecord: any): MMPFile => {
         accepted_at: migrated.accepted_at,
         claimed_by: migrated.claimed_by,
         claimed_at: migrated.claimed_at,
+        cost_acknowledged: migrated.cost_acknowledged ?? (migrated.additional_data || {})?.cost_acknowledged,
         additionalData: migrated.additional_data || {},
         status: migrated.status,
         forwardedToUserId: migrated.forwarded_to_user_id,
