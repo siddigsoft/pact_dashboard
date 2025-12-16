@@ -305,13 +305,13 @@ serve(async (req) => {
       console.log(`CC: ${mailOptions.cc}`)
     }
 
-    // Set priority headers for urgent emails
+    // Set priority headers for urgent/high priority emails
     if (priority === 'urgent' || priority === 'high') {
       mailOptions.priority = priority
       mailOptions.headers = {
         'X-Priority': priority === 'urgent' ? '1' : '2',
-        'X-MSMail-Priority': priority === 'urgent' ? 'High' : 'Normal',
-        'Importance': priority === 'urgent' ? 'high' : 'normal'
+        'X-MSMail-Priority': 'High',
+        'Importance': 'high'
       }
     }
 
