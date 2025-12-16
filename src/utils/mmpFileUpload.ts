@@ -3,6 +3,7 @@ import { MMPFile, MMPSiteEntry } from '@/types';
 import { toast } from 'sonner';
 import { validateCSV, CSVValidationError } from '@/utils/csvValidator';
 import { validateSitesAgainstRegistry, SiteMatchResult, RegistryLinkage } from '@/utils/sitesRegistryMatcher';
+import { insertNotifications } from '@/services/mmpActions';
 
 // Transform database record (snake_case) to MMPFile interface (camelCase)
 const transformDBToMMPFile = (dbRecord: any): MMPFile => {
@@ -94,15 +95,18 @@ async function notifyStakeholdersOnUpload(mmp: { id: string; name: string; hub?:
     if (userIds.length === 0) return;
 
     const rows = userIds.map(uid => ({
-      user_id: uid,
-      title: 'New MMP uploaded',
-      message: `${mmp.name} has been uploaded and is ready for verification`,
-      type: 'info',
-      link: `/mmp/${mmp.id}`,
-      related_entity_id: mmp.id,
-      related_entity_type: 'mmpFile'
+      recipient_id: uid,
+      title_en: 'New MMP uploaded',
+      title_ar: 'تم رفع خطة مراقبة شهرية جديدة',
+      message_en: `${mmp.name} has been uploaded and is ready for verification`,
+      message_ar: `تم رفع ${mmp.name} وهي جاهزة للتحقق`,
+      action_url: `/mmp/${mmp.id}`,
+      entity_id: mmp.id,
+      entity_type: 'mmpFile',
+      type: 'info' // Use 'info' for system notifications
     }));
-    await supabase.from('notifications').insert(rows);
+    // Use insertNotifications helper which properly maps to database schema
+    await insertNotifications(rows);
   } catch {}
 }
 

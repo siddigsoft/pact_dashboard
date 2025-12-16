@@ -15,6 +15,7 @@ DO $$ BEGIN
     'adjustment_credit',
     'adjustment_debit'
   );
+  
 EXCEPTION
   WHEN duplicate_object THEN null;
 END $$;

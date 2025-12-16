@@ -175,6 +175,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       }
       try {
         // Fetch notifications where recipient_id OR user_id matches current user
+        // Database has both columns - recipient_id is the primary one in extended schema
         const { data, error } = await supabase
           .from('notifications')
           .select('*')
@@ -201,10 +202,11 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     const subscribeRealtime = () => {
       if (!currentUserId) return;
       try {
-        // Subscribe to notifications for both recipient_id and user_id
+        // Subscribe to notifications for recipient_id or user_id
+        // Database uses recipient_id as primary column in extended schema
         channel = supabase
           .channel(`notifications-${currentUserId}`)
-          // Listen for recipient_id
+          // Listen for recipient_id (primary) and user_id (fallback)
           .on('postgres_changes', {
             event: 'INSERT',
             schema: 'public',
@@ -212,7 +214,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
             filter: `recipient_id=eq.${currentUserId}`,
           }, (payload) => {
             const n = mapDbToNotification((payload as any).new);
-            if (filterByRoleAndProject(n)) {
+            // Only add if it matches current user
+            if (n.userId === currentUserId && filterByRoleAndProject(n)) {
               setAppNotifications(prev => {
                 // Avoid duplicates
                 if (prev.some(p => p.id === n.id)) return prev;
@@ -220,7 +223,6 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
               });
             }
           })
-          // Listen for user_id
           .on('postgres_changes', {
             event: 'INSERT',
             schema: 'public',
@@ -228,7 +230,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
             filter: `user_id=eq.${currentUserId}`,
           }, (payload) => {
             const n = mapDbToNotification((payload as any).new);
-            if (filterByRoleAndProject(n)) {
+            // Only add if it matches current user (double check)
+            if (n.userId === currentUserId && filterByRoleAndProject(n)) {
               setAppNotifications(prev => {
                 // Avoid duplicates
                 if (prev.some(p => p.id === n.id)) return prev;
@@ -243,9 +246,11 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
             filter: `recipient_id=eq.${currentUserId}`,
           }, (payload) => {
             const updated = mapDbToNotification((payload as any).new);
-            setAppNotifications(prev => 
-              prev.map(n => n.id === updated.id ? updated : n)
-            );
+            if (updated.userId === currentUserId) {
+              setAppNotifications(prev => 
+                prev.map(n => n.id === updated.id ? updated : n)
+              );
+            }
           })
           .on('postgres_changes', {
             event: 'UPDATE',
@@ -254,9 +259,11 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
             filter: `user_id=eq.${currentUserId}`,
           }, (payload) => {
             const updated = mapDbToNotification((payload as any).new);
-            setAppNotifications(prev => 
-              prev.map(n => n.id === updated.id ? updated : n)
-            );
+            if (updated.userId === currentUserId) {
+              setAppNotifications(prev => 
+                prev.map(n => n.id === updated.id ? updated : n)
+              );
+            }
           })
           .on('postgres_changes', {
             event: 'DELETE',
@@ -328,30 +335,25 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     });
 
     // Fire-and-forget persistence to Supabase (using correct schema columns)
-    // Insert with both recipient_id and user_id for compatibility
     (async () => {
       try {
-        await supabase.from('notifications').insert({
+        const { error } = await supabase.from('notifications').insert({
           recipient_id: notification.userId,
-          user_id: notification.userId,
           title_en: notification.title,
-          title: notification.title,
           title_ar: notification.title,
           message_en: notification.message,
-          message: notification.message,
           message_ar: notification.message,
           priority: notification.priority || 'normal',
-          action_url: notification.link,
-          link: notification.link,
-          entity_id: notification.relatedEntityId,
-          related_entity_id: notification.relatedEntityId,
-          entity_type: notification.relatedEntityType,
-          related_entity_type: notification.relatedEntityType,
+          action_url: notification.link || null,
+          entity_id: notification.relatedEntityId || null,
+          entity_type: notification.relatedEntityType || null,
           event_type: notification.category || 'system',
           status: 'pending',
-          is_read: false,
           email_sent: false,
         });
+        if (error) {
+          console.warn('Failed to persist notification:', error.message);
+        }
       } catch (err) {
         console.warn('Failed to persist notification:', err);
       }
@@ -361,12 +363,14 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const markNotificationAsRead = useCallback(async (notificationId: string) => {
     setAppNotifications(prev => prev.map(n => n.id === notificationId ? { ...n, isRead: true } : n));
     try {
-      // Update both is_read and read_at for schema compatibility
-      await supabase.from('notifications').update({ 
+      // Update read_at and status to mark as read
+      const { error } = await supabase.from('notifications').update({ 
         status: 'read', 
-        is_read: true,
         read_at: new Date().toISOString() 
       }).eq('id', notificationId);
+      if (error) {
+        console.warn('Failed to persist read state:', error.message);
+      }
     } catch (err) {
       console.warn('Failed to persist read state:', err);
     }
@@ -393,13 +397,12 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     console.log(`Attempting to delete all notifications for user: ${userId}`);
     
     // Delete all notifications for the current user from the database
-    // Delete by both recipient_id and user_id for schema compatibility
     try {
-      // Delete notifications where recipient_id OR user_id matches
+      // Delete notifications where recipient_id matches
       const { data: deletedData, error } = await supabase
         .from('notifications')
         .delete()
-        .or(`recipient_id.eq.${userId},user_id.eq.${userId}`)
+        .eq('recipient_id', userId)
         .select('id');
       
       if (error) {
@@ -427,7 +430,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       const { data: remaining, error: verifyError } = await supabase
         .from('notifications')
         .select('id')
-        .or(`recipient_id.eq.${userId},user_id.eq.${userId}`)
+        .eq('recipient_id', userId)
         .limit(1);
       
       if (verifyError) {

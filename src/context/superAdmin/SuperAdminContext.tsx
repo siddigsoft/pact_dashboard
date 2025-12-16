@@ -355,14 +355,15 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
   ) => {
     try {
       await supabase.from('notifications').insert({
-        user_id: userId,
-        title,
-        message,
-        type,
-        is_read: false,
-        related_entity_id: relatedEntityId,
-        related_entity_type: relatedEntityType,
-        category: 'system',
+        recipient_id: userId,
+        title_en: title,
+        title_ar: title,
+        message_en: message,
+        message_ar: message,
+        entity_id: relatedEntityId,
+        entity_type: relatedEntityType,
+        event_type: 'system',
+        status: 'pending',
         priority: 'high',
       });
     } catch (error) {
