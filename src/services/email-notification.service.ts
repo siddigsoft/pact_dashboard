@@ -288,137 +288,97 @@ export const EmailNotificationService = {
   },
 
   /**
-   * Send a notification-style email with formatted template
+   * Send a notification-style email with formatted template (compact payload)
    */
   async sendNotification(
     email: string,
     recipientName: string,
     options: NotificationEmailOptions
   ): Promise<EmailNotificationResult> {
-    const html = generateNotificationEmailHTML(recipientName, options);
-    const text = generatePlainText(recipientName, options);
-    
-    return this.sendEmail({
-      to: email,
-      subject: options.title,
-      recipientName,
-      html,
-      text,
-    });
+    try {
+      const priorityPrefix = options.type === 'error' ? '[URGENT | عاجل] ' : 
+                            options.type === 'warning' ? '[HIGH PRIORITY | أولوية عالية] ' : '';
+      const subject = priorityPrefix + options.title;
+      
+      console.log(`[EMAIL] Sending notification to ${email}: ${subject}`);
+
+      const { data, error } = await supabase.functions.invoke('send-email', {
+        body: {
+          to: email,
+          subject,
+          type: 'notification',
+          recipientName: recipientName || 'User',
+          title_en: options.title,
+          title_ar: options.titleAr || options.title,
+          message_en: options.message,
+          message_ar: options.messageAr || options.message,
+          actionUrl: options.actionUrl,
+          priority: options.type === 'error' ? 'urgent' : options.type === 'warning' ? 'high' : 'normal',
+          details: options.details,
+        },
+      });
+
+      if (error) {
+        console.error('[EMAIL] Edge Function error:', error);
+        await logEmailSend(email, subject, 'notification', false, undefined, error.message);
+        return { success: false, error: error.message };
+      }
+
+      if (data && !data.success) {
+        console.error('[EMAIL] Email failed:', data.error);
+        await logEmailSend(email, subject, 'notification', false, undefined, data.error);
+        return { success: false, error: data.error };
+      }
+
+      const messageId = data?.messageId || `email-${Date.now()}`;
+      await logEmailSend(email, subject, 'notification', true, messageId);
+      return { success: true, messageId, deliveredAt: data?.deliveredAt };
+    } catch (error: any) {
+      console.error('[EMAIL] Error:', error);
+      return { success: false, error: error.message };
+    }
   },
 
   // ============================================
-  // TEMPLATE 6: Welcome Email (New User) - Bilingual
+  // TEMPLATE 6: Welcome Email (New User) - Compact Payload
   // ============================================
   async sendWelcomeEmail(
     email: string,
     recipientName: string,
     role: string
   ): Promise<EmailNotificationResult> {
-    const html = `
-      <!DOCTYPE html>
-      <html dir="ltr">
-      <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Welcome to PACT | مرحباً بك في باكت</title>
-      </head>
-      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
-        <div style="background-color: white; border-radius: 8px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-          <div style="text-align: center; margin-bottom: 30px;">
-            <h1 style="color: #1a1a2e; margin: 0; font-size: 24px;">PACT Workflow Platform</h1>
-            <p style="color: #666; margin: 5px 0 0 0; font-size: 14px;">منصة باكت للعمليات الميدانية</p>
-          </div>
-          
-          <!-- English Section -->
-          <div style="margin-bottom: 25px; padding-bottom: 25px; border-bottom: 1px solid #eee;">
-            <p style="color: #333; font-size: 16px; line-height: 1.5;">Hello ${recipientName},</p>
-            <p style="color: #333; font-size: 16px; line-height: 1.5;">Welcome to PACT Workflow Platform! Your account has been approved and is now active.</p>
-            
-            <div style="background-color: #e8f5e9; border-left: 4px solid #4caf50; border-radius: 4px; padding: 16px; margin: 20px 0;">
-              <p style="margin: 0; color: #333;"><strong>Account Status:</strong> Approved</p>
-              <p style="margin: 10px 0 0 0; color: #333;"><strong>Role:</strong> ${role}</p>
-            </div>
-            
-            <p style="color: #333; font-size: 16px; line-height: 1.5;">You can now log in to access your dashboard and start managing your assignments.</p>
-          </div>
-          
-          <!-- Arabic Section -->
-          <div dir="rtl" style="margin-top: 25px; padding-top: 25px; border-top: 1px solid #eee; text-align: right;">
-            <p style="color: #333; font-size: 16px; line-height: 1.8;">مرحباً ${recipientName}،</p>
-            <p style="color: #333; font-size: 16px; line-height: 1.8;">أهلاً بك في منصة باكت للعمليات الميدانية! تمت الموافقة على حسابك وأصبح نشطاً الآن.</p>
-            
-            <div style="background-color: #e8f5e9; border-right: 4px solid #4caf50; border-radius: 4px; padding: 16px; margin: 20px 0;">
-              <p style="margin: 0; color: #333;"><strong>حالة الحساب:</strong> تمت الموافقة</p>
-              <p style="margin: 10px 0 0 0; color: #333;"><strong>الدور:</strong> ${role}</p>
-            </div>
-            
-            <p style="color: #333; font-size: 16px; line-height: 1.8;">يمكنك الآن تسجيل الدخول للوصول إلى لوحة التحكم الخاصة بك والبدء في إدارة مهامك.</p>
-          </div>
-          
-          <div style="text-align: center; margin: 25px 0;">
-            <a href="${APP_URL}/login" style="display: inline-block; padding: 14px 30px; background-color: #9b87f5; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
-              Log In Now | تسجيل الدخول
-            </a>
-          </div>
-          
-          <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
-          
-          <!-- Management Oversight Notice -->
-          <div style="background-color: #f8f9fa; border-radius: 6px; padding: 12px; margin-bottom: 20px;">
-            <p style="color: #555; font-size: 11px; text-align: center; margin: 0; line-height: 1.6;">
-              This notification has been sent to relevant management for oversight and accountability.<br>
-              <span style="direction: rtl; display: inline-block;">تم إرسال هذا الإشعار إلى الإدارة المعنية للإشراف والمساءلة.</span>
-            </p>
-          </div>
-          
-          <p style="color: #999; font-size: 12px; text-align: center;">
-            This is an automated message from PACT Workflow Platform.<br>
-            هذه رسالة آلية من منصة باكت للعمليات الميدانية.<br>
-            ICT Team - PACT Command Center Platform<br>
-            فريق تكنولوجيا المعلومات - منصة مركز قيادة باكت
-          </p>
-        </div>
-      </body>
-      </html>
-    `;
-    
-    const text = `Hello ${recipientName},
+    try {
+      const { data, error } = await supabase.functions.invoke('send-email', {
+        body: {
+          to: email,
+          subject: 'Welcome to PACT | مرحباً بك في باكت',
+          type: 'welcome',
+          recipientName,
+          title_en: 'Welcome to PACT Command Center',
+          title_ar: 'مرحباً بك في مركز قيادة باكت',
+          message_en: `Your account has been approved and is now active. You can now log in to access your dashboard and start managing your assignments.`,
+          message_ar: `تمت الموافقة على حسابك وأصبح نشطاً الآن. يمكنك الآن تسجيل الدخول للوصول إلى لوحة التحكم الخاصة بك.`,
+          actionUrl: '/login',
+          details: [{ label: 'Role', value: role }],
+        },
+      });
 
-Welcome to PACT Workflow Platform! Your account has been approved and is now active.
-
-Account Status: Approved
-Role: ${role}
-
-You can now log in to access your dashboard and start managing your assignments.
-
-Log in at: ${APP_URL}/login
-
----
-
-مرحباً ${recipientName}،
-
-أهلاً بك في منصة باكت للعمليات الميدانية! تمت الموافقة على حسابك وأصبح نشطاً الآن.
-
-حالة الحساب: تمت الموافقة
-الدور: ${role}
-
-يمكنك الآن تسجيل الدخول للوصول إلى لوحة التحكم الخاصة بك والبدء في إدارة مهامك.
-
----
-PACT Workflow Platform | منصة باكت`;
-
-    return this.sendEmail({
-      to: email,
-      subject: 'Welcome to PACT | مرحباً بك في باكت',
-      recipientName,
-      html,
-      text,
-    });
+      if (error) {
+        console.error('[EMAIL] Welcome email error:', error);
+        return { success: false, error: error.message };
+      }
+      if (data && !data.success) {
+        return { success: false, error: data.error };
+      }
+      return { success: true, messageId: data?.messageId };
+    } catch (error: any) {
+      console.error('[EMAIL] Welcome email error:', error);
+      return { success: false, error: error.message };
+    }
   },
 
   // ============================================
-  // TEMPLATE 6B: MMP Forwarded to FOM - Bilingual
+  // TEMPLATE 6B: MMP Forwarded to FOM - Compact Payload
   // ============================================
   async sendMMPForwardedToFOM(
     email: string,
@@ -429,124 +389,57 @@ PACT Workflow Platform | منصة باكت`;
     isRecipientFOM: boolean = true,
     recipientRole?: { en: string; ar: string }
   ): Promise<EmailNotificationResult> {
-    const viewMmpUrl = `${APP_URL}/mmp/${mmpId}`;
-    
-    // Get role display names (default to FOM if not provided)
     const roleEn = recipientRole?.en || 'Field Operations Manager';
     const roleAr = recipientRole?.ar || 'مدير العمليات الميدانية';
     
-    // Personalized subject with name, role, and MMP name
     const titleEn = isRecipientFOM 
-      ? `MMP "${mmpName}" Forwarded to ${recipientName} - ${roleEn}` 
+      ? `MMP "${mmpName}" Forwarded - Action Required` 
       : `MMP "${mmpName}" Forwarded to FOM`;
     const titleAr = isRecipientFOM 
-      ? `خطة "${mmpName}" إلى ${recipientName} - ${roleAr}` 
+      ? `خطة "${mmpName}" - إجراء مطلوب` 
       : `خطة "${mmpName}" إلى مدير العمليات الميدانية`;
     
     const messageEn = isRecipientFOM 
-      ? `The Monthly Monitoring Plan "${mmpName}" has been forwarded to you for permits attachment by ${forwarderName}. Please review and attach the necessary permits.`
-      : `The Monthly Monitoring Plan "${mmpName}" has been forwarded to the Field Operations Manager(s) for permits attachment by ${forwarderName}.`;
+      ? `MMP "${mmpName}" forwarded to you for permits by ${forwarderName}. Please attach necessary permits.`
+      : `MMP "${mmpName}" forwarded to FOM for permits by ${forwarderName}.`;
     
     const messageAr = isRecipientFOM
-      ? `تم إرسال خطة المراقبة الشهرية "${mmpName}" إليك لإرفاق التصاريح بواسطة ${forwarderName}. يرجى المراجعة وإرفاق التصاريح اللازمة.`
-      : `تم إرسال خطة المراقبة الشهرية "${mmpName}" إلى مدير(مديري) العمليات الميدانية لإرفاق التصاريح بواسطة ${forwarderName}.`;
+      ? `خطة "${mmpName}" أُرسلت إليك لإرفاق التصاريح بواسطة ${forwarderName}. يرجى إرفاق التصاريح.`
+      : `خطة "${mmpName}" أُرسلت إلى مدير العمليات الميدانية بواسطة ${forwarderName}.`;
 
-    const html = `
-      <!DOCTYPE html>
-      <html dir="ltr">
-      <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>${titleEn} | ${titleAr}</title>
-      </head>
-      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
-        <div style="background-color: white; border-radius: 8px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-          <div style="text-align: center; margin-bottom: 30px;">
-            <h1 style="color: #1a1a2e; margin: 0; font-size: 24px;">PACT Workflow Platform</h1>
-            <p style="color: #666; margin: 5px 0 0 0; font-size: 14px;">منصة باكت للعمليات الميدانية</p>
-          </div>
-          
-          <!-- English Section -->
-          <div style="margin-bottom: 25px; padding-bottom: 25px; border-bottom: 1px solid #eee;">
-            <p style="color: #333; font-size: 16px; line-height: 1.5;">Hello ${recipientName},</p>
-            <p style="color: #333; font-size: 16px; line-height: 1.5;">${messageEn}</p>
-            
-            <div style="background-color: #e3f2fd; border-left: 4px solid #2196f3; border-radius: 4px; padding: 16px; margin: 20px 0;">
-              <p style="margin: 0; color: #333;"><strong>MMP Name:</strong> ${mmpName}</p>
-              <p style="margin: 10px 0 0 0; color: #333;"><strong>Forwarded By:</strong> ${forwarderName}</p>
-              ${isRecipientFOM ? '<p style="margin: 10px 0 0 0; color: #333;"><strong>Action Required:</strong> Attach Permits</p>' : ''}
-            </div>
-          </div>
-          
-          <!-- Arabic Section -->
-          <div dir="rtl" style="margin-top: 25px; padding-top: 25px; border-top: 1px solid #eee; text-align: right;">
-            <p style="color: #333; font-size: 16px; line-height: 1.8;">مرحباً ${recipientName}،</p>
-            <p style="color: #333; font-size: 16px; line-height: 1.8;">${messageAr}</p>
-            
-            <div style="background-color: #e3f2fd; border-right: 4px solid #2196f3; border-radius: 4px; padding: 16px; margin: 20px 0;">
-              <p style="margin: 0; color: #333;"><strong>اسم خطة المراقبة الشهرية:</strong> ${mmpName}</p>
-              <p style="margin: 10px 0 0 0; color: #333;"><strong>تم الإرسال بواسطة:</strong> ${forwarderName}</p>
-              ${isRecipientFOM ? '<p style="margin: 10px 0 0 0; color: #333;"><strong>الإجراء المطلوب:</strong> إرفاق التصاريح</p>' : ''}
-            </div>
-          </div>
-          
-          <div style="text-align: center; margin: 25px 0;">
-            <a href="${viewMmpUrl}" style="display: inline-block; padding: 14px 30px; background-color: #9b87f5; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
-              View MMP | عرض خطة المراقبة الشهرية
-            </a>
-          </div>
-          
-          <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
-          
-          <!-- Management Oversight Notice -->
-          <div style="background-color: #f8f9fa; border-radius: 6px; padding: 12px; margin-bottom: 20px;">
-            <p style="color: #555; font-size: 11px; text-align: center; margin: 0; line-height: 1.6;">
-              This notification has been sent to relevant management for oversight and accountability.<br>
-              <span style="direction: rtl; display: inline-block;">تم إرسال هذا الإشعار إلى الإدارة المعنية للإشراف والمساءلة.</span>
-            </p>
-          </div>
-          
-          <p style="color: #999; font-size: 12px; text-align: center;">
-            This is an automated message from PACT Workflow Platform.<br>
-            هذه رسالة آلية من منصة باكت للعمليات الميدانية.<br>
-            ICT Team - PACT Command Center Platform<br>
-            فريق تكنولوجيا المعلومات - منصة مركز قيادة باكت
-          </p>
-        </div>
-      </body>
-      </html>
-    `;
-    
-    const text = `Hello ${recipientName},
+    try {
+      const { data, error } = await supabase.functions.invoke('send-email', {
+        body: {
+          to: email,
+          subject: `${titleEn} | ${titleAr}`,
+          type: 'mmp',
+          recipientName,
+          title_en: titleEn,
+          title_ar: titleAr,
+          message_en: messageEn,
+          message_ar: messageAr,
+          actionUrl: `/mmp/${mmpId}`,
+          priority: 'high',
+          details: [
+            { label: 'MMP', value: mmpName },
+            { label: 'By', value: forwarderName },
+            ...(isRecipientFOM ? [{ label: 'Action', value: 'Attach Permits' }] : []),
+          ],
+        },
+      });
 
-${messageEn}
-
-MMP Name: ${mmpName}
-Forwarded By: ${forwarderName}
-${isRecipientFOM ? 'Action Required: Attach Permits' : ''}
-
-View MMP: ${viewMmpUrl}
-
----
-
-مرحباً ${recipientName}،
-
-${messageAr}
-
-اسم خطة المراقبة الشهرية: ${mmpName}
-تم الإرسال بواسطة: ${forwarderName}
-${isRecipientFOM ? 'الإجراء المطلوب: إرفاق التصاريح' : ''}
-
----
-PACT Workflow Platform | منصة باكت`;
-
-    return this.sendEmail({
-      to: email,
-      subject: `${titleEn} | ${titleAr}`,
-      recipientName,
-      html,
-      text,
-    });
+      if (error) {
+        console.error('[EMAIL] MMP forward email error:', error);
+        return { success: false, error: error.message };
+      }
+      if (data && !data.success) {
+        return { success: false, error: data.error };
+      }
+      return { success: true, messageId: data?.messageId };
+    } catch (error: any) {
+      console.error('[EMAIL] MMP forward email error:', error);
+      return { success: false, error: error.message };
+    }
   },
 
   // ============================================
