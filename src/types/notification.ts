@@ -13,7 +13,7 @@ export interface Notification {
   relatedEntityId?: string;
   relatedEntityType?: 'siteVisit' | 'mmpFile' | 'transaction' | 'chat' | 'call' | 'signature' | 'document';
   category?: NotificationCategory;
-  priority?: 'low' | 'medium' | 'high' | 'urgent';
+  priority?: 'normal' | 'high' | 'urgent';
   targetRoles?: string[];  // Roles that should see this notification
   projectId?: string;      // Project this notification is related to
 }
