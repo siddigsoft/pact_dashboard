@@ -167,6 +167,34 @@ export const StatePermitUpload: React.FC<StatePermitUploadProps> = ({
         throw updateError;
       }
 
+      // Update all sites in this state to mark state permit as attached
+      // First, fetch current sites to merge additional_data properly
+      const { data: sitesData, error: sitesFetchError } = await supabase
+        .from('mmp_site_entries')
+        .select('id, additional_data')
+        .eq('mmp_file_id', mmpFileId)
+        .eq('state', state);
+
+      if (!sitesFetchError && sitesData && sitesData.length > 0) {
+        // Update each site's additional_data to include state_permit_attached flag
+        for (const site of sitesData) {
+          const currentAdditionalData = site.additional_data || {};
+          const updatedAdditionalData = {
+            ...currentAdditionalData,
+            state_permit_attached: true
+          };
+
+          const { error: siteUpdateError } = await supabase
+            .from('mmp_site_entries')
+            .update({ additional_data: updatedAdditionalData })
+            .eq('id', site.id);
+
+          if (siteUpdateError) {
+            console.warn(`Failed to update site ${site.id} with state permit flag:`, siteUpdateError);
+          }
+        }
+      }
+
       toast({
         title: "State permit uploaded successfully",
         description: `State permit for ${state} has been uploaded. You can now proceed to upload local permits.`,
