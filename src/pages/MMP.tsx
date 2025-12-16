@@ -2590,6 +2590,19 @@ const MMP = () => {
 
   return (
     <div className="space-y-6 sm:space-y-10 min-h-screen bg-slate-50 dark:bg-gray-900 py-4 sm:py-8 px-1 sm:px-4 md:px-8">
+      {/* Header with Upload Button */}
+      {canCreate && (
+        <div className="flex justify-end">
+          <Button 
+            onClick={() => navigate('/mmp-upload')} 
+            className="flex items-center gap-2"
+            data-testid="button-upload-mmp"
+          >
+            <Upload className="h-4 w-4" />
+            Upload MMP
+          </Button>
+        </div>
+      )}
       {/* Body */}
       <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-lg p-2 sm:p-4 md:p-6 overflow-y-auto max-h-[calc(100vh-200px)]">
         {loading ? (
