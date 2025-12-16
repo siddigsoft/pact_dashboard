@@ -169,6 +169,41 @@ export const LocalityPermitUpload: React.FC<LocalityPermitUploadProps> = ({
         throw updateError;
       }
 
+      // Update all sites in this locality to 'permits_attached' status
+      // This moves sites to the permits_attached tab
+      // First, fetch current sites to merge additional_data properly
+      const { data: sitesData, error: sitesFetchError } = await supabase
+        .from('mmp_site_entries')
+        .select('id, additional_data, status')
+        .eq('mmp_file_id', mmpFileId)
+        .eq('state', state)
+        .eq('locality', locality)
+        // Only update sites that are in pending/new status
+        .in('status', ['Pending', 'Dispatched', 'assigned', 'inProgress', 'in_progress']);
+
+      if (!sitesFetchError && sitesData && sitesData.length > 0) {
+        // Update each site to permits_attached status
+        for (const site of sitesData) {
+          const currentAdditionalData = site.additional_data || {};
+          const updatedAdditionalData = {
+            ...currentAdditionalData,
+            locality_permit_attached: true
+          };
+
+          const { error: siteUpdateError } = await supabase
+            .from('mmp_site_entries')
+            .update({ 
+              status: 'permits_attached',
+              additional_data: updatedAdditionalData
+            })
+            .eq('id', site.id);
+
+          if (siteUpdateError) {
+            console.warn(`Failed to update site ${site.id} to permits_attached:`, siteUpdateError);
+          }
+        }
+      }
+
       toast({
         title: "Local permit uploaded successfully",
         description: `Local permit for ${locality}, ${state} has been uploaded. Sites in this locality are now ready for verification.`,

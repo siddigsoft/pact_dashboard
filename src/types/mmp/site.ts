@@ -28,6 +28,8 @@ export interface MMPSiteEntry {
   comments?: string;
   additionalData?: Record<string, string>;
   mmpFiles?: { name?: string }; // For joined MMP file data
+  // Coordinator assignment
+  forwardedToUserId?: string; // User ID the site entry is forwarded to
 }
 
 export interface MMPSiteVisit {
