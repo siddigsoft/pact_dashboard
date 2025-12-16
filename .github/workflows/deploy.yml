@@ -34,7 +34,8 @@ jobs:
             cd /home/deploy/pact_dashboard
 
             # 🔑 CRITICAL FIX: Ensure 'deploy' owns all files before Git operations
-            chown -R deploy:deploy .
+            sudo chown -R deploy:deploy /home/deploy/pact_dashboard
+
 
             # Now safe to reset and clean
             git fetch origin
