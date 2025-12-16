@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -165,6 +165,21 @@ const ReviewAssignCoordinators: React.FC = () => {
     loadData();
   }, [id, getMmpById, navigate, toast]);
 
+  // Convert Set to sorted array for stable dependency comparison
+  const forwardedSiteIdsArray = useMemo(() => {
+    return Array.from(forwardedSiteIds).sort();
+  }, [forwardedSiteIds]);
+
+  // Create stable dependency values to prevent unnecessary re-runs
+  const forwardedIdsKey = forwardedSiteIdsArray.join(',');
+  const statesLength = states.length;
+  const localitiesLength = localities.length;
+  const mmpFileId = mmpFile?.id;
+  const entriesLength = mmpFile?.siteEntries?.length || 0;
+
+  // Track initialization to prevent unnecessary re-runs
+  const initializationKeyRef = useRef<string>('');
+
   // Initialize selectedSites for groups that don't have selections yet
   // This must be in useEffect, not during render
   useEffect(() => {
@@ -176,6 +191,14 @@ const ReviewAssignCoordinators: React.FC = () => {
       : [];
     
     if (!entries.length) return;
+    
+    // Create a stable key to track if we've already initialized for this exact state
+    const initializationKey = `${mmpFileId}-${forwardedIdsKey}-${statesLength}-${localitiesLength}-${entriesLength}`;
+    
+    // Skip if we've already initialized for this exact state
+    if (initializationKeyRef.current === initializationKey && Object.keys(selectedSites).length > 0) {
+      return;
+    }
     
     // Recompute groupMap here (same logic as in render, but in useEffect)
     const stateNameToId = new Map<string, string>();
@@ -208,13 +231,16 @@ const ReviewAssignCoordinators: React.FC = () => {
       groupMap[key].push(e);
     });
     
+    // Create a Set from the array for efficient lookups
+    const forwardedSet = new Set(forwardedSiteIdsArray);
+    
     const newSelectedSites: Record<string, Set<string>> = { ...selectedSites };
     let hasChanges = false;
     
     Object.entries(groupMap).forEach(([groupKey, groupSites]) => {
       // Only initialize if not already set and has unforwarded sites
       if (!newSelectedSites[groupKey]) {
-        const unforwardedSites = groupSites.filter((site: any) => !forwardedSiteIds.has(site.id));
+        const unforwardedSites = groupSites.filter((site: any) => !forwardedSet.has(site.id));
         if (unforwardedSites.length > 0) {
           newSelectedSites[groupKey] = new Set(unforwardedSites.map((site: any) => site.id));
           hasChanges = true;
@@ -224,9 +250,15 @@ const ReviewAssignCoordinators: React.FC = () => {
     
     if (hasChanges) {
       setSelectedSites(newSelectedSites);
+      initializationKeyRef.current = initializationKey;
+    } else if (initializationKeyRef.current !== initializationKey) {
+      // Update key even if no changes to prevent re-running
+      initializationKeyRef.current = initializationKey;
     }
+    // Note: We intentionally don't include states/localities/mmpFile in deps
+    // because we only want to re-run when the stable values change
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [forwardedSiteIds, states, localities, loading, loadingForwardedStates, loadingLocations, mmpFile]);
+  }, [forwardedIdsKey, statesLength, localitiesLength, entriesLength, loading, loadingForwardedStates, loadingLocations, mmpFileId]);
 
   if (loading || loadingForwardedStates || loadingLocations) {
     return (
