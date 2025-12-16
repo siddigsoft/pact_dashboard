@@ -125,11 +125,15 @@ export const BulkClearForwardedDialog: React.FC<BulkClearForwardedDialogProps> =
       // Notification summary
       if (adminId) {
         await supabase.from('notifications').insert({
-          user_id: adminId,
-          title: 'Forwarded sites cleared',
-          message: `Cleared ${mmpRows.length} MMP(s); reset ${includeSiteVisitDeletion ? totalSiteVisits : 0} site entry status(es).`,
-          type: 'info',
-          related_entity_type: 'mmpFile',
+          recipient_id: adminId,
+          title_en: 'Forwarded sites cleared',
+          title_ar: 'تم مسح المواقع المُحالة',
+          message_en: `Cleared ${mmpRows.length} MMP(s); reset ${includeSiteVisitDeletion ? totalSiteVisits : 0} site entry status(es).`,
+          message_ar: `تم مسح ${mmpRows.length} خطة مراقبة شهرية؛ إعادة تعيين ${includeSiteVisitDeletion ? totalSiteVisits : 0} حالة إدخال موقع.`,
+          entity_type: 'mmpFile',
+          event_type: 'system',
+          status: 'pending',
+          priority: 'normal'
         });
       }
 
