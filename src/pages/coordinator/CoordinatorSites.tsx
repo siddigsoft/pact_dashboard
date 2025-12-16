@@ -13,7 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAppContext } from '@/context/AppContext';
 import { useMMP } from '@/context/mmp/MMPContext';
 import { useUserProjects } from '@/hooks/useUserProjects';
-import { CheckCircle, Clock, FileCheck, XCircle, ArrowLeft, Eye, Edit, Search, ChevronLeft, ChevronRight, Calendar, CheckSquare, MapPin, AlertTriangle, ChevronUp, ChevronDown, Play } from 'lucide-react';
+import { CheckCircle, Clock, FileCheck, XCircle, ArrowLeft, Eye, Edit, Search, ChevronLeft, ChevronRight, Calendar, CheckSquare, MapPin, AlertTriangle, ChevronUp, ChevronDown, Play, Upload } from 'lucide-react';
 import { useSiteVisitContext } from '@/context/siteVisit/SiteVisitContext';
 import { format } from 'date-fns';
 import { DatePicker } from '@/components/ui/date-picker';
@@ -21,6 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useCoordinatorLocalityPermits } from '@/hooks/use-coordinator-permits';
 import { LocalityPermitUpload } from '@/components/LocalityPermitUpload';
 import { StatePermitUpload } from '@/components/StatePermitUpload';
+import { SequentialPermitUpload } from '@/components/SequentialPermitUpload';
 import { LocalityPermitStatus } from '@/types/coordinator-permits';
 import { PermitVerificationQuestions, PermitDecision } from '@/components/PermitVerificationQuestions';
 import { NotificationTriggerService } from '@/services/NotificationTriggerService';
@@ -540,6 +541,10 @@ const CoordinatorSites: React.FC = () => {
 
   // Locality permit upload dialog state
   const [localityPermitUploadDialogOpen, setLocalityPermitUploadDialogOpen] = useState(false);
+
+  // Sequential permit upload dialog state (state first, then localities)
+  const [sequentialPermitDialogOpen, setSequentialPermitDialogOpen] = useState(false);
+  const [selectedStateForSequentialUpload, setSelectedStateForSequentialUpload] = useState<{state: string; stateId: string; mmpFileId: string} | null>(null);
 
   // Individual site verification without permit dialog state
   const [siteWithoutPermitDialogOpen, setSiteWithoutPermitDialogOpen] = useState(false);
@@ -2509,10 +2514,30 @@ const CoordinatorSites: React.FC = () => {
                       {stateData.statePermitVerified ? 'State Permit Verified' : 'State Permit Uploaded'}
                     </Badge>
                   ) : (
-                    <Badge variant="destructive">
-                      <AlertTriangle className="h-3 w-3 mr-1" />
-                      State Permit Required
-                    </Badge>
+                    <>
+                      <Badge variant="destructive">
+                        <AlertTriangle className="h-3 w-3 mr-1" />
+                        State Permit Required
+                      </Badge>
+                      <Button
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const mmpFileId = stateData.localities?.[0]?.sites?.[0]?.mmp_file_id;
+                          const stateId = stateData.stateId || stateData.state.toLowerCase().replace(/\s+/g, '-');
+                          setSelectedStateForSequentialUpload({
+                            state: stateData.state,
+                            stateId: stateId,
+                            mmpFileId: mmpFileId
+                          });
+                          setSequentialPermitDialogOpen(true);
+                        }}
+                        data-testid={`button-upload-permits-${stateData.state}`}
+                      >
+                        <Upload className="h-3 w-3 mr-1" />
+                        Upload Permits
+                      </Button>
+                    </>
                   )}
                 </div>
               </div>
@@ -4125,6 +4150,45 @@ const CoordinatorSites: React.FC = () => {
                 Cancel
               </Button>
             </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Sequential Permit Upload Dialog (State first, then localities) */}
+      {selectedStateForSequentialUpload && (
+        <Dialog open={sequentialPermitDialogOpen} onOpenChange={(open) => {
+          if (!open) {
+            setSequentialPermitDialogOpen(false);
+            setSelectedStateForSequentialUpload(null);
+          }
+        }}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Upload Permits - {selectedStateForSequentialUpload.state}</DialogTitle>
+              <DialogDescription>
+                Upload state permit first, then optionally upload locality permits
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+              <SequentialPermitUpload
+                state={selectedStateForSequentialUpload.state}
+                stateId={selectedStateForSequentialUpload.stateId}
+                mmpFileId={selectedStateForSequentialUpload.mmpFileId}
+                onComplete={() => {
+                  setSequentialPermitDialogOpen(false);
+                  setSelectedStateForSequentialUpload(null);
+                  loadSites();
+                  toast({
+                    title: "Permits uploaded",
+                    description: `Permits for ${selectedStateForSequentialUpload.state} have been processed.`,
+                  });
+                }}
+                onCancel={() => {
+                  setSequentialPermitDialogOpen(false);
+                  setSelectedStateForSequentialUpload(null);
+                }}
+              />
+            </div>
           </DialogContent>
         </Dialog>
       )}
