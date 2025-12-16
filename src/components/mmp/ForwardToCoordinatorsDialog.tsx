@@ -157,7 +157,9 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
             type: 'info',
             link: `/mmp/${mmpId}`,
             related_entity_id: siteIdsInGroup[0], // Use first site ID as reference
-            related_entity_type: 'mmpSiteEntry'
+            related_entity_type: 'mmpSiteEntry',
+            event_type: 'assignments',
+            status: 'pending'
           }));
           const { error: nErr } = await supabase.from('notifications').insert(rows);
           if (nErr) throw nErr;
@@ -174,7 +176,9 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
                 type: 'success',
                 link: `/mmp/${mmpId}`,
                 related_entity_id: siteIdsInGroup[0],
-                related_entity_type: 'mmpSiteEntry'
+                related_entity_type: 'mmpSiteEntry',
+                event_type: 'system',
+                status: 'pending'
               });
             }
           } catch {}
@@ -242,7 +246,9 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
           type: 'info',
           link: `/mmp/${mmpId}`,
           related_entity_id: siteIds![0], // Use first site ID as reference
-          related_entity_type: 'mmpSiteEntry'
+          related_entity_type: 'mmpSiteEntry',
+          event_type: 'assignments',
+          status: 'pending'
         }));
         const { error: nErr } = await supabase.from('notifications').insert(rows);
         if (nErr) throw nErr;
@@ -259,7 +265,9 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
               type: 'success',
               link: `/mmp/${mmpId}`,
               related_entity_id: siteIds![0],
-              related_entity_type: 'mmpSiteEntry'
+              related_entity_type: 'mmpSiteEntry',
+              event_type: 'system',
+              status: 'pending'
             });
           }
         } catch {}
@@ -292,7 +300,9 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
           type: 'info',
           link: `/mmp/${mmpId}`,
           related_entity_id: mmpId,
-          related_entity_type: 'mmpFile'
+          related_entity_type: 'mmpFile',
+          event_type: 'assignments',
+          status: 'pending'
         }));
         const { error: nErr } = await supabase.from('notifications').insert(rows);
         if (nErr) throw nErr;
@@ -309,7 +319,9 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
               type: 'success',
               link: `/mmp/${mmpId}`,
               related_entity_id: mmpId,
-              related_entity_type: 'mmpFile'
+              related_entity_type: 'mmpFile',
+              event_type: 'system',
+              status: 'pending'
             });
           }
         } catch {}

@@ -100,7 +100,9 @@ async function notifyStakeholdersOnUpload(mmp: { id: string; name: string; hub?:
       type: 'info',
       link: `/mmp/${mmp.id}`,
       related_entity_id: mmp.id,
-      related_entity_type: 'mmpFile'
+      related_entity_type: 'mmpFile',
+      event_type: 'system',
+      status: 'pending'
     }));
     await supabase.from('notifications').insert(rows);
   } catch {}

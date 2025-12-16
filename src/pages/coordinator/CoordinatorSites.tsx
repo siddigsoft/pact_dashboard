@@ -1617,6 +1617,8 @@ const CoordinatorSites: React.FC = () => {
                 : `Site ${siteNames} has been returned. Reason: ${reason}`,
               type: 'warning',
               read: false,
+              event_type: 'approvals',
+              status: 'pending'
             });
           }
         } catch (notifErr) {

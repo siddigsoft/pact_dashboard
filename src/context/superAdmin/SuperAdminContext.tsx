@@ -362,7 +362,8 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
         is_read: false,
         related_entity_id: relatedEntityId,
         related_entity_type: relatedEntityType,
-        category: 'system',
+        event_type: 'system',
+        status: 'pending',
         priority: 'high',
       });
     } catch (error) {
