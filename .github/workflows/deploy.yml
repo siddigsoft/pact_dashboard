@@ -1,4 +1,4 @@
-name: Deploy to VPS Production
+name: Deploy to VPS Production (TEST ONLY)
 
 on:
   push:
@@ -10,30 +10,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout code
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Step 2: Set up Node.js
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-
-      # Step 3: Install dependencies locally (optional)
-      - name: Install dependencies
-        run: npm ci
-
-      # Step 4: Build project locally (optional)
-      - name: Build project
-        run: npx vite build
-
-      # Step 5: Deploy via SSH to VPS using hardcoded key
-      - name: Deploy to VPS via SSH
+      - name: Deploy to VPS (hardcoded creds — TEST)
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: 209.38.78.38
-          username: root
+          username: deploy
           key: |
             -----BEGIN OPENSSH PRIVATE KEY-----
             b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
@@ -43,27 +27,22 @@ jobs:
             HIpR+la6Zr5cWb9qPng5AAAACnZwcy1hY2Nlc3MBAgM=
             -----END OPENSSH PRIVATE KEY-----
           script: |
-            # Navigate to project folder
+            set -e
+
+            echo "🚀 Deploying PACT Frontend (static)"
+
             cd /home/deploy/pact_dashboard
 
-            # Clean local changes
-            git reset --hard
+            git fetch origin
+            git reset --hard origin/master_backup
             git clean -fd
 
-            # Pull latest code
-            git pull origin master_backup
-
-            # Install dependencies (dev + prod)
             npm install
+            npm run build
 
-            # Build project using Vite
-            npx vite build
+            # Ensure Nginx can read files
+            chown -R deploy:www-data dist
+            find dist -type d -exec chmod 755 {} \;
+            find dist -type f -exec chmod 644 {} \;
 
-            # Ensure PM2 is installed
-            npm install -g pm2
-
-            # Reload app if running, otherwise start
-            pm2 reload pact_dashboard --update-env || pm2 start dist/index.js --name pact_dashboard
-
-            # Optional: check PM2 status
-            pm2 list
+            echo "✅ Deployment complete — static files ready"
