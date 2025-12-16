@@ -2,7 +2,47 @@ import { supabase } from '@/integrations/supabase/client';
 import { EmailNotificationService } from './email-notification.service';
 
 export type NotificationCategory = 'assignments' | 'approvals' | 'financial' | 'team' | 'system' | 'signatures' | 'calls' | 'messages';
-export type NotificationPriority = 'low' | 'medium' | 'high' | 'urgent';
+
+/**
+ * Helper function to format role strings into displayable titles
+ * Supports both English display and bilingual greetings
+ */
+export const formatRoleName = (role: string | null | undefined): { en: string; ar: string } => {
+  if (!role) return { en: 'Team Member', ar: 'عضو الفريق' };
+  
+  const roleMap: Record<string, { en: string; ar: string }> = {
+    'super_admin': { en: 'Super Administrator', ar: 'المدير العام' },
+    'superAdmin': { en: 'Super Administrator', ar: 'المدير العام' },
+    'SuperAdmin': { en: 'Super Administrator', ar: 'المدير العام' },
+    'admin': { en: 'Administrator', ar: 'المدير' },
+    'Admin': { en: 'Administrator', ar: 'المدير' },
+    'fom': { en: 'Field Operations Manager', ar: 'مدير العمليات الميدانية' },
+    'FOM': { en: 'Field Operations Manager', ar: 'مدير العمليات الميدانية' },
+    'supervisor': { en: 'Hub Supervisor', ar: 'مشرف المحور' },
+    'Supervisor': { en: 'Hub Supervisor', ar: 'مشرف المحور' },
+    'coordinator': { en: 'Coordinator', ar: 'المنسق' },
+    'Coordinator': { en: 'Coordinator', ar: 'المنسق' },
+    'data_collector': { en: 'Data Collector', ar: 'جامع البيانات' },
+    'dataCollector': { en: 'Data Collector', ar: 'جامع البيانات' },
+    'enumerator': { en: 'Enumerator', ar: 'العداد' },
+    'Enumerator': { en: 'Enumerator', ar: 'العداد' },
+    'finance': { en: 'Finance Officer', ar: 'موظف المالية' },
+    'Finance': { en: 'Finance Officer', ar: 'موظف المالية' },
+    'viewer': { en: 'Viewer', ar: 'مشاهد' },
+    'Viewer': { en: 'Viewer', ar: 'مشاهد' },
+  };
+  
+  return roleMap[role] || { en: role.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()), ar: role };
+};
+
+// Type for hub management users with role information
+interface HubManagementUser {
+  id: string;
+  full_name: string;
+  email: string;
+  role: string;
+}
+export type NotificationPriority = 'normal' | 'high' | 'urgent';
 
 interface TriggerNotificationOptions {
   userId: string;
@@ -87,7 +127,7 @@ export const NotificationTriggerService = {
       message,
       type = 'info',
       category = 'system',
-      priority = 'medium',
+      priority = 'normal',
       link,
       relatedEntityId,
       relatedEntityType,
@@ -107,23 +147,28 @@ export const NotificationTriggerService = {
     }
 
     try {
+      // Ensure event_type is never null - database constraint requires it
+      const safeEventType = category || 'system';
+      const safePriority = priority || 'normal';
+      
       // Map to actual database schema columns
       const notificationData = {
         recipient_id: userId,
-        title_en: title,
-        title_ar: title,
-        message_en: message,
-        message_ar: message,
-        priority: priority,
-        action_url: link,
-        entity_id: relatedEntityId,
-        entity_type: relatedEntityType,
-        event_type: category,
+        title_en: title || 'Notification',
+        title_ar: title || 'إشعار',
+        message_en: message || '',
+        message_ar: message || '',
+        priority: safePriority,
+        action_url: link || null,
+        entity_id: relatedEntityId || null,
+        entity_type: relatedEntityType || null,
+        event_type: safeEventType,
         status: 'pending',
         email_sent: false
       };
 
       console.log(`[NOTIFICATION] Inserting into database:`, JSON.stringify(notificationData));
+      console.log(`[NOTIFICATION] event_type="${safeEventType}", priority="${safePriority}"`);
 
       const { data, error } = await supabase.from('notifications').insert(notificationData).select('id');
 
@@ -178,7 +223,7 @@ export const NotificationTriggerService = {
       message: `Successfully uploaded "${mmpName}" with ${siteCount} sites`,
       type: 'success',
       category: 'system',
-      priority: 'medium',
+      priority: 'normal',
       link: `/mmp/${mmpId}`,
       relatedEntityId: mmpId,
       relatedEntityType: 'mmpFile'
@@ -197,7 +242,7 @@ export const NotificationTriggerService = {
   },
 
   async siteVisitReminder(userId: string, siteName: string, hoursUntilDeadline: number, siteId: string): Promise<void> {
-    const urgency = hoursUntilDeadline <= 4 ? 'urgent' : hoursUntilDeadline <= 24 ? 'high' : 'medium';
+    const urgency = hoursUntilDeadline <= 4 ? 'urgent' : hoursUntilDeadline <= 24 ? 'high' : 'normal';
     const type = hoursUntilDeadline <= 4 ? 'error' : hoursUntilDeadline <= 24 ? 'warning' : 'info';
     
     await this.send({
@@ -229,7 +274,7 @@ export const NotificationTriggerService = {
     const statusInfo = statusMessages[status];
     
     // All withdrawal status changes should trigger email notifications
-    const priority: NotificationPriority = status === 'approved' || status === 'rejected' ? 'high' : 'medium';
+    const priority: NotificationPriority = status === 'approved' || status === 'rejected' ? 'high' : 'normal';
     
     await this.send({
       userId,
@@ -270,7 +315,7 @@ export const NotificationTriggerService = {
 
   async budgetThresholdAlert(userId: string, projectName: string, percentUsed: number): Promise<void> {
     const type = percentUsed >= 100 ? 'error' : percentUsed >= 90 ? 'warning' : 'info';
-    const priority = percentUsed >= 100 ? 'urgent' : percentUsed >= 90 ? 'high' : 'medium';
+    const priority = percentUsed >= 100 ? 'urgent' : percentUsed >= 90 ? 'high' : 'normal';
     
     await this.send({
       userId,
@@ -302,7 +347,7 @@ export const NotificationTriggerService = {
       message: `${collectorName} has completed the visit to "${siteName}"`,
       type: 'success',
       category: 'assignments',
-      priority: 'medium',
+      priority: 'normal',
       link: `/mmp`,
       relatedEntityId: siteId,
       relatedEntityType: 'siteVisit'
@@ -330,7 +375,7 @@ export const NotificationTriggerService = {
       message: `Your transaction of ${currency} ${amount.toLocaleString()} has been digitally signed and recorded`,
       type: 'success',
       category: 'signatures',
-      priority: 'medium',
+      priority: 'normal',
       link: '/wallet',
       relatedEntityId: transactionId,
       relatedEntityType: 'transaction'
@@ -356,7 +401,7 @@ export const NotificationTriggerService = {
       message: `${signerName} has signed "${documentTitle}"`,
       type: 'info',
       category: 'signatures',
-      priority: 'medium',
+      priority: 'normal',
       link: '/signatures',
       relatedEntityId: documentId,
       relatedEntityType: 'document'
@@ -458,7 +503,7 @@ export const NotificationTriggerService = {
       message: `${senderName}: ${messagePreview.slice(0, 50)}${messagePreview.length > 50 ? '...' : ''}`,
       type: 'info',
       category: 'messages',
-      priority: 'medium',
+      priority: 'normal',
       link: chatId ? `/chat?userId=${chatId}` : '/chat',
       relatedEntityId: chatId,
       relatedEntityType: 'chat'
@@ -472,7 +517,7 @@ export const NotificationTriggerService = {
       message: `You have ${count} unread message${count > 1 ? 's' : ''}`,
       type: 'info',
       category: 'messages',
-      priority: 'medium',
+      priority: 'normal',
       link: '/chat'
     });
   },
@@ -570,7 +615,7 @@ export const NotificationTriggerService = {
         message,
         type: 'info',
         category: 'system',
-        priority: 'medium'
+        priority: 'normal'
       }, projectId);
     }
     
@@ -583,7 +628,7 @@ export const NotificationTriggerService = {
       message,
       type: 'info',
       category: 'system',
-      priority: 'medium',
+      priority: 'normal',
       projectId
     });
   },
@@ -634,7 +679,7 @@ export const NotificationTriggerService = {
         message: `${claimerName} has claimed the site "${siteName}"`,
         type: 'info' as const,
         category: 'assignments' as NotificationCategory,
-        priority: 'medium' as NotificationPriority,
+        priority: 'normal' as NotificationPriority,
         link: `/mmp`,
         relatedEntityId: siteId,
         relatedEntityType: 'siteVisit' as const
@@ -667,7 +712,7 @@ export const NotificationTriggerService = {
     siteId: string,
     hoursUntilDeadline: number
   ): Promise<void> {
-    const priority: NotificationPriority = hoursUntilDeadline <= 12 ? 'urgent' : hoursUntilDeadline <= 24 ? 'high' : 'medium';
+    const priority: NotificationPriority = hoursUntilDeadline <= 12 ? 'urgent' : hoursUntilDeadline <= 24 ? 'high' : 'normal';
     const type = hoursUntilDeadline <= 12 ? 'warning' : 'info';
     
     let message: string;
@@ -739,7 +784,7 @@ export const NotificationTriggerService = {
     }
 
     const priorityMap: Record<string, NotificationPriority> = {
-      '24h': 'medium',
+      '24h': 'normal',
       '12h': 'high',
       '6h': 'urgent'
     };
@@ -772,16 +817,17 @@ export const NotificationTriggerService = {
   /**
    * Helper: Find all management users for hub notifications
    * Includes: Hub Supervisors, Hub FOMs, all Super Admins, and all Admins
+   * Returns role information for personalized email greetings
    */
-  async getHubManagementUsers(hubId: string): Promise<{ id: string; full_name: string; email: string }[]> {
+  async getHubManagementUsers(hubId: string): Promise<HubManagementUser[]> {
     try {
-      const allUsers: { id: string; full_name: string; email: string }[] = [];
+      const allUsers: HubManagementUser[] = [];
       const seenIds = new Set<string>();
 
       // 1. Get hub supervisors (role = 'supervisor' in the specific hub)
       const { data: supervisors, error: supError } = await supabase
         .from('profiles')
-        .select('id, full_name, email')
+        .select('id, full_name, email, role')
         .eq('hub_id', hubId)
         .eq('role', 'supervisor');
 
@@ -789,7 +835,7 @@ export const NotificationTriggerService = {
         supervisors.forEach(s => {
           if (!seenIds.has(s.id)) {
             seenIds.add(s.id);
-            allUsers.push(s);
+            allUsers.push({ ...s, role: s.role || 'supervisor' });
           }
         });
       }
@@ -797,7 +843,7 @@ export const NotificationTriggerService = {
       // 2. Get hub FOMs (role = 'fom' in the specific hub)
       const { data: foms, error: fomError } = await supabase
         .from('profiles')
-        .select('id, full_name, email')
+        .select('id, full_name, email, role')
         .eq('hub_id', hubId)
         .eq('role', 'fom');
 
@@ -805,7 +851,7 @@ export const NotificationTriggerService = {
         foms.forEach(f => {
           if (!seenIds.has(f.id)) {
             seenIds.add(f.id);
-            allUsers.push(f);
+            allUsers.push({ ...f, role: f.role || 'fom' });
           }
         });
       }
@@ -813,14 +859,14 @@ export const NotificationTriggerService = {
       // 3. Get all super admins (global, not hub-specific)
       const { data: superAdmins, error: saError } = await supabase
         .from('profiles')
-        .select('id, full_name, email')
+        .select('id, full_name, email, role')
         .in('role', ['super_admin', 'superAdmin']);
 
       if (!saError && superAdmins) {
         superAdmins.forEach(sa => {
           if (!seenIds.has(sa.id)) {
             seenIds.add(sa.id);
-            allUsers.push(sa);
+            allUsers.push({ ...sa, role: sa.role || 'super_admin' });
           }
         });
       }
@@ -828,14 +874,14 @@ export const NotificationTriggerService = {
       // 4. Get all admins (global, not hub-specific)
       const { data: admins, error: adminError } = await supabase
         .from('profiles')
-        .select('id, full_name, email')
+        .select('id, full_name, email, role')
         .eq('role', 'admin');
 
       if (!adminError && admins) {
         admins.forEach(a => {
           if (!seenIds.has(a.id)) {
             seenIds.add(a.id);
-            allUsers.push(a);
+            allUsers.push({ ...a, role: a.role || 'admin' });
           }
         });
       }
@@ -879,24 +925,224 @@ export const NotificationTriggerService = {
   },
 
   /**
-   * Notify supervisor when MMP is forwarded from FOM to Coordinators
+   * Notify supervisors, admins, and super admins when MMP is forwarded from FOM to Coordinators
+   * - Sends in-app notification to all hub management users
+   * - Sends bilingual email to supervisors, admins, and super admins
    */
   async mmpForwardedToCoordinators(
     hubId: string,
     mmpName: string,
     coordinatorCount: number,
-    mmpId?: string
+    mmpId?: string,
+    forwarderName?: string
   ): Promise<number> {
-    return await this.notifyHubSupervisor(hubId, {
-      title: 'MMP Forwarded to Coordinators',
-      message: `MMP "${mmpName}" has been forwarded to ${coordinatorCount} coordinator(s) for review`,
-      type: 'info',
-      category: 'assignments',
-      priority: 'medium',
-      link: '/mmp',
-      relatedEntityId: mmpId,
-      relatedEntityType: 'mmpFile'
-    });
+    try {
+      let successCount = 0;
+      const sender = forwarderName || 'Field Operations Manager';
+
+      // 1. Get hub management users (supervisors, FOMs, admins)
+      const managementUsers = await this.getHubManagementUsers(hubId);
+      
+      // 2. Send in-app notifications to all management users
+      for (const user of managementUsers) {
+        const sent = await this.send({
+          userId: user.id,
+          title: 'MMP Forwarded to Coordinators',
+          message: `MMP "${mmpName}" has been forwarded to ${coordinatorCount} coordinator(s) for site assignment by ${sender}`,
+          type: 'info',
+          category: 'assignments',
+          priority: 'high',
+          link: mmpId ? `/mmp/${mmpId}` : '/mmp',
+          relatedEntityId: mmpId,
+          relatedEntityType: 'mmpFile',
+          sendEmail: false // We send bilingual email separately
+        });
+        if (sent) successCount++;
+
+        // Send bilingual email with role-based greeting
+        if (user.email) {
+          try {
+            const roleInfo = formatRoleName(user.role);
+            await EmailNotificationService.sendMMPForwardedToCoordinators(
+              user.email,
+              user.full_name || 'Team Member',
+              mmpName,
+              sender,
+              coordinatorCount,
+              mmpId,
+              roleInfo
+            );
+            console.log(`[NOTIFICATION] Sent bilingual MMP->Coordinators email to ${roleInfo.en}: ${user.email}`);
+          } catch (emailError) {
+            console.error(`[NOTIFICATION] Failed to send bilingual email to ${user.email}:`, emailError);
+          }
+        }
+      }
+
+      // 3. Also notify Admins and Super Admins who may not be in the hub
+      const { data: adminUsers, error: adminError } = await supabase
+        .from('profiles')
+        .select('id, full_name, email, role')
+        .in('role', ['admin', 'super_admin', 'Admin', 'SuperAdmin']);
+
+      if (adminError) {
+        console.error('Error fetching admins for MMP->Coordinators notification:', adminError);
+      } else if (adminUsers && adminUsers.length > 0) {
+        // Filter out admins already notified via hub management
+        const notifiedIds = new Set(managementUsers.map(u => u.id));
+        const remainingAdmins = adminUsers.filter(a => !notifiedIds.has(a.id));
+
+        for (const admin of remainingAdmins) {
+          const sent = await this.send({
+            userId: admin.id,
+            title: 'MMP Forwarded to Coordinators',
+            message: `MMP "${mmpName}" has been forwarded to ${coordinatorCount} coordinator(s) for site assignment by ${sender}`,
+            type: 'info',
+            category: 'assignments',
+            priority: 'high',
+            link: mmpId ? `/mmp/${mmpId}` : '/mmp',
+            relatedEntityId: mmpId,
+            relatedEntityType: 'mmpFile',
+            sendEmail: false
+          });
+          if (sent) successCount++;
+
+          // Send bilingual email with role-based greeting
+          if (admin.email) {
+            try {
+              const roleInfo = formatRoleName(admin.role);
+              await EmailNotificationService.sendMMPForwardedToCoordinators(
+                admin.email,
+                admin.full_name || 'Administrator',
+                mmpName,
+                sender,
+                coordinatorCount,
+                mmpId,
+                roleInfo
+              );
+              console.log(`[NOTIFICATION] Sent bilingual MMP->Coordinators email to ${roleInfo.en}: ${admin.email}`);
+            } catch (emailError) {
+              console.error(`[NOTIFICATION] Failed to send bilingual email to ${admin.email}:`, emailError);
+            }
+          }
+        }
+      }
+
+      return successCount;
+    } catch (error) {
+      console.error('Failed to send MMP forwarded to coordinators notifications:', error);
+      return 0;
+    }
+  },
+
+  /**
+   * Notify supervisors, FOMs, admins, and super admins when a site is verified by a coordinator
+   * - Sends in-app notification to all hub management users
+   * - Sends bilingual email with role-based personalized greetings
+   */
+  async siteVerifiedByCoordinator(
+    hubId: string,
+    siteName: string,
+    mmpName: string,
+    coordinatorName: string,
+    siteId?: string
+  ): Promise<number> {
+    try {
+      let successCount = 0;
+
+      // 1. Get hub management users (supervisors, FOMs, admins)
+      const managementUsers = await this.getHubManagementUsers(hubId);
+      
+      // 2. Send in-app notifications and bilingual emails to all management users
+      for (const user of managementUsers) {
+        const sent = await this.send({
+          userId: user.id,
+          title: 'Site Verified by Coordinator',
+          message: `Site "${siteName}" from MMP "${mmpName}" has been verified by Coordinator ${coordinatorName}`,
+          type: 'success',
+          category: 'assignments',
+          priority: 'normal',
+          link: siteId ? `/mmp?site=${siteId}` : '/mmp',
+          relatedEntityId: siteId,
+          relatedEntityType: 'siteVisit',
+          sendEmail: false // We send bilingual email separately
+        });
+        if (sent) successCount++;
+
+        // Send bilingual email with role-based greeting
+        if (user.email) {
+          try {
+            const roleInfo = formatRoleName(user.role);
+            await EmailNotificationService.sendSiteVerifiedByCoordinator(
+              user.email,
+              user.full_name || 'Team Member',
+              siteName,
+              mmpName,
+              coordinatorName,
+              siteId,
+              roleInfo
+            );
+            console.log(`[NOTIFICATION] Sent bilingual Site Verified email to ${roleInfo.en}: ${user.email}`);
+          } catch (emailError) {
+            console.error(`[NOTIFICATION] Failed to send bilingual email to ${user.email}:`, emailError);
+          }
+        }
+      }
+
+      // 3. Also notify Admins and Super Admins who may not be in the hub
+      const { data: adminUsers, error: adminError } = await supabase
+        .from('profiles')
+        .select('id, full_name, email, role')
+        .in('role', ['admin', 'super_admin', 'Admin', 'SuperAdmin']);
+
+      if (adminError) {
+        console.error('Error fetching admins for Site Verified notification:', adminError);
+      } else if (adminUsers && adminUsers.length > 0) {
+        // Filter out admins already notified via hub management
+        const notifiedIds = new Set(managementUsers.map(u => u.id));
+        const remainingAdmins = adminUsers.filter(a => !notifiedIds.has(a.id));
+
+        for (const admin of remainingAdmins) {
+          const sent = await this.send({
+            userId: admin.id,
+            title: 'Site Verified by Coordinator',
+            message: `Site "${siteName}" from MMP "${mmpName}" has been verified by Coordinator ${coordinatorName}`,
+            type: 'success',
+            category: 'assignments',
+            priority: 'normal',
+            link: siteId ? `/mmp?site=${siteId}` : '/mmp',
+            relatedEntityId: siteId,
+            relatedEntityType: 'siteVisit',
+            sendEmail: false
+          });
+          if (sent) successCount++;
+
+          // Send bilingual email with role-based greeting
+          if (admin.email) {
+            try {
+              const roleInfo = formatRoleName(admin.role);
+              await EmailNotificationService.sendSiteVerifiedByCoordinator(
+                admin.email,
+                admin.full_name || 'Administrator',
+                siteName,
+                mmpName,
+                coordinatorName,
+                siteId,
+                roleInfo
+              );
+              console.log(`[NOTIFICATION] Sent bilingual Site Verified email to ${roleInfo.en}: ${admin.email}`);
+            } catch (emailError) {
+              console.error(`[NOTIFICATION] Failed to send bilingual email to ${admin.email}:`, emailError);
+            }
+          }
+        }
+      }
+
+      return successCount;
+    } catch (error) {
+      console.error('Failed to send site verified notifications:', error);
+      return 0;
+    }
   },
 
   /**
@@ -942,7 +1188,7 @@ export const NotificationTriggerService = {
         title: 'Site Claimed',
         message: `Site "${siteName}" has been claimed${details?.actorName ? ` by ${details.actorName}` : ''}`,
         type: 'info' as const,
-        priority: 'medium' as NotificationPriority
+        priority: 'normal' as NotificationPriority
       },
       rejected: {
         title: 'Site Rejected',
@@ -954,13 +1200,13 @@ export const NotificationTriggerService = {
         title: 'Site Verified',
         message: `Site "${siteName}" has been verified${details?.actorName ? ` by ${details.actorName}` : ''}`,
         type: 'success' as const,
-        priority: 'medium' as NotificationPriority
+        priority: 'normal' as NotificationPriority
       },
       approved: {
         title: 'Site Approved',
         message: `Site "${siteName}" has been approved${details?.actorName ? ` by ${details.actorName}` : ''}`,
         type: 'success' as const,
-        priority: 'medium' as NotificationPriority
+        priority: 'normal' as NotificationPriority
       },
       dispatched: {
         title: 'Sites Dispatched',
@@ -968,13 +1214,13 @@ export const NotificationTriggerService = {
           ? `${details.siteCount} sites including "${siteName}" have been dispatched`
           : `Site "${siteName}" has been dispatched`,
         type: 'info' as const,
-        priority: 'medium' as NotificationPriority
+        priority: 'normal' as NotificationPriority
       },
       completed: {
         title: 'Site Visit Completed',
         message: `Site visit to "${siteName}" has been completed${details?.actorName ? ` by ${details.actorName}` : ''}`,
         type: 'success' as const,
-        priority: 'medium' as NotificationPriority
+        priority: 'normal' as NotificationPriority
       }
     };
 
@@ -1028,7 +1274,7 @@ export const NotificationTriggerService = {
       message: `${label} of ${currency} ${amount.toLocaleString()}${details?.userName ? ` by ${details.userName}` : ''} has been ${statusLabel}`,
       type: status === 'approved' ? 'success' : status === 'rejected' ? 'error' : 'info',
       category: 'financial',
-      priority: status === 'pending' ? 'high' : 'medium',
+      priority: status === 'pending' ? 'high' : 'normal',
       link: '/finance-approval',
       relatedEntityId: details?.transactionId,
       relatedEntityType: 'transaction'
@@ -1059,7 +1305,7 @@ export const NotificationTriggerService = {
         : `Activity "${activityName}" has reached ${coveragePercent}% coverage (${completedSites}/${totalSites} sites)`,
       type: isComplete ? 'success' : 'info',
       category: 'assignments',
-      priority: isComplete ? 'high' : 'medium',
+      priority: isComplete ? 'high' : 'normal',
       link: '/tracker'
     });
   },
@@ -1112,16 +1358,16 @@ export const NotificationTriggerService = {
         : `Activity "${activityName}" at "${siteName}" is scheduled in ${daysUntil} days (${activityDate})`,
       type: isToday ? 'warning' : 'info',
       category: 'assignments',
-      priority: isToday ? 'high' : 'medium',
+      priority: isToday ? 'high' : 'normal',
       link: '/mmp'
     });
   },
 
   /**
    * Notify FOM and all Admins/Super Admins when MMP is forwarded to FOM
-   * - Sends notification to all selected FOMs
-   * - Sends notification to all Admins and Super Admins
-   * - Sends email notifications to all recipients
+   * - Sends notification to all selected FOMs with bilingual email
+   * - Sends notification to all Admins and Super Admins with bilingual email
+   * - Uses dedicated bilingual email template for professional formatting
    */
   async mmpForwardedToFOM(
     fomUserIds: string[],
@@ -1131,56 +1377,101 @@ export const NotificationTriggerService = {
   ): Promise<number> {
     try {
       let successCount = 0;
+      const sender = forwarderName || 'System';
 
-      // 1. Notify all selected FOMs with email
+      // 1. Fetch FOM user details for bilingual emails
+      const { data: fomUsers, error: fomError } = await supabase
+        .from('profiles')
+        .select('id, full_name, email')
+        .in('id', fomUserIds);
+
+      if (fomError) {
+        console.error('Error fetching FOM user details:', fomError);
+      }
+
+      // 2. Notify all selected FOMs with bilingual email
       for (const fomId of fomUserIds) {
+        const fomUser = fomUsers?.find(u => u.id === fomId);
+        const recipientName = fomUser?.full_name || 'Field Operations Manager';
+        const recipientEmail = fomUser?.email;
+
+        // Create in-app notification
         const sent = await this.send({
           userId: fomId,
           title: 'MMP Forwarded to You',
-          message: `MMP "${mmpName}" has been forwarded to you for permits attachment${forwarderName ? ` by ${forwarderName}` : ''}`,
+          message: `MMP "${mmpName}" has been forwarded to you for permits attachment by ${sender}`,
           type: 'info',
           category: 'assignments',
           priority: 'high',
           link: `/mmp/${mmpId}`,
           relatedEntityId: mmpId,
           relatedEntityType: 'mmpFile',
-          sendEmail: true,
-          emailActionUrl: `/mmp/${mmpId}`,
-          emailActionLabel: 'View MMP'
+          sendEmail: false // We send bilingual email separately
         });
         if (sent) successCount++;
+
+        // Send bilingual email directly
+        if (recipientEmail) {
+          try {
+            await EmailNotificationService.sendMMPForwardedToFOM(
+              recipientEmail,
+              recipientName,
+              mmpName,
+              sender,
+              mmpId,
+              true // isRecipientFOM
+            );
+            console.log(`[NOTIFICATION] Sent bilingual MMP forwarded email to FOM: ${recipientEmail}`);
+          } catch (emailError) {
+            console.error(`[NOTIFICATION] Failed to send bilingual email to FOM ${recipientEmail}:`, emailError);
+          }
+        }
       }
 
-      // 2. Fetch all Admins and Super Admins
+      // 3. Fetch all Admins and Super Admins
       const { data: adminUsers, error: adminError } = await supabase
         .from('profiles')
-        .select('id')
+        .select('id, full_name, email')
         .in('role', ['admin', 'super_admin', 'Admin', 'SuperAdmin']);
 
       if (adminError) {
         console.error('Error fetching admins for MMP forward notification:', adminError);
       } else if (adminUsers && adminUsers.length > 0) {
-        // 3. Notify all Admins/Super Admins with email
-        // Note: Admins who are also FOMs get both notifications - the FOM notification about their assignment
-        // AND the admin notification about the forwarding action. This is intentional for full visibility.
-        const adminIds = adminUsers.map(u => u.id);
-        
-        for (const adminId of adminIds) {
+        // 4. Notify all Admins/Super Admins with bilingual email
+        for (const admin of adminUsers) {
+          const recipientName = admin.full_name || 'Administrator';
+          
+          // Create in-app notification
           const sent = await this.send({
-            userId: adminId,
+            userId: admin.id,
             title: 'MMP Forwarded to FOM',
-            message: `MMP "${mmpName}" has been forwarded to ${fomUserIds.length} Field Operations Manager(s)${forwarderName ? ` by ${forwarderName}` : ''}`,
+            message: `MMP "${mmpName}" has been forwarded to ${fomUserIds.length} Field Operations Manager(s) by ${sender}`,
             type: 'info',
             category: 'assignments',
             priority: 'high',
             link: `/mmp/${mmpId}`,
             relatedEntityId: mmpId,
             relatedEntityType: 'mmpFile',
-            sendEmail: true,
-            emailActionUrl: `/mmp/${mmpId}`,
-            emailActionLabel: 'View MMP'
+            sendEmail: false // We send bilingual email separately
           });
           if (sent) successCount++;
+
+          // Send bilingual email directly
+          if (admin.email) {
+            try {
+              await EmailNotificationService.sendMMPForwardedToFOM(
+                admin.email,
+                recipientName,
+                mmpName,
+                sender,
+                mmpId,
+                false // isRecipientFOM (admin gets info notification, not action required)
+              );
+              console.log(`[NOTIFICATION] Sent bilingual MMP forwarded email to Admin: ${admin.email}`);
+            } catch (emailError) {
+              console.error(`[NOTIFICATION] Failed to send bilingual email to Admin ${admin.email}:`, emailError);
+            }
+          }
         }
       }
 
