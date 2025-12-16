@@ -710,11 +710,33 @@ const MMPUpload = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Upload MMP</h1>
-        <p className="text-muted-foreground">
-          Upload a new Monthly Monitoring Plan with detailed site information
-        </p>
+      {/* Blue Header Section */}
+      <div className="bg-gradient-to-r from-blue-600 to-blue-700 dark:from-blue-700 dark:to-blue-800 rounded-lg p-6 text-white shadow-lg">
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-white/20 rounded-full">
+            <Upload className="h-8 w-8" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Upload MMP</h1>
+            <p className="text-blue-100 mt-1">
+              Upload a new Monthly Monitoring Plan with detailed site information
+            </p>
+          </div>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-4 text-sm">
+          <div className="flex items-center gap-2 bg-white/10 rounded-full px-3 py-1">
+            <CheckCircle className="h-4 w-4" />
+            <span>CSV & Excel Support</span>
+          </div>
+          <div className="flex items-center gap-2 bg-white/10 rounded-full px-3 py-1">
+            <ListChecks className="h-4 w-4" />
+            <span>Auto Validation</span>
+          </div>
+          <div className="flex items-center gap-2 bg-white/10 rounded-full px-3 py-1">
+            <Eye className="h-4 w-4" />
+            <span>Preview & Edit</span>
+          </div>
+        </div>
       </div>
 
       {validationReportUrl && (
@@ -848,12 +870,19 @@ const MMPUpload = () => {
       ) : (
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>MMP File Upload</CardTitle>
-                <CardDescription>
-                  Enter MMP details and upload an Excel or CSV file containing site visit information
-                </CardDescription>
+            <Card className="border-t-4 border-t-blue-500">
+              <CardHeader className="bg-blue-50/50 dark:bg-blue-950/20">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-blue-100 dark:bg-blue-900/50 rounded-lg">
+                    <ArrowUpCircle className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-blue-900 dark:text-blue-100">MMP File Upload</CardTitle>
+                    <CardDescription className="text-blue-700/70 dark:text-blue-300/70">
+                      Enter MMP details and upload an Excel or CSV file containing site visit information
+                    </CardDescription>
+                  </div>
+                </div>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -997,36 +1026,47 @@ const MMPUpload = () => {
                               />
 
                               <div
-                                className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer ${
+                                className={`border-2 border-dashed rounded-lg p-10 text-center transition-all cursor-pointer ${
                                   isDragOver
-                                    ? 'border-primary bg-primary/5'
-                                    : 'border-muted-foreground/25 hover:bg-muted/50'
+                                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/30 scale-[1.02]'
+                                    : 'border-blue-300 dark:border-blue-700 hover:border-blue-400 hover:bg-blue-50/50 dark:hover:bg-blue-950/20'
                                 }`}
                                 onDragOver={handleDragOver}
                                 onDragLeave={handleDragLeave}
                                 onDrop={handleDrop}
                                 onClick={handleFileSelect}
                               >
-                                <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-                                <p className="text-sm text-muted-foreground">
-                                  Drag and drop your Excel or CSV file here, or click to browse
+                                <div className="mx-auto w-16 h-16 mb-4 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center">
+                                  <Upload className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+                                </div>
+                                <p className="text-base font-medium text-blue-900 dark:text-blue-100">
+                                  Drag and drop your file here
                                 </p>
-                                <p className="text-xs text-muted-foreground mt-2">
-                                  Supported formats: .xlsx, .xls, .csv
+                                <p className="text-sm text-blue-600/70 dark:text-blue-300/70 mt-1">
+                                  or click to browse from your computer
+                                </p>
+                                <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
+                                  <Upload className="h-4 w-4" />
+                                  Select File
+                                </div>
+                                <p className="text-xs text-muted-foreground mt-4">
+                                  Supported formats: .xlsx, .xls, .csv (Max 10MB)
                                 </p>
                               </div>
                             </div>
                           </FormControl>
                           {value && (
-                            <div className="text-sm p-2 bg-green-50 border border-green-100 rounded flex items-center">
-                              <CheckCircle className="h-4 w-4 text-green-500 mt-1" />
-                              <span>
+                            <div className="text-sm p-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg flex items-center gap-3">
+                              <div className="p-1.5 bg-blue-100 dark:bg-blue-900/50 rounded-full">
+                                <CheckCircle className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                              </div>
+                              <span className="text-blue-900 dark:text-blue-100">
                                 Ready to upload: <strong>{(value as File).name}</strong> ({((value as File).size / 1024).toFixed(2)} KB)
                               </span>
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="ml-auto h-6 w-6"
+                                className="ml-auto"
                                 onClick={() => {
                                   onChange(undefined);
                                 }}
@@ -1171,9 +1211,10 @@ const MMPUpload = () => {
                 
                 </div>
               </CardContent>
-              <CardFooter className="flex justify-between">
+              <CardFooter className="flex flex-wrap justify-between gap-4 bg-slate-50/50 dark:bg-slate-900/20 border-t">
                 <div className="flex gap-2">
                   <Button variant="outline" onClick={handleClearForm}>
+                    <X className="mr-2 h-4 w-4" />
                     Cancel
                   </Button>
                   
@@ -1187,34 +1228,35 @@ const MMPUpload = () => {
                   </Button>
                 </div>
                 
-                <div className="flex gap-2">
+                <div className="flex gap-3 items-center">
                   {isUploading && (
                     <Button 
                       type="button"
                       variant="outline"
                       onClick={resetUploadState}
-                      className="text-red-600 hover:text-red-700"
+                      className="text-red-600 hover:text-red-700 border-red-200"
                     >
                       <X className="mr-2 h-4 w-4" />
-                      Cancel Validate
+                      Cancel
                     </Button>
                   )}
                   
                   <div className="space-y-2">
                     {isUploading && uploadProgress > 0 && (
-                      <div className="space-y-1">
-                        <div className="flex justify-between text-sm">
+                      <div className="space-y-1 min-w-[200px]">
+                        <div className="flex justify-between text-sm text-blue-700 dark:text-blue-300">
                           <span>{uploadStage}</span>
-                          <span>{uploadProgress}%</span>
+                          <span className="font-medium">{uploadProgress}%</span>
                         </div>
-                        <Progress value={uploadProgress} className="h-2" />
+                        <Progress value={uploadProgress} className="h-2 bg-blue-100 dark:bg-blue-900" />
                       </div>
                     )}
 
                     <Button
                       type="submit"
                       disabled={!form.formState.isValid || isUploading}
-                      className="w-full"
+                      className="w-full bg-blue-600 hover:bg-blue-700 text-white shadow-md"
+                      data-testid="button-upload-mmp-submit"
                     >
                       {isUploading ? (
                         <>
@@ -1224,7 +1266,7 @@ const MMPUpload = () => {
                       ) : (
                         <>
                           <Upload className="mr-2 h-4 w-4" />
-                          Validate MMP
+                          Upload & Validate MMP
                         </>
                       )}
                     </Button>
@@ -1237,23 +1279,34 @@ const MMPUpload = () => {
       )}
       
       <Dialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>
-        <DialogContent>
+        <DialogContent className="border-t-4 border-t-blue-500">
           <DialogHeader>
-            <DialogTitle>Save Progress for Later</DialogTitle>
-            <DialogDescription>
-              Your MMP file and settings will be saved as a draft. You can continue editing it later.
-            </DialogDescription>
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-blue-100 dark:bg-blue-900/50 rounded-lg">
+                <Save className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div>
+                <DialogTitle className="text-blue-900 dark:text-blue-100">Save Progress for Later</DialogTitle>
+                <DialogDescription className="text-blue-700/70 dark:text-blue-300/70">
+                  Your MMP file and settings will be saved as a draft. You can continue editing it later.
+                </DialogDescription>
+              </div>
+            </div>
           </DialogHeader>
           <div className="py-4">
-            <Label htmlFor="draftName" className="mb-2 block">Draft Name (optional)</Label>
+            <Label htmlFor="draftName" className="mb-2 block text-blue-900 dark:text-blue-100">Draft Name (optional)</Label>
             <Input 
               id="draftName" 
               placeholder="My MMP Upload Draft"
+              className="border-blue-200 dark:border-blue-800 focus:border-blue-500"
             />
           </div>
-          <DialogFooter>
+          <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setSaveDialogOpen(false)}>Cancel</Button>
-            <Button onClick={confirmSave}>Save Draft</Button>
+            <Button onClick={confirmSave} className="bg-blue-600 hover:bg-blue-700 text-white">
+              <Save className="mr-2 h-4 w-4" />
+              Save Draft
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
