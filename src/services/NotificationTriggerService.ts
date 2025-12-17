@@ -909,20 +909,8 @@ export const NotificationTriggerService = {
         });
       }
 
-      // 4. Get all admins (global, not hub-specific)
-      const { data: admins, error: adminError } = await supabase
-        .from('profiles')
-        .select('id, full_name, email, role')
-        .eq('role', 'admin');
-
-      if (!adminError && admins) {
-        admins.forEach(a => {
-          if (!seenIds.has(a.id)) {
-            seenIds.add(a.id);
-            allUsers.push({ ...a, role: a.role || 'admin' });
-          }
-        });
-      }
+      // Note: Regular admins removed from hub management notifications
+      // Only super admins receive management notifications now
 
       return allUsers;
     } catch (error) {
@@ -1446,22 +1434,23 @@ export const NotificationTriggerService = {
         }
       }
 
-      // 3. Fetch all Admins and Super Admins
-      const { data: adminUsers, error: adminError } = await supabase
+      // 3. Fetch only approved Super Admins (no regular admins)
+      const { data: superAdminUsers, error: saError } = await supabase
         .from('profiles')
         .select('id, full_name, email')
-        .in('role', ['admin', 'super_admin', 'Admin', 'SuperAdmin']);
+        .in('role', ['super_admin', 'superAdmin', 'SuperAdmin'])
+        .eq('status', 'approved');
 
-      if (adminError) {
-        console.error('Error fetching admins for MMP forward notification:', adminError);
-      } else if (adminUsers && adminUsers.length > 0) {
-        // 4. Notify all Admins/Super Admins with bilingual email
-        for (const admin of adminUsers) {
-          const recipientName = admin.full_name || 'Administrator';
+      if (saError) {
+        console.error('Error fetching super admins for MMP forward notification:', saError);
+      } else if (superAdminUsers && superAdminUsers.length > 0) {
+        // 4. Notify only approved Super Admins with bilingual email
+        for (const superAdmin of superAdminUsers) {
+          const recipientName = superAdmin.full_name || 'Super Administrator';
           
           // Create in-app notification
           const sent = await this.send({
-            userId: admin.id,
+            userId: superAdmin.id,
             title: 'MMP Forwarded to FOM',
             message: `MMP "${mmpName}" has been forwarded to ${fomUserIds.length} Field Operations Manager(s) by ${sender}`,
             type: 'info',
@@ -1474,20 +1463,20 @@ export const NotificationTriggerService = {
           });
           if (sent) successCount++;
 
-          // Send bilingual email directly
-          if (admin.email) {
+          // Send bilingual email directly to super admin
+          if (superAdmin.email) {
             try {
               await EmailNotificationService.sendMMPForwardedToFOM(
-                admin.email,
+                superAdmin.email,
                 recipientName,
                 mmpName,
                 sender,
                 mmpId,
-                false // isRecipientFOM (admin gets info notification, not action required)
+                false // isRecipientFOM (super admin gets info notification, not action required)
               );
-              console.log(`[NOTIFICATION] Sent bilingual MMP forwarded email to Admin: ${admin.email}`);
+              console.log(`[NOTIFICATION] Sent bilingual MMP forwarded email to Super Admin: ${superAdmin.email}`);
             } catch (emailError) {
-              console.error(`[NOTIFICATION] Failed to send bilingual email to Admin ${admin.email}:`, emailError);
+              console.error(`[NOTIFICATION] Failed to send bilingual email to Super Admin ${superAdmin.email}:`, emailError);
             }
           }
         }
