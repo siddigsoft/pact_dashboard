@@ -21,7 +21,7 @@ import {
 } from '@/components/ui/select';
 import { useSuperAdmin } from '@/context/superAdmin/SuperAdminContext';
 import { useUser } from '@/context/user/UserContext';
-import { ShieldCheck, UserPlus, UserX, Shield, AlertTriangle, CheckCircle2, XCircle, Mail, KeyRound, Loader2 } from 'lucide-react';
+import { ShieldCheck, UserPlus, UserX, Shield, AlertTriangle, CheckCircle2, XCircle, Mail, KeyRound, Loader2, Trash2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
@@ -37,14 +37,17 @@ export function SuperAdminManagementPage() {
     canAddSuperAdmin,
     createSuperAdmin,
     deactivateSuperAdmin,
+    deleteSuperAdmin,
   } = useSuperAdmin();
 
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showDeactivateDialog, setShowDeactivateDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState('');
   const [selectedSuperAdminId, setSelectedSuperAdminId] = useState('');
   const [appointmentReason, setAppointmentReason] = useState('');
   const [deactivationReason, setDeactivationReason] = useState('');
+  const [deleteReason, setDeleteReason] = useState('');
   const [processing, setProcessing] = useState(false);
   const [passwordResetDialog, setPasswordResetDialog] = useState<{ open: boolean; user: { id: string; name: string; email: string } | null }>({ open: false, user: null });
   const [isSendingReset, setIsSendingReset] = useState(false);
@@ -102,6 +105,34 @@ export function SuperAdminManagementPage() {
   const openDeactivateDialog = (superAdminId: string) => {
     setSelectedSuperAdminId(superAdminId);
     setShowDeactivateDialog(true);
+  };
+
+  const openDeleteDialog = (superAdminId: string) => {
+    setSelectedSuperAdminId(superAdminId);
+    setShowDeleteDialog(true);
+  };
+
+  const handleDelete = async () => {
+    if (!currentUser || !selectedSuperAdminId) return;
+
+    if (!deleteReason.trim()) {
+      alert('Please provide a reason for deletion');
+      return;
+    }
+
+    setProcessing(true);
+    const success = await deleteSuperAdmin({
+      superAdminId: selectedSuperAdminId,
+      deletedBy: currentUser.id,
+      deleteReason,
+    });
+
+    setProcessing(false);
+    if (success) {
+      setShowDeleteDialog(false);
+      setSelectedSuperAdminId('');
+      setDeleteReason('');
+    }
   };
 
   const handleOpenPasswordReset = (user: { id: string; name: string; email: string }) => {
@@ -379,6 +410,15 @@ export function SuperAdminManagementPage() {
                               <UserX className="h-4 w-4 mr-1" />
                               Deactivate
                             </Button>
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={() => openDeleteDialog(superAdmin.id)}
+                              data-testid={`button-delete-${superAdmin.id}`}
+                            >
+                              <Trash2 className="h-4 w-4 mr-1" />
+                              Delete
+                            </Button>
                           </div>
                         </div>
                       </CardContent>
@@ -431,6 +471,17 @@ export function SuperAdminManagementPage() {
                               <Label className="text-xs text-muted-foreground">Reason</Label>
                               <p className="text-sm">{superAdmin.deactivationReason || 'N/A'}</p>
                             </div>
+                          </div>
+                          <div className="flex gap-2 mt-2">
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={() => openDeleteDialog(superAdmin.id)}
+                              data-testid={`button-delete-deactivated-${superAdmin.id}`}
+                            >
+                              <Trash2 className="h-4 w-4 mr-1" />
+                              Delete Permanently
+                            </Button>
                           </div>
                         </div>
                       </CardContent>
@@ -534,6 +585,48 @@ export function SuperAdminManagementPage() {
               data-testid="button-confirm-deactivate"
             >
               {processing ? 'Deactivating...' : 'Deactivate'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent data-testid="dialog-delete-super-admin">
+          <DialogHeader>
+            <DialogTitle>Delete Super-Admin</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900 p-3 rounded-md">
+              <p className="text-sm text-red-800 dark:text-red-200">
+                This will permanently delete the super-admin record from the database. This action cannot be undone.
+              </p>
+            </div>
+
+            <div>
+              <Label htmlFor="delete-reason">Delete Reason *</Label>
+              <Textarea
+                id="delete-reason"
+                value={deleteReason}
+                onChange={(e) => setDeleteReason(e.target.value)}
+                placeholder="Explain why this super-admin record is being deleted..."
+                rows={3}
+                data-testid="textarea-delete-reason"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeleteDialog(false)} data-testid="button-cancel-delete">
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={processing}
+              data-testid="button-confirm-delete"
+            >
+              {processing ? 'Deleting...' : 'Delete Permanently'}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -43,6 +43,12 @@ export interface DeactivateSuperAdmin {
   deactivationReason: string;
 }
 
+export interface DeleteSuperAdmin {
+  superAdminId: string;
+  deletedBy: string;
+  deleteReason: string;
+}
+
 export interface SuperAdminStats {
   activeCount: number;
   totalCount: number;

@@ -7,6 +7,7 @@ import {
   SuperAdmin,
   CreateSuperAdmin,
   DeactivateSuperAdmin,
+  DeleteSuperAdmin,
   SuperAdminStats,
   DeletionAuditLog,
   CreateDeletionLog,
@@ -48,6 +49,7 @@ interface SuperAdminContextType {
   refreshDeletionLogs: () => Promise<void>;
   createSuperAdmin: (data: CreateSuperAdmin) => Promise<boolean>;
   deactivateSuperAdmin: (data: DeactivateSuperAdmin) => Promise<boolean>;
+  deleteSuperAdmin: (data: DeleteSuperAdmin) => Promise<boolean>;
   logDeletion: (data: CreateDeletionLog) => Promise<boolean>;
   checkSuperAdminStatus: (userId: string) => Promise<boolean>;
   resetSiteVisit: (params: ResetSiteVisitParams) => Promise<boolean>;
@@ -286,8 +288,9 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
   };
 
   const deactivateSuperAdmin = async (data: DeactivateSuperAdmin): Promise<boolean> => {
+    console.log('[SuperAdmin] Deactivating super-admin:', data.superAdminId);
     try {
-      const { error } = await supabase
+      const { data: updateData, error } = await supabase
         .from('super_admins')
         .update({
           is_active: false,
@@ -296,9 +299,35 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
           deactivation_reason: data.deactivationReason,
           updated_at: new Date().toISOString(),
         })
-        .eq('id', data.superAdminId);
+        .eq('id', data.superAdminId)
+        .select();
 
-      if (error) throw error;
+      console.log('[SuperAdmin] Deactivation result:', { updateData, error });
+
+      if (error) {
+        // Handle RLS permission errors specifically
+        if (error.code === '42501' || error.message?.includes('permission') || error.message?.includes('RLS')) {
+          console.error('[SuperAdmin] RLS permission denied:', error);
+          toast({
+            title: 'Permission Denied',
+            description: 'You do not have permission to deactivate this super-admin. Please check RLS policies in Supabase.',
+            variant: 'destructive',
+          });
+          return false;
+        }
+        throw error;
+      }
+
+      // Check if any row was actually updated
+      if (!updateData || updateData.length === 0) {
+        console.warn('[SuperAdmin] No rows updated - record may not exist or RLS blocked');
+        toast({
+          title: 'Warning',
+          description: 'No record was updated. The super-admin may not exist or you lack permission.',
+          variant: 'destructive',
+        });
+        return false;
+      }
 
       toast({
         title: 'Super-Admin Deactivated',
@@ -308,10 +337,76 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
       await refreshSuperAdmins();
       return true;
     } catch (error: any) {
-      console.error('Failed to deactivate super-admin:', error);
+      console.error('[SuperAdmin] Failed to deactivate super-admin:', error);
       toast({
         title: 'Error',
         description: error.message || 'Failed to deactivate super-admin',
+        variant: 'destructive',
+      });
+      return false;
+    }
+  };
+
+  const deleteSuperAdmin = async (data: DeleteSuperAdmin): Promise<boolean> => {
+    console.log('[SuperAdmin] Deleting super-admin:', data.superAdminId);
+    try {
+      // First get the record data for audit log
+      const { data: superAdminRecord, error: fetchError } = await supabase
+        .from('super_admins')
+        .select('*')
+        .eq('id', data.superAdminId)
+        .single();
+
+      if (fetchError) {
+        console.error('[SuperAdmin] Failed to fetch record for deletion:', fetchError);
+        throw fetchError;
+      }
+
+      // Delete the record
+      const { error } = await supabase
+        .from('super_admins')
+        .delete()
+        .eq('id', data.superAdminId);
+
+      console.log('[SuperAdmin] Delete result:', { error });
+
+      if (error) {
+        if (error.code === '42501' || error.message?.includes('permission') || error.message?.includes('RLS')) {
+          console.error('[SuperAdmin] RLS permission denied for delete:', error);
+          toast({
+            title: 'Permission Denied',
+            description: 'You do not have permission to delete this super-admin. Please check RLS policies in Supabase.',
+            variant: 'destructive',
+          });
+          return false;
+        }
+        throw error;
+      }
+
+      // Log the deletion for audit trail
+      await supabase.from('deletion_audit_log').insert({
+        table_name: 'super_admins',
+        record_id: data.superAdminId,
+        record_data: superAdminRecord,
+        deleted_by: data.deletedBy,
+        deleted_by_role: 'superAdmin',
+        deleted_by_name: currentUser?.fullName || currentUser?.email || 'Unknown',
+        deletion_reason: data.deleteReason,
+        is_restorable: false,
+      });
+
+      toast({
+        title: 'Super-Admin Deleted',
+        description: 'Super-admin record has been permanently removed',
+      });
+
+      await refreshSuperAdmins();
+      return true;
+    } catch (error: any) {
+      console.error('[SuperAdmin] Failed to delete super-admin:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to delete super-admin',
         variant: 'destructive',
       });
       return false;
@@ -751,6 +846,7 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
     refreshDeletionLogs,
     createSuperAdmin,
     deactivateSuperAdmin,
+    deleteSuperAdmin,
     logDeletion,
     checkSuperAdminStatus,
     resetSiteVisit,
