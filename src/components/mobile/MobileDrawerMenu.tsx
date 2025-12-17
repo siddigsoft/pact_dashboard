@@ -14,8 +14,7 @@ import {
   Wallet,
   FileText,
   ChevronRight,
-  ExternalLink,
-  AlertTriangle
+  ExternalLink
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -24,16 +23,6 @@ import { cn } from '@/lib/utils';
 import { hapticPresets } from '@/lib/haptics';
 import { useUser } from '@/context/user/UserContext';
 import { Badge } from '@/components/ui/badge';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 
 interface MobileDrawerMenuProps {
   isOpen: boolean;
@@ -56,7 +45,6 @@ export function MobileDrawerMenu({ isOpen, onClose, onLogout }: MobileDrawerMenu
   const navigate = useNavigate();
   const { currentUser } = useUser();
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
-  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' | null;
@@ -96,14 +84,8 @@ export function MobileDrawerMenu({ isOpen, onClose, onLogout }: MobileDrawerMenu
     navigate(path);
   };
 
-  const handleLogoutClick = () => {
+  const handleLogout = () => {
     hapticPresets.buttonPress();
-    setShowLogoutConfirm(true);
-  };
-
-  const handleLogoutConfirm = () => {
-    hapticPresets.buttonPress();
-    setShowLogoutConfirm(false);
     onClose();
     onLogout?.();
   };
@@ -260,7 +242,7 @@ export function MobileDrawerMenu({ isOpen, onClose, onLogout }: MobileDrawerMenu
               <Button
                 variant="outline"
                 className="w-full justify-start gap-3 text-destructive border-destructive/20 hover:bg-destructive/10"
-                onClick={handleLogoutClick}
+                onClick={handleLogout}
                 data-testid="button-logout"
               >
                 <LogOut className="w-5 h-5" />
@@ -268,44 +250,6 @@ export function MobileDrawerMenu({ isOpen, onClose, onLogout }: MobileDrawerMenu
               </Button>
             </div>
           </motion.div>
-
-          {/* Logout Confirmation Dialog */}
-          <AlertDialog open={showLogoutConfirm} onOpenChange={setShowLogoutConfirm}>
-            <AlertDialogContent className="max-w-[90%] rounded-2xl" data-testid="dialog-logout-confirm">
-              <AlertDialogHeader>
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="w-10 h-10 rounded-full bg-destructive/10 flex items-center justify-center">
-                    <AlertTriangle className="w-5 h-5 text-destructive" />
-                  </div>
-                  <AlertDialogTitle className="text-lg">Confirm Logout</AlertDialogTitle>
-                </div>
-                <AlertDialogDescription className="text-left space-y-2">
-                  <p>Are you sure you want to log out?</p>
-                  <p className="text-destructive font-medium">
-                    If you are in the middle of a site visit or have offline data, logging out may cause data loss.
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    If you don't have internet access, you won't be able to log back in until connectivity is restored.
-                  </p>
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter className="flex-row gap-2">
-                <AlertDialogCancel 
-                  className="flex-1 m-0"
-                  data-testid="button-cancel-logout"
-                >
-                  Cancel
-                </AlertDialogCancel>
-                <AlertDialogAction 
-                  className="flex-1 m-0 bg-destructive hover:bg-destructive/90"
-                  onClick={handleLogoutConfirm}
-                  data-testid="button-confirm-logout"
-                >
-                  Log Out
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
         </>
       )}
     </AnimatePresence>
