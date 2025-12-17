@@ -1653,15 +1653,33 @@ PACT Workflow Platform`;
   // ============================================
 
   /**
-   * Send bulk emails to multiple recipients
+   * Send bulk emails to multiple recipients with rate limiting
+   * Sends emails sequentially with 2-second delays to avoid SMTP rate limits
    */
   async sendBulk(
     recipients: Array<{ email: string; name: string }>,
     options: NotificationEmailOptions
   ): Promise<{ total: number; successful: number; failed: number }> {
-    const results = await Promise.all(
-      recipients.map(r => this.sendNotification(r.email, r.name, options))
-    );
+    const results: EmailNotificationResult[] = [];
+    const DELAY_MS = 2000; // 2 second delay between emails to avoid IONOS rate limiting
+    
+    for (let i = 0; i < recipients.length; i++) {
+      const r = recipients[i];
+      
+      // Add delay before sending (except for the first email)
+      if (i > 0) {
+        await new Promise(resolve => setTimeout(resolve, DELAY_MS));
+      }
+      
+      try {
+        const result = await this.sendNotification(r.email, r.name, options);
+        results.push(result);
+        console.log(`[EMAIL] Sent ${i + 1}/${recipients.length} to ${r.email}: ${result.success ? 'OK' : result.error}`);
+      } catch (error: any) {
+        results.push({ success: false, error: error.message });
+        console.error(`[EMAIL] Failed ${i + 1}/${recipients.length} to ${r.email}:`, error.message);
+      }
+    }
     
     const successful = results.filter(r => r.success).length;
     return {
