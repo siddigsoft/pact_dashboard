@@ -179,9 +179,10 @@ export const NotificationTriggerService = {
 
       console.log(`[NOTIFICATION] Successfully inserted notification with id:`, data?.[0]?.id);
 
-      // Send email for high priority or explicit email requests
-      const shouldSendEmail = sendEmail || priority === 'urgent' || priority === 'high';
-      console.log(`[NOTIFICATION] Should send email: ${shouldSendEmail} (sendEmail=${sendEmail}, priority=${priority})`);
+      // Send email ONLY if explicitly requested via sendEmail=true
+      // Do NOT auto-send for high priority - bilingual emails are sent separately
+      const shouldSendEmail = sendEmail === true;
+      console.log(`[NOTIFICATION] Should send email: ${shouldSendEmail} (sendEmail=${sendEmail})`);
       
       if (shouldSendEmail) {
         try {
