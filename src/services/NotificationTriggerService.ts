@@ -976,7 +976,16 @@ export const NotificationTriggerService = {
         }
       }
       
-      // NOTE: Only Hub Supervisors in CC - no Super Admin or Admin
+      // Add ONE Super Admin
+      const { data: superAdmins } = await supabase
+        .from('profiles')
+        .select('email')
+        .in('role', ['superAdmin', 'super_admin', 'SuperAdmin'])
+        .limit(1);
+      
+      if (superAdmins?.[0]?.email && !ccEmails.includes(superAdmins[0].email)) {
+        ccEmails.push(superAdmins[0].email);
+      }
 
       // 2. If specific coordinators provided, notify them directly
       if (coordinatorUserIds && coordinatorUserIds.length > 0) {
@@ -1026,9 +1035,9 @@ export const NotificationTriggerService = {
             }
           }
           
-          // Minimal delay between emails - emails are sent asynchronously
+          // Add delay between emails to prevent rate limiting
           if ((coordinators || []).indexOf(coord) < (coordinators || []).length - 1) {
-            await new Promise(resolve => setTimeout(resolve, 300));
+            await new Promise(resolve => setTimeout(resolve, 2000));
           }
         }
       }
@@ -1043,7 +1052,7 @@ export const NotificationTriggerService = {
   /**
    * Notify FOM when a site is verified by a coordinator
    * - Sends in-app notification to the FOM only
-   * - Sends bilingual email to FOM (CC Hub Supervisors only)
+   * - Sends bilingual email to FOM (CC one Super Admin)
    * - Simplified to reduce email volume
    */
   async siteVerifiedByCoordinator(
@@ -1057,10 +1066,10 @@ export const NotificationTriggerService = {
     try {
       let successCount = 0;
 
-      // 1. Build CC list: ONLY Hub Supervisors (no Super Admin, no Admin)
+      // 1. Build CC list: Hub Supervisors + ONE Super Admin for accountability
       const ccEmails: string[] = [];
       
-      // Get hub supervisors only
+      // Get hub supervisors
       if (hubId) {
         const { data: supervisors } = await supabase
           .from('profiles')
@@ -1075,6 +1084,17 @@ export const NotificationTriggerService = {
             }
           });
         }
+      }
+      
+      // Add ONE Super Admin
+      const { data: superAdmins } = await supabase
+        .from('profiles')
+        .select('email')
+        .in('role', ['superAdmin', 'super_admin', 'SuperAdmin'])
+        .limit(1);
+      
+      if (superAdmins?.[0]?.email && !ccEmails.includes(superAdmins[0].email)) {
+        ccEmails.push(superAdmins[0].email);
       }
 
       // 2. If specific FOM provided, notify them directly
@@ -1100,7 +1120,7 @@ export const NotificationTriggerService = {
           });
           if (sent) successCount++;
 
-          // Send bilingual email to FOM (CC Hub Supervisors only)
+          // Send bilingual email to FOM (CC Hub Supervisors + Super Admin)
           if (fomUser.email) {
             try {
               const roleInfo = formatRoleName(fomUser.role);
@@ -1395,8 +1415,8 @@ export const NotificationTriggerService = {
   /**
    * Notify FOM when MMP is forwarded to them
    * - Sends in-app notification and bilingual email to selected FOM(s) only
-   * - CC Hub Supervisors only (no Admin, no Super Admin)
-   * - Simplified for faster delivery
+   * - CC one Super Admin on email (not all admins)
+   * - Simplified to reduce email volume and avoid rate limiting
    */
   async mmpForwardedToFOM(
     fomUserIds: string[],
@@ -1419,28 +1439,21 @@ export const NotificationTriggerService = {
         console.error('Error fetching FOM user details:', fomError);
       }
 
-      // 2. CC ONLY Hub Supervisors (no Super Admin, no Admin)
+      // 2. CC only ONE Super Admin (no hub supervisors for FOM forwarding)
       const ccEmails: string[] = [];
       
-      // Get hub supervisors for the FOM's hub
-      const fomHubId = hubId || fomUsers?.[0]?.hub_id;
-      if (fomHubId) {
-        const { data: supervisors } = await supabase
-          .from('profiles')
-          .select('email')
-          .eq('hub_id', fomHubId)
-          .eq('role', 'supervisor');
-        
-        if (supervisors) {
-          supervisors.forEach(s => {
-            if (s.email && !ccEmails.includes(s.email)) {
-              ccEmails.push(s.email);
-            }
-          });
-        }
+      // Add ONE Super Admin only
+      const { data: superAdmins } = await supabase
+        .from('profiles')
+        .select('email')
+        .in('role', ['superAdmin', 'super_admin', 'SuperAdmin'])
+        .limit(1);
+      
+      if (superAdmins?.[0]?.email) {
+        ccEmails.push(superAdmins[0].email);
       }
 
-      // 3. Notify all selected FOMs with bilingual email (CC Hub Supervisors only)
+      // 3. Notify all selected FOMs with bilingual email (CC Super Admin only)
       for (const fomId of fomUserIds) {
         const fomUser = fomUsers?.find(u => u.id === fomId);
         const recipientName = fomUser?.full_name || 'Field Operations Manager';
@@ -1461,7 +1474,7 @@ export const NotificationTriggerService = {
         });
         if (sent) successCount++;
 
-        // Send bilingual email directly to FOM only (CC Hub Supervisors only)
+        // Send bilingual email directly to FOM only (CC Super Admin only, no supervisors)
         if (recipientEmail) {
           try {
             console.log(`[NOTIFICATION] Sending email to FOM: ${recipientEmail}${ccEmails.length ? `, CC: ${ccEmails.join(', ')}` : ''}`);
@@ -1474,7 +1487,7 @@ export const NotificationTriggerService = {
               true, // isRecipientFOM
               undefined, // recipientRole
               0, // retryCount
-              ccEmails.length > 0 ? ccEmails : undefined // CC Hub Supervisors only
+              ccEmails.length > 0 ? ccEmails : undefined // CC Super Admin only
             );
             if (emailResult.success) {
               console.log(`[NOTIFICATION] Email sent successfully to FOM: ${recipientEmail}, messageId: ${emailResult.messageId}`);
@@ -1488,9 +1501,9 @@ export const NotificationTriggerService = {
           console.warn(`[NOTIFICATION] No email found for FOM user ${fomId}`);
         }
         
-        // Minimal delay between emails - emails are sent asynchronously
+        // Add small delay between emails to prevent rate limiting
         if (fomUserIds.indexOf(fomId) < fomUserIds.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 300));
+          await new Promise(resolve => setTimeout(resolve, 2000));
         }
       }
 
