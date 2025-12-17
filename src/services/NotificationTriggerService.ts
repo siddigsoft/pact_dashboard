@@ -945,78 +945,71 @@ export const NotificationTriggerService = {
   },
 
   /**
-   * Notify supervisors, admins, and super admins when MMP is forwarded from FOM to Coordinators
-   * - Sends in-app notification to all hub management users
-   * - Sends bilingual email to supervisors, admins, and super admins
+   * Notify coordinators when MMP is forwarded to them
+   * - Sends in-app notification to selected coordinators only
+   * - Sends bilingual email to coordinators (CC one Super Admin)
+   * - Simplified to reduce email volume and avoid rate limiting
    */
   async mmpForwardedToCoordinators(
     hubId: string,
     mmpName: string,
     coordinatorCount: number,
     mmpId?: string,
-    forwarderName?: string
+    forwarderName?: string,
+    coordinatorUserIds?: string[]
   ): Promise<number> {
     try {
       let successCount = 0;
       const sender = forwarderName || 'Field Operations Manager';
 
-      // 1. Get hub management users (supervisors, FOMs, admins)
-      const managementUsers = await this.getHubManagementUsers(hubId);
+      // 1. Build CC list: Hub Supervisors + ONE Super Admin for accountability
+      const ccEmails: string[] = [];
       
-      // 2. Send in-app notifications to all management users
-      for (const user of managementUsers) {
-        const sent = await this.send({
-          userId: user.id,
-          title: 'MMP Forwarded to Coordinators',
-          message: `MMP "${mmpName}" has been forwarded to ${coordinatorCount} coordinator(s) for site assignment by ${sender}`,
-          type: 'info',
-          category: 'assignments',
-          priority: 'high',
-          link: mmpId ? `/mmp/${mmpId}` : '/mmp',
-          relatedEntityId: mmpId,
-          relatedEntityType: 'mmpFile',
-          sendEmail: false // We send bilingual email separately
-        });
-        if (sent) successCount++;
-
-        // Send bilingual email with role-based greeting
-        if (user.email) {
-          try {
-            const roleInfo = formatRoleName(user.role);
-            await EmailNotificationService.sendMMPForwardedToCoordinators(
-              user.email,
-              user.full_name || 'Team Member',
-              mmpName,
-              sender,
-              coordinatorCount,
-              mmpId,
-              roleInfo
-            );
-            console.log(`[NOTIFICATION] Sent bilingual MMP->Coordinators email to ${roleInfo.en}: ${user.email}`);
-          } catch (emailError) {
-            console.error(`[NOTIFICATION] Failed to send bilingual email to ${user.email}:`, emailError);
-          }
+      // Get hub supervisors
+      if (hubId) {
+        const { data: supervisors } = await supabase
+          .from('profiles')
+          .select('email')
+          .eq('hub_id', hubId)
+          .eq('role', 'supervisor');
+        
+        if (supervisors) {
+          supervisors.forEach(s => {
+            if (s.email && !ccEmails.includes(s.email)) {
+              ccEmails.push(s.email);
+            }
+          });
         }
       }
-
-      // 3. Also notify Admins and Super Admins who may not be in the hub
-      const { data: adminUsers, error: adminError } = await supabase
+      
+      // Add ONE Super Admin
+      const { data: superAdmins } = await supabase
         .from('profiles')
-        .select('id, full_name, email, role')
-        .in('role', ['admin', 'super_admin', 'Admin', 'SuperAdmin']);
+        .select('email')
+        .in('role', ['superAdmin', 'super_admin', 'SuperAdmin'])
+        .limit(1);
+      
+      if (superAdmins?.[0]?.email && !ccEmails.includes(superAdmins[0].email)) {
+        ccEmails.push(superAdmins[0].email);
+      }
 
-      if (adminError) {
-        console.error('Error fetching admins for MMP->Coordinators notification:', adminError);
-      } else if (adminUsers && adminUsers.length > 0) {
-        // Filter out admins already notified via hub management
-        const notifiedIds = new Set(managementUsers.map(u => u.id));
-        const remainingAdmins = adminUsers.filter(a => !notifiedIds.has(a.id));
+      // 2. If specific coordinators provided, notify them directly
+      if (coordinatorUserIds && coordinatorUserIds.length > 0) {
+        const { data: coordinators, error: coordError } = await supabase
+          .from('profiles')
+          .select('id, full_name, email, role')
+          .in('id', coordinatorUserIds);
 
-        for (const admin of remainingAdmins) {
+        if (coordError) {
+          console.error('Error fetching coordinator details:', coordError);
+        }
+
+        for (const coord of coordinators || []) {
+          // Create in-app notification
           const sent = await this.send({
-            userId: admin.id,
-            title: 'MMP Forwarded to Coordinators',
-            message: `MMP "${mmpName}" has been forwarded to ${coordinatorCount} coordinator(s) for site assignment by ${sender}`,
+            userId: coord.id,
+            title: 'MMP Forwarded to You',
+            message: `MMP "${mmpName}" has been forwarded to you for site assignment by ${sender}`,
             type: 'info',
             category: 'assignments',
             priority: 'high',
@@ -1027,23 +1020,30 @@ export const NotificationTriggerService = {
           });
           if (sent) successCount++;
 
-          // Send bilingual email with role-based greeting
-          if (admin.email) {
+          // Send bilingual email to coordinator (CC Hub Supervisors + Super Admin)
+          if (coord.email) {
             try {
-              const roleInfo = formatRoleName(admin.role);
+              const roleInfo = formatRoleName(coord.role);
+              console.log(`[NOTIFICATION] Sending email to Coordinator: ${coord.email}${ccEmails.length ? `, CC: ${ccEmails.join(', ')}` : ''}`);
               await EmailNotificationService.sendMMPForwardedToCoordinators(
-                admin.email,
-                admin.full_name || 'Administrator',
+                coord.email,
+                coord.full_name || 'Coordinator',
                 mmpName,
                 sender,
                 coordinatorCount,
                 mmpId,
-                roleInfo
+                roleInfo,
+                ccEmails.length > 0 ? ccEmails : undefined
               );
-              console.log(`[NOTIFICATION] Sent bilingual MMP->Coordinators email to ${roleInfo.en}: ${admin.email}`);
+              console.log(`[NOTIFICATION] Email sent to Coordinator: ${coord.email}`);
             } catch (emailError) {
-              console.error(`[NOTIFICATION] Failed to send bilingual email to ${admin.email}:`, emailError);
+              console.error(`[NOTIFICATION] Failed to send email to ${coord.email}:`, emailError);
             }
+          }
+          
+          // Add delay between emails to prevent rate limiting
+          if ((coordinators || []).indexOf(coord) < (coordinators || []).length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 2000));
           }
         }
       }
@@ -1056,80 +1056,69 @@ export const NotificationTriggerService = {
   },
 
   /**
-   * Notify supervisors, FOMs, admins, and super admins when a site is verified by a coordinator
-   * - Sends in-app notification to all hub management users
-   * - Sends bilingual email with role-based personalized greetings
+   * Notify FOM when a site is verified by a coordinator
+   * - Sends in-app notification to the FOM only
+   * - Sends bilingual email to FOM (CC one Super Admin)
+   * - Simplified to reduce email volume
    */
   async siteVerifiedByCoordinator(
     hubId: string,
     siteName: string,
     mmpName: string,
     coordinatorName: string,
-    siteId?: string
+    siteId?: string,
+    fomUserId?: string
   ): Promise<number> {
     try {
       let successCount = 0;
 
-      // 1. Get hub management users (supervisors, FOMs, admins)
-      const managementUsers = await this.getHubManagementUsers(hubId);
+      // 1. Build CC list: Hub Supervisors + ONE Super Admin for accountability
+      const ccEmails: string[] = [];
       
-      // 2. Send in-app notifications and bilingual emails to all management users
-      for (const user of managementUsers) {
-        const sent = await this.send({
-          userId: user.id,
-          title: 'Site Verified by Coordinator',
-          message: `Site "${siteName}" from MMP "${mmpName}" has been verified by Coordinator ${coordinatorName}`,
-          type: 'success',
-          category: 'assignments',
-          priority: 'normal',
-          link: siteId ? `/mmp?site=${siteId}` : '/mmp',
-          relatedEntityId: siteId,
-          relatedEntityType: 'siteVisit',
-          sendEmail: false // We send bilingual email separately
-        });
-        if (sent) successCount++;
-
-        // Send bilingual email with role-based greeting
-        if (user.email) {
-          try {
-            const roleInfo = formatRoleName(user.role);
-            await EmailNotificationService.sendSiteVerifiedByCoordinator(
-              user.email,
-              user.full_name || 'Team Member',
-              siteName,
-              mmpName,
-              coordinatorName,
-              siteId,
-              roleInfo
-            );
-            console.log(`[NOTIFICATION] Sent bilingual Site Verified email to ${roleInfo.en}: ${user.email}`);
-          } catch (emailError) {
-            console.error(`[NOTIFICATION] Failed to send bilingual email to ${user.email}:`, emailError);
-          }
+      // Get hub supervisors
+      if (hubId) {
+        const { data: supervisors } = await supabase
+          .from('profiles')
+          .select('email')
+          .eq('hub_id', hubId)
+          .eq('role', 'supervisor');
+        
+        if (supervisors) {
+          supervisors.forEach(s => {
+            if (s.email && !ccEmails.includes(s.email)) {
+              ccEmails.push(s.email);
+            }
+          });
         }
       }
-
-      // 3. Also notify Admins and Super Admins who may not be in the hub
-      const { data: adminUsers, error: adminError } = await supabase
+      
+      // Add ONE Super Admin
+      const { data: superAdmins } = await supabase
         .from('profiles')
-        .select('id, full_name, email, role')
-        .in('role', ['admin', 'super_admin', 'Admin', 'SuperAdmin']);
+        .select('email')
+        .in('role', ['superAdmin', 'super_admin', 'SuperAdmin'])
+        .limit(1);
+      
+      if (superAdmins?.[0]?.email && !ccEmails.includes(superAdmins[0].email)) {
+        ccEmails.push(superAdmins[0].email);
+      }
 
-      if (adminError) {
-        console.error('Error fetching admins for Site Verified notification:', adminError);
-      } else if (adminUsers && adminUsers.length > 0) {
-        // Filter out admins already notified via hub management
-        const notifiedIds = new Set(managementUsers.map(u => u.id));
-        const remainingAdmins = adminUsers.filter(a => !notifiedIds.has(a.id));
+      // 2. If specific FOM provided, notify them directly
+      if (fomUserId) {
+        const { data: fomUser } = await supabase
+          .from('profiles')
+          .select('id, full_name, email, role')
+          .eq('id', fomUserId)
+          .single();
 
-        for (const admin of remainingAdmins) {
+        if (fomUser) {
           const sent = await this.send({
-            userId: admin.id,
-            title: 'Site Verified by Coordinator',
-            message: `Site "${siteName}" from MMP "${mmpName}" has been verified by Coordinator ${coordinatorName}`,
+            userId: fomUser.id,
+            title: 'Site Verified - Ready for Review',
+            message: `Site "${siteName}" from MMP "${mmpName}" has been verified by Coordinator ${coordinatorName}. Ready for your approval.`,
             type: 'success',
             category: 'assignments',
-            priority: 'normal',
+            priority: 'high',
             link: siteId ? `/mmp?site=${siteId}` : '/mmp',
             relatedEntityId: siteId,
             relatedEntityType: 'siteVisit',
@@ -1137,22 +1126,68 @@ export const NotificationTriggerService = {
           });
           if (sent) successCount++;
 
-          // Send bilingual email with role-based greeting
-          if (admin.email) {
+          // Send bilingual email to FOM (CC Hub Supervisors + Super Admin)
+          if (fomUser.email) {
             try {
-              const roleInfo = formatRoleName(admin.role);
+              const roleInfo = formatRoleName(fomUser.role);
+              console.log(`[NOTIFICATION] Sending Site Verified email to FOM: ${fomUser.email}${ccEmails.length ? `, CC: ${ccEmails.join(', ')}` : ''}`);
               await EmailNotificationService.sendSiteVerifiedByCoordinator(
-                admin.email,
-                admin.full_name || 'Administrator',
+                fomUser.email,
+                fomUser.full_name || 'Field Operations Manager',
                 siteName,
                 mmpName,
                 coordinatorName,
                 siteId,
-                roleInfo
+                roleInfo,
+                ccEmails.length > 0 ? ccEmails : undefined
               );
-              console.log(`[NOTIFICATION] Sent bilingual Site Verified email to ${roleInfo.en}: ${admin.email}`);
+              console.log(`[NOTIFICATION] Site Verified email sent to FOM: ${fomUser.email}`);
             } catch (emailError) {
-              console.error(`[NOTIFICATION] Failed to send bilingual email to ${admin.email}:`, emailError);
+              console.error(`[NOTIFICATION] Failed to send email to FOM ${fomUser.email}:`, emailError);
+            }
+          }
+        }
+      } else {
+        // Fallback: Get hub's FOM if not specified
+        const { data: hubFoms } = await supabase
+          .from('profiles')
+          .select('id, full_name, email, role')
+          .eq('hub_id', hubId)
+          .in('role', ['fom', 'FOM'])
+          .limit(1);
+
+        if (hubFoms && hubFoms.length > 0) {
+          const fom = hubFoms[0];
+          const sent = await this.send({
+            userId: fom.id,
+            title: 'Site Verified - Ready for Review',
+            message: `Site "${siteName}" from MMP "${mmpName}" has been verified by Coordinator ${coordinatorName}. Ready for your approval.`,
+            type: 'success',
+            category: 'assignments',
+            priority: 'high',
+            link: siteId ? `/mmp?site=${siteId}` : '/mmp',
+            relatedEntityId: siteId,
+            relatedEntityType: 'siteVisit',
+            sendEmail: false
+          });
+          if (sent) successCount++;
+
+          if (fom.email) {
+            try {
+              const roleInfo = formatRoleName(fom.role);
+              console.log(`[NOTIFICATION] Sending Site Verified email to fallback FOM: ${fom.email}${ccEmails.length ? `, CC: ${ccEmails.join(', ')}` : ''}`);
+              await EmailNotificationService.sendSiteVerifiedByCoordinator(
+                fom.email,
+                fom.full_name || 'Field Operations Manager',
+                siteName,
+                mmpName,
+                coordinatorName,
+                siteId,
+                roleInfo,
+                ccEmails.length > 0 ? ccEmails : undefined
+              );
+            } catch (emailError) {
+              console.error(`[NOTIFICATION] Failed to send email to FOM ${fom.email}:`, emailError);
             }
           }
         }
@@ -1384,32 +1419,47 @@ export const NotificationTriggerService = {
   },
 
   /**
-   * Notify FOM and all Admins/Super Admins when MMP is forwarded to FOM
-   * - Sends notification to all selected FOMs with bilingual email
-   * - Sends notification to all Admins and Super Admins with bilingual email
-   * - Uses dedicated bilingual email template for professional formatting
+   * Notify FOM when MMP is forwarded to them
+   * - Sends in-app notification and bilingual email to selected FOM(s) only
+   * - CC one Super Admin on email (not all admins)
+   * - Simplified to reduce email volume and avoid rate limiting
    */
   async mmpForwardedToFOM(
     fomUserIds: string[],
     mmpName: string,
     mmpId: string,
-    forwarderName?: string
+    forwarderName?: string,
+    hubId?: string
   ): Promise<number> {
     try {
       let successCount = 0;
       const sender = forwarderName || 'System';
 
-      // 1. Fetch FOM user details for bilingual emails
+      // 1. Fetch FOM user details for bilingual emails (include hub_id if not provided)
       const { data: fomUsers, error: fomError } = await supabase
         .from('profiles')
-        .select('id, full_name, email')
+        .select('id, full_name, email, hub_id')
         .in('id', fomUserIds);
 
       if (fomError) {
         console.error('Error fetching FOM user details:', fomError);
       }
 
-      // 2. Notify all selected FOMs with bilingual email
+      // 2. CC only ONE Super Admin (no hub supervisors for FOM forwarding)
+      const ccEmails: string[] = [];
+      
+      // Add ONE Super Admin only
+      const { data: superAdmins } = await supabase
+        .from('profiles')
+        .select('email')
+        .in('role', ['superAdmin', 'super_admin', 'SuperAdmin'])
+        .limit(1);
+      
+      if (superAdmins?.[0]?.email) {
+        ccEmails.push(superAdmins[0].email);
+      }
+
+      // 3. Notify all selected FOMs with bilingual email (CC Super Admin only)
       for (const fomId of fomUserIds) {
         const fomUser = fomUsers?.find(u => u.id === fomId);
         const recipientName = fomUser?.full_name || 'Field Operations Manager';
@@ -1430,17 +1480,20 @@ export const NotificationTriggerService = {
         });
         if (sent) successCount++;
 
-        // Send bilingual email directly
+        // Send bilingual email directly to FOM only (CC Super Admin only, no supervisors)
         if (recipientEmail) {
           try {
-            console.log(`[NOTIFICATION] Attempting to send email to FOM: ${recipientEmail}`);
+            console.log(`[NOTIFICATION] Sending email to FOM: ${recipientEmail}${ccEmails.length ? `, CC: ${ccEmails.join(', ')}` : ''}`);
             const emailResult = await EmailNotificationService.sendMMPForwardedToFOM(
               recipientEmail,
               recipientName,
               mmpName,
               sender,
               mmpId,
-              true // isRecipientFOM
+              true, // isRecipientFOM
+              undefined, // recipientRole
+              0, // retryCount
+              ccEmails.length > 0 ? ccEmails : undefined // CC Super Admin only
             );
             if (emailResult.success) {
               console.log(`[NOTIFICATION] Email sent successfully to FOM: ${recipientEmail}, messageId: ${emailResult.messageId}`);
@@ -1453,57 +1506,10 @@ export const NotificationTriggerService = {
         } else {
           console.warn(`[NOTIFICATION] No email found for FOM user ${fomId}`);
         }
-      }
-
-      // 3. Fetch all Admins and Super Admins
-      const { data: adminUsers, error: adminError } = await supabase
-        .from('profiles')
-        .select('id, full_name, email')
-        .in('role', ['admin', 'super_admin', 'Admin', 'SuperAdmin']);
-
-      if (adminError) {
-        console.error('Error fetching admins for MMP forward notification:', adminError);
-      } else if (adminUsers && adminUsers.length > 0) {
-        // 4. Notify all Admins/Super Admins with bilingual email
-        for (const admin of adminUsers) {
-          const recipientName = admin.full_name || 'Administrator';
-          
-          // Create in-app notification
-          const sent = await this.send({
-            userId: admin.id,
-            title: 'MMP Forwarded to FOM',
-            message: `MMP "${mmpName}" has been forwarded to ${fomUserIds.length} Field Operations Manager(s) by ${sender}`,
-            type: 'info',
-            category: 'assignments',
-            priority: 'high',
-            link: `/mmp/${mmpId}`,
-            relatedEntityId: mmpId,
-            relatedEntityType: 'mmpFile',
-            sendEmail: false // We send bilingual email separately
-          });
-          if (sent) successCount++;
-
-          // Send bilingual email directly
-          if (admin.email) {
-            try {
-              console.log(`[NOTIFICATION] Attempting to send email to Admin: ${admin.email}`);
-              const emailResult = await EmailNotificationService.sendMMPForwardedToFOM(
-                admin.email,
-                recipientName,
-                mmpName,
-                sender,
-                mmpId,
-                false // isRecipientFOM (admin gets info notification, not action required)
-              );
-              if (emailResult.success) {
-                console.log(`[NOTIFICATION] Email sent successfully to Admin: ${admin.email}, messageId: ${emailResult.messageId}`);
-              } else {
-                console.error(`[NOTIFICATION] Email FAILED to Admin: ${admin.email}, error: ${emailResult.error}`);
-              }
-            } catch (emailError) {
-              console.error(`[NOTIFICATION] Failed to send bilingual email to Admin ${admin.email}:`, emailError);
-            }
-          }
+        
+        // Add small delay between emails to prevent rate limiting
+        if (fomUserIds.indexOf(fomId) < fomUserIds.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 2000));
         }
       }
 

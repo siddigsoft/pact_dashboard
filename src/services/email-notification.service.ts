@@ -417,16 +417,107 @@ export const EmailNotificationService = {
         },
       });
 
+      const subject = 'Welcome to PACT | مرحباً بك في باكت';
+      
       if (error) {
         console.error('[EMAIL] Welcome email error:', error);
+        await logEmailSend(email, subject, 'welcome', false, undefined, error.message);
         return { success: false, error: error.message };
       }
       if (data && !data.success) {
+        await logEmailSend(email, subject, 'welcome', false, undefined, data.error);
         return { success: false, error: data.error };
       }
-      return { success: true, messageId: data?.messageId };
+      
+      const messageId = data?.messageId || `welcome-${Date.now()}`;
+      await logEmailSend(email, subject, 'welcome', true, messageId);
+      return { success: true, messageId };
     } catch (error: any) {
       console.error('[EMAIL] Welcome email error:', error);
+      await logEmailSend(email, 'Welcome to PACT', 'welcome', false, undefined, error.message);
+      return { success: false, error: error.message };
+    }
+  },
+
+  // ============================================
+  // TEMPLATE 6A: New User Registration Notification (to Admins)
+  // ============================================
+  async sendNewUserRegistrationNotification(
+    userName: string,
+    userEmail: string,
+    userRole: string,
+    hubName?: string
+  ): Promise<EmailNotificationResult> {
+    try {
+      // Get all admin emails (admin and superAdmin)
+      const { data: admins } = await supabase
+        .from('profiles')
+        .select('email, full_name')
+        .in('role', ['admin', 'superAdmin', 'Admin', 'SuperAdmin', 'super_admin'])
+        .eq('status', 'approved');
+
+      if (!admins || admins.length === 0) {
+        console.log('[EMAIL] No admins found to notify about new registration');
+        return { success: true, messageId: 'no-admins' };
+      }
+
+      const subject = 'New User Registration | تسجيل مستخدم جديد';
+      const results: EmailNotificationResult[] = [];
+
+      for (const admin of admins) {
+        if (!admin.email) continue;
+        
+        try {
+          const { data, error } = await supabase.functions.invoke('send-email', {
+            body: {
+              to: admin.email,
+              subject,
+              type: 'notification',
+              recipientName: admin.full_name || 'Admin',
+              title_en: 'New User Registration - Approval Required',
+              title_ar: 'تسجيل مستخدم جديد - يتطلب الموافقة',
+              message_en: `A new user "${userName}" (${userEmail}) has registered as ${userRole}${hubName ? ` in ${hubName}` : ''}. Please review and approve their account.`,
+              message_ar: `قام المستخدم "${userName}" (${userEmail}) بالتسجيل كـ ${userRole}${hubName ? ` في ${hubName}` : ''}. يرجى مراجعة حسابه والموافقة عليه.`,
+              actionUrl: '/users?tab=pending',
+              details: [
+                { label: 'Name', value: userName },
+                { label: 'Email', value: userEmail },
+                { label: 'Role', value: userRole },
+                ...(hubName ? [{ label: 'Hub', value: hubName }] : [])
+              ],
+            },
+          });
+
+          if (error) {
+            console.error(`[EMAIL] Failed to notify admin ${admin.email}:`, error);
+            await logEmailSend(admin.email, subject, 'notification', false, undefined, error.message);
+            results.push({ success: false, error: error.message });
+          } else if (data && !data.success) {
+            await logEmailSend(admin.email, subject, 'notification', false, undefined, data.error);
+            results.push({ success: false, error: data.error });
+          } else {
+            const messageId = data?.messageId || `newuser-${Date.now()}`;
+            await logEmailSend(admin.email, subject, 'notification', true, messageId);
+            results.push({ success: true, messageId });
+          }
+
+          // Add small delay between emails to avoid rate limiting
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        } catch (err: any) {
+          console.error(`[EMAIL] Error notifying admin ${admin.email}:`, err);
+          results.push({ success: false, error: err.message });
+        }
+      }
+
+      const successCount = results.filter(r => r.success).length;
+      console.log(`[EMAIL] New user registration notification: ${successCount}/${admins.length} admins notified`);
+      
+      return { 
+        success: successCount > 0, 
+        messageId: `newuser-batch-${Date.now()}` 
+      };
+    } catch (error: any) {
+      console.error('[EMAIL] New user registration notification error:', error);
       return { success: false, error: error.message };
     }
   },
@@ -442,7 +533,8 @@ export const EmailNotificationService = {
     mmpId: string,
     isRecipientFOM: boolean = true,
     recipientRole?: { en: string; ar: string },
-    retryCount: number = 0
+    retryCount: number = 0,
+    cc?: string[]
   ): Promise<EmailNotificationResult> {
     const MAX_RETRIES = 2;
     const BASE_DELAY = 3000;
@@ -480,6 +572,7 @@ export const EmailNotificationService = {
           message_ar: messageAr,
           actionUrl: `/mmp/${mmpId}`,
           priority: 'high',
+          cc: cc, // CC Super Admin only
           details: [
             { label: 'MMP', value: mmpName },
             { label: 'By', value: forwarderName },
@@ -488,6 +581,8 @@ export const EmailNotificationService = {
         },
       });
 
+      const subject = `${titleEn} | ${titleAr}`;
+      
       if (error) {
         console.error('[EMAIL] MMP forward email error:', error);
         
@@ -495,9 +590,10 @@ export const EmailNotificationService = {
           const delay = BASE_DELAY * Math.pow(2, retryCount);
           console.log(`[EMAIL] Transient error on MMP email, retrying in ${delay}ms...`);
           await new Promise(resolve => setTimeout(resolve, delay));
-          return this.sendMMPForwardedToFOM(email, recipientName, mmpName, forwarderName, mmpId, isRecipientFOM, recipientRole, retryCount + 1);
+          return this.sendMMPForwardedToFOM(email, recipientName, mmpName, forwarderName, mmpId, isRecipientFOM, recipientRole, retryCount + 1, cc);
         }
         
+        await logEmailSend(email, subject, 'mmp', false, undefined, error.message);
         return { success: false, error: error.message };
       }
       
@@ -506,14 +602,17 @@ export const EmailNotificationService = {
           const delay = BASE_DELAY * Math.pow(2, retryCount);
           console.log(`[EMAIL] Transient error in MMP response, retrying in ${delay}ms...`);
           await new Promise(resolve => setTimeout(resolve, delay));
-          return this.sendMMPForwardedToFOM(email, recipientName, mmpName, forwarderName, mmpId, isRecipientFOM, recipientRole, retryCount + 1);
+          return this.sendMMPForwardedToFOM(email, recipientName, mmpName, forwarderName, mmpId, isRecipientFOM, recipientRole, retryCount + 1, cc);
         }
         
+        await logEmailSend(email, subject, 'mmp', false, undefined, data.error);
         return { success: false, error: data.error };
       }
       
+      const messageId = data?.messageId || `mmp-fom-${Date.now()}`;
       console.log(`[EMAIL] MMP forward email sent successfully to ${email}`);
-      return { success: true, messageId: data?.messageId };
+      await logEmailSend(email, subject, 'mmp', true, messageId);
+      return { success: true, messageId };
     } catch (error: any) {
       console.error('[EMAIL] MMP forward email exception:', error);
       
@@ -521,9 +620,10 @@ export const EmailNotificationService = {
         const delay = BASE_DELAY * Math.pow(2, retryCount);
         console.log(`[EMAIL] Network error on MMP email, retrying in ${delay}ms...`);
         await new Promise(resolve => setTimeout(resolve, delay));
-        return this.sendMMPForwardedToFOM(email, recipientName, mmpName, forwarderName, mmpId, isRecipientFOM, recipientRole, retryCount + 1);
+        return this.sendMMPForwardedToFOM(email, recipientName, mmpName, forwarderName, mmpId, isRecipientFOM, recipientRole, retryCount + 1, cc);
       }
       
+      await logEmailSend(email, `MMP Forwarded to FOM`, 'mmp', false, undefined, error.message);
       return { success: false, error: error.message };
     }
   },
@@ -538,7 +638,8 @@ export const EmailNotificationService = {
     forwarderName: string,
     coordinatorCount: number,
     mmpId?: string,
-    recipientRole?: { en: string; ar: string }
+    recipientRole?: { en: string; ar: string },
+    cc?: string[]
   ): Promise<EmailNotificationResult> {
     const viewMmpUrl = mmpId ? `${APP_URL}/mmp/${mmpId}` : `${APP_URL}/mmp`;
     
@@ -650,6 +751,7 @@ PACT Workflow Platform | منصة باكت`;
       recipientName,
       html,
       text,
+      cc: cc, // CC Super Admin only
     });
   },
 
@@ -663,7 +765,8 @@ PACT Workflow Platform | منصة باكت`;
     mmpName: string,
     coordinatorName: string,
     siteId?: string,
-    recipientRole?: { en: string; ar: string }
+    recipientRole?: { en: string; ar: string },
+    cc?: string[]
   ): Promise<EmailNotificationResult> {
     const viewSiteUrl = siteId ? `${APP_URL}/mmp?site=${siteId}` : `${APP_URL}/mmp`;
     
@@ -786,6 +889,7 @@ PACT Workflow Platform | منصة باكت`;
       recipientName,
       html,
       text,
+      cc: cc, // CC Super Admin only
     });
   },
 
@@ -1747,7 +1851,7 @@ PACT Workflow Platform`;
     options: NotificationEmailOptions
   ): Promise<{ total: number; successful: number; failed: number }> {
     const results: EmailNotificationResult[] = [];
-    const DELAY_MS = 2000; // 2 second delay between emails to avoid IONOS rate limiting
+    const DELAY_MS = 5000; // 5 second delay between emails to avoid IONOS rate limiting
     
     for (let i = 0; i < recipients.length; i++) {
       const r = recipients[i];
