@@ -345,13 +345,8 @@ export default function EmailTracking() {
       
       setLastUpdate(new Date());
       
-      // Show toast for new email
-      toast({
-        title: 'New notification logged',
-        description: newLog.entity_type === 'email' 
-          ? `Email to ${newLog.metadata?.recipient || 'unknown'}` 
-          : `OTP ${newLog.tags?.includes('verification') ? 'verification' : 'sent'}`,
-      });
+      // Note: Toast notifications removed to reduce UI noise
+      // Email logs are visible in the table below
     }
   };
 
