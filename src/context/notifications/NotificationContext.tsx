@@ -6,18 +6,24 @@ import { supabase } from '@/integrations/supabase/client';
 
 const initialNotifications: Notification[] = [];
 
+type RealtimeStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
+
 interface NotificationContextType {
   notifications: Notification[];
   addNotification: (notification: Omit<Notification, 'id' | 'isRead' | 'createdAt'>) => void;
   markNotificationAsRead: (notificationId: string) => void;
   getUnreadNotificationsCount: () => number;
   clearAllNotifications: () => Promise<number>;
+  realtimeStatus: RealtimeStatus;
+  lastRefresh: Date | null;
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
 
 export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [appNotifications, setAppNotifications] = useState<Notification[]>(initialNotifications);
+  const [realtimeStatus, setRealtimeStatus] = useState<RealtimeStatus>('connecting');
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   // Get current user ID from localStorage or auth state
   const [currentUserId, setCurrentUserId] = useState<string | null>(() => {
     try {
@@ -192,6 +198,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
               .filter(n => n.title !== 'Chat System Active')
               .filter(filterByRoleAndProject);
             setAppNotifications(filtered);
+            setLastRefresh(new Date());
           }
         }
       } catch (err) {
@@ -283,7 +290,25 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
             const deletedId = (payload as any).old.id;
             setAppNotifications(prev => prev.filter(n => n.id !== deletedId));
           })
-          .subscribe();
+          .subscribe((status, err) => {
+            if (status === 'SUBSCRIBED') {
+              console.log('Notifications realtime connected');
+              setRealtimeStatus('connected');
+            } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+              console.warn('Notifications realtime error:', status, err);
+              setRealtimeStatus('error');
+              // Retry after delay
+              setTimeout(() => {
+                if (!cancelled && channel) {
+                  setRealtimeStatus('connecting');
+                  supabase.removeChannel(channel);
+                  subscribeRealtime();
+                }
+              }, 5000);
+            } else if (status === 'CLOSED') {
+              setRealtimeStatus('disconnected');
+            }
+          });
       } catch (err) {
         console.warn('Realtime subscription failed:', err);
       }
@@ -292,7 +317,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     fetchNotifications();
     subscribeRealtime();
 
-    const interval = setInterval(fetchNotifications, 60000);
+    // Poll more frequently (every 15 seconds) as fallback for realtime
+    const interval = setInterval(fetchNotifications, 15000);
     return () => {
       cancelled = true;
       try { if (channel) supabase.removeChannel(channel); } catch {}
@@ -465,6 +491,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         markNotificationAsRead,
         getUnreadNotificationsCount,
         clearAllNotifications,
+        realtimeStatus,
+        lastRefresh,
       }}
     >
       {children}
