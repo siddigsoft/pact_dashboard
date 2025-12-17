@@ -980,7 +980,7 @@ export const NotificationTriggerService = {
       const { data: superAdmins } = await supabase
         .from('profiles')
         .select('email')
-        .in('role', ['super_admin', 'SuperAdmin'])
+        .in('role', ['superAdmin', 'super_admin', 'SuperAdmin'])
         .limit(1);
       
       if (superAdmins?.[0]?.email && !ccEmails.includes(superAdmins[0].email)) {
@@ -1090,7 +1090,7 @@ export const NotificationTriggerService = {
       const { data: superAdmins } = await supabase
         .from('profiles')
         .select('email')
-        .in('role', ['super_admin', 'SuperAdmin'])
+        .in('role', ['superAdmin', 'super_admin', 'SuperAdmin'])
         .limit(1);
       
       if (superAdmins?.[0]?.email && !ccEmails.includes(superAdmins[0].email)) {
@@ -1446,7 +1446,7 @@ export const NotificationTriggerService = {
       const { data: superAdmins } = await supabase
         .from('profiles')
         .select('email')
-        .in('role', ['super_admin', 'SuperAdmin'])
+        .in('role', ['superAdmin', 'super_admin', 'SuperAdmin'])
         .limit(1);
       
       if (superAdmins?.[0]?.email) {
