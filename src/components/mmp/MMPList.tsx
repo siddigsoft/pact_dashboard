@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { MMPFile } from '@/types';
 import { Card, CardContent } from '@/components/ui/card';
@@ -31,6 +30,8 @@ import {
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import { Badge } from '@/components/ui/badge';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 
 interface MMPListProps {
   mmpFiles: MMPFile[];
@@ -47,6 +48,9 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
   const [forwardDialogOpen, setForwardDialogOpen] = useState(false);
   const [selectedMMPForForward, setSelectedMMPForForward] = useState<MMPFile | null>(null);
   const [forwardedMMPs, setForwardedMMPs] = useState<Set<string>>(new Set());
+  const { refreshMMPFiles } = useMMP();
+  const { toast } = useToast();
+  const [recallingId, setRecallingId] = useState<string | null>(null);
 
   // Check permissions (case-insensitive fallback for possible lowercase stored roles)
   const isAdmin = hasAnyRole(['Admin', 'admin']);
@@ -84,6 +88,33 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
   const handleForwardComplete = (userIds: string[]) => {
     if (selectedMMPForForward) {
       setForwardedMMPs(prev => new Set(prev).add(selectedMMPForForward.id));
+    }
+  };
+
+  // Added recall handler consistent with MMPFileManagement.tsx
+  const handleRecall = async (mmpId: string) => {
+    setRecallingId(mmpId);
+    try {
+      const { data, error } = await supabase
+        .from('mmp_files')
+        .select('workflow')
+        .eq('id', mmpId)
+        .single();
+      if (error) throw error;
+      const wf = (data?.workflow as any) || {};
+      wf.forwardedToFomIds = [];
+      await supabase.from('mmp_files').update({ workflow: wf }).eq('id', mmpId);
+      await refreshMMPFiles();
+      setForwardedMMPs(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(mmpId);
+        return newSet;
+      });
+      toast({ title: 'MMP recalled', description: 'Forwarding to FOMs has been recalled.' });
+    } catch (e: any) {
+      toast({ title: 'Recall failed', description: e?.message || 'Unexpected error', variant: 'destructive' });
+    } finally {
+      setRecallingId(null);
     }
   };
 
@@ -202,6 +233,21 @@ export const MMPList = ({ mmpFiles, showActions = true }: MMPListProps) => {
                           </DropdownMenuItem>
                         </>
                       )}
+
+                      {/* Added Recall MMP option for consistency */}
+                      {isForwarded && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={() => handleRecall(mmp.id)}
+                            disabled={recallingId === mmp.id}
+                            className="text-destructive"
+                          >
+                            {recallingId === mmp.id ? 'Recalling...' : 'Recall MMP'}
+                          </DropdownMenuItem>
+                        </>
+                      )}
+
                       {canDeleteMMP && (
                         <>
                           <DropdownMenuSeparator />
