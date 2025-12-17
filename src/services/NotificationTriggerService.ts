@@ -956,14 +956,36 @@ export const NotificationTriggerService = {
       let successCount = 0;
       const sender = forwarderName || 'Field Operations Manager';
 
-      // 1. Fetch ONE Super Admin for CC (first available)
+      // 1. Build CC list: Hub Supervisors + ONE Super Admin for accountability
+      const ccEmails: string[] = [];
+      
+      // Get hub supervisors
+      if (hubId) {
+        const { data: supervisors } = await supabase
+          .from('profiles')
+          .select('email')
+          .eq('hub_id', hubId)
+          .eq('role', 'supervisor');
+        
+        if (supervisors) {
+          supervisors.forEach(s => {
+            if (s.email && !ccEmails.includes(s.email)) {
+              ccEmails.push(s.email);
+            }
+          });
+        }
+      }
+      
+      // Add ONE Super Admin
       const { data: superAdmins } = await supabase
         .from('profiles')
         .select('email')
         .in('role', ['super_admin', 'SuperAdmin'])
         .limit(1);
       
-      const ccEmail = superAdmins?.[0]?.email;
+      if (superAdmins?.[0]?.email && !ccEmails.includes(superAdmins[0].email)) {
+        ccEmails.push(superAdmins[0].email);
+      }
 
       // 2. If specific coordinators provided, notify them directly
       if (coordinatorUserIds && coordinatorUserIds.length > 0) {
@@ -992,11 +1014,11 @@ export const NotificationTriggerService = {
           });
           if (sent) successCount++;
 
-          // Send bilingual email to coordinator (CC Super Admin)
+          // Send bilingual email to coordinator (CC Hub Supervisors + Super Admin)
           if (coord.email) {
             try {
               const roleInfo = formatRoleName(coord.role);
-              console.log(`[NOTIFICATION] Sending email to Coordinator: ${coord.email}${ccEmail ? `, CC: ${ccEmail}` : ''}`);
+              console.log(`[NOTIFICATION] Sending email to Coordinator: ${coord.email}${ccEmails.length ? `, CC: ${ccEmails.join(', ')}` : ''}`);
               await EmailNotificationService.sendMMPForwardedToCoordinators(
                 coord.email,
                 coord.full_name || 'Coordinator',
@@ -1005,7 +1027,7 @@ export const NotificationTriggerService = {
                 coordinatorCount,
                 mmpId,
                 roleInfo,
-                ccEmail ? [ccEmail] : undefined
+                ccEmails.length > 0 ? ccEmails : undefined
               );
               console.log(`[NOTIFICATION] Email sent to Coordinator: ${coord.email}`);
             } catch (emailError) {
@@ -1044,14 +1066,36 @@ export const NotificationTriggerService = {
     try {
       let successCount = 0;
 
-      // 1. Fetch ONE Super Admin for CC
+      // 1. Build CC list: Hub Supervisors + ONE Super Admin for accountability
+      const ccEmails: string[] = [];
+      
+      // Get hub supervisors
+      if (hubId) {
+        const { data: supervisors } = await supabase
+          .from('profiles')
+          .select('email')
+          .eq('hub_id', hubId)
+          .eq('role', 'supervisor');
+        
+        if (supervisors) {
+          supervisors.forEach(s => {
+            if (s.email && !ccEmails.includes(s.email)) {
+              ccEmails.push(s.email);
+            }
+          });
+        }
+      }
+      
+      // Add ONE Super Admin
       const { data: superAdmins } = await supabase
         .from('profiles')
         .select('email')
         .in('role', ['super_admin', 'SuperAdmin'])
         .limit(1);
       
-      const ccEmail = superAdmins?.[0]?.email;
+      if (superAdmins?.[0]?.email && !ccEmails.includes(superAdmins[0].email)) {
+        ccEmails.push(superAdmins[0].email);
+      }
 
       // 2. If specific FOM provided, notify them directly
       if (fomUserId) {
@@ -1076,11 +1120,11 @@ export const NotificationTriggerService = {
           });
           if (sent) successCount++;
 
-          // Send bilingual email to FOM (CC Super Admin)
+          // Send bilingual email to FOM (CC Hub Supervisors + Super Admin)
           if (fomUser.email) {
             try {
               const roleInfo = formatRoleName(fomUser.role);
-              console.log(`[NOTIFICATION] Sending Site Verified email to FOM: ${fomUser.email}${ccEmail ? `, CC: ${ccEmail}` : ''}`);
+              console.log(`[NOTIFICATION] Sending Site Verified email to FOM: ${fomUser.email}${ccEmails.length ? `, CC: ${ccEmails.join(', ')}` : ''}`);
               await EmailNotificationService.sendSiteVerifiedByCoordinator(
                 fomUser.email,
                 fomUser.full_name || 'Field Operations Manager',
@@ -1089,7 +1133,7 @@ export const NotificationTriggerService = {
                 coordinatorName,
                 siteId,
                 roleInfo,
-                ccEmail ? [ccEmail] : undefined
+                ccEmails.length > 0 ? ccEmails : undefined
               );
               console.log(`[NOTIFICATION] Site Verified email sent to FOM: ${fomUser.email}`);
             } catch (emailError) {
@@ -1125,6 +1169,7 @@ export const NotificationTriggerService = {
           if (fom.email) {
             try {
               const roleInfo = formatRoleName(fom.role);
+              console.log(`[NOTIFICATION] Sending Site Verified email to fallback FOM: ${fom.email}${ccEmails.length ? `, CC: ${ccEmails.join(', ')}` : ''}`);
               await EmailNotificationService.sendSiteVerifiedByCoordinator(
                 fom.email,
                 fom.full_name || 'Field Operations Manager',
@@ -1133,7 +1178,7 @@ export const NotificationTriggerService = {
                 coordinatorName,
                 siteId,
                 roleInfo,
-                ccEmail ? [ccEmail] : undefined
+                ccEmails.length > 0 ? ccEmails : undefined
               );
             } catch (emailError) {
               console.error(`[NOTIFICATION] Failed to send email to FOM ${fom.email}:`, emailError);
@@ -1377,32 +1422,58 @@ export const NotificationTriggerService = {
     fomUserIds: string[],
     mmpName: string,
     mmpId: string,
-    forwarderName?: string
+    forwarderName?: string,
+    hubId?: string
   ): Promise<number> {
     try {
       let successCount = 0;
       const sender = forwarderName || 'System';
 
-      // 1. Fetch FOM user details for bilingual emails
+      // 1. Fetch FOM user details for bilingual emails (include hub_id if not provided)
       const { data: fomUsers, error: fomError } = await supabase
         .from('profiles')
-        .select('id, full_name, email')
+        .select('id, full_name, email, hub_id')
         .in('id', fomUserIds);
 
       if (fomError) {
         console.error('Error fetching FOM user details:', fomError);
       }
 
-      // 2. Fetch ONE Super Admin for CC (first available)
+      // 2. Build CC list: Hub Supervisors + ONE Super Admin for accountability
+      const ccEmails: string[] = [];
+      
+      // Get hubId from first FOM if not provided
+      const effectiveHubId = hubId || fomUsers?.[0]?.hub_id;
+      
+      // Get hub supervisors
+      if (effectiveHubId) {
+        const { data: supervisors } = await supabase
+          .from('profiles')
+          .select('email')
+          .eq('hub_id', effectiveHubId)
+          .eq('role', 'supervisor');
+        
+        if (supervisors) {
+          supervisors.forEach(s => {
+            if (s.email && !ccEmails.includes(s.email)) {
+              ccEmails.push(s.email);
+            }
+          });
+        }
+      }
+      
+      // Add ONE Super Admin
       const { data: superAdmins } = await supabase
         .from('profiles')
         .select('email')
         .in('role', ['super_admin', 'SuperAdmin'])
         .limit(1);
       
-      const ccEmail = superAdmins?.[0]?.email;
+      if (superAdmins?.[0]?.email && !ccEmails.includes(superAdmins[0].email)) {
+        ccEmails.push(superAdmins[0].email);
+      }
 
-      // 3. Notify all selected FOMs with bilingual email (no mass CC to all admins)
+      // 3. Notify all selected FOMs with bilingual email (CC Hub Supervisors + Super Admin)
       for (const fomId of fomUserIds) {
         const fomUser = fomUsers?.find(u => u.id === fomId);
         const recipientName = fomUser?.full_name || 'Field Operations Manager';
@@ -1423,10 +1494,10 @@ export const NotificationTriggerService = {
         });
         if (sent) successCount++;
 
-        // Send bilingual email directly to FOM only (CC Super Admin)
+        // Send bilingual email directly to FOM only (CC Hub Supervisors + Super Admin)
         if (recipientEmail) {
           try {
-            console.log(`[NOTIFICATION] Sending email to FOM: ${recipientEmail}${ccEmail ? `, CC: ${ccEmail}` : ''}`);
+            console.log(`[NOTIFICATION] Sending email to FOM: ${recipientEmail}${ccEmails.length ? `, CC: ${ccEmails.join(', ')}` : ''}`);
             const emailResult = await EmailNotificationService.sendMMPForwardedToFOM(
               recipientEmail,
               recipientName,
@@ -1436,7 +1507,7 @@ export const NotificationTriggerService = {
               true, // isRecipientFOM
               undefined, // recipientRole
               0, // retryCount
-              ccEmail ? [ccEmail] : undefined // CC only one Super Admin
+              ccEmails.length > 0 ? ccEmails : undefined // CC Hub Supervisors + Super Admin
             );
             if (emailResult.success) {
               console.log(`[NOTIFICATION] Email sent successfully to FOM: ${recipientEmail}, messageId: ${emailResult.messageId}`);
