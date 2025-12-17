@@ -1678,7 +1678,7 @@ PACT Workflow Platform`;
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('email, first_name, last_name, full_name')
+        .select('email, full_name, username')
         .eq('id', userId)
         .single();
 
@@ -1686,9 +1686,7 @@ PACT Workflow Platform`;
         return null;
       }
 
-      const name = data.full_name || 
-        (data.first_name && data.last_name ? `${data.first_name} ${data.last_name}` : data.first_name) || 
-        'User';
+      const name = data.full_name || data.username || 'User';
 
       return { email: data.email, name };
     } catch (error) {
