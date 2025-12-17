@@ -12,12 +12,12 @@ export async function fetchFomUsers() {
   return data || [];
 }
 
-// Fetch Coordinator users (role = 'coordinator')
+// Fetch Coordinator users (role = 'coordinator' - case insensitive)
 export async function fetchCoordinatorUsers() {
   const { data, error } = await supabase
     .from('profiles')
     .select('id, full_name, username, email, hub_id, state_id, locality_id')
-    .eq('role', 'coordinator')
+    .or('role.eq.coordinator,role.eq.Coordinator,role.ilike.%coordinator%')
     .order('full_name', { ascending: true });
 
   if (error) throw error;
