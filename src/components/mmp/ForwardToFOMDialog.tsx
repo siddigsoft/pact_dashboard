@@ -27,7 +27,9 @@ interface FOMUser {
   locality_id?: string | null;
 }
 
-export const ForwardToFOMDialog: React.FC<ForwardToFOMDialogProps> = ({ open, onOpenChange, mmpId, mmpName, onForwarded }) => {
+export const ForwardToFOMDialog: React.FC<ForwardToFOMDialogProps> = ({
+  open, onOpenChange, mmpId, mmpName, onForwarded
+}) => {
   const [loading, setLoading] = React.useState(false);
   const [foms, setFoms] = React.useState<FOMUser[]>([]);
   const [search, setSearch] = React.useState('');

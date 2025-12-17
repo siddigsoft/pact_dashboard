@@ -559,27 +559,34 @@ export const EmailNotificationService = {
 
     try {
       console.log(`[EMAIL] Sending MMP forward email to ${email} (attempt ${retryCount + 1}/${MAX_RETRIES + 1})`);
+      console.log(`[EMAIL] FOM Email Details: to=${email}, mmpName=${mmpName}, forwarder=${forwarderName}, cc=${cc?.join(',') || 'none'}`);
+      
+      const requestBody = {
+        to: email,
+        subject: `${titleEn} | ${titleAr}`,
+        type: 'mmp',
+        recipientName,
+        title_en: titleEn,
+        title_ar: titleAr,
+        message_en: messageEn,
+        message_ar: messageAr,
+        actionUrl: `/mmp/${mmpId}`,
+        priority: 'high',
+        cc: cc, // CC Super Admin only
+        details: [
+          { label: 'MMP', value: mmpName },
+          { label: 'By', value: forwarderName },
+          ...(isRecipientFOM ? [{ label: 'Action', value: 'Attach Permits' }] : []),
+        ],
+      };
+      
+      console.log(`[EMAIL] Invoking Supabase Edge Function send-email with body:`, JSON.stringify(requestBody, null, 2));
       
       const { data, error } = await supabase.functions.invoke('send-email', {
-        body: {
-          to: email,
-          subject: `${titleEn} | ${titleAr}`,
-          type: 'mmp',
-          recipientName,
-          title_en: titleEn,
-          title_ar: titleAr,
-          message_en: messageEn,
-          message_ar: messageAr,
-          actionUrl: `/mmp/${mmpId}`,
-          priority: 'high',
-          cc: cc, // CC Super Admin only
-          details: [
-            { label: 'MMP', value: mmpName },
-            { label: 'By', value: forwarderName },
-            ...(isRecipientFOM ? [{ label: 'Action', value: 'Attach Permits' }] : []),
-          ],
-        },
+        body: requestBody,
       });
+
+      console.log(`[EMAIL] Edge Function response: data=${JSON.stringify(data)}, error=${JSON.stringify(error)}`);
 
       const subject = `${titleEn} | ${titleAr}`;
       
