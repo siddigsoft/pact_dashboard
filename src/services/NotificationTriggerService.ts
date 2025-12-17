@@ -952,17 +952,32 @@ export const NotificationTriggerService = {
         }
       }
 
-      // 3. CC Super Admins on email only (NO in-app notification)
+      // 3. Super Admins receive both in-app notification AND email
       const { data: superAdminUsers, error: saError } = await supabase
         .from('profiles')
         .select('id, full_name, email, role')
         .in('role', ['super_admin', 'superAdmin', 'SuperAdmin']);
 
       if (saError) {
-        console.error('Error fetching super admins for MMP->Coordinators CC:', saError);
+        console.error('Error fetching super admins for MMP->Coordinators notification:', saError);
       } else if (superAdminUsers && superAdminUsers.length > 0) {
         for (const superAdmin of superAdminUsers) {
-          // Only send email (no in-app notification) - Super Admins are CC only
+          // Send in-app notification
+          const sent = await this.send({
+            userId: superAdmin.id,
+            title: 'MMP Forwarded to Coordinators',
+            message: `MMP "${mmpName}" has been forwarded to ${coordinatorCount} coordinator(s) for site assignment by ${sender}`,
+            type: 'info',
+            category: 'assignments',
+            priority: 'high',
+            link: mmpId ? `/mmp/${mmpId}` : '/mmp',
+            relatedEntityId: mmpId,
+            relatedEntityType: 'mmpFile',
+            sendEmail: false
+          });
+          if (sent) successCount++;
+
+          // Send email
           if (superAdmin.email) {
             try {
               const roleInfo = formatRoleName(superAdmin.role);
@@ -975,9 +990,9 @@ export const NotificationTriggerService = {
                 mmpId,
                 roleInfo
               );
-              console.log(`[NOTIFICATION] CC'd Super Admin on MMP->Coordinators email: ${superAdmin.email}`);
+              console.log(`[NOTIFICATION] Sent MMP->Coordinators to Super Admin: ${superAdmin.email}`);
             } catch (emailError) {
-              console.error(`[NOTIFICATION] Failed to CC super admin ${superAdmin.email}:`, emailError);
+              console.error(`[NOTIFICATION] Failed to send to super admin ${superAdmin.email}:`, emailError);
             }
           }
         }
