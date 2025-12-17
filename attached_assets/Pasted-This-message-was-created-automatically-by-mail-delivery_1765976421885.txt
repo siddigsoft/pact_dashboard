@@ -1,0 +1,73 @@
+This message was created automatically by mail delivery software.
+
+A message that you sent could not be delivered to one or more of
+its recipients. This is a permanent error.
+
+The following address failed:
+
+    adam.mohamed@pactorg.com:
+        SMTP error from remote server for RCPT TO command, host: mx00.ionos.com (74.208.5.3) reason: 550-Requested action not taken: mailbox unavailable
+550 For explanation visit https://postmaster.1und1.de/en/case?c=r1601&i=ip
+&v=74.208.4.197&r=1MGgJS-1vjEqT16Xa-00BNdt
+
+
+--- The header of the original message is following. ---
+
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=pactorg.com;
+	s=s1-ionos; t=1765892551; x=1766497351; i=noreply@pactorg.com;
+	bh=AW4AYgs1GMXH/XC02IZcDoCk2f2/ehicBleeEd89Kn4=;
+	h=X-UI-Sender-Class:Mime-Version:Date:From:To:Subject:
+	 Content-Transfer-Encoding:Content-Type:Message-ID:cc:
+	 content-transfer-encoding:content-type:date:from:message-id:
+	 mime-version:reply-to:subject:to;
+	b=fImVJKSO3iLuNCE+4BR2EE5CAzA046kGK63jLU7SaidiwXrB6YNKH8ENxUWE8+5I
+	 QebWHmQPTCOvz3WWKbyuc595rqobFIRG2b+D2igjlr9I7xDHmAzCdJVwkXL2ktTyq
+	 CQ9PCwYz/e0hwd5F5ZO8hyv8UijGf5aWt38puiCTDU+3aqSNdp4jLt9dkyWCFcYAw
+	 C9f0bIMOZ0OdYs2ttTldw8OYYpod2bYkJJywj15WE+Kqjhu1Sfp/xUYf9GWuFaIW0
+	 VXz8Sl9sDfyp45L+5nKKQu5wp3itEhvtlTFIFUH3trSq7cHr3c86AjMYmQR2cJCdK
+	 Zd+Jc9kj3GaPMHK18g==
+X-UI-Sender-Class: 55c96926-9e95-11ee-ae09-1f7a4046a0f6
+Received: from abznugnirnlrqnnfkein.supabase.co ([13.61.62.50]) by
+ mrelay.perfora.net (mreueus003 [74.208.5.2]) with ESMTPSA (Nemesis) id
+ 0LzuTN-1w0d4X34nT-016n5I for <adam.mohamed@pactorg.com>; Tue, 16 Dec 2025
+ 14:42:31 +0100
+Mime-Version: 1.0
+Date: Tue, 16 Dec 2025 13:42:30 +0000
+From: "ICT Team -  PACT  Command Center Platform" <noreply@pactorg.com>
+To: adam.mohamed@pactorg.com
+Subject: =?UTF-8?q?Confirm_your_PACT_Platform_registration_|_=D8=AA=D8=A3=D9=83?= =?UTF-8?q?=D9=8A=D8=AF_=D8=AA=D8=B3=D8=AC=D9=8A=D9=84=D9=83_=D9=81=D9=8A_?=
+ =?UTF-8?q?=D9=85=D9=86=D8=B5=D8=A9_=D8=A8=D8=A7=D9=83=D8=AA?=
+Content-Transfer-Encoding: quoted-printable
+Content-Type: text/html; charset=UTF-8
+Message-ID: <0M1m9M-1vpvor0CZW-00rdrB@mrelay.perfora.net>
+X-Provags-ID: V03:K1:+8eonGFxjcPX5+SniQ3VirtfHS8LyNMI2Spt3Il3IeIU6anaqH8
+ sILjURw30icMiDUWNYxZoqVOSIVwcdPeMnB9brsXbaxOr2rJ8nhWT6LFFHqqpuVZoNPoJeS
+ Zd6LRczQhw6ytvVpfg14WNEC+Tc7f96pGFHQ6x1lZ90NV8PziXwKCpldKYlV4n68cC6ZPxZ
+ D6yjqSbWzizS2SbeGTfOw==
+X-Spam-Flag: NO
+UI-OutboundReport: notjunk:1;M01:P0:1jFgGwCBA9w=;4BvlR9kgjEoAn+UwXNMRnW7QUni
+ VZWgqjGVurXLNN+joZhElCBmavyo+BQecAe+VhtiB1h2lATteOdYnCc4ZKbv0F2gACn5UDU0n
+ tWqC4qkerCuu6RNJHF0K13pDoz+3fMth9q+zLumqdT1CGx09MF4ZXq7WuehYUzVSQy9kdIjVT
+ yOiWM2E41FoeBNATZEVQ9m7sIV9eG+cJdoyohILCeJX9kyVxsUv2wjXR58CjI+71WfSf3G4ik
+ nFI+bCWPaGLq1q1tPWje5rGQkVU+oGrHSpLeST+3hVY1PyxDv11Vtjt8nc7123DVyOScMucSM
+ 1wHbHUm1W0vUWD7u+wzpI9ZWR6D2ozgccUy39qy7FCakA32yyA6L693V8Yo0Zr9ApR/dzeoME
+ UIvfNl8Ww/WUnc4ZsAabFYRecGh+AXbbgVxYFrgNduAJ9dIPHYESNnB+SWb6G8QaMDz10rHiR
+ lNjiQPlDoN+wilCTkQYFX1rx4WhESKw3oDsQJyzQYWwLOVDJFN5sPeZfrJ3MsYvluFx3+IWgX
+ x+sveDo7CE2cFmWRobQbjb4KrYbYy3QhpiFGi+YFKvtIp52X7zK1RP4OVMED6ufPJW4on0KrJ
+ hzmKPp/k6vIz7alx38OEL/y2r+ot27fUaa5PesJ5UFGbK2XnpkOrs/UbD+KsVGwHCuUZTrK0c
+ /FoIEEiiYnLCE0HYV3jvXyrOcu2QfNcSwFfudz8YzD6lLvGv5DG+gxPDCqDtV/x6ninAenwYa
+ MBFOtKxHmEa5vsetUq28dWHI2mmVzzZuRngIc+UNCo2bfpgdWZmSQ9kQ9F0HPnEER9/HB6QGW
+ UcCi4USJ/7VIajGo8mdA3K0KVhzQhxJwErqXnj5lh2BFSUE3PSQvb531uuuZ3m2Rp+qTrmq7o
+ JLlMXZI+DSewUEupQMuK+gqUfvgvn+PHFZAhCNr6uDG153G2MpGfITdEwK9DHVMUnUv7MgvrG
+ ECzIPM8yywDJzHwW/vmFoxmjcMSiVYt1H9nWXF5SEQANaDrJUYTD1FqM3P2Llzr0FKCDsoIkT
+ KN/fCHkHY+nxay+ESJbTI1mWjeR12qE/eA8+1DYZB+eLhO6kj4otKdkDyxaSZ26QJEHB76413
+ LPcuuMTUOduUtzy9r3cRr9RSg1q+BR1l2zTvEfw3rvw4OQisUmRs5Ngc9bE7EDm/n549f0w4w
+ RjbnzWAAp8DlJxc4qo1jWKX/DLajbcgKoXlTD9Mf4sRYmNsobGoVD2cKmJlU4/uy6fOJYpXIh
+ 7GbJjfyniXtV2h9hfSs4UKwVPp/nKm/wbIDEjR7Hp8HE/bhPOunArQV65T7+w3wip9GhMl5i5
+ C5jg/K2nVbzdL0jh4vu1tWvyB9O7LBm/d8za0/RSVkSxiKS+wM/Q6PC3/GNxAN2CwDxCAzpqq
+ /sNbZ6wl8YNziP/kJMpo+uTGFcClHBqrg91mNg6cqj7eAj3+/ww2VBahe9YcWl4qj5KH3EDBU
+ 5zFOA2MczUCSKe3nIWPfRBboUpenE7NwyYyDw2bGQ4Ti4xdTpGFPkk850f0vXLcVb0QRqpd90
+ m2aY3swYXVgv6ZT9A60XfeUH7WKNFDMFA+fTerIMcESk8Y1TivAoIWVf+NpJKKFoQtNXTq1CY
+ GxAdM8m8sNsjGyCdnI92dxoi7e2ndF/GuITg+K6VDYISPBypydJN5+G6lnaFnOo6a+ZFWrsAy
+ l/CWhe6IOeE4G+fqz2haf1UuP32bJD3uodb8hPcIVBe4xr6/OwlsKTB19cHGjUbLu+rzV2VEB
+ P4ayotV4w5dY0rSFZzTPsb7aiMGjvhPfyrg==

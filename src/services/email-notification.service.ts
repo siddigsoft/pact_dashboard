@@ -41,6 +41,28 @@ export interface NotificationEmailOptions {
   recipientRole?: { en: string; ar: string };
 }
 
+/**
+ * Helper to detect transient SMTP/network errors that can be retried
+ * Normalizes error message to lowercase for case-insensitive matching
+ */
+const isTransientSmtpError = (errorMsg: string | undefined): boolean => {
+  if (!errorMsg) return false;
+  const msg = errorMsg.toLowerCase();
+  return (
+    msg.includes('450') ||       // Rate limit / temporary rejection
+    msg.includes('421') ||       // Service temporarily unavailable  
+    msg.includes('451') ||       // Temporary local error
+    msg.includes('connection') ||// Connection issues
+    msg.includes('timeout') ||   // Timeouts
+    msg.includes('econnreset') ||// Connection reset
+    msg.includes('etimedout') || // Connection timed out
+    msg.includes('econnrefused') || // Connection refused
+    msg.includes('enotfound') || // DNS lookup failed
+    msg.includes('socket') ||    // Socket errors
+    msg.includes('network')      // Network errors
+  );
+};
+
 // Role display names for email footers
 const roleDisplayNames: Record<string, { en: string; ar: string }> = {
   'super_admin': { en: 'Super Administrator', ar: 'المسؤول الأعلى' },
@@ -293,14 +315,18 @@ export const EmailNotificationService = {
   async sendNotification(
     email: string,
     recipientName: string,
-    options: NotificationEmailOptions
+    options: NotificationEmailOptions,
+    retryCount: number = 0
   ): Promise<EmailNotificationResult> {
+    const MAX_RETRIES = 2; // Reduced to avoid excessive delays
+    const BASE_DELAY = 3000; // 3 seconds base delay
+    
     try {
       const priorityPrefix = options.type === 'error' ? '[URGENT | عاجل] ' : 
                             options.type === 'warning' ? '[HIGH PRIORITY | أولوية عالية] ' : '';
       const subject = priorityPrefix + options.title;
       
-      console.log(`[EMAIL] Sending notification to ${email}: ${subject}`);
+      console.log(`[EMAIL] Sending notification to ${email}: ${subject} (attempt ${retryCount + 1}/${MAX_RETRIES + 1})`);
 
       const { data, error } = await supabase.functions.invoke('send-email', {
         body: {
@@ -320,21 +346,49 @@ export const EmailNotificationService = {
 
       if (error) {
         console.error('[EMAIL] Edge Function error:', error);
+        
+        // Only retry on transient errors
+        if (isTransientSmtpError(error.message) && retryCount < MAX_RETRIES) {
+          const delay = BASE_DELAY * Math.pow(2, retryCount); // Exponential backoff: 3s, 6s
+          console.log(`[EMAIL] Transient error detected, retrying in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          return this.sendNotification(email, recipientName, options, retryCount + 1);
+        }
+        
         await logEmailSend(email, subject, 'notification', false, undefined, error.message);
         return { success: false, error: error.message };
       }
 
       if (data && !data.success) {
         console.error('[EMAIL] Email failed:', data.error);
+        
+        // Only retry on transient errors
+        if (isTransientSmtpError(data.error) && retryCount < MAX_RETRIES) {
+          const delay = BASE_DELAY * Math.pow(2, retryCount);
+          console.log(`[EMAIL] Transient error in response, retrying in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          return this.sendNotification(email, recipientName, options, retryCount + 1);
+        }
+        
         await logEmailSend(email, subject, 'notification', false, undefined, data.error);
         return { success: false, error: data.error };
       }
 
       const messageId = data?.messageId || `email-${Date.now()}`;
+      console.log(`[EMAIL] Successfully sent to ${email}, messageId: ${messageId}`);
       await logEmailSend(email, subject, 'notification', true, messageId);
       return { success: true, messageId, deliveredAt: data?.deliveredAt };
     } catch (error: any) {
-      console.error('[EMAIL] Error:', error);
+      console.error('[EMAIL] Exception:', error);
+      
+      // Only retry on network/transient errors, not on deterministic failures
+      if (isTransientSmtpError(error.message) && retryCount < MAX_RETRIES) {
+        const delay = BASE_DELAY * Math.pow(2, retryCount);
+        console.log(`[EMAIL] Network error, retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return this.sendNotification(email, recipientName, options, retryCount + 1);
+      }
+      
       return { success: false, error: error.message };
     }
   },
@@ -363,16 +417,107 @@ export const EmailNotificationService = {
         },
       });
 
+      const subject = 'Welcome to PACT | مرحباً بك في باكت';
+      
       if (error) {
         console.error('[EMAIL] Welcome email error:', error);
+        await logEmailSend(email, subject, 'welcome', false, undefined, error.message);
         return { success: false, error: error.message };
       }
       if (data && !data.success) {
+        await logEmailSend(email, subject, 'welcome', false, undefined, data.error);
         return { success: false, error: data.error };
       }
-      return { success: true, messageId: data?.messageId };
+      
+      const messageId = data?.messageId || `welcome-${Date.now()}`;
+      await logEmailSend(email, subject, 'welcome', true, messageId);
+      return { success: true, messageId };
     } catch (error: any) {
       console.error('[EMAIL] Welcome email error:', error);
+      await logEmailSend(email, 'Welcome to PACT', 'welcome', false, undefined, error.message);
+      return { success: false, error: error.message };
+    }
+  },
+
+  // ============================================
+  // TEMPLATE 6A: New User Registration Notification (to Admins)
+  // ============================================
+  async sendNewUserRegistrationNotification(
+    userName: string,
+    userEmail: string,
+    userRole: string,
+    hubName?: string
+  ): Promise<EmailNotificationResult> {
+    try {
+      // Get all admin emails (admin and superAdmin)
+      const { data: admins } = await supabase
+        .from('profiles')
+        .select('email, full_name')
+        .in('role', ['admin', 'superAdmin', 'Admin', 'SuperAdmin', 'super_admin'])
+        .eq('status', 'approved');
+
+      if (!admins || admins.length === 0) {
+        console.log('[EMAIL] No admins found to notify about new registration');
+        return { success: true, messageId: 'no-admins' };
+      }
+
+      const subject = 'New User Registration | تسجيل مستخدم جديد';
+      const results: EmailNotificationResult[] = [];
+
+      for (const admin of admins) {
+        if (!admin.email) continue;
+        
+        try {
+          const { data, error } = await supabase.functions.invoke('send-email', {
+            body: {
+              to: admin.email,
+              subject,
+              type: 'notification',
+              recipientName: admin.full_name || 'Admin',
+              title_en: 'New User Registration - Approval Required',
+              title_ar: 'تسجيل مستخدم جديد - يتطلب الموافقة',
+              message_en: `A new user "${userName}" (${userEmail}) has registered as ${userRole}${hubName ? ` in ${hubName}` : ''}. Please review and approve their account.`,
+              message_ar: `قام المستخدم "${userName}" (${userEmail}) بالتسجيل كـ ${userRole}${hubName ? ` في ${hubName}` : ''}. يرجى مراجعة حسابه والموافقة عليه.`,
+              actionUrl: '/users?tab=pending',
+              details: [
+                { label: 'Name', value: userName },
+                { label: 'Email', value: userEmail },
+                { label: 'Role', value: userRole },
+                ...(hubName ? [{ label: 'Hub', value: hubName }] : [])
+              ],
+            },
+          });
+
+          if (error) {
+            console.error(`[EMAIL] Failed to notify admin ${admin.email}:`, error);
+            await logEmailSend(admin.email, subject, 'notification', false, undefined, error.message);
+            results.push({ success: false, error: error.message });
+          } else if (data && !data.success) {
+            await logEmailSend(admin.email, subject, 'notification', false, undefined, data.error);
+            results.push({ success: false, error: data.error });
+          } else {
+            const messageId = data?.messageId || `newuser-${Date.now()}`;
+            await logEmailSend(admin.email, subject, 'notification', true, messageId);
+            results.push({ success: true, messageId });
+          }
+
+          // Add small delay between emails to avoid rate limiting
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        } catch (err: any) {
+          console.error(`[EMAIL] Error notifying admin ${admin.email}:`, err);
+          results.push({ success: false, error: err.message });
+        }
+      }
+
+      const successCount = results.filter(r => r.success).length;
+      console.log(`[EMAIL] New user registration notification: ${successCount}/${admins.length} admins notified`);
+      
+      return { 
+        success: successCount > 0, 
+        messageId: `newuser-batch-${Date.now()}` 
+      };
+    } catch (error: any) {
+      console.error('[EMAIL] New user registration notification error:', error);
       return { success: false, error: error.message };
     }
   },
@@ -387,8 +532,13 @@ export const EmailNotificationService = {
     forwarderName: string,
     mmpId: string,
     isRecipientFOM: boolean = true,
-    recipientRole?: { en: string; ar: string }
+    recipientRole?: { en: string; ar: string },
+    retryCount: number = 0,
+    cc?: string[]
   ): Promise<EmailNotificationResult> {
+    const MAX_RETRIES = 2;
+    const BASE_DELAY = 3000;
+    
     const roleEn = recipientRole?.en || 'Field Operations Manager';
     const roleAr = recipientRole?.ar || 'مدير العمليات الميدانية';
     
@@ -408,6 +558,8 @@ export const EmailNotificationService = {
       : `خطة "${mmpName}" أُرسلت إلى مدير العمليات الميدانية بواسطة ${forwarderName}.`;
 
     try {
+      console.log(`[EMAIL] Sending MMP forward email to ${email} (attempt ${retryCount + 1}/${MAX_RETRIES + 1})`);
+      
       const { data, error } = await supabase.functions.invoke('send-email', {
         body: {
           to: email,
@@ -420,6 +572,7 @@ export const EmailNotificationService = {
           message_ar: messageAr,
           actionUrl: `/mmp/${mmpId}`,
           priority: 'high',
+          cc: cc, // CC Super Admin only
           details: [
             { label: 'MMP', value: mmpName },
             { label: 'By', value: forwarderName },
@@ -428,16 +581,49 @@ export const EmailNotificationService = {
         },
       });
 
+      const subject = `${titleEn} | ${titleAr}`;
+      
       if (error) {
         console.error('[EMAIL] MMP forward email error:', error);
+        
+        if (isTransientSmtpError(error.message) && retryCount < MAX_RETRIES) {
+          const delay = BASE_DELAY * Math.pow(2, retryCount);
+          console.log(`[EMAIL] Transient error on MMP email, retrying in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          return this.sendMMPForwardedToFOM(email, recipientName, mmpName, forwarderName, mmpId, isRecipientFOM, recipientRole, retryCount + 1, cc);
+        }
+        
+        await logEmailSend(email, subject, 'mmp', false, undefined, error.message);
         return { success: false, error: error.message };
       }
+      
       if (data && !data.success) {
+        if (isTransientSmtpError(data.error) && retryCount < MAX_RETRIES) {
+          const delay = BASE_DELAY * Math.pow(2, retryCount);
+          console.log(`[EMAIL] Transient error in MMP response, retrying in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          return this.sendMMPForwardedToFOM(email, recipientName, mmpName, forwarderName, mmpId, isRecipientFOM, recipientRole, retryCount + 1, cc);
+        }
+        
+        await logEmailSend(email, subject, 'mmp', false, undefined, data.error);
         return { success: false, error: data.error };
       }
-      return { success: true, messageId: data?.messageId };
+      
+      const messageId = data?.messageId || `mmp-fom-${Date.now()}`;
+      console.log(`[EMAIL] MMP forward email sent successfully to ${email}`);
+      await logEmailSend(email, subject, 'mmp', true, messageId);
+      return { success: true, messageId };
     } catch (error: any) {
-      console.error('[EMAIL] MMP forward email error:', error);
+      console.error('[EMAIL] MMP forward email exception:', error);
+      
+      if (isTransientSmtpError(error.message) && retryCount < MAX_RETRIES) {
+        const delay = BASE_DELAY * Math.pow(2, retryCount);
+        console.log(`[EMAIL] Network error on MMP email, retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return this.sendMMPForwardedToFOM(email, recipientName, mmpName, forwarderName, mmpId, isRecipientFOM, recipientRole, retryCount + 1, cc);
+      }
+      
+      await logEmailSend(email, `MMP Forwarded to FOM`, 'mmp', false, undefined, error.message);
       return { success: false, error: error.message };
     }
   },
@@ -452,7 +638,8 @@ export const EmailNotificationService = {
     forwarderName: string,
     coordinatorCount: number,
     mmpId?: string,
-    recipientRole?: { en: string; ar: string }
+    recipientRole?: { en: string; ar: string },
+    cc?: string[]
   ): Promise<EmailNotificationResult> {
     const viewMmpUrl = mmpId ? `${APP_URL}/mmp/${mmpId}` : `${APP_URL}/mmp`;
     
@@ -564,6 +751,7 @@ PACT Workflow Platform | منصة باكت`;
       recipientName,
       html,
       text,
+      cc: cc, // CC Super Admin only
     });
   },
 
@@ -577,7 +765,8 @@ PACT Workflow Platform | منصة باكت`;
     mmpName: string,
     coordinatorName: string,
     siteId?: string,
-    recipientRole?: { en: string; ar: string }
+    recipientRole?: { en: string; ar: string },
+    cc?: string[]
   ): Promise<EmailNotificationResult> {
     const viewSiteUrl = siteId ? `${APP_URL}/mmp?site=${siteId}` : `${APP_URL}/mmp`;
     
@@ -698,6 +887,258 @@ PACT Workflow Platform | منصة باكت`;
       to: email,
       subject: `${titleEn} | ${titleAr}`,
       recipientName,
+      html,
+      text,
+      cc: cc, // CC Super Admin only
+    });
+  },
+
+  // ============================================
+  // TEMPLATE 6E: Sites Forwarded TO Coordinator - Direct Notification
+  // ============================================
+  async sendSitesForwardedToCoordinator(
+    email: string,
+    coordinatorName: string,
+    siteNames: string[],
+    mmpName: string,
+    forwarderName: string,
+    locationInfo: string,
+    mmpId?: string
+  ): Promise<EmailNotificationResult> {
+    const viewMmpUrl = mmpId ? `${APP_URL}/mmp/${mmpId}` : `${APP_URL}/coordinator/sites`;
+    const siteCount = siteNames.length;
+    const siteList = siteNames.slice(0, 5).join(', ') + (siteNames.length > 5 ? ` and ${siteNames.length - 5} more` : '');
+    
+    const titleEn = `${siteCount} Site(s) Assigned to You - Action Required`;
+    const titleAr = `تم تعيين ${siteCount} موقع(ًا) لك - مطلوب إجراء`;
+    
+    const messageEn = `You have been assigned ${siteCount} site(s) for verification from the Monthly Monitoring Plan "${mmpName}". Please review and verify these sites at your earliest convenience.`;
+    const messageAr = `تم تعيينك لـ ${siteCount} موقع(ًا) للتحقق من خطة المراقبة الشهرية "${mmpName}". يرجى مراجعة هذه المواقع والتحقق منها في أقرب وقت ممكن.`;
+
+    const html = `
+      <!DOCTYPE html>
+      <html dir="ltr">
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${titleEn} | ${titleAr}</title>
+      </head>
+      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
+        <div style="background-color: white; border-radius: 8px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <div style="text-align: center; margin-bottom: 30px;">
+            <h1 style="color: #1a1a2e; margin: 0; font-size: 24px;">PACT Command Center</h1>
+            <p style="color: #666; margin: 5px 0 0 0; font-size: 14px;">مركز قيادة باكت</p>
+          </div>
+          
+          <!-- English Section -->
+          <div style="margin-bottom: 25px; padding-bottom: 25px; border-bottom: 1px solid #eee;">
+            <p style="color: #333; font-size: 16px; line-height: 1.5;">Dear ${coordinatorName},</p>
+            <p style="color: #333; font-size: 16px; line-height: 1.5;">${messageEn}</p>
+            
+            <div style="background-color: #e3f2fd; border-left: 4px solid #2196f3; border-radius: 4px; padding: 16px; margin: 20px 0;">
+              <p style="margin: 0; color: #333;"><strong>Sites Assigned:</strong> ${siteCount}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>Sites:</strong> ${siteList}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>Location:</strong> ${locationInfo}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>MMP:</strong> ${mmpName}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>Assigned By:</strong> ${forwarderName}</p>
+            </div>
+            
+            <p style="color: #d32f2f; font-size: 14px; font-weight: 600;">Action Required: Please verify these sites as soon as possible.</p>
+          </div>
+          
+          <!-- Arabic Section -->
+          <div dir="rtl" style="margin-top: 25px; padding-top: 25px; border-top: 1px solid #eee; text-align: right;">
+            <p style="color: #333; font-size: 16px; line-height: 1.8;">عزيزي ${coordinatorName}،</p>
+            <p style="color: #333; font-size: 16px; line-height: 1.8;">${messageAr}</p>
+            
+            <div style="background-color: #e3f2fd; border-right: 4px solid #2196f3; border-radius: 4px; padding: 16px; margin: 20px 0;">
+              <p style="margin: 0; color: #333;"><strong>المواقع المعينة:</strong> ${siteCount}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>المواقع:</strong> ${siteList}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>الموقع:</strong> ${locationInfo}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>خطة المراقبة الشهرية:</strong> ${mmpName}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>تم التعيين بواسطة:</strong> ${forwarderName}</p>
+            </div>
+            
+            <p style="color: #d32f2f; font-size: 14px; font-weight: 600;">مطلوب إجراء: يرجى التحقق من هذه المواقع في أقرب وقت ممكن.</p>
+          </div>
+          
+          <div style="text-align: center; margin: 25px 0;">
+            <a href="${viewMmpUrl}" style="display: inline-block; padding: 14px 30px; background-color: #2196f3; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
+              View My Sites | عرض مواقعي
+            </a>
+          </div>
+          
+          <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+          
+          <p style="color: #999; font-size: 12px; text-align: center;">
+            This is an automated message from PACT Command Center.<br>
+            هذه رسالة آلية من مركز قيادة باكت.<br>
+            ICT Team | فريق تكنولوجيا المعلومات
+          </p>
+        </div>
+      </body>
+      </html>
+    `;
+    
+    const text = `Dear ${coordinatorName},
+
+${messageEn}
+
+Sites Assigned: ${siteCount}
+Sites: ${siteList}
+Location: ${locationInfo}
+MMP: ${mmpName}
+Assigned By: ${forwarderName}
+
+Action Required: Please verify these sites as soon as possible.
+
+View Sites: ${viewMmpUrl}
+
+---
+
+عزيزي ${coordinatorName}،
+
+${messageAr}
+
+المواقع المعينة: ${siteCount}
+الموقع: ${locationInfo}
+خطة المراقبة الشهرية: ${mmpName}
+تم التعيين بواسطة: ${forwarderName}
+
+---
+PACT Command Center | مركز قيادة باكت`;
+
+    return this.sendEmail({
+      to: email,
+      subject: `${titleEn} | ${titleAr}`,
+      recipientName: coordinatorName,
+      html,
+      text,
+    });
+  },
+
+  // ============================================
+  // TEMPLATE 6B: Site Dispatched to Data Collector
+  // ============================================
+  async sendSiteDispatchedToCollector(
+    email: string,
+    collectorName: string,
+    siteNames: string[],
+    location: string,
+    mmpName: string,
+    assignedBy: string,
+    totalBudget: number,
+    siteId?: string
+  ): Promise<EmailNotificationResult> {
+    const viewSitesUrl = siteId ? `${APP_URL}/mmp?entry=${siteId}` : `${APP_URL}/my-sites`;
+    const siteCount = siteNames.length;
+    const siteList = siteNames.slice(0, 5).join(', ') + (siteNames.length > 5 ? ` and ${siteNames.length - 5} more` : '');
+    
+    const titleEn = `${siteCount} Site(s) Assigned to You - Action Required`;
+    const titleAr = `تم تعيين ${siteCount} موقع(ًا) لك - مطلوب إجراء`;
+    
+    const messageEn = `You have been assigned ${siteCount} site(s) for data collection. Please review the site details and complete your visits according to the schedule.`;
+    const messageAr = `تم تعيينك لـ ${siteCount} موقع(ًا) لجمع البيانات. يرجى مراجعة تفاصيل الموقع وإكمال زياراتك وفقًا للجدول الزمني.`;
+
+    const html = `
+      <!DOCTYPE html>
+      <html dir="ltr">
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${titleEn} | ${titleAr}</title>
+      </head>
+      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
+        <div style="background-color: white; border-radius: 8px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <div style="text-align: center; margin-bottom: 30px;">
+            <h1 style="color: #1a1a2e; margin: 0; font-size: 24px;">PACT Command Center</h1>
+            <p style="color: #666; margin: 5px 0 0 0; font-size: 14px;">مركز قيادة باكت</p>
+          </div>
+          
+          <!-- English Section -->
+          <div style="margin-bottom: 25px; padding-bottom: 25px; border-bottom: 1px solid #eee;">
+            <p style="color: #333; font-size: 16px; line-height: 1.5;">Dear ${collectorName},</p>
+            <p style="color: #333; font-size: 16px; line-height: 1.5;">${messageEn}</p>
+            
+            <div style="background-color: #e8f5e9; border-left: 4px solid #4caf50; border-radius: 4px; padding: 16px; margin: 20px 0;">
+              <p style="margin: 0; color: #333;"><strong>Sites Assigned:</strong> ${siteCount}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>Sites:</strong> ${siteList}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>Location:</strong> ${location}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>MMP:</strong> ${mmpName}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>Transport Budget:</strong> ${totalBudget.toLocaleString()} SDG</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>Assigned By:</strong> ${assignedBy}</p>
+            </div>
+            
+            <p style="color: #1976d2; font-size: 14px; font-weight: 600;">Please complete your site visits and submit your reports on time.</p>
+          </div>
+          
+          <!-- Arabic Section -->
+          <div dir="rtl" style="margin-top: 25px; padding-top: 25px; border-top: 1px solid #eee; text-align: right;">
+            <p style="color: #333; font-size: 16px; line-height: 1.8;">عزيزي ${collectorName}،</p>
+            <p style="color: #333; font-size: 16px; line-height: 1.8;">${messageAr}</p>
+            
+            <div style="background-color: #e8f5e9; border-right: 4px solid #4caf50; border-radius: 4px; padding: 16px; margin: 20px 0;">
+              <p style="margin: 0; color: #333;"><strong>المواقع المعينة:</strong> ${siteCount}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>المواقع:</strong> ${siteList}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>الموقع:</strong> ${location}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>خطة المراقبة الشهرية:</strong> ${mmpName}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>ميزانية النقل:</strong> ${totalBudget.toLocaleString()} جنيه سوداني</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>تم التعيين بواسطة:</strong> ${assignedBy}</p>
+            </div>
+            
+            <p style="color: #1976d2; font-size: 14px; font-weight: 600;">يرجى إكمال زيارات المواقع وتقديم تقاريرك في الوقت المحدد.</p>
+          </div>
+          
+          <div style="text-align: center; margin: 25px 0;">
+            <a href="${viewSitesUrl}" style="display: inline-block; padding: 14px 30px; background-color: #4caf50; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
+              View My Sites | عرض مواقعي
+            </a>
+          </div>
+          
+          <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+          
+          <p style="color: #999; font-size: 12px; text-align: center;">
+            This is an automated message from PACT Command Center.<br>
+            هذه رسالة آلية من مركز قيادة باكت.<br>
+            ICT Team | فريق تكنولوجيا المعلومات
+          </p>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const text = `Dear ${collectorName},
+
+${messageEn}
+
+Sites Assigned: ${siteCount}
+Sites: ${siteList}
+Location: ${location}
+MMP: ${mmpName}
+Transport Budget: ${totalBudget.toLocaleString()} SDG
+Assigned By: ${assignedBy}
+
+View Sites: ${viewSitesUrl}
+
+---
+
+عزيزي ${collectorName}،
+
+${messageAr}
+
+المواقع المعينة: ${siteCount}
+الموقع: ${location}
+خطة المراقبة الشهرية: ${mmpName}
+ميزانية النقل: ${totalBudget.toLocaleString()} جنيه سوداني
+تم التعيين بواسطة: ${assignedBy}
+
+---
+PACT Command Center | مركز قيادة باكت`;
+
+    return this.sendEmail({
+      to: email,
+      subject: `${titleEn} | ${titleAr}`,
+      recipientName: collectorName,
       html,
       text,
     });
@@ -1402,15 +1843,33 @@ PACT Workflow Platform`;
   // ============================================
 
   /**
-   * Send bulk emails to multiple recipients
+   * Send bulk emails to multiple recipients with rate limiting
+   * Sends emails sequentially with 2-second delays to avoid SMTP rate limits
    */
   async sendBulk(
     recipients: Array<{ email: string; name: string }>,
     options: NotificationEmailOptions
   ): Promise<{ total: number; successful: number; failed: number }> {
-    const results = await Promise.all(
-      recipients.map(r => this.sendNotification(r.email, r.name, options))
-    );
+    const results: EmailNotificationResult[] = [];
+    const DELAY_MS = 5000; // 5 second delay between emails to avoid IONOS rate limiting
+    
+    for (let i = 0; i < recipients.length; i++) {
+      const r = recipients[i];
+      
+      // Add delay before sending (except for the first email)
+      if (i > 0) {
+        await new Promise(resolve => setTimeout(resolve, DELAY_MS));
+      }
+      
+      try {
+        const result = await this.sendNotification(r.email, r.name, options);
+        results.push(result);
+        console.log(`[EMAIL] Sent ${i + 1}/${recipients.length} to ${r.email}: ${result.success ? 'OK' : result.error}`);
+      } catch (error: any) {
+        results.push({ success: false, error: error.message });
+        console.error(`[EMAIL] Failed ${i + 1}/${recipients.length} to ${r.email}:`, error.message);
+      }
+    }
     
     const successful = results.filter(r => r.success).length;
     return {
@@ -1427,7 +1886,7 @@ PACT Workflow Platform`;
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('email, first_name, last_name, full_name')
+        .select('email, full_name, username')
         .eq('id', userId)
         .single();
 
@@ -1435,9 +1894,7 @@ PACT Workflow Platform`;
         return null;
       }
 
-      const name = data.full_name || 
-        (data.first_name && data.last_name ? `${data.first_name} ${data.last_name}` : data.first_name) || 
-        'User';
+      const name = data.full_name || data.username || 'User';
 
       return { email: data.email, name };
     } catch (error) {
