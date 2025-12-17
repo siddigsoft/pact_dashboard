@@ -7,6 +7,7 @@
 
 // Database role codes (matches Supabase app_role enum)
 export type RoleCode = 
+  | 'superAdmin'
   | 'admin'
   | 'ict'
   | 'fom'
@@ -18,6 +19,7 @@ export type RoleCode =
 
 // UI display labels
 export type RoleLabel =
+  | 'Super Admin'
   | 'Admin'
   | 'ICT'
   | 'Field Operation Manager (FOM)'
@@ -29,6 +31,11 @@ export type RoleLabel =
 
 // Comprehensive role mapping
 export const ROLE_MAP: Record<RoleCode, { code: RoleCode; label: RoleLabel; legacy: string[] }> = {
+  superAdmin: {
+    code: 'superAdmin',
+    label: 'Super Admin',
+    legacy: ['SuperAdmin', 'superAdmin', 'super_admin', 'Super Admin']
+  },
   admin: {
     code: 'admin',
     label: 'Admin',
