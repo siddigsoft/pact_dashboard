@@ -51,6 +51,7 @@ import {
 import { format, parseISO, isValid } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { EmailNotificationService } from '@/services/email-notification.service';
+import { logEmailSend } from '@/utils/audit-logger';
 
 interface EmailLog {
   id: string;
@@ -143,7 +144,7 @@ export default function EmailTracking() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'success' | 'failed'>('all');
-  const [typeFilter, setTypeFilter] = useState<'all' | 'email' | 'otp'>('all');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'email' | 'otp' | 'welcome' | 'mmp' | 'site' | 'password-reset' | 'notification'>('all');
   const [stats, setStats] = useState<EmailStats>({
     total: 0,
     successful: 0,
@@ -424,40 +425,32 @@ export default function EmailTracking() {
       (statusFilter === 'success' && log.success) ||
       (statusFilter === 'failed' && !log.success);
 
+    const emailType = (log.metadata?.emailType || '').toLowerCase();
+    const subject = (log.metadata?.subject || log.entity_name || '').toLowerCase();
+    const description = (log.description || '').toLowerCase();
+    
+    // Enhanced type matching - check emailType, subject, and description
+    const isWelcome = emailType === 'welcome' || subject.includes('welcome') || description.includes('welcome');
+    const isMmp = emailType === 'mmp' || subject.includes('mmp') || description.includes('mmp');
+    const isSite = emailType === 'site' || subject.includes('site') || description.includes('site visit');
+    const isPasswordOtp = emailType === 'password-reset' || emailType === 'otp' || log.entity_type === 'otp' || 
+                          subject.includes('password') || subject.includes('otp') || subject.includes('reset');
+    const isNotification = emailType === 'notification';
+    
     const matchesType = typeFilter === 'all' ||
-      (typeFilter === 'email' && log.entity_type === 'email') ||
-      (typeFilter === 'otp' && log.entity_type === 'otp');
+      (typeFilter === 'welcome' && isWelcome) ||
+      (typeFilter === 'mmp' && isMmp) ||
+      (typeFilter === 'site' && isSite) ||
+      (typeFilter === 'password-reset' && isPasswordOtp) ||
+      (typeFilter === 'notification' && isNotification) ||
+      (typeFilter === 'email' && log.entity_type === 'email' && !isWelcome && !isMmp && !isSite && !isPasswordOtp && !isNotification);
 
     return matchesSearch && matchesStatus && matchesType;
   });
 
-  // Store email log locally for immediate display
-  const storeLocalEmailLog = (recipient: string, subject: string, success: boolean, error?: string) => {
-    try {
-      const stored = localStorage.getItem('pact_audit_logs');
-      const logs = stored ? JSON.parse(stored) : [];
-      const newLog = {
-        id: `email-${Date.now()}`,
-        module: 'notification',
-        entityType: 'email',
-        entity_type: 'email',
-        entityName: subject,
-        entity_name: subject,
-        description: success ? `Email sent to ${recipient}: ${subject}` : `Failed to send email to ${recipient}`,
-        timestamp: new Date().toISOString(),
-        success,
-        errorMessage: error,
-        error_message: error,
-        metadata: { recipient, subject, emailType: 'test' },
-        actorName: 'System',
-        actor_name: 'System',
-        tags: ['notification', 'email', 'test'],
-      };
-      logs.unshift(newLog);
-      localStorage.setItem('pact_audit_logs', JSON.stringify(logs.slice(0, 1000)));
-    } catch (e) {
-      console.warn('Failed to store local email log:', e);
-    }
+  // Log email send to audit_logs database
+  const logTestEmailSend = async (recipient: string, subject: string, success: boolean, messageId?: string, error?: string) => {
+    await logEmailSend(recipient, subject, 'test', success, messageId, error);
   };
 
   const [diagnosticResult, setDiagnosticResult] = useState<string | null>(null);
@@ -497,9 +490,11 @@ export default function EmailTracking() {
       const resultInfo = JSON.stringify({ data, error }, null, 2);
       setDiagnosticResult(resultInfo);
 
+      const subject = 'PACT SMTP Test | اختبار البريد';
+      
       if (error) {
         console.error('[DIAGNOSTIC] Invocation error:', error);
-        storeLocalEmailLog(testEmail, 'SMTP Direct Test', false, error.message);
+        await logTestEmailSend(testEmail, subject, false, undefined, error.message);
         toast({
           title: 'Edge Function Error',
           description: `Invocation failed: ${error.message}`,
@@ -507,7 +502,7 @@ export default function EmailTracking() {
         });
       } else if (data && !data.success) {
         console.error('[DIAGNOSTIC] SMTP error:', data.error);
-        storeLocalEmailLog(testEmail, 'SMTP Direct Test', false, data.error);
+        await logTestEmailSend(testEmail, subject, false, undefined, data.error);
         toast({
           title: 'SMTP Error',
           description: data.error || 'Email sending failed - check diagnostic output below',
@@ -515,7 +510,7 @@ export default function EmailTracking() {
         });
       } else if (data?.success) {
         console.log('[DIAGNOSTIC] Success:', data);
-        storeLocalEmailLog(testEmail, 'SMTP Direct Test', true);
+        await logTestEmailSend(testEmail, subject, true, data.messageId);
         toast({
           title: 'Email sent successfully',
           description: `Message ID: ${data.messageId}. Check inbox and spam folder.`,
@@ -528,7 +523,7 @@ export default function EmailTracking() {
       console.error('[DIAGNOSTIC] Exception:', error);
       const errorInfo = JSON.stringify({ error: error.message, stack: error.stack }, null, 2);
       setDiagnosticResult(errorInfo);
-      storeLocalEmailLog(testEmail, 'SMTP Direct Test', false, error.message);
+      await logTestEmailSend(testEmail, 'PACT SMTP Test', false, undefined, error.message);
       toast({
         title: 'Error',
         description: error.message || 'Failed to send test email',
@@ -558,26 +553,81 @@ export default function EmailTracking() {
   };
 
   const getTypeBadge = (log: EmailLog) => {
-    if (log.entity_type === 'email') {
+    const emailType = (log.metadata?.emailType || '').toLowerCase();
+    const subject = (log.metadata?.subject || log.entity_name || '').toLowerCase();
+    const description = (log.description || '').toLowerCase();
+    
+    // Enhanced type detection - check emailType, subject, and description
+    const isWelcome = emailType === 'welcome' || subject.includes('welcome') || description.includes('welcome');
+    const isMmp = emailType === 'mmp' || subject.includes('mmp') || description.includes('mmp');
+    const isSite = emailType === 'site' || subject.includes('site') || description.includes('site visit');
+    const isPasswordOtp = emailType === 'password-reset' || emailType === 'otp' || log.entity_type === 'otp' || 
+                          subject.includes('password') || subject.includes('otp') || subject.includes('reset');
+    const isNotification = emailType === 'notification';
+    
+    // Welcome emails
+    if (isWelcome) {
       return (
-        <Badge variant="secondary">
-          <Mail className="w-3 h-3 mr-1" />
-          Email
+        <Badge variant="secondary" className="bg-green-500/10 text-green-600 border-green-500/30">
+          <MailCheck className="w-3 h-3 mr-1" />
+          Welcome
         </Badge>
       );
     }
-    if (log.tags?.includes('verification')) {
+    
+    // MMP notifications
+    if (isMmp) {
+      return (
+        <Badge variant="secondary" className="bg-blue-500/10 text-blue-600 border-blue-500/30">
+          <FileText className="w-3 h-3 mr-1" />
+          MMP
+        </Badge>
+      );
+    }
+    
+    // Site visit notifications
+    if (isSite) {
+      return (
+        <Badge variant="secondary" className="bg-orange-500/10 text-orange-600 border-orange-500/30">
+          <FileText className="w-3 h-3 mr-1" />
+          Site Visit
+        </Badge>
+      );
+    }
+    
+    // Password reset / OTP
+    if (isPasswordOtp) {
+      if (log.tags?.includes('verification')) {
+        return (
+          <Badge variant="secondary" className="bg-purple-500/10 text-purple-600 border-purple-500/30">
+            <KeyRound className="w-3 h-3 mr-1" />
+            OTP Verify
+          </Badge>
+        );
+      }
       return (
         <Badge variant="secondary" className="bg-purple-500/10 text-purple-600 border-purple-500/30">
           <KeyRound className="w-3 h-3 mr-1" />
-          OTP Verify
+          Password/OTP
         </Badge>
       );
     }
+    
+    // General notifications
+    if (isNotification) {
+      return (
+        <Badge variant="secondary" className="bg-cyan-500/10 text-cyan-600 border-cyan-500/30">
+          <MessageSquare className="w-3 h-3 mr-1" />
+          Notification
+        </Badge>
+      );
+    }
+    
+    // Default email
     return (
-      <Badge variant="secondary" className="bg-blue-500/10 text-blue-600 border-blue-500/30">
-        <KeyRound className="w-3 h-3 mr-1" />
-        OTP Send
+      <Badge variant="secondary">
+        <Mail className="w-3 h-3 mr-1" />
+        Email
       </Badge>
     );
   };
@@ -986,7 +1036,7 @@ export default function EmailTracking() {
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between gap-4 flex-wrap">
-            <CardTitle className="text-base">Email & OTP Logs</CardTitle>
+            <CardTitle className="text-base">All Communications Log</CardTitle>
             <div className="flex items-center gap-3 flex-wrap">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -1009,13 +1059,17 @@ export default function EmailTracking() {
                 </SelectContent>
               </Select>
               <Select value={typeFilter} onValueChange={(v: any) => setTypeFilter(v)}>
-                <SelectTrigger className="w-[130px]" data-testid="select-type">
+                <SelectTrigger className="w-[150px]" data-testid="select-type">
                   <SelectValue placeholder="Type" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Types</SelectItem>
-                  <SelectItem value="email">Emails</SelectItem>
-                  <SelectItem value="otp">OTP</SelectItem>
+                  <SelectItem value="welcome">Welcome</SelectItem>
+                  <SelectItem value="mmp">MMP</SelectItem>
+                  <SelectItem value="site">Site Visit</SelectItem>
+                  <SelectItem value="notification">Notification</SelectItem>
+                  <SelectItem value="password-reset">Password/OTP</SelectItem>
+                  <SelectItem value="email">Other Emails</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1029,8 +1083,8 @@ export default function EmailTracking() {
           ) : filteredLogs.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <Mail className="h-12 w-12 mx-auto mb-3 opacity-50" />
-              <p>No email logs found</p>
-              <p className="text-sm">Email and OTP activities will appear here</p>
+              <p>No communication logs found</p>
+              <p className="text-sm">All email communications (Welcome, MMP, Site Visit, Notifications, OTP) will appear here</p>
             </div>
           ) : (
             <div className="overflow-x-auto">

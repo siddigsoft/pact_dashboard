@@ -23,10 +23,12 @@ const iconSizeClasses = {
 };
 
 const getRoleConfig = (role: string) => {
-  const normalizedRole = role.toLowerCase();
+  const normalizedRole = role.toLowerCase().replace(/_/g, '');
   
   switch (normalizedRole) {
+    case 'superadmin':
     case 'admin':
+      // SuperAdmin displays as Admin for security
       return {
         gradient: 'bg-gradient-to-r from-red-500 to-pink-500',
         border: 'border-red-400/50',

@@ -98,6 +98,13 @@ The frontend, built with React 18, TypeScript, Tailwind CSS v3, and Shadcn UI, f
     - Notifications sent for: MMP forwarding, site operations (claimed/rejected/verified/approved), financial transactions, activity coverage milestones, activity dates
     - Deduplication via Set to prevent duplicate notifications
     - Backward-compatible `getHubSupervisors(hubId)` method (deprecated, calls getHubManagementUsers)
+*   **Targeted Email Notification System (Optimized Dec 2024):**
+    - Reduced email volume to prevent IONOS rate limiting (450 errors)
+    - MMP Forward to FOM: Email sent to selected FOM(s) only, CC: 1 Super Admin (no supervisors)
+    - MMP Forward to Coordinators: Email sent to selected coordinators only, CC: Hub Supervisors + 1 Super Admin
+    - Site Verified by Coordinator: Email sent to FOM only, CC: Hub Supervisors (of coordinator's hub) + 1 Super Admin
+    - 2-second delay between emails when sending to multiple recipients
+    - Hub Supervisors included for accountability only on coordinator-related workflow emails
 
 ### System Design Choices
 The project utilizes a unified Supabase client for all Supabase interactions, ensuring consistent authentication and session management. The system integrates the complete Sudan administrative structure.
