@@ -417,16 +417,24 @@ export const EmailNotificationService = {
         },
       });
 
+      const subject = 'Welcome to PACT | مرحباً بك في باكت';
+      
       if (error) {
         console.error('[EMAIL] Welcome email error:', error);
+        await logEmailSend(email, subject, 'welcome', false, undefined, error.message);
         return { success: false, error: error.message };
       }
       if (data && !data.success) {
+        await logEmailSend(email, subject, 'welcome', false, undefined, data.error);
         return { success: false, error: data.error };
       }
-      return { success: true, messageId: data?.messageId };
+      
+      const messageId = data?.messageId || `welcome-${Date.now()}`;
+      await logEmailSend(email, subject, 'welcome', true, messageId);
+      return { success: true, messageId };
     } catch (error: any) {
       console.error('[EMAIL] Welcome email error:', error);
+      await logEmailSend(email, 'Welcome to PACT', 'welcome', false, undefined, error.message);
       return { success: false, error: error.message };
     }
   },
@@ -488,6 +496,8 @@ export const EmailNotificationService = {
         },
       });
 
+      const subject = `${titleEn} | ${titleAr}`;
+      
       if (error) {
         console.error('[EMAIL] MMP forward email error:', error);
         
@@ -498,6 +508,7 @@ export const EmailNotificationService = {
           return this.sendMMPForwardedToFOM(email, recipientName, mmpName, forwarderName, mmpId, isRecipientFOM, recipientRole, retryCount + 1);
         }
         
+        await logEmailSend(email, subject, 'mmp', false, undefined, error.message);
         return { success: false, error: error.message };
       }
       
@@ -509,11 +520,14 @@ export const EmailNotificationService = {
           return this.sendMMPForwardedToFOM(email, recipientName, mmpName, forwarderName, mmpId, isRecipientFOM, recipientRole, retryCount + 1);
         }
         
+        await logEmailSend(email, subject, 'mmp', false, undefined, data.error);
         return { success: false, error: data.error };
       }
       
+      const messageId = data?.messageId || `mmp-fom-${Date.now()}`;
       console.log(`[EMAIL] MMP forward email sent successfully to ${email}`);
-      return { success: true, messageId: data?.messageId };
+      await logEmailSend(email, subject, 'mmp', true, messageId);
+      return { success: true, messageId };
     } catch (error: any) {
       console.error('[EMAIL] MMP forward email exception:', error);
       
@@ -524,6 +538,7 @@ export const EmailNotificationService = {
         return this.sendMMPForwardedToFOM(email, recipientName, mmpName, forwarderName, mmpId, isRecipientFOM, recipientRole, retryCount + 1);
       }
       
+      await logEmailSend(email, `MMP Forwarded to FOM`, 'mmp', false, undefined, error.message);
       return { success: false, error: error.message };
     }
   },
@@ -1747,7 +1762,7 @@ PACT Workflow Platform`;
     options: NotificationEmailOptions
   ): Promise<{ total: number; successful: number; failed: number }> {
     const results: EmailNotificationResult[] = [];
-    const DELAY_MS = 2000; // 2 second delay between emails to avoid IONOS rate limiting
+    const DELAY_MS = 5000; // 5 second delay between emails to avoid IONOS rate limiting
     
     for (let i = 0; i < recipients.length; i++) {
       const r = recipients[i];
