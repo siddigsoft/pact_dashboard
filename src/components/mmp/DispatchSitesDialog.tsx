@@ -13,6 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2, DollarSign, AlertCircle, ArrowRight, ArrowLeft, Copy, Users, MapPin } from 'lucide-react';
 import { sudanStates } from '@/data/sudanStates';
 import { fetchAllRegistrySites, matchSiteToRegistry, RegistryLinkage } from '@/utils/sitesRegistryMatcher';
+import { EmailNotificationService } from '@/services/email-notification.service';
 
 interface DispatchSitesDialogProps {
   open: boolean;
@@ -701,6 +702,51 @@ export const DispatchSitesDialog: React.FC<DispatchSitesDialogProps> = ({
           description: `Successfully dispatched ${successCount} site(s) with calculated costs to ${targetCollectors.length} data collector(s).${skippedCount > 0 ? ` (${skippedCount} skipped)` : ''}`,
           variant: 'default'
         });
+      }
+
+      // Send email notifications for individual dispatch (direct assignment)
+      if (dispatchType === 'individual' && selectedCollector && successCount > 0) {
+        try {
+          // Get the assigned collector's info
+          const assignedCollector = collectors.find(c => c.id === selectedCollector);
+          if (assignedCollector?.email) {
+            // Get site names and locations
+            const siteNames = selectedSiteObjects.map(s => s.site_name || s.siteName || 'Unknown Site');
+            const locations = [...new Set(selectedSiteObjects.map(s => {
+              const state = s.state || s.state_name || '';
+              const locality = s.locality || s.locality_name || '';
+              return locality ? `${locality}, ${state}` : state;
+            }))].join('; ');
+            
+            // Calculate total budget
+            let totalBudget = 0;
+            selectedSiteObjects.forEach(s => {
+              const costs = siteCosts.get(s.id);
+              if (costs) {
+                totalBudget += costs.transportation + costs.accommodation + costs.mealAllowance + costs.otherCosts;
+              }
+            });
+
+            // Get MMP name from first site entry
+            const mmpName = selectedSiteObjects[0]?.mmp_name || 'Monthly Monitoring Plan';
+
+            // Send email to assigned collector
+            await EmailNotificationService.sendSiteDispatchedToCollector(
+              assignedCollector.email,
+              assignedCollector.full_name || assignedCollector.username || 'Data Collector',
+              siteNames,
+              locations,
+              mmpName,
+              dispatchedBy,
+              totalBudget,
+              selectedSiteObjects[0]?.id
+            );
+            console.log(`[EMAIL] Sent site assignment email to ${assignedCollector.email}`);
+          }
+        } catch (emailError) {
+          console.error('[EMAIL] Failed to send assignment email:', emailError);
+          // Don't fail the dispatch if email fails
+        }
       }
 
       onDispatched?.();

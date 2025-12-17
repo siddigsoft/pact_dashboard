@@ -26,18 +26,10 @@ import { useAuthorization } from "@/hooks/use-authorization";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle, Plus } from "lucide-react";
 import type { ClassificationHistory } from "@/types/classification";
+import { VISIBLE_ROLE_CODES } from "@/utils/roleMapping";
 
-// Database role codes (camelCase) - matches Supabase app_role enum
-const availableRoles = [
-  "admin",
-  "ict",
-  "fom",
-  "financialAdmin",
-  "supervisor",
-  "coordinator",
-  "dataCollector",
-  "reviewer"
-] as const;
+// Use centralized visible role codes (excludes superAdmin)
+const availableRoles = VISIBLE_ROLE_CODES;
 
 const UserDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();

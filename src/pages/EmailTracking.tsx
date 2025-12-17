@@ -51,6 +51,7 @@ import {
 import { format, parseISO, isValid } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { EmailNotificationService } from '@/services/email-notification.service';
+import { logEmailSend } from '@/utils/audit-logger';
 
 interface EmailLog {
   id: string;
@@ -113,6 +114,16 @@ interface EmailStats {
   emails: number;
   otpSent: number;
   otpVerified: number;
+  todayTotal: number;
+  todaySuccessful: number;
+  todayFailed: number;
+  errorBreakdown: {
+    rateLimit: number;
+    invalidMailbox: number;
+    connectionError: number;
+    authError: number;
+    other: number;
+  };
 }
 
 const safeParseDateForDisplay = (dateString: string | null | undefined): string => {
@@ -133,7 +144,7 @@ export default function EmailTracking() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'success' | 'failed'>('all');
-  const [typeFilter, setTypeFilter] = useState<'all' | 'email' | 'otp'>('all');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'email' | 'otp' | 'welcome' | 'mmp' | 'site' | 'password-reset' | 'notification'>('all');
   const [stats, setStats] = useState<EmailStats>({
     total: 0,
     successful: 0,
@@ -141,6 +152,16 @@ export default function EmailTracking() {
     emails: 0,
     otpSent: 0,
     otpVerified: 0,
+    todayTotal: 0,
+    todaySuccessful: 0,
+    todayFailed: 0,
+    errorBreakdown: {
+      rateLimit: 0,
+      invalidMailbox: 0,
+      connectionError: 0,
+      authError: 0,
+      other: 0,
+    },
   });
   const [testEmail, setTestEmail] = useState('');
   const [sendingTest, setSendingTest] = useState(false);
@@ -172,13 +193,53 @@ export default function EmailTracking() {
       setEmailLogs(logs);
 
       // Calculate stats
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const todayLogs = logs.filter(l => {
+        try {
+          const logDate = new Date(l.timestamp);
+          return logDate >= today;
+        } catch {
+          return false;
+        }
+      });
+
+      // Categorize error types
+      const failedLogs = logs.filter(l => !l.success);
+      const errorBreakdown = {
+        rateLimit: 0,
+        invalidMailbox: 0,
+        connectionError: 0,
+        authError: 0,
+        other: 0,
+      };
+
+      failedLogs.forEach(log => {
+        const errorMsg = (log.error_message || '').toLowerCase();
+        if (errorMsg.includes('450') || errorMsg.includes('limit') || errorMsg.includes('rate')) {
+          errorBreakdown.rateLimit++;
+        } else if (errorMsg.includes('550') || errorMsg.includes('mailbox') || errorMsg.includes('unavailable') || errorMsg.includes('rejected')) {
+          errorBreakdown.invalidMailbox++;
+        } else if (errorMsg.includes('connection') || errorMsg.includes('timeout') || errorMsg.includes('econnreset') || errorMsg.includes('network')) {
+          errorBreakdown.connectionError++;
+        } else if (errorMsg.includes('auth') || errorMsg.includes('535') || errorMsg.includes('credential') || errorMsg.includes('password')) {
+          errorBreakdown.authError++;
+        } else {
+          errorBreakdown.other++;
+        }
+      });
+
       const newStats: EmailStats = {
         total: logs.length,
         successful: logs.filter(l => l.success).length,
-        failed: logs.filter(l => !l.success).length,
+        failed: failedLogs.length,
         emails: logs.filter(l => l.entity_type === 'email').length,
         otpSent: logs.filter(l => l.entity_type === 'otp' && l.metadata?.purpose !== 'verification').length,
         otpVerified: logs.filter(l => l.entity_type === 'otp' && l.tags?.includes('verification')).length,
+        todayTotal: todayLogs.length,
+        todaySuccessful: todayLogs.filter(l => l.success).length,
+        todayFailed: todayLogs.filter(l => !l.success).length,
+        errorBreakdown,
       };
       setStats(newStats);
     } catch (error: any) {
@@ -248,6 +309,20 @@ export default function EmailTracking() {
       }, 5000);
       
       // Update stats
+      const errorMsg = (newLog.error_message || '').toLowerCase();
+      let errorType: keyof EmailStats['errorBreakdown'] = 'other';
+      if (!newLog.success) {
+        if (errorMsg.includes('450') || errorMsg.includes('limit') || errorMsg.includes('rate')) {
+          errorType = 'rateLimit';
+        } else if (errorMsg.includes('550') || errorMsg.includes('mailbox') || errorMsg.includes('unavailable') || errorMsg.includes('rejected')) {
+          errorType = 'invalidMailbox';
+        } else if (errorMsg.includes('connection') || errorMsg.includes('timeout') || errorMsg.includes('econnreset') || errorMsg.includes('network')) {
+          errorType = 'connectionError';
+        } else if (errorMsg.includes('auth') || errorMsg.includes('535') || errorMsg.includes('credential') || errorMsg.includes('password')) {
+          errorType = 'authError';
+        }
+      }
+
       setStats((prev) => ({
         total: prev.total + 1,
         successful: newLog.success ? prev.successful + 1 : prev.successful,
@@ -259,6 +334,13 @@ export default function EmailTracking() {
         otpVerified: newLog.entity_type === 'otp' && newLog.tags?.includes('verification') 
           ? prev.otpVerified + 1 
           : prev.otpVerified,
+        todayTotal: prev.todayTotal + 1,
+        todaySuccessful: newLog.success ? prev.todaySuccessful + 1 : prev.todaySuccessful,
+        todayFailed: !newLog.success ? prev.todayFailed + 1 : prev.todayFailed,
+        errorBreakdown: {
+          ...prev.errorBreakdown,
+          [errorType]: !newLog.success ? prev.errorBreakdown[errorType] + 1 : prev.errorBreakdown[errorType],
+        },
       }));
       
       setLastUpdate(new Date());
@@ -343,41 +425,35 @@ export default function EmailTracking() {
       (statusFilter === 'success' && log.success) ||
       (statusFilter === 'failed' && !log.success);
 
+    const emailType = (log.metadata?.emailType || '').toLowerCase();
+    const subject = (log.metadata?.subject || log.entity_name || '').toLowerCase();
+    const description = (log.description || '').toLowerCase();
+    
+    // Enhanced type matching - check emailType, subject, and description
+    const isWelcome = emailType === 'welcome' || subject.includes('welcome') || description.includes('welcome');
+    const isMmp = emailType === 'mmp' || subject.includes('mmp') || description.includes('mmp');
+    const isSite = emailType === 'site' || subject.includes('site') || description.includes('site visit');
+    const isPasswordOtp = emailType === 'password-reset' || emailType === 'otp' || log.entity_type === 'otp' || 
+                          subject.includes('password') || subject.includes('otp') || subject.includes('reset');
+    const isNotification = emailType === 'notification';
+    
     const matchesType = typeFilter === 'all' ||
-      (typeFilter === 'email' && log.entity_type === 'email') ||
-      (typeFilter === 'otp' && log.entity_type === 'otp');
+      (typeFilter === 'welcome' && isWelcome) ||
+      (typeFilter === 'mmp' && isMmp) ||
+      (typeFilter === 'site' && isSite) ||
+      (typeFilter === 'password-reset' && isPasswordOtp) ||
+      (typeFilter === 'notification' && isNotification) ||
+      (typeFilter === 'email' && log.entity_type === 'email' && !isWelcome && !isMmp && !isSite && !isPasswordOtp && !isNotification);
 
     return matchesSearch && matchesStatus && matchesType;
   });
 
-  // Store email log locally for immediate display
-  const storeLocalEmailLog = (recipient: string, subject: string, success: boolean, error?: string) => {
-    try {
-      const stored = localStorage.getItem('pact_audit_logs');
-      const logs = stored ? JSON.parse(stored) : [];
-      const newLog = {
-        id: `email-${Date.now()}`,
-        module: 'notification',
-        entityType: 'email',
-        entity_type: 'email',
-        entityName: subject,
-        entity_name: subject,
-        description: success ? `Email sent to ${recipient}: ${subject}` : `Failed to send email to ${recipient}`,
-        timestamp: new Date().toISOString(),
-        success,
-        errorMessage: error,
-        error_message: error,
-        metadata: { recipient, subject, emailType: 'test' },
-        actorName: 'System',
-        actor_name: 'System',
-        tags: ['notification', 'email', 'test'],
-      };
-      logs.unshift(newLog);
-      localStorage.setItem('pact_audit_logs', JSON.stringify(logs.slice(0, 1000)));
-    } catch (e) {
-      console.warn('Failed to store local email log:', e);
-    }
+  // Log email send to audit_logs database
+  const logTestEmailSend = async (recipient: string, subject: string, success: boolean, messageId?: string, error?: string) => {
+    await logEmailSend(recipient, subject, 'test', success, messageId, error);
   };
+
+  const [diagnosticResult, setDiagnosticResult] = useState<string | null>(null);
 
   const sendTestEmail = async () => {
     if (!testEmail || !testEmail.includes('@')) {
@@ -390,38 +466,64 @@ export default function EmailTracking() {
     }
 
     setSendingTest(true);
+    setDiagnosticResult(null);
+    
     try {
-      // Use custom OTP Edge Function - sends through IONOS SMTP
-      const { data, error } = await supabase.functions.invoke('verify-reset-otp', {
-        body: { 
-          email: testEmail.toLowerCase(),
-          action: 'generate'
+      console.log('[DIAGNOSTIC] Calling send-email Edge Function directly...');
+      
+      const { data, error } = await supabase.functions.invoke('send-email', {
+        body: {
+          to: testEmail.toLowerCase(),
+          subject: 'PACT SMTP Test | اختبار البريد',
+          type: 'notification',
+          recipientName: 'Test User',
+          title_en: 'SMTP Connection Test',
+          title_ar: 'اختبار اتصال SMTP',
+          message_en: 'This is a test email to verify SMTP configuration. If you receive this, email is working correctly.',
+          message_ar: 'هذه رسالة اختبار للتحقق من إعدادات SMTP. إذا استلمت هذه الرسالة، فالبريد يعمل بشكل صحيح.',
+          priority: 'normal',
         },
       });
 
-      const success = data?.success && !error;
-      const errorMessage = error?.message || data?.error;
+      console.log('[DIAGNOSTIC] Edge Function response:', { data, error });
+      
+      const resultInfo = JSON.stringify({ data, error }, null, 2);
+      setDiagnosticResult(resultInfo);
 
-      // Store log locally for immediate display
-      storeLocalEmailLog(testEmail, 'Password Reset Test (IONOS SMTP)', success, errorMessage);
-
-      if (success) {
+      const subject = 'PACT SMTP Test | اختبار البريد';
+      
+      if (error) {
+        console.error('[DIAGNOSTIC] Invocation error:', error);
+        await logTestEmailSend(testEmail, subject, false, undefined, error.message);
         toast({
-          title: 'Password reset code sent',
-          description: `6-digit code sent to ${testEmail} via IONOS SMTP. Check inbox (and spam folder).`,
-        });
-        setTestEmail('');
-      } else {
-        toast({
-          title: 'Failed to send test email',
-          description: errorMessage || 'Unknown error occurred',
+          title: 'Edge Function Error',
+          description: `Invocation failed: ${error.message}`,
           variant: 'destructive',
         });
+      } else if (data && !data.success) {
+        console.error('[DIAGNOSTIC] SMTP error:', data.error);
+        await logTestEmailSend(testEmail, subject, false, undefined, data.error);
+        toast({
+          title: 'SMTP Error',
+          description: data.error || 'Email sending failed - check diagnostic output below',
+          variant: 'destructive',
+        });
+      } else if (data?.success) {
+        console.log('[DIAGNOSTIC] Success:', data);
+        await logTestEmailSend(testEmail, subject, true, data.messageId);
+        toast({
+          title: 'Email sent successfully',
+          description: `Message ID: ${data.messageId}. Check inbox and spam folder.`,
+        });
+        setTestEmail('');
       }
-      // Refresh logs after storing
+      
       setTimeout(fetchEmailLogs, 500);
     } catch (error: any) {
-      storeLocalEmailLog(testEmail, 'Password Reset Test (IONOS SMTP)', false, error.message);
+      console.error('[DIAGNOSTIC] Exception:', error);
+      const errorInfo = JSON.stringify({ error: error.message, stack: error.stack }, null, 2);
+      setDiagnosticResult(errorInfo);
+      await logTestEmailSend(testEmail, 'PACT SMTP Test', false, undefined, error.message);
       toast({
         title: 'Error',
         description: error.message || 'Failed to send test email',
@@ -451,26 +553,81 @@ export default function EmailTracking() {
   };
 
   const getTypeBadge = (log: EmailLog) => {
-    if (log.entity_type === 'email') {
+    const emailType = (log.metadata?.emailType || '').toLowerCase();
+    const subject = (log.metadata?.subject || log.entity_name || '').toLowerCase();
+    const description = (log.description || '').toLowerCase();
+    
+    // Enhanced type detection - check emailType, subject, and description
+    const isWelcome = emailType === 'welcome' || subject.includes('welcome') || description.includes('welcome');
+    const isMmp = emailType === 'mmp' || subject.includes('mmp') || description.includes('mmp');
+    const isSite = emailType === 'site' || subject.includes('site') || description.includes('site visit');
+    const isPasswordOtp = emailType === 'password-reset' || emailType === 'otp' || log.entity_type === 'otp' || 
+                          subject.includes('password') || subject.includes('otp') || subject.includes('reset');
+    const isNotification = emailType === 'notification';
+    
+    // Welcome emails
+    if (isWelcome) {
       return (
-        <Badge variant="secondary">
-          <Mail className="w-3 h-3 mr-1" />
-          Email
+        <Badge variant="secondary" className="bg-green-500/10 text-green-600 border-green-500/30">
+          <MailCheck className="w-3 h-3 mr-1" />
+          Welcome
         </Badge>
       );
     }
-    if (log.tags?.includes('verification')) {
+    
+    // MMP notifications
+    if (isMmp) {
+      return (
+        <Badge variant="secondary" className="bg-blue-500/10 text-blue-600 border-blue-500/30">
+          <FileText className="w-3 h-3 mr-1" />
+          MMP
+        </Badge>
+      );
+    }
+    
+    // Site visit notifications
+    if (isSite) {
+      return (
+        <Badge variant="secondary" className="bg-orange-500/10 text-orange-600 border-orange-500/30">
+          <FileText className="w-3 h-3 mr-1" />
+          Site Visit
+        </Badge>
+      );
+    }
+    
+    // Password reset / OTP
+    if (isPasswordOtp) {
+      if (log.tags?.includes('verification')) {
+        return (
+          <Badge variant="secondary" className="bg-purple-500/10 text-purple-600 border-purple-500/30">
+            <KeyRound className="w-3 h-3 mr-1" />
+            OTP Verify
+          </Badge>
+        );
+      }
       return (
         <Badge variant="secondary" className="bg-purple-500/10 text-purple-600 border-purple-500/30">
           <KeyRound className="w-3 h-3 mr-1" />
-          OTP Verify
+          Password/OTP
         </Badge>
       );
     }
+    
+    // General notifications
+    if (isNotification) {
+      return (
+        <Badge variant="secondary" className="bg-cyan-500/10 text-cyan-600 border-cyan-500/30">
+          <MessageSquare className="w-3 h-3 mr-1" />
+          Notification
+        </Badge>
+      );
+    }
+    
+    // Default email
     return (
-      <Badge variant="secondary" className="bg-blue-500/10 text-blue-600 border-blue-500/30">
-        <KeyRound className="w-3 h-3 mr-1" />
-        OTP Send
+      <Badge variant="secondary">
+        <Mail className="w-3 h-3 mr-1" />
+        Email
       </Badge>
     );
   };
@@ -635,6 +792,178 @@ export default function EmailTracking() {
         </Card>
       </div>
 
+      {/* Daily Usage & Error Breakdown */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Daily Email Counter */}
+        <Card className="border-orange-500/30 bg-orange-500/5">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Calendar className="h-4 w-4 text-orange-500" />
+              Today's Email Usage (IONOS Limit ~500/day)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Emails sent today</span>
+                <span className="text-2xl font-bold" data-testid="stat-today-total">
+                  {stats.todayTotal} <span className="text-sm font-normal text-muted-foreground">/ ~500</span>
+                </span>
+              </div>
+              <div className="w-full bg-muted rounded-full h-3">
+                <div 
+                  className={`h-3 rounded-full transition-all ${
+                    stats.todayTotal >= 450 ? 'bg-red-500' : 
+                    stats.todayTotal >= 300 ? 'bg-yellow-500' : 'bg-green-500'
+                  }`}
+                  style={{ width: `${Math.min((stats.todayTotal / 500) * 100, 100)}%` }}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4 pt-2">
+                <div className="text-center p-2 rounded bg-green-500/10">
+                  <p className="text-lg font-bold text-green-600" data-testid="stat-today-success">{stats.todaySuccessful}</p>
+                  <p className="text-xs text-muted-foreground">Successful</p>
+                </div>
+                <div className="text-center p-2 rounded bg-red-500/10">
+                  <p className="text-lg font-bold text-red-600" data-testid="stat-today-failed">{stats.todayFailed}</p>
+                  <p className="text-xs text-muted-foreground">Failed</p>
+                </div>
+              </div>
+              {stats.todayTotal >= 450 && (
+                <div className="p-2 bg-red-500/10 rounded border border-red-500/30 text-sm text-red-600 flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4" />
+                  Approaching IONOS daily limit! Consider spreading emails over multiple days.
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Error Breakdown */}
+        <Card className="border-red-500/30 bg-red-500/5">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <XCircle className="h-4 w-4 text-red-500" />
+              Failed Emails Breakdown ({stats.failed} total)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {/* Rate Limit Errors */}
+              <div className="flex items-center justify-between p-2 rounded bg-orange-500/10 border border-orange-500/20">
+                <div className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-orange-500" />
+                  <div>
+                    <p className="text-sm font-medium">Rate Limit (450)</p>
+                    <p className="text-xs text-muted-foreground">IONOS sending limit exceeded</p>
+                  </div>
+                </div>
+                <Badge variant="outline" className="bg-orange-500/10 text-orange-600 border-orange-500/30">
+                  {stats.errorBreakdown.rateLimit}
+                </Badge>
+              </div>
+
+              {/* Invalid Mailbox */}
+              <div className="flex items-center justify-between p-2 rounded bg-red-500/10 border border-red-500/20">
+                <div className="flex items-center gap-2">
+                  <MailX className="h-4 w-4 text-red-500" />
+                  <div>
+                    <p className="text-sm font-medium">Invalid Mailbox (550)</p>
+                    <p className="text-xs text-muted-foreground">Recipient doesn't exist</p>
+                  </div>
+                </div>
+                <Badge variant="outline" className="bg-red-500/10 text-red-600 border-red-500/30">
+                  {stats.errorBreakdown.invalidMailbox}
+                </Badge>
+              </div>
+
+              {/* Connection Errors */}
+              <div className="flex items-center justify-between p-2 rounded bg-yellow-500/10 border border-yellow-500/20">
+                <div className="flex items-center gap-2">
+                  <WifiOff className="h-4 w-4 text-yellow-500" />
+                  <div>
+                    <p className="text-sm font-medium">Connection Error</p>
+                    <p className="text-xs text-muted-foreground">Network/timeout issues</p>
+                  </div>
+                </div>
+                <Badge variant="outline" className="bg-yellow-500/10 text-yellow-600 border-yellow-500/30">
+                  {stats.errorBreakdown.connectionError}
+                </Badge>
+              </div>
+
+              {/* Auth Errors */}
+              <div className="flex items-center justify-between p-2 rounded bg-purple-500/10 border border-purple-500/20">
+                <div className="flex items-center gap-2">
+                  <KeyRound className="h-4 w-4 text-purple-500" />
+                  <div>
+                    <p className="text-sm font-medium">Authentication Error</p>
+                    <p className="text-xs text-muted-foreground">SMTP credentials issue</p>
+                  </div>
+                </div>
+                <Badge variant="outline" className="bg-purple-500/10 text-purple-600 border-purple-500/30">
+                  {stats.errorBreakdown.authError}
+                </Badge>
+              </div>
+
+              {/* Other Errors */}
+              {stats.errorBreakdown.other > 0 && (
+                <div className="flex items-center justify-between p-2 rounded bg-muted border">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+                    <div>
+                      <p className="text-sm font-medium">Other Errors</p>
+                      <p className="text-xs text-muted-foreground">Miscellaneous failures</p>
+                    </div>
+                  </div>
+                  <Badge variant="outline">
+                    {stats.errorBreakdown.other}
+                  </Badge>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* SMTP Configuration Info */}
+      <Card className="border-blue-500/30 bg-blue-500/5">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Wifi className="h-4 w-4 text-blue-500" />
+            IONOS SMTP Configuration (Required in Supabase Edge Function Secrets)
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+            <div className="p-3 bg-background rounded-lg border">
+              <p className="text-xs text-muted-foreground mb-1">SMTP_HOST</p>
+              <p className="font-mono font-medium">smtp.ionos.com</p>
+            </div>
+            <div className="p-3 bg-background rounded-lg border">
+              <p className="text-xs text-muted-foreground mb-1">SMTP_PORT</p>
+              <p className="font-mono font-medium text-green-600">465 (SSL)</p>
+            </div>
+            <div className="p-3 bg-background rounded-lg border">
+              <p className="text-xs text-muted-foreground mb-1">SMTP_USER</p>
+              <p className="font-mono font-medium text-xs">noreply@pactorg.com</p>
+            </div>
+            <div className="p-3 bg-background rounded-lg border">
+              <p className="text-xs text-muted-foreground mb-1">SMTP_PASSWORD</p>
+              <p className="font-mono font-medium">(Your IONOS password)</p>
+            </div>
+          </div>
+          <div className="mt-3 p-3 bg-yellow-500/10 rounded-lg border border-yellow-500/30">
+            <p className="text-sm flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-yellow-600" />
+              <span className="font-medium">Important:</span> Set these in Supabase Dashboard → Edge Functions → send-email → Secrets
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Port must be 465 (not 587). The Edge Function uses SSL for port 465 automatically.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Test Email Section */}
       <Card>
         <CardHeader className="pb-3">
@@ -671,8 +1000,35 @@ export default function EmailTracking() {
             </Button>
           </div>
           <p className="text-xs text-muted-foreground mt-2">
-            Tests your IONOS SMTP by sending a password reset email. This uses the same SMTP configured in Supabase Dashboard for all auth emails.
+            Tests your IONOS SMTP directly via the send-email Edge Function. This will show the exact error if email fails.
           </p>
+          
+          {diagnosticResult && (
+            <div className="mt-4 p-4 bg-muted/50 rounded-lg border">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-yellow-500" />
+                  Diagnostic Result (Edge Function Response)
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    navigator.clipboard.writeText(diagnosticResult);
+                    toast({ title: 'Copied', description: 'Diagnostic result copied to clipboard' });
+                  }}
+                >
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+              <pre className="text-xs bg-background p-3 rounded border overflow-auto max-h-48 whitespace-pre-wrap">
+                {diagnosticResult}
+              </pre>
+              <p className="text-xs text-muted-foreground mt-2">
+                If "requestId" appears, the new Edge Function IS deployed. Check Supabase Edge Function Logs for details.
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -680,7 +1036,7 @@ export default function EmailTracking() {
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between gap-4 flex-wrap">
-            <CardTitle className="text-base">Email & OTP Logs</CardTitle>
+            <CardTitle className="text-base">All Communications Log</CardTitle>
             <div className="flex items-center gap-3 flex-wrap">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -703,13 +1059,17 @@ export default function EmailTracking() {
                 </SelectContent>
               </Select>
               <Select value={typeFilter} onValueChange={(v: any) => setTypeFilter(v)}>
-                <SelectTrigger className="w-[130px]" data-testid="select-type">
+                <SelectTrigger className="w-[150px]" data-testid="select-type">
                   <SelectValue placeholder="Type" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Types</SelectItem>
-                  <SelectItem value="email">Emails</SelectItem>
-                  <SelectItem value="otp">OTP</SelectItem>
+                  <SelectItem value="welcome">Welcome</SelectItem>
+                  <SelectItem value="mmp">MMP</SelectItem>
+                  <SelectItem value="site">Site Visit</SelectItem>
+                  <SelectItem value="notification">Notification</SelectItem>
+                  <SelectItem value="password-reset">Password/OTP</SelectItem>
+                  <SelectItem value="email">Other Emails</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -723,8 +1083,8 @@ export default function EmailTracking() {
           ) : filteredLogs.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <Mail className="h-12 w-12 mx-auto mb-3 opacity-50" />
-              <p>No email logs found</p>
-              <p className="text-sm">Email and OTP activities will appear here</p>
+              <p>No communication logs found</p>
+              <p className="text-sm">All email communications (Welcome, MMP, Site Visit, Notifications, OTP) will appear here</p>
             </div>
           ) : (
             <div className="overflow-x-auto">

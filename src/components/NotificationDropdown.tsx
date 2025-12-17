@@ -4,7 +4,7 @@ import { DropdownMenuContent, DropdownMenuLabel, DropdownMenuSeparator } from '@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Bell, CheckCheck, AlertCircle, CheckCircle2, Clock, Phone, MessageSquare, Search, Calendar, X, ChevronRight } from 'lucide-react';
+import { Bell, CheckCheck, AlertCircle, CheckCircle2, Clock, Phone, MessageSquare, Search, Calendar, X, ChevronRight, Wifi, WifiOff, Loader2 } from 'lucide-react';
 import { useNotifications } from '@/context/notifications/NotificationContext';
 import { useCommunication } from '@/context/communications/CommunicationContext';
 import { useChat } from '@/context/chat/ChatContextSupabase';
@@ -21,7 +21,7 @@ interface NotificationDropdownProps {
 }
 
 const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
-  const { notifications, markNotificationAsRead, clearAllNotifications } = useNotifications();
+  const { notifications, markNotificationAsRead, clearAllNotifications, realtimeStatus, lastRefresh } = useNotifications();
   const navigate = useNavigate();
   const [activeFilter, setActiveFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -343,13 +343,34 @@ const NotificationDropdown = ({ onClose }: NotificationDropdownProps) => {
               <DropdownMenuLabel className="text-base font-semibold p-0 text-foreground">
                 Notifications
               </DropdownMenuLabel>
-              {(counts.unread > 0 || unreadMessages > 0) && (
-                <p className="text-xs text-muted-foreground">
-                  {counts.unread > 0 && `${counts.unread} unread`}
-                  {counts.unread > 0 && unreadMessages > 0 && ' · '}
-                  {unreadMessages > 0 && `${unreadMessages} new messages`}
-                </p>
-              )}
+              <div className="flex items-center gap-2">
+                {(counts.unread > 0 || unreadMessages > 0) && (
+                  <p className="text-xs text-muted-foreground">
+                    {counts.unread > 0 && `${counts.unread} unread`}
+                    {counts.unread > 0 && unreadMessages > 0 && ' · '}
+                    {unreadMessages > 0 && `${unreadMessages} new messages`}
+                  </p>
+                )}
+                <div 
+                  className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                    realtimeStatus === 'connected' 
+                      ? 'bg-green-500/10 text-green-600 dark:text-green-400' 
+                      : realtimeStatus === 'connecting' 
+                        ? 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400'
+                        : 'bg-red-500/10 text-red-600 dark:text-red-400'
+                  }`}
+                  title={lastRefresh ? `Last updated: ${format(lastRefresh, 'HH:mm:ss')}` : 'Connecting...'}
+                  data-testid="realtime-status"
+                >
+                  {realtimeStatus === 'connected' ? (
+                    <><Wifi className="h-2.5 w-2.5" /> Live</>
+                  ) : realtimeStatus === 'connecting' ? (
+                    <><Loader2 className="h-2.5 w-2.5 animate-spin" /> Connecting</>
+                  ) : (
+                    <><WifiOff className="h-2.5 w-2.5" /> Offline</>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
           <div className="flex gap-1">
