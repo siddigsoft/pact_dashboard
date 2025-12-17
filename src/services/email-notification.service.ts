@@ -828,6 +828,133 @@ PACT Command Center | مركز قيادة باكت`;
   },
 
   // ============================================
+  // TEMPLATE 6B: Site Dispatched to Data Collector
+  // ============================================
+  async sendSiteDispatchedToCollector(
+    email: string,
+    collectorName: string,
+    siteNames: string[],
+    location: string,
+    mmpName: string,
+    assignedBy: string,
+    totalBudget: number,
+    siteId?: string
+  ): Promise<EmailNotificationResult> {
+    const viewSitesUrl = siteId ? `${APP_URL}/mmp?entry=${siteId}` : `${APP_URL}/my-sites`;
+    const siteCount = siteNames.length;
+    const siteList = siteNames.slice(0, 5).join(', ') + (siteNames.length > 5 ? ` and ${siteNames.length - 5} more` : '');
+    
+    const titleEn = `${siteCount} Site(s) Assigned to You - Action Required`;
+    const titleAr = `تم تعيين ${siteCount} موقع(ًا) لك - مطلوب إجراء`;
+    
+    const messageEn = `You have been assigned ${siteCount} site(s) for data collection. Please review the site details and complete your visits according to the schedule.`;
+    const messageAr = `تم تعيينك لـ ${siteCount} موقع(ًا) لجمع البيانات. يرجى مراجعة تفاصيل الموقع وإكمال زياراتك وفقًا للجدول الزمني.`;
+
+    const html = `
+      <!DOCTYPE html>
+      <html dir="ltr">
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${titleEn} | ${titleAr}</title>
+      </head>
+      <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
+        <div style="background-color: white; border-radius: 8px; padding: 40px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <div style="text-align: center; margin-bottom: 30px;">
+            <h1 style="color: #1a1a2e; margin: 0; font-size: 24px;">PACT Command Center</h1>
+            <p style="color: #666; margin: 5px 0 0 0; font-size: 14px;">مركز قيادة باكت</p>
+          </div>
+          
+          <!-- English Section -->
+          <div style="margin-bottom: 25px; padding-bottom: 25px; border-bottom: 1px solid #eee;">
+            <p style="color: #333; font-size: 16px; line-height: 1.5;">Dear ${collectorName},</p>
+            <p style="color: #333; font-size: 16px; line-height: 1.5;">${messageEn}</p>
+            
+            <div style="background-color: #e8f5e9; border-left: 4px solid #4caf50; border-radius: 4px; padding: 16px; margin: 20px 0;">
+              <p style="margin: 0; color: #333;"><strong>Sites Assigned:</strong> ${siteCount}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>Sites:</strong> ${siteList}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>Location:</strong> ${location}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>MMP:</strong> ${mmpName}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>Transport Budget:</strong> ${totalBudget.toLocaleString()} SDG</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>Assigned By:</strong> ${assignedBy}</p>
+            </div>
+            
+            <p style="color: #1976d2; font-size: 14px; font-weight: 600;">Please complete your site visits and submit your reports on time.</p>
+          </div>
+          
+          <!-- Arabic Section -->
+          <div dir="rtl" style="margin-top: 25px; padding-top: 25px; border-top: 1px solid #eee; text-align: right;">
+            <p style="color: #333; font-size: 16px; line-height: 1.8;">عزيزي ${collectorName}،</p>
+            <p style="color: #333; font-size: 16px; line-height: 1.8;">${messageAr}</p>
+            
+            <div style="background-color: #e8f5e9; border-right: 4px solid #4caf50; border-radius: 4px; padding: 16px; margin: 20px 0;">
+              <p style="margin: 0; color: #333;"><strong>المواقع المعينة:</strong> ${siteCount}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>المواقع:</strong> ${siteList}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>الموقع:</strong> ${location}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>خطة المراقبة الشهرية:</strong> ${mmpName}</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>ميزانية النقل:</strong> ${totalBudget.toLocaleString()} جنيه سوداني</p>
+              <p style="margin: 10px 0 0 0; color: #333;"><strong>تم التعيين بواسطة:</strong> ${assignedBy}</p>
+            </div>
+            
+            <p style="color: #1976d2; font-size: 14px; font-weight: 600;">يرجى إكمال زيارات المواقع وتقديم تقاريرك في الوقت المحدد.</p>
+          </div>
+          
+          <div style="text-align: center; margin: 25px 0;">
+            <a href="${viewSitesUrl}" style="display: inline-block; padding: 14px 30px; background-color: #4caf50; color: white; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
+              View My Sites | عرض مواقعي
+            </a>
+          </div>
+          
+          <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+          
+          <p style="color: #999; font-size: 12px; text-align: center;">
+            This is an automated message from PACT Command Center.<br>
+            هذه رسالة آلية من مركز قيادة باكت.<br>
+            ICT Team | فريق تكنولوجيا المعلومات
+          </p>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const text = `Dear ${collectorName},
+
+${messageEn}
+
+Sites Assigned: ${siteCount}
+Sites: ${siteList}
+Location: ${location}
+MMP: ${mmpName}
+Transport Budget: ${totalBudget.toLocaleString()} SDG
+Assigned By: ${assignedBy}
+
+View Sites: ${viewSitesUrl}
+
+---
+
+عزيزي ${collectorName}،
+
+${messageAr}
+
+المواقع المعينة: ${siteCount}
+الموقع: ${location}
+خطة المراقبة الشهرية: ${mmpName}
+ميزانية النقل: ${totalBudget.toLocaleString()} جنيه سوداني
+تم التعيين بواسطة: ${assignedBy}
+
+---
+PACT Command Center | مركز قيادة باكت`;
+
+    return this.sendEmail({
+      to: email,
+      subject: `${titleEn} | ${titleAr}`,
+      recipientName: collectorName,
+      html,
+      text,
+    });
+  },
+
+  // ============================================
   // TEMPLATE 7: Site Assignment
   // ============================================
   async sendSiteAssignment(
