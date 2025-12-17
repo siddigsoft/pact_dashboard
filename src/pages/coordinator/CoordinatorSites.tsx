@@ -1658,7 +1658,6 @@ const CoordinatorSites: React.FC = () => {
                   currentStage: workflow.currentStage === 'awaitingCoordinatorVerification' ? 'verified' : (workflow.currentStage || 'verified'),
                   lastUpdated: new Date().toISOString()
                 };
-
                 await supabase
                   .from('mmp_files')
                   .update({
@@ -2026,8 +2025,12 @@ const CoordinatorSites: React.FC = () => {
           return ad.assigned_to === userId;
         });
         
-        const permitsAttachedCount = { count: userEntries.filter((e: any) => e.status?.toLowerCase() === 'permits_attached').length };
-        const verifiedCount = { count: userEntries.filter((e: any) => e.status?.toLowerCase() === 'verified').length };
+        const permitsAttachedCount = { count: userEntries.filter((e: any) => 
+          e.status?.toLowerCase() === 'permits_attached'
+        ).length };
+        const verifiedCount = { count: userEntries.filter((e: any) => 
+          e.status?.toLowerCase() === 'verified'
+        ).length };
         
         setPermitsAttachedCount(permitsAttachedCount.count || 0);
         setVerifiedSitesCount(verifiedCount.count || 0);
@@ -2840,27 +2843,39 @@ const CoordinatorSites: React.FC = () => {
         <TabsList className="grid w-full grid-cols-3 sm:grid-cols-6 gap-1 h-auto p-1">
           <TabsTrigger value="new" className="flex flex-col items-center justify-center gap-1 rounded-md py-2 px-1 sm:px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-xs sm:text-sm">
             <span>New</span>
-            <Badge variant="secondary" className="text-xs">{newSitesCount}</Badge>
+            <Badge variant="secondary" className="ml-2">
+              {newSitesCount}
+            </Badge>
           </TabsTrigger>
           <TabsTrigger value="permits_attached" className="flex flex-col items-center justify-center gap-1 rounded-md py-2 px-1 sm:px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-xs sm:text-sm">
             <span>CP Verification</span>
-            <Badge variant="secondary" className="text-xs">{permitsAttachedCount}</Badge>
+            <Badge variant="secondary" className="ml-2">
+              {permitsAttachedCount}
+            </Badge>
           </TabsTrigger>
           <TabsTrigger value="verified" className="flex flex-col items-center justify-center gap-1 rounded-md py-2 px-1 sm:px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-xs sm:text-sm">
             <span>Verified</span>
-            <Badge variant="secondary" className="text-xs">{verifiedSitesCount}</Badge>
+            <Badge variant="secondary" className="ml-2">
+              {verifiedSitesCount}
+            </Badge>
           </TabsTrigger>
           <TabsTrigger value="approved" className="flex flex-col items-center justify-center gap-1 rounded-md py-2 px-1 sm:px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-xs sm:text-sm">
             <span>Approved</span>
-            <Badge variant="secondary" className="text-xs">{approvedSitesCount}</Badge>
+            <Badge variant="secondary" className="ml-2">
+              {approvedSitesCount}
+            </Badge>
           </TabsTrigger>
           <TabsTrigger value="completed" className="flex flex-col items-center justify-center gap-1 rounded-md py-2 px-1 sm:px-3 bg-gray-100 hover:bg-gray-200 data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-sm text-xs sm:text-sm">
             <span>Completed</span>
-            <Badge variant="secondary" className="text-xs">{completedSitesCount}</Badge>
+            <Badge variant="secondary" className="ml-2">
+              {completedSitesCount}
+            </Badge>
           </TabsTrigger>
           <TabsTrigger value="rejected" className={`flex flex-col items-center justify-center gap-1 rounded-md py-2 px-1 sm:px-3 ${rejectedSitesCount > 0 ? 'bg-red-200 hover:bg-red-300 data-[state=active]:bg-red-600 data-[state=active]:text-white data-[state=active]:shadow-sm' : 'bg-red-100 hover:bg-red-200 data-[state=active]:bg-red-100 data-[state=active]:text-red-800 data-[state=active]:shadow-sm'} text-xs sm:text-sm`}>
             <span>Rejected</span>
-            <Badge variant="secondary" className="text-xs">{rejectedSitesCount}</Badge>
+            <Badge variant="secondary" className="ml-2">
+              {rejectedSitesCount}
+            </Badge>
           </TabsTrigger>
         </TabsList>
 
@@ -2957,24 +2972,24 @@ const CoordinatorSites: React.FC = () => {
                       <p className="text-muted-foreground">Loading localities...</p>
                     </div>
                   ) : (() => {
-        // Get all localities from states that have state permits
-        const localRequiredLocalities = localitiesData
-          .filter((state: any) => state.hasStatePermit)
-          .flatMap((state: any) => 
-            state.localities.map((locality: any) => ({
-              ...locality,
-              stateName: state.state
-            }))
-          )
-          .filter((locality: any) => !locality.hasPermit) // Only show localities without local permits
-          .filter((locality: any) => {
-            // Only show localities that have pending sites
-            return locality.sites.some((site: SiteVisit) => 
-              site.status === 'Pending' || site.status === 'Dispatched' || 
-              site.status === 'assigned' || site.status === 'inProgress' || 
-              site.status === 'in_progress'
-            );
-          });                    const filteredLocalities = localRequiredLocalities.filter((locality: any) => 
+                    // Get all localities from states that have state permits
+                    const localRequiredLocalities = localitiesData
+                      .filter((state: any) => state.hasStatePermit)
+                      .flatMap((state: any) => 
+                        state.localities.map((locality: any) => ({
+                          ...locality,
+                          stateName: state.state
+                        }))
+                      )
+                      .filter((locality: any) => !locality.hasPermit) // Only show localities without local permits
+                      .filter((locality: any) => {
+                        // Only show localities that have pending sites
+                        return locality.sites.some((site: SiteVisit) => 
+                          site.status === 'Pending' || site.status === 'Dispatched' || 
+                          site.status === 'assigned' || site.status === 'inProgress' || 
+                          site.status === 'in_progress'
+                        );
+                      });                    const filteredLocalities = localRequiredLocalities.filter((locality: any) => 
                       locality.locality.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
                       locality.stateName.toLowerCase().includes(debouncedSearchQuery.toLowerCase())
                     );
@@ -4098,7 +4113,7 @@ const CoordinatorSites: React.FC = () => {
                   // Now show the local permit question dialog
                   setSelectedLocalityForWorkflow(selectedStateForWorkflow);
                   setPermitQuestionDialogOpen(true);
-                  setSelectedStateForWorkflow(null);
+                  setSelectedStateForSequentialUpload(null);
                 }}
               />
             </div>
@@ -4177,7 +4192,7 @@ const CoordinatorSites: React.FC = () => {
                 onComplete={() => {
                   setSequentialPermitDialogOpen(false);
                   setSelectedStateForSequentialUpload(null);
-                  loadSites();
+                  refreshMMPFiles();
                   toast({
                     title: "Permits uploaded",
                     description: `Permits for ${selectedStateForSequentialUpload.state} have been processed.`,
@@ -4204,7 +4219,7 @@ const CoordinatorSites: React.FC = () => {
           </DialogHeader>
           <div className="py-4">
             <p className="text-sm text-muted-foreground">
-              If you can proceed without the local permit, this site will be moved to "Permits Attached" and you can verify it immediately.
+              If you can proceed without the local permit, this site will be moved to "Permits Attached" and allow immediate verification.
               If you cannot proceed without the permit, the site will remain in this locality and wait for the local permit to be uploaded.
             </p>
           </div>
