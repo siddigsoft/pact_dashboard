@@ -976,24 +976,15 @@ export const NotificationTriggerService = {
         }
       }
       
-      // Add ONE Super Admin - lookup from super_admins table joined with profiles
-      const { data: superAdminRecords } = await supabase
-        .from('super_admins')
-        .select('user_id, is_active')
-        .eq('is_active', true)
+      // Add ONE Super Admin
+      const { data: superAdmins } = await supabase
+        .from('profiles')
+        .select('email')
+        .in('role', ['superAdmin', 'super_admin', 'SuperAdmin'])
         .limit(1);
       
-      if (superAdminRecords?.[0]?.user_id) {
-        const { data: saProfile } = await supabase
-          .from('profiles')
-          .select('email')
-          .eq('id', superAdminRecords[0].user_id)
-          .single();
-        
-        if (saProfile?.email && !ccEmails.includes(saProfile.email)) {
-          ccEmails.push(saProfile.email);
-          console.log(`[NOTIFICATION] Added Super Admin CC: ${saProfile.email}`);
-        }
+      if (superAdmins?.[0]?.email && !ccEmails.includes(superAdmins[0].email)) {
+        ccEmails.push(superAdmins[0].email);
       }
 
       // 2. If specific coordinators provided, notify them directly
@@ -1095,24 +1086,15 @@ export const NotificationTriggerService = {
         }
       }
       
-      // Add ONE Super Admin - lookup from super_admins table joined with profiles
-      const { data: superAdminRecords } = await supabase
-        .from('super_admins')
-        .select('user_id, is_active')
-        .eq('is_active', true)
+      // Add ONE Super Admin
+      const { data: superAdmins } = await supabase
+        .from('profiles')
+        .select('email')
+        .in('role', ['superAdmin', 'super_admin', 'SuperAdmin'])
         .limit(1);
       
-      if (superAdminRecords?.[0]?.user_id) {
-        const { data: saProfile } = await supabase
-          .from('profiles')
-          .select('email')
-          .eq('id', superAdminRecords[0].user_id)
-          .single();
-        
-        if (saProfile?.email && !ccEmails.includes(saProfile.email)) {
-          ccEmails.push(saProfile.email);
-          console.log(`[NOTIFICATION] Added Super Admin CC: ${saProfile.email}`);
-        }
+      if (superAdmins?.[0]?.email && !ccEmails.includes(superAdmins[0].email)) {
+        ccEmails.push(superAdmins[0].email);
       }
 
       // 2. If specific FOM provided, notify them directly
@@ -1460,24 +1442,15 @@ export const NotificationTriggerService = {
       // 2. CC only ONE Super Admin (no hub supervisors for FOM forwarding)
       const ccEmails: string[] = [];
       
-      // Add ONE Super Admin - lookup from super_admins table joined with profiles
-      const { data: superAdminRecords } = await supabase
-        .from('super_admins')
-        .select('user_id, is_active')
-        .eq('is_active', true)
+      // Add ONE Super Admin only
+      const { data: superAdmins } = await supabase
+        .from('profiles')
+        .select('email')
+        .in('role', ['superAdmin', 'super_admin', 'SuperAdmin'])
         .limit(1);
       
-      if (superAdminRecords?.[0]?.user_id) {
-        const { data: saProfile } = await supabase
-          .from('profiles')
-          .select('email')
-          .eq('id', superAdminRecords[0].user_id)
-          .single();
-        
-        if (saProfile?.email) {
-          ccEmails.push(saProfile.email);
-          console.log(`[NOTIFICATION] Added Super Admin CC: ${saProfile.email}`);
-        }
+      if (superAdmins?.[0]?.email) {
+        ccEmails.push(superAdmins[0].email);
       }
 
       // 3. Notify all selected FOMs with bilingual email (CC Super Admin only)

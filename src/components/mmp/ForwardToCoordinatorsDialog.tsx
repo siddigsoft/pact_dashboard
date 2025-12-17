@@ -114,38 +114,27 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
       const isGroupedForwarding = siteGroups && siteGroups.length > 0;
 
       if (isGroupedForwarding) {
-        // Forward grouped sites to coordinators - OPTIMIZED with parallel operations
+        // Forward grouped sites to coordinators
         const now = new Date().toISOString();
-        const { data: auth } = await supabase.auth.getUser();
-        const forwarderId = auth?.user?.id;
-        const forwarderName = (currentUser as any)?.full_name || (currentUser as any)?.fullName || currentUser?.email || 'Field Operations Manager';
 
-        // Process all groups in parallel
-        const groupPromises = siteGroups!.filter(group => {
+        for (const group of siteGroups!) {
           const groupKey = `${group.stateId}|${group.localityId}`;
           const selectedCoordinators = groupSelections[groupKey] || new Set();
-          return selectedCoordinators.size > 0;
-        }).map(async (group) => {
-          const groupKey = `${group.stateId}|${group.localityId}`;
-          const selectedCoordinators = groupSelections[groupKey] || new Set();
+
+          if (selectedCoordinators.size === 0) continue; // Skip groups with no selection
+
           const coordinatorIds = Array.from(selectedCoordinators);
           const siteIdsInGroup = group.sites.map(s => s.id);
           const siteNamesInGroup = group.sites.map(s => s.siteName || s.siteCode || `Site ${s.id}`);
-          const locationInfo = `${group.stateName}${group.localityName ? ` - ${group.localityName}` : ''}`;
 
-          // Batch fetch all workflows for this group
-          const { data: siteRows, error: fetchErr } = await supabase
-            .from('mmp_site_entries')
-            .select('id, workflow')
-            .in('id', siteIdsInGroup);
+          // Update each site entry in this group
+          for (const siteId of siteIdsInGroup) {
+            const { data: row } = await supabase
+              .from('mmp_site_entries')
+              .select('workflow')
+              .eq('id', siteId)
+              .single();
 
-          if (fetchErr) {
-            console.error(`[FORWARD] Failed to fetch sites for group ${groupKey}:`, fetchErr);
-            throw fetchErr;
-          }
-
-          // Prepare batch updates for all sites in group
-          const updatePromises = (siteRows || []).map(row => {
             const wf = (row?.workflow as any) || {};
             const list: string[] = Array.isArray(wf.forwardedToCoordinatorIds) ? wf.forwardedToCoordinatorIds : [];
             const unique = Array.from(new Set([...list, ...coordinatorIds]));
@@ -156,86 +145,78 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
               forwardedToCoordinators: true,
               forwardedAt: now,
               lastUpdated: now,
-              locked: true
+              locked: true // Lock the site after forwarding
             };
-            return supabase.from('mmp_site_entries').update({ workflow: next }).eq('id', row.id);
-          });
-
-          // Execute all site updates in parallel and check for errors
-          const updateResults = await Promise.all(updatePromises);
-          const updateErrors = updateResults.filter(r => r.error).map(r => r.error);
-          if (updateErrors.length > 0) {
-            console.error(`[FORWARD] Failed to update ${updateErrors.length} sites in group ${groupKey}:`, updateErrors);
-            throw new Error(`Failed to update ${updateErrors.length} site(s)`);
+            await supabase.from('mmp_site_entries').update({ workflow: next }).eq('id', siteId);
           }
 
-          // Insert notifications for coordinators (single batch insert)
-          const notificationRows = coordinatorIds.map(uid => ({
+          // Insert notifications for coordinators in this group
+          const rows = coordinatorIds.map(uid => ({
             recipient_id: uid,
             title_en: 'Sites forwarded to you',
             title_ar: 'تم إرسال مواقع إليك',
-            message_en: `${siteNamesInGroup.join(', ')} (${locationInfo}) have been forwarded to you for verification`,
-            message_ar: `تم إرسال ${siteNamesInGroup.join(', ')} (${locationInfo}) إليك للتحقق`,
+            message_en: `${siteNamesInGroup.join(', ')} (${group.stateName}${group.localityName ? ` - ${group.localityName}` : ''}) have been forwarded to you for verification`,
+            message_ar: `تم إرسال ${siteNamesInGroup.join(', ')} (${group.stateName}${group.localityName ? ` - ${group.localityName}` : ''}) إليك للتحقق`,
             action_url: `/mmp/${mmpId}`,
-            entity_id: siteIdsInGroup[0],
+            entity_id: siteIdsInGroup[0], // Use first site ID as reference
             entity_type: 'mmpSiteEntry',
             event_type: 'assignments',
             status: 'pending',
             priority: 'normal'
           }));
-          const { error: notifErr } = await supabase.from('notifications').insert(notificationRows);
-          if (notifErr) {
-            console.error(`[FORWARD] Failed to insert notifications for group ${groupKey}:`, notifErr);
-            throw notifErr;
-          }
+          const { error: nErr } = await supabase.from('notifications').insert(rows);
+          if (nErr) throw nErr;
 
-          // Send emails in parallel (fire-and-forget, don't wait)
-          coordinatorIds.forEach(coordId => {
+          // Send email notifications directly to coordinators
+          const forwarderName = (currentUser as any)?.full_name || (currentUser as any)?.fullName || currentUser?.email || 'Field Operations Manager';
+          const locationInfo = `${group.stateName}${group.localityName ? ` - ${group.localityName}` : ''}`;
+          
+          for (const coordId of coordinatorIds) {
             const coord = coordinators.find(c => c.id === coordId);
             if (coord?.email) {
-              console.log(`[EMAIL] Sending sites forwarded email to coordinator: ${coord.email}`);
-              EmailNotificationService.sendSitesForwardedToCoordinator(
-                coord.email,
-                coord.full_name || coord.username || 'Coordinator',
-                siteNamesInGroup,
-                mmpName || 'MMP',
-                forwarderName,
-                locationInfo,
-                mmpId
-              ).then(result => {
+              try {
+                console.log(`[EMAIL] Sending sites forwarded email to coordinator: ${coord.email}`);
+                const result = await EmailNotificationService.sendSitesForwardedToCoordinator(
+                  coord.email,
+                  coord.full_name || coord.username || 'Coordinator',
+                  siteNamesInGroup,
+                  mmpName || 'MMP',
+                  forwarderName,
+                  locationInfo,
+                  mmpId
+                );
                 if (result.success) {
                   console.log(`[EMAIL] Successfully sent to coordinator: ${coord.email}`);
                 } else {
                   console.error(`[EMAIL] Failed to send to coordinator ${coord.email}:`, result.error);
                 }
-              }).catch(emailError => {
+              } catch (emailError) {
                 console.error(`[EMAIL] Error sending to coordinator ${coord.email}:`, emailError);
-              });
+              }
             }
-          });
-
-          // Notify the forwarder
-          if (forwarderId) {
-            await supabase.from('notifications').insert({
-              recipient_id: forwarderId,
-              title_en: 'Sites forwarded',
-              title_ar: 'تم إرسال المواقع',
-              message_en: `You forwarded ${siteNamesInGroup.join(', ')} (${locationInfo}) to ${coordinatorIds.length} Coordinator(s)`,
-              message_ar: `قمت بإرسال ${siteNamesInGroup.join(', ')} (${locationInfo}) إلى ${coordinatorIds.length} منسق(ين)`,
-              action_url: `/mmp/${mmpId}`,
-              entity_id: siteIdsInGroup[0],
-              entity_type: 'mmpSiteEntry',
-              event_type: 'system',
-              status: 'pending',
-              priority: 'normal'
-            });
           }
 
-          return { groupKey, coordinatorCount: coordinatorIds.length };
-        });
-
-        // Wait for all groups to complete
-        await Promise.all(groupPromises);
+          // Notify the forwarder
+          try {
+            const { data: auth } = await supabase.auth.getUser();
+            const forwarderId = auth?.user?.id;
+            if (forwarderId) {
+              await supabase.from('notifications').insert({
+                recipient_id: forwarderId,
+                title_en: 'Sites forwarded',
+                title_ar: 'تم إرسال المواقع',
+                message_en: `You forwarded ${siteNamesInGroup.join(', ')} (${group.stateName}${group.localityName ? ` - ${group.localityName}` : ''}) to ${coordinatorIds.length} Coordinator(s)`,
+                message_ar: `قمت بإرسال ${siteNamesInGroup.join(', ')} (${group.stateName}${group.localityName ? ` - ${group.localityName}` : ''}) إلى ${coordinatorIds.length} منسق(ين)`,
+                action_url: `/mmp/${mmpId}`,
+                entity_id: siteIdsInGroup[0],
+                entity_type: 'mmpSiteEntry',
+                event_type: 'system',
+                status: 'pending',
+                priority: 'normal'
+              });
+            }
+          } catch {}
+        }
 
         toast({ title: 'Sites forwarded', description: `Forwarded sites to coordinators by locality` });
 
@@ -263,28 +244,20 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
           }
         }
       } else if (isSiteForwarding) {
-        // Forward all sites to coordinators - OPTIMIZED with parallel operations
+        // Forward all sites to coordinators (existing logic)
         const now = new Date().toISOString();
-        const ids = Array.from(selected);
-        const siteNamesStr = siteNames?.join(', ') || 'sites';
-        const forwarderNameNonGrouped = (currentUser as any)?.full_name || (currentUser as any)?.fullName || currentUser?.email || 'Field Operations Manager';
 
-        // Batch fetch all site workflows in one query
-        const { data: siteRows, error: fetchErr } = await supabase
-          .from('mmp_site_entries')
-          .select('id, workflow')
-          .in('id', siteIds!);
+        // Update each site entry
+        for (const siteId of siteIds!) {
+          const { data: row } = await supabase
+            .from('mmp_site_entries')
+            .select('workflow')
+            .eq('id', siteId)
+            .single();
 
-        if (fetchErr) {
-          console.error('[FORWARD] Failed to fetch site workflows:', fetchErr);
-          throw fetchErr;
-        }
-
-        // Update all sites in parallel
-        const updatePromises = (siteRows || []).map(row => {
           const wf = (row?.workflow as any) || {};
           const list: string[] = Array.isArray(wf.forwardedToCoordinatorIds) ? wf.forwardedToCoordinatorIds : [];
-          const unique = Array.from(new Set([...list, ...ids]));
+          const unique = Array.from(new Set([...list, ...Array.from(selected)]));
           const next = {
             ...wf,
             currentStage: 'awaitingCoordinatorVerification',
@@ -292,60 +265,57 @@ export const ForwardToCoordinatorsDialog: React.FC<ForwardToCoordinatorsDialogPr
             forwardedToCoordinators: true,
             forwardedAt: now,
             lastUpdated: now,
-            locked: true
+            locked: true // Lock the site after forwarding
           };
-          return supabase.from('mmp_site_entries').update({ workflow: next }).eq('id', row.id);
-        });
-        
-        // Execute all site updates in parallel and check for errors
-        const updateResults = await Promise.all(updatePromises);
-        const updateErrors = updateResults.filter(r => r.error).map(r => r.error);
-        if (updateErrors.length > 0) {
-          console.error(`[FORWARD] Failed to update ${updateErrors.length} sites:`, updateErrors);
-          throw new Error(`Failed to update ${updateErrors.length} site(s)`);
+          await supabase.from('mmp_site_entries').update({ workflow: next }).eq('id', siteId);
         }
 
-        // Insert notifications for each coordinator (batch insert)
-        const notificationRows = ids.map(uid => ({
+        // Insert notifications for each coordinator
+        const ids = Array.from(selected);
+        const siteNamesStr = siteNames?.join(', ') || 'sites';
+        const rows = ids.map(uid => ({
           recipient_id: uid,
           title_en: 'Sites forwarded to you',
           title_ar: 'تم إرسال مواقع إليك',
           message_en: `${siteNamesStr} have been forwarded to you for verification`,
           message_ar: `تم إرسال ${siteNamesStr} إليك للتحقق`,
           action_url: `/mmp/${mmpId}`,
-          entity_id: siteIds![0],
+          entity_id: siteIds![0], // Use first site ID as reference
           entity_type: 'mmpSiteEntry',
           event_type: 'assignments',
           status: 'pending',
           priority: 'normal'
         }));
-        const { error: nErr } = await supabase.from('notifications').insert(notificationRows);
+        const { error: nErr } = await supabase.from('notifications').insert(rows);
         if (nErr) throw nErr;
 
-        // Send emails in parallel (fire-and-forget, don't wait)
-        ids.forEach(coordId => {
+        // Send email notifications directly to coordinators
+        const forwarderNameNonGrouped = (currentUser as any)?.full_name || (currentUser as any)?.fullName || currentUser?.email || 'Field Operations Manager';
+        
+        for (const coordId of ids) {
           const coord = coordinators.find(c => c.id === coordId);
           if (coord?.email) {
-            console.log(`[EMAIL] Sending sites forwarded email to coordinator: ${coord.email}`);
-            EmailNotificationService.sendSitesForwardedToCoordinator(
-              coord.email,
-              coord.full_name || coord.username || 'Coordinator',
-              siteNames || ['Sites'],
-              mmpName || 'MMP',
-              forwarderNameNonGrouped,
-              'Multiple locations',
-              mmpId
-            ).then(result => {
+            try {
+              console.log(`[EMAIL] Sending sites forwarded email to coordinator: ${coord.email}`);
+              const result = await EmailNotificationService.sendSitesForwardedToCoordinator(
+                coord.email,
+                coord.full_name || coord.username || 'Coordinator',
+                siteNames || ['Sites'],
+                mmpName || 'MMP',
+                forwarderNameNonGrouped,
+                'Multiple locations',
+                mmpId
+              );
               if (result.success) {
                 console.log(`[EMAIL] Successfully sent to coordinator: ${coord.email}`);
               } else {
                 console.error(`[EMAIL] Failed to send to coordinator ${coord.email}:`, result.error);
               }
-            }).catch(emailError => {
+            } catch (emailError) {
               console.error(`[EMAIL] Error sending to coordinator ${coord.email}:`, emailError);
-            });
+            }
           }
-        });
+        }
 
         // Notify the forwarder
         try {

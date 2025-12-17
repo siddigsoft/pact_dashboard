@@ -3,7 +3,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { useUser } from '../user/UserContext';
 import { useToast } from '@/hooks/use-toast';
 import { useRealtimeTable } from '@/hooks/useRealtimeResource';
-import { normalizeRole } from '@/utils/roleMapping';
 import {
   SuperAdmin,
   CreateSuperAdmin,
@@ -118,34 +117,12 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
 
   const checkSuperAdminStatus = useCallback(async (userId: string): Promise<boolean> => {
     try {
-      // First check the super_admins table
       const { data, error } = await supabase
         .from('super_admins')
         .select('*')
         .eq('user_id', userId)
         .eq('is_active', true)
         .maybeSingle();
-
-      if (!error && data) {
-        console.log('[SuperAdmin] Found active entry in super_admins table');
-        return true;
-      }
-
-      // Fallback: Check if the user's profile role is superAdmin
-      // This allows super admin access even without a super_admins table entry
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', userId)
-        .maybeSingle();
-
-      if (!profileError && profileData?.role) {
-        const normalizedRole = normalizeRole(profileData.role);
-        if (normalizedRole === 'superAdmin') {
-          console.log('[SuperAdmin] User has superAdmin role in profile, granting access');
-          return true;
-        }
-      }
 
       if (error) {
         // Suppress RLS permission errors - just log and return false
@@ -155,7 +132,7 @@ export function SuperAdminProvider({ children }: { children: React.ReactNode }) 
         }
         throw error;
       }
-      return false;
+      return !!data;
     } catch (error: any) {
       // Suppress permission-related errors silently
       if (!error.message?.includes('permission') && !error.message?.includes('RLS') && error.code !== '42501') {
