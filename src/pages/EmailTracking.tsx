@@ -51,6 +51,7 @@ import {
 import { format, parseISO, isValid } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { EmailNotificationService } from '@/services/email-notification.service';
+import { logEmailSend } from '@/utils/audit-logger';
 
 interface EmailLog {
   id: string;
@@ -431,33 +432,9 @@ export default function EmailTracking() {
     return matchesSearch && matchesStatus && matchesType;
   });
 
-  // Store email log locally for immediate display
-  const storeLocalEmailLog = (recipient: string, subject: string, success: boolean, error?: string) => {
-    try {
-      const stored = localStorage.getItem('pact_audit_logs');
-      const logs = stored ? JSON.parse(stored) : [];
-      const newLog = {
-        id: `email-${Date.now()}`,
-        module: 'notification',
-        entityType: 'email',
-        entity_type: 'email',
-        entityName: subject,
-        entity_name: subject,
-        description: success ? `Email sent to ${recipient}: ${subject}` : `Failed to send email to ${recipient}`,
-        timestamp: new Date().toISOString(),
-        success,
-        errorMessage: error,
-        error_message: error,
-        metadata: { recipient, subject, emailType: 'test' },
-        actorName: 'System',
-        actor_name: 'System',
-        tags: ['notification', 'email', 'test'],
-      };
-      logs.unshift(newLog);
-      localStorage.setItem('pact_audit_logs', JSON.stringify(logs.slice(0, 1000)));
-    } catch (e) {
-      console.warn('Failed to store local email log:', e);
-    }
+  // Log email send to audit_logs database
+  const logTestEmailSend = async (recipient: string, subject: string, success: boolean, messageId?: string, error?: string) => {
+    await logEmailSend(recipient, subject, 'test', success, messageId, error);
   };
 
   const [diagnosticResult, setDiagnosticResult] = useState<string | null>(null);
@@ -497,9 +474,11 @@ export default function EmailTracking() {
       const resultInfo = JSON.stringify({ data, error }, null, 2);
       setDiagnosticResult(resultInfo);
 
+      const subject = 'PACT SMTP Test | اختبار البريد';
+      
       if (error) {
         console.error('[DIAGNOSTIC] Invocation error:', error);
-        storeLocalEmailLog(testEmail, 'SMTP Direct Test', false, error.message);
+        await logTestEmailSend(testEmail, subject, false, undefined, error.message);
         toast({
           title: 'Edge Function Error',
           description: `Invocation failed: ${error.message}`,
@@ -507,7 +486,7 @@ export default function EmailTracking() {
         });
       } else if (data && !data.success) {
         console.error('[DIAGNOSTIC] SMTP error:', data.error);
-        storeLocalEmailLog(testEmail, 'SMTP Direct Test', false, data.error);
+        await logTestEmailSend(testEmail, subject, false, undefined, data.error);
         toast({
           title: 'SMTP Error',
           description: data.error || 'Email sending failed - check diagnostic output below',
@@ -515,7 +494,7 @@ export default function EmailTracking() {
         });
       } else if (data?.success) {
         console.log('[DIAGNOSTIC] Success:', data);
-        storeLocalEmailLog(testEmail, 'SMTP Direct Test', true);
+        await logTestEmailSend(testEmail, subject, true, data.messageId);
         toast({
           title: 'Email sent successfully',
           description: `Message ID: ${data.messageId}. Check inbox and spam folder.`,
@@ -528,7 +507,7 @@ export default function EmailTracking() {
       console.error('[DIAGNOSTIC] Exception:', error);
       const errorInfo = JSON.stringify({ error: error.message, stack: error.stack }, null, 2);
       setDiagnosticResult(errorInfo);
-      storeLocalEmailLog(testEmail, 'SMTP Direct Test', false, error.message);
+      await logTestEmailSend(testEmail, 'PACT SMTP Test', false, undefined, error.message);
       toast({
         title: 'Error',
         description: error.message || 'Failed to send test email',
