@@ -97,7 +97,21 @@ export const PermitVerificationQuestions: React.FC<PermitVerificationQuestionsPr
 
   const handleStatePermitUploaded = () => {
     setStatePermitUploaded(true);
-    setStep('locality_question');
+    // Instead of proceeding to locality questions, complete the verification with state permit uploaded
+    // and locality marked as not required (to close the dialog)
+    const decision: PermitDecision = {
+      statePermit: {
+        requirement: 'required_have_it',
+        canWorkWithout: null,
+        uploaded: true,
+      },
+      localityPermit: {
+        requirement: 'not_required',
+        canWorkWithout: null,
+        uploaded: false,
+      },
+    };
+    onComplete(decision);
   };
 
   const handleLocalityPermitNext = () => {
