@@ -107,7 +107,12 @@ export const RoleManagementProvider: React.FC<{ children: React.ReactNode }> = (
                 return { role_id: admin.id, resource, action, conditions: null as any };
               });
             if (missing.length > 0) {
-              await supabase.from('permissions').upsert(missing, { onConflict: 'role_id,resource,action' });
+              try {
+                await supabase.from('permissions').upsert(missing, { onConflict: 'role_id,resource,action' });
+              } catch {
+                // permissions table may not exist in some deployments
+                console.debug('[RoleManagement] permissions table not available');
+              }
             }
           }
         }
