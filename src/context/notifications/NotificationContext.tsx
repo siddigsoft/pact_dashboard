@@ -111,17 +111,22 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           setCurrentUserRole(profile.role);
         }
         
-        // Fetch user's project memberships
-        const { data: teamMemberships } = await supabase
-          .from('team_members')
-          .select('project_id')
-          .eq('user_id', currentUserId);
-        
-        if (teamMemberships) {
-          const projectIds = teamMemberships
-            .map(m => m.project_id)
-            .filter((id): id is string => id !== null);
-          setCurrentUserProjects(projectIds);
+        // Fetch user's project memberships (table may not exist in some deployments)
+        try {
+          const { data: teamMemberships, error: teamError } = await supabase
+            .from('team_members')
+            .select('project_id')
+            .eq('user_id', currentUserId);
+          
+          if (!teamError && teamMemberships) {
+            const projectIds = teamMemberships
+              .map(m => m.project_id)
+              .filter((id): id is string => id !== null);
+            setCurrentUserProjects(projectIds);
+          }
+        } catch {
+          // team_members table may not exist - this is optional
+          console.debug('[Notifications] team_members table not available, skipping project filter');
         }
       } catch (error) {
         console.error('Error fetching user role/projects:', error);

@@ -555,14 +555,19 @@ export const NotificationTriggerService = {
       let targetUserIds = users.map(u => u.id);
       
       if (projectId) {
-        const { data: teamMembers } = await supabase
-          .from('team_members')
-          .select('user_id')
-          .eq('project_id', projectId);
-        
-        if (teamMembers) {
-          const projectUserIds = teamMembers.map(m => m.user_id);
-          targetUserIds = targetUserIds.filter(id => projectUserIds.includes(id));
+        try {
+          const { data: teamMembers, error: teamError } = await supabase
+            .from('team_members')
+            .select('user_id')
+            .eq('project_id', projectId);
+          
+          if (!teamError && teamMembers) {
+            const projectUserIds = teamMembers.map(m => m.user_id);
+            targetUserIds = targetUserIds.filter(id => projectUserIds.includes(id));
+          }
+        } catch {
+          // team_members table may not exist - skip project filtering
+          console.debug('[Notifications] team_members table not available');
         }
       }
       
@@ -584,12 +589,21 @@ export const NotificationTriggerService = {
     options: Omit<TriggerNotificationOptions, 'userId' | 'projectId'>
   ): Promise<number> {
     try {
+      // Try to get team members, but this table may not exist
       const { data: teamMembers, error } = await supabase
         .from('team_members')
         .select('user_id')
         .eq('project_id', projectId);
       
       if (error) {
+        // If table doesn't exist (404), fall back to all users in the project scope
+        if (error.code === 'PGRST116' || error.message?.includes('does not exist')) {
+          console.debug('[Notifications] team_members table not found, falling back to all users');
+          // Fall back: send to admins/FOMs who might be interested
+          return await this.sendToRoles(['super_admin', 'admin', 'fom'], {
+            ...options,
+          });
+        }
         console.error('Failed to fetch project team members:', error);
         return 0;
       }
