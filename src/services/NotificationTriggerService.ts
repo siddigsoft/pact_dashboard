@@ -1377,100 +1377,74 @@ export const NotificationTriggerService = {
   ): Promise<number> {
     try {
       let successCount = 0;
-      const sender = forwarderName || 'System';
+      const sender = forwarderName || 'Admin';
 
-      // 1. Fetch FOM user details for bilingual emails
-      const { data: fomUsers, error: fomError } = await supabase
-        .from('profiles')
-        .select('id, full_name, email')
-        .in('id', fomUserIds);
-
-      if (fomError) {
-        console.error('Error fetching FOM user details:', fomError);
+      // 1. Get FOM users (from the provided IDs)
+      const fomUsers = [];
+      for (const fomId of fomUserIds) {
+        try {
+          const { data: user } = await supabase
+            .from('profiles')
+            .select('id, full_name, email, role')
+            .eq('id', fomId)
+            .single();
+          if (user) fomUsers.push(user);
+        } catch (e) {
+          console.error(`Failed to fetch FOM ${fomId}:`, e);
+        }
       }
 
-      // 2. Notify all selected FOMs with bilingual email
-      for (const fomId of fomUserIds) {
-        const fomUser = fomUsers?.find(u => u.id === fomId);
-        const recipientName = fomUser?.full_name || 'Field Operations Manager';
-        const recipientEmail = fomUser?.email;
+      // 2. Get all Admins and Super Admins
+      const { data: adminUsers, error: adminError } = await supabase
+        .from('profiles')
+        .select('id, full_name, email, role')
+        .in('role', ['admin', 'super_admin', 'Admin', 'SuperAdmin']);
 
-        // Create in-app notification
+      if (adminError) {
+        console.error('Error fetching admins for MMP->FOM notification:', adminError);
+      }
+
+      // Combine FOMs and admins, remove duplicates
+      const allRecipients = [...fomUsers];
+      if (adminUsers) {
+        const existingIds = new Set(allRecipients.map(u => u.id));
+        allRecipients.push(...adminUsers.filter(a => !existingIds.has(a.id)));
+      }
+
+      // 3. Send in-app notifications and bilingual emails to all recipients
+      for (const user of allRecipients) {
+        const isRecipientFOM = fomUserIds.includes(user.id);
+
         const sent = await this.send({
-          userId: fomId,
-          title: 'MMP Forwarded to You',
-          message: `MMP "${mmpName}" has been forwarded to you for permits attachment by ${sender}`,
+          userId: user.id,
+          title: 'MMP Forwarded to FOM',
+          message: `MMP "${mmpName}" has been forwarded to FOM(s) for permits attachment by ${sender}`,
           type: 'info',
           category: 'assignments',
           priority: 'high',
-          link: `/mmp/${mmpId}`,
+          link: mmpId ? `/mmp/${mmpId}` : '/mmp',
           relatedEntityId: mmpId,
           relatedEntityType: 'mmpFile',
           sendEmail: false // We send bilingual email separately
         });
         if (sent) successCount++;
 
-        // Send bilingual email directly
-        if (recipientEmail) {
+        // Send bilingual email with role-based greeting
+        if (user.email) {
           try {
+            const roleInfo = formatRoleName(user.role);
             await EmailNotificationService.sendMMPForwardedToFOM(
-              recipientEmail,
-              recipientName,
+              user.email,
+              user.full_name || 'Team Member',
               mmpName,
               sender,
-              mmpId,
-              true // isRecipientFOM
+              mmpId || '',
+              isRecipientFOM,
+              roleInfo
             );
-            console.log(`[NOTIFICATION] Sent bilingual MMP forwarded email to FOM: ${recipientEmail}`);
+            console.log(`[NOTIFICATION] Sent bilingual MMP->FOM email to ${roleInfo.en}: ${user.email}`);
           } catch (emailError) {
-            console.error(`[NOTIFICATION] Failed to send bilingual email to FOM ${recipientEmail}:`, emailError);
-          }
-        }
-      }
-
-      // 3. Fetch all Admins and Super Admins
-      const { data: adminUsers, error: adminError } = await supabase
-        .from('profiles')
-        .select('id, full_name, email')
-        .in('role', ['admin', 'super_admin', 'Admin', 'SuperAdmin']);
-
-      if (adminError) {
-        console.error('Error fetching admins for MMP forward notification:', adminError);
-      } else if (adminUsers && adminUsers.length > 0) {
-        // 4. Notify all Admins/Super Admins with bilingual email
-        for (const admin of adminUsers) {
-          const recipientName = admin.full_name || 'Administrator';
-          
-          // Create in-app notification
-          const sent = await this.send({
-            userId: admin.id,
-            title: 'MMP Forwarded to FOM',
-            message: `MMP "${mmpName}" has been forwarded to ${fomUserIds.length} Field Operations Manager(s) by ${sender}`,
-            type: 'info',
-            category: 'assignments',
-            priority: 'high',
-            link: `/mmp/${mmpId}`,
-            relatedEntityId: mmpId,
-            relatedEntityType: 'mmpFile',
-            sendEmail: false // We send bilingual email separately
-          });
-          if (sent) successCount++;
-
-          // Send bilingual email directly
-          if (admin.email) {
-            try {
-              await EmailNotificationService.sendMMPForwardedToFOM(
-                admin.email,
-                recipientName,
-                mmpName,
-                sender,
-                mmpId,
-                false // isRecipientFOM (admin gets info notification, not action required)
-              );
-              console.log(`[NOTIFICATION] Sent bilingual MMP forwarded email to Admin: ${admin.email}`);
-            } catch (emailError) {
-              console.error(`[NOTIFICATION] Failed to send bilingual email to Admin ${admin.email}:`, emailError);
-            }
+            console.error(`[NOTIFICATION] Failed to send bilingual email to ${user.email}:`, emailError);
           }
         }
       }
