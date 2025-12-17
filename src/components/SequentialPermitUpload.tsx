@@ -57,6 +57,40 @@ export const SequentialPermitUpload: React.FC<SequentialPermitUploadProps> = ({
   const [currentLocalityIndex, setCurrentLocalityIndex] = useState(0);
   const [statePermitUploaded, setStatePermitUploaded] = useState(false);
 
+  // Check if state permit already exists and set initial step accordingly
+  useEffect(() => {
+    const checkExistingPermits = async () => {
+      try {
+        const { data: mmpData, error } = await supabase
+          .from('mmp_files')
+          .select('permits')
+          .eq('id', mmpFileId)
+          .single();
+
+        if (error) {
+          console.error('Error checking existing permits:', error);
+          return;
+        }
+
+        const permits = mmpData?.permits as any;
+        if (permits?.statePermits) {
+          const existingStatePermit = permits.statePermits.find(
+            (p: any) => p.state === state || p.stateId === stateId
+          );
+          if (existingStatePermit) {
+            console.log('State permit already exists, skipping to locality step');
+            setStatePermitUploaded(true);
+            setCurrentStep('ask_locality');
+          }
+        }
+      } catch (err) {
+        console.error('Error checking existing permits:', err);
+      }
+    };
+
+    checkExistingPermits();
+  }, [mmpFileId, state, stateId]);
+
   useEffect(() => {
     const stateData = sudanStates.find(s => 
       s.id === stateId || 
