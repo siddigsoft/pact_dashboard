@@ -379,6 +379,8 @@ export default function EmailTracking() {
     }
   };
 
+  const [diagnosticResult, setDiagnosticResult] = useState<string | null>(null);
+
   const sendTestEmail = async () => {
     if (!testEmail || !testEmail.includes('@')) {
       toast({
@@ -390,38 +392,62 @@ export default function EmailTracking() {
     }
 
     setSendingTest(true);
+    setDiagnosticResult(null);
+    
     try {
-      // Use custom OTP Edge Function - sends through IONOS SMTP
-      const { data, error } = await supabase.functions.invoke('verify-reset-otp', {
-        body: { 
-          email: testEmail.toLowerCase(),
-          action: 'generate'
+      console.log('[DIAGNOSTIC] Calling send-email Edge Function directly...');
+      
+      const { data, error } = await supabase.functions.invoke('send-email', {
+        body: {
+          to: testEmail.toLowerCase(),
+          subject: 'PACT SMTP Test | اختبار البريد',
+          type: 'notification',
+          recipientName: 'Test User',
+          title_en: 'SMTP Connection Test',
+          title_ar: 'اختبار اتصال SMTP',
+          message_en: 'This is a test email to verify SMTP configuration. If you receive this, email is working correctly.',
+          message_ar: 'هذه رسالة اختبار للتحقق من إعدادات SMTP. إذا استلمت هذه الرسالة، فالبريد يعمل بشكل صحيح.',
+          priority: 'normal',
         },
       });
 
-      const success = data?.success && !error;
-      const errorMessage = error?.message || data?.error;
+      console.log('[DIAGNOSTIC] Edge Function response:', { data, error });
+      
+      const resultInfo = JSON.stringify({ data, error }, null, 2);
+      setDiagnosticResult(resultInfo);
 
-      // Store log locally for immediate display
-      storeLocalEmailLog(testEmail, 'Password Reset Test (IONOS SMTP)', success, errorMessage);
-
-      if (success) {
+      if (error) {
+        console.error('[DIAGNOSTIC] Invocation error:', error);
+        storeLocalEmailLog(testEmail, 'SMTP Direct Test', false, error.message);
         toast({
-          title: 'Password reset code sent',
-          description: `6-digit code sent to ${testEmail} via IONOS SMTP. Check inbox (and spam folder).`,
-        });
-        setTestEmail('');
-      } else {
-        toast({
-          title: 'Failed to send test email',
-          description: errorMessage || 'Unknown error occurred',
+          title: 'Edge Function Error',
+          description: `Invocation failed: ${error.message}`,
           variant: 'destructive',
         });
+      } else if (data && !data.success) {
+        console.error('[DIAGNOSTIC] SMTP error:', data.error);
+        storeLocalEmailLog(testEmail, 'SMTP Direct Test', false, data.error);
+        toast({
+          title: 'SMTP Error',
+          description: data.error || 'Email sending failed - check diagnostic output below',
+          variant: 'destructive',
+        });
+      } else if (data?.success) {
+        console.log('[DIAGNOSTIC] Success:', data);
+        storeLocalEmailLog(testEmail, 'SMTP Direct Test', true);
+        toast({
+          title: 'Email sent successfully',
+          description: `Message ID: ${data.messageId}. Check inbox and spam folder.`,
+        });
+        setTestEmail('');
       }
-      // Refresh logs after storing
+      
       setTimeout(fetchEmailLogs, 500);
     } catch (error: any) {
-      storeLocalEmailLog(testEmail, 'Password Reset Test (IONOS SMTP)', false, error.message);
+      console.error('[DIAGNOSTIC] Exception:', error);
+      const errorInfo = JSON.stringify({ error: error.message, stack: error.stack }, null, 2);
+      setDiagnosticResult(errorInfo);
+      storeLocalEmailLog(testEmail, 'SMTP Direct Test', false, error.message);
       toast({
         title: 'Error',
         description: error.message || 'Failed to send test email',
@@ -671,8 +697,35 @@ export default function EmailTracking() {
             </Button>
           </div>
           <p className="text-xs text-muted-foreground mt-2">
-            Tests your IONOS SMTP by sending a password reset email. This uses the same SMTP configured in Supabase Dashboard for all auth emails.
+            Tests your IONOS SMTP directly via the send-email Edge Function. This will show the exact error if email fails.
           </p>
+          
+          {diagnosticResult && (
+            <div className="mt-4 p-4 bg-muted/50 rounded-lg border">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-yellow-500" />
+                  Diagnostic Result (Edge Function Response)
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    navigator.clipboard.writeText(diagnosticResult);
+                    toast({ title: 'Copied', description: 'Diagnostic result copied to clipboard' });
+                  }}
+                >
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+              <pre className="text-xs bg-background p-3 rounded border overflow-auto max-h-48 whitespace-pre-wrap">
+                {diagnosticResult}
+              </pre>
+              <p className="text-xs text-muted-foreground mt-2">
+                If "requestId" appears, the new Edge Function IS deployed. Check Supabase Edge Function Logs for details.
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
 

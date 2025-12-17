@@ -119,31 +119,45 @@ serve(async (req) => {
     return new Response('ok', { headers: corsHeaders })
   }
 
+  const requestId = `req-${Date.now()}-${Math.random().toString(36).substring(7)}`
+  console.log(`[${requestId}] Email function invoked`)
+
   try {
     const smtpHost = Deno.env.get('SMTP_HOST')
     const smtpPort = Deno.env.get('SMTP_PORT')
     const smtpUser = Deno.env.get('SMTP_USER')
     const smtpPassword = Deno.env.get('SMTP_PASSWORD')
 
+    console.log(`[${requestId}] SMTP Config: host=${smtpHost ? 'SET' : 'MISSING'}, port=${smtpPort ? 'SET' : 'MISSING'}, user=${smtpUser ? 'SET' : 'MISSING'}, pass=${smtpPassword ? 'SET' : 'MISSING'}`)
+
     if (!smtpHost || !smtpPort || !smtpUser || !smtpPassword) {
-      console.error('Missing SMTP configuration')
+      const missing = [
+        !smtpHost ? 'SMTP_HOST' : '',
+        !smtpPort ? 'SMTP_PORT' : '',
+        !smtpUser ? 'SMTP_USER' : '',
+        !smtpPassword ? 'SMTP_PASSWORD' : '',
+      ].filter(Boolean).join(', ')
+      
+      console.error(`[${requestId}] Missing SMTP secrets: ${missing}`)
       return new Response(
         JSON.stringify({ 
           success: false, 
-          error: 'SMTP not configured. Add SMTP secrets to Supabase Edge Functions.',
+          error: `SMTP not configured. Missing secrets: ${missing}. Add them in Supabase Dashboard > Edge Functions > send-email > Secrets.`,
+          requestId,
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
       )
     }
 
     const body: EmailRequest = await req.json()
-    const { to, subject, html, text, type, otp, recipientName, recipientEmail, actionUrl, actionLabel, priority, cc, title_en, title_ar, message_en, message_ar, details } = body
+    const { to, subject, html, text, type, otp, recipientName, actionUrl, priority, cc, title_en, title_ar, message_en, message_ar, details } = body
 
-    console.log(`Email: to=${to}, subject=${subject?.substring(0, 30)}..., type=${type}`)
+    console.log(`[${requestId}] Email request: to=${to}, subject=${subject?.substring(0, 40)}..., type=${type}`)
 
     if (!to || !subject) {
+      console.error(`[${requestId}] Missing required fields: to=${!!to}, subject=${!!subject}`)
       return new Response(
-        JSON.stringify({ success: false, error: 'Missing: to, subject' }),
+        JSON.stringify({ success: false, error: 'Missing required fields: to, subject', requestId }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
       )
     }
@@ -172,13 +186,16 @@ serve(async (req) => {
     }
 
     if (!emailHtml && !emailText) {
+      console.error(`[${requestId}] No email content provided`)
       return new Response(
-        JSON.stringify({ success: false, error: 'Email content required' }),
+        JSON.stringify({ success: false, error: 'Email content required (html or text)', requestId }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
       )
     }
 
     const portNum = Number(smtpPort)
+    console.log(`[${requestId}] Creating SMTP transporter: ${smtpHost}:${portNum}`)
+    
     const nodemailer = await import('npm:nodemailer@6.9.8')
     
     const transporter = nodemailer.default.createTransport({
@@ -186,23 +203,39 @@ serve(async (req) => {
       port: portNum,
       secure: portNum === 465,
       auth: { user: smtpUser, pass: smtpPassword },
-      tls: { rejectUnauthorized: false, minVersion: 'TLSv1.2' },
+      tls: { 
+        rejectUnauthorized: false, 
+        minVersion: 'TLSv1.2' 
+      },
       connectionTimeout: 30000,
       greetingTimeout: 15000,
       socketTimeout: 30000,
+      pool: false,
+      maxConnections: 1,
     })
 
+    console.log(`[${requestId}] Verifying SMTP connection...`)
     try {
       await transporter.verify()
+      console.log(`[${requestId}] SMTP connection verified`)
     } catch (verifyError: any) {
-      console.error('SMTP verify failed:', verifyError.message)
+      console.error(`[${requestId}] SMTP verify failed:`, verifyError.message, verifyError.code)
       return new Response(
-        JSON.stringify({ success: false, error: `SMTP connection failed: ${verifyError.message}` }),
+        JSON.stringify({ 
+          success: false, 
+          error: `SMTP connection failed: ${verifyError.message}. Check your SMTP credentials and host settings.`,
+          details: {
+            host: smtpHost,
+            port: portNum,
+            errorCode: verifyError.code,
+          },
+          requestId,
+        }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
       )
     }
 
-    const mailOptions: any = {
+    const mailOptions: Record<string, unknown> = {
       from: `"PACT Workflow" <${smtpUser}>`,
       to,
       subject,
@@ -223,21 +256,30 @@ serve(async (req) => {
       }
     }
 
+    console.log(`[${requestId}] Sending email to ${to}...`)
     const info = await transporter.sendMail(mailOptions)
-    console.log(`Sent: ${info.messageId}`)
+    console.log(`[${requestId}] Email sent successfully: ${info.messageId}`)
+
+    transporter.close()
 
     return new Response(
       JSON.stringify({ 
         success: true, 
         messageId: info.messageId || `email-${Date.now()}`,
-        deliveredAt: new Date().toISOString()
+        deliveredAt: new Date().toISOString(),
+        requestId,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   } catch (error: any) {
-    console.error('Email error:', error.message)
+    console.error(`[${requestId}] Email error:`, error.message, error.stack)
     return new Response(
-      JSON.stringify({ success: false, error: error.message || 'Failed to send' }),
+      JSON.stringify({ 
+        success: false, 
+        error: error.message || 'Failed to send email',
+        errorType: error.name,
+        requestId,
+      }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     )
   }
