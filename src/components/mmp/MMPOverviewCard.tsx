@@ -1,5 +1,5 @@
 import React from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { FileCheck, Edit } from 'lucide-react';
@@ -62,20 +62,6 @@ const MMPOverviewCard = ({ mmpFile, siteEntries = [], onProceedToVerification, o
 
   return (
     <div className="relative">
-      {/* Recall button fixed at top-right of the page */}
-      {isForwarded && (
-        <div className="fixed top-[128px] right-[198px] z-50">
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={handleRecall}
-            disabled={recalling}
-          >
-            {recalling ? 'Recalling MMP…' : 'Recall MMP'}
-          </Button>
-        </div>
-      )}
-
       <Card className="border-l-4 border-l-blue-500">
         <CardHeader className="bg-gradient-to-r from-blue-50 to-transparent">
           <CardTitle>MMP Overview</CardTitle>
@@ -122,25 +108,27 @@ const MMPOverviewCard = ({ mmpFile, siteEntries = [], onProceedToVerification, o
               <div className="bg-amber-50 p-4 rounded-lg text-center">No site entries available for distribution display</div>
             )}
           </div>
-
-          <div className="pt-4 border-t mt-4 flex justify-between">
-            <div className="text-sm text-muted-foreground">{displayDate ? `Last: ${format(new Date(displayDate), 'MMM d, yyyy')}` : 'No date available'}</div>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={onEditMMP}>
-                <Edit className="h-4 w-4 mr-2" />
-                Edit MMP Data
-              </Button>
-              {/* Removed recall button from here */}
-              {/* Verification buttons removed for admin overview */}
-              {/* {onProceedToVerification && (
-                <Button size="sm" onClick={onProceedToVerification}>
-                  <FileCheck className="h-4 w-4 mr-2" />
-                  Proceed to Verification
-                </Button>
-              )} */}
-            </div>
-          </div>
         </CardContent>
+
+        <CardFooter className="flex justify-between">
+          <div className="text-sm text-muted-foreground">{displayDate ? `Last: ${format(new Date(displayDate), 'MMM d, yyyy')}` : 'No date available'}</div>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={onEditMMP}>
+              <Edit className="h-4 w-4 mr-2" />
+              Edit MMP Data
+            </Button>
+            {isForwarded && (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={handleRecall}
+                disabled={recalling}
+              >
+                {recalling ? 'Recalling MMP…' : 'Recall MMP'}
+              </Button>
+            )}
+          </div>
+        </CardFooter>
       </Card>
     </div>
   );
