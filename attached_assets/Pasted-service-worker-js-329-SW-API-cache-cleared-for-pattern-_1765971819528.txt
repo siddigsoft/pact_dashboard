@@ -1,0 +1,18 @@
+service-worker.js:329 [SW] API cache cleared for pattern: /rest/v1/notifications
+service-worker.js:329 [SW] API cache cleared for pattern: /rest/v1/notifications
+service-worker.js:329 [SW] API cache cleared for pattern: /rest/v1/notifications
+service-worker.js:329 [SW] API cache cleared for pattern: /rest/v1/notifications
+service-worker.js:329 [SW] API cache cleared for pattern: /rest/v1/notifications
+abznugnirnlrqnnfkein.supabase.co/rest/v1/team_members?select=project_id&user_id=eq.ed292caf-e64b-4b7c-8351-0e2ac5721fdc:1  Failed to load resource: the server responded with a status of 404 ()
+abznugnirnlrqnnfkein.supabase.co/rest/v1/team_members?select=project_id&user_id=eq.ed292caf-e64b-4b7c-8351-0e2ac5721fdc:1  Failed to load resource: the server responded with a status of 404 ()
+/dashboard#:1 Notifications permission has been blocked as the user has dismissed the permission prompt several times. This can be reset in Page Info which can be accessed by clicking the tune icon next to the URL. See https://www.chromestatus.com/feature/6443143280984064 for more information.
+/dashboard#:1 Notifications permission has been blocked as the user has dismissed the permission prompt several times. This can be reset in Page Info which can be accessed by clicking the tune icon next to the URL. See https://www.chromestatus.com/feature/6443143280984064 for more information.
+register.ts:80 Event handler of 'push' event must be added on the initial evaluation of worker script.
+Ft @ register.ts:80
+register.ts:83 Event handler of 'pushsubscriptionchange' event must be added on the initial evaluation of worker script.
+Ft @ register.ts:83
+register.ts:86 Event handler of 'notificationclick' event must be added on the initial evaluation of worker script.
+Ft @ register.ts:86
+firebase-messaging-sw.js:20 [firebase-messaging-sw.js] Firebase initialized via postMessage
+abznugnirnlrqnnfkein.supabase.co/rest/v1/permissions?on_conflict=role_id%2Cresource%2Caction&columns=%22role_id%22%2C%22resource%22%2C%22action%22%2C%22conditions%22:1  Failed to load resource: the server responded with a status of 400 ()
+service-worker.js:329 [SW] API cache cleared for pattern: /rest/v1/notifications
