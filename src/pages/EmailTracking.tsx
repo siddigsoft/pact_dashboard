@@ -425,15 +425,25 @@ export default function EmailTracking() {
       (statusFilter === 'success' && log.success) ||
       (statusFilter === 'failed' && !log.success);
 
-    const emailType = log.metadata?.emailType || '';
+    const emailType = (log.metadata?.emailType || '').toLowerCase();
+    const subject = (log.metadata?.subject || log.entity_name || '').toLowerCase();
+    const description = (log.description || '').toLowerCase();
+    
+    // Enhanced type matching - check emailType, subject, and description
+    const isWelcome = emailType === 'welcome' || subject.includes('welcome') || description.includes('welcome');
+    const isMmp = emailType === 'mmp' || subject.includes('mmp') || description.includes('mmp');
+    const isSite = emailType === 'site' || subject.includes('site') || description.includes('site visit');
+    const isPasswordOtp = emailType === 'password-reset' || emailType === 'otp' || log.entity_type === 'otp' || 
+                          subject.includes('password') || subject.includes('otp') || subject.includes('reset');
+    const isNotification = emailType === 'notification';
+    
     const matchesType = typeFilter === 'all' ||
-      (typeFilter === 'email' && log.entity_type === 'email') ||
-      (typeFilter === 'otp' && (log.entity_type === 'otp' || emailType === 'otp')) ||
-      (typeFilter === 'welcome' && emailType === 'welcome') ||
-      (typeFilter === 'mmp' && emailType === 'mmp') ||
-      (typeFilter === 'site' && emailType === 'site') ||
-      (typeFilter === 'password-reset' && (emailType === 'password-reset' || emailType === 'otp')) ||
-      (typeFilter === 'notification' && emailType === 'notification');
+      (typeFilter === 'welcome' && isWelcome) ||
+      (typeFilter === 'mmp' && isMmp) ||
+      (typeFilter === 'site' && isSite) ||
+      (typeFilter === 'password-reset' && isPasswordOtp) ||
+      (typeFilter === 'notification' && isNotification) ||
+      (typeFilter === 'email' && log.entity_type === 'email' && !isWelcome && !isMmp && !isSite && !isPasswordOtp && !isNotification);
 
     return matchesSearch && matchesStatus && matchesType;
   });
@@ -543,10 +553,20 @@ export default function EmailTracking() {
   };
 
   const getTypeBadge = (log: EmailLog) => {
-    const emailType = log.metadata?.emailType || '';
+    const emailType = (log.metadata?.emailType || '').toLowerCase();
+    const subject = (log.metadata?.subject || log.entity_name || '').toLowerCase();
+    const description = (log.description || '').toLowerCase();
+    
+    // Enhanced type detection - check emailType, subject, and description
+    const isWelcome = emailType === 'welcome' || subject.includes('welcome') || description.includes('welcome');
+    const isMmp = emailType === 'mmp' || subject.includes('mmp') || description.includes('mmp');
+    const isSite = emailType === 'site' || subject.includes('site') || description.includes('site visit');
+    const isPasswordOtp = emailType === 'password-reset' || emailType === 'otp' || log.entity_type === 'otp' || 
+                          subject.includes('password') || subject.includes('otp') || subject.includes('reset');
+    const isNotification = emailType === 'notification';
     
     // Welcome emails
-    if (emailType === 'welcome') {
+    if (isWelcome) {
       return (
         <Badge variant="secondary" className="bg-green-500/10 text-green-600 border-green-500/30">
           <MailCheck className="w-3 h-3 mr-1" />
@@ -556,7 +576,7 @@ export default function EmailTracking() {
     }
     
     // MMP notifications
-    if (emailType === 'mmp') {
+    if (isMmp) {
       return (
         <Badge variant="secondary" className="bg-blue-500/10 text-blue-600 border-blue-500/30">
           <FileText className="w-3 h-3 mr-1" />
@@ -566,7 +586,7 @@ export default function EmailTracking() {
     }
     
     // Site visit notifications
-    if (emailType === 'site') {
+    if (isSite) {
       return (
         <Badge variant="secondary" className="bg-orange-500/10 text-orange-600 border-orange-500/30">
           <FileText className="w-3 h-3 mr-1" />
@@ -576,27 +596,7 @@ export default function EmailTracking() {
     }
     
     // Password reset / OTP
-    if (emailType === 'password-reset' || emailType === 'otp') {
-      return (
-        <Badge variant="secondary" className="bg-purple-500/10 text-purple-600 border-purple-500/30">
-          <KeyRound className="w-3 h-3 mr-1" />
-          Password/OTP
-        </Badge>
-      );
-    }
-    
-    // General notifications
-    if (emailType === 'notification') {
-      return (
-        <Badge variant="secondary" className="bg-cyan-500/10 text-cyan-600 border-cyan-500/30">
-          <MessageSquare className="w-3 h-3 mr-1" />
-          Notification
-        </Badge>
-      );
-    }
-    
-    // OTP entity type
-    if (log.entity_type === 'otp') {
+    if (isPasswordOtp) {
       if (log.tags?.includes('verification')) {
         return (
           <Badge variant="secondary" className="bg-purple-500/10 text-purple-600 border-purple-500/30">
@@ -608,7 +608,17 @@ export default function EmailTracking() {
       return (
         <Badge variant="secondary" className="bg-purple-500/10 text-purple-600 border-purple-500/30">
           <KeyRound className="w-3 h-3 mr-1" />
-          OTP Send
+          Password/OTP
+        </Badge>
+      );
+    }
+    
+    // General notifications
+    if (isNotification) {
+      return (
+        <Badge variant="secondary" className="bg-cyan-500/10 text-cyan-600 border-cyan-500/30">
+          <MessageSquare className="w-3 h-3 mr-1" />
+          Notification
         </Badge>
       );
     }
