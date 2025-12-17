@@ -885,20 +885,8 @@ export const NotificationTriggerService = {
         });
       }
 
-      // 4. Get all admins (global, not hub-specific)
-      const { data: admins, error: adminError } = await supabase
-        .from('profiles')
-        .select('id, full_name, email, role')
-        .eq('role', 'admin');
-
-      if (!adminError && admins) {
-        admins.forEach(a => {
-          if (!seenIds.has(a.id)) {
-            seenIds.add(a.id);
-            allUsers.push({ ...a, role: a.role || 'admin' });
-          }
-        });
-      }
+      // 4. NOTE: Admins are excluded from hub management notifications per user request
+      // Only Super Admins should be CC'd on emails, not regular Admins
 
       return allUsers;
     } catch (error) {
@@ -993,22 +981,22 @@ export const NotificationTriggerService = {
         }
       }
 
-      // 3. Also notify Admins and Super Admins who may not be in the hub
-      const { data: adminUsers, error: adminError } = await supabase
+      // 3. Also notify Super Admins who may not be in the hub (Admins excluded per user request)
+      const { data: superAdminUsers, error: saError } = await supabase
         .from('profiles')
         .select('id, full_name, email, role')
-        .in('role', ['admin', 'super_admin', 'Admin', 'SuperAdmin']);
+        .in('role', ['super_admin', 'superAdmin', 'SuperAdmin']);
 
-      if (adminError) {
-        console.error('Error fetching admins for MMP->Coordinators notification:', adminError);
-      } else if (adminUsers && adminUsers.length > 0) {
-        // Filter out admins already notified via hub management
+      if (saError) {
+        console.error('Error fetching super admins for MMP->Coordinators notification:', saError);
+      } else if (superAdminUsers && superAdminUsers.length > 0) {
+        // Filter out super admins already notified via hub management
         const notifiedIds = new Set(managementUsers.map(u => u.id));
-        const remainingAdmins = adminUsers.filter(a => !notifiedIds.has(a.id));
+        const remainingSuperAdmins = superAdminUsers.filter(a => !notifiedIds.has(a.id));
 
-        for (const admin of remainingAdmins) {
+        for (const superAdmin of remainingSuperAdmins) {
           const sent = await this.send({
-            userId: admin.id,
+            userId: superAdmin.id,
             title: 'MMP Forwarded to Coordinators',
             message: `MMP "${mmpName}" has been forwarded to ${coordinatorCount} coordinator(s) for site assignment by ${sender}`,
             type: 'info',
@@ -1022,21 +1010,21 @@ export const NotificationTriggerService = {
           if (sent) successCount++;
 
           // Send bilingual email with role-based greeting
-          if (admin.email) {
+          if (superAdmin.email) {
             try {
-              const roleInfo = formatRoleName(admin.role);
+              const roleInfo = formatRoleName(superAdmin.role);
               await EmailNotificationService.sendMMPForwardedToCoordinators(
-                admin.email,
-                admin.full_name || 'Administrator',
+                superAdmin.email,
+                superAdmin.full_name || 'Super Administrator',
                 mmpName,
                 sender,
                 coordinatorCount,
                 mmpId,
                 roleInfo
               );
-              console.log(`[NOTIFICATION] Sent bilingual MMP->Coordinators email to ${roleInfo.en}: ${admin.email}`);
+              console.log(`[NOTIFICATION] Sent bilingual MMP->Coordinators email to ${roleInfo.en}: ${superAdmin.email}`);
             } catch (emailError) {
-              console.error(`[NOTIFICATION] Failed to send bilingual email to ${admin.email}:`, emailError);
+              console.error(`[NOTIFICATION] Failed to send bilingual email to ${superAdmin.email}:`, emailError);
             }
           }
         }
