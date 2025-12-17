@@ -144,7 +144,7 @@ export default function EmailTracking() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'success' | 'failed'>('all');
-  const [typeFilter, setTypeFilter] = useState<'all' | 'email' | 'otp'>('all');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'email' | 'otp' | 'welcome' | 'mmp' | 'site' | 'password-reset' | 'notification'>('all');
   const [stats, setStats] = useState<EmailStats>({
     total: 0,
     successful: 0,
@@ -425,9 +425,15 @@ export default function EmailTracking() {
       (statusFilter === 'success' && log.success) ||
       (statusFilter === 'failed' && !log.success);
 
+    const emailType = log.metadata?.emailType || '';
     const matchesType = typeFilter === 'all' ||
       (typeFilter === 'email' && log.entity_type === 'email') ||
-      (typeFilter === 'otp' && log.entity_type === 'otp');
+      (typeFilter === 'otp' && (log.entity_type === 'otp' || emailType === 'otp')) ||
+      (typeFilter === 'welcome' && emailType === 'welcome') ||
+      (typeFilter === 'mmp' && emailType === 'mmp') ||
+      (typeFilter === 'site' && emailType === 'site') ||
+      (typeFilter === 'password-reset' && (emailType === 'password-reset' || emailType === 'otp')) ||
+      (typeFilter === 'notification' && emailType === 'notification');
 
     return matchesSearch && matchesStatus && matchesType;
   });
@@ -537,26 +543,81 @@ export default function EmailTracking() {
   };
 
   const getTypeBadge = (log: EmailLog) => {
-    if (log.entity_type === 'email') {
+    const emailType = log.metadata?.emailType || '';
+    
+    // Welcome emails
+    if (emailType === 'welcome') {
       return (
-        <Badge variant="secondary">
-          <Mail className="w-3 h-3 mr-1" />
-          Email
+        <Badge variant="secondary" className="bg-green-500/10 text-green-600 border-green-500/30">
+          <MailCheck className="w-3 h-3 mr-1" />
+          Welcome
         </Badge>
       );
     }
-    if (log.tags?.includes('verification')) {
+    
+    // MMP notifications
+    if (emailType === 'mmp') {
+      return (
+        <Badge variant="secondary" className="bg-blue-500/10 text-blue-600 border-blue-500/30">
+          <FileText className="w-3 h-3 mr-1" />
+          MMP
+        </Badge>
+      );
+    }
+    
+    // Site visit notifications
+    if (emailType === 'site') {
+      return (
+        <Badge variant="secondary" className="bg-orange-500/10 text-orange-600 border-orange-500/30">
+          <FileText className="w-3 h-3 mr-1" />
+          Site Visit
+        </Badge>
+      );
+    }
+    
+    // Password reset / OTP
+    if (emailType === 'password-reset' || emailType === 'otp') {
       return (
         <Badge variant="secondary" className="bg-purple-500/10 text-purple-600 border-purple-500/30">
           <KeyRound className="w-3 h-3 mr-1" />
-          OTP Verify
+          Password/OTP
         </Badge>
       );
     }
+    
+    // General notifications
+    if (emailType === 'notification') {
+      return (
+        <Badge variant="secondary" className="bg-cyan-500/10 text-cyan-600 border-cyan-500/30">
+          <MessageSquare className="w-3 h-3 mr-1" />
+          Notification
+        </Badge>
+      );
+    }
+    
+    // OTP entity type
+    if (log.entity_type === 'otp') {
+      if (log.tags?.includes('verification')) {
+        return (
+          <Badge variant="secondary" className="bg-purple-500/10 text-purple-600 border-purple-500/30">
+            <KeyRound className="w-3 h-3 mr-1" />
+            OTP Verify
+          </Badge>
+        );
+      }
+      return (
+        <Badge variant="secondary" className="bg-purple-500/10 text-purple-600 border-purple-500/30">
+          <KeyRound className="w-3 h-3 mr-1" />
+          OTP Send
+        </Badge>
+      );
+    }
+    
+    // Default email
     return (
-      <Badge variant="secondary" className="bg-blue-500/10 text-blue-600 border-blue-500/30">
-        <KeyRound className="w-3 h-3 mr-1" />
-        OTP Send
+      <Badge variant="secondary">
+        <Mail className="w-3 h-3 mr-1" />
+        Email
       </Badge>
     );
   };
@@ -965,7 +1026,7 @@ export default function EmailTracking() {
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between gap-4 flex-wrap">
-            <CardTitle className="text-base">Email & OTP Logs</CardTitle>
+            <CardTitle className="text-base">All Communications Log</CardTitle>
             <div className="flex items-center gap-3 flex-wrap">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -988,13 +1049,17 @@ export default function EmailTracking() {
                 </SelectContent>
               </Select>
               <Select value={typeFilter} onValueChange={(v: any) => setTypeFilter(v)}>
-                <SelectTrigger className="w-[130px]" data-testid="select-type">
+                <SelectTrigger className="w-[150px]" data-testid="select-type">
                   <SelectValue placeholder="Type" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Types</SelectItem>
-                  <SelectItem value="email">Emails</SelectItem>
-                  <SelectItem value="otp">OTP</SelectItem>
+                  <SelectItem value="welcome">Welcome</SelectItem>
+                  <SelectItem value="mmp">MMP</SelectItem>
+                  <SelectItem value="site">Site Visit</SelectItem>
+                  <SelectItem value="notification">Notification</SelectItem>
+                  <SelectItem value="password-reset">Password/OTP</SelectItem>
+                  <SelectItem value="email">Other Emails</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1008,8 +1073,8 @@ export default function EmailTracking() {
           ) : filteredLogs.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <Mail className="h-12 w-12 mx-auto mb-3 opacity-50" />
-              <p>No email logs found</p>
-              <p className="text-sm">Email and OTP activities will appear here</p>
+              <p>No communication logs found</p>
+              <p className="text-sm">All email communications (Welcome, MMP, Site Visit, Notifications, OTP) will appear here</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
