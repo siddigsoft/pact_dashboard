@@ -56,9 +56,12 @@ export const SequentialPermitUpload: React.FC<SequentialPermitUploadProps> = ({
   const [localities, setLocalities] = useState<LocalityPermitStatus[]>([]);
   const [currentLocalityIndex, setCurrentLocalityIndex] = useState(0);
   const [statePermitUploaded, setStatePermitUploaded] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
 
   // Check if state permit already exists and set initial step accordingly
   useEffect(() => {
+    let isMounted = true;
+    
     const checkExistingPermits = async () => {
       try {
         const { data: mmpData, error } = await supabase
@@ -67,8 +70,11 @@ export const SequentialPermitUpload: React.FC<SequentialPermitUploadProps> = ({
           .eq('id', mmpFileId)
           .single();
 
+        if (!isMounted) return;
+
         if (error) {
           console.error('Error checking existing permits:', error);
+          setInitialLoading(false);
           return;
         }
 
@@ -78,17 +84,20 @@ export const SequentialPermitUpload: React.FC<SequentialPermitUploadProps> = ({
             (p: any) => p.state === state || p.stateId === stateId
           );
           if (existingStatePermit) {
-            console.log('State permit already exists, skipping to locality step');
             setStatePermitUploaded(true);
             setCurrentStep('ask_locality');
           }
         }
+        setInitialLoading(false);
       } catch (err) {
         console.error('Error checking existing permits:', err);
+        if (isMounted) setInitialLoading(false);
       }
     };
 
     checkExistingPermits();
+    
+    return () => { isMounted = false; };
   }, [mmpFileId, state, stateId]);
 
   useEffect(() => {
@@ -530,6 +539,19 @@ export const SequentialPermitUpload: React.FC<SequentialPermitUploadProps> = ({
       </div>
     );
   };
+
+  if (initialLoading) {
+    return (
+      <Card className="border-border shadow-sm">
+        <CardContent className="flex items-center justify-center py-12">
+          <div className="flex flex-col items-center gap-3">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            <p className="text-sm text-muted-foreground">Loading permit status...</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   if (currentStep === 'state') {
     return (
