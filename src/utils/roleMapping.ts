@@ -29,12 +29,21 @@ export type RoleLabel =
   | 'DataCollector'
   | 'Reviewer';
 
+// Role configuration type
+type RoleConfig = {
+  code: RoleCode;
+  label: RoleLabel;
+  legacy: string[];
+  hidden?: boolean; // If true, hide from role selection dropdowns
+};
+
 // Comprehensive role mapping
-export const ROLE_MAP: Record<RoleCode, { code: RoleCode; label: RoleLabel; legacy: string[] }> = {
+export const ROLE_MAP: Record<RoleCode, RoleConfig> = {
   superAdmin: {
     code: 'superAdmin',
-    label: 'Super Admin',
-    legacy: ['SuperAdmin', 'superAdmin', 'super_admin', 'Super Admin']
+    label: 'Admin', // Display as "Admin" in UI for security
+    legacy: ['SuperAdmin', 'superAdmin', 'super_admin', 'Super Admin'],
+    hidden: true // Hide from role selection dropdowns
   },
   admin: {
     code: 'admin',
@@ -80,6 +89,21 @@ export const ROLE_MAP: Record<RoleCode, { code: RoleCode; label: RoleLabel; lega
 
 // All canonical role codes
 export const ALL_ROLE_CODES: RoleCode[] = Object.keys(ROLE_MAP) as RoleCode[];
+
+// Visible role codes (excludes hidden roles like superAdmin)
+export const VISIBLE_ROLE_CODES: RoleCode[] = Object.entries(ROLE_MAP)
+  .filter(([_, config]) => !config.hidden)
+  .map(([code]) => code as RoleCode);
+
+/**
+ * Get role options for dropdowns (excludes hidden roles)
+ */
+export function getVisibleRoleOptions(): { value: RoleCode; label: RoleLabel }[] {
+  return VISIBLE_ROLE_CODES.map(code => ({
+    value: code,
+    label: ROLE_MAP[code].label
+  }));
+}
 
 /**
  * Normalize any role input to canonical RoleCode
