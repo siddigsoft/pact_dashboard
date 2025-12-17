@@ -283,7 +283,20 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
             const deletedId = (payload as any).old.id;
             setAppNotifications(prev => prev.filter(n => n.id !== deletedId));
           })
-          .subscribe();
+          .subscribe((status, err) => {
+            if (status === 'SUBSCRIBED') {
+              console.log('Notifications realtime connected');
+            } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+              console.warn('Notifications realtime error:', status, err);
+              // Retry after delay
+              setTimeout(() => {
+                if (!cancelled && channel) {
+                  supabase.removeChannel(channel);
+                  subscribeRealtime();
+                }
+              }, 5000);
+            }
+          });
       } catch (err) {
         console.warn('Realtime subscription failed:', err);
       }
@@ -292,7 +305,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     fetchNotifications();
     subscribeRealtime();
 
-    const interval = setInterval(fetchNotifications, 60000);
+    // Poll more frequently (every 15 seconds) as fallback for realtime
+    const interval = setInterval(fetchNotifications, 15000);
     return () => {
       cancelled = true;
       try { if (channel) supabase.removeChannel(channel); } catch {}
